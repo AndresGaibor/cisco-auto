@@ -1,0 +1,66 @@
+metadata:
+  name: Lab de Prueba CLI
+  description: Laboratorio para probar el CLI interactivo
+  version: "1.0"
+  author: Cisco-Auto CLI
+  difficulty: beginner
+  estimatedTime: "30 min"
+
+topology:
+  devices:
+    - name: R1
+      type: router
+      model: Cisco 2911
+      hostname: Router1
+      interfaces:
+        - name: GigabitEthernet0/0
+          ip: 192.168.1.1
+          mask: 255.255.255.0
+        - name: GigabitEthernet0/1
+          ip: 10.0.0.1
+          mask: 255.255.255.0
+      ports:
+        - GigabitEthernet0/0
+        - GigabitEthernet0/1
+        - GigabitEthernet0/2
+        - Serial0/0/0
+        - Serial0/0/1
+
+    - name: SW1
+      type: switch
+      model: Cisco 2960
+      hostname: Switch1
+      vlans:
+        - id: 10
+          name: VLAN10
+      ports:
+        - FastEthernet0/1
+        - FastEthernet0/2
+        - FastEthernet0/3
+        - FastEthernet0/4
+        - GigabitEthernet0/1
+        - GigabitEthernet0/2
+
+    - name: PC1
+      type: pc
+      model: PC-PT
+      interfaces:
+        - name: FastEthernet0
+          ip: 192.168.1.10
+          mask: 255.255.255.0
+          gateway: 192.168.1.1
+      ports:
+        - FastEthernet0
+
+  connections:
+    - from: R1
+      fromPort: GigabitEthernet0/0
+      to: SW1
+      toPort: GigabitEthernet0/1
+      cable: cobre directo
+
+    - from: SW1
+      fromPort: FastEthernet0/1
+      to: PC1
+      toPort: FastEthernet0
+      cable: cobre directo

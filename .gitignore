@@ -1,0 +1,55 @@
+# dependencies (bun install)
+node_modules
+
+# output
+out
+dist
+*.tgz
+
+# code coverage
+coverage
+*.lcov
+
+# logs
+logs
+_.log
+report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# IntelliJ based IDEs
+.idea
+
+# Finder (MacOS) folder config
+.DS_Store
+
+# Packet Tracer & Debug Files (Ignored for GitHub)
+*.pka
+*.pkt
+*.xml
+!docs/audit_xml/*.xml
+
+# Temporary/Development files
+yaml_*.yaml
+imported_lab.yaml
+line_num.txt
+
+# Test Assets
+archivos_prueba/
+
+# AI Agent folders
+.agent/
+.agents/
+.claude/
+.iflow/
+.qwen/
