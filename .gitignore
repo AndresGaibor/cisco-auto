@@ -51,5 +51,10 @@ archivos_prueba/
 .agent/
 .agents/
 .claude/
-.iflow/
 .qwen/
+
+# Allow specific skills to be tracked
+!.iflow/skills/cisco-networking-assistant/
+!.iflow/skills/cisco-networking-assistant/**/
+!.gemini/skills/cisco-networking-assistant/
+!.gemini/skills/cisco-networking-assistant/**/

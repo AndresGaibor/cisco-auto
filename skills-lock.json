@@ -5,6 +5,12 @@
       "source": "anthropics/skills",
       "sourceType": "github",
       "computedHash": "b122f4d1e91aa1d83027e050b5b37c3156203ee85458d7b1360bc48167c9e02a"
+    },
+    "cisco-networking-assistant": {
+      "source": "local",
+      "sourceType": "local",
+      "computedHash": "local-skill-cisco-networking-assistant-v1",
+      "description": "Asistente experto para tareas de redes Cisco y Packet Tracer"
     }
   }
 }
