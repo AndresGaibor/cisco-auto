@@ -147,8 +147,8 @@ export interface RouteEntry {
   /** CIDR */
   cidr: number;
   
-  /** Next hop IP */
-  nextHop?: string;
+  /** Next hop IP (null para rutas conectadas) */
+  nextHop: string | null;
   
   /** Interface de salida */
   interface: string;
@@ -160,10 +160,10 @@ export interface RouteEntry {
   metric: number;
   
   /** Protocolo de origen */
-  protocol: 'connected' | 'static' | 'ospf' | 'eigrp' | 'rip' | 'bgp';
+  protocol: 'connected' | 'static' | 'ospf' | 'eigrp' | 'rip' | 'bgp' | 'isis';
   
   /** Tiempo de edad */
-  age?: number;
+  age: number;
 }
 
 // =============================================================================
