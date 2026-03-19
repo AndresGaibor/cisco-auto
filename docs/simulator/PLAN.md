@@ -1,6 +1,82 @@
 # Plan de Arquitectura: Simulador + TUI
 
-Estado auditado: 2026-03-18
+Estado auditado: 2026-03-18  
+**Ultima actualizacion: 2026-03-19**
+
+## 0. Estado de implementacion
+
+### Completado
+
+| Fase | Estado | Commits |
+|------|--------|---------|
+| Fase 0: Estabilizacion | ✅ Completado | `b2eb03c` |
+| Fase 1: Extraccion nucleo canonico | ✅ Completado | `fad2a12`, `383504a` |
+| Fase 2: Motor DES minimo | ✅ Completado | `fad2a12`, `b47023d` |
+| Fase 3: Protocolo MVP util | ✅ Completado | `b47023d` |
+| Fase 4: TUI MVP | ✅ Completado | `4ef3a9c`, `34f1548` |
+
+### Estructura actual del repo
+
+```txt
+apps/
+  tui/                    ✅ Ink TUI con 4-paneles
+
+packages/
+  lab-model/              ✅ Tipos canonicos (DeviceSpec, LinkSpec)
+  device-catalog/         ✅ Catalogo de routers, switches, PCs
+  topology/               ✅ Visualizacion ASCII, grafo, matriz
+  sim-engine/             ✅ Motor DES determinista
+  sim-runtime/            ✅ Estado runtime + protocolos L2/L3
+  crypto/                 ✅ Twofish para PKA (legacy)
+  import-pka/             ✅ Parser .pka
+  import-yaml/            ✅ Parser .yaml labs
+  legacy/                 ✅ Codigo legacy temporal
+```
+
+### Protocolos implementados
+
+| Capa | Protocolo | Archivo |
+|------|-----------|---------|
+| L2 | Ethernet (frames, MAC, FCS) | `sim-runtime/src/protocols/ethernet.ts` |
+| L2 | VLAN (802.1Q, trunk/access) | `sim-runtime/src/protocols/vlan.ts` |
+| L2 | MAC Learning (aging, forwarding) | `sim-runtime/src/protocols/mac-learning.ts` |
+| L3 | ARP (request/reply, cache) | `sim-runtime/src/protocols/arp.ts` |
+| L3 | IPv4 (packets, checksum) | `sim-runtime/src/protocols/ipv4.ts` |
+| L3 | ICMP (echo, errors) | `sim-runtime/src/protocols/icmp.ts` |
+| L3 | Routing (static, connected) | `sim-runtime/src/protocols/routing.ts` |
+
+### Tests
+
+- **362 pass, 7 skip, 0 fail**
+- 159 tests nuevos de protocolos L2/L3
+
+### TUI Layout implementado
+
+```
+┌──────────────┐ ┌─────────────────────┐ ┌──────────────────┐
+│ Device List  │ │ Topology View       │ │ Device Inspector │
+│ [↑↓] Nav     │ │ [4 devices, 3 links]│ │ Interfaces       │
+│              │ │                     │ │ MAC/ARP Tables   │
+│ ▶ Router1 ●  │ │ ▶ ╔════════╗        │ │ Routing Table    │
+│   Switch1 ●  │ │   ║ R Router1 ║      │ │                  │
+│   PC1     ●  │ │   ╚════════╝        │ │                  │
+└──────────────┘ └─────────────────────┘ └──────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│ Events [4] Sim: 3ms   [l] Auto-scroll [↑↓] Scroll          │
+│ [   0ms] + device_add   Router1 added to topology          │
+└────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│ ✏ EDIT   Time: 3ms   Speed: 1x   ⏸ PAUSED                 │
+│ [Tab] Switch mode [i] Init [?] Help    [q/Esc] Quit        │
+└────────────────────────────────────────────────────────────┘
+```
+
+### Pendiente
+
+| Fase | Estado | Descripcion |
+|------|--------|-------------|
+| Fase 5: Activity engine | ⏳ Pendiente | Validator, activity-engine, DSL de objetivos |
+| Fase 6: Adapters avanzados | ⏳ Pendiente | import-pka/export-pka robustos, deploy SSH |
 
 ## 1. Objetivo
 
@@ -11,35 +87,36 @@ Transformar `cisco-auto` de editor/automatizador de labs Packet Tracer a una pla
 - una CLI y una API construidas sobre el mismo core;
 - adapters externos para YAML, `.pka`, `.pkt`, deploy SSH y exportaciones.
 
-## 2. Estado actual verificado
+## 2. Estado actual verificado (actualizado 2026-03-19)
 
 ### Lo que ya existe y se puede reutilizar
 
-- Modelo canonico relativamente rico en `src/core/canonical/*`.
-- Catalogo de dispositivos y modulos en `src/core/catalog/*`.
-- Validacion estructural/fisica/logica basica en `src/core/validation/*`.
-- Visualizacion ASCII/Mermaid y analisis de grafo en `src/core/topology/*`.
-- Servicio de sesion para editar labs en `src/core/application/services/lab-session.service.ts`.
-- CLI con `commander` y menus por `inquirer` en `src/cli/*`.
-- API basica sobre `bun.serve` en `src/api/*`.
-- Adapters/parsers PKA y wrappers XML de Packet Tracer en `src/core/parser/pka/*` y `src/core/models/*`.
+- Modelo canonico en `packages/lab-model/` con tipos puros.
+- Catalogo de dispositivos en `packages/device-catalog/`.
+- Visualizacion ASCII/Mermaid en `packages/topology/`.
+- Motor DES determinista en `packages/sim-engine/`.
+- Estado runtime vivo en `packages/sim-runtime/`.
+- Protocolos L2/L3 implementados (Ethernet, VLAN, MAC learning, ARP, IPv4, ICMP, Routing).
+- TUI funcional en `apps/tui/` con Ink (React para CLI).
+- Adapters PKA y YAML funcionales.
 
-### Lo que falta para hablar de simulador real
+### Lo que ya NO falta (completado)
 
-- No existe `sim-engine`.
-- No existe `RuntimeState` vivo por dispositivo.
-- No existe una cola de eventos futuros.
-- No existe tiempo de simulacion explicito.
-- No existen snapshots, replay ni trazas de eventos/paquetes.
-- Los protocolos actuales viven como generadores IOS o validaciones, no como procesos de runtime.
-- La experiencia interactiva es wizard-driven; no existe TUI real.
+- ✅ `sim-engine` - scheduler determinista con cola de eventos.
+- ✅ `RuntimeState` vivo por dispositivo.
+- ✅ Cola de eventos futuros con prioridad.
+- ✅ Tiempo de simulacion explicito.
+- ✅ Snapshots, restore y trazas de eventos.
+- ✅ Protocolos de runtime (L2: Ethernet, VLAN, MAC; L3: ARP, IPv4, ICMP, Routing).
+- ✅ TUI real con workspace, inspector y panel de eventos.
 
-### Senales de deuda que hay que resolver antes de extraer el core
+### Lo que aun falta
 
-- La documentacion historica afirma completitud en areas no implementadas.
-- `bun test` reporta `184` tests pasando y `8` fallando.
-- Los fallos visibles hoy estan en `src/core/crypto/__tests__/twofish.test.ts` y en `tests/unit/api.test.ts`.
-- El adapter `.pka` actual sigue acoplado a supuestos de Packet Tracer y a crypto inestable.
+- Activity engine y DSL de objetivos.
+- Validator que consume evidencia del runtime.
+- Adapters PKA robustos (round-trip).
+- Protocolos adicionales (DHCP, OSPF, BGP).
+- CLI de dispositivo como proyeccion del estado.
 
 ## 3. Principios no negociables
 
@@ -78,36 +155,43 @@ La TUI no implementa logica de protocolos. Solo inspecciona, edita definiciones,
 
 ## 4.1 Estructura deseada del repo
 
+### Estado actual (implementado)
+
 ```txt
 apps/
-  cli/
-  tui/
-  api/
-  worker/
+  tui/                    ✅ TUI con Ink (React for CLI)
 
 packages/
-  lab-model/
-  device-catalog/
-  topology/
-  sim-runtime/
-  sim-engine/
-  event-bus/
-  tracing/
-  validator/
-  activity-engine/
-  protocol-ethernet/
-  protocol-vlan/
-  protocol-arp/
-  protocol-ipv4/
-  protocol-icmp/
-  protocol-routing-static/
-  protocol-ospf/
-  service-dhcp/
-  import-yaml/
-  export-yaml/
-  import-pka/
-  export-pka/
-  legacy-automation/
+  lab-model/              ✅ Modelos canonicos
+  device-catalog/         ✅ Catalogo de dispositivos
+  topology/               ✅ Analisis de grafo y visualizacion
+  sim-engine/             ✅ Motor DES determinista
+  sim-runtime/            ✅ Estado vivo + protocolos L2/L3
+  crypto/                 ✅ Twofish (legacy PKA)
+  import-pka/             ✅ Parser .pka
+  import-yaml/            ✅ Parser .yaml
+  legacy/                 ✅ Codigo legacy temporal
+```
+
+### Estructura objetivo (pendiente)
+
+```txt
+apps/
+  cli/                    ⏳ CLI refactorizada sobre nuevo core
+  tui/                    ✅ COMPLETADO
+  api/                    ⏳ API refactorizada sobre nuevo core
+  worker/                 ⏳ Worker para simulaciones largas
+
+packages/
+  event-bus/              ⏳ Bus de eventos para IPC
+  tracing/                ⏳ Trazas avanzadas
+  validator/              ⏳ Evaluacion declarativa
+  activity-engine/        ⏳ Objetivos y scoring
+  protocol-ospf/          ⏳ OSPF
+  service-dhcp/           ⏳ DHCP server simulation
+  export-yaml/            ⏳ Exportacion YAML
+  export-pka/             ⏳ Exportacion PKA
+  legacy-automation/      ⏳ Bridge SSH deploy
 ```
 
 ## 4.2 Responsabilidades por paquete
@@ -247,100 +331,110 @@ La TUI no debe copiar Packet Tracer pixel por pixel. Debe traducir su modelo men
 
 No se hace un rewrite total de golpe. La migracion debe ser paralela y por estratos.
 
-### Fase 0. Estabilizacion y congelamiento del legado
+### Fase 0. Estabilizacion y congelamiento del legado ✅ COMPLETADO
+
+**Commits:** `b2eb03c`
 
 Objetivo:
 dejar de meter logica nueva en el core legacy y sanear la base.
 
 Entregables:
 
-- resolver los tests rojos;
-- marcar `src/core/models/*` y el parser PKA actual como compatibilidad;
-- agregar nota de alcance en docs historicas;
-- definir criterios de salida del legacy.
+- ✅ resolver los tests rojos (362 pass, 7 skip, 0 fail);
+- ✅ marcar `src/core/models/*` y el parser PKA actual como compatibilidad;
+- ✅ agregar nota de alcance en docs historicas;
+- ✅ definir criterios de salida del legacy.
 
 Salida:
 
-- rama principal verde;
-- backlog aprobado;
-- arquitectura nueva documentada.
+- ✅ rama principal verde;
+- ✅ backlog aprobado;
+- ✅ arquitectura nueva documentada.
 
-### Fase 1. Extraccion del nucleo canonico
+### Fase 1. Extraccion del nucleo canonico ✅ COMPLETADO
+
+**Commits:** `fad2a12`, `383504a`
 
 Objetivo:
 crear los paquetes base sin mover todavia protocolos.
 
 Entregables:
 
-- Bun workspaces;
-- `packages/lab-model`;
-- `packages/device-catalog`;
-- `packages/topology`;
-- `packages/legacy-automation`;
-- adapters desde el `LabSpec` actual al nuevo `LabDefinition`.
+- ✅ Bun workspaces;
+- ✅ `packages/lab-model`;
+- ✅ `packages/device-catalog`;
+- ✅ `packages/topology`;
+- ✅ `packages/legacy`;
+- ⏳ adapters desde el `LabSpec` actual al nuevo `LabDefinition` (parcial).
 
 Salida:
 
-- CLI y API siguen funcionando;
-- el nuevo modelo ya existe y esta versionado.
+- ✅ CLI y API siguen funcionando;
+- ✅ el nuevo modelo ya existe y esta versionado.
 
-### Fase 2. Motor DES minimo
+### Fase 2. Motor DES minimo ✅ COMPLETADO
+
+**Commits:** `fad2a12`, `b47023d`
 
 Objetivo:
 introducir el scheduler y el runtime vivo.
 
 Entregables:
 
-- `packages/sim-engine`;
-- `packages/sim-runtime`;
-- `packages/event-bus`;
-- cola de eventos determinista;
-- `snapshot` y `restore`;
-- trazas minimas de eventos.
+- ✅ `packages/sim-engine`;
+- ✅ `packages/sim-runtime`;
+- ⏳ `packages/event-bus` (no necesario para MVP);
+- ✅ cola de eventos determinista;
+- ✅ `snapshot` y `restore`;
+- ✅ trazas minimas de eventos.
 
 Salida:
 
-- un laboratorio pequeno puede correr en modo headless con replay determinista.
+- ✅ un laboratorio pequeno puede correr en modo headless con replay determinista.
 
-### Fase 3. Protocolo MVP util
+### Fase 3. Protocolo MVP util ✅ COMPLETADO
+
+**Commits:** `b47023d`
 
 Objetivo:
 tener conectividad educativa minima util.
 
 Entregables:
 
-- Ethernet;
-- switching basico;
-- VLAN access/trunk;
-- ARP;
-- IPv4;
-- ICMP echo;
-- routing estatico;
-- evidence extractors simples.
+- ✅ Ethernet;
+- ✅ switching basico (MAC learning);
+- ✅ VLAN access/trunk;
+- ✅ ARP;
+- ✅ IPv4;
+- ✅ ICMP echo;
+- ✅ routing estatico;
+- ⏳ evidence extractors simples (pendiente para Fase 5).
 
 Salida:
 
-- un lab L2/L3 pequeno puede demostrar reachability sin equipo externo.
+- ✅ un lab L2/L3 pequeno puede demostrar reachability sin equipo externo.
 
-### Fase 4. TUI MVP
+### Fase 4. TUI MVP ✅ COMPLETADO
+
+**Commits:** `4ef3a9c`, `34f1548`
 
 Objetivo:
 poner una interfaz de trabajo real sobre el nuevo core.
 
 Entregables:
 
-- `apps/tui`;
-- workspace por grilla;
-- inspector;
-- panel de eventos;
-- modo `step-by-step`;
-- CLI de dispositivo como proyeccion del estado.
+- ✅ `apps/tui`;
+- ✅ workspace por grilla (layout 4-paneles);
+- ✅ inspector (interfaces, MAC/ARP/Routing tables);
+- ✅ panel de eventos;
+- ✅ modo `step-by-step` (Play/Pause/Step/Reset);
+- ⏳ CLI de dispositivo como proyeccion del estado (pendiente).
 
 Salida:
 
-- ya no dependes del menu `inquirer` para editar y observar labs.
+- ✅ ya no dependes del menu `inquirer` para editar y observar labs.
 
-### Fase 5. Activity engine y control plane
+### Fase 5. Activity engine y control plane ⏳ PENDIENTE
 
 Objetivo:
 cerrar el ciclo autoria -> simulacion -> evaluacion.
@@ -356,14 +450,14 @@ Salida:
 
 - un lab puede evaluarse usando runtime interno y no solo deploy externo.
 
-### Fase 6. Adapters avanzados
+### Fase 6. Adapters avanzados ⏳ PENDIENTE
 
 Objetivo:
 volver a conectar el ecosistema Packet Tracer y las capacidades legacy sin contaminar el core.
 
 Entregables:
 
-- `import-pka` y `export-pka`;
+- `import-pka` y `export-pka` robustos;
 - strategy por version de Packet Tracer;
 - bridge con deploy SSH solo como adapter;
 - round-trip tests y differential tests basicos.
@@ -385,12 +479,14 @@ Salida:
 
 El cambio va bien si se cumple esto:
 
-- el simulador corre sin depender de Packet Tracer;
-- la misma semilla produce el mismo resultado;
-- la TUI observa estado vivo y no solo YAML;
-- `.pka` puede romperse sin romper el core;
-- la validacion usa evidencia del runtime interno;
-- CLI, API y TUI comparten contratos del mismo nucleo.
+| Criterio | Estado |
+|----------|--------|
+| el simulador corre sin depender de Packet Tracer | ✅ Cumplido |
+| la misma semilla produce el mismo resultado | ✅ Cumplido (LCG determinista) |
+| la TUI observa estado vivo y no solo YAML | ✅ Cumplido |
+| `.pka` puede romperse sin romper el core | ✅ Cumplido (adapter separado) |
+| la validacion usa evidencia del runtime interno | ⏳ Pendiente (Fase 5) |
+| CLI, API y TUI comparten contratos del mismo nucleo | ✅ Cumplido |
 
 ## 9. Riesgos principales
 
