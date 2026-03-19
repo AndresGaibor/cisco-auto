@@ -1,0 +1,29 @@
+{
+  "name": "@cisco-auto/device-catalog",
+  "version": "0.1.0",
+  "description": "Catálogo de dispositivos Cisco con especificaciones de hardware",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./routers": "./src/routers.ts",
+    "./switches": "./src/switches.ts",
+    "./end-devices": "./src/end-devices.ts",
+    "./modules": "./src/modules.ts",
+    "./service": "./src/service.ts"
+  },
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cisco-auto/lab-model": "workspace:*",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  }
+}
