@@ -3,6 +3,7 @@
  * Representa un puerto de red con sus características
  */
 export enum PortType {
+  ETHERNET = 'Ethernet',
   FAST_ETHERNET = 'FastEthernet',
   GIGABIT_ETHERNET = 'GigabitEthernet',
   SERIAL = 'Serial',
@@ -127,6 +128,7 @@ export class Port {
    */
   getFormattedName(): string {
     const prefixes: Record<PortType, string> = {
+      [PortType.ETHERNET]: 'Ethernet',
       [PortType.FAST_ETHERNET]: 'FastEthernet',
       [PortType.GIGABIT_ETHERNET]: 'GigabitEthernet',
       [PortType.SERIAL]: 'Serial',

@@ -1,4 +1,4 @@
-//**
+/**
  * DTOs para Connection
  * Objetos de transferencia de datos para conexiones
  */

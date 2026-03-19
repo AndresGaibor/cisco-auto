@@ -13,6 +13,8 @@ import { createDeployCommand } from './commands/deploy.ts';
 import { createInitCommand } from './commands/init.ts';
 import { createParsePKACommand } from './commands/parse-pka.ts';
 import { createModTestCommand } from './commands/mod-test.ts';
+import { createTemplateCommand } from './commands/template.ts';
+import { createServeCommand } from './commands/serve.ts';
 import { createInteractiveCommand } from './repl.ts';
 import { createShellCommands } from './shell-commands.ts';
 
@@ -32,6 +34,8 @@ program.addCommand(createDeployCommand());
 program.addCommand(createInitCommand());
 program.addCommand(createParsePKACommand());
 program.addCommand(createModTestCommand());
+program.addCommand(createTemplateCommand());
+program.addCommand(createServeCommand());
 
 // Nuevos comandos interactivos
 program.addCommand(createInteractiveCommand());

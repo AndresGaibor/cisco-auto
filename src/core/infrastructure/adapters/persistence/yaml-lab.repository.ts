@@ -310,7 +310,8 @@ export class YamlLabRepository implements LabRepository {
         break;
       case 'switch':
       case 'multilayer-switch':
-        for (let i = 0; i < 24; i++) {
+        // Cisco switch ports start at Fa0/1, not Fa0/0
+        for (let i = 1; i <= 24; i++) {
           ports.push(Port.create(`FastEthernet0/${i}`));
         }
         ports.push(Port.create('GigabitEthernet0/1'));
