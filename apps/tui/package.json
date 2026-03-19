@@ -9,7 +9,7 @@
     "cisco-tui": "./bin/cisco-tui.ts"
   },
   "scripts": {
-    "start": "bun run ./src/cli.ts",
+    "start": "bun run ./cli.ts",
     "build": "bun build ./src/index.tsx --outdir ./dist",
     "typecheck": "tsc --noEmit"
   },
