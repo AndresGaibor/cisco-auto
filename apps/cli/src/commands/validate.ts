@@ -1,8 +1,8 @@
 import { Command } from 'commander';
-import { loadLab } from '../../core/parser/yaml-parser.ts';
-import { validateLab } from '../../core/validation/lab.validator.ts';
-import type { LabSpec } from '../../core/canonical/index.ts';
-import type { ValidationIssue } from '../../core/validation/lab.validator.ts';
+import { loadLab } from '../../../../src/core/parser/yaml-parser.ts';
+import { validateLab } from '../../../../src/core/validation/lab.validator.ts';
+import type { LabSpec } from '../../../../src/core/canonical/index.ts';
+import type { ValidationIssue } from '../../../../src/core/validation/lab.validator.ts';
 
 const SEVERITY_ICONS = {
   error: '❌',

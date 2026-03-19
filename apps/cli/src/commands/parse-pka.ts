@@ -1,6 +1,6 @@
 import { Command } from 'commander';
-import { parsePKA, isPka2XmlAvailable } from '../../core/parser/pka/index.ts';
-import { PKAtoYAML } from '../../core/parser/pka-to-yaml.ts';
+import { parsePKA, isPka2XmlAvailable } from '../../../../src/core/parser/pka/index.ts';
+import { PKAtoYAML } from '../../../../src/core/parser/pka-to-yaml.ts';
 import { writeFileSync } from 'fs';
 import * as yaml from 'js-yaml';
 

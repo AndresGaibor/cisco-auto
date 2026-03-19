@@ -23,13 +23,11 @@
     "@cisco-auto/legacy": "workspace:*",
     "chalk": "^5.6.2",
     "commander": "^14.0.3",
-    "inquirer": "^13.3.2",
     "pino": "^10.3.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/inquirer": "^9.0.9",
     "typescript": "^5"
   }
 }

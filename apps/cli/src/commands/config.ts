@@ -1,8 +1,8 @@
 import { Command } from 'commander';
 import * as fs from 'fs';
 import * as path from 'path';
-import { loadLab } from '../../core/parser/yaml-parser.ts';
-import { generateIOS, IOSGenerator } from '../../core/config-generators/ios-generator.ts';
+import { loadLab } from '../../../../src/core/parser/yaml-parser.ts';
+import { generateIOS, IOSGenerator } from '../../../../src/core/config-generators/ios-generator.ts';
 
 export function createConfigCommand(): Command {
   return new Command('config')

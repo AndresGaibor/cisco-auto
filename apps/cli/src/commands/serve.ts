@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { createAPIServer } from '../../api/index.ts';
+import { createAPIServer } from '../../../../src/api/index.ts';
 
 export function createServeCommand(): Command {
   return new Command('serve')

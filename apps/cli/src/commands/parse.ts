@@ -1,8 +1,8 @@
 import { Command } from 'commander';
-import { loadLab, YAMLParser } from '../../core/parser/yaml-parser.ts';
-import { validateLabSafe } from '../../core/types/index.ts';
-import { visualizeTopology, generateMermaidDiagram, analyzeTopology } from '../../core/topology/index.ts';
-import type { LabSpec } from '../../core/canonical/index.ts';
+import { loadLab, YAMLParser } from '../../../../src/core/parser/yaml-parser.ts';
+import { validateLabSafe } from '../../../../src/core/types/index.ts';
+import { visualizeTopology, generateMermaidDiagram, analyzeTopology } from '../../../../src/core/topology/index.ts';
+import type { LabSpec } from '../../../../src/core/canonical/index.ts';
 
 /**
  * Convierte Lab del parser a LabSpec

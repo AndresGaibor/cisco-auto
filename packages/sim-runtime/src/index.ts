@@ -25,3 +25,6 @@ export * from './device-handlers';
 
 // L3 Protocols (includes RouteEntry, ARPEntry, etc)
 export * from './protocols';
+
+// Normalized event types
+export * from './event-types';

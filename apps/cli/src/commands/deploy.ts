@@ -1,8 +1,8 @@
 import { Command } from 'commander';
-import { loadLab } from '../../core/parser/yaml-parser.ts';
-import { DeployOrchestrator, deployToDevice } from '../../core/executor/index.ts';
-import type { ConnectionCredentials, DeployOptions, DeployResult } from '../../core/executor/types.ts';
-import type { DeviceSpec, LabSpec } from '../../core/canonical/index.ts';
+import { loadLab } from '../../../../src/core/parser/yaml-parser.ts';
+import { DeployOrchestrator, deployToDevice } from '../../../../src/core/executor/index.ts';
+import type { ConnectionCredentials, DeployOptions, DeployResult } from '../../../../src/core/executor/types.ts';
+import type { DeviceSpec, LabSpec } from '../../../../src/core/canonical/index.ts';
 
 /**
  * Obtiene credenciales para un dispositivo

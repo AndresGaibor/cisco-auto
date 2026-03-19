@@ -1,6 +1,6 @@
 import { Command } from 'commander';
-import { parsePKA, isPka2XmlAvailable, encodePKAExternal } from '../../core/parser/pka/index.ts';
-import { Network, PC, Switch, Router, Server } from '../../core/models/index.ts';
+import { parsePKA, isPka2XmlAvailable, encodePKAExternal } from '../../../../src/core/parser/pka/index.ts';
+import { Network, PC, Switch, Router, Server } from '../../../../src/core/models/index.ts';
 import { writeFileSync } from 'fs';
 
 export function createModTestCommand(): Command {

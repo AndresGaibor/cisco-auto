@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { loadLab } from '../../core/parser/yaml-parser.ts';
+import { loadLab } from '../../../../src/core/parser/yaml-parser.ts';
 
 export function createDevicesCommand(): Command {
   return new Command('devices')
