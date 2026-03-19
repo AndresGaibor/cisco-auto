@@ -78,7 +78,6 @@
       "version": "0.1.0",
       "dependencies": {
         "@cisco-auto/lab-model": "workspace:*",
-        "zod": "^4.3.6",
       },
       "devDependencies": {
         "@types/bun": "latest",
