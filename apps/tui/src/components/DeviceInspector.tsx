@@ -242,6 +242,18 @@ function RoutingTableView({ routes }: { routes: RouteEntry[] }) {
 export function DeviceInspector() {
   const { runtime, selectedDevice } = useSimulator();
   
+  // All hooks must be called before any early returns
+  const device = runtime?.devices.get(selectedDevice ?? '');
+  
+  const interfaces = useMemo(
+    () => device ? Array.from(device.interfaces.values()) : [],
+    [device]
+  );
+  
+  const isSwitch = device?.type === 'switch' || device?.type === 'multilayer-switch';
+  const isRouter = device?.type === 'router' || device?.type === 'multilayer-switch';
+  
+  // Early returns AFTER all hooks
   if (!runtime) {
     return (
       <Box flexDirection="column" padding={1}>
@@ -267,8 +279,6 @@ export function DeviceInspector() {
     );
   }
   
-  const device = runtime.devices.get(selectedDevice);
-  
   if (!device) {
     return (
       <Box flexDirection="column" padding={1}>
@@ -277,14 +287,6 @@ export function DeviceInspector() {
       </Box>
     );
   }
-  
-  const interfaces = useMemo(
-    () => Array.from(device.interfaces.values()),
-    [device.interfaces]
-  );
-  
-  const isSwitch = device.type === 'switch' || device.type === 'multilayer-switch';
-  const isRouter = device.type === 'router' || device.type === 'multilayer-switch';
   
   return (
     <Box flexDirection="column" padding={1}>
