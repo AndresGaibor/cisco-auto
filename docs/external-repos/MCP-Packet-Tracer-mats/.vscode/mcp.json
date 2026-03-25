@@ -1,0 +1,7 @@
+{
+  "servers": {
+    "packet-tracer": {
+      "url": "http://127.0.0.1:39000/mcp"
+    }
+  }
+}
