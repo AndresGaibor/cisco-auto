@@ -1,23 +1,27 @@
 # cisco-auto 🚀
 
+[![Bun Version](https://img.shields.io/badge/Bun-%E2%89%A51.1-black?logo=bun)](https://bun.sh/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-%E2%89%A55.0-blue?logo=typescript)](https://www.typescriptlang.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 **cisco-auto** es una potente herramienta de automatización diseñada para simplificar y acelerar la configuración de laboratorios y talleres de **Cisco Packet Tracer**. 
 
-Ideal para estudiantes de Redes de Computadores (especialmente de la ESPOCH), esta herramienta reduce el tiempo de configuración manual de 45 minutos a menos de 2 minutos, minimizando errores humanos y asegurando que la topología cumpla con los estándares requeridos.
+Ideal para estudiantes y profesionales de redes, esta herramienta reduce el tiempo de configuración manual de topologías complejas de 45 minutos a menos de 2 minutos. Al estandarizar el despliegue, minimiza los errores humanos y asegura que la topología cumpla con los estándares requeridos para pruebas o evaluación.
 
 ---
 
 ## ✨ Características Principales
 
-- **⚙️ Configuración Automática**: Despliegue de comandos vía SSH/Telnet directamente a dispositivos Cisco.
-- **🏗️ Topologías Declarativas**: Define tu red usando archivos **YAML** o **JSON** fáciles de leer.
-- **🔍 Análisis de Archivos PKA/PKT**: Capacidad para extraer y decodificar información de archivos de Packet Tracer (versiones compatibles).
-- **🌐 Soporte Multitarea**: Configuración paralela de múltiples dispositivos para máxima velocidad.
+- **⚙️ Configuración Automática**: Despliegue de comandos vía API (Bridge) o scripts simulados directamente a dispositivos Cisco.
+- **🏗️ Topologías Declarativas**: Define tu red usando archivos **YAML** intuitivos.
+- **🔍 Análisis de Archivos PKA/PKT**: Capacidad para extraer y decodificar información de archivos de Packet Tracer (versiones 7.x y anteriores).
+- **🌐 Soporte Multitarea**: Generación de configuraciones paralelas de múltiples dispositivos para máxima velocidad.
 - **🛠️ Protocolos Soportados**:
   - **L2**: VLANs, VTP, STP, EtherChannel (LACP/PAgP).
-  - **L3**: OSPF (Multi-área), EIGRP, BGP.
-  - **Seguridad**: ACLs (Estándar/Extendidas), NAT (Estático/Dinámico/Overload), VPN IPsec.
-- **✅ Validación Automática**: Verifica conectividad (ping) y estado de interfaces tras el despliegue.
-- **🤖 Asistente IA Integrado**: Skill de Cisco Networking Assistant para guía interactiva.
+  - **L3**: Routing estático, OSPF (Multi-área), EIGRP, BGP.
+  - **Seguridad**: ACLs (Estándar/Extendidas), NAT (Estático/Dinámico/Overload).
+- **✅ Validación Automática**: Verifica la correcta estructura del laboratorio antes del despliegue.
+- **🤖 Asistente IA Integrado**: Interfaz lista para usar con IA a través de iFlow, Gemini o Claude CLI.
 
 ---
 
@@ -25,9 +29,9 @@ Ideal para estudiantes de Redes de Computadores (especialmente de la ESPOCH), es
 
 ### Requisitos Previos
 
-- [Bun](https://bun.sh/) (v1.1 o superior) - Runtime de JavaScript/TypeScript
-- [Cisco Packet Tracer](https://www.netacad.com/courses/packet-tracer) (para pruebas locales)
-- Git (para clonar el repositorio)
+- [Bun](https://bun.sh/) (v1.1 o superior) - Runtime ultrarrápido de JavaScript/TypeScript.
+- [Cisco Packet Tracer](https://www.netacad.com/courses/packet-tracer) (opcional, para simulaciones locales).
+- Git (para clonar el repositorio).
 
 ### Paso 1: Clonar el Repositorio
 
@@ -38,374 +42,144 @@ cd cisco-auto
 
 ### Paso 2: Instalar Dependencias
 
+Dado que el proyecto es un **monorepo** gestionado con Bun, simplemente ejecuta:
+
 ```bash
 bun install
 ```
 
 ### Paso 3: Verificar Instalación
 
+Puedes ejecutar la CLI directamente a través del alias principal de Bun:
+
 ```bash
-bun run src/cli/index.ts --help
+bun run cisco-auto --help
 ```
 
 Deberías ver la ayuda de la CLI con los comandos disponibles.
 
 ---
 
+## 🛠️ Uso de la CLI
+
+**cisco-auto** ofrece una potente interfaz de línea de comandos (CLI) para gestionar el ciclo de vida de tus laboratorios.
+
+### Flujo de Trabajo Principal
+
+1. **Crear o Parsear:** Inicia creando un archivo YAML base.
+2. **Validar:** Asegura que la topología y comandos sean correctos.
+3. **Desplegar:** (Opcional) Genera scripts o se conecta para aprovisionar los equipos.
+
+### Comandos de Ejemplo
+
+```bash
+# Iniciar el asistente interactivo para crear un laboratorio nuevo
+bun run cisco-auto lab interactive
+
+# Analizar un archivo de laboratorio (YAML) y ver la topología detectada
+bun run cisco-auto lab parse labs/vlan-basico.yaml
+
+# Validar exhaustivamente un laboratorio y sus reglas de negocio
+bun run cisco-auto lab validate labs/vlan-basico.yaml
+
+# Listar los dispositivos definidos en el laboratorio
+bun run cisco-auto device list labs/vlan-basico.yaml
+
+# Generar configuraciones para los dispositivos definidos (modo dry-run por defecto en legacy)
+bun run cisco-auto legacy deploy labs/vlan-basico.yaml
+
+# Extraer y transformar un archivo de Packet Tracer (PKA/PKT) a YAML (solo versiones compatibles)
+bun run cisco-auto legacy parse-pka archivo.pka --yaml --output lab.yaml
+```
+
+*Para ver la ayuda completa de cada comando, utiliza el flag `--help`, por ejemplo: `bun run cisco-auto lab --help`.*
+
+---
+
 ## 🚀 Cómo Usar con IA (Skills)
 
-Este proyecto incluye una **skill de Cisco Networking Assistant** que te permite interactuar con asistentes de IA para obtener ayuda experta en tus tareas de redes.
+Este proyecto incluye una **skill de Cisco Networking Assistant** que te permite interactuar con asistentes de IA para obtener ayuda experta, guiada o automática en tus tareas de redes.
 
 ### Opción A: Usar con iFlow CLI (Recomendado)
 
-**iFlow CLI** es el entorno en el que estás interactuando ahora mismo.
+**iFlow CLI** es un entorno optimizado para usar Skills de IA locales.
 
-#### Instalación de iFlow CLI:
+1. Descarga e instala [iFlow CLI](https://github.com/iflow/cli).
+2. Navega al directorio del proyecto `cisco-auto`.
+3. Ejecuta `iflow` en tu terminal. La skill se cargará desde `.iflow/skills/cisco-networking-assistant/`.
+4. Escribe tu solicitud, por ejemplo:
+   > *"Necesito ayuda configurando VLANs en mi taller"*
+   > *"Analiza este archivo lab-vlans.yaml y corrígelo"*
 
-1. Descarga iFlow CLI desde: https://github.com/iflow/cli (o el repositorio oficial)
-2. Instala siguiendo las instrucciones del proyecto
-3. Abre tu terminal y navega al proyecto:
+### Opción B: Usar con Gemini CLI (Google) o Claude Code (Anthropic)
 
-```bash
-cd /Users/andresgaibor/code/javascript/cisco-auto
-iflow
-```
+También puedes usar las interfaces oficiales de Google o Anthropic instaladas globalmente (`@google/gemini-cli` o `@anthropic-ai/claude-code`).
 
-4. La skill se cargará automáticamente desde `.iflow/skills/cisco-networking-assistant/`
+- Inicia sesión con `gemini auth login` o `claude auth login`.
+- En el directorio del proyecto, inicia `gemini` o `claude`. La skill correspondiente se detectará en sus carpetas respectivas (ej. `.gemini/skills/`).
 
-#### Uso:
-
-Simplemente escribe tus preguntas o solicitudes:
-
-```
-"Necesito ayuda configurando VLANs en mi taller"
-"Analiza este archivo lab-vlans.pka"
-"Qué comandos necesito para OSPF?"
-"No funciona la conectividad entre VLANs, ayuda con troubleshooting"
-```
-
-### Opción B: Usar con Gemini CLI (Google)
-
-**Gemini CLI** es la interfaz de línea de comandos de Google para interactuar con Gemini.
-
-#### Instalación de Gemini CLI:
-
-1. Instala Gemini CLI (requiere Node.js):
-
-```bash
-npm install -g @google/gemini-cli
-# o
-yarn global add @google/gemini-cli
-```
-
-2. Autentícate con tu cuenta de Google:
-
-```bash
-gemini auth login
-```
-
-3. Navega al proyecto:
-
-```bash
-cd /Users/andresgaibor/code/javascript/cisco-auto
-```
-
-4. Inicia Gemini en el directorio:
-
-```bash
-gemini
-```
-
-La skill se cargará automáticamente desde `.gemini/skills/cisco-networking-assistant/`
-
-#### Uso:
-
-```
-"Ayúdame con este laboratorio de Packet Tracer"
-"Genera configuración para Router-on-a-stick"
-"Explicame qué es VTP y cómo configurarlo"
-```
-
-### Opción C: Usar con Claude Code (Anthropic)
-
-**Claude Code** es el CLI oficial de Anthropic para Claude.
-
-#### Instalación de Claude Code:
-
-1. Instala Claude Code:
-
-```bash
-npm install -g @anthropic-ai/claude-code
-# o
-yarn global add @anthropic-ai/claude-code
-```
-
-2. Autentícate:
-
-```bash
-claude auth login
-```
-
-3. Navega al proyecto e inicia Claude:
-
-```bash
-cd /Users/andresgaibor/code/javascript/cisco-auto
-claude
-```
-
-#### Uso:
-
-Similar a las otras opciones, la skill está disponible en `.claude/skills/` (si está configurado).
+**Ejemplos de Prompts:**
+- *"Ayúdame con este laboratorio de Packet Tracer"*
+- *"Genera configuración para Router-on-a-stick"*
+- *"Las PCs no se hacen ping en mi lab, ayúdame con el troubleshooting"*
 
 ---
 
-## 🛠️ Uso de la CLI Directa
+## 📁 Estructura del Monorepo
 
-Si prefieres usar la CLI sin IA, estos son los comandos disponibles:
-
-### Comandos Principales
-
-```bash
-# Analizar un archivo YAML de laboratorio
-bun run src/cli/index.ts parse labs/vlan-basico.yaml
-
-# Generar configuraciones IOS
-bun run src/cli/index.ts config labs/vlan-basico.yaml --dry-run
-
-# Desplegar configuración a dispositivos
-bun run src/cli/index.ts deploy labs/vlan-basico.yaml --save-config
-
-# Validar un archivo de laboratorio
-bun run src/cli/index.ts validate labs/vlan-basico.yaml
-
-# Listar dispositivos
-bun run src/cli/index.ts devices labs/vlan-basico.yaml
-
-# Parsear archivo PKA de Packet Tracer
-bun run src/cli/index.ts parse-pka archivo.pka --yaml --output lab.yaml
-
-# Modificar archivo PKA
-bun run src/cli/index.ts mod-test lab.pka --pc PC1 --ip 192.168.1.10 --output modificado.pka
-
-# Modo interactivo
-bun run src/cli/index.ts interactive
-```
-
-### Scripts Auxiliares
-
-```bash
-# Analizar un laboratorio (usando la skill)
-bun run .iflow/skills/cisco-networking-assistant/scripts/lab-analyzer.ts archivo.pka
-
-# Wizard de configuración interactivo
-bun run .iflow/skills/cisco-networking-assistant/scripts/config-wizard.ts
-```
-
----
-
-## 📁 Estructura del Proyecto
+El proyecto está organizado en un monorepo para separar lógicamente la CLI, los modelos de negocio y las utilidades:
 
 ```
 cisco-auto/
-├── src/
-│   ├── cli/                    # Interfaz de línea de comandos
-│   │   ├── commands/           # Comandos disponibles
-│   │   ├── interactive/        # Menús interactivos
-│   │   └── index.ts            # Punto de entrada
-│   ├── core/                   # Lógica de negocio
-│   │   ├── config-generators/  # Generadores de configuración IOS
-│   │   ├── parser/             # Parsers de PKA/YAML
-│   │   ├── models/             # Modelos de dispositivos
-│   │   └── types/              # Tipos y schemas
-│   ├── api/                    # API REST (en desarrollo)
-│   └── templates/              # Templates de configuración
-├── labs/                       # Ejemplos de laboratorios
-├── docs/                       # Documentación técnica
-├── .iflow/skills/              # Skills para iFlow CLI
-├── .gemini/skills/             # Skills para Gemini CLI
-├── .claude/skills/             # Skills para Claude CLI
-├── archivos_prueba/            # Archivos de prueba (PKA)
-└── tests/                      # Tests unitarios e integración
-```
-
----
-
-## 📚 Documentación de la Skill
-
-La skill incluye guías de referencia completas:
-
-### Guías Disponibles
-
-| Guía | Contenido | Ubicación |
-|------|-----------|-----------|
-| **VLAN Guide** | VLANs, trunking, VTP, STP, EtherChannel, Port Security | `.iflow/skills/cisco-networking-assistant/references/vlan-guide.md` |
-| **Routing Guide** | OSPF, EIGRP, BGP, routing estático | `.iflow/skills/cisco-networking-assistant/references/routing-guide.md` |
-| **Security Guide** | ACLs, NAT, VPNs, DHCP Snooping, DAI | `.iflow/skills/cisco-networking-assistant/references/security-guide.md` |
-| **Troubleshooting** | Metodología, comandos de diagnóstico | `.iflow/skills/cisco-networking-assistant/references/troubleshooting-guide.md` |
-
-### Templates
-
-- **VLAN Lab Template**: `.iflow/skills/cisco-networking-assistant/assets/templates/vlan-lab-template.yaml`
-
-### Checklists
-
-- **Verification Checklist**: `.iflow/skills/cisco-networking-assistant/assets/checklists/verification.md`
-
----
-
-## 💡 Ejemplos de Uso con IA
-
-### Ejemplo 1: Modo Guía (Aprendizaje)
-
-**Tú**: "Necesito ayuda configurando VLANs en mi taller, soy principiante"
-
-**IA**:
-```
-📚 MODO GUIA - NIVEL PRINCIPIANTE
-=====================================
-
-Voy a guiarte paso a paso. Primero, dime:
-1. ¿Tienes un archivo .pka del taller? 
-2. ¿Cuántas VLANs necesitas configurar?
-
-Mientras tanto, aquí está el concepto:
-- Las VLANs segmentan una red física en redes lógicas
-- Es como tener varios switches dentro de uno
-
-PASOS GENERALES:
-1. Crear las VLANs en los switches
-2. Asignar puertos a VLANs (modo access)
-3. Configurar enlaces trunk entre switches
-4. Configurar Router-on-a-stick si hay routing entre VLANs
-```
-
-### Ejemplo 2: Modo Automático (Rápido)
-
-**Tú**: "Tengo este archivo lab-vlans.pka, complétalo para que funcione"
-
-**IA**:
-```
-🤖 MODO AUTOMATICO ACTIVADO
-============================
-
-Analizando archivo...
-Detectado:
-- 2 Switches
-- 4 PCs
-- Requisito: VLAN 10 y 20 con Inter-VLAN routing
-
-Generando configuración...
-✅ Archivo modificado: lab-vlans-completed.pka
-
-Cambios realizados:
-- SW-CORE: VLANs 10 y 20 creadas, trunk configurado
-- R1: Router-on-a-stick con subinterfaces
-- PCs: IPs configuradas en rangos correctos
-
-Comandos clave aplicados:
-[Mostrará los comandos específicos]
-```
-
-### Ejemplo 3: Troubleshooting
-
-**Tú**: "Las PCs no se hacen ping, qué puede ser?"
-
-**IA**:
-```
-🔧 MODO TROUBLESHOOTING
-========================
-
-Vamos a diagnosticar paso a paso:
-
-PASO 1: Verificar Capa 1 (Física)
-- ¿Los cables están conectados? (deben estar verdes en PT)
-- ¿Las interfaces están up/up?
-
-Comando: show ip interface brief
-
-PASO 2: Verificar Capa 2 (Enlace de Datos)
-- ¿Los puertos están en la VLAN correcta?
-- ¿Hay trunk entre switches si es necesario?
-
-Comando: show vlan brief
-         show interfaces trunk
-
-[Continúa con árbol de decisión...]
+├── apps/
+│   └── cli/                    # Interfaz principal de línea de comandos
+├── packages/
+│   ├── crypto/                 # Desencriptación de archivos de Packet Tracer (PT 7.x)
+│   ├── device-catalog/         # Catálogo de hardware soportado por cisco-auto
+│   ├── import-pka/             # Parseo de archivos .pka y .pkt
+│   ├── import-yaml/            # Parseo y validación de topologías YAML
+│   ├── lab-model/              # Definición base y tipado de los modelos de Lab
+│   ├── legacy/                 # Código y comandos heredados (deprecated)
+│   ├── sim-engine/             # Motor de simulación para pruebas de estado
+│   ├── sim-runtime/            # Entorno de simulación
+│   └── topology/               # Validaciones estructurales y modelos de red
+├── labs/                       # Ejemplos de laboratorios YAML
+├── docs/                       # Documentación técnica, diseño de fases y PRDs
+├── scripts/                    # Scripts útiles (ej: instalación del Bridge en MacOS)
+└── tests/                      # Pruebas e2e, unitarias y de integración
 ```
 
 ---
 
 ## 🔧 Desarrollo y Contribución
 
-### Estructura de la Skill
+Si deseas contribuir, desarrollar nuevas funciones o mejorar las skills de IA, asegúrate de correr los scripts locales.
 
-Las skills están organizadas así:
+### Comandos de Desarrollo
 
-```
-.iflow/skills/cisco-networking-assistant/
-├── SKILL.md              # Instrucciones principales para la IA
-├── references/           # Documentación de referencia
-│   ├── vlan-guide.md
-│   ├── routing-guide.md
-│   ├── security-guide.md
-│   └── troubleshooting-guide.md
-├── scripts/              # Scripts ejecutables
-│   ├── lab-analyzer.ts
-│   └── config-wizard.ts
-└── assets/               # Recursos adicionales
-    ├── templates/
-    └── checklists/
+```bash
+# Construir todas las dependencias del monorepo
+bun run build
+
+# Correr pruebas unitarias e integración en todos los paquetes
+bun run test
+
+# Verificar el tipado global
+bun run typecheck
 ```
 
-### Agregar Nueva Guía
-
-1. Crea el archivo `.md` en `references/`
-2. Actualiza `SKILL.md` para mencionar la nueva guía
-3. La IA automáticamente la usará cuando sea relevante
-
-### Modificar Comportamiento de la Skill
-
-Edita `SKILL.md` para cambiar:
-- Cuándo se activa la skill
-- Qué hace en cada modo
-- Cómo estructura las respuestas
+### Agregando contenido a la Skill IA
+1. Ve a `.iflow/skills/cisco-networking-assistant/references/`.
+2. Crea una guía en Markdown (`.md`).
+3. Modifica `.iflow/skills/cisco-networking-assistant/SKILL.md` para que la IA sepa cuándo invocarla.
 
 ---
 
-## ⚠️ Solución de Problemas
+## ⚠️ Solución de Problemas Comunes
 
-### La skill no se carga
-
-**iFlow**:
-```bash
-# Verificar que la skill existe
-ls -la .iflow/skills/cisco-networking-assistant/
-
-# Verificar skills-lock.json
-cat skills-lock.json
-```
-
-**Gemini**:
-```bash
-# Verificar ubicación de skills de Gemini
-gemini skills list
-
-# Recargar skills
-gemini skills reload
-```
-
-### Error al parsear PKA
-
-Los archivos PKA de Packet Tracer 8.x están encriptados y no pueden parsearse completamente. Usa la definición YAML como alternativa.
-
-### Comandos no funcionan
-
-Asegúrate de tener Bun instalado y las dependencias instaladas:
-
-```bash
-bun --version  # Debe ser 1.1+
-bun install    # Reinstalar dependencias
-```
+- **Error al parsear PKA/PKT:** Los archivos creados con Cisco Packet Tracer 8.x están fuertemente encriptados. `cisco-auto` actualmente solo puede extraer archivos de versiones anteriores o desprotegidos. Usa definiciones YAML directamente como la mejor alternativa.
+- **Comandos no encontrados:** Asegúrate de ejecutar `bun install` en la raíz para que los workspaces (`apps/*` y `packages/*`) se vinculen adecuadamente.
+- **La skill IA no responde adecuadamente:** Verifica si tu CLI (iFlow, Gemini, Claude) detecta la skill. Puedes revisar el archivo `skills-lock.json`.
 
 ---
 
@@ -417,14 +191,13 @@ Este proyecto está bajo la Licencia MIT. Consulta el archivo [LICENSE](LICENSE)
 
 ## 🤝 Soporte y Comunidad
 
-- **Issues**: Reporta problemas en GitHub Issues
-- **Discussions**: Preguntas y discusiones en GitHub Discussions
-- **Documentación**: Revisa la carpeta `docs/` para guías técnicas detalladas
+- **Problemas (Issues):** Reporta bugs en GitHub Issues.
+- **Documentación Avanzada:** Revisa la carpeta `docs/` para detalles de la arquitectura, mapas de PT y PRDs.
 
 ---
 
-Hecho con ❤️ para la comunidad de Redes.
+Hecho con ❤️ para la comunidad de Redes y Telecomunicaciones.
 
 **Autor**: Andrés Gaibor  
 **Institución**: ESPOCH - Escuela Superior Politécnica de Chimborazo  
-**Carrera**: Ingeniería en Sistemas/Redes
+**Carrera**: Ingeniería en Sistemas / Redes de Computadores
