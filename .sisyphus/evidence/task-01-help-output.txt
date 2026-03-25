@@ -1,0 +1,24 @@
+Usage: cisco-auto [options] [command]
+
+Automatización de laboratorios Cisco Packet Tracer
+
+Options:
+  -j, --json             Salida en formato JSON (default: false)
+  --jq <filter>          Filtrar salida JSON usando sintaxis similar a jq (ej:
+                         .[0].name)
+  -o, --output <format>  Formato de salida: json, yaml, table, text (default:
+                         "text")
+  -v, --verbose          Salida detallada con logs de debug (default: false)
+  -q, --quiet            Suprime salida no esencial (solo errores) (default:
+                         false)
+  -V, --version          output the version number
+  -h, --help             display help for command
+
+Commands:
+  lab                    Comandos para gestionar laboratorios Cisco
+  device                 Comandos para gestionar dispositivos
+  topology               Comandos para gestionar topologías de red
+  config                 Gestionar configuración de cisco-auto
+  bridge                 Comandos para gestión de bridges (compatibilidad)
+  legacy                 Comandos heredados (deprecated)
+  help [command]         display help for command

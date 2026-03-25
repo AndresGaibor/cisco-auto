@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bridge Client</title>
+</head>
+<body style="font-family: Arial; padding: 12px;">
+    <h3>Bridge Client</h3>
+    <div id="status">Esperando comandos por archivo...</div>
+    <pre id="log" style="margin-top:12px; background:#f5f5f5; padding:8px; min-height:120px; white-space:pre-wrap;"></pre>
+    <script>
+      function log(msg) {
+        var el = document.getElementById('log');
+        el.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg + '\n' + el.textContent;
+      }
+      window.BridgeUI = {
+        setStatus: function(value) {
+          document.getElementById('status').textContent = value;
+        },
+        log: log
+      };
+      log('UI lista');
+    </script>
+</body>
+</html>

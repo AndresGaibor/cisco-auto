@@ -1,0 +1,10 @@
+
+⚠️  ADVERTENCIA: Los comandos en "legacy" están deprecated.
+   Por favor usa los nuevos comandos estructurados por recurso:
+   • cisco-auto lab parse     (antes: cisco-auto parse)
+   • cisco-auto lab validate  (antes: cisco-auto validate)
+   • cisco-auto device list   (antes: cisco-auto devices)
+   • cisco-auto config        (antes: cisco-auto config)
+   • cisco-auto topology      (nuevo comando)
+
+🔍 Parseando archivo: /tmp/test.yaml

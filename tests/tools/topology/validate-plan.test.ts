@@ -1,0 +1,250 @@
+import { describe, test, expect } from 'bun:test';
+import { ptValidatePlanTool } from '../../../src/tools/topology/validate-plan.ts';
+import type { TopologyPlan } from '../../../src/core/types/tool.ts';
+
+function createValidPlan(): TopologyPlan {
+  return {
+    id: 'test-plan-1',
+    name: 'Test Plan',
+    devices: [
+      {
+        id: 'R1',
+        name: 'Router1',
+        model: {
+          name: '2911',
+          type: 'router',
+          ptType: 'Router-PT',
+          ports: [
+            { name: 'GigabitEthernet0/0', type: 'gigabitethernet', available: true },
+            { name: 'GigabitEthernet0/1', type: 'gigabitethernet', available: true }
+          ]
+        },
+        position: { x: 100, y: 100 },
+        interfaces: [
+          { name: 'GigabitEthernet0/0', ip: '192.168.1.1', subnetMask: '255.255.255.0', configured: true },
+          { name: 'GigabitEthernet0/1', configured: false }
+        ]
+      },
+      {
+        id: 'S1',
+        name: 'Switch1',
+        model: {
+          name: '2960-24TT',
+          type: 'switch',
+          ptType: 'Switch-PT',
+          ports: [
+            { name: 'FastEthernet0/1', type: 'fastethernet', available: true },
+            { name: 'FastEthernet0/2', type: 'fastethernet', available: true }
+          ]
+        },
+        position: { x: 200, y: 100 },
+        interfaces: [
+          { name: 'FastEthernet0/1', configured: false },
+          { name: 'FastEthernet0/2', configured: false }
+        ]
+      }
+    ],
+    links: [
+      {
+        id: 'link-1',
+        from: { deviceId: 'R1', deviceName: 'Router1', port: 'GigabitEthernet0/0' },
+        to: { deviceId: 'S1', deviceName: 'Switch1', port: 'FastEthernet0/1' },
+        cableType: 'straight-through',
+        validated: false
+      }
+    ],
+    params: {
+      routerCount: 1,
+      switchCount: 1,
+      pcCount: 0,
+      networkType: 'single_lan'
+    }
+  };
+}
+
+describe('pt_validate_plan', () => {
+  test('retorna válido para un plan correcto', async () => {
+    const plan = createValidPlan();
+    const result = await ptValidatePlanTool.handler({ plan }, {} as any);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.valid).toBe(true);
+      expect(result.data.errors).toHaveLength(0);
+    }
+  });
+
+  test('detecta modelo inexistente en catálogo', async () => {
+    const plan = createValidPlan();
+    plan.devices.push({
+      id: 'R2',
+      name: 'Router2',
+      model: {
+        name: 'MODELOX-999',
+        type: 'router',
+        ptType: 'Router-PT',
+        ports: []
+      },
+      position: { x: 300, y: 100 },
+      interfaces: []
+    });
+
+    const result = await ptValidatePlanTool.handler({ plan }, {} as any);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.valid).toBe(false);
+      expect(result.data.errors.some((e: any) => e.type === 'invalid_model')).toBe(true);
+    }
+  });
+
+  test('detecta puerto inexistente en link', async () => {
+    const plan = createValidPlan();
+    plan.links.push({
+      id: 'link-2',
+      from: { deviceId: 'R1', deviceName: 'Router1', port: 'NonExistentPort' },
+      to: { deviceId: 'S1', deviceName: 'Switch1', port: 'FastEthernet0/2' },
+      cableType: 'straight-through',
+      validated: false
+    });
+
+    const result = await ptValidatePlanTool.handler({ plan }, {} as any);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.valid).toBe(false);
+      expect(result.data.errors.some((e: any) => e.type === 'invalid_port')).toBe(true);
+    }
+  });
+
+  test('detecta IPs duplicados', async () => {
+    const plan = createValidPlan();
+    plan.devices.push({
+      id: 'PC1',
+      name: 'PC1',
+      model: {
+        name: 'PC-PT',
+        type: 'pc',
+        ptType: 'PC-PT',
+        ports: [{ name: 'FastEthernet0', type: 'fastethernet', available: true }]
+      },
+      position: { x: 300, y: 200 },
+      interfaces: [
+        { name: 'FastEthernet0', ip: '192.168.1.1', subnetMask: '255.255.255.0', configured: true }
+      ]
+    });
+
+    const result = await ptValidatePlanTool.handler({ plan }, {} as any);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.valid).toBe(false);
+      expect(result.data.errors.some((e: any) => e.type === 'ip_conflict')).toBe(true);
+    }
+  });
+
+  test('detecta router sin IP configurada', async () => {
+    const plan = createValidPlan();
+    plan.devices.push({
+      id: 'R3',
+      name: 'Router3',
+      model: {
+        name: '2911',
+        type: 'router',
+        ptType: 'Router-PT',
+        ports: [
+          { name: 'GigabitEthernet0/0', type: 'gigabitethernet', available: true }
+        ]
+      },
+      position: { x: 400, y: 100 },
+      interfaces: [
+        { name: 'GigabitEthernet0/0', configured: false }
+      ]
+    });
+
+    const result = await ptValidatePlanTool.handler({ plan }, {} as any);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.valid).toBe(false);
+      expect(result.data.errors.some((e: any) => e.type === 'missing_ip')).toBe(true);
+    }
+  });
+
+  test('detecta tipo de cable inválido', async () => {
+    const plan = createValidPlan();
+    plan.links.push({
+      id: 'link-3',
+      from: { deviceId: 'R1', deviceName: 'Router1', port: 'GigabitEthernet0/1' },
+      to: { deviceId: 'S1', deviceName: 'Switch1', port: 'FastEthernet0/2' },
+      cableType: 'invalid-cable-type' as any,
+      validated: false
+    });
+
+    const result = await ptValidatePlanTool.handler({ plan }, {} as any);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.valid).toBe(false);
+      expect(result.data.errors.some((e: any) => e.type === 'invalid_cable')).toBe(true);
+    }
+  });
+
+  test('retorna error si no se proporciona plan', async () => {
+    const result = await ptValidatePlanTool.handler({}, {} as any);
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe('INVALID_INPUT');
+    }
+  });
+
+  test('retorna error si el plan no tiene devices', async () => {
+    const result = await ptValidatePlanTool.handler({ plan: { links: [] } }, {} as any);
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe('INVALID_STRUCTURE');
+    }
+  });
+
+  test('retorna error si el plan no tiene links', async () => {
+    const result = await ptValidatePlanTool.handler({ plan: { devices: [] } }, {} as any);
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe('INVALID_STRUCTURE');
+    }
+  });
+
+  test('incluye warnings para puertos sin usar', async () => {
+    const plan = createValidPlan();
+    
+    const result = await ptValidatePlanTool.handler({ plan }, {} as any);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.warnings.length).toBeGreaterThan(0);
+      expect(result.data.warnings.some((w: any) => w.type === 'unused_port')).toBe(true);
+    }
+  });
+
+  test('detecta dispositivo referencedo en link que no existe', async () => {
+    const plan = createValidPlan();
+    plan.links.push({
+      id: 'link-4',
+      from: { deviceId: 'NONEXISTENT', deviceName: 'Ghost', port: 'GigabitEthernet0/0' },
+      to: { deviceId: 'S1', deviceName: 'Switch1', port: 'FastEthernet0/2' },
+      cableType: 'straight-through',
+      validated: false
+    });
+
+    const result = await ptValidatePlanTool.handler({ plan }, {} as any);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.valid).toBe(false);
+      expect(result.data.errors.some((e: any) => e.type === 'invalid_port')).toBe(true);
+    }
+  });
+});

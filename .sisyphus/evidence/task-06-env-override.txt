@@ -1,0 +1,9 @@
+Scenario: Env var overrides config
+  Tool: Bash
+  Steps:
+    1. echo "defaultRouter: 2911" > cisco-auto.yaml
+    2. CISCO_AUTO_DEFAULT_ROUTER=1941 cisco-auto config get defaultRouter
+    3. Assert output contains "1941"
+  Expected Result: Env var overrides file config
+  Evidence: Output = 1941
+  Status: PASS

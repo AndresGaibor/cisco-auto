@@ -1,0 +1,17 @@
+# Evidencia: Task 02 - jq Filter
+
+## Comando
+```
+cisco-auto legacy devices labs/vlan-basico.yaml --json --jq '.[0].name'
+```
+
+## Salida
+```
+"SW-CORE"
+```
+
+## Verificación
+- ✅ El filtro jq se aplica correctamente
+- ✅ Extrae el primer elemento del array
+- ✅ Accede a la propiedad 'name' del objeto
+- ✅ Funciona con sintaxis: .[0].name

@@ -1,0 +1,33 @@
+// Auto-connect .pts script (generated)
+// Contiene bootstrap permanente para conectar con PT MCP bridge
+
+// Nota: Este archivo puede ser generado dinámicamente por src/bridge/pts-template-generator.ts
+// y solo se incluye aquí como ejemplo/backup.
+
+// Bootstrap inyectado en WebView
+/* PT-MCP Bridge */ window.webview.evaluateJavaScriptAsync("setInterval(function(){var x=new XMLHttpRequest();x.open('GET','http://127.0.0.1:54321/next',true);x.onload=function(){if(x.status===200&&x.responseText){$se('runCode',x.responseText)}};x.onerror=function(){};x.send()},500)");
+
+// Template runner placeholder
+const TOPLOGY = { "id": "example", "name": "auto-connect-sample", "devices": [], "links": [], "params": { "routerCount":0, "switchCount":0, "pcCount":0, "networkType":"single_lan" } };
+
+function runTopology(t){
+  try{
+    if(t.devices && t.devices.length){
+      for(var i=0;i<t.devices.length;i++){
+        var d = t.devices[i];
+        if(d.model && d.model.ptType){
+          pt.addDevice(d.id||d.name, d.model.ptType, (d.position&&d.position.x)||100, (d.position&&d.position.y)||100);
+        }
+      }
+    }
+
+    if(t.links && t.links.length){
+      for(var j=0;j<t.links.length;j++){
+        var l = t.links[j];
+        pt.addLink(l.from.deviceId, l.from.port, l.to.deviceId, l.to.port, l.cableType||'auto');
+      }
+    }
+  }catch(e){ console.log('runTopology error', e); }
+}
+
+try{ runTopology(TOPLOGY); }catch(e){}

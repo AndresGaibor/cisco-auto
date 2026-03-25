@@ -1,0 +1,24 @@
+Usage: cisco-auto lab create [options] <name>
+
+Crear un nuevo archivo de laboratorio
+
+Arguments:
+  name                 Nombre del laboratorio
+
+Options:
+  -o, --output <file>  Archivo de salida (default: "<name>.yaml")
+  -h, --help           display help for command
+
+Examples:
+  # Crear laboratorio básico con VLANs
+  $ cisco-auto lab create --template vlan labs/vlan-lab
+
+  # Crear laboratorio con routing OSPF
+  $ cisco-auto lab create --template routing labs/ospf-lab --area 1
+
+  # Crear laboratorio desde archivo existente
+  $ cisco-auto lab create labs/existing.yaml --output new-lab
+See also:
+  cisco-auto lab parse - Parsear laboratorio
+  cisco-auto lab validate - Validar laboratorio
+  cisco-auto device list - Listar dispositivos

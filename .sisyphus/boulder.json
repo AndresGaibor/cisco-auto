@@ -1,0 +1,63 @@
+{
+  "active_plan": "/Users/andresgaibor/code/javascript/cisco-auto/.sisyphus/plans/skill-bridge-auto-install.md",
+  "started_at": "2026-03-25T15:12:48.714Z",
+  "session_ids": [
+    "ses_2da71d013ffeEfUXhGO2yC3alN",
+    "ses_2da70d358ffeNeiw5Xujk0aXbV",
+    "ses_2da70a9d8ffenZMuMdK2mVAy5m",
+    "ses_2da703cc2ffeztyBKTD20jOrm9",
+    "ses_2da707a3fffeIrzykeqqQMolEU",
+    "ses_2da68bca5ffeQNImqZLQJ2B0uh",
+    "ses_2da68f2b3ffevgXZ20Obcu1uk5",
+    "ses_2da6837fbffemW0eMYwA4U003j",
+    "ses_2da688a2cffeosC0241SSp0mhy",
+    "ses_2da5bc0c3ffezKugrW7LmWE41O",
+    "ses_2da5b20bdffe6kN7f8wnTUYYz1",
+    "ses_2da5a371bffe9beH9QS6gzK9jN",
+    "ses_2da5aae3affe6il4WzKLDa5jTv",
+    "ses_2da516f13ffe0O0gBiWIx9PElQ",
+    "ses_2da50611affeqcbWZfaXMfCCiU",
+    "ses_2da50d440ffeNDY1skU1uARX3Y",
+    "ses_2da4feb30ffe5lLgf4lA0HY7LQ"
+  ],
+  "plan_name": "skill-bridge-auto-install",
+  "agent": "atlas",
+  "task_sessions": {
+    "todo:1": {
+      "task_key": "todo:1",
+      "task_label": "1",
+      "task_title": "Define Bridge Server Contract",
+      "session_id": "ses_2da70d358ffeNeiw5Xujk0aXbV",
+      "agent": "Sisyphus-Junior",
+      "category": "writing",
+      "updated_at": "2026-03-25T15:14:47.145Z"
+    },
+    "todo:5": {
+      "task_key": "todo:5",
+      "task_label": "5",
+      "task_title": "Implement OS Detection",
+      "session_id": "ses_2da68f2b3ffevgXZ20Obcu1uk5",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-03-25T15:27:42.103Z"
+    },
+    "todo:9": {
+      "task_key": "todo:9",
+      "task_label": "9",
+      "task_title": "Create sync-skills.ts Script",
+      "session_id": "ses_2da5bc0c3ffezKugrW7LmWE41O",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-03-25T15:39:52.468Z"
+    },
+    "final-wave:f1": {
+      "task_key": "final-wave:f1",
+      "task_label": "F1",
+      "task_title": "**Plan Compliance Audit** — `oracle`",
+      "session_id": "ses_2da50611affeqcbWZfaXMfCCiU",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-03-25T15:50:01.105Z"
+    }
+  }
+}

@@ -3,3 +3,4 @@ export * from './protocols.ts';
 export * from './security.ts';
 export * from './device.ts';
 export * from './lab.ts';
+export * from './tool.ts';

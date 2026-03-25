@@ -166,6 +166,126 @@ Si el usuario tiene problemas:
 3. **Analizar resultados**: Interpretar la salida
 4. **Proponer soluciones**: Comandos específicos para arreglar el problema
 
+## Bridge Installation - AUTOMATIZADO
+
+La skill puede interactuar directamente con Cisco Packet Tracer a través del Bridge Server que expone la API REST de `cisco-auto`.
+
+### ⚡ FLUJO AUTOMATIZADO (RECOMENDADO)
+
+**El agente DEBE ejecutar estos comandos automáticamente usando Bash tool**, sin pedir intervención manual al usuario.
+
+#### Verificación y Preparación Automática
+
+Cuando el usuario necesite trabajar con Packet Tracer, el agente ejecuta:
+
+```bash
+bun run .iflow/skills/cisco-networking-assistant/scripts/bridge-automation.ts ensure-all
+```
+
+Este comando hace TODO automáticamente:
+1. ✅ Detecta si el bridge server está corriendo → lo inicia si no
+2. ✅ Detecta si Packet Tracer está instalado → informa si falta
+3. ✅ Detecta si Packet Tracer está ejecutándose → lo abre si no
+4. ✅ Instala el bridge en Packet Tracer → configura la conexión
+5. ✅ Verifica que todo esté listo para trabajar
+
+#### Comandos de Automatización Disponibles
+
+El agente puede usar estos comandos según la situación:
+
+| Comando | Cuándo usarlo | Qué hace |
+|---------|---------------|----------|
+| `ensure-all` | Flujo completo automático | Prepara todo el sistema (bridge + PT + instalación) |
+| `status` | Verificar estado actual | Muestra estado de bridge, PT y conexión |
+| `ensure-running` | Solo iniciar bridge | Inicia el bridge si no está corriendo |
+| `install` | Solo instalar en PT | Instala el bridge en Packet Tracer ya abierto |
+| `start` | Solo iniciar server | Inicia el bridge server |
+| `stop` | Detener todo | Detiene el bridge server |
+| `health` | Health check rápido | Verifica que el bridge responda |
+
+#### Ejemplo de Uso Automatizado por el Agente
+
+```
+Usuario: "Quiero trabajar con mi laboratorio de VLANs"
+
+Agente (ejecuta automáticamente):
+bun run .iflow/skills/cisco-networking-assistant/scripts/bridge-automation.ts ensure-all
+
+Salida esperada:
+🎯 Verificando sistema completo...
+   Bridge: ✅
+   Packet Tracer: ✅
+   Conexión: ✅
+🎉 Sistema completamente configurado y listo para trabajar
+```
+
+Si algo falla, el agente recibe instrucciones claras en `nextSteps` para resolver.
+
+---
+
+### Flujo Manual (Solo si Automatización Falla)
+
+Si por alguna razón la automatización no funciona (permisos denegados, SO no soportado), el agente puede guiar manualmente:
+
+#### 1. Iniciar el Bridge Server
+```bash
+bun run src/bridge/server.ts
+# o usando CLI:
+bun run apps/cli/src/index.ts bridge start
+```
+
+#### 2. Verificar Estado
+```bash
+bun run .iflow/skills/cisco-networking-assistant/scripts/bridge-automation.ts status
+```
+
+#### 3. Instalar en Packet Tracer (macOS)
+```bash
+bun run .iflow/skills/cisco-networking-assistant/scripts/bridge-automation.ts install
+```
+
+---
+
+### Troubleshooting Automatizado
+
+El agente puede diagnosticar problemas ejecutando:
+
+```bash
+bun run .iflow/skills/cisco-networking-assistant/scripts/bridge-automation.ts status
+```
+
+La salida incluye:
+- Estado del bridge (running/stopped)
+- Estado de Packet Tracer (installed/running)
+- Estado de la conexión (connected/disconnected)
+- **Lista de problemas detectados** con recomendaciones
+
+#### Problemas Comunes y Soluciones
+
+| Problema | Diagnóstico | Solución Automática |
+|----------|-------------|---------------------|
+| Bridge no inicia | Puerto ocupado | El agente sugiere cambiar puerto: `BRIDGE_PORT=54322 bun run ...` |
+| PT no detectado | No instalado | El agente muestra URL de descarga |
+| Permisos denegados | Accessibility (macOS) | El agente instruye ir a System Preferences > Privacy |
+| Sin conexión | Bridge OK, PT OK, pero no conectan | El agente ejecuta `install` automáticamente |
+
+---
+
+### Arquitectura del Sistema (Referencia)
+
+El bridge funciona así:
+1. **Bridge Server** (src/bridge/server.ts): Servidor HTTP en puerto 54321
+2. **CLI Commands** (apps/cli/src/commands/bridge/): Interfaz de usuario
+3. **Script de Automatización** (bridge-automation.ts): Controlador inteligente
+4. **Packet Tracer Client**: Bootstrap JS inyectado que hace polling a /next
+
+Endpoints del servidor:
+- `GET /health` → Health check
+- `GET /status` → Estado detallado
+- `GET /next` → Siguiente comando (polling desde PT)
+- `POST /execute` → Encolar comando
+- `GET /bridge-client.js` → Bootstrap para PT
+
 ## Referencias Disponibles
 
 Lee estas guías según el tema del taller:

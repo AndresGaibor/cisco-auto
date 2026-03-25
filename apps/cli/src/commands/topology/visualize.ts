@@ -1,0 +1,73 @@
+import { Command } from 'commander';
+import { loadLab } from '../../../../../src/core/parser/yaml-parser.ts';
+import { visualizeTopology, generateMermaidDiagram } from '../../../../../src/core/topology/index.ts';
+import type { LabSpec } from '../../../../../src/core/canonical/index.ts';
+import { formatExamples, formatRelatedCommands } from '../../help/formatter.ts';
+import { getExamples } from '../../help/examples.ts';
+import { getRelatedCommands } from '../../help/related.ts';
+
+function toLabSpec(parsed: any): LabSpec {
+  return {
+    metadata: {
+      name: parsed.lab?.metadata?.name || 'Lab',
+      version: parsed.lab?.metadata?.version || '1.0',
+      author: parsed.lab?.metadata?.author || 'unknown',
+      createdAt: new Date().toISOString()
+    },
+    devices: (parsed.lab?.topology?.devices || []).map((d: any) => ({
+      id: d.name,
+      name: d.name,
+      type: d.type,
+      hostname: d.hostname || d.name,
+      managementIp: d.management?.ip,
+      interfaces: (d.interfaces || []).map((i: any) => ({
+        id: i.name,
+        name: i.name,
+        description: i.description,
+        ipAddress: i.ip,
+        shutdown: i.shutdown,
+        switchport: i.mode ? { mode: i.mode, accessVlan: i.vlan } : undefined
+      })),
+      security: d.security,
+      vlans: d.vlans,
+      routing: d.routing,
+      services: d.services
+    })),
+    connections: (parsed.lab?.topology?.connections || []).map((c: any) => ({
+      id: `${c.from}-${c.to}`,
+      from: { deviceName: c.from?.device || c.from, portName: c.from?.port || c.fromInterface || 'unknown' },
+      to: { deviceName: c.to?.device || c.to, portName: c.to?.port || c.toInterface || 'unknown' },
+      cableType: c.cable || c.type || 'ethernet'
+    }))
+  };
+}
+
+export function createTopologyVisualizeCommand(): Command {
+  const cmd = new Command('visualize')
+    .description('Visualizar topología de red')
+    .argument('<file>', 'Archivo YAML del lab')
+    .option('-m, --mermaid', 'Generar diagrama Mermaid', false)
+    .action(async (file, options) => {
+      try {
+        const parsedLab = loadLab(file);
+        const labSpec = toLabSpec(parsedLab);
+
+        if (options.mermaid) {
+          console.log('\n📊 Diagrama Mermaid:');
+          console.log(generateMermaidDiagram(labSpec));
+        } else {
+          console.log(visualizeTopology(labSpec, { showIPs: true, showPorts: true }));
+        }
+      } catch (error) {
+        console.error('❌ Error:', error instanceof Error ? error.message : error);
+        process.exit(1);
+      }
+    });
+
+  const examples = getExamples('topology visualize');
+  const related = getRelatedCommands('topology visualize');
+
+  cmd.addHelpText('after', formatExamples(examples) + formatRelatedCommands(related));
+
+  return cmd;
+}

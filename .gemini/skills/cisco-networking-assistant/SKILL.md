@@ -166,6 +166,63 @@ Si el usuario tiene problemas:
 3. **Analizar resultados**: Interpretar la salida
 4. **Proponer soluciones**: Comandos específicos para arreglar el problema
 
+## Bridge Installation
+
+La skill puede interactuar directamente con Cisco Packet Tracer a través del Bridge Server que expone la API REST de `cisco-auto`.
+
+### Quick Start
+
+1. Inicia el servidor del bridge:
+   ```bash
+   cisco-auto bridge start
+   ```
+
+2. Instala el bridge dentro de Packet Tracer:
+   ```bash
+   cisco-auto bridge install
+   ```
+
+3. Verifica la conexión:
+   ```bash
+   cisco-auto bridge status
+   ```
+
+### Commands
+
+#### bridge start
+Arranca el servidor del bridge en el puerto 54321 y prepara la cola de comandos para recibir instrucciones desde Packet Tracer. Devuelve una URL local (http://127.0.0.1:54321) que Packet Tracer consumirá automáticamente.
+
+#### bridge install
+Instala el adaptador dentro de Packet Tracer cargando el script generado por `cisco-auto` y registrando el endpoint del bridge. Esta acción copia el bootstrap JS necesario al directorio de Packet Tracer y activa la comunicación segura (JWT + WebSocket).
+
+#### bridge status
+Consulta el estado actual del bridge, incluyendo:
+- Puerto escuchando
+- Número de dispositivos sincronizados
+- Estado de la conexión con Packet Tracer
+
+#### bridge uninstall
+Elimina el adaptador del laboratorio Packet Tracer y limpia los metadatos guardados por `cisco-auto` para forzar una reinstalación limpia.
+
+### Troubleshooting de Bridge
+
+- **Packet Tracer no detecta Bridge** → Verifica que el archivo `packet-tracer-bridge.js` esté dentro de la carpeta `scripts` de Packet Tracer y que el nombre coincida con la versión del cliente. Ejecuta `cisco-auto bridge install` con la ruta completa si usas una instalación custom.
+- **Permisos de accesibilidad bloqueados** → macOS/Windows bloquean las APIs de automatización. Otorga a Packet Tracer permisos en Preferencias del Sistema → Seguridad y Privacidad (macOS) o Ejecutar como administrador (Windows).
+- **Conflicto de puerto** → Cambia la variable de entorno `BRIDGE_PORT` antes de arrancar el bridge (`export BRIDGE_PORT=54322`). Asegúrate de actualizar el script dentro de Packet Tracer si lo editaste manualmente.
+- **Bridge no responde** → ¿El servidor sigue en ejecución? Revisa los logs (`cisco-auto bridge status` o `cisco-auto bridge start` con `--verbose`) y confirma que Packet Tracer tenga acceso a localhost (firewall, VPN, proxies).
+
+### Manual Installation Fallback
+
+Si la instalación automática falla (Packet Tracer bloqueado, errores de compatibilidad o script corrupto) sigue estos pasos manuales:
+
+1. Copia el script base `assets/bridges/bridge-bootstrap.js` (o el que indique `docs/bridge-api-contract.md`) y pégalo en la carpeta de scripts de Packet Tracer (`Documentos/Cisco Packet Tracer/Scripts`).
+2. Abre Packet Tracer y navega a **Tools > Script Editor**. Crea un nuevo script que instancie la conexión al servidor (`const bridge = new CiscoBridge('{URL}');`). Usa la URL https://127.0.0.1:54321 por defecto.
+3. Configura la línea de comandos del script para ejecutar `bridge.connect()` al iniciar el laboratorio y `bridge.sync()` tras cada cambio en la topología.
+4. Guarda y habilita el script en la pestaña de *Automation* para que Packet Tracer lo cargue automáticamente.
+5. Usa `cisco-auto bridge status` para confirmar que el servidor recibió las solicitudes desde Packet Tracer.
+
+Si necesitas actualizar el script, repite el paso 1 copiando la versión más reciente y reiniciando Packet Tracer.
+
 ## Referencias Disponibles
 
 Lee estas guías según el tema del taller:

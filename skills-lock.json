@@ -9,8 +9,15 @@
     "cisco-networking-assistant": {
       "source": "local",
       "sourceType": "local",
-      "computedHash": "local-skill-cisco-networking-assistant-v1",
-      "description": "Asistente experto para tareas de redes Cisco y Packet Tracer"
+      "computedHash": "9f97d7eb43766ca4ff6cdade3947d9b269fb4fbeb461885141ea8c3d350d3b10",
+      "description": "Asistente experto para tareas de redes Cisco y Packet Tracer",
+      "lastSync": "2026-03-25T15:39:30.149Z",
+      "destinations": [
+        ".gemini/skills/cisco-networking-assistant",
+        ".claude/skills/cisco-networking-assistant",
+        ".qwen/skills/cisco-networking-assistant",
+        ".agents/skills/cisco-networking-assistant"
+      ]
     }
   }
 }
