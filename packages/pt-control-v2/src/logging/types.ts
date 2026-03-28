@@ -1,119 +1,97 @@
 /**
- * Logging Types for PT Control v2
- * NDJSON logging with session tracking
+ * Tipos de logging para PT Control v2.
+ * Cada LogEntry corresponde a una línea NDJSON.
  */
 
 /**
- * Log entry structure - each entry is one line in NDJSON file
+ * Entrada de log - formato principal registrado en events.ndjson
  */
 export interface LogEntry {
-  /** Session identifier - groups related operations */
+  // Identificador de sesión que agrupa operaciones relacionadas
   session_id: string;
-  
-  /** Correlation ID for tracing individual operations */
+
+  // ID de correlación para trazar operaciones individuales
   correlation_id: string;
-  
-  /** ISO timestamp of the log entry */
-  timestamp: string;
-  
-  /** Action being performed (e.g., "device list", "device reset") */
+
+  // Marca de tiempo: puede ser epoch (number) o ISO (string)
+  timestamp: number | string;
+
+  // Acción realizada (por ejemplo: "device:list", "deploy:config")
   action: string;
-  
-  /** Target device name if applicable */
+
+  // Dispositivo objetivo (si aplica)
   target_device?: string;
-  
-  /** Outcome of the action */
-  outcome: 'success' | 'failure' | 'cancelled' | 'pending';
-  
-  /** Duration in milliseconds if measurable */
+
+  // Resultado de la acción
+  outcome: 'success' | 'error' | 'cancelled' | 'pending' | 'failure';
+
+  // Duración en milisegundos si es medible
   duration_ms?: number;
-  
-  /** Additional context as JSON */
-  context?: Record<string, unknown>;
-  
-  /** Error message if outcome is failure */
+
+  // Mensaje de error cuando outcome === 'failure'
   error?: string;
-  
-  /** Whether this was a destructive action */
+
+  // Metadatos arbitrarios para enriquecer la entrada (NDJSON-friendly)
+  metadata?: Record<string, unknown>;
+
+  context?: Record<string, unknown>;
+
   is_destructive?: boolean;
-  
-  /** User confirmation status for destructive actions */
-  confirmation_status?: 'confirmed' | 'cancelled' | 'timeout' | 'not_required';
+
+  confirmation_status?: 'cancelled' | 'confirmed' | 'timeout' | 'not_required';
 }
 
 /**
- * Session tracking for grouping related log entries
+ * Seguimiento de sesiones para agrupar entradas relacionadas
  */
 export interface LogSession {
-  /** Unique session identifier */
+  // Identificador único de la sesión
   id: string;
-  
-  /** When the session started */
-  started_at: Date;
-  
-  /** When the session ended (if completed) */
-  ended_at?: Date;
-  
-  /** All entries in this session */
+
+  // Timestamp de inicio (epoch o ISO)
+  started_at: number | string;
+
+  // Timestamp de fin si la sesión concluyó
+  ended_at?: number | string;
+
+  // Entradas asociadas a la sesión
   entries: LogEntry[];
 }
 
 /**
- * Configuration for LogManager
+ * Configuración para el gestor de logs (LogManager)
  */
 export interface LogConfig {
-  /** Directory to store log files */
+  // Directorio donde se almacenan los archivos de log
   logDir: string;
-  
-  /** Number of days to keep log files */
+
+  // Retención en días antes de rotar/borrar archivos
   retentionDays: number;
-  
-  /** Prefix for log file names */
-  prefix: string;
+
+  // Prefijo para nombres de archivo (ej: "pt-control-events")
+  prefix?: string;
 }
 
 /**
- * Options for querying logs
+ * Opciones para consultas simples sobre los logs
  */
 export interface LogQueryOptions {
-  /** Filter by session ID */
   session_id?: string;
-  
-  /** Filter by action */
   action?: string;
-  
-  /** Filter by outcome */
   outcome?: LogEntry['outcome'];
-  
-  /** Filter by target device */
   target_device?: string;
-  
-  /** Filter entries after this date */
-  from?: Date;
-  
-  /** Filter entries before this date */
-  to?: Date;
-  
-  /** Maximum number of entries to return */
+  from?: number | string;
+  to?: number | string;
   limit?: number;
 }
 
 /**
- * Statistics about logging
+ * Estadísticas básicas sobre los archivos de log
  */
 export interface LogStats {
-  /** Total number of log files */
   fileCount: number;
-  
-  /** Total size in bytes */
   totalSize: number;
-  
-  /** Oldest log file date */
-  oldestFile?: Date;
-  
-  /** Newest log file date */
-  newestFile?: Date;
-  
-  /** Total entries across all files */
+  oldestFile?: number | string;
+  newestFile?: number | string;
   totalEntries: number;
 }

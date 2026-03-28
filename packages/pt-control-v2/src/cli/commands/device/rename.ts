@@ -35,54 +35,59 @@ export default class DeviceRename extends BaseCommand {
     let oldName = this.args.oldName as string | undefined;
     let newName = this.args.newName as string | undefined;
 
-    // Interactive mode if args not provided
-    if (!oldName || !newName) {
-      const interactive = await this.promptForRename(oldName, newName);
-      oldName = interactive.oldName;
-      newName = interactive.newName;
-    }
+    await this.runLoggedCommand({
+      action: 'device:rename',
+      targetDevice: () => oldName,
+      context: { newName },
+      execute: async () => {
+        if (!oldName || !newName) {
+          const interactive = await this.promptForRename(oldName, newName);
+          oldName = interactive.oldName;
+          newName = interactive.newName;
+        }
 
-    if (!oldName || oldName.trim() === '') {
-      throw new ValidationError('Current device name is required');
-    }
-    if (!newName || newName.trim() === '') {
-      throw new ValidationError('New device name is required');
-    }
-    if (oldName === newName) {
-      throw new ValidationError('New name must be different from current name');
-    }
+        if (!oldName || oldName.trim() === '') {
+          throw new ValidationError('Current device name is required');
+        }
+        if (!newName || newName.trim() === '') {
+          throw new ValidationError('New device name is required');
+        }
+        if (oldName === newName) {
+          throw new ValidationError('New name must be different from current name');
+        }
 
-    const controller = createDefaultPTController();
-    const spinner = createSpinner(`Renaming device ${pc.cyan(oldName)} to ${pc.cyan(newName)}...`);
+        const controller = createDefaultPTController();
+        const spinner = createSpinner(`Renaming device ${pc.cyan(oldName)} to ${pc.cyan(newName)}...`);
 
-    await controller.start();
+        await controller.start();
 
-    try {
-      // Check if device exists
-      const devices = await controller.listDevices() as DeviceState[];
-      const exists = devices.some((d: DeviceState) => d.name === oldName);
+        try {
+          const devices = await controller.listDevices() as DeviceState[];
+          const exists = devices.some((d: DeviceState) => d.name === oldName);
 
-      if (!exists) {
-        throw new DeviceNotFoundError(oldName);
-      }
+          if (!exists) {
+            throw new DeviceNotFoundError(oldName);
+          }
 
-      spinner.start();
-      await controller.renameDevice(oldName, newName);
-      spinner.succeed(`Device renamed: ${pc.cyan(oldName)} -> ${pc.cyan(newName)}`);
+          spinner.start();
+          await controller.renameDevice(oldName, newName);
+          spinner.succeed(`Device renamed: ${pc.cyan(oldName)} -> ${pc.cyan(newName)}`);
 
-      if (this.globalFlags.format === 'json') {
-        this.outputData({ success: true, oldName, newName });
-      }
-    } catch (error) {
-      if (error instanceof DeviceNotFoundError) {
-        spinner.fail(`Device ${oldName} not found`);
-      } else {
-        spinner.fail(`Failed to rename device ${oldName}`);
-      }
-      throw error;
-    } finally {
-      await controller.stop();
-    }
+          if (this.globalFlags.format === 'json') {
+            this.outputData({ success: true, oldName, newName });
+          }
+        } catch (error) {
+          if (error instanceof DeviceNotFoundError) {
+            spinner.fail(`Device ${oldName} not found`);
+          } else {
+            spinner.fail(`Failed to rename device ${oldName}`);
+          }
+          throw error;
+        } finally {
+          await controller.stop();
+        }
+      },
+    });
   }
 
   private async promptForRename(

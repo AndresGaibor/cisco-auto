@@ -13,16 +13,40 @@
 export type TopologyQueryType = 'device' | 'link' | 'full';
 
 /**
- * Query parameters for topology lookups
+ * Consulta para un único dispositivo por nombre
  */
-export interface TopologyQuery {
-  /** Type of query: device, link, or full topology */
-  type: TopologyQueryType;
-  /** Device name to query (for device queries) */
-  name?: string;
-  /** Device name for link queries (returns links connected to this device) */
-  device?: string;
+export interface DeviceQuery {
+  type: 'device';
+  /** Nombre del dispositivo a buscar */
+  name: string;
+  /** Opciones adicionales de la consulta */
+  options?: TopologyQueryOptions;
 }
+
+/**
+ * Consulta para enlaces (por dispositivo o entre dos dispositivos)
+ */
+export interface LinkQuery {
+  type: 'link';
+  /** Nombre del dispositivo origen/terminal para filtrar enlaces */
+  device?: string;
+  /** Opcional: buscar enlace entre deviceA y deviceB */
+  between?: [string, string];
+  options?: TopologyQueryOptions;
+}
+
+/**
+ * Consulta para obtener la topología completa
+ */
+export interface FullQuery {
+  type: 'full';
+  options?: TopologyQueryOptions;
+}
+
+/**
+ * Union discriminada para consultas a la topología
+ */
+export type TopologyQuery = DeviceQuery | LinkQuery | FullQuery;
 
 // ============================================================================
 // Result Types

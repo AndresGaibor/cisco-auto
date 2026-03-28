@@ -72,49 +72,55 @@ export default class DeviceAdd extends BaseCommand {
     const x = this.flags.x as number;
     const y = this.flags.y as number;
 
-    // Interactive mode if args not provided
-    if (!name || !model) {
-      const interactive = await this.promptForDevice(name, model);
-      name = interactive.name;
-      model = interactive.model;
-    }
-
-    // Validate
-    if (!name || name.trim() === '') {
-      throw new ValidationError('Device name is required');
-    }
-    if (!model || model.trim() === '') {
-      throw new ValidationError('Device model is required');
-    }
-
-    const controller = createDefaultPTController();
-    const spinner = createSpinner(`Adding device ${pc.cyan(name)}...`);
-
-    await controller.start();
-
-    try {
-      spinner.start();
-
-      const device = await controller.addDevice(name, model, { x, y });
-
-      spinner.succeed(`Device ${pc.cyan(name)} added successfully`);
-
-      if (this.globalFlags.format === 'json') {
-        this.outputData(device);
-      } else {
-        this.print(`  Type: ${device.type}`);
-        this.print(`  Model: ${device.model}`);
-        this.print(`  Position: (${device.x}, ${device.y})`);
-        if (device.ports?.length) {
-          this.print(`  Ports: ${device.ports.length}`);
+    await this.runLoggedCommand({
+      action: 'device:add',
+      targetDevice: () => name,
+      context: { model, x, y },
+      execute: async () => {
+        // Interactive mode if args not provided
+        if (!name || !model) {
+          const interactive = await this.promptForDevice(name, model);
+          name = interactive.name;
+          model = interactive.model;
         }
-      }
-    } catch (error) {
-      spinner.fail(`Failed to add device ${name}`);
-      throw error;
-    } finally {
-      await controller.stop();
-    }
+
+        if (!name || name.trim() === '') {
+          throw new ValidationError('Device name is required');
+        }
+        if (!model || model.trim() === '') {
+          throw new ValidationError('Device model is required');
+        }
+
+        const controller = createDefaultPTController();
+        const spinner = createSpinner(`Adding device ${pc.cyan(name)}...`);
+
+        await controller.start();
+
+        try {
+          spinner.start();
+
+          const device = await controller.addDevice(name, model, { x, y });
+
+          spinner.succeed(`Device ${pc.cyan(name)} added successfully`);
+
+          if (this.globalFlags.format === 'json') {
+            this.outputData(device);
+          } else {
+            this.print(`  Type: ${device.type}`);
+            this.print(`  Model: ${device.model}`);
+            this.print(`  Position: (${device.x}, ${device.y})`);
+            if (device.ports?.length) {
+              this.print(`  Ports: ${device.ports.length}`);
+            }
+          }
+        } catch (error) {
+          spinner.fail(`Failed to add device ${name}`);
+          throw error;
+        } finally {
+          await controller.stop();
+        }
+      },
+    });
   }
 
   private async promptForDevice(

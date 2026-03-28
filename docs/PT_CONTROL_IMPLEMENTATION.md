@@ -13,8 +13,8 @@ A complete real-time control system for Cisco Packet Tracer using TypeScript/Bun
 - Event streaming to NDJSON
 - Debounced file change handling
 
-#### 2. TypeScript Bridge (`packages/pt-control/`)
-- **FileBridge**: FileWatcher-based bridge for CLI ↔ PT communication
+-#### 2. TypeScript Bridge (`packages/pt-control-v2/`)
+- **FileBridge**: FileWatcher-based bridge para CLI ↔ PT (migrado a v2)
 - **Types**: Complete Zod schemas for commands, events, operations
 - **Constants**: PT IPC constants (cable types, command status, etc)
 - **CLI**: Full-featured command-line interface
@@ -72,7 +72,7 @@ A complete real-time control system for Cisco Packet Tracer using TypeScript/Bun
 
 ```
 cisco-auto/
-├── packages/pt-control/
+├── packages/pt-control-v2/
 │   ├── src/
 │   │   ├── bridge/
 │   │   │   ├── file-bridge.ts          # FileBridge implementation
@@ -84,10 +84,9 @@ cisco-auto/
 │   │   ├── constants/
 │   │   │   └── index.ts                # PT constants
 │   │   └── index.ts
-│   ├── test.ts                         # Test suite
+│   ├── tests/                         # Test suite
 │   ├── package.json
-│   ├── tsconfig.json
-│   └── README.md
+│   ├── README.md
 │
 ├── pt-extension/
 │   ├── main.js                         # PT Script Module entry
@@ -251,12 +250,12 @@ Based on the research in PT_CONTROL_RESEARCH.md:
 # Run setup
 bash scripts/setup-pt-control.sh
 
-# Run test suite
+# Run test suite (pt-control-v2)
 bun run pt:test
 ```
 
 ### Test Coverage
-The test suite (`packages/pt-control/test.ts`) covers:
+The test suite (`packages/pt-control-v2/tests`) covers:
 1. ✅ Snapshot (empty topology)
 2. ✅ Add device (router)
 3. ✅ List devices
@@ -338,7 +337,7 @@ All documentation is comprehensive and ready:
 - ✅ `PT_CONTROL_RESEARCH.md` - 1125 lines of API research
 - ✅ `PT_CONTROL_QUICKSTART.md` - Quick start guide
 - ✅ `pt-extension/README.md` - Installation guide
-- ✅ `packages/pt-control/README.md` - Package documentation
+- ✅ `packages/pt-control-v2/README.md` - Package documentation (v2)
 
 ## 🎉 Conclusion
 

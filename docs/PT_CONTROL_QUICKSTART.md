@@ -138,7 +138,7 @@ This will:
 
 ```
 cisco-auto/
-├── packages/pt-control/          # PT Control package
+├── packages/pt-control-v2/          # PT Control package
 │   ├── src/
 │   │   ├── bridge/              # Bridge implementation
 │   │   │   └── file-bridge.ts   # FileWatcher-based bridge
@@ -245,7 +245,7 @@ cisco-auto/
 Use the bridge programmatically in your TypeScript code:
 
 ```typescript
-import { FileBridge } from "@cisco-auto/pt-control/bridge";
+import { FileBridge } from "@cisco-auto/pt-control-v2/bridge";
 
 const bridge = new FileBridge({ devDir: "~/pt-dev" });
 
@@ -299,7 +299,7 @@ await bridge.stop();
 
 ## 📚 Documentation
 
-- [PT Control Package README](packages/pt-control/README.md) - Detailed usage
+- [PT Control Package README (v2)](packages/pt-control-v2/README.md) - Detailed usage (migrated to v2)
 - [PT Extension README](pt-extension/README.md) - Installation guide
 - [PT Control Research](docs/PT_CONTROL_RESEARCH.md) - Complete API reference
 
@@ -307,7 +307,7 @@ await bridge.stop();
 
 See test suite for complete examples:
 ```bash
-cat packages/pt-control/test.ts
+cat packages/pt-control-v2/tests
 ```
 
 ## 📝 Notes

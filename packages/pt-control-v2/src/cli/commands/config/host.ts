@@ -53,80 +53,90 @@ export default class ConfigHost extends BaseCommand {
     let device = this.args.device as string | undefined;
     const flags = this.flags;
 
-    // Interactive mode
-    if (!device || (!flags.ip && !flags.dhcp)) {
-      const interactive = await this.promptForHost(device);
-      device = interactive.device;
-    }
-
-    // Validate
-    if (!device || device.trim() === '') {
-      throw new ValidationError('Device name is required');
-    }
-
-    if (!flags.dhcp && !flags.ip) {
-      throw new ValidationError('Either --ip or --dhcp is required');
-    }
-
-    const ip = flags.ip as string | undefined;
-    if (ip && !this.isValidIp(ip)) {
-      throw new ValidationError(`Invalid IP address: ${ip}`);
-    }
-
-    const controller = createDefaultPTController();
-    const spinner = createSpinner(`Configuring ${pc.cyan(device)}...`);
-
-    await controller.start();
-
-    try {
-      // Check if device exists
-      const devices = await controller.listDevices() as DeviceState[];
-      const exists = devices.some((d: DeviceState) => d.name === device);
-
-      if (!exists) {
-        throw new DeviceNotFoundError(device);
-      }
-
-      spinner.start();
-
-      const config: {
-        ip?: string;
-        mask?: string;
-        gateway?: string;
-        dns?: string;
-        dhcp?: boolean;
-      } = {};
-
-      if (flags.dhcp) {
-        config.dhcp = true;
-      } else {
-        if (flags.ip) config.ip = flags.ip as string;
-        if (flags.mask) config.mask = flags.mask as string;
-        if (flags.gateway) config.gateway = flags.gateway as string;
-        if (flags.dns) config.dns = flags.dns as string;
-      }
-
-      await controller.configHost(device, config);
-      spinner.succeed(`Host ${pc.cyan(device)} configured`);
-
-      if (this.globalFlags.format === 'json') {
-        this.outputData({ success: true, device, ...config });
-      } else {
-        if (flags.dhcp) {
-          this.print('  Mode: DHCP');
-        } else {
-          if (flags.ip) this.print(`  IP: ${flags.ip}`);
-          if (flags.mask) this.print(`  Mask: ${flags.mask}`);
-          if (flags.gateway) this.print(`  Gateway: ${flags.gateway}`);
-          if (flags.dns) this.print(`  DNS: ${flags.dns}`);
+    await this.runLoggedCommand({
+      action: 'config:host',
+      targetDevice: () => device,
+      context: {
+        mode: flags.dhcp ? 'dhcp' : 'static',
+        hasIp: Boolean(flags.ip),
+        hasMask: Boolean(flags.mask),
+        hasGateway: Boolean(flags.gateway),
+        hasDns: Boolean(flags.dns),
+      },
+      execute: async () => {
+        if (!device || (!flags.ip && !flags.dhcp)) {
+          const interactive = await this.promptForHost(device);
+          device = interactive.device;
         }
-      }
-    } catch (error) {
-      spinner.fail(`Failed to configure ${device}`);
-      throw error;
-    } finally {
-      await controller.stop();
-    }
+
+        if (!device || device.trim() === '') {
+          throw new ValidationError('Device name is required');
+        }
+
+        if (!flags.dhcp && !flags.ip) {
+          throw new ValidationError('Either --ip or --dhcp is required');
+        }
+
+        const ip = flags.ip as string | undefined;
+        if (ip && !this.isValidIp(ip)) {
+          throw new ValidationError(`Invalid IP address: ${ip}`);
+        }
+
+        const controller = createDefaultPTController();
+        const spinner = createSpinner(`Configuring ${pc.cyan(device)}...`);
+
+        await controller.start();
+
+        try {
+          const devices = await controller.listDevices() as DeviceState[];
+          const exists = devices.some((d: DeviceState) => d.name === device);
+
+          if (!exists) {
+            throw new DeviceNotFoundError(device);
+          }
+
+          spinner.start();
+
+          const config: {
+            ip?: string;
+            mask?: string;
+            gateway?: string;
+            dns?: string;
+            dhcp?: boolean;
+          } = {};
+
+          if (flags.dhcp) {
+            config.dhcp = true;
+          } else {
+            if (flags.ip) config.ip = flags.ip as string;
+            if (flags.mask) config.mask = flags.mask as string;
+            if (flags.gateway) config.gateway = flags.gateway as string;
+            if (flags.dns) config.dns = flags.dns as string;
+          }
+
+          await controller.configHost(device, config);
+          spinner.succeed(`Host ${pc.cyan(device)} configured`);
+
+          if (this.globalFlags.format === 'json') {
+            this.outputData({ success: true, device, ...config });
+          } else {
+            if (flags.dhcp) {
+              this.print('  Mode: DHCP');
+            } else {
+              if (flags.ip) this.print(`  IP: ${flags.ip}`);
+              if (flags.mask) this.print(`  Mask: ${flags.mask}`);
+              if (flags.gateway) this.print(`  Gateway: ${flags.gateway}`);
+              if (flags.dns) this.print(`  DNS: ${flags.dns}`);
+            }
+          }
+        } catch (error) {
+          spinner.fail(`Failed to configure ${device}`);
+          throw error;
+        } finally {
+          await controller.stop();
+        }
+      },
+    });
   }
 
   private isValidIp(ip: string): boolean {

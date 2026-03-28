@@ -32,59 +32,63 @@ export default class SnapshotSave extends BaseCommand {
   async run(): Promise<void> {
     let name = this.args.name as string | undefined;
 
-    if (!name) {
-      name = await input({
-        message: 'Snapshot name',
-        validate: (value) => value.trim() !== '' || 'Name is required',
-      });
-    }
+    await this.runLoggedCommand({
+      action: 'snapshot:save',
+      targetDevice: 'topology',
+      execute: async () => {
+        if (!name) {
+          name = await input({
+            message: 'Snapshot name',
+            validate: (value) => value.trim() !== '' || 'Name is required',
+          });
+        }
 
-    if (!name || name.trim() === '') {
-      throw new ValidationError('Snapshot name is required');
-    }
+        if (!name || name.trim() === '') {
+          throw new ValidationError('Snapshot name is required');
+        }
 
-    // Sanitize name
-    name = name.replace(/[^a-zA-Z0-9-_]/g, '-');
+        name = name.replace(/[^a-zA-Z0-9-_]/g, '-');
 
-    const controller = createDefaultPTController();
-    const spinner = createSpinner(`Saving snapshot ${pc.cyan(name)}...`);
+        const controller = createDefaultPTController();
+        const spinner = createSpinner(`Saving snapshot ${pc.cyan(name)}...`);
 
-    await controller.start();
+        await controller.start();
 
-    try {
-      spinner.start();
+        try {
+          spinner.start();
 
-      const snapshot = await controller.snapshot();
+          const snapshot = await controller.snapshot();
 
-      // Save to snapshots directory
-      const snapshotsDir = join(this.devDir, 'snapshots');
-      if (!existsSync(snapshotsDir)) {
-        mkdirSync(snapshotsDir, { recursive: true });
-      }
+          const snapshotsDir = join(this.devDir, 'snapshots');
+          if (!existsSync(snapshotsDir)) {
+            mkdirSync(snapshotsDir, { recursive: true });
+          }
 
-      const snapshotPath = join(snapshotsDir, `${name}.json`);
-      writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2));
+          const snapshotPath = join(snapshotsDir, `${name}.json`);
+          writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2));
 
-      spinner.succeed(`Snapshot saved: ${pc.cyan(name)}`);
+          spinner.succeed(`Snapshot saved: ${pc.cyan(name)}`);
 
-      if (this.globalFlags.format === 'json') {
-        this.outputData({
-          success: true,
-          name,
-          path: snapshotPath,
-          devices: Object.keys(snapshot.devices || {}).length,
-          links: Object.keys(snapshot.links || {}).length,
-        });
-      } else {
-        this.print(`  Path: ${snapshotPath}`);
-        this.print(`  Devices: ${Object.keys(snapshot.devices || {}).length}`);
-        this.print(`  Links: ${Object.keys(snapshot.links || {}).length}`);
-      }
-    } catch (error) {
-      spinner.fail(`Failed to save snapshot ${name}`);
-      throw error;
-    } finally {
-      await controller.stop();
-    }
+          if (this.globalFlags.format === 'json') {
+            this.outputData({
+              success: true,
+              name,
+              path: snapshotPath,
+              devices: Object.keys(snapshot.devices || {}).length,
+              links: Object.keys(snapshot.links || {}).length,
+            });
+          } else {
+            this.print(`  Path: ${snapshotPath}`);
+            this.print(`  Devices: ${Object.keys(snapshot.devices || {}).length}`);
+            this.print(`  Links: ${Object.keys(snapshot.links || {}).length}`);
+          }
+        } catch (error) {
+          spinner.fail(`Failed to save snapshot ${name}`);
+          throw error;
+        } finally {
+          await controller.stop();
+        }
+      },
+    });
   }
 }

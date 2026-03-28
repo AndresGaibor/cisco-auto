@@ -14,7 +14,7 @@
     "build:watch": "bun run scripts/build.ts --watch",
     "build:no-deploy": "bun run scripts/build.ts --no-deploy",
     "dev": "tsc --watch",
-    "test": "bun test packages/pt-control-v2/tests",
+    "test": "bun test tests",
     "runtime:generate": "bun run scripts/build.ts --no-deploy",
     "runtime:deploy": "bun run scripts/build.ts",
     "oclif:manifest": "oclif manifest",

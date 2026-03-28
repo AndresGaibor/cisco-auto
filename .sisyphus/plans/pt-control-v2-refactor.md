@@ -415,7 +415,7 @@ Max Concurrent: 5 (Wave 1)
 
   **Commit**: NO (groups with Wave 1)
 
-- [ ] 6. **Integrar logging en PT control v2 CLI**
+- [x] 6. **Integrar logging en PT control v2 CLI**
 
   **What to do**:
   - Importar LogManager en `packages/pt-control-v2/src/cli/`
@@ -467,7 +467,7 @@ Max Concurrent: 5 (Wave 1)
 
   **Commit**: NO (groups with Wave 2)
 
-- [ ] 7. **Integrar logging en skill Cisco assistant**
+- [x] 7. **Integrar logging en skill Cisco assistant**
 
   **What to do**:
   - Actualizar `.iflow/skills/cisco-networking-assistant/SKILL.md` con instrucciones de logging
@@ -511,7 +511,7 @@ Max Concurrent: 5 (Wave 1)
 
   **Commit**: NO (groups with Wave 2)
 
-- [ ] 8. **Actualizar virtual topology para consultas desde PT control**
+- [x] 8. **Actualizar virtual topology para consultas desde PT control**
 
   **What to do**:
   - Agregar función `queryTopology(query: TopologyQuery): TopologyResult` en `packages/topology/src/`
@@ -561,7 +561,7 @@ Max Concurrent: 5 (Wave 1)
 
   **Commit**: NO (groups with Wave 2)
 
-- [ ] 9. **Implementar flujo de confirmación para acciones destructivas**
+- [x] 9. **Implementar flujo de confirmación para acciones destructivas**
 
   **What to do**:
   - En CLI de PT control, antes de ejecutar acción destructiva, llamar `requestConfirmation`
@@ -613,7 +613,7 @@ Max Concurrent: 5 (Wave 1)
 
   **Commit**: NO (groups with Wave 2)
 
-- [ ] 10. **Conectar skill Cisco con PT control v2 CLI**
+- [x] 10. **Conectar skill Cisco con PT control v2 CLI**
 
   **What to do**:
   - Skill puede invocar comandos de PT control v2 CLI programáticamente
@@ -663,7 +663,7 @@ Max Concurrent: 5 (Wave 1)
 
   **Commit**: NO (groups with Wave 2)
 
-- [ ] 11. **Eliminar código y referencias de PT control v1**
+- [x] 11. **Eliminar código y referencias de PT control v1**
 
   **What to do**:
   - Buscar y eliminar `packages/pt-control/` (v1) si existe
@@ -713,7 +713,7 @@ Max Concurrent: 5 (Wave 1)
 
   **Commit**: NO (groups with Wave 3)
 
-- [ ] 12. **Actualizar README.md**
+- [x] 12. **Actualizar README.md**
 
   **What to do**:
   - Eliminar referencias a PT control v1
@@ -765,7 +765,7 @@ Max Concurrent: 5 (Wave 1)
 
   **Commit**: NO (groups with Wave 3)
 
-- [ ] 13. **Actualizar docs/PT_CONTROL_*.md**
+- [x] 13. **Actualizar docs/PT_CONTROL_*.md**
 
   **What to do**:
   - Revisar y actualizar 5 archivos PT_CONTROL_*.md
@@ -815,7 +815,7 @@ Max Concurrent: 5 (Wave 1)
 
   **Commit**: NO (groups with Wave 3)
 
-- [ ] 14. **Actualizar skills del proyecto**
+- [x] 14. **Actualizar skills del proyecto**
 
   **What to do**:
   - Revisar `.iflow/skills/cisco-networking-assistant/SKILL.md`
@@ -865,7 +865,7 @@ Max Concurrent: 5 (Wave 1)
 
   **Commit**: NO (groups with Wave 3)
 
-- [ ] 15. **Tests para sistema de logging**
+- [x] 15. **Tests para sistema de logging**
 
   **What to do**:
   - Crear `packages/pt-control-v2/src/logging/__tests__/log-manager.test.ts`
@@ -906,7 +906,7 @@ Max Concurrent: 5 (Wave 1)
 
   **Commit**: NO (groups with Wave 4)
 
-- [ ] 16. **Tests para integración virtual topology**
+- [x] 16. **Tests para integración virtual topology**
 
   **What to do**:
   - Crear `packages/topology/src/__tests__/query.test.ts`
@@ -947,7 +947,7 @@ Max Concurrent: 5 (Wave 1)
 
   **Commit**: NO (groups with Wave 4)
 
-- [ ] 17. **Tests para flujo de confirmación**
+- [x] 17. **Tests para flujo de confirmación**
 
   **What to do**:
   - Crear `packages/pt-control-v2/src/autonomy/__tests__/confirmation.test.ts`
@@ -986,7 +986,7 @@ Max Concurrent: 5 (Wave 1)
 
   **Commit**: NO (groups with Wave 4)
 
-- [ ] 18. **Tests de integración end-to-end**
+- [x] 18. **Tests de integración end-to-end**
 
   **What to do**:
   - Crear `tests/integration/pt-control-v2-integration.test.ts`

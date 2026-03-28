@@ -8,7 +8,7 @@ A complete real-time control system for Cisco Packet Tracer using TypeScript/Bun
 
 ```
 cisco-auto/
-├── packages/pt-control/              # Main package
+├── packages/pt-control-v2/              # Main package (migrated to v2)
 │   ├── src/
 │   │   ├── bridge/
 │   │   │   └── file-bridge.ts        # FileWatcher-based bridge
@@ -108,7 +108,7 @@ bun run pt help
 
 ## 🧪 Testing
 
-Test suite included in `packages/pt-control/test.ts`:
+Test suite included in `packages/pt-control-v2/tests`:
 - Creates devices
 - Creates links
 - Gets snapshots

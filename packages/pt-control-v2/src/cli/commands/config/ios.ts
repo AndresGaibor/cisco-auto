@@ -59,52 +59,61 @@ export default class ConfigIos extends BaseCommand {
       }
     }
 
-    // Interactive mode
-    if (!device || commands.length === 0) {
-      const interactive = await this.promptForConfig(device, commands);
-      device = interactive.device;
-      commands = interactive.commands;
-    }
-
-    // Validate
-    if (!device || device.trim() === '') {
-      throw new ValidationError('Device name is required');
-    }
-    if (commands.length === 0) {
-      throw new ValidationError('At least one command is required');
-    }
-
     const save = this.flags.save as boolean;
-    const controller = createDefaultPTController();
-    const spinner = createSpinner(`Configuring ${pc.cyan(device)}...`);
 
-    await controller.start();
+    await this.runLoggedCommand({
+      action: 'config:ios',
+      targetDevice: () => device,
+      context: {
+        commandsCount: commands.length,
+        save,
+        source: filePath ? 'file' : 'interactive-or-flags',
+      },
+      execute: async () => {
+        if (!device || commands.length === 0) {
+          const interactive = await this.promptForConfig(device, commands);
+          device = interactive.device;
+          commands = interactive.commands;
+        }
 
-    try {
-      // Check if device exists
-      const devices = await controller.listDevices() as DeviceState[];
-      const exists = devices.some((d: DeviceState) => d.name === device);
+        if (!device || device.trim() === '') {
+          throw new ValidationError('Device name is required');
+        }
+        if (commands.length === 0) {
+          throw new ValidationError('At least one command is required');
+        }
 
-      if (!exists) {
-        throw new DeviceNotFoundError(device);
-      }
+        const controller = createDefaultPTController();
+        const spinner = createSpinner(`Configuring ${pc.cyan(device)}...`);
 
-      spinner.start();
-      await controller.configIos(device, commands, { save });
-      spinner.succeed(`Configuration applied to ${pc.cyan(device)}`);
+        await controller.start();
 
-      if (this.globalFlags.format === 'json') {
-        this.outputData({ success: true, device, commandsCount: commands.length });
-      } else {
-        this.print(`  Commands: ${commands.length}`);
-        this.print(`  Saved: ${save}`);
-      }
-    } catch (error) {
-      spinner.fail(`Failed to configure ${device}`);
-      throw error;
-    } finally {
-      await controller.stop();
-    }
+        try {
+          const devices = await controller.listDevices() as DeviceState[];
+          const exists = devices.some((d: DeviceState) => d.name === device);
+
+          if (!exists) {
+            throw new DeviceNotFoundError(device);
+          }
+
+          spinner.start();
+          await controller.configIos(device, commands, { save });
+          spinner.succeed(`Configuration applied to ${pc.cyan(device)}`);
+
+          if (this.globalFlags.format === 'json') {
+            this.outputData({ success: true, device, commandsCount: commands.length });
+          } else {
+            this.print(`  Commands: ${commands.length}`);
+            this.print(`  Saved: ${save}`);
+          }
+        } catch (error) {
+          spinner.fail(`Failed to configure ${device}`);
+          throw error;
+        } finally {
+          await controller.stop();
+        }
+      },
+    });
   }
 
   private async promptForConfig(

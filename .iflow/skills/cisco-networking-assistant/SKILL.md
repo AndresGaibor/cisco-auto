@@ -417,6 +417,47 @@ pt show <device> "show running-config"
 
 ---
 
+## Logging Estructurado y Contexto Histórico
+
+La skill debe **documentar** el logging, no duplicar `LogManager` ni crear una segunda infraestructura.
+
+### Qué registrar
+
+Registra cada acción proactiva en tres momentos:
+
+| Momento | Convención sugerida | Contenido mínimo |
+|---------|---------------------|------------------|
+| Diagnóstico | `diagnostic:<tema>` | Problema, dispositivo, evidencia, sesión |
+| Sugerencia | `suggestion:<tema>` | Recomendación breve, sin secretos ni payloads completos |
+| Ejecución | `execution:<comando>` | Acción aplicada, resultado, duración, error si falló |
+
+### Reglas de logging
+
+- Usa `BaseCommand.runLoggedCommand()` para capturar ejecución, duración y outcome. Si actúas programáticamente, utiliza el helper `runPtCommand()` o `createDefaultPTController()`; no clones la lógica ni generes nuevas APIs.
+- No añadas logging manual por comando si ya pasa por el flujo central.
+- Usa `outcome: "error"` para fallos y `outcome: "cancelled"` para cancelaciones.
+- Configura `PT_DEV_DIR` antes de ejecutar la CLI desde scripts o skills para apuntar al dev dir correcto.
+- Sanitiza el contexto antes de guardarlo.
+- No expongas secretos, tokens, contraseñas ni configs completas.
+
+### Cómo leer contexto previo
+
+Para obtener contexto histórico antes de sugerir o ejecutar algo nuevo:
+
+1. Revisa el flujo actual con `pt logs --follow`.
+2. Consulta eventos recientes con `pt runtime events`.
+3. Si necesitas historial de una sesión anterior, busca la entrada NDJSON por `session_id` y `correlation_id` en el directorio de logs.
+4. Para análisis programático, usa `LogManager.query()` o `LogManager.getSession()`; no inventes otro lector.
+
+### Uso recomendado
+
+- Primero registra el diagnóstico.
+- Luego registra la sugerencia que vas a dar al usuario.
+- Finalmente registra la ejecución cuando haya una acción real.
+- Si ya existe evidencia en logs previos, reutilízala antes de repetir diagnóstico.
+
+---
+
 ## Arquitectura del Sistema
 
 ```
@@ -424,7 +465,7 @@ pt show <device> "show running-config"
 │                     CLI Profesional `pt`                    │
 │                    (packages/pt-control-v2)                 │
 ├─────────────────────────────────────────────────────────────┤
-│  Commands (oclif)                                           │
+│  Commands (oclif) + proactividad                            │
 │  ├── device (list, add, remove, rename)                     │
 │  ├── link (list, add, remove)                               │
 │  ├── config (ios, host)                                     │
@@ -433,7 +474,7 @@ pt show <device> "show running-config"
 │  ├── snapshot (save, load)                                  │
 │  └── record, replay, logs                                   │
 ├─────────────────────────────────────────────────────────────┤
-│  PTController (High-level API)                              │
+│  PTController + runPtCommand (invocación programática)      │
 │  ├── FileBridge (IPC con PT)                                │
 │  └── TopologyCache                                          │
 │       └── VirtualTopology (VDOM)                            │

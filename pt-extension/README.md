@@ -65,10 +65,10 @@ cp pt-extension/runtime.js ~/pt-dev/runtime.js
 
 ## Testing
 
-After installation, test with the CLI:
+After installation, test with the CLI (pt-control-v2):
 
 ```bash
-bun run packages/pt-control/test.ts
+bun run pt:test
 ```
 
 ## Troubleshooting

@@ -33,6 +33,8 @@ export interface ConfirmationOptions {
   
   /** Timeout in milliseconds (default: 30000) */
   timeoutMs?: number;
+
+  skipPrompt?: boolean;
 }
 
 /**
@@ -80,7 +82,12 @@ export function isInteractive(): boolean {
  * }
  * ```
  */
-export async function requestConfirmation(
+/**
+ * Internal implementation which accepts ConfirmationOptions and returns a rich result
+ * Separa la implementación para permitir una sobrecarga simple (action, details) que
+ * devuelve sólo booleano, como requiere la tarea.
+ */
+async function requestConfirmationImpl(
   options: ConfirmationOptions
 ): Promise<ConfirmationResult> {
   const {
@@ -90,6 +97,7 @@ export async function requestConfirmation(
     targetDevice,
     sessionId,
     timeoutMs = 30000,
+    skipPrompt = false,
   } = options;
 
   const correlationId = LogManager.generateCorrelationId();
@@ -98,6 +106,31 @@ export async function requestConfirmation(
 
   // Check if action is destructive
   const destructive = isDestructive(action);
+
+  if (skipPrompt) {
+    await logManager.logAction(
+      effectiveSessionId,
+      correlationId,
+      `confirm:${action}`,
+      'success',
+      {
+        target_device: targetDevice,
+        is_destructive: true,
+        confirmation_status: 'confirmed',
+        context: {
+          details,
+          skipped_prompt: true,
+        },
+      }
+    );
+
+    return {
+      confirmed: true,
+      status: 'confirmed',
+      correlationId,
+      isDestructive: destructive,
+    };
+  }
 
   // Non-destructive actions don't need confirmation
   if (!destructive) {
@@ -132,7 +165,8 @@ export async function requestConfirmation(
       {
         target_device: targetDevice,
         is_destructive: true,
-        confirmation_status: 'not_tty',
+        // Use 'not_required' for log compatibility (non-interactive environment)
+        confirmation_status: 'not_required',
         context: {
           details,
           default_response: defaultResponse,
@@ -217,6 +251,25 @@ export async function requestConfirmation(
     correlationId,
     isDestructive: true,
   };
+}
+
+/**
+ * Public overload: simple signature for callers that only need a boolean result
+ * requestConfirmation(action: string, details: string): Promise<boolean>
+ *
+ * Also supports the richer options form used elsewhere in the codebase and tests.
+ */
+export async function requestConfirmation(action: string, details: string): Promise<boolean>;
+export async function requestConfirmation(options: ConfirmationOptions): Promise<ConfirmationResult>;
+export async function requestConfirmation(arg1: string | ConfirmationOptions, arg2?: string): Promise<any> {
+  if (typeof arg1 === 'string') {
+    // simple form -> return boolean
+    const res = await requestConfirmationImpl({ action: arg1, details: arg2 ?? '' });
+    return res.confirmed;
+  }
+
+  // options form -> return full result
+  return await requestConfirmationImpl(arg1);
 }
 
 /**

@@ -1,55 +1,37 @@
-// packages/pt-control-v2/src/autonomy/destructive-actions.ts
-
-/**
- * Destructive Actions Registry
- * Actions that require user confirmation before execution
- */
-
-// List of destructive actions that require confirmation
 export const DESTRUCTIVE_ACTIONS = [
-  'device-reset',      // Reset device to factory defaults
-  'vlan-delete',       // Delete a VLAN
-  'interface-shutdown', // Shutdown an interface
-  'routing-change',    // Modify routing configuration
-  'acl-modify',        // Modify access control lists
-  'config-write',      // Write configuration to memory
-  'topology-change',   // Modify network topology
+  'device-reset',
+  'vlan-delete',
+  'interface-shutdown',
+  'routing-change',
+  'acl-modify',
+  'config-write',
+  'topology-change',
 ] as const;
 
-export type DestructiveAction = typeof DESTRUCTIVE_ACTIONS[number];
+export type DestructiveAction = (typeof DESTRUCTIVE_ACTIONS)[number];
 
-// Confirmation prompts for each action type
 const CONFIRMATION_PROMPTS: Record<DestructiveAction, string> = {
-  'device-reset': 'This will reset the device to factory defaults. All configuration will be lost.',
-  'vlan-delete': 'This will delete the VLAN. All associated ports will be affected.',
-  'interface-shutdown': 'This will shutdown the interface. Traffic will be interrupted.',
-  'routing-change': 'This will modify routing configuration. Network connectivity may be affected.',
-  'acl-modify': 'This will modify access control lists. Security policies may be impacted.',
-  'config-write': 'This will save the current configuration to memory.',
-  'topology-change': 'This will modify the network topology. Existing connections may be affected.',
+  'device-reset': 'Esta acción restablece el dispositivo a valores de fábrica y eliminará la configuración actual.',
+  'vlan-delete': 'Esta acción eliminará la VLAN y puede afectar a los puertos asociados.',
+  'interface-shutdown': 'Esta acción apagará la interfaz y el tráfico se interrumpirá.',
+  'routing-change': 'Esta acción modificará el enrutamiento y puede afectar la conectividad de la red.',
+  'acl-modify': 'Esta acción modificará las listas de control de acceso y puede impactar las políticas de seguridad.',
+  'config-write': 'Esta acción guardará la configuración actual en memoria.',
+  'topology-change': 'Esta acción modificará la topología de red y puede afectar las conexiones existentes.',
 };
 
-/**
- * Check if an action is destructive and requires confirmation
- */
 export function isDestructive(action: string): boolean {
   return DESTRUCTIVE_ACTIONS.includes(action as DestructiveAction);
 }
 
-/**
- * Get the confirmation prompt for a destructive action
- * Returns undefined if action is not destructive
- */
-export function getConfirmationPrompt(action: string): string | undefined {
+export function getConfirmationPrompt(action: string): string {
   if (isDestructive(action)) {
-    return CONFIRMATION_PROMPTS[action as DestructiveAction];
+    return `Confirmación requerida: ${CONFIRMATION_PROMPTS[action as DestructiveAction]}`;
   }
-  return undefined;
+
+  return `La acción "${action}" no está marcada como destructiva.`;
 }
 
-/**
- * Get all destructive actions
- */
-export function getDestructiveActions(): readonly string[] {
+export function getDestructiveActions(): readonly DestructiveAction[] {
   return DESTRUCTIVE_ACTIONS;
 }

@@ -18,8 +18,8 @@
     "typecheck": "bun run --filter './packages/*' typecheck && bun run --filter './apps/*' typecheck",
     "cisco-auto": "bun run --cwd apps/cli start",
     "sim": "bun run --cwd packages/sim-engine test",
-    "pt": "bun run --cwd packages/pt-control src/cli/index.ts",
-    "pt:test": "bun run --cwd packages/pt-control test"
+    "pt": "bun run --cwd packages/pt-control-v2 bin/run.js",
+    "pt:test": "bun run --cwd packages/pt-control-v2 test"
   },
   "devDependencies": {
     "@types/bun": "latest",
@@ -35,7 +35,6 @@
     "@cisco-auto/import-yaml": "workspace:*",
     "@cisco-auto/lab-model": "workspace:*",
     "@cisco-auto/legacy": "workspace:*",
-    "@cisco-auto/pt-control": "workspace:*",
     "@cisco-auto/sim-engine": "workspace:*",
     "@cisco-auto/sim-runtime": "workspace:*",
     "@cisco-auto/topology": "workspace:*",

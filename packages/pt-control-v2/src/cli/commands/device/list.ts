@@ -26,45 +26,55 @@ export default class DeviceList extends BaseCommand {
 
   async run(): Promise<void> {
     const filter = this.flags.filter as string | undefined;
-    const controller = createDefaultPTController();
 
-    await controller.start();
+    await this.runLoggedCommand({
+      action: 'device:list',
+      targetDevice: filter ?? 'all',
+      context: {
+        format: this.globalFlags.format,
+        hasFilter: Boolean(filter),
+      },
+      execute: async () => {
+        const controller = createDefaultPTController();
 
-    try {
-      const devices = await this.listDevices(controller);
+        await controller.start();
 
-      let filtered = devices;
-      if (filter) {
-        const filterLower = filter.toLowerCase();
-        filtered = devices.filter(d =>
-          d.type.toLowerCase() === filterLower ||
-          d.model.toLowerCase().includes(filterLower)
-        );
-      }
+        try {
+          const devices = await this.listDevices(controller);
 
-      if (this.globalFlags.format === 'json' || this.globalFlags.jq) {
-        this.outputData(filtered);
-        return;
-      }
+          let filtered = devices;
+          if (filter) {
+            const filterLower = filter.toLowerCase();
+            filtered = devices.filter(d =>
+              d.type.toLowerCase() === filterLower ||
+              d.model.toLowerCase().includes(filterLower)
+            );
+          }
 
-      if (filtered.length === 0) {
-        this.print('No devices found.');
-        return;
-      }
+          if (this.globalFlags.format === 'json' || this.globalFlags.jq) {
+            this.outputData(filtered);
+            return;
+          }
 
-      // Table output
-      const tableData = filtered.map(d => ({
-        name: d.name,
-        model: d.model,
-        type: d.type,
-        status: d.power ? 'on' : 'off',
-      }));
+          if (filtered.length === 0) {
+            this.print('No devices found.');
+            return;
+          }
 
-      this.outputData(tableData);
-      this.print(`\nTotal: ${filtered.length} device(s)`);
-    } finally {
-      await controller.stop();
-    }
+          const tableData = filtered.map(d => ({
+            name: d.name,
+            model: d.model,
+            type: d.type,
+            status: d.power ? 'on' : 'off',
+          }));
+
+          this.outputData(tableData);
+          this.print(`\nTotal: ${filtered.length} device(s)`);
+        } finally {
+          await controller.stop();
+        }
+      },
+    });
   }
 
   private async listDevices(controller: PTController): Promise<DeviceState[]> {

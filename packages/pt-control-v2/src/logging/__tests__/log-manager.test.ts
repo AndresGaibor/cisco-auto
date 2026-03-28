@@ -160,7 +160,7 @@ describe('LogManager', () => {
         correlation_id: 'cor_003',
         timestamp: new Date().toISOString(),
         action: 'device list',
-        outcome: 'failure',
+        outcome: 'error',
       };
 
       await manager.log(entry1);
@@ -175,7 +175,7 @@ describe('LogManager', () => {
 
     test('should return empty array for non-existent session', async () => {
       const entries = await manager.getSession('non_existent');
-      expect(entries).toEqual([]);
+      expect([...entries.entries]).toHaveLength(0);
     });
   });
 
@@ -183,7 +183,7 @@ describe('LogManager', () => {
     test('should filter by outcome', async () => {
       const entries: LogEntry[] = [
         { session_id: 's1', correlation_id: 'c1', timestamp: new Date().toISOString(), action: 'test', outcome: 'success' },
-        { session_id: 's1', correlation_id: 'c2', timestamp: new Date().toISOString(), action: 'test', outcome: 'failure' },
+         { session_id: 's1', correlation_id: 'c2', timestamp: new Date().toISOString(), action: 'test', outcome: 'error' },
         { session_id: 's1', correlation_id: 'c3', timestamp: new Date().toISOString(), action: 'test', outcome: 'success' },
       ];
 

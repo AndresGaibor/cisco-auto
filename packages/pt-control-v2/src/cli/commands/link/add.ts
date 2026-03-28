@@ -52,53 +52,57 @@ export default class LinkAdd extends BaseCommand {
     let port2Spec = this.args.port2 as string | undefined;
     let cableType = this.flags.type as CableType;
 
-    // Interactive mode if args not provided
-    if (!port1Spec || !port2Spec) {
-      const interactive = await this.promptForLink(port1Spec, port2Spec);
-      port1Spec = interactive.port1Spec;
-      port2Spec = interactive.port2Spec;
-      if (this.flags.type === 'auto') {
-        cableType = interactive.cableType;
-      }
-    }
+    await this.runLoggedCommand({
+      action: 'link:add',
+      targetDevice: () => port1Spec,
+      execute: async () => {
+        if (!port1Spec || !port2Spec) {
+          const interactive = await this.promptForLink(port1Spec, port2Spec);
+          port1Spec = interactive.port1Spec;
+          port2Spec = interactive.port2Spec;
+          if (this.flags.type === 'auto') {
+            cableType = interactive.cableType;
+          }
+        }
 
-    // Validate
-    if (!port1Spec || !this.isValidPortSpec(port1Spec)) {
-      throw new ValidationError('Invalid port1 format. Expected: device:port');
-    }
-    if (!port2Spec || !this.isValidPortSpec(port2Spec)) {
-      throw new ValidationError('Invalid port2 format. Expected: device:port');
-    }
+        if (!port1Spec || !this.isValidPortSpec(port1Spec)) {
+          throw new ValidationError('Invalid port1 format. Expected: device:port');
+        }
+        if (!port2Spec || !this.isValidPortSpec(port2Spec)) {
+          throw new ValidationError('Invalid port2 format. Expected: device:port');
+        }
 
-    const { device: device1, port: port1 } = this.parsePortSpec(port1Spec);
-    const { device: device2, port: port2 } = this.parsePortSpec(port2Spec);
+        const { device: device1, port: port1 } = this.parsePortSpec(port1Spec);
+        const { device: device2, port: port2 } = this.parsePortSpec(port2Spec);
 
-    const controller = createDefaultPTController();
-    const spinner = createSpinner(
-      `Creating link ${pc.cyan(port1Spec)} <-> ${pc.cyan(port2Spec)}...`
-    );
+        const controller = createDefaultPTController();
+        const spinner = createSpinner(
+          `Creating link ${pc.cyan(port1Spec)} <-> ${pc.cyan(port2Spec)}...`
+        );
 
-    await controller.start();
+        await controller.start();
 
-    try {
-      spinner.start();
+        try {
+          spinner.start();
 
-      const link = await controller.addLink(device1, port1, device2, port2, cableType);
+          const link = await controller.addLink(device1, port1, device2, port2, cableType);
 
-      spinner.succeed(`Link created: ${pc.cyan(port1Spec)} <-> ${pc.cyan(port2Spec)}`);
+          spinner.succeed(`Link created: ${pc.cyan(port1Spec)} <-> ${pc.cyan(port2Spec)}`);
 
-      if (this.globalFlags.format === 'json') {
-        this.outputData(link);
-      } else {
-        this.print(`  Cable type: ${link.cableType}`);
-        this.print(`  Link ID: ${link.id}`);
-      }
-    } catch (error) {
-      spinner.fail(`Failed to create link`);
-      throw error;
-    } finally {
-      await controller.stop();
-    }
+          if (this.globalFlags.format === 'json') {
+            this.outputData(link);
+          } else {
+            this.print(`  Cable type: ${link.cableType}`);
+            this.print(`  Link ID: ${link.id}`);
+          }
+        } catch (error) {
+          spinner.fail(`Failed to create link`);
+          throw error;
+        } finally {
+          await controller.stop();
+        }
+      },
+    });
   }
 
   private isValidPortSpec(spec: string): boolean {

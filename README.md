@@ -12,7 +12,7 @@ Diseñado especialmente para estudiantes de Redes de Computadores (con enfoque e
 
 ## ✨ Características Principales
 
-- **🎮 Control en Tiempo Real de Packet Tracer**: Nueva CLI para controlar PT desde TypeScript/Bun sin dependencias externas.
+- **🎮 Control en Tiempo Real de Packet Tracer**: Nueva CLI para controlar PT desde TypeScript/Bun sin dependencias externas (migrado a pt-control-v2).
 - **⚙️ Despliegue Automático**: Configuración directa a dispositivos Cisco vía SSH/Telnet con ejecución paralela para máxima velocidad.
 - **🏗️ Topologías Declarativas**: Define la arquitectura completa de tu red utilizando archivos **YAML** o **JSON** validados estrictamente (Zod).
 - **🔍 Análisis Avanzado PKA/PKT**: Ingeniería inversa integrada para decodificar archivos de Packet Tracer (XOR + Twofish CBC + zlib), extrayendo dispositivos y topologías.
@@ -110,6 +110,16 @@ bun run src/cli/index.ts devices labs/vlan-basico.yaml
 
 ---
 
+## 📝 Logging, Autonomía y Confirmación
+
+La CLI de cisco-auto (basada en pt-control-v2) implementa:
+
+- **Logging estructurado:** Cada comando ejecutado queda registrado en archivos NDJSON, permitiendo auditoría y análisis histórico. Puedes consultar logs con `pt logs` o desde la skill de IA.
+- **Autonomía proactiva:** El sistema ejecuta pasos seguros automáticamente y sugiere acciones recomendadas, minimizando la intervención manual y acelerando flujos repetitivos.
+- **Confirmación de acciones destructivas:** Antes de eliminar dispositivos, enlaces o limpiar snapshots, la CLI solicita confirmación interactiva. Para automatización, usa el flag global `--yes` para registrar la aprobación en el log sin prompt.
+
+---
+
 ## 🤖 Uso con Asistentes de IA (Skills)
 
 `cisco-auto` incluye la skill especializada **Cisco Networking Assistant**, que convierte a tu CLI de IA favorita en un experto en Packet Tracer y redes Cisco. Esta skill te permite solicitar modificaciones a archivos, consultar teoría de redes, y diagnosticar problemas directamente desde tu terminal.
@@ -153,7 +163,7 @@ cisco-auto/
 │   └── cli/                # Aplicación de línea de comandos (Commander.js)
 ├── packages/
 │   ├── core/               # Lógica de negocio y orquestadores
-│   ├── pt-control/         # 🎮 Control en tiempo real de Packet Tracer (NUEVO)
+│   ├── pt-control-v2/         # 🎮 Control en tiempo real de Packet Tracer (NUEVO)
 │   ├── lab-model/          # Modelo de dominio canónico
 │   ├── bridge/             # Integración con Packet Tracer
 │   ├── crypto/             # Implementación de Twofish

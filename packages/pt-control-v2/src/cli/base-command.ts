@@ -5,6 +5,16 @@
 import { Command, Flags, Interfaces } from '@oclif/core';
 import pc from 'picocolors';
 import { formatOutput, applyJqFilter, type OutputFormat } from './formatters/index.js';
+import { LogManager, getLogManager } from '../logging/index.js';
+import type { LogEntry } from '../logging/index.js';
+import { requestConfirmation } from '../autonomy/index.js';
+
+export class CommandCancelledError extends Error {
+  constructor() {
+    super('Command cancelled by user');
+    this.name = 'CommandCancelledError';
+  }
+}
 
 // ============================================================================
 // Types
@@ -16,6 +26,7 @@ export type GlobalFlags = {
   quiet: boolean;
   verbose: boolean;
   devDir: string;
+  yes: boolean;
 };
 
 // ============================================================================
@@ -56,6 +67,11 @@ export abstract class BaseCommand extends Command {
       default: process.env.PT_DEV_DIR || `${process.env.HOME}/pt-dev`,
       env: 'PT_DEV_DIR',
     }),
+    yes: Flags.boolean({
+      description: 'Assume yes for confirmation prompts',
+      default: false,
+      char: 'y',
+    }),
   };
 
   // Parsed flags
@@ -63,6 +79,8 @@ export abstract class BaseCommand extends Command {
   protected args!: Record<string, unknown>;
   protected globalFlags!: GlobalFlags;
   protected devDir!: string;
+  protected logManager!: LogManager;
+  protected logSessionId!: string;
 
   async init(): Promise<void> {
     await super.init();
@@ -80,8 +98,19 @@ export abstract class BaseCommand extends Command {
       quiet: flags.quiet as boolean,
       verbose: flags.verbose as boolean,
       devDir: (flags['dev-dir'] as string) || process.env.PT_DEV_DIR || `${process.env.HOME}/pt-dev`,
+      yes: flags.yes as boolean,
     };
     this.devDir = this.globalFlags.devDir;
+
+    this.logManager = getLogManager();
+    const currentSessionId = this.logManager.getCurrentSessionId();
+
+    if (currentSessionId) {
+      this.logSessionId = currentSessionId;
+    } else {
+      this.logSessionId = LogManager.generateSessionId();
+      this.logManager.startSession(this.logSessionId);
+    }
   }
 
   // ============================================================================
@@ -152,6 +181,89 @@ export abstract class BaseCommand extends Command {
     const { PTController } = require('../controller/index.js');
     return new PTController({ devDir: this.devDir });
   }
+
+  protected async confirmDestructiveAction(options: {
+    action: string;
+    details: string;
+    targetDevice?: string;
+    skipPrompt?: boolean;
+  }): Promise<void> {
+    const result = await requestConfirmation({
+      action: options.action,
+      details: options.details,
+      targetDevice: options.targetDevice,
+      sessionId: this.logSessionId,
+      skipPrompt: options.skipPrompt ?? this.globalFlags.yes,
+    });
+
+    if (!result.confirmed) {
+      throw new CommandCancelledError();
+    }
+  }
+
+  protected async runLoggedCommand<T>(options: {
+    action: string;
+    targetDevice?: string | (() => string | undefined);
+    context?: Record<string, unknown>;
+    execute: () => Promise<T>;
+  }): Promise<T> {
+    const correlationId = LogManager.generateCorrelationId();
+    const startedAt = Date.now();
+
+    try {
+      const result = await options.execute();
+      const successOutcome: LogEntry['outcome'] = 'success';
+      const targetDevice = typeof options.targetDevice === 'function'
+        ? options.targetDevice()
+        : options.targetDevice;
+      await this.logManager.logAction(this.logSessionId, correlationId, options.action, successOutcome, {
+        target_device: targetDevice,
+        duration_ms: Date.now() - startedAt,
+        context: options.context,
+      });
+      return result;
+    } catch (error) {
+      if (error instanceof CommandCancelledError) {
+        const cancelledOutcome: LogEntry['outcome'] = 'cancelled';
+        const targetDevice = typeof options.targetDevice === 'function'
+          ? options.targetDevice()
+          : options.targetDevice;
+        await this.logManager.logAction(this.logSessionId, correlationId, options.action, cancelledOutcome, {
+          target_device: targetDevice,
+          duration_ms: Date.now() - startedAt,
+          context: options.context,
+        });
+        return undefined as T;
+      }
+
+      const failureOutcome: LogEntry['outcome'] = 'error';
+      const targetDevice = typeof options.targetDevice === 'function'
+        ? options.targetDevice()
+        : options.targetDevice;
+      await this.logManager.logAction(this.logSessionId, correlationId, options.action, failureOutcome, {
+        target_device: targetDevice,
+        duration_ms: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+        context: options.context,
+      });
+      throw error;
+    }
+  }
+
+  protected async logCancelledCommand(options: {
+    action: string;
+    targetDevice?: string;
+    context?: Record<string, unknown>;
+  }): Promise<void> {
+    const correlationId = LogManager.generateCorrelationId();
+    const cancelledOutcome: LogEntry['outcome'] = 'cancelled';
+
+    await this.logManager.logAction(this.logSessionId, correlationId, options.action, cancelledOutcome, {
+      target_device: options.targetDevice,
+      duration_ms: 0,
+      context: options.context,
+    });
+  }
 }
 
 // ============================================================================
@@ -162,7 +274,7 @@ export abstract class BaseCommand extends Command {
  * Create a spinner for long operations
  */
 export function createSpinner(text: string) {
-  const ora = require('ora');
+  const ora = require('ora').default;
   return ora(text);
 }
 

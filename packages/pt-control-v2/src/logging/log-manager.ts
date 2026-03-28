@@ -1,64 +1,45 @@
-/**
- * LogManager - NDJSON logging with 7-day rotation
- * Uses Bun native APIs for file operations
- */
+import { unlink } from 'node:fs/promises';
+import { basename, join } from 'node:path';
+import type { LogConfig, LogEntry, LogQueryOptions, LogSession, LogStats } from './types.js';
 
-import { mkdir, unlink } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-import type { LogEntry, LogSession, LogConfig, LogQueryOptions, LogStats } from './types.js';
+type SessionLog = LogSession & LogEntry[];
 
 export class LogManager {
-  private config: LogConfig;
+  private config: Required<LogConfig>;
   private currentSession: LogSession | null = null;
 
   constructor(config?: Partial<LogConfig>) {
     this.config = {
-      logDir: config?.logDir || '.sisyphus/logs',
+      logDir: config?.logDir ?? '.sisyphus/logs',
       retentionDays: config?.retentionDays ?? 7,
-      prefix: config?.prefix || 'pt-control',
+      prefix: config?.prefix ?? 'pt-control',
     };
   }
 
-  /**
-   * Start a new logging session
-   */
   startSession(sessionId: string): void {
     this.currentSession = {
       id: sessionId,
-      started_at: new Date(),
+      started_at: new Date().toISOString(),
       entries: [],
     };
   }
 
-  /**
-   * Get the current session ID if one is active
-   */
   getCurrentSessionId(): string | null {
     return this.currentSession?.id ?? null;
   }
 
-  /**
-   * Log an entry
-   */
   async log(entry: LogEntry): Promise<void> {
-    // Ensure log directory exists
-    await this.ensureLogDir();
+    const filePath = this.getLogFilePath(entry.timestamp);
+    const previous = await this.readText(filePath);
+    const line = `${JSON.stringify(entry)}\n`;
 
-    // Add to current session if active
-    if (this.currentSession) {
+    await Bun.write(filePath, previous + line, { createPath: true });
+
+    if (this.currentSession && this.currentSession.id === entry.session_id) {
       this.currentSession.entries.push(entry);
     }
-
-    // Append to NDJSON file
-    const filePath = this.getLogFilePath(new Date(entry.timestamp));
-    const line = JSON.stringify(entry) + '\n';
-    await Bun.write(filePath, line, { createPath: true });
   }
 
-  /**
-   * Convenience method to log with auto-generated timestamp
-   */
   async logAction(
     sessionId: string,
     correlationId: string,
@@ -67,108 +48,76 @@ export class LogManager {
     options?: Partial<LogEntry>
   ): Promise<void> {
     const entry: LogEntry = {
+      ...options,
       session_id: sessionId,
       correlation_id: correlationId,
-      timestamp: options?.timestamp || new Date().toISOString(),
+      timestamp: options?.timestamp ?? new Date().toISOString(),
       action,
       outcome,
-      ...options,
     };
+
     await this.log(entry);
   }
 
-  /**
-   * Get all entries for a session
-   */
-  async getSession(sessionId: string): Promise<LogEntry[]> {
-    const entries: LogEntry[] = [];
-    const pattern = `${this.config.logDir}/${this.config.prefix}-*.ndjson`;
-    const glob = new Bun.Glob(pattern);
-    
-    for await (const file of glob.scan()) {
-      const content = await Bun.file(file).text();
-      for (const line of content.split('\n').filter(Boolean)) {
-        try {
-          const entry = JSON.parse(line) as LogEntry;
-          if (entry.session_id === sessionId) {
-            entries.push(entry);
-          }
-        } catch {
-          // Skip malformed lines
-        }
-      }
-    }
-    
-    return entries.sort((a, b) => 
-      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-    );
+  async getSession(sessionId: string): Promise<SessionLog> {
+    const entries = await this.query({ session_id: sessionId });
+    const sessionEntries = entries.slice().sort((a, b) => this.toTime(a.timestamp) - this.toTime(b.timestamp));
+
+    return Object.assign(sessionEntries, {
+      id: sessionId,
+      started_at: sessionEntries[0]?.timestamp ?? new Date().toISOString(),
+      ended_at: sessionEntries.at(-1)?.timestamp,
+      entries: sessionEntries,
+    }) as SessionLog;
   }
 
-  /**
-   * Query log entries with filters
-   */
   async query(options: LogQueryOptions): Promise<LogEntry[]> {
     const entries: LogEntry[] = [];
-    const pattern = `${this.config.logDir}/${this.config.prefix}-*.ndjson`;
-    const glob = new Bun.Glob(pattern);
-    
-    for await (const file of glob.scan()) {
-      const content = await Bun.file(file).text();
-      for (const line of content.split('\n').filter(Boolean)) {
-        try {
-          const entry = JSON.parse(line) as LogEntry;
-          if (this.matchesFilter(entry, options)) {
-            entries.push(entry);
-          }
-        } catch {
-          // Skip malformed lines
+
+    for await (const filePath of this.scanLogFiles()) {
+      const fileEntries = await this.readEntries(filePath);
+
+      for (const entry of fileEntries) {
+        if (this.matchesFilter(entry, options)) {
+          entries.push(entry);
         }
       }
     }
-    
-    let results = entries.sort((a, b) => 
-      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-    );
+
+    entries.sort((a, b) => this.toTime(a.timestamp) - this.toTime(b.timestamp));
 
     if (options.limit && options.limit > 0) {
-      results = results.slice(0, options.limit);
+      return entries.slice(0, options.limit);
     }
 
-    return results;
+    return entries;
   }
 
-  /**
-   * Rotate logs - delete files older than retention period
-   */
   async rotate(): Promise<number> {
     const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - this.config.retentionDays);
-    
+    cutoffDate.setUTCDate(cutoffDate.getUTCDate() - this.config.retentionDays);
+    const cutoff = cutoffDate.toISOString().slice(0, 10);
+
     let deleted = 0;
-    const pattern = `${this.config.logDir}/${this.config.prefix}-*.ndjson`;
-    const glob = new Bun.Glob(pattern);
-    
-    for await (const file of glob.scan()) {
-      const fileObj = Bun.file(file);
-      const stat = await fileObj.stat();
-      
-      if (stat && stat.mtime && new Date(stat.mtime) < cutoffDate) {
-        try {
-          await unlink(file);
-          deleted++;
-        } catch (error) {
-          // Skip files that can't be deleted
-          console.error(`Failed to delete log file ${file}:`, error);
-        }
+
+    for await (const filePath of this.scanLogFiles()) {
+      const fileDate = this.extractDateFromFileName(filePath);
+
+      if (!fileDate || fileDate >= cutoff) {
+        continue;
+      }
+
+      try {
+        await unlink(filePath);
+        deleted += 1;
+      } catch {
+        continue;
       }
     }
-    
+
     return deleted;
   }
 
-  /**
-   * Get statistics about logging
-   */
   async getStats(): Promise<LogStats> {
     const stats: LogStats = {
       fileCount: 0,
@@ -176,33 +125,21 @@ export class LogManager {
       totalEntries: 0,
     };
 
-    const pattern = `${this.config.logDir}/${this.config.prefix}-*.ndjson`;
-    const glob = new Bun.Glob(pattern);
-    const files: string[] = [];
+    for await (const filePath of this.scanLogFiles()) {
+      stats.fileCount += 1;
 
-    for await (const file of glob.scan()) {
-      files.push(file);
-      stats.fileCount++;
-      
-      const fileObj = Bun.file(file);
-      const stat = await fileObj.stat();
-      
-      if (stat) {
-        stats.totalSize += stat.size || 0;
-        
-        // Count entries
-        const content = await fileObj.text();
-        stats.totalEntries += content.split('\n').filter(Boolean).length;
-        
-        // Track dates
-        const mtime = stat.mtime ? new Date(stat.mtime) : undefined;
-        if (mtime) {
-          if (!stats.oldestFile || mtime < stats.oldestFile) {
-            stats.oldestFile = mtime;
-          }
-          if (!stats.newestFile || mtime > stats.newestFile) {
-            stats.newestFile = mtime;
-          }
+      const file = Bun.file(filePath);
+      const content = await this.readText(filePath);
+      stats.totalSize += file.size ?? content.length;
+      stats.totalEntries += content.split(/\r?\n/).filter(Boolean).length;
+
+      const fileDate = this.extractDateFromFileName(filePath);
+      if (fileDate) {
+        if (!stats.oldestFile || fileDate < this.normalizeDateValue(stats.oldestFile)) {
+          stats.oldestFile = fileDate;
+        }
+        if (!stats.newestFile || fileDate > this.normalizeDateValue(stats.newestFile)) {
+          stats.newestFile = fileDate;
         }
       }
     }
@@ -210,88 +147,150 @@ export class LogManager {
     return stats;
   }
 
-  /**
-   * End current session
-   */
   endSession(): void {
     if (this.currentSession) {
-      this.currentSession.ended_at = new Date();
+      this.currentSession.ended_at = new Date().toISOString();
       this.currentSession = null;
     }
   }
 
-  /**
-   * Generate a unique correlation ID
-   */
   static generateCorrelationId(): string {
-    return `cor_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    return `cor_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   }
 
-  /**
-   * Generate a unique session ID
-   */
   static generateSessionId(): string {
-    return `ses_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    return `ses_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   }
 
-  // Private helpers
-
-  private async ensureLogDir(): Promise<void> {
-    if (!existsSync(this.config.logDir)) {
-      await mkdir(this.config.logDir, { recursive: true });
+  private async readText(filePath: string): Promise<string> {
+    try {
+      return await Bun.file(filePath).text();
+    } catch {
+      return '';
     }
   }
 
-  private getLogFilePath(date: Date): string {
-    const dateStr = date.toISOString().split('T')[0];
-    return join(this.config.logDir, `${this.config.prefix}-${dateStr}.ndjson`);
+  private async readEntries(filePath: string): Promise<LogEntry[]> {
+    const content = await this.readText(filePath);
+    if (!content.trim()) {
+      return [];
+    }
+
+    const entries: LogEntry[] = [];
+    for (const line of content.split(/\r?\n/)) {
+      if (!line.trim()) {
+        continue;
+      }
+
+      try {
+        entries.push(JSON.parse(line) as LogEntry);
+      } catch {
+        continue;
+      }
+    }
+
+    return entries;
+  }
+
+  private async *scanLogFiles(): AsyncGenerator<string> {
+    const pattern = `${this.config.prefix}-*.ndjson`;
+
+    try {
+      for await (const fileName of new Bun.Glob(pattern).scan({ cwd: this.config.logDir })) {
+        yield join(this.config.logDir, fileName);
+      }
+    } catch {
+      return;
+    }
+  }
+
+  private getLogFilePath(timestamp: LogEntry['timestamp']): string {
+    return join(this.config.logDir, `${this.config.prefix}-${this.toDateString(timestamp)}.ndjson`);
   }
 
   private matchesFilter(entry: LogEntry, options: LogQueryOptions): boolean {
     if (options.session_id && entry.session_id !== options.session_id) {
       return false;
     }
+
     if (options.action && entry.action !== options.action) {
       return false;
     }
+
     if (options.outcome && entry.outcome !== options.outcome) {
       return false;
     }
+
     if (options.target_device && entry.target_device !== options.target_device) {
       return false;
     }
+
     if (options.from) {
-      const entryDate = new Date(entry.timestamp);
-      if (entryDate < options.from) {
+      const from = this.toTime(options.from);
+      if (this.toTime(entry.timestamp) < from) {
         return false;
       }
     }
+
     if (options.to) {
-      const entryDate = new Date(entry.timestamp);
-      if (entryDate > options.to) {
+      const to = this.toTime(options.to);
+      if (this.toTime(entry.timestamp) > to) {
         return false;
       }
     }
+
     return true;
+  }
+
+  private toTime(value: LogEntry['timestamp'] | LogQueryOptions['from'] | LogQueryOptions['to']): number {
+    if (value === undefined || value === null) {
+      return 0;
+    }
+
+    if (typeof value === 'object') {
+      return (value as Date).getTime();
+    }
+
+    if (typeof value === 'number') {
+      return value;
+    }
+
+    return new Date(value).getTime();
+  }
+
+  private toDateString(value: LogEntry['timestamp']): string {
+    return new Date(value).toISOString().slice(0, 10);
+  }
+
+  private extractDateFromFileName(filePath: string): string | null {
+    const name = basename(filePath);
+    const match = name.match(new RegExp(`^${this.escapeRegex(this.config.prefix)}-(\\d{4}-\\d{2}-\\d{2})\\.ndjson$`));
+    return match?.[1] ?? null;
+  }
+
+  private normalizeDateValue(value: number | string): string {
+    if (typeof value === 'number') {
+      return new Date(value).toISOString().slice(0, 10);
+    }
+
+    return new Date(value).toISOString().slice(0, 10);
+  }
+
+  private escapeRegex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 }
 
-// Singleton instance
 let defaultLogManager: LogManager | null = null;
 
-/**
- * Get the default LogManager instance (singleton)
- */
 export function getLogManager(config?: Partial<LogConfig>): LogManager {
   if (!defaultLogManager) {
     defaultLogManager = new LogManager(config);
   }
+
   return defaultLogManager;
 }
 
-/**
- * Reset the singleton instance (useful for testing)
- */
 export function resetLogManager(): void {
   defaultLogManager = null;
 }

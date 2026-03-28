@@ -20,35 +20,41 @@ export default class LinkList extends BaseCommand {
   };
 
   async run(): Promise<void> {
-    const controller = createDefaultPTController();
+    await this.runLoggedCommand({
+      action: 'link:list',
+      targetDevice: 'all',
+      context: { format: this.globalFlags.format },
+      execute: async () => {
+        const controller = createDefaultPTController();
 
-    await controller.start();
+        await controller.start();
 
-    try {
-      const snapshot = await controller.snapshot();
-      const links = Object.values(snapshot.links) as LinkState[];
+        try {
+          const snapshot = await controller.snapshot();
+          const links = Object.values(snapshot.links) as LinkState[];
 
-      if (this.globalFlags.format === 'json' || this.globalFlags.jq) {
-        this.outputData(links);
-        return;
-      }
+          if (this.globalFlags.format === 'json' || this.globalFlags.jq) {
+            this.outputData(links);
+            return;
+          }
 
-      if (links.length === 0) {
-        this.print('No links found.');
-        return;
-      }
+          if (links.length === 0) {
+            this.print('No links found.');
+            return;
+          }
 
-      // Table output
-      const tableData = links.map(link => ({
-        endpoint1: `${link.device1}:${link.port1}`,
-        endpoint2: `${link.device2}:${link.port2}`,
-        cableType: link.cableType,
-      }));
+          const tableData = links.map(link => ({
+            endpoint1: `${link.device1}:${link.port1}`,
+            endpoint2: `${link.device2}:${link.port2}`,
+            cableType: link.cableType,
+          }));
 
-      this.outputData(tableData);
-      this.print(`\nTotal: ${links.length} link(s)`);
-    } finally {
-      await controller.stop();
-    }
+          this.outputData(tableData);
+          this.print(`\nTotal: ${links.length} link(s)`);
+        } finally {
+          await controller.stop();
+        }
+      },
+    });
   }
 }
