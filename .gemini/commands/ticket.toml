@@ -1,0 +1,2 @@
+description = "Genera un ticket de soporte o mejora siguiendo el formato oficial del proyecto."
+prompt = "Completa un ticket usando la plantilla en .claude/skills/cisco-networking-assistant/templates/ticket.md. Resume el problema, adjunta evidencia relevante y define criterios de aceptación. Puedes incluir detalles adicionales usando {{args}} si es necesario."

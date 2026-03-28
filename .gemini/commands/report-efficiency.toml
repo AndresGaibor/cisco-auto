@@ -1,0 +1,2 @@
+description = "Genera un informe de eficiencia para optimización de flujos."
+prompt = "Completa un informe de eficiencia usando la plantilla de .claude/skills/cisco-networking-assistant/templates/efficiency-report.md. Describe el contexto, adjunta métricas y define criterios de aceptación. Puedes complementar con información extra usando {{args}}."

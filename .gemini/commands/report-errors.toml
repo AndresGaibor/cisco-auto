@@ -1,0 +1,2 @@
+description = "Genera un reporte de error detallado usando la plantilla oficial."
+prompt = "Completa un reporte de error siguiendo el formato de .claude/skills/cisco-networking-assistant/templates/error-report.md. Explica el error, adjunta evidencia y define criterios de aceptación. Puedes agregar detalles adicionales usando {{args}}."
