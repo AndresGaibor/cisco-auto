@@ -174,6 +174,8 @@ cp -r .iflow/skills/cisco-networking-assistant .claude/skills/
 
 ## Modos de Operación
 
+Nota: Cuando la skill necesite interactuar con Packet Tracer el agente intentará automáticamente usar la CLI `pt` (pt-control-v2) si está instalada; si no, usará los scripts de bridge (`bun run .iflow/skills/.../bridge-automation.ts`) para preparar el entorno.
+
 La skill tiene dos modos principales:
 
 ### 1. Modo Guía (Aprendizaje)

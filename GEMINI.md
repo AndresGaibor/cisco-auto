@@ -19,15 +19,16 @@
 - **Cryptography:** twofish-ts
 - **Logging:** Pino
 
-## Architecture
-- `src/cli/`: Entry point and command definitions (`parse`, `config`, `deploy`, `verify`, `parse-pka`).
-- `src/core/parser/`: 
-    - `pka-decoder.ts`: The complex 4-stage decryption logic for .pka files.
-    - `yaml-parser.ts`: Loads and validates lab definitions.
-- `src/core/config-generators/`: `ios-generator.ts` uses templates to create executable IOS commands.
-- `src/core/connector/`: `ssh-connector.ts` manages SSH sessions and parallel execution.
-- `src/core/types/`: `topology.ts` contains the "Source of Truth" schemas for all network entities.
-- `src/templates/`: Version-specific IOS command templates.
+## Architecture (Monorepo)
+- `apps/cli/`: Entry point and command definitions.
+- `packages/core/`: Core business logic, domain models, and orchestrators.
+- `packages/lab-model/`: Canonical domain model for labs.
+- `packages/bridge/`: Integration with Packet Tracer Bridge.
+- `packages/import-yaml/`: YAML parsing and validation.
+- `packages/import-pka/`: PKA/PKT decoding and encoding.
+- `packages/crypto/`: Cryptographic utilities (Twofish).
+- `packages/device-catalog/`: Database of Cisco device specifications.
+- `packages/topology/`: Topology analysis and visualization.
 
 ## Building and Running
 
@@ -39,19 +40,20 @@ bun install
 ### Main Commands
 ```bash
 # Run the CLI
-bun start
+bun run apps/cli/src/index.ts --help
 
-# Parse a .pka file to extract XML/Devices
-bun run src/cli/index.ts parse-pka <path_to_pka>
+# Parse a .pka file
+bun run apps/cli/src/index.ts parse-pka <path_to_pka>
 
-# Generate configurations from a YAML lab definition
-bun run src/cli/index.ts config <path_to_yaml> --output ./configs
+# Generate configurations
+bun run apps/cli/src/index.ts config <path_to_yaml> --output ./configs
+```
 
 # Validate a lab definition
-bun run src/cli/index.ts validate <path_to_yaml>
+bun run apps/cli/src/index.ts validate <path_to_yaml>
 
 # List devices in a lab
-bun run src/cli/index.ts devices <path_to_yaml>
+bun run apps/cli/src/index.ts devices <path_to_yaml>
 ```
 
 ### Testing
@@ -60,15 +62,13 @@ bun test
 ```
 
 ## Development Conventions
-- **Bun First:** Use `bun` for running, testing, and building. Never use `npm` or `node`.
-- **Type Safety:** Always use Zod schemas in `src/core/types/topology.ts` for any new network property.
-- **Language:** User-facing CLI messages and documentation should be in **Spanish**, as it targets students in Ecuador.
-- **Modular Generators:** When adding support for a new protocol (e.g., BGP), create a dedicated method in `IOSGenerator` and update the `DeviceSchema`.
-- **Parallelism:** Use `executeInParallel` from `ssh-connector.ts` for any operation involving multiple devices.
+- **Bun First:** Use `bun` for running, testing, and building.
+- **Type Safety:** Always use Zod schemas in `packages/core/src/types/` for any new network property.
+- **Language:** User-facing CLI messages and documentation should be in **Spanish**.
 
 ## Key Files
-- `src/core/types/topology.ts`: Definitions for routers, switches, interfaces, and protocols.
-- `src/core/parser/pka-decoder.ts`: Logic for decrypting Packet Tracer files.
-- `src/core/config-generators/ios-generator.ts`: Logic for turning types into IOS commands.
+- `packages/core/src/types/topology.ts`: Definitions for routers, switches, etc.
+- `packages/import-pka/src/decoder.ts`: Logic for decrypting Packet Tracer files.
+- `packages/core/src/config-generators/ios-generator.ts`: Logic for turning types into IOS commands.
 - `PRD.md`: Full product requirements and roadmap.
 - `CLAUDE.md`: Coding standards and Bun-specific instructions.

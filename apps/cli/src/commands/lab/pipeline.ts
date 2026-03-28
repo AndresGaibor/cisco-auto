@@ -9,9 +9,9 @@ import { Command } from 'commander';
 import { readFileSync, writeFileSync } from 'fs';
 import chalk from 'chalk';
 import { createInterface } from 'readline';
-import { loadLab } from '../../../../../src/core/parser/yaml-parser.ts';
-import { ptValidatePlanTool } from '../../../../../src/tools/topology/validate-plan.ts';
-import { ptFixPlanTool } from '../../../../../src/tools/topology/fix-plan.ts';
+import { loadLab } from '@cisco-auto/core';
+import { ptValidatePlanTool } from '@cisco-auto/tools';
+import { ptFixPlanTool } from '@cisco-auto/tools';
 
 /**
  * Crea interfaz readline

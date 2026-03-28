@@ -1,8 +1,8 @@
 import { Command } from 'commander';
-import { pushCommands } from '../../../../src/bridge/ios-command-pusher.ts';
-import { RoutingGenerator } from '../../../../src/core/config-generators/routing-generator.ts';
-import { AdvancedRoutingGenerator } from '../../../../src/core/config-generators/advanced-routing.generator.ts';
-import type { EIGRP, OSPF } from '../../../../src/core/types/index.ts';
+import { pushCommands } from '@cisco-auto/bridge';
+import { RoutingGenerator } from '@cisco-auto/core';
+import { AdvancedRoutingGenerator } from '@cisco-auto/core';
+import type { EIGRP, OSPF } from '@cisco-auto/core';
 
 const IPV4_REGEX = /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 const CIDR_REGEX = /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}\/(?:[0-9]|[12]\d|3[0-2])$/;

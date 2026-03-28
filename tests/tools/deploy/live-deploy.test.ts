@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'bun:test';
-import { ptLiveDeployTool } from '../../../src/tools/deploy/live-deploy.ts';
-import type { TopologyPlan } from '../../../src/core/types/tool.ts';
+import { ptLiveDeployTool } from '@cisco-auto/tools';
+import type { TopologyPlan } from '@cisco-auto/core';
 
 function createTestPlan(): TopologyPlan {
   return {

@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { ptListTemplatesTool, topologyTemplates } from '../../../src/tools/catalog/list-templates.ts';
+import { ptListTemplatesTool, topologyTemplates } from '@cisco-auto/tools';
 
 describe('pt_list_templates', () => {
   test('retorna todos los templates', async () => {

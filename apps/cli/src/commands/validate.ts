@@ -1,8 +1,8 @@
 import { Command } from 'commander';
-import { loadLab } from '../../../../src/core/parser/yaml-parser.ts';
-import { validateLab } from '../../../../src/core/validation/lab.validator.ts';
-import type { LabSpec } from '../../../../src/core/canonical/index.ts';
-import type { ValidationIssue } from '../../../../src/core/validation/lab.validator.ts';
+import { loadLab } from '@cisco-auto/core';
+import { validateLab } from '@cisco-auto/core';
+import type { LabSpec } from '@cisco-auto/core';
+import type { ValidationIssue } from '@cisco-auto/core';
 
 const SEVERITY_ICONS = {
   error: '❌',

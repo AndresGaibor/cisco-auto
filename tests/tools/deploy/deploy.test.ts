@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { ptDeployTool } from '../../../src/tools/deploy/deploy.ts';
+import { ptDeployTool } from '@cisco-auto/tools';
 
 describe('pt_deploy', () => {
   test('copia configuraciones al portapapeles', async () => {

@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'bun:test';
-import { ptFixPlanTool } from '../../../src/tools/topology/fix-plan.ts';
-import type { TopologyPlan, FixSuggestion, ValidationError } from '../../../src/core/types/tool.ts';
+import { ptFixPlanTool } from '@cisco-auto/tools';
+import type { TopologyPlan, FixSuggestion, ValidationError } from '@cisco-auto/core';
 
 interface FixPlanResult {
   plan: TopologyPlan;

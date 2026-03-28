@@ -7,13 +7,13 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./models": "./src/models/index.ts",
-    "./ssh-connector": "./src/connector/ssh-connector.ts",
-    "./config-generators": "./src/config-generators/index.ts",
-    "./validation": "./src/validation/index.ts"
+    "./models": "./src/models",
+    "./ssh-connector": "./src/connector/ssh-connector",
+    "./config-generators": "./src/config-generators",
+    "./validation": "./src/validation"
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist",
+    "build": "bun build ./src --outdir ./dist",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },

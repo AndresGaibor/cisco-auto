@@ -3,7 +3,7 @@
  * Script para probar la integración con pka2xml externo
  */
 
-import { decodePKAExternal, isPka2XmlAvailable, getPKAInfo, extractDevicesFromXML } from '../src/core/parser/pka/pka-external.ts';
+import { decodePKAExternal, isPka2XmlAvailable, getPKAInfo, extractDevicesFromXML } from '@cisco-auto/core';
 
 async function testFile(filepath: string): Promise<void> {
   console.log('═══════════════════════════════════════════════════════════');

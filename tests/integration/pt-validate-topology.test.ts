@@ -1,8 +1,8 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { ptQueryTopologyTool, type TopologyQueryResult, type QueriedDevice, type QueriedLink } from '../../src/tools/deploy/query-topology';
-import { ptValidatePlanTool } from '../../src/tools/topology/validate-plan';
-import type { TopologyPlan } from '../../src/core/types/tool.ts';
-import type { ToolResult } from '../../src/core/types/tool.ts';
+import { ptQueryTopologyTool, type TopologyQueryResult, type QueriedDevice, type QueriedLink } from '@cisco-auto/tools';
+import { ptValidatePlanTool } from '@cisco-auto/tools';
+import type { TopologyPlan } from '@cisco-auto/core';
+import type { ToolResult } from '@cisco-auto/core';
 
 const MOCK_BRIDGE_URL = 'http://localhost:54321';
 

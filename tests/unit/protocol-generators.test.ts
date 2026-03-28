@@ -3,11 +3,11 @@
  */
 
 import { describe, test, expect } from 'bun:test';
-import { STPGenerator } from '../../src/core/config-generators/stp.generator';
-import { EtherChannelGenerator } from '../../src/core/config-generators/etherchannel.generator';
-import { AdvancedRoutingGenerator } from '../../src/core/config-generators/advanced-routing.generator';
-import { IPv6Generator } from '../../src/core/config-generators/ipv6.generator';
-import { ServicesGenerator } from '../../src/core/config-generators/services.generator';
+import { STPGenerator } from '@cisco-auto/core';
+import { EtherChannelGenerator } from '@cisco-auto/core';
+import { AdvancedRoutingGenerator } from '@cisco-auto/core';
+import { IPv6Generator } from '@cisco-auto/core';
+import { ServicesGenerator } from '@cisco-auto/core';
 import type { 
   STPSpec, 
   EtherChannelSpec,

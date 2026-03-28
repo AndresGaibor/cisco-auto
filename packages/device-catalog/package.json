@@ -7,15 +7,15 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./schema": "./src/schema.ts",
-    "./service": "./src/service.ts",
-    "./routers": "./src/routers.ts",
-    "./switches": "./src/switches.ts",
-    "./end-devices": "./src/end-devices.ts",
-    "./modules": "./src/modules.ts"
+    "./schema": "./src/schema",
+    "./service": "./src/service",
+    "./routers": "./src/routers",
+    "./switches": "./src/switches",
+    "./end-devices": "./src/end-devices",
+    "./modules": "./src/modules"
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist",
+    "build": "bun build ./src --outdir ./dist",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },

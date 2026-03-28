@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { ptBridgeStatusTool, type BridgeStatusResult } from '../../../src/tools/deploy/bridge-status.ts';
+import { ptBridgeStatusTool, type BridgeStatusResult } from '@cisco-auto/tools';
 
 describe('pt_bridge_status', () => {
   describe('ptBridgeStatusTool', () => {

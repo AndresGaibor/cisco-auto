@@ -10,81 +10,300 @@ description: |
   - Guía paso a paso para completar talleres
   - Análisis de topologías de red
   - Validación de configuraciones
+  - Control programático de Packet Tracer via CLI profesional
   
   La skill soporta dos modos: GUIA (instrucciones detalladas paso a paso) 
   y AUTOMATICO (modificación directa de archivos PKA/YAML).
-  Adapta el nivel de detalle según la experiencia del usuario (principiante/intermedio/avanzado).
+  Incluye CLI profesional `pt` basada en oclif (similar a GitHub CLI).
+  Adapta el nivel de detalle según la experiencia del usuario.
 ---
 
 # Cisco Networking Assistant
 
-Asistente integral para tareas de redes Cisco, laboratorios de Packet Tracer, y configuración de dispositivos. Diseñado para estudiantes de CCNA/CCNP, profesionales de redes, y entusiastas que necesiten ayuda con configuraciones Cisco IOS.
+Asistente integral para redes Cisco, laboratorios de Packet Tracer, y configuración de dispositivos. Diseñado para estudiantes de CCNA/CCNP y profesionales de redes.
 
-## Capacidades Principales
+## CLI Profesional `pt`
 
-1. **Análisis de Laboratorios**: Parsea archivos PKA y YAML para entender topologías y requisitos
-2. **Modo Guía**: Proporciona instrucciones paso a paso con comandos exactos para copiar y pegar
-3. **Modo Automático**: Modifica archivos PKA directamente para completar talleres
-4. **Generación de Configuraciones**: Crea configuraciones IOS completas basadas en requisitos
-5. **Troubleshooting**: Diagnostica problemas y sugiere comandos de verificación
-6. **Validación**: Verifica que las configuraciones cumplen con los requisitos del taller
+La herramienta principal es el comando `pt` (pt-control-v2), una CLI profesional basada en **oclif** (el mismo framework que usa GitHub CLI `gh`).
 
-## Cuándo Usar Esta Skill
+### Instalación y Acceso
 
-- El usuario menciona Packet Tracer, archivos .pka, o laboratorios Cisco
-- Necesita ayuda configurando VLANs, OSPF, ACLs, NAT, u otros protocolos
-- Quiere comandos específicos para copiar y pegar en dispositivos Cisco
-- Necesita modificar o analizar un archivo de laboratorio
-- Tiene problemas de conectividad o configuración en su red
-- Quiere aprender cómo configurar algo paso a paso
-- Necesita validar que su configuración es correcta
+```bash
+# Si está instalado globalmente
+pt <command>
 
-## Flujo de Trabajo
+# Desde el proyecto
+bun run packages/pt-control-v2/bin/run.js <command>
+
+# O compilado
+node packages/pt-control-v2/bin/run.js <command>
+```
+
+### Comandos Disponibles
+
+```
+pt --help                          # Ver ayuda general
+pt <topic> --help                  # Ayuda de un topic
+
+# Device management
+pt device list                     # Listar dispositivos (--format json|table)
+pt device add <name> <model>       # Agregar dispositivo
+pt device remove <name>            # Eliminar dispositivo
+pt device rename <old> <new>       # Renombrar dispositivo
+
+# Link management  
+pt link list                       # Listar conexiones
+pt link add <port1> <port2>        # Crear enlace (device:port format)
+pt link remove <port>              # Eliminar enlace
+
+# Configuration
+pt config ios <device> -c "cmd1"   # Ejecutar comandos IOS
+pt config host <device> --ip ...   # Configurar IP en PC/Server
+
+# Operations
+pt show <device> "<command>"       # Ejecutar show command
+pt inspect <device>                # Ver detalles del dispositivo
+
+# Runtime management
+pt runtime build [--deploy]        # Compilar runtime
+pt runtime deploy                  # Desplegar en PT
+pt runtime status                  # Estado del sistema
+pt runtime events                  # Ver eventos
+
+# Snapshots
+pt snapshot save <name>            # Guardar topología
+pt snapshot load <name>            # Cargar topología
+
+# Recording & Replay
+pt record start [--output file]    # Iniciar grabación
+pt record stop                     # Detener grabación
+pt replay --file <file>            # Reproducir operaciones
+
+# Logs
+pt logs [--follow]                 # Ver logs en tiempo real
+```
+
+### Flags Globales
+
+```bash
+--format json|yaml|table|text   # Formato de salida
+--jq ".[].name"                 # Filtrar JSON (jq-like)
+--quiet                         # Modo silencioso
+--verbose                       # Modo detallado
+--dev-dir <path>                # Directorio de desarrollo PT
+```
+
+### Ejemplos de Uso
+
+```bash
+# Listar dispositivos en tabla
+pt device list --format table
+
+# Agregar router con posición
+pt device add R1 2911 --x 100 --y 100
+
+# Crear enlace entre dispositivos
+pt link add R1:GigabitEthernet0/0 S1:GigabitEthernet0/1 --type straight
+
+# Configurar IOS
+pt config ios R1 -c "conf t" -c "hostname Router1" -c "end"
+
+# Ver tabla de rutas en JSON
+pt show R1 "show ip route" --format json
+
+# Filtrar nombres de dispositivos
+pt device list --format json --jq ".[].name"
+
+# Guardar topología actual
+pt snapshot save lab-vlans-base
+```
+
+---
+
+## Virtual Topology (VDOM)
+
+El sistema incluye **VirtualTopology**, un componente de gestión de estado que mantiene una copia en memoria de la topología de Packet Tracer, similar a un "Virtual DOM".
+
+### Conceptos Clave
+
+| Concepto | Descripción |
+|----------|-------------|
+| **VirtualTopology** | Clase que mantiene estado espejo de PT en memoria |
+| **TopologySnapshot** | Estado completo: dispositivos + enlaces |
+| **TopologyDelta** | Cambios incrementales entre estados |
+| **TopologyCache** | Capa de caché que usa VirtualTopology |
+
+### Tipos de Datos
+
+```typescript
+// Snapshot completo
+interface TopologySnapshot {
+  version: string;
+  timestamp: number;
+  devices: Record<string, DeviceState>;
+  links: Record<string, LinkState>;
+}
+
+// Estado de dispositivo
+interface DeviceState {
+  name: string;
+  type: 'router' | 'switch' | 'pc' | 'server' | ...;
+  model: string;
+  x: number;
+  y: number;
+  power: boolean;
+  ports: string[];
+}
+
+// Estado de enlace
+interface LinkState {
+  id: string;
+  device1: string;
+  port1: string;
+  device2: string;
+  port2: string;
+  cableType: 'straight' | 'cross' | 'fiber' | ...;
+}
+
+// Delta de cambios
+interface TopologyDelta {
+  devices: DeviceDelta[];
+  links: LinkDelta[];
+}
+```
+
+### Flujo de Eventos
+
+```
+PT Event ──► FileBridge ──► TopologyCache ──► VirtualTopology
+                                                         │
+                    Delta calculado ◄─────────────────────┘
+                              │
+                              ▼
+                    Handlers notificados
+```
+
+### Ventajas
+
+- **Acceso rápido**: Consultas sin hitting PT
+- **Deltas**: Calcula cambios incrementales
+- **Reactive**: Suscripciones a cambios de topología
+- **Undo/Redo**: Base para implementar deshacer
+
+### Uso Programático
+
+```typescript
+import { PTController } from '@cisco-auto/pt-control-v2';
+
+const controller = new PTController({ devDir: '~/pt-dev' });
+await controller.start();
+
+// Obtener snapshot (usando VirtualTopology internamente)
+const snapshot = await controller.snapshot();
+
+// Acceder a caché de topología
+const devices = controller.topologyCache.getDevices();
+const links = controller.topologyCache.getLinks();
+
+// Suscribirse a cambios
+controller.on('device-added', (event) => {
+  console.log('Nuevo dispositivo:', event.name);
+});
+```
+
+---
+
+## Bridge Automation - AUTOMATIZADO
+
+La skill puede interactuar directamente con Cisco Packet Tracer a través del Bridge Server.
+
+### Flujo Automatizado (Recomendado)
+
+El agente ejecuta automáticamente:
+
+```bash
+bun run .iflow/skills/cisco-networking-assistant/scripts/bridge-automation.ts ensure-all
+```
+
+Este comando hace TODO automáticamente:
+1. Detecta si el bridge server está corriendo → lo inicia si no
+2. Detecta si Packet Tracer está instalado → informa si falta
+3. Detecta si Packet Tracer está ejecutándose → lo abre si no
+4. Instala el bridge en Packet Tracer → configura la conexión
+5. Verifica que todo esté listo para trabajar
+
+### Comandos de Bridge Automation
+
+| Comando | Cuándo usarlo | Qué hace |
+|---------|---------------|----------|
+| `ensure-all` | Flujo completo | Prepara todo el sistema |
+| `status` | Verificar estado | Muestra estado completo |
+| `ensure-running` | Solo iniciar bridge | Inicia el bridge si no está |
+| `install` | Solo instalar en PT | Instala el bridge en PT abierto |
+| `start` | Solo iniciar server | Inicia el bridge server |
+| `stop` | Detener todo | Detiene el bridge server |
+| `health` | Health check | Verifica que el bridge responda |
+
+### Ejemplo de Salida
+
+```
+🎯 Verificando sistema completo...
+   Bridge: ✅
+   Packet Tracer: ✅
+   Conexión: ✅
+🎉 Sistema completamente configurado y listo para trabajar
+```
+
+---
+
+## Flujo de Trabajo General
 
 ### Paso 1: Entender el Contexto
 
-Primero, identifica qué necesita el usuario:
+Identificar:
+1. **Tipo de ayuda**: ¿Guía paso a paso o automático?
+2. **Nivel de experiencia**: Principiante, intermedio o avanzado
+3. **Archivos involucrados**: PKA, YAML, o crear desde cero
 
-1. **Tipo de ayuda**:
-   - ¿Quiere que lo guíe paso a paso? (Modo Guía)
-   - ¿Quiere que modifique el archivo por él? (Modo Automático)
-   - ¿Solo necesita análisis o validación?
-
-2. **Nivel de experiencia** (pregunta si no está claro):
-   - **Principiante**: Explicaciones detalladas de cada comando
-   - **Intermedio**: Comandos con comentarios y tips
-   - **Avanzado**: Comandos optimizados, configuraciones eficientes
-
-3. **Archivos involucrados**:
-   - ¿Tiene un archivo .pka?
-   - ¿Un archivo .yaml?
-   - ¿Necesita crear uno desde cero?
-
-### Paso 2: Analizar el Laboratorio (si hay archivo)
-
-Si el usuario proporciona un archivo PKA:
+### Paso 2: Usar CLI para Análisis
 
 ```bash
-# Analizar el archivo PKA
-bun run src/cli/index.ts parse-pka <archivo.pka> --yaml --output /tmp/lab-analysis.yaml
+# Ver estado del sistema
+pt runtime status
 
-# O usar el parser directamente
-bun run src/core/parser/pka/index.ts <archivo.pka>
+# Listar dispositivos actuales
+pt device list --format table
+
+# Ver eventos recientes
+pt runtime events --tail 20
+
+# Analizar archivo PKA (via apps/cli)
+cisco-auto parse-pka <archivo.pka> --yaml --output analysis.yaml
 ```
 
-Extrae información clave:
-- Dispositivos presentes y sus tipos
-- Topología de conexiones
-- Configuraciones actuales
-- Objetivos del taller (si están en el archivo)
+### Paso 3: Ejecutar Operaciones
 
-### Paso 3: Modo de Operación
+```bash
+# Crear topología desde cero
+pt device add R1 2911 --x 100 --y 100
+pt device add S1 2960 --x 300 --y 100
+pt link add R1:GigabitEthernet0/0 S1:GigabitEthernet0/1
 
-#### **Modo Guía (Guide Mode)**
+# Configurar dispositivos
+pt config ios R1 -c "conf t" -c "interface Gi0/0" -c "ip address 192.168.1.1 255.255.255.0" -c "no shut"
+
+# Verificar
+pt show R1 "show ip interface brief"
+
+# Guardar snapshot
+pt snapshot save my-lab-base
+```
+
+---
+
+## Modo Guía (Guide Mode)
 
 Proporciona instrucciones detalladas paso a paso:
-
-**Estructura para cada paso:**
 
 ```
 📋 PASO X: [Título del paso]
@@ -93,7 +312,7 @@ Proporciona instrucciones detalladas paso a paso:
    1. [Acción física en Packet Tracer]
    2. [Navegación CLI]
 
-💻 COMANDOS (copia y pega uno por uno):
+💻 COMANDOS (copia y pega):
    ```
    [comando 1]
    [comando 2]
@@ -104,381 +323,208 @@ Proporciona instrucciones detalladas paso a paso:
    - [Por qué es necesario]
 
 ✅ VERIFICACIÓN:
-   Escribe: [comando de verificación]
+   pt show <device> "<command>"
    Deberías ver: [resultado esperado]
 
 💡 TIP: [Consejo útil]
-
-¿Completaste este paso? (sí/no/ayuda)
 ```
 
-**Adaptar según nivel:**
+### Adaptación por Nivel
 
-- **Principiante**: 
-  - Explicar cada modo CLI (user, privileged, config)
-  - Describir qué hace cada comando
-  - Incluir salidas esperadas completas
-  - Advertir sobre errores comunes
-
-- **Intermedio**:
-  - Comandos con comentarios breves
-  - Tips de optimización
-  - Comandos de verificación clave
-
-- **Avanzado**:
-  - Configuraciones optimizadas
-  - Comandos condensados cuando sea apropiado
-  - Mejores prácticas de diseño
-  - Troubleshooting avanzado
-
-#### **Modo Automático (Auto Mode)**
-
-Modifica archivos PKA directamente:
-
-1. **Analizar requisitos**: Entender qué configuraciones necesita el taller
-2. **Generar configuraciones**: Usar los generadores de cisco-auto
-3. **Modificar archivo**: Usar el comando `mod-test` o los modelos directamente
-4. **Verificar cambios**: Validar que el archivo modificado es correcto
-5. **Entregar resultado**: Proporcionar el archivo modificado y un resumen
-
-**Comandos útiles:**
-
-```bash
-# Modificar configuraciones específicas
-bun run src/cli/index.ts mod-test <archivo.pka> --output <modificado.pka> [opciones]
-
-# Ver configuraciones generadas
-bun run src/cli/index.ts config <archivo.yaml> --device <nombre>
-```
-
-### Paso 4: Troubleshooting
-
-Si el usuario tiene problemas:
-
-1. **Identificar síntomas**: ¿Qué no está funcionando?
-2. **Sugerir comandos de diagnóstico**:
-   - `ping` - Conectividad básica
-   - `traceroute` - Ruta de red
-   - `show ip interface brief` - Estado de interfaces
-   - `show vlan brief` - VLANs configuradas
-   - `show ip route` - Tabla de routing
-   - `show cdp neighbors` - Vecinos Cisco
-3. **Analizar resultados**: Interpretar la salida
-4. **Proponer soluciones**: Comandos específicos para arreglar el problema
-
-## Bridge Installation - AUTOMATIZADO
-
-La skill puede interactuar directamente con Cisco Packet Tracer a través del Bridge Server que expone la API REST de `cisco-auto`.
-
-### ⚡ FLUJO AUTOMATIZADO (RECOMENDADO)
-
-**El agente DEBE ejecutar estos comandos automáticamente usando Bash tool**, sin pedir intervención manual al usuario.
-
-#### Verificación y Preparación Automática
-
-Cuando el usuario necesite trabajar con Packet Tracer, el agente ejecuta:
-
-```bash
-bun run .iflow/skills/cisco-networking-assistant/scripts/bridge-automation.ts ensure-all
-```
-
-Este comando hace TODO automáticamente:
-1. ✅ Detecta si el bridge server está corriendo → lo inicia si no
-2. ✅ Detecta si Packet Tracer está instalado → informa si falta
-3. ✅ Detecta si Packet Tracer está ejecutándose → lo abre si no
-4. ✅ Instala el bridge en Packet Tracer → configura la conexión
-5. ✅ Verifica que todo esté listo para trabajar
-
-#### Comandos de Automatización Disponibles
-
-El agente puede usar estos comandos según la situación:
-
-| Comando | Cuándo usarlo | Qué hace |
-|---------|---------------|----------|
-| `ensure-all` | Flujo completo automático | Prepara todo el sistema (bridge + PT + instalación) |
-| `status` | Verificar estado actual | Muestra estado de bridge, PT y conexión |
-| `ensure-running` | Solo iniciar bridge | Inicia el bridge si no está corriendo |
-| `install` | Solo instalar en PT | Instala el bridge en Packet Tracer ya abierto |
-| `start` | Solo iniciar server | Inicia el bridge server |
-| `stop` | Detener todo | Detiene el bridge server |
-| `health` | Health check rápido | Verifica que el bridge responda |
-
-#### Ejemplo de Uso Automatizado por el Agente
-
-```
-Usuario: "Quiero trabajar con mi laboratorio de VLANs"
-
-Agente (ejecuta automáticamente):
-bun run .iflow/skills/cisco-networking-assistant/scripts/bridge-automation.ts ensure-all
-
-Salida esperada:
-🎯 Verificando sistema completo...
-   Bridge: ✅
-   Packet Tracer: ✅
-   Conexión: ✅
-🎉 Sistema completamente configurado y listo para trabajar
-```
-
-Si algo falla, el agente recibe instrucciones claras en `nextSteps` para resolver.
+- **Principiante**: Explicar cada modo CLI, describir comandos, incluir salidas completas
+- **Intermedio**: Comandos con comentarios, tips de optimización
+- **Avanzado**: Configuraciones condensadas, mejores prácticas
 
 ---
 
-### Flujo Manual (Solo si Automatización Falla)
+## Modo Automático (Auto Mode)
 
-Si por alguna razón la automatización no funciona (permisos denegados, SO no soportado), el agente puede guiar manualmente:
+Modifica archivos y configuraciones automáticamente:
 
-#### 1. Iniciar el Bridge Server
+1. **Analizar requisitos**: Entender qué se necesita
+2. **Ejecutar comandos**: Usar `pt` CLI para operaciones
+3. **Verificar cambios**: Validar con `pt show` o `pt inspect`
+4. **Guardar snapshot**: `pt snapshot save`
+
+### Ejemplo Completo
+
 ```bash
-bun run src/bridge/server.ts
-# o usando CLI:
-bun run apps/cli/src/index.ts bridge start
-```
+# Usuario: "Configura VLAN 10 y 20 en el switch S1"
 
-#### 2. Verificar Estado
-```bash
-bun run .iflow/skills/cisco-networking-assistant/scripts/bridge-automation.ts status
-```
+# Análisis automático
+pt device list --format json --jq '.[] | select(.name=="S1")'
 
-#### 3. Instalar en Packet Tracer (macOS)
-```bash
-bun run .iflow/skills/cisco-networking-assistant/scripts/bridge-automation.ts install
+# Configuración automática
+pt config ios S1 \
+  -c "conf t" \
+  -c "vlan 10" \
+  -c "name Ventas" \
+  -c "vlan 20" \
+  -c "name IT" \
+  -c "interface range Fa0/1-12" \
+  -c "switchport mode access" \
+  -c "switchport access vlan 10" \
+  -c "interface range Fa0/13-24" \
+  -c "switchport mode access" \
+  -c "switchport access vlan 20" \
+  -c "end"
+
+# Verificación
+pt show S1 "show vlan brief"
+
+# Guardar progreso
+pt snapshot save vlan-config-done
 ```
 
 ---
 
-### Troubleshooting Automatizado
+## Troubleshooting
 
-El agente puede diagnosticar problemas ejecutando:
+### Diagnóstico con CLI
 
 ```bash
-bun run .iflow/skills/cisco-networking-assistant/scripts/bridge-automation.ts status
+# Estado del sistema
+pt runtime status
+
+# Ver eventos recientes
+pt runtime events --tail 50 --type error
+
+# Logs en tiempo real
+pt logs --follow
+
+# Inspeccionar dispositivo específico
+pt inspect R1 --include-xml
 ```
 
-La salida incluye:
-- Estado del bridge (running/stopped)
-- Estado de Packet Tracer (installed/running)
-- Estado de la conexión (connected/disconnected)
-- **Lista de problemas detectados** con recomendaciones
+### Comandos de Diagnóstico IOS
 
-#### Problemas Comunes y Soluciones
+```bash
+pt show <device> "show ip interface brief"
+pt show <device> "show vlan brief"
+pt show <device> "show ip route"
+pt show <device> "show cdp neighbors"
+pt show <device> "show running-config"
+```
 
-| Problema | Diagnóstico | Solución Automática |
-|----------|-------------|---------------------|
-| Bridge no inicia | Puerto ocupado | El agente sugiere cambiar puerto: `BRIDGE_PORT=54322 bun run ...` |
-| PT no detectado | No instalado | El agente muestra URL de descarga |
-| Permisos denegados | Accessibility (macOS) | El agente instruye ir a System Preferences > Privacy |
-| Sin conexión | Bridge OK, PT OK, pero no conectan | El agente ejecuta `install` automáticamente |
+### Problemas Comunes
+
+| Problema | Diagnóstico | Solución |
+|----------|-------------|----------|
+| Bridge no responde | `pt runtime status` | `bun run bridge-automation.ts ensure-running` |
+| PT no conecta | `bridge-automation.ts status` | `bun run bridge-automation.ts install` |
+| Comando falla | `pt logs --follow` | Ver eventos para detalles |
+| Snapshot vacío | `pt device list` | Verificar que PT tenga topología |
 
 ---
 
-### Arquitectura del Sistema (Referencia)
+## Arquitectura del Sistema
 
-El bridge funciona así:
-1. **Bridge Server** (src/bridge/server.ts): Servidor HTTP en puerto 54321
-2. **CLI Commands** (apps/cli/src/commands/bridge/): Interfaz de usuario
-3. **Script de Automatización** (bridge-automation.ts): Controlador inteligente
-4. **Packet Tracer Client**: Bootstrap JS inyectado que hace polling a /next
-
-Endpoints del servidor:
-- `GET /health` → Health check
-- `GET /status` → Estado detallado
-- `GET /next` → Siguiente comando (polling desde PT)
-- `POST /execute` → Encolar comando
-- `GET /bridge-client.js` → Bootstrap para PT
-
-## Referencias Disponibles
-
-Lee estas guías según el tema del taller:
-
-- `references/vlan-guide.md` - VLANs, trunking, VTP, STP
-- `references/routing-guide.md` - OSPF, EIGRP, BGP, rutas estáticas
-- `references/security-guide.md` - ACLs, NAT, VPNs
-- `references/troubleshooting-guide.md` - Comandos de diagnóstico
-- `references/ios-commands-ref.md` - Referencia rápida de comandos
-
-## Scripts Auxiliares
-
-Usa estos scripts para tareas comunes:
-
-- `scripts/lab-analyzer.ts` - Analiza un PKA y genera reporte
-- `scripts/config-generator.ts` - Genera configuraciones personalizadas
-- `scripts/pka-modifier.ts` - Modifica archivos PKA programáticamente
-
-## Templates Disponibles
-
-En `assets/templates/`:
-
-- `vlan-lab-template.yaml` - Estructura base para labs de VLANs
-- `routing-lab-template.yaml` - Estructura para labs de routing
-- `security-lab-template.yaml` - Estructura para labs de seguridad
-
-## Checklists
-
-En `assets/checklists/`:
-
-- `pre-deployment.md` - Verificar antes de aplicar configuraciones
-- `verification.md` - Validar después de configurar
-
-## Ejemplos de Interacción
-
-### Ejemplo 1: Modo Guía
-
-**Usuario**: "Necesito ayuda configurando VLANs en mi taller"
-
-**Skill**:
 ```
-🔍 Entendido. Voy a ayudarte con la configuración de VLANs.
-
-Primero, necesito saber:
-1. ¿Tienes un archivo .pka del taller? Si es así, proporciona la ruta
-2. ¿Qué nivel de detalle prefieres?
-   - 🟢 Principiante (explicaciones detalladas)
-   - 🟡 Intermedio (comandos con comentarios)
-   - 🔴 Avanzado (configuraciones optimizadas)
-
-Mientras tanto, aquí está una vista general de lo que vamos a hacer:
-
-📚 CONFIGURACIÓN DE VLANs - RESUMEN
-====================================
-
-VLANs (Virtual LANs) permiten segmentar una red física en múltiples
-redes lógicas aisladas. Es como tener varios switches dentro de uno.
-
-PASOS GENERALES:
-1. Crear las VLANs en los switches
-2. Asignar puertos a VLANs (modo access)
-3. Configurar enlaces troncal (modo trunk) entre switches
-4. Configurar Inter-VLAN routing (si es necesario)
-
-¿Tienes el archivo del taller o quieres que te guíe con un ejemplo genérico?
+┌─────────────────────────────────────────────────────────────┐
+│                     CLI Profesional `pt`                    │
+│                    (packages/pt-control-v2)                 │
+├─────────────────────────────────────────────────────────────┤
+│  Commands (oclif)                                           │
+│  ├── device (list, add, remove, rename)                     │
+│  ├── link (list, add, remove)                               │
+│  ├── config (ios, host)                                     │
+│  ├── show, inspect                                          │
+│  ├── runtime (build, deploy, status, events)                │
+│  ├── snapshot (save, load)                                  │
+│  └── record, replay, logs                                   │
+├─────────────────────────────────────────────────────────────┤
+│  PTController (High-level API)                              │
+│  ├── FileBridge (IPC con PT)                                │
+│  └── TopologyCache                                          │
+│       └── VirtualTopology (VDOM)                            │
+├─────────────────────────────────────────────────────────────┤
+│  Packet Tracer Bridge                                       │
+│  ├── main.js (extension entry point)                        │
+│  ├── runtime.js (runtime code)                              │
+│  ├── state.json / command.json (IPC files)                  │
+│  └── response/ (response directory)                         │
+└─────────────────────────────────────────────────────────────┘
 ```
-
-### Ejemplo 2: Modo Automático
-
-**Usuario**: "Tengo este archivo lab-vlans.pka, necesito que lo completes para que las PCs en VLAN 10 puedan comunicarse con las PCs en VLAN 20"
-
-**Skill**:
-```
-🤖 MODO AUTOMÁTICO ACTIVADO
-============================
-
-Voy a analizar el archivo y completar la configuración automáticamente.
-
-PASOS QUE VOY A REALIZAR:
-1. Analizar la topología actual
-2. Identificar qué configuraciones faltan
-3. Configurar VLANs en todos los switches
-4. Configurar trunking entre switches
-5. Configurar Router-on-a-stick para Inter-VLAN routing
-6. Verificar conectividad
-
-Procesando...
-
-✅ ARCHIVO MODIFICADO: lab-vlans-completed.pka
-
-RESUMEN DE CAMBIOS:
-- SW-CORE: Creadas VLAN 10 y 20, configurado trunk hacia R1
-- SW-ACCESS1: Asignados puertos Fa0/1-12 a VLAN 10
-- SW-ACCESS2: Asignados puertos Fa0/1-12 a VLAN 20
-- R1: Configurado Router-on-a-stick con subinterfaces Gi0/0.10 y Gi0/0.20
-
-CONFIGURACIÓN CLAVE APLICADA:
-
-Router R1:
-interface GigabitEthernet0/0.10
- encapsulation dot1Q 10
- ip address 192.168.10.1 255.255.255.0
-!
-interface GigabitEthernet0/0.20
- encapsulation dot1Q 20
- ip address 192.168.20.1 255.255.255.0
-
-VERIFICACIÓN:
-Las PCs en VLAN 10 ahora pueden hacer ping a las PCs en VLAN 20
-usando el router como gateway predeterminado.
-
-¿Necesitas que explique alguna parte de la configuración?
-```
-
-### Ejemplo 3: Troubleshooting
-
-**Usuario**: "Las PCs no se pueden comunicar entre sí, ¿qué puede ser?"
-
-**Skill**:
-```
-🔧 MODO TROUBLESHOOTING
-========================
-
-Vamos a diagnosticar el problema paso a paso.
-
-PASO 1: Verificar conectividad física
-En cada PC, ejecuta:
-   ping 127.0.0.1
-
-¿Funciona? (sí/no)
 
 ---
 
-Si el usuario dice que no:
+## Referencias y Recursos
 
-El problema está en la configuración IP de las PCs.
-Verifica:
-1. Cada PC tiene IP configurada
-2. La máscara de subred es correcta
-3. El gateway predeterminado está configurado
+### Documentación Interna
+- `docs/bridge-api-contract.md` - Contrato del Bridge API
+- `packages/pt-control-v2/src/vdom/` - Implementación VirtualTopology
+- `packages/pt-control-v2/src/types/` - Tipos TypeScript
+
+### Recursos Externos
+- Cisco Networking Academy: netacad.com
+- Documentación Cisco: cisco.com/c/en/us/support
+- Comunidad: learningnetwork.cisco.com
 
 ---
-
-Si el usuario dice que sí:
-
-PASO 2: Verificar configuración de VLANs
-En el switch, ejecuta:
-   show vlan brief
-
-¿Aparecen las VLANs configuradas con los puertos asignados correctamente?
-```
 
 ## Mejores Prácticas
 
+### Uso de CLI
+
+1. **Siempre verificar estado antes de operar**:
+   ```bash
+   pt runtime status
+   ```
+
+2. **Usar formato apropiado para el contexto**:
+   ```bash
+   pt device list --format table    # Lectura humana
+   pt device list --format json     # Scripting/procesamiento
+   pt device list --jq ".[].name"   # Extracción específica
+   ```
+
+3. **Guardar snapshots con frecuencia**:
+   ```bash
+   pt snapshot save before-changes
+   # ... hacer cambios ...
+   pt snapshot save after-changes
+   ```
+
+4. **Usar verbose para debugging**:
+   ```bash
+   pt device add R1 2911 --verbose
+   ```
+
 ### Configuración
 
-1. **Siempre verificar antes de aplicar**:
-   - Usar `show` commands para confirmar estado actual
-   - Hacer backup de configuraciones existentes
-   - Aplicar cambios en horarios de mantenimiento si es producción
+1. **Verificar antes de aplicar**:
+   ```bash
+   pt show <device> "show running-config"
+   ```
 
 2. **Documentar cambios**:
-   - Usar descripciones en interfaces
-   - Comentar configuraciones complejas
-   - Mantener registro de modificaciones
+   ```bash
+   pt config ios <device> -c "description Link to Core"
+   ```
 
-3. **Seguridad básica**:
-   - Cambiar passwords por defecto
-   - Configurar SSH en lugar de Telnet
-   - Aplicar ACLs para restringir acceso
+3. **Validar conectividad**:
+   ```bash
+   pt show <device> "show ip interface brief"
+   ```
 
-### Troubleshooting
-
-1. **Enfoque sistemático**:
-   - Físico → Enlace → Red → Transporte → Aplicación
-   - Verificar una capa a la vez
-   - Documentar resultados de cada prueba
-
-2. **Comandos esenciales**:
-   - `show running-config` - Configuración actual
-   - `show ip interface brief` - Estado de interfaces
-   - `show vlan brief` - VLANs configuradas
-   - `show ip route` - Tabla de routing
-   - `show cdp neighbors` - Dispositivos conectados
+---
 
 ## Limitaciones Conocidas
 
 - Archivos PKA versión 8.x pueden no ser completamente parseables
 - Algunas funcionalidades avanzadas requieren IOS específico
-- El modo automático modifica archivos, siempre mantener backups
+- El modo automático modifica archivos, mantener backups
+- VirtualTopology requiere bridge activo para sincronización
 
-## Recursos Adicionales
+---
 
-- Cisco Networking Academy: netacad.com
-- Documentación oficial Cisco: cisco.com/c/en/us/support
-- Comunidad Packet Tracer: learningnetwork.cisco.com
+## Changelog
+
+### v2.0.0 (Actual)
+- Migración a oclif v4 (CLI profesional estilo gh)
+- Flags globales: `--format`, `--jq`, `--quiet`, `--verbose`
+- Comandos interactivos con @inquirer/prompts
+- Sistema de errores estructurado con sugerencias
+- Shell completion automático (bash, zsh, fish)
+- Integración completa con VirtualTopology
+- Formateadores: JSON, YAML, table, text

@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { ptListDevicesTool, deviceCatalog } from '../../../src/tools/catalog/list-devices.ts';
+import { ptListDevicesTool, deviceCatalog } from '@cisco-auto/tools';
 
 describe('pt_list_devices', () => {
   test('retorna todos los dispositivos sin filtro', async () => {

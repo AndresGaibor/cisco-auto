@@ -1,6 +1,6 @@
 import { Command } from 'commander';
-import { loadLab } from '../../../../src/core/parser/yaml-parser.ts';
-import { formatOutput, applyJqFilter, getGlobalFlags, type OutputFormat } from '../flags.ts';
+import { loadLab } from '@cisco-auto/core';
+import { formatOutput, applyJqFilter, getGlobalFlags, type OutputFormat } from '../flags';
 
 export function createDevicesCommand(): Command {
   return new Command('devices')

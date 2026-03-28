@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bridge Client</title>
+</head>
+<body style="font-family: Arial; padding: 12px; background: #1a1a2e; color: #eee;">
+    <h3 style="margin: 0 0 10px 0;">Bridge Client</h3>
+    <div id="status" style="color: #4CAF50;">Conectando...</div>
+    <pre id="log" style="margin-top:12px; background:#16213e; padding:8px; min-height:120px; max-height:300px; overflow-y:auto; white-space:pre-wrap; font-size:11px;"></pre>
+    <script>
+    (function() {
+        var BRIDGE_URL = 'http://127.0.0.1:54321';
+        var PT_HANDLERS = {};
+        var pollTimer = null;
+        var lastCmdId = null;
+
+        function log(msg) {
+            var el = document.getElementById('log');
+            var time = new Date().toLocaleTimeString();
+            el.textContent = '[' + time + '] ' + msg + '\n' + el.textContent;
+            if (el.textContent.length > 5000) {
+                el.textContent = el.textContent.substring(0, 5000);
+            }
+        }
+
+        function setStatus(s) {
+            document.getElementById('status').textContent = s;
+        }
+
+        function loadHandlers() {
+            try {
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', BRIDGE_URL + '/handlers', false);
+                xhr.send();
+                if (xhr.status === 200) {
+                    // Inicializar PT_HANDLERS como global en Script Engine
+                    $se('runCode', 'if(typeof PT_HANDLERS==="undefined")PT_HANDLERS={};');
+                    // Cargar handlers (sin var, asigna a global)
+                    $se('runCode', xhr.responseText.replace(/PT_HANDLERS\\s*=/g, 'PT_HANDLERS='));
+                    log('Handlers cargados OK');
+                    setStatus('Conectado - Handlers OK');
+                    return true;
+                }
+            } catch(e) {
+                log('Error handlers: ' + e.message);
+            }
+            return false;
+        }
+
+        function poll() {
+            try {
+                // Cargar handlers actualizados
+                loadHandlers();
+                
+                // Obtener siguiente comando
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', BRIDGE_URL + '/next', false);
+                xhr.send();
+                
+                if (xhr.status === 200) {
+                    var data = JSON.parse(xhr.responseText);
+                    if (data.hasCommand && data.command) {
+                        if (data.command.id !== lastCmdId) {
+                            lastCmdId = data.command.id;
+                            executeCommand(data.command);
+                        }
+                    }
+                }
+            } catch(e) {
+                log('Poll error: ' + e.message);
+                setStatus('Error: ' + e.message);
+            }
+            
+            pollTimer = setTimeout(poll, 300);
+        }
+
+        function executeCommand(cmd) {
+            log('Ejecutando: ' + cmd.tipo);
+            var result = {ok: false, message: 'Unknown'};
+            
+            try {
+                if (PT_HANDLERS[cmd.tipo]) {
+                    result = PT_HANDLERS[cmd.tipo](cmd.args);
+                } else {
+                    result = {ok: false, message: 'Handler no encontrado: ' + cmd.tipo};
+                }
+            } catch(e) {
+                result = {ok: false, message: String(e)};
+                log('Error: ' + e.message);
+            }
+            
+            sendResult(cmd.id, result);
+        }
+
+        function sendResult(id, result) {
+            try {
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', BRIDGE_URL + '/result', false);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.send(JSON.stringify({
+                    id: id,
+                    ok: result.ok,
+                    message: result.message,
+                    data: result.data
+                }));
+                log('Resultado enviado: ' + (result.ok ? 'OK' : 'ERROR'));
+            } catch(e) {
+                log('Error enviando resultado: ' + e.message);
+            }
+        }
+
+        // Iniciar
+        log('Bridge iniciando...');
+        setStatus('Conectando...');
+        
+        // Esperar un poco antes de empezar polling
+        setTimeout(function() {
+            poll();
+        }, 500);
+
+        // API pública
+        window.BridgeUI = {
+            log: log,
+            setStatus: setStatus
+        };
+    })();
+    </script>
+</body>
+</html>

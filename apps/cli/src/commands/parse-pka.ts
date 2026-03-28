@@ -1,7 +1,8 @@
 import { Command } from 'commander';
-import { parsePKA, isPka2XmlAvailable } from '../../../../src/core/parser/pka/index.ts';
-import { PKAtoYAML } from '../../../../src/core/parser/pka-to-yaml.ts';
-import { writeFileSync } from 'fs';
+import { parsePKA, isPka2XmlAvailable } from '@cisco-auto/import-pka';
+import { PKAtoYAML } from '@cisco-auto/core';
+import * as fs from 'fs';
+
 import * as yaml from 'js-yaml';
 
 export function createParsePKACommand(): Command {

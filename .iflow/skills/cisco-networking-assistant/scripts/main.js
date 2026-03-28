@@ -1,55 +1,45 @@
+// ============================================
+// BRIDGE SCRIPT - Todo en Script Engine
+// ============================================
+
 var BRIDGE_DIR = '/tmp/cisco-auto-bridge';
 var COMMAND_FILE = BRIDGE_DIR + '/bridge-command.json';
-var RESPONSE_FILE = BRIDGE_DIR + '/bridge-response.json';
-var POLL_INTERVAL = 250;
+var RESPONSE_DIR = BRIDGE_DIR + '/responses';
+var POLL_INTERVAL = 300;
 
 var fileManager = null;
 var pollTimer = null;
 var lastCommandId = null;
-var webView = null;
+var PT_HANDLERS = {};
 
 function main() {
-    console.log('[Bridge-SE] Script Engine iniciado');
-
+    console.log('[Bridge] Iniciando...');
+    
     try {
         fileManager = ipc.systemFileManager();
-        console.log('[Bridge-SE] SystemFileManager disponible');
+        console.log('[Bridge] SystemFileManager OK');
     } catch (e) {
-        console.log('[Bridge-SE] Error obteniendo SystemFileManager: ' + e.message);
+        console.log('[Bridge] Error: ' + e.message);
         return;
     }
-
+    
+    // Crear directorio de respuestas
     try {
-        console.log('[Bridge-SE] webViewManager disponible');
-        console.log('[Bridge-SE] Metodos: ' + JSON.stringify(Object.keys(webViewManager)));
-        webView = webViewManager.createWebView('Bridge Client', 'this-sm:bridge.html', 420, 320);
-        webView.show();
-        console.log('[Bridge-SE] WebView mostrada');
-    } catch (e) {
-        console.log('[Bridge-SE] Error creando WebView: ' + e.message);
-    }
-
+        fileManager.writeTextToFile(RESPONSE_DIR + '/.keep', 'ok');
+    } catch (e) {}
+    
+    // Cargar handlers
+    initHandlers();
+    
     startPolling();
+    console.log('[Bridge] Listo');
 }
 
 function cleanUp() {
-    console.log('[Bridge-SE] Script Engine detenido');
-
-    try {
-        if (pollTimer) {
-            clearTimeout(pollTimer);
-            pollTimer = null;
-        }
-        if (webViewManager) {
-            webViewManager.closeAll();
-        }
-    } catch (e) {
-        console.log('[Bridge-SE] Error en cleanUp: ' + e.message);
-    }
+    if (pollTimer) clearTimeout(pollTimer);
 }
 
 function startPolling() {
-    console.log('[Bridge-SE] Iniciando polling por archivo cada ' + POLL_INTERVAL + 'ms');
     poll();
 }
 
@@ -58,126 +48,185 @@ function poll() {
         var cmd = readCommand();
         if (cmd && cmd.id && cmd.id !== lastCommandId) {
             lastCommandId = cmd.id;
-            logToUI('Comando recibido: ' + cmd.tipo);
+            console.log('[Bridge] Comando: ' + cmd.tipo);
             var result = executeCommand(cmd);
-            writeResponse(cmd, result.ok, result.message);
+            writeResponse(cmd.id, result);
             clearCommandFile();
         }
     } catch (e) {
-        console.log('[Bridge-SE] Error en polling: ' + e.message);
+        console.log('[Bridge] Error poll: ' + e.message);
     }
-
     pollTimer = setTimeout(poll, POLL_INTERVAL);
 }
 
 function readCommand() {
-    if (!fileManager || !fileManager.fileExists(COMMAND_FILE)) {
+    try {
+        if (!fileManager.fileExists(COMMAND_FILE)) return null;
+        var raw = fileManager.getFileContents(COMMAND_FILE);
+        if (!raw || !String(raw).trim()) return null;
+        return JSON.parse(raw);
+    } catch (e) {
         return null;
     }
-
-    var raw = fileManager.getFileContents(COMMAND_FILE);
-    if (!raw) {
-        return null;
-    }
-
-    return JSON.parse(raw);
 }
 
 function clearCommandFile() {
     try {
-        if (fileManager && fileManager.fileExists(COMMAND_FILE)) {
-            if (typeof fileManager.removeFile === 'function') {
-                fileManager.removeFile(COMMAND_FILE);
-            } else {
-                fileManager.writeTextToFile(COMMAND_FILE, '');
-            }
+        if (fileManager.fileExists(COMMAND_FILE)) {
+            fileManager.removeFile(COMMAND_FILE);
         }
-    } catch (e) {
-        console.log('[Bridge-SE] Error limpiando comando: ' + e.message);
-    }
+    } catch (e) {}
 }
 
-function writeResponse(cmd, ok, message) {
+// Escribir respuesta como archivo de texto simple (evita encoding JSON)
+function writeResponse(id, result) {
     try {
-        var response = {
-            id: cmd.id,
-            tipo: cmd.tipo,
-            ok: ok,
-            message: message,
-            timestamp: new Date().toISOString()
-        };
-
-        fileManager.writeTextToFile(RESPONSE_FILE, JSON.stringify(response, null, 2));
+        var responseFile = RESPONSE_DIR + '/' + id + '.txt';
+        var content = result.ok + '\n' + result.message + '\n';
+        if (result.data) {
+            content += JSON.stringify(result.data);
+        }
+        fileManager.writeTextToFile(responseFile, content);
+        console.log('[Bridge] Respuesta escrita: ' + id);
     } catch (e) {
-        console.log('[Bridge-SE] Error escribiendo respuesta: ' + e.message);
+        console.log('[Bridge] Error writeResponse: ' + e.message);
     }
 }
 
 function executeCommand(cmd) {
     try {
-        switch (cmd.tipo) {
-            case 'ping':
-                console.log('[Bridge-SE] PING OK');
-                return { ok: true, message: 'ping ok' };
-
-            case 'test':
-                testBridge();
-                return { ok: true, message: 'test ok' };
-
-            case 'demo-vlan':
-                demoVlan();
-                return { ok: true, message: 'demo-vlan ok' };
-
-            case 'agregarDispositivo':
-                console.log('[Bridge-SE] agregarDispositivo: ' + JSON.stringify(cmd.args || []));
-                return { ok: true, message: 'agregarDispositivo ok' };
-
-            case 'conectar':
-                console.log('[Bridge-SE] conectar: ' + JSON.stringify(cmd.args || []));
-                return { ok: true, message: 'conectar ok' };
-
-            case 'configurar':
-                console.log('[Bridge-SE] configurar: ' + JSON.stringify(cmd.args || []));
-                return { ok: true, message: 'configurar ok' };
-
-            case 'eliminarDispositivo':
-                console.log('[Bridge-SE] eliminarDispositivo: ' + JSON.stringify(cmd.args || []));
-                return { ok: true, message: 'eliminarDispositivo ok' };
-
-            default:
-                console.log('[Bridge-SE] Comando desconocido: ' + cmd.tipo);
-                return { ok: false, message: 'comando desconocido' };
+        if (PT_HANDLERS[cmd.tipo]) {
+            return PT_HANDLERS[cmd.tipo](cmd.args || []);
         }
+        return { ok: false, message: 'Comando desconocido: ' + cmd.tipo };
     } catch (e) {
-        console.log('[Bridge-SE] Error ejecutando comando: ' + e.message);
-        return { ok: false, message: e.message };
+        return { ok: false, message: String(e) };
     }
 }
 
-function logToUI(msg) {
-    try {
-        if (webView && typeof webView.evaluateJavaScriptAsync === 'function') {
-            webView.evaluateJavaScriptAsync('window.BridgeUI && window.BridgeUI.log(' + JSON.stringify(msg) + ');');
+// ============================================
+// HANDLERS
+// ============================================
+
+function initHandlers() {
+    // TypeId: 0=router, 1=switch, 8=PC, 9=server
+    
+    PT_HANDLERS.agregarDispositivo = function(args) {
+        try {
+            var p = args[0] || {};
+            var name = p.name;
+            var typeId = p.typeId !== undefined ? p.typeId : 0;
+            var model = p.model || '1941';
+            var x = p.x || 100;
+            var y = p.y || 100;
+
+            var lw = ipc.appWindow().getActiveWorkspace().getLogicalWorkspace();
+            var assignedName = lw.addDevice(typeId, model, x, y);
+
+            if (!assignedName) return { ok: false, message: 'Error creando dispositivo' };
+
+            if (assignedName !== name) {
+                var dev = ipc.network().getDevice(assignedName);
+                if (dev) dev.setName(name);
+            }
+            
+            console.log('[Bridge] Creado: ' + name);
+            return { ok: true, message: 'OK', data: { name: name } };
+        } catch (e) {
+            return { ok: false, message: String(e) };
         }
-    } catch (e) {
-        console.log('[Bridge-SE] Error enviando log a UI: ' + e.message);
-    }
-}
+    };
 
-function testBridge() {
-    console.log('[Bridge-SE] ✅ BRIDGE FUNCIONANDO PERFECTAMENTE');
-    logToUI('✅ BRIDGE FUNCIONANDO PERFECTAMENTE');
-}
+    PT_HANDLERS.conectar = function(args) {
+        try {
+            var p = args[0] || {};
+            pt.addLink(p.dev1, p.port1, p.dev2, p.port2, p.cableType || 'straight');
+            console.log('[Bridge] Enlace: ' + p.dev1 + ' <-> ' + p.dev2);
+            return { ok: true, message: 'Enlace creado' };
+        } catch (e) {
+            return { ok: false, message: String(e) };
+        }
+    };
 
-function demoVlan() {
-    console.log('[Bridge-SE] VLAN demo:');
-    console.log('[Bridge-SE] - R1 <-> SW-CORE');
-    console.log('[Bridge-SE] - SW-CORE <-> SW-ACC1');
-    console.log('[Bridge-SE] - SW-CORE <-> SW-ACC2');
-    console.log('[Bridge-SE] - VLAN 10: ADMIN');
-    console.log('[Bridge-SE] - VLAN 20: USERS');
-    console.log('[Bridge-SE] - VLAN 30: GUEST');
-    console.log('[Bridge-SE] - Trunk entre SW-CORE y access');
-    console.log('[Bridge-SE] - Router-on-a-stick para inter-VLAN routing');
-    logToUI('Demo VLAN cargada: R1/SW-CORE/SW-ACC1/SW-ACC2 + VLAN 10/20/30');
+    PT_HANDLERS.configurar = function(args) {
+        try {
+            var p = args[0] || {};
+            if (!p.device) return { ok: false, message: 'Device requerido' };
+            var cmdStr = (p.commands || []).join('\n');
+            pt.configureIosDevice(p.device, cmdStr);
+            console.log('[Bridge] Config: ' + p.device);
+            return { ok: true, message: 'OK' };
+        } catch (e) {
+            return { ok: false, message: String(e) };
+        }
+    };
+
+    PT_HANDLERS.eliminarDispositivo = function(args) {
+        try {
+            var p = args[0] || {};
+            var lw = ipc.appWindow().getActiveWorkspace().getLogicalWorkspace();
+            lw.removeDevice(p.name);
+            console.log('[Bridge] Eliminado: ' + p.name);
+            return { ok: true, message: 'OK' };
+        } catch (e) {
+            return { ok: false, message: String(e) };
+        }
+    };
+
+    PT_HANDLERS.listarDispositivos = function(args) {
+        try {
+            var net = ipc.network();
+            var count = net.getDeviceCount();
+            var devices = [];
+            for (var i = 0; i < count; i++) {
+                var d = net.getDeviceAt(i);
+                devices.push({ name: d.getName(), model: d.getModel(), type: d.getType() });
+            }
+            console.log('[Bridge] Listados: ' + count);
+            return { ok: true, message: 'OK', data: { devices: devices, count: count } };
+        } catch (e) {
+            return { ok: false, message: String(e) };
+        }
+    };
+
+    PT_HANDLERS.obtenerDispositivo = function(args) {
+        try {
+            var p = args[0] || {};
+            var dev = ipc.network().getDevice(p.name);
+            if (!dev) return { ok: false, message: 'No encontrado: ' + p.name };
+            
+            var ports = [];
+            for (var i = 0; i < dev.getPortCount(); i++) {
+                var port = dev.getPortAt(i);
+                ports.push({
+                    name: port.getName(),
+                    ip: port.getIpAddress() || '',
+                    mask: port.getSubnetMask() || ''
+                });
+            }
+            return { ok: true, message: 'OK', data: { name: dev.getName(), model: dev.getModel(), ports: ports } };
+        } catch (e) {
+            return { ok: false, message: String(e) };
+        }
+    };
+
+    PT_HANDLERS.obtenerEnlaces = function(args) {
+        try {
+            var net = ipc.network();
+            var count = net.getLinkCount();
+            var links = [];
+            for (var i = 0; i < count; i++) {
+                var link = net.getLinkAt(i);
+                links.push({
+                    port1: link.getPort1().getName(),
+                    port2: link.getPort2().getName()
+                });
+            }
+            return { ok: true, message: 'OK', data: { links: links, count: count } };
+        } catch (e) {
+            return { ok: false, message: String(e) };
+        }
+    };
+
+    console.log('[Bridge] Handlers cargados');
 }

@@ -7,12 +7,12 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./scheduler": "./src/scheduler.ts",
-    "./engine": "./src/engine.ts",
-    "./types": "./src/types.ts"
+    "./scheduler": "./src/scheduler",
+    "./engine": "./src/engine",
+    "./types": "./src/types"
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist",
+    "build": "bun build ./src --outdir ./dist",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },

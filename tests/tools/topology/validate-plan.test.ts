@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'bun:test';
-import { ptValidatePlanTool } from '../../../src/tools/topology/validate-plan.ts';
-import type { TopologyPlan } from '../../../src/core/types/tool.ts';
+import { ptValidatePlanTool } from '@cisco-auto/tools';
+import type { TopologyPlan } from '@cisco-auto/core';
 
 function createValidPlan(): TopologyPlan {
   return {

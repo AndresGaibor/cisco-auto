@@ -1,11 +1,11 @@
 import { Command } from 'commander';
-import { loadLab, YAMLParser } from '../../../../../src/core/parser/yaml-parser.ts';
-import { validateLabSafe } from '../../../../../src/core/types/index.ts';
-import { visualizeTopology, generateMermaidDiagram, analyzeTopology } from '../../../../../src/core/topology/index.ts';
-import type { LabSpec } from '../../../../../src/core/canonical/index.ts';
-import { formatExamples, formatRelatedCommands } from '../../help/formatter.ts';
-import { getExamples } from '../../help/examples.ts';
-import { getRelatedCommands } from '../../help/related.ts';
+import { loadLab, YAMLParser } from '@cisco-auto/core';
+import { validateLabSafe } from '@cisco-auto/core';
+import { visualizeTopology, generateMermaidDiagram, analyzeTopology } from '@cisco-auto/core';
+import type { LabSpec } from '@cisco-auto/core';
+import { formatExamples, formatRelatedCommands } from '../../help/formatter';
+import { getExamples } from '../../help/examples';
+import { getRelatedCommands } from '../../help/related';
 
 /**
  * Convierte Lab del parser a LabSpec

@@ -8,8 +8,8 @@
 
 import { Command } from 'commander';
 import { createInterface } from 'readline';
-import { ptListDevicesTool } from '../../../../../src/tools/catalog/list-devices.ts';
-import { ptGetDeviceDetailsTool } from '../../../../../src/tools/catalog/get-device-details.ts';
+import { ptListDevicesTool } from '@cisco-auto/tools';
+import { ptGetDeviceDetailsTool } from '@cisco-auto/tools';
 
 /**
  * Crea interfaz readline

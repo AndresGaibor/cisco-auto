@@ -9,10 +9,10 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { createInterface } from 'readline';
-import { loadLab } from '../../../../../src/core/parser/yaml-parser.ts';
-import { ptValidatePlanTool } from '../../../../../src/tools/topology/validate-plan.ts';
-import { ptGenerateConfigsTool } from '../../../../../src/tools/deploy/generate-configs.ts';
-import { ptLiveDeployTool } from '../../../../../src/tools/deploy/live-deploy.ts';
+import { loadLab } from '@cisco-auto/core';
+import { ptValidatePlanTool } from '@cisco-auto/tools';
+import { ptGenerateConfigsTool } from '@cisco-auto/tools';
+import { ptLiveDeployTool } from '@cisco-auto/tools';
 
 /**
  * Crea interfaz readline

@@ -8,8 +8,8 @@ import {
   generateMermaidDiagram, 
   generateAdjacencyMatrix,
   analyzeTopology
-} from '../../src/core/topology/visualizer.ts';
-import type { LabSpec } from '../../src/core/canonical/index.ts';
+} from '../../src/core/topology/visualizer';
+import type { LabSpec } from '@cisco-auto/core';
 
 const createTestLab = (): LabSpec => ({
   metadata: { name: 'Test Lab', version: '1.0', author: 'test', created: new Date().toISOString() },

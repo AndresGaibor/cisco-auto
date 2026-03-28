@@ -1,10 +1,10 @@
 import { Command } from 'commander';
-import { loadLab } from '../../../../../src/core/parser/yaml-parser.ts';
-import { analyzeTopology } from '../../../../../src/core/topology/index.ts';
-import type { LabSpec } from '../../../../../src/core/canonical/index.ts';
-import { formatExamples, formatRelatedCommands } from '../../help/formatter.ts';
-import { getExamples } from '../../help/examples.ts';
-import { getRelatedCommands } from '../../help/related.ts';
+import { loadLab } from '@cisco-auto/core';
+import { analyzeTopology } from '@cisco-auto/core';
+import type { LabSpec } from '@cisco-auto/core';
+import { formatExamples, formatRelatedCommands } from '../../help/formatter';
+import { getExamples } from '../../help/examples';
+import { getRelatedCommands } from '../../help/related';
 
 function toLabSpec(parsed: any): LabSpec {
   return {

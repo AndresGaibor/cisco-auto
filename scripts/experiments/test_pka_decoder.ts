@@ -4,7 +4,7 @@
  */
 
 import { readFileSync } from 'fs';
-import { decodePKA, PKADecoder } from '../src/core/parser/pka-decoder.ts';
+import { decodePKA, PKADecoder } from '@cisco-auto/core';
 
 const testFile = '/Users/andresgaibor/code/javascript/cisco-auto/archivos_prueba/2.5.5 Packet Tracer - Configure Initial Switch Settings (2).pka';
 

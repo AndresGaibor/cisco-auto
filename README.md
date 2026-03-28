@@ -12,6 +12,7 @@ Diseñado especialmente para estudiantes de Redes de Computadores (con enfoque e
 
 ## ✨ Características Principales
 
+- **🎮 Control en Tiempo Real de Packet Tracer**: Nueva CLI para controlar PT desde TypeScript/Bun sin dependencias externas.
 - **⚙️ Despliegue Automático**: Configuración directa a dispositivos Cisco vía SSH/Telnet con ejecución paralela para máxima velocidad.
 - **🏗️ Topologías Declarativas**: Define la arquitectura completa de tu red utilizando archivos **YAML** o **JSON** validados estrictamente (Zod).
 - **🔍 Análisis Avanzado PKA/PKT**: Ingeniería inversa integrada para decodificar archivos de Packet Tracer (XOR + Twofish CBC + zlib), extrayendo dispositivos y topologías.
@@ -62,6 +63,23 @@ bun run src/cli/index.ts --help
 ## 💻 Uso de la Interfaz de Línea de Comandos (CLI)
 
 La CLI proporciona acceso rápido a todas las funcionalidades principales.
+
+### 🎮 Control en Tiempo Real de Packet Tracer (NUEVO)
+
+```bash
+# Setup inicial (solo una vez)
+bash scripts/setup-pt-control.sh
+
+# Controlar PT en tiempo real
+bun run pt device add R1 2911 100 100
+bun run pt device add S1 2960-24TT 300 100
+bun run pt link add R1:GigabitEthernet0/0 S1:GigabitEthernet0/1 straight
+bun run pt config host PC1 192.168.1.10 255.255.255.0 192.168.1.1
+bun run pt snapshot
+
+# Ver guía completa
+cat docs/PT_CONTROL_QUICKSTART.md
+```
 
 ### Analizar Laboratorios
 ```bash
@@ -127,22 +145,27 @@ bun run src/cli/index.ts devices labs/vlan-basico.yaml
 
 ---
 
-## 📁 Estructura del Proyecto
+## 📁 Estructura del Proyecto (Monorepo)
 
 ```text
 cisco-auto/
-├── src/
-│   ├── cli/                    # Interfaz de línea de comandos (Commander.js)
-│   ├── core/                   # Lógica central
-│   │   ├── config-generators/  # Generadores de comandos IOS basados en templates
-│   │   ├── parser/             # Decodificador PKA y YAML Parser
-│   │   ├── connector/          # Ejecución paralela vía SSH
-│   │   └── types/              # Schemas de validación (Zod) - Source of Truth
-│   ├── api/                    # API REST
-│   └── templates/              # Plantillas versionadas de comandos IOS
-├── labs/                       # Archivos YAML de topologías de ejemplo
-├── docs/                       # Documentación técnica, metodologías y auditorías
-└── tests/                      # Pruebas unitarias e integración (Bun Test)
+├── apps/
+│   └── cli/                # Aplicación de línea de comandos (Commander.js)
+├── packages/
+│   ├── core/               # Lógica de negocio y orquestadores
+│   ├── pt-control/         # 🎮 Control en tiempo real de Packet Tracer (NUEVO)
+│   ├── lab-model/          # Modelo de dominio canónico
+│   ├── bridge/             # Integración con Packet Tracer
+│   ├── crypto/             # Implementación de Twofish
+│   ├── device-catalog/     # Base de datos de equipos Cisco
+│   ├── import-yaml/        # Parser de laboratorios YAML
+│   ├── import-pka/         # Decodificador de archivos Packet Tracer
+│   ├── topology/           # Análisis y visualización
+│   └── tools/              # Herramientas de alto nivel
+├── pt-extension/           # 🎮 PT Script Module (JavaScript que corre en PT)
+├── labs/                   # Archivos YAML de topologías de ejemplo
+├── docs/                   # Documentación técnica y guías
+└── tests/                  # Pruebas globales
 ```
 
 ---

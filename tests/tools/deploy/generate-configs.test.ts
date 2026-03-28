@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'bun:test';
-import { ptGenerateConfigsTool } from '../../../src/tools/deploy/generate-configs.ts';
-import type { TopologyPlan } from '../../../src/core/types/tool.ts';
+import { ptGenerateConfigsTool } from '@cisco-auto/tools';
+import type { TopologyPlan } from '@cisco-auto/core';
 
 function createTestPlan(): TopologyPlan {
   return {

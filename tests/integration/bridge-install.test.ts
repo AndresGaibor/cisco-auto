@@ -6,8 +6,8 @@
  */
 
 import { test, expect, describe, beforeEach, afterEach } from 'bun:test';
-import { detectOS } from '../../src/bridge/os-detection';
-import { detectPacketTracer, isPacketTracerRunning } from '../../src/bridge/packet-tracer';
+import { detectOS } from '@cisco-auto/bridge';
+import { detectPacketTracer, isPacketTracerRunning } from '@cisco-auto/bridge';
 
 // ============================================================================
 // Configuración
@@ -206,19 +206,19 @@ describe('AppleScript Execution (Mocked)', () => {
 
 describe('Launch Packet Tracer', () => {
   test('launchPacketTracer debería existir y ser callable', async () => {
-    const { launchPacketTracer } = await import('../../src/bridge/packet-tracer');
+    const { launchPacketTracer } = await import('@cisco-auto/bridge');
 
     expect(typeof launchPacketTracer).toBe('function');
   });
 
   test('waitForPacketTracerReady debería existir y ser callable', async () => {
-    const { waitForPacketTracerReady } = await import('../../src/bridge/packet-tracer');
+    const { waitForPacketTracerReady } = await import('@cisco-auto/bridge');
 
     expect(typeof waitForPacketTracerReady).toBe('function');
   });
 
   test('waitForPacketTracerReady debería aceptar timeout parameter', async () => {
-    const { waitForPacketTracerReady } = await import('../../src/bridge/packet-tracer');
+    const { waitForPacketTracerReady } = await import('@cisco-auto/bridge');
 
     // No debería lanzar con timeout válido
     const result = await waitForPacketTracerReady(1000);

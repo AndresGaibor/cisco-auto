@@ -1,8 +1,6 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { resolveConfig, ConfigResolver } from '../config/resolver.ts';
-import { getGlobalConfigPath, getProjectConfigPath, hasGlobalConfig, hasProjectConfig, saveGlobalConfig, saveProjectConfig } from '../config/loader.ts';
-import type { CiscoAutoConfig } from '../config/types.ts';
+import { resolveConfig, ConfigResolver, getGlobalConfigPath, getProjectConfigPath, hasGlobalConfig, hasProjectConfig, saveGlobalConfig, saveProjectConfig, type CiscoAutoConfig } from '@cisco-auto/core';
 
 const VALID_KEYS = [
   'defaultRouter',

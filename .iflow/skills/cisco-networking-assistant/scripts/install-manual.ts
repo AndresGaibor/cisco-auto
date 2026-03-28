@@ -14,6 +14,25 @@ interface PTStatus {
   version: string | null;
 }
 
+// Helper to run pt CLI (pt-control-v2) intelligently
+async function runPtCommand(args: string[]): Promise<{ success: boolean; stdout?: string; stderr?: string }> {
+  try {
+    const { promisify } = await import('util');
+    const { exec } = await import('child_process');
+    const execAsync = promisify(exec);
+    const which = await execAsync('which pt').then(r => r.stdout.trim()).catch(() => '');
+    if (which) {
+      const { stdout, stderr } = await execAsync(`pt ${args.map(a => String(a)).join(' ')}`);
+      return { success: true, stdout, stderr };
+    }
+    const { stdout, stderr } = await execAsync(`bun run packages/pt-control-v2/dist/cli/index.js ${args.map(a => String(a)).join(' ')}`);
+    return { success: true, stdout, stderr };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, stderr: msg };
+  }
+}
+
 async function detectPacketTracer(): Promise<PTStatus> {
   const { exec } = await import('child_process');
   const { promisify } = await import('util');
@@ -148,6 +167,23 @@ async function main() {
   console.log('   El bridge quedará conectado y podrás enviar comandos.\n');
   console.log('Para verificar conexión:');
   console.log('   bun run .iflow/skills/cisco-networking-assistant/scripts/bridge-automation.ts status\n');
+
+    // If --auto provided, try to deploy runtime via pt CLI
+    const args = process.argv.slice(2);
+    if (args.includes('--auto')) {
+      console.log('\nIntentando despliegue automático vía pt CLI...');
+      try {
+        const { runPtCommand } = await import('../../../scripts/pt-cli.ts');
+        const res = await runPtCommand(['runtime', 'build', '--no-deploy']);
+        if (res.success) {
+          console.log('pt runtime build ejecutado con éxito');
+        } else {
+          console.log('pt CLI no disponible o fallo:', res.stderr || 'unknown');
+        }
+      } catch (e) {
+        console.log('Error al ejecutar pt CLI:', e);
+      }
+    }
 }
 
 main().catch(err => {

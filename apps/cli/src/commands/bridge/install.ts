@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { exec } from 'child_process';
-import { detectOS } from '../../../../../src/bridge/os-detection.ts';
-import { detectPacketTracer, isPacketTracerRunning, launchPacketTracer, waitForPacketTracerReady } from '../../../../../src/bridge/packet-tracer.ts';
+import { detectOS } from '@cisco-auto/bridge';
+import { detectPacketTracer, isPacketTracerRunning, launchPacketTracer, waitForPacketTracerReady } from '@cisco-auto/bridge';
 
 const BRIDGE_PORT = process.env.BRIDGE_PORT || '54321';
 const BRIDGE_URL = `http://127.0.0.1:${BRIDGE_PORT}`;

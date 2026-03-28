@@ -7,10 +7,10 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./twofish": "./src/twofish/index.ts"
+    "./twofish": "./src/twofish"
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist",
+    "build": "bun build ./src --outdir ./dist",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },

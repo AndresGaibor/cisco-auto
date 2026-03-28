@@ -7,12 +7,12 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./decoder": "./src/decoder.ts",
-    "./encoder": "./src/encoder.ts",
-    "./adapter": "./src/adapter.ts"
+    "./decoder": "./src/decoder",
+    "./encoder": "./src/encoder",
+    "./adapter": "./src/adapter"
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist",
+    "build": "bun build ./src --outdir ./dist --target bun",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },

@@ -6,8 +6,8 @@
  */
 
 import { describe, test, expect } from 'bun:test';
-import { generateIosCommands, ptGenerateScriptTool } from '../../src/tools/topology/generate-script.ts';
-import type { TopologyPlan, DevicePlan, LinkPlan } from '../../src/core/types/tool.ts';
+import { generateIosCommands, ptGenerateScriptTool } from '@cisco-auto/tools';
+import type { TopologyPlan, DevicePlan, LinkPlan } from '@cisco-auto/core';
 
 // ============================================================================
 // Fixtures - Topologías de prueba

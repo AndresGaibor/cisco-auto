@@ -3,8 +3,8 @@
  * Script para probar el decoder PKA v2 con archivos reales
  */
 
-import { decodePKAFile, detectPKAVersion } from '../src/core/parser/pka/pka-decoder-v2.ts';
-import { stage1Deobfuscate, stage3Deobfuscate, stage4ZlibDecompress } from '../src/core/parser/pka/pka-decoder-v2.ts';
+import { decodePKAFile, detectPKAVersion } from '@cisco-auto/core';
+import { stage1Deobfuscate, stage3Deobfuscate, stage4ZlibDecompress } from '@cisco-auto/core';
 import { readFileSync } from 'fs';
 
 function testFile(filepath: string): void {

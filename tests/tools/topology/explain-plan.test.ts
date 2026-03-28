@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'bun:test';
-import { ptExplainPlanTool } from '../../../src/tools/topology/explain-plan.ts';
-import type { TopologyPlan } from '../../../src/core/types/tool.ts';
+import { ptExplainPlanTool } from '@cisco-auto/tools';
+import type { TopologyPlan } from '@cisco-auto/core';
 
 function createTestPlan(): TopologyPlan {
   return {

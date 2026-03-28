@@ -1,6 +1,6 @@
 import { Command } from 'commander';
-import { parsePKA, isPka2XmlAvailable, encodePKAExternal } from '../../../../../src/core/parser/pka/index.ts';
-import { Network, PC, Switch, Router, Server } from '../../../../../src/core/models/index.ts';
+import { parsePKA, isPka2XmlAvailable, encodePKAExternal } from '@cisco-auto/import-pka';
+import { Network, PC, Switch, Router, Server } from '@cisco-auto/core';
 
 export function createBridgeCommand(): Command {
   return new Command('command')

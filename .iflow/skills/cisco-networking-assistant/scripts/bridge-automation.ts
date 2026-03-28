@@ -39,6 +39,27 @@ const DEFAULT_TIMEOUT = 5000; // 5 segundos
 //Tipos
 // ============================================================================
 
+// ============================================================================
+// Helper to run pt CLI (pt-control-v2) intelligently
+// ============================================================================
+async function runPtCommand(args: string[]): Promise<{ success: boolean; stdout?: string; stderr?: string }> {
+  try {
+    // Prefer global 'pt' binary (pt-control-v2)
+    const which = await execAsync('which pt').then(r => r.stdout.trim()).catch(() => '');
+    if (which) {
+      const { stdout, stderr } = await execAsync(`pt ${args.map(a => String(a)).join(' ')}`);
+      return { success: true, stdout, stderr };
+    }
+    // Fallback: use bin/run.js entry point (oclif)
+    const { stdout, stderr } = await execAsync(`node packages/pt-control-v2/bin/run.js ${args.map(a => String(a)).join(' ')}`);
+    return { success: true, stdout, stderr };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, stderr: msg };
+  }
+}
+
+
 interface BridgeStatus {
   running: boolean;
   port: number;
@@ -628,6 +649,15 @@ async function ensureAll(): Promise<AutomationResult> {
   status = await getFullStatus();
   
   if (status.ready) {
+    // Try a quick pt CLI test via centralized helper
+    try {
+      const { runPtCommand } = await import('../../../scripts/pt-cli.ts');
+      const res = await runPtCommand(['status']);
+      if (res.success) {
+        status.recommendations.push('pt CLI disponible: usar `pt <command>` para interactuar con Packet Tracer');
+      }
+    } catch (e) {}
+
     return {
       success: true,
       message: '🎉 Sistema completamente configurado y listo para trabajar',

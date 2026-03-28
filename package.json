@@ -17,13 +17,29 @@
     "build:apps": "bun run --filter './apps/*' build",
     "typecheck": "bun run --filter './packages/*' typecheck && bun run --filter './apps/*' typecheck",
     "cisco-auto": "bun run --cwd apps/cli start",
-    "sim": "bun run --cwd packages/sim-engine test"
+    "sim": "bun run --cwd packages/sim-engine test",
+    "pt": "bun run --cwd packages/pt-control src/cli/index.ts",
+    "pt:test": "bun run --cwd packages/pt-control test"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5"
   },
   "dependencies": {
+    "@cisco-auto/core": "workspace:*",
+    "@cisco-auto/api": "workspace:*",
+    "@cisco-auto/bridge": "workspace:*",
+    "@cisco-auto/crypto": "workspace:*",
+    "@cisco-auto/device-catalog": "workspace:*",
+    "@cisco-auto/import-pka": "workspace:*",
+    "@cisco-auto/import-yaml": "workspace:*",
+    "@cisco-auto/lab-model": "workspace:*",
+    "@cisco-auto/legacy": "workspace:*",
+    "@cisco-auto/pt-control": "workspace:*",
+    "@cisco-auto/sim-engine": "workspace:*",
+    "@cisco-auto/sim-runtime": "workspace:*",
+    "@cisco-auto/topology": "workspace:*",
+    "@cisco-auto/tools": "workspace:*",
     "fast-xml-parser": "^5.5.6",
     "js-yaml": "^4.1.1",
     "pino": "^10.3.1",

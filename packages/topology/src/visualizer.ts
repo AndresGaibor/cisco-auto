@@ -89,8 +89,8 @@ export function visualizeTopology(lab: LabSpec, options: VisualizationOptions = 
     let toStr = conn.to.deviceName;
     
     if (showPorts) {
-      fromStr += `:${conn.from.portName}`;
-      toStr += `:${conn.to.portName}`;
+      fromStr += `:${conn.from.port}`;
+      toStr += `:${conn.to.port}`;
     }
     
     const line = `║  ${fromStr} ${cableSymbol} ${toStr}`;

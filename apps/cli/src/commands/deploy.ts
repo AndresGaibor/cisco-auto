@@ -1,8 +1,8 @@
 import { Command } from 'commander';
-import { loadLab } from '../../../../src/core/parser/yaml-parser.ts';
-import { DeployOrchestrator, deployToDevice } from '../../../../src/core/executor/index.ts';
-import type { ConnectionCredentials, DeployOptions, DeployResult } from '../../../../src/core/executor/types.ts';
-import type { DeviceSpec, LabSpec } from '../../../../src/core/canonical/index.ts';
+import { loadLab } from '@cisco-auto/core';
+import { DeployOrchestrator, deployToDevice } from '@cisco-auto/core';
+import type { ConnectionCredentials, DeployOptions, DeployResult } from '@cisco-auto/core';
+import type { DeviceSpec, LabSpec } from '@cisco-auto/core';
 
 /**
  * Obtiene credenciales para un dispositivo

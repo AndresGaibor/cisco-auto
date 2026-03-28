@@ -10,15 +10,15 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { readFileSync, writeFileSync } from 'fs';
 import * as yaml from 'js-yaml';
-import { loadLab } from '../../../../../src/core/parser/yaml-parser.ts';
-import { ptValidatePlanTool } from '../../../../../src/tools/topology/validate-plan.ts';
-import { ptFixPlanTool } from '../../../../../src/tools/topology/fix-plan.ts';
+import { loadLab } from '@cisco-auto/core';
+import { ptValidatePlanTool } from '@cisco-auto/tools';
+import { ptFixPlanTool } from '@cisco-auto/tools';
 import type { 
   TopologyPlan, 
   ValidationError, 
   ValidationWarning, 
   FixSuggestion 
-} from '../../../../../src/core/types/tool.ts';
+} from '@cisco-auto/core';
 
 /**
  * Interfaz para preguntas interactivas usando readline nativo
@@ -323,8 +323,8 @@ async function ejecutarValidacionInteractiva(filepath: string): Promise<number> 
     console.log('\n' + chalk.bold.cyan('─'.repeat(50)));
     console.log(chalk.bold('\n🎯 OPCIONES DE CORRECCIÓN:'));
     console.log(`   ${chalk.green('[1]')} Aplicar correcciones automáticas`);
-    console.log(`   ${chalk.yellow('[2]'} Ver detalles de errores`);
-    console.log(`   ${chalk.red('[3]'} Salir sin corregir`);
+    console.log(`   ${chalk.yellow('[2]')} Ver detalles de errores`);
+    console.log(`   ${chalk.red('[3]')} Salir sin corregir`);
     
     const rl = crearReadline();
     

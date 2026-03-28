@@ -1,6 +1,6 @@
 import { Command } from 'commander';
-import { SecurityGenerator } from '../../../../src/core/config-generators/security-generator.ts';
-import { pushCommands } from '../../../../src/bridge/ios-command-pusher.ts';
+import { SecurityGenerator } from '@cisco-auto/core';
+import { pushCommands } from '@cisco-auto/bridge';
 
 /**
  * Comandos CLI para gestionar ACLs: create, add-rule, apply

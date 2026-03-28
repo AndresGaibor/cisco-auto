@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { writeFileSync } from 'fs';
-import { CCNATemplates, getTemplateById, getTemplatesByCategory, getTemplatesByDifficulty } from '../../../../src/templates/index.ts';
+import { CCNATemplates, getTemplateById, getTemplatesByCategory, getTemplatesByDifficulty } from '@cisco-auto/templates';
 
 export function createTemplateCommand(): Command {
   const cmd = new Command('template')

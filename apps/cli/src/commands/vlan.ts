@@ -1,6 +1,6 @@
 import { Command } from 'commander';
-import { pushCommands } from '../../../../src/bridge/ios-command-pusher.ts';
-import { VlanGenerator } from '../../../../src/core/config-generators/vlan-generator.ts';
+import { pushCommands } from '@cisco-auto/bridge';
+import { VlanGenerator } from '@cisco-auto/core';
 
 const VLAN_LIST_SEPARATOR = ',';
 

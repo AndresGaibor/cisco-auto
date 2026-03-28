@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { ptEstimatePlanTool } from '../../../src/tools/topology/estimate-plan.ts';
+import { ptEstimatePlanTool } from '@cisco-auto/tools';
 
 describe('pt_estimate_plan', () => {
   test('calcula estimación correcta para 2 routers, 1 switch, 4 PCs', async () => {

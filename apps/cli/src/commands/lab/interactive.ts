@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { createInterface } from 'readline';
 import { writeFileSync } from 'fs';
-import type { TopologyPlanParams } from '../../../../../src/core/types/tool.ts';
+import type { TopologyPlanParams } from '@cisco-auto/core';
 
 const NETWORK_TYPES = [
   { value: 'single_lan', label: 'LAN Única', description: 'Todos los dispositivos en una sola red' },

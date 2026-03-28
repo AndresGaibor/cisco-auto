@@ -1,5 +1,5 @@
 import { describe, test, expect, afterEach } from 'bun:test';
-import { ptQueryTopologyTool } from '../../../src/tools/deploy/query-topology.ts';
+import { ptQueryTopologyTool } from '@cisco-auto/tools';
 
 describe('pt_query_topology', () => {
   afterEach(() => {

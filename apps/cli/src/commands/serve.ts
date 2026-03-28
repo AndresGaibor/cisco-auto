@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { createAPIServer } from '../../../../src/api/index.ts';
+import { createAPIServer } from '@cisco-auto/api';
 
 export function createServeCommand(): Command {
   return new Command('serve')

@@ -3,7 +3,7 @@
  * Test final del parser PKA integrado
  */
 
-import { parsePKA, isPka2XmlAvailable } from '../src/core/parser/pka/index.ts';
+import { parsePKA, isPka2XmlAvailable } from '@cisco-auto/core';
 
 async function testFile(filepath: string): Promise<void> {
   console.log('═══════════════════════════════════════════════════════════');

@@ -6,7 +6,7 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
-import { startBridgeServer, type ComandoPT, type HealthResponse, type NextResponse, type ExecuteResponse } from '../../src/bridge/server';
+import { startBridgeServer, type ComandoPT, type HealthResponse, type NextResponse, type ExecuteResponse } from '@cisco-auto/bridge';
 
 // ============================================================================
 // Configuración
