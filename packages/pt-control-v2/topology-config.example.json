@@ -1,0 +1,34 @@
+{
+  "vlans": [
+    { "id": 10, "name": "ADMIN" },
+    { "id": 20, "name": "USUARIOS" },
+    { "id": 30, "name": "SERVIDORES" },
+    { "id": 40, "name": "INVITADOS" },
+    { "id": 50, "name": "MANAGEMENT" }
+  ],
+  "trunkPorts": {
+    "Switch1": ["GigabitEthernet0/1", "GigabitEthernet0/2"],
+    "Switch2": ["GigabitEthernet0/1", "GigabitEthernet0/2"],
+    "Switch-Test": ["GigabitEthernet0/1", "GigabitEthernet0/2"],
+    "Multilayer Switch0": ["GigabitEthernet0/1", "GigabitEthernet0/2"]
+  },
+  "sshConfig": {
+    "domain": "cisco-lab.local",
+    "username": "admin",
+    "password": "admin"
+  },
+  "hostIpConfig": {
+    "PC10": { "ip": "192.168.10.10", "mask": "255.255.255.0", "gateway": "192.168.10.1" },
+    "PC11": { "ip": "192.168.10.11", "mask": "255.255.255.0", "gateway": "192.168.10.1" },
+    "PC12": { "ip": "192.168.10.12", "mask": "255.255.255.0", "gateway": "192.168.10.1" },
+    "PC13": { "ip": "192.168.10.13", "mask": "255.255.255.0", "gateway": "192.168.10.1" },
+    "PC20": { "ip": "192.168.20.20", "mask": "255.255.255.0", "gateway": "192.168.20.1" },
+    "PC21": { "ip": "192.168.20.21", "mask": "255.255.255.0", "gateway": "192.168.20.1" },
+    "PC22": { "ip": "192.168.20.22", "mask": "255.255.255.0", "gateway": "192.168.20.1" },
+    "PC23": { "ip": "192.168.20.23", "mask": "255.255.255.0", "gateway": "192.168.20.1" },
+    "Laptop0": { "ip": "192.168.10.50", "mask": "255.255.255.0", "gateway": "192.168.10.1" },
+    "EMAIL, IOT, APP": { "ip": "192.168.50.10", "mask": "255.255.255.0", "gateway": "192.168.50.1" },
+    "DHCP, DNS, WEB": { "ip": "192.168.50.20", "mask": "255.255.255.0", "gateway": "192.168.50.1" },
+    "Server0": { "ip": "192.168.50.30", "mask": "255.255.255.0", "gateway": "192.168.50.1" }
+  }
+}

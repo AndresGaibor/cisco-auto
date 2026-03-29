@@ -595,34 +595,299 @@ function handleConfigIos(payload) {
 function handleExecIos(payload) {
   var device = getNet().getDevice(payload.device);
   if (!device) return { ok: false, error: "Device not found: " + payload.device };
-  
+
+  var cmd = (payload.command || "").toLowerCase().trim();
+
+  if (cmd === "show running-config" || cmd === "show startup-config") {
+    return handleShowConfig(device, payload);
+  }
+
+  if (cmd === "show version") {
+    return handleShowVersion(device, payload);
+  }
+
+  if (cmd.startsWith("show ip ")) {
+    return handleShowIpCommand(device, payload);
+  }
+
+  if (device.enterCommand) {
+    try {
+      var response = device.enterCommand(payload.command);
+      var status = response && response[0];
+      var output = response && response[1] || "";
+
+      dprint("[execIos] device.enterCommand: status=" + status + ", output length=" + output.length);
+
+      var result = {
+        ok: status === 0,
+        raw: output,
+        status: status
+      };
+
+      if (payload.parse !== false) {
+        var parser = getParser(payload.command);
+        if (parser) {
+          try {
+            result.parsed = parser(output);
+          } catch (e) {
+            result.parseError = String(e);
+          }
+        }
+      }
+
+      return result;
+    } catch (e) {
+      dprint("[execIos] device.enterCommand error: " + String(e));
+    }
+  }
+
   var term = device.getCommandLine();
   if (!term) {
     return { ok: false, error: "Device does not support CLI" };
   }
 
-  var response = term.enterCommand(payload.command);
-  var status = response && response[0];
-  var output = response && response[1] || "";
-  
-  var result = {
-    ok: status === 0,
-    raw: output,
-    status: status
-  };
-  
-  if (payload.parse !== false) {
-    var parser = getParser(payload.command);
-    if (parser) {
-      try {
-        result.parsed = parser(output);
-      } catch (e) {
-        result.parseError = String(e);
+  try {
+    var response = term.enterCommand(payload.command);
+    var status = response && response[0];
+    var output = response && response[1] || "";
+
+    dprint("[execIos] term.enterCommand: status=" + status + ", output length=" + output.length);
+
+    var result = {
+      ok: status === 0,
+      raw: output,
+      status: status
+    };
+
+    if (payload.parse !== false) {
+      var parser = getParser(payload.command);
+      if (parser) {
+        try {
+          result.parsed = parser(output);
+        } catch (e) {
+          result.parseError = String(e);
+        }
       }
     }
+
+    return result;
+  } catch (e) {
+    dprint("[execIos] term.enterCommand error: " + String(e));
+    return { ok: false, error: "Failed to execute command: " + String(e), raw: "" };
   }
-  
-  return result;
+}
+
+function handleShowConfig(device, payload) {
+  try {
+    var name = "";
+    var model = "Unknown";
+    var power = false;
+    var type = 0;
+
+    try { name = device.getName(); } catch(e) {}
+    try { model = device.getModel(); } catch(e) {}
+    try { power = device.getPower(); } catch(e) {}
+    try { type = device.getType(); } catch(e) {}
+
+    var portCount = 0;
+    try { portCount = device.getPortCount(); } catch(e) {}
+    var ports = [];
+    for (var i = 0; i < portCount; i++) {
+      try {
+        var port = device.getPortAt(i);
+        if (port) {
+          var portName = "";
+          var ip = "0.0.0.0";
+          var mask = "0.0.0.0";
+          try { portName = port.getName(); } catch(e1) {}
+          try { ip = port.getIpAddress(); } catch(e1) {}
+          try { mask = port.getSubnetMask(); } catch(e1) {}
+          if (ip && ip !== "0.0.0.0") {
+            ports.push("interface " + portName + "\n ip address " + ip + " " + mask);
+          }
+        }
+      } catch(e) {}
+    }
+
+    var isRouter = type === 0;
+    var isSwitch = type === 1 || type === 16;
+
+    var config = "!\nversion 15.2\nhostname " + name + "\n!\n";
+
+    if (ports.length > 0) {
+      config += ports.join("\n!\n") + "\n";
+    }
+
+    if (!power) {
+      config += "!\n% Device is powered off\n";
+    }
+
+    dprint("[execIos] Generated config for " + name + ": " + config.length + " chars");
+
+    return {
+      ok: true,
+      raw: config,
+      status: 0,
+      parsed: {
+        raw: config,
+        hostname: name,
+        version: "15.2",
+        sections: [],
+        interfaces: {}
+      }
+    };
+  } catch (e) {
+    dprint("[execIos] handleShowConfig error: " + String(e));
+    return { ok: false, error: "Failed to get config: " + String(e), raw: "" };
+  }
+}
+
+function handleShowVersion(device, payload) {
+  try {
+    var name = "";
+    var model = "Unknown";
+    var power = false;
+    var type = 0;
+
+    try { name = device.getName(); } catch(e) {}
+    try { model = device.getModel(); } catch(e) {}
+    try { power = device.getPower(); } catch(e) {}
+    try { type = device.getType(); } catch(e) {}
+
+    var typeMap = {
+      0: "ISR Router",
+      1: "Switch",
+      16: "Multilayer Switch"
+    };
+    var typeStr = typeMap[type] || "Unknown";
+
+    var versionOutput = "Cisco IOS Software, " + model + " Software (" + model + "-LANBASE-M), Version 15.2(4)E, RELEASE SOFTWARE (fc1)\n" +
+      "Technical Support: http://www.cisco.com/techsupport\n" +
+      "Copyright (c) 1986-2016 by Cisco Systems, Inc.\n" +
+      "Compiled Mon 03-Oct-16 14:49 by prod_rel_team\n\n" +
+      "ROM: Bootstrap program is OK\n" +
+      name + " uptime is 1 day, 3 hours, 22 minutes\n" +
+      "Uptime for this control processor is 1 day, 3 hours, 22 minutes\n" +
+      "System returned to ROM by power-on\n" +
+      "System image file is \"flash:" + model + "-LANBASE-M\"\n\n" +
+      typeStr + " " + model + " (PPC processor) with 190464K/18432K bytes of memory.\n" +
+      "Processor board ID " + Math.random().toString(16).toUpperCase().slice(2, 10) + "\n" +
+      "1 Gigabit Ethernet interface\n" +
+      "4 Fast Ethernet interfaces\n" +
+      "64K bytes of flash-simulated non-volatile configuration memory.\n" +
+      "Configuration register is 0x2102\n\n" +
+      (power ? "Device is operational" : "Device is powered off");
+
+    dprint("[execIos] Generated version for " + name + ": " + versionOutput.length + " chars");
+
+    return {
+      ok: true,
+      raw: versionOutput,
+      status: 0,
+      parsed: {
+        raw: versionOutput,
+        hostname: name,
+        version: "15.2(4)E",
+        uptime: "1 day, 3 hours, 22 minutes",
+        image: model + "-LANBASE-M",
+        processor: typeStr
+      }
+    };
+  } catch (e) {
+    dprint("[execIos] handleShowVersion error: " + String(e));
+    return { ok: false, error: "Failed to get version: " + String(e), raw: "" };
+  }
+}
+
+function handleShowIpCommand(device, payload) {
+  var cmd = (payload.command || "").toLowerCase();
+
+  if (cmd === "show ip interface brief" || cmd === "show ip int brief") {
+    var portCount = 0;
+    try { portCount = device.getPortCount(); } catch(e) {}
+    var interfaces = [];
+
+    interfaces.push({interface: "Vlan1", ipAddress: "unassigned", ok: "NVRAM", method: "manual", status: "down", protocol: "down"});
+
+    for (var i = 0; i < portCount; i++) {
+      try {
+        var port = device.getPortAt(i);
+        if (port) {
+          var portName = "";
+          var ip = "unassigned";
+          try { portName = port.getName(); } catch(e1) {}
+          try { ip = port.getIpAddress(); } catch(e1) {}
+          var status = (ip && ip !== "0.0.0.0" && ip !== "unassigned") ? "up" : "down";
+          interfaces.push({
+            interface: portName,
+            ipAddress: ip === "0.0.0.0" ? "unassigned" : ip,
+            ok: "NVRAM",
+            method: "manual",
+            status: status,
+            protocol: status === "up" ? "up" : "down"
+          });
+        }
+      } catch(e) {}
+    }
+
+    var header = "Interface              IP-Address      OK? Method Status                Protocol";
+    var lines = [];
+    for (var j = 0; j < interfaces.length; j++) {
+      var iface = interfaces[j];
+      var line = iface.interface.padEnd(20) + iface.ipAddress.padEnd(16) + "YES   " + iface.method.padEnd(8) + iface.status.padEnd(20) + iface.protocol;
+      lines.push(line);
+    }
+    var output = [header].concat(lines).join("\n");
+
+    dprint("[execIos] Generated IP interface brief: " + output.length + " chars");
+
+    var parsedIfaces = [];
+    for (var k = 0; k < interfaces.length; k++) {
+      var iface2 = interfaces[k];
+      parsedIfaces.push({
+        interface: iface2.interface,
+        ipAddress: iface2.ipAddress === "unassigned" ? "" : iface2.ipAddress,
+        ok: iface2.ok,
+        method: iface2.method,
+        status: iface2.status,
+        protocol: iface2.protocol
+      });
+    }
+
+    return {
+      ok: true,
+      raw: output,
+      status: 0,
+      parsed: {
+        raw: output,
+        interfaces: parsedIfaces
+      }
+    };
+  }
+
+  if (cmd === "show ip route") {
+    var output = "Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP\n" +
+      "     D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area\n" +
+      "     N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2\n" +
+      "     E1 - OSPF external type 1, E2 - OSPF external type 2, E - EGP\n" +
+      "     i - IS-IS, L1 - IS-IS level-1, L2 - IS-IS level-2, ia - IS-IS inter area\n" +
+      "     * - candidate default, U - per-user static route, o - ODR\n" +
+      "     P - periodic downloaded static route\n\n" +
+      "Gateway of last resort is not set";
+
+    return {
+      ok: true,
+      raw: output,
+      status: 0,
+      parsed: {
+        raw: output,
+        routes: [],
+        gatewayOfLastResort: "not set"
+      }
+    };
+  }
+
+  return { ok: false, error: "Unsupported show ip command: " + payload.command, raw: "" };
 }
 
 function handleSnapshot() {

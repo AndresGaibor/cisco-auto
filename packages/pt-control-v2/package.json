@@ -65,6 +65,15 @@
       },
       "record": {
         "description": "Recording commands"
+      },
+      "trunk": {
+        "description": "Trunk port configuration commands"
+      },
+      "vlan": {
+        "description": "VLAN configuration commands"
+      },
+      "ssh": {
+        "description": "SSH configuration commands"
       }
     }
   },

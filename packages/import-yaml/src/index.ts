@@ -1,4 +1,8 @@
 /**
+ * @deprecated Este paquete (import-yaml) está DEPRECADÍSIMO y solo se mantiene por compatibilidad interna.
+ * 
+ * ⚠️ NO INICIES NUEVOS FLUJOS USANDO YAML. El flujo recomendado y soportado es pt-control-v2 (control en tiempo real).
+ *
  * Parser YAML para archivos de definición de laboratorios
  * Usa js-yaml v4 API con Zod para validación
  */
@@ -19,11 +23,16 @@ export interface ParseError {
   errors?: string[];
 }
 
+/**
+ * @deprecated Esta clase está DEPRECADÍSIMA. Solo para compatibilidad interna.
+ * Usa pt-control-v2 para nuevos desarrollos.
+ */
 export class YAMLParser {
   /**
    * Carga y parsea un archivo YAML de laboratorio
    * @param filepath Ruta al archivo YAML
    * @returns ParsedLab con el lab validado
+   * @deprecated No recomendado para nuevos flujos. Usa pt-control-v2.
    */
   public static loadFile(filepath: string): ParsedLab {
     try {
@@ -42,12 +51,13 @@ export class YAMLParser {
    * @param content Contenido YAML
    * @param filepath Ruta del archivo (para metadata)
    * @returns ParsedLab con el lab validado
+   * @deprecated No recomendado para nuevos flujos. Usa pt-control-v2.
    */
   public static parse(content: string, filepath: string = 'inline'): ParsedLab {
     try {
       // Parsear YAML usando js-yaml v4 API (load en lugar de safeLoad)
       const data = yaml.load(content) as Record<string, unknown>;
-      
+
       if (!data || typeof data !== 'object') {
         throw new Error('El archivo YAML no contiene un objeto válido');
       }
@@ -73,14 +83,15 @@ export class YAMLParser {
    * @param content Contenido YAML
    * @param filepath Ruta del archivo
    * @returns Resultado de la operación
+   * @deprecated No recomendado para nuevos flujos. Usa pt-control-v2.
    */
-  public static parseSafe(content: string, filepath: string = 'inline'): 
+  public static parseSafe(content: string, filepath: string = 'inline'):
     | { success: true; lab: ParsedLab }
     | { success: false; error: ParseError } {
-    
+
     try {
       const data = yaml.load(content) as Record<string, unknown>;
-      
+
       if (!data || typeof data !== 'object') {
         return {
           success: false,
@@ -92,7 +103,7 @@ export class YAMLParser {
       }
 
       const validation = validateLabSafe(data);
-      
+
       if (validation.success && validation.data) {
         return {
           success: true,
@@ -134,7 +145,7 @@ export class YAMLParser {
   } {
     const devices = parsedLab.lab.topology.devices;
     const connections = parsedLab.lab.topology.connections || [];
-    
+
     const deviceTypes = devices.reduce((acc, device) => {
       acc[device.type] = (acc[device.type] || 0) + 1;
       return acc;
@@ -179,10 +190,16 @@ export class YAMLParser {
 }
 
 // Exportar función de conveniencia
+/**
+ * @deprecated No recomendado para nuevos flujos. Usa pt-control-v2.
+ */
 export function loadLab(filepath: string): ParsedLab {
   return YAMLParser.loadFile(filepath);
 }
 
+/**
+ * @deprecated No recomendado para nuevos flujos. Usa pt-control-v2.
+ */
 export function parseLab(content: string, filepath?: string): ParsedLab {
   return YAMLParser.parse(content, filepath);
 }

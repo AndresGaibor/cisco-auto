@@ -45,3 +45,10 @@ export type { RuntimeGeneratorConfig } from "./runtime-generator/index.js";
 // Logging - NDJSON logging with session tracking
 export { LogManager, getLogManager, resetLogManager } from "./logging/index.js";
 export type { LogEntry, LogSession, LogConfig, LogQueryOptions, LogStats } from "./logging/index.js";
+
+// IOS Command Utilities
+export {
+  buildVlanCommands,
+  buildTrunkCommands,
+  buildSshCommands,
+} from "./utils/ios-commands.js";

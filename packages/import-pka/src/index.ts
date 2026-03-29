@@ -3,6 +3,8 @@
  * 
  * Usa pka2xml externo para decodificación confiable
  * El parser interno de Twofish queda como fallback/teaching
+ * 
+ * @deprecated Este paquete está deprecado. Usa pt-control-v2 para cualquier flujo nuevo.
  */
 
 import { decodePKAExternal, isPka2XmlAvailable, encodePKAExternal } from './pka-external.ts';
@@ -32,6 +34,7 @@ export interface PKAParseResult {
  * 
  * @param filepath Ruta al archivo .pka
  * @returns Resultado del parseo
+ * @deprecated Usa pt-control-v2 para nuevos flujos de trabajo.
  */
 export async function parsePKA(filepath: string): Promise<PKAParseResult> {
   const startTime = Date.now();
@@ -87,6 +90,7 @@ export async function parsePKA(filepath: string): Promise<PKAParseResult> {
  * Requiere que pka2xml esté disponible
  * 
  * @throws Error si pka2xml no está disponible
+ * @deprecated Usa pt-control-v2 para nuevos flujos de trabajo.
  */
 export function parsePKASync(filepath: string): Promise<PKAParseResult> {
   if (!isPka2XmlAvailable()) {
