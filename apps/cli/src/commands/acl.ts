@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { SecurityGenerator } from '@cisco-auto/core';
-import { pushCommands } from '@cisco-auto/bridge';
+import { pushCommands } from '@cisco-auto/pt-control-v2';
 
 /**
  * Comandos CLI para gestionar ACLs: create, add-rule, apply

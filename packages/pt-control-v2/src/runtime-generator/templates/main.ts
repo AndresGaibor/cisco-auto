@@ -33,9 +33,6 @@ var LOGS_DIR = DEV_DIR + "/logs";
 var EVENTS_FILE = LOGS_DIR + "/events.current.ndjson";
 var STATE_FILE = DEV_DIR + "/state.json";
 
-// Legacy paths (for compatibility during transition)
-var COMMAND_FILE = DEV_DIR + "/command.json";
-
 // State
 var fm = null;
 var fw = null;
@@ -50,9 +47,8 @@ var snapshotInterval = null;
 
 function appendEvent(evt) {
   try {
-    var prev = fm.fileExists(EVENTS_FILE) ? fm.getFileContents(EVENTS_FILE) : "";
     var line = JSON.stringify(evt) + "\\n";
-    fm.writePlainTextToFile(EVENTS_FILE, prev + line);
+    fm.appendToFile(EVENTS_FILE, line);
   } catch (e) {
     dprint("[ERROR] Failed to append event: " + String(e));
   }
@@ -139,14 +135,72 @@ function loadRuntime() {
     }
 
     var code = fm.getFileContents(RUNTIME_FILE);
-    runtimeFn = new Function("payload", "ipc", "dprint", code);
-    
-    appendEvent({ type: "runtime-loaded", ts: Date.now(), version: "2.0" });
-    dprint("[OK] Runtime loaded successfully");
+    if (!code || code.length < 100) {
+      appendEvent({ type: "error", ts: Date.now(), message: "Runtime file is suspiciously small or empty" });
+      dprint("[ERROR] Runtime file is suspiciously small or empty");
+      return;
+    }
+
+    // Parse to validate syntax
+    var candidate;
+    try {
+      candidate = new Function("payload", "ipc", "dprint", code);
+    } catch (syntaxErr) {
+      appendEvent({
+        type: "error",
+        ts: Date.now(),
+        message: "Runtime syntax error: " + String(syntaxErr),
+        stack: String(syntaxErr.stack || "")
+      });
+      dprint("[ERROR] Runtime syntax error: " + String(syntaxErr));
+      return;
+    }
+
+    // Smoke test: execute with a healthcheck payload
+    var smokeTestPassed = false;
+    var smokeTestError = null;
+    try {
+      var smokeResult = candidate(
+        { type: "__healthcheck__" },
+        ipc,
+        function() {} // dprint stub
+      );
+
+      // Smoke test passes if it returns an "unknown command" error (not a crash)
+      if (smokeResult && smokeResult.error && smokeResult.error.indexOf("Unknown command") !== -1) {
+        smokeTestPassed = true;
+      } else if (smokeResult && smokeResult.ok === false && smokeResult.error) {
+        // Runtime executed but returned our healthcheck as unknown - that's fine
+        smokeTestPassed = true;
+      } else if (!smokeResult) {
+        // Null/undefined result might be OK if runtime is still initializing
+        smokeTestPassed = true;
+      }
+    } catch (execErr) {
+      smokeTestError = execErr;
+      smokeTestPassed = false;
+    }
+
+    if (!smokeTestPassed) {
+      appendEvent({
+        type: "error",
+        ts: Date.now(),
+        message: "Runtime smoke test failed" + (smokeTestError ? ": " + String(smokeTestError) : ""),
+        stack: smokeTestError ? String(smokeTestError.stack || "") : ""
+      });
+      dprint("[ERROR] Runtime smoke test failed: " + (smokeTestError ? String(smokeTestError) : "unknown error"));
+      return;
+    }
+
+    // All checks passed - replace the runtime function
+    runtimeFn = candidate;
+
+    appendEvent({ type: "runtime-loaded", ts: Date.now(), version: "2.1", smokeTest: true });
+    dprint("[OK] Runtime loaded and smoke-tested successfully");
   } catch (e) {
-    appendEvent({ 
-      type: "error", 
-      ts: Date.now(), 
+    appendEvent({
+      type: "error",
+      ts: Date.now(),
       message: "Failed to load runtime: " + String(e),
       stack: String(e.stack || "")
     });
@@ -213,18 +267,7 @@ function runCommand() {
     var cmd = pickNextCommand();
     
     if (!cmd) {
-      // Fallback to legacy command.json for backwards compatibility
-      if (!fm.fileExists(COMMAND_FILE)) {
-        return;
-      }
-      
-      try {
-        var cmdContent = fm.getFileContents(COMMAND_FILE);
-        cmd = JSON.parse(cmdContent);
-      } catch (e) {
-        dprint("[WARN] Failed to read legacy command file: " + String(e));
-        return;
-      }
+      return;
     }
     
     if (!cmd || !cmd.payload) {
@@ -463,14 +506,6 @@ function onFileChanged(src, args) {
       runCommand();
     }, 50);
   }
-  
-  // Legacy: Still watch command.json for backwards compatibility
-  if (path === COMMAND_FILE) {
-    if (commandTimer) clearTimeout(commandTimer);
-    commandTimer = setTimeout(function() {
-      runCommand();
-    }, 50);
-  }
 }
 
 // ============================================================================
@@ -495,19 +530,13 @@ function main() {
     ensureDirectory(RESULTS_DIR);
     ensureDirectory(LOGS_DIR);
 
-    // Clear events file on startup
-    if (fm.fileExists(EVENTS_FILE)) {
-      fm.writePlainTextToFile(EVENTS_FILE, "");
-    }
-
     // Setup file watcher
     fw.addPath(RUNTIME_FILE);
     fw.addPath(COMMANDS_DIR);  // V2: Watch the commands directory
-    fw.addPath(COMMAND_FILE);  // Legacy: Still watch for backwards compatibility
     fw.registerEvent("fileChanged", null, onFileChanged);
 
     // Init event
-    appendEvent({ type: "init", ts: Date.now(), version: "2.0" });
+    appendEvent({ type: "init", ts: Date.now(), version: "2.1" });
     
     // Setup PT event listeners
     setupEventListeners();

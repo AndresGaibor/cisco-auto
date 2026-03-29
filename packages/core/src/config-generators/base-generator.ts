@@ -18,7 +18,8 @@ export class BaseGenerator {
 
     // SSH configuration moved to services.ssh in canonical model
     if (device.services?.ssh?.enabled) {
-      commands.push('ip domain-name espoch.local');
+      const domain = device.domain || 'local.domain'; // Configurable domain
+      commands.push(`ip domain-name ${domain}`);
       const version = device.services.ssh.version ?? 2;
       commands.push(`crypto key generate rsa modulus ${version === 2 ? 2048 : 1024}`);
       commands.push(`ip ssh version ${version}`);

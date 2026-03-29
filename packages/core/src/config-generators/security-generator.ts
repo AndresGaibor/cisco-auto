@@ -3,37 +3,90 @@ import type { ACLSpec, NATSpec, SecuritySpec } from '../canonical/device.spec.ts
 export class SecurityGenerator {
   /**
    * Generate ACL commands from canonical ACLSpec
+   * Supports both numbered and named ACLs with correct Cisco syntax
    */
   public static generateACLs(acls: ACLSpec[]): string[] {
     const commands: string[] = [];
 
     for (const acl of acls) {
       commands.push(`! ACL: ${acl.name}`);
-      for (const rule of acl.rules) {
-        let cmd = `access-list ${acl.name} ${rule.action}`;
-        if (acl.type === 'extended' && rule.protocol) {
-          cmd += ` ${rule.protocol}`;
+
+      if (acl.type === 'named') {
+        // Named ACL requires ip access-list {standard|extended} <name>
+        const aclType = this.inferACLType(acl.rules);
+        commands.push(`ip access-list ${aclType} ${acl.name}`);
+
+        for (const rule of acl.rules) {
+          const ruleCmd = this.buildACLRule(rule, aclType);
+          commands.push(` ${ruleCmd}`); // Indented under ip access-list
         }
-        cmd += ` ${rule.source}`;
-        if (rule.sourceWildcard) {
-          cmd += ` ${rule.sourceWildcard}`;
+        commands.push(' exit');
+      } else {
+        // Numbered ACL (standard or extended)
+        for (const rule of acl.rules) {
+          const ruleCmd = this.buildACLRule(rule, acl.type);
+          commands.push(`access-list ${acl.name} ${ruleCmd}`);
         }
-        if (rule.destination) {
-          cmd += ` ${rule.destination}`;
-          if (rule.destinationWildcard) {
-            cmd += ` ${rule.destinationWildcard}`;
-          }
-        }
-        if (rule.sourcePort) {
-          cmd += ` eq ${rule.sourcePort}`;
-        }
-        if (rule.log) {
-          cmd += ' log';
-        }
-        commands.push(cmd);
       }
     }
     return commands;
+  }
+
+  /**
+   * Infer ACL type from rules - extended if has protocol or ports
+   */
+  private static inferACLType(rules: ACLSpec['rules']): 'standard' | 'extended' {
+    const hasProtocol = rules.some(r => r.protocol && r.protocol !== 'ip');
+    const hasPort = rules.some(r => r.sourcePort || r.destinationPort);
+    return (hasProtocol || hasPort) ? 'extended' : 'standard';
+  }
+
+  /**
+   * Build a single ACL rule command
+   */
+  private static buildACLRule(rule: ACLSpec['rules'][number], aclType: string): string {
+    let cmd = rule.action; // permit | deny
+
+    // Protocol (extended only - standard ACLs don't support protocol filtering)
+    if (aclType === 'extended' && rule.protocol) {
+      cmd += ` ${rule.protocol}`;
+    }
+    // Note: Standard ACLs never include protocol - they only filter by source address
+
+    // Source
+    cmd += ` ${rule.source}`;
+    if (rule.sourceWildcard && rule.source !== 'any' && !rule.source.startsWith('host ')) {
+      cmd += ` ${rule.sourceWildcard}`;
+    }
+
+    // Source port (extended only)
+    if (aclType === 'extended' && rule.sourcePort) {
+      cmd += ` eq ${rule.sourcePort}`;
+    }
+
+    // Destination (extended only)
+    if (aclType === 'extended') {
+      if (rule.destination) {
+        cmd += ` ${rule.destination}`;
+        if (rule.destinationWildcard && rule.destination !== 'any' && !rule.destination.startsWith('host ')) {
+          cmd += ` ${rule.destinationWildcard}`;
+        }
+      } else {
+        cmd += ' any';
+      }
+
+      // Destination port (extended only)
+      if (rule.destinationPort) {
+        cmd += ` eq ${rule.destinationPort}`;
+      }
+    }
+
+    // Log
+    if (rule.log) {
+      cmd += ' log';
+    }
+
+    return cmd;
   }
 
   /**

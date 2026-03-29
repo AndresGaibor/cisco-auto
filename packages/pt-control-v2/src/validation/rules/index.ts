@@ -12,6 +12,7 @@ import { vlanExistsRule } from "./vlan-exists.rule";
 import { aclMatchOrderRule } from "./acl-match-order.rule";
 import { natOverlapRule } from "./nat-overlap.rule";
 import { gatewayReachabilityRule } from "./gateway-reachability.rule";
+import { loopDetectionRule } from "./loop-detection.rule";
 
 export const defaultRules = [
   duplicateIpRule,
@@ -24,6 +25,7 @@ export const defaultRules = [
   aclMatchOrderRule,
   natOverlapRule,
   gatewayReachabilityRule,
+  loopDetectionRule,
 ];
 
 export {
@@ -37,4 +39,5 @@ export {
   aclMatchOrderRule,
   natOverlapRule,
   gatewayReachabilityRule,
+  loopDetectionRule,
 };

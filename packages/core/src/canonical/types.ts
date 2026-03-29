@@ -392,19 +392,21 @@ export function isValidMAC(mac: string): boolean {
 
 /**
  * Convierte CIDR a máscara de subred
+ * Usa método aritmético para evitar bugs con signed 32-bit bitwise operations
  */
 export function cidrToMask(cidr: number): string {
   if (cidr < 0 || cidr > 32) {
     throw new Error('CIDR must be between 0 and 32');
   }
-  
-  const mask = [];
+
+  // Método aritmético seguro - evita problemas con signed/unsigned bitwise
+  const octets: number[] = [];
   for (let i = 0; i < 4; i++) {
-    const bits = Math.min(8, Math.max(0, cidr - i * 8));
-    mask.push(256 - Math.pow(2, 8 - bits));
+    const bits = Math.max(0, Math.min(8, cidr - i * 8));
+    octets.push(256 - Math.pow(2, 8 - bits));
   }
-  
-  return mask.join('.');
+
+  return octets.join('.');
 }
 
 /**

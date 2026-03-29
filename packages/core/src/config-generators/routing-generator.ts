@@ -10,6 +10,50 @@ import type {
 import { NetworkUtils } from './utils.ts';
 
 export class RoutingGenerator {
+  /**
+   * Valida formato de router ID (debe ser IP válida)
+   */
+  private static isValidRouterId(routerId: string): boolean {
+    const ipv4Pattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (!ipv4Pattern.test(routerId)) return false;
+    const octets = routerId.split('.').map(Number);
+    return octets.every(octet => octet >= 0 && octet <= 255);
+  }
+
+  /**
+   * Valida configuración de routing
+   */
+  static validate(routing: RoutingSpec): { valid: boolean; errors: string[]; warnings: string[] } {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    // Validar router ID de OSPF
+    if (routing.ospf?.routerId && !this.isValidRouterId(routing.ospf.routerId)) {
+      errors.push(`Invalid OSPF router-id: ${routing.ospf.routerId}. Must be a valid IPv4 address`);
+    }
+
+    // Validar router ID de EIGRP
+    if (routing.eigrp?.routerId && !this.isValidRouterId(routing.eigrp.routerId)) {
+      errors.push(`Invalid EIGRP router-id: ${routing.eigrp.routerId}. Must be a valid IPv4 address`);
+    }
+
+    // Validar router ID de BGP
+    if (routing.bgp?.routerId && !this.isValidRouterId(routing.bgp.routerId)) {
+      errors.push(`Invalid BGP router-id: ${routing.bgp.routerId}. Must be a valid IPv4 address`);
+    }
+
+    // Warning: OSPF sin router-id explícito (usa IP más alta)
+    if (routing.ospf && !routing.ospf.routerId) {
+      warnings.push('OSPF without explicit router-id. Will use highest IP address');
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings
+    };
+  }
+
   public static generateRouting(routing: RoutingSpec): string[] {
     const commands: string[] = [];
     if (!routing) return commands;

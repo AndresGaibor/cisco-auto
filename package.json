@@ -27,7 +27,6 @@
   "dependencies": {
     "@cisco-auto/core": "workspace:*",
     "@cisco-auto/api": "workspace:*",
-    "@cisco-auto/bridge": "workspace:*",
     "@cisco-auto/lab-model": "workspace:*",
     "@cisco-auto/tools": "workspace:*",
     "fast-xml-parser": "^5.5.6",

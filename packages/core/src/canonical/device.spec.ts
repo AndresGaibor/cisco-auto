@@ -482,6 +482,9 @@ export interface DeviceSpec {
   
   /** Hostname (nombre en IOS) */
   hostname?: string;
+
+  /** Dominio DNS para SSH (usado en 'ip domain-name') */
+  domain?: string;
   
   // === Modelo ===
   /** Información del modelo */

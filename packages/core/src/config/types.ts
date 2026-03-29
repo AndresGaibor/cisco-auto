@@ -11,7 +11,6 @@ export interface CiscoAutoConfig {
   defaultVlan?: number;
   defaultSubnet?: string;
   outputDir?: string;
-  bridgePort?: number;
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
   format?: 'json' | 'yaml' | 'table';
 }
@@ -24,7 +23,6 @@ export const DEFAULT_CONFIG: Required<CiscoAutoConfig> = {
   defaultVlan: 10,
   defaultSubnet: '255.255.255.0',
   outputDir: './output',
-  bridgePort: 54321,
   logLevel: 'info',
   format: 'table'
 };

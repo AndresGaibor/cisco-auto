@@ -27,12 +27,6 @@ describe('ExecutionContext', () => {
     expect(config.defaultRouter).toBeDefined();
   });
 
-  test('getBridgeClient retorna cliente del bridge', () => {
-    const client = ctx.getBridgeClient();
-    expect(client).toBeDefined();
-    expect(typeof client.isConnected).toBe('function');
-  });
-
   test('elapsedMs retorna tiempo transcurrido', () => {
     const elapsed = ctx.elapsedMs();
     expect(typeof elapsed).toBe('number');
@@ -67,12 +61,6 @@ describe('createStubContext', () => {
   test('contexto stub tiene logger no-op', () => {
     const stub = createStubContext();
     expect(stub.logger.isDebug()).toBe(false);
-  });
-
-  test('contexto stub tiene bridge client offline', async () => {
-    const stub = createStubContext();
-    const connected = await stub.isBridgeConnected();
-    expect(connected).toBe(false);
   });
 });
 

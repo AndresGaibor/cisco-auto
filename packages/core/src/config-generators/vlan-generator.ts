@@ -115,10 +115,22 @@ export class VlanGenerator {
         }
         if (iface.switchportMode === 'trunk') {
           if (iface.nativeVlan) {
+            if (iface.nativeVlan < 1 || iface.nativeVlan > 4094) {
+              throw new Error(`Native VLAN ${iface.nativeVlan} out of range (1-4094) on interface ${iface.name}`);
+            }
             commands.push(` switchport trunk native vlan ${iface.nativeVlan}`);
           }
           if (iface.allowedVlans) {
-            commands.push(` switchport trunk allowed vlan ${iface.allowedVlans.join(',')}`);
+            // Validate all VLANs are in valid range
+            const invalidVlans = iface.allowedVlans.filter(v => v < 1 || v > 4094);
+            if (invalidVlans.length > 0) {
+              throw new Error(
+                `Invalid VLANs in allowedVlans on interface ${iface.name}: ${invalidVlans.join(', ')}. Must be 1-4094`
+              );
+            }
+            // Sort and deduplicate for cleaner output
+            const uniqueVlans = Array.from(new Set(iface.allowedVlans)).sort((a, b) => a - b);
+            commands.push(` switchport trunk allowed vlan ${uniqueVlans.join(',')}`);
           }
         }
       }

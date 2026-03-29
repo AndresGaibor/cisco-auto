@@ -4,7 +4,12 @@
 // actual consultada al bridge de Packet Tracer.
 
 import type { TopologyPlan, DevicePlan, LinkPlan } from '@cisco-auto/core';
-import type { QueriedDevice } from '../deploy/query-topology';
+
+/** Dispositivo consultado desde Packet Tracer */
+export interface QueriedDevice {
+  name: string;
+  type: string;
+}
 
 /** Lista de dispositivos consultados desde Packet Tracer */
 export type DeviceList = QueriedDevice[];

@@ -138,7 +138,7 @@ export class FileBridgeV2 extends EventEmitter {
   }
 
   /** Stop the bridge gracefully */
-  async stop(): void {
+  async stop(): Promise<void> {
     if (!this.running) return;
     this.running = false;
 
@@ -337,6 +337,7 @@ export class FileBridgeV2 extends EventEmitter {
         // Check expiration
         if (envelope.expiresAt && Date.now() > envelope.expiresAt) {
           this.publishResult(envelope, {
+            startedAt: Date.now(),
             status: "timeout",
             ok: false,
             error: {
@@ -353,6 +354,7 @@ export class FileBridgeV2 extends EventEmitter {
           const computed = checksumOf({ type: envelope.type, payload: envelope.payload });
           if (computed !== envelope.checksum) {
             this.publishResult(envelope, {
+              startedAt: Date.now(),
               status: "failed",
               ok: false,
               error: {
@@ -446,6 +448,19 @@ export class FileBridgeV2 extends EventEmitter {
       ts: event.ts ?? Date.now(),
       ...event,
     } as BridgeEvent);
+  }
+
+  // ============================================================================
+  // FileBridgePort implementation
+  // ============================================================================
+
+  readState<T = unknown>(): T | null {
+    return null; // V2 derives topology from events, not a single state file
+  }
+
+  onAll(handler: (event: unknown) => void): () => void {
+    this.on("*", handler);
+    return () => this.off("*", handler);
   }
 
   // ============================================================================

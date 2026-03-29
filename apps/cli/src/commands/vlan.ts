@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { pushCommands } from '@cisco-auto/bridge';
+import { pushCommands } from '@cisco-auto/pt-control-v2';
 import { VlanGenerator } from '@cisco-auto/core';
 
 const VLAN_LIST_SEPARATOR = ',';

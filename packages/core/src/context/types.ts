@@ -1,11 +1,10 @@
 /**
  * Tipos para el contexto de ejecución de tools
- * Proporciona dependencias injectadas: logger, config, bridge client
+ * Proporciona dependencias injectadas: logger, config
  */
 
 import type { CiscoAutoConfig } from '../config/types.ts';
 import type { ContextLogger } from './logger.ts';
-import type { BridgeClient } from './bridge-client.ts';
 
 // ============================================================================
 // Configuración del contexto
@@ -41,11 +40,6 @@ export interface ExecutionContextOptions {
    * Logger personalizado (opcional)
    */
   logger?: ContextLogger;
-
-  /**
-   * Bridge client override (opcional)
-   */
-  bridgeClient?: BridgeClient;
 
   /**
    * Indica si el contexto es para modo verbose
@@ -111,45 +105,6 @@ export interface ContextError {
    * Duración hasta el error
    */
   durationMs: number;
-}
-
-// ============================================================================
-// Bridge Client Types
-// ============================================================================
-
-/**
- * Comando para enviar a Packet Tracer via bridge
- */
-export interface BridgeCommand {
-  tipo: 'agregarDispositivo' | 'conectar' | 'configurar' | 'eliminarDispositivo';
-  args: unknown[];
-}
-
-/**
- * Respuesta del bridge al enviar un comando
- */
-export interface BridgeExecuteResponse {
-  success: boolean;
-  commandId: string;
-  message: string;
-}
-
-/**
- * Comando pendiente obtenido del bridge
- */
-export interface BridgePendingCommand {
-  id: string;
-  tipo: string;
-  args: unknown[];
-  timestamp: number;
-}
-
-/**
- * Respuesta del polling /next
- */
-export interface BridgeNextResponse {
-  hasCommand: boolean;
-  command: BridgePendingCommand | null;
 }
 
 // ============================================================================

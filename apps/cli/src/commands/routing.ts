@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { pushCommands } from '@cisco-auto/bridge';
+import { pushCommands } from '@cisco-auto/pt-control-v2';
 import { RoutingGenerator } from '@cisco-auto/core';
 import { AdvancedRoutingGenerator } from '@cisco-auto/core';
 import type { OSPFSpec, EIGRPSpec } from '@cisco-auto/core';

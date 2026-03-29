@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { STPGenerator } from '@cisco-auto/core';
-import { pushCommands } from '@cisco-auto/bridge';
+import { pushCommands } from '@cisco-auto/pt-control-v2';
 
 function generateConfigureCommands(mode: 'pvst' | 'rapid-pvst' | 'mst') {
   const spec = { mode } as any;

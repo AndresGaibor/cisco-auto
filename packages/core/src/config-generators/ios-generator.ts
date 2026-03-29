@@ -10,8 +10,33 @@ export interface GeneratedConfig {
   sections: Record<string, string[]>;
 }
 
-export class IOSGenerator {
-  public static generate(device: DeviceSpec): GeneratedConfig {
+/**
+ * Orden predeterminado de secciones IOS (best practice Cisco)
+ */
+export const DEFAULT_SECTION_ORDER: string[] = [
+  'basic',        // hostname, banner, service password-encryption
+  'vlans',        // VLAN database
+  'vtp',          // VTP configuration
+  'interfaces',   // Physical and logical interfaces
+  'routing',      // Routing protocols (OSPF, EIGRP, BGP)
+  'security',     // ACLs, NAT
+  'lines'         // Console, VTY lines
+];
+
+/**
+ * Orden personalizado de secciones IOS
+ * Permite reordenar las secciones según preferencias del usuario
+ */
+export class SectionOrderConfig {
+  /**
+   * Genera configuración IOS con orden personalizado de secciones
+   * @param device - Especificación del dispositivo
+   * @param sectionOrder - Orden de secciones (default: DEFAULT_SECTION_ORDER)
+   */
+  public static generate(
+    device: DeviceSpec,
+    sectionOrder: string[] = DEFAULT_SECTION_ORDER
+  ): GeneratedConfig {
     const sections: Record<string, string[]> = {
       'basic': BaseGenerator.generateBasic(device),
       'interfaces': VlanGenerator.generateInterfaces(device),
@@ -31,13 +56,27 @@ export class IOSGenerator {
     commands.push('!');
     commands.push('');
 
-    Object.entries(sections).forEach(([name, sectionCommands]) => {
-      if (sectionCommands.length > 0) {
-        commands.push(`! --- ${name.toUpperCase()} ---`);
+    // Usar orden personalizado o el default
+    const order = sectionOrder.length > 0 ? sectionOrder : DEFAULT_SECTION_ORDER;
+
+    for (const sectionName of order) {
+      const sectionCommands = sections[sectionName];
+      if (sectionCommands && sectionCommands.length > 0) {
+        commands.push(`! --- ${sectionName.toUpperCase()} ---`);
         commands.push(...sectionCommands);
         commands.push('');
       }
-    });
+    }
+
+    // Agregar secciones no listadas en el orden (por seguridad)
+    const listedSections = new Set(order);
+    for (const [name, sectionCommands] of Object.entries(sections)) {
+      if (!listedSections.has(name) && sectionCommands.length > 0) {
+        commands.push(`! --- ${name.toUpperCase()} (unlisted) ---`);
+        commands.push(...sectionCommands);
+        commands.push('');
+      }
+    }
 
     commands.push('! Guardar configuración');
     commands.push('end');
@@ -48,6 +87,69 @@ export class IOSGenerator {
       commands,
       sections
     };
+  }
+
+  /**
+   * Valida que un orden de secciones sea válido
+   */
+  public static validateOrder(sectionOrder: string[]): { valid: boolean; errors: string[]; warnings: string[] } {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const validSections = new Set(DEFAULT_SECTION_ORDER);
+
+    for (const section of sectionOrder) {
+      if (!validSections.has(section)) {
+        warnings.push(`Unknown section: '${section}'. Will be ignored if not generated`);
+      }
+    }
+
+    // Verificar secciones duplicadas
+    const seen = new Set<string>();
+    for (const section of sectionOrder) {
+      if (seen.has(section)) {
+        errors.push(`Duplicate section: '${section}'`);
+      }
+      seen.add(section);
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings
+    };
+  }
+
+  /**
+   * Obtiene el orden predeterminado
+   */
+  public static getDefaultOrder(): string[] {
+    return [...DEFAULT_SECTION_ORDER];
+  }
+
+  /**
+   * Crea un orden personalizado moviendo secciones específicas
+   * @param moves - Objeto con secciones a mover { sectionName: newIndex }
+   */
+  public static customizeOrder(moves: Record<string, number>): string[] {
+    const customOrder = [...DEFAULT_SECTION_ORDER];
+
+    for (const [section, newIndex] of Object.entries(moves)) {
+      const currentIndex = customOrder.indexOf(section);
+      if (currentIndex !== -1) {
+        // Remover y colocar en nueva posición
+        customOrder.splice(currentIndex, 1);
+        const clampedIndex = Math.min(Math.max(0, newIndex), customOrder.length);
+        customOrder.splice(clampedIndex, 0, section);
+      }
+    }
+
+    return customOrder;
+  }
+}
+
+export class IOSGenerator {
+  public static generate(device: DeviceSpec): GeneratedConfig {
+    return SectionOrderConfig.generate(device, DEFAULT_SECTION_ORDER);
   }
 
   public static formatCommands(commands: string[]): string {

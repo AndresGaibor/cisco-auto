@@ -5,14 +5,13 @@
 // Controller - High-level API for controlling Packet Tracer
 export {
   PTController,
-  FileBridge,
   createPTController,
   createDefaultPTController,
-  FileBridgeV2Adapter,
-  createFileBridgeV2Adapter,
+  type PTControllerConfig,
 } from "./controller/index.js";
-export type { FileBridgeConfig } from "./infrastructure/pt/file-bridge.js";
+export { FileBridgeV2 } from "./infrastructure/pt/file-bridge-v2.js";
 export type { FileBridgePort } from "./application/ports/file-bridge.port.js";
+export { pushCommands, pushCode, type PushResult } from "./infrastructure/pt/file-bridge-v2-commands.js";
 
 // Types - All type definitions
 export * from "./types/index.js";

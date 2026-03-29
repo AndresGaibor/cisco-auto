@@ -19,6 +19,7 @@
     "@cisco-auto/core": "workspace:*",
     "@cisco-auto/api": "workspace:*",
     "@cisco-auto/bridge": "workspace:*",
+    "@cisco-auto/pt-control-v2": "workspace:*",
     "@cisco-auto/templates": "workspace:*",
     "@cisco-auto/tools": "workspace:*",
     "chalk": "^5.6.2",

@@ -130,9 +130,6 @@ export interface ToolExecutionContext {
   /** Configuración global */
   config: ToolConfig;
   
-  /** Cliente del bridge HTTP */
-  bridgeClient?: BridgeClient;
-  
   /** Token de cancelación */
   signal?: AbortSignal;
   
@@ -168,33 +165,6 @@ export interface ToolConfig {
   
   /** Configuración adicional */
   [key: string]: unknown;
-}
-
-/**
- * Cliente para el bridge HTTP de Packet Tracer
- */
-export interface BridgeClient {
-  /** Verifica si el bridge está disponible */
-  isAvailable(): Promise<boolean>;
-  
-  /** Envía un comando a Packet Tracer */
-  execute(command: string, args?: unknown[]): Promise<unknown>;
-  
-  /** Obtiene el estado del bridge */
-  getStatus(): Promise<BridgeStatus>;
-  
-  /** Obtiene la topología actual */
-  getTopology(): Promise<unknown>;
-}
-
-/**
- * Estado del bridge
- */
-export interface BridgeStatus {
-  connected: boolean;
-  version?: string;
-  uptime?: number;
-  ptVersion?: string;
 }
 
 /**

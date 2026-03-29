@@ -14,7 +14,6 @@ import { createTemplateCommand } from './commands/template.ts';
 import { createServeCommand } from './commands/serve.ts';
 import { createCompletionCommand } from './commands/completion.ts';
 import { createTopologyCommand } from './commands/topology/index.ts';
-import { createBridgeCommandGroup } from './commands/bridge/index.ts';
 import { createStpCommand } from './commands/stp.ts';
 import { ExitCodes } from './errors/index.ts';
 
@@ -35,7 +34,6 @@ program.addCommand(createLabCommand());
 program.addCommand(createDeviceCommand());
 program.addCommand(createTopologyCommand());
 program.addCommand(createConfigCommand());
-program.addCommand(createBridgeCommandGroup());
 program.addCommand(createStpCommand());
 
 const legacyCommand = new Command('legacy')

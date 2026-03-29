@@ -1,10 +1,9 @@
 /**
  * Contexto de ejecución para tools
- * Proporciona inyección de dependencias: logger, config, bridge client
+ * Proporciona inyección de dependencias: logger, config
  */
 
 import { createContextLogger, type ContextLogger, createNoOpLogger } from './logger.ts';
-import { createBridgeClient, type BridgeClient, NoOpBridgeClient } from './bridge-client.ts';
 import { resolveConfig } from '../config/resolver.ts';
 import { DEFAULT_CONFIG, type CiscoAutoConfig } from '../config/types.ts';
 import type { ExecutionContextOptions, ContextResult, ContextError } from './types.ts';
@@ -19,7 +18,6 @@ export class ExecutionContext {
   readonly correlationId: string;
   readonly logger: ContextLogger;
   readonly config: Required<CiscoAutoConfig>;
-  readonly bridgeClient: BridgeClient;
   readonly timeout: number;
   readonly abortSignal?: AbortSignal;
   readonly verbose: boolean;
@@ -37,9 +35,6 @@ export class ExecutionContext {
 
     const resolved = resolveConfig();
     this.config = { ...DEFAULT_CONFIG, ...resolved, ...options.config };
-
-    const port = this.config.bridgePort || 54321;
-    this.bridgeClient = options.bridgeClient || createBridgeClient(port, this.timeout);
 
     this.createdAt = new Date();
   }
@@ -62,14 +57,6 @@ export class ExecutionContext {
 
   getConfig(): CiscoAutoConfig {
     return this.config;
-  }
-
-  getBridgeClient(): BridgeClient {
-    return this.bridgeClient;
-  }
-
-  async isBridgeConnected(): Promise<boolean> {
-    return this.bridgeClient.isConnected();
   }
 
   async run<T>(fn: (ctx: ExecutionContext) => Promise<T>): Promise<ContextResult<T>> {
@@ -156,11 +143,9 @@ export function createStubContext(): ExecutionContext {
       defaultVlan: 10,
       defaultSubnet: '255.255.255.0',
       outputDir: './output',
-      bridgePort: 54321,
       logLevel: 'info',
       format: 'table'
     },
-    timeout: 30000,
-    bridgeClient: new NoOpBridgeClient()
+    timeout: 30000
   });
 }

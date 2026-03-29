@@ -9,7 +9,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@cisco-auto/core": "workspace:*"
+    "@cisco-auto/core": "workspace:*",
+    "@cisco-auto/pt-control-v2": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "latest",

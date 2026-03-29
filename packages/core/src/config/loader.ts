@@ -87,9 +87,6 @@ export function loadEnvConfig(): Partial<CiscoAutoConfig> {
         case 'outputdir':
           config.outputDir = value;
           break;
-        case 'bridgeport':
-          config.bridgePort = parseInt(value, 10);
-          break;
         case 'loglevel':
           config.logLevel = value as 'debug' | 'info' | 'warn' | 'error';
           break;

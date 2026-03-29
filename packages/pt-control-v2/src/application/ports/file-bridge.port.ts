@@ -21,6 +21,16 @@ export type EventHandler<E extends PTEventType = PTEventType> = (
  */
 export interface FileBridgePort {
   /**
+   * Start the bridge
+   */
+  start(): void;
+
+  /**
+   * Stop the bridge gracefully
+   */
+  stop(): Promise<void>;
+
+  /**
    * Send a command to PT and wait for its result
    */
   sendCommandAndWait<T = unknown>(

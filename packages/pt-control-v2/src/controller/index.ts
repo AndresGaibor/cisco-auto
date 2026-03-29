@@ -2,9 +2,8 @@
 // PTController - High-level API for controlling Packet Tracer
 // ============================================================================
 
-import { FileBridge, type FileBridgeConfig } from "../infrastructure/pt/file-bridge.js";
+import { FileBridgeV2 } from "../infrastructure/pt/file-bridge-v2.js";
 import { FileBridgeV2Adapter } from "../infrastructure/pt/file-bridge-v2-adapter.js";
-import type { FileBridgeV2Options } from "../infrastructure/pt/file-bridge-v2.js";
 import { TopologyCache } from "../infrastructure/pt/topology-cache.js";
 import type { FileBridgePort } from "../application/ports/file-bridge.port.js";
 import { topologySnapshotToNetworkTwin } from "../vdom/twin-adapter.js";
@@ -34,13 +33,17 @@ import { ValidationEngine } from "../validation/validation-engine.js";
 import { defaultRules } from "../validation/rules/index.js";
 import { normalPolicy } from "../validation/policies.js";
 
-// Re-export FileBridge for external use
-export { FileBridge, type FileBridgeConfig } from "../infrastructure/pt/file-bridge.js";
-export { FileBridgeV2Adapter, createFileBridgeV2Adapter } from "../infrastructure/pt/file-bridge-v2-adapter.js";
+// Re-export FileBridgeV2 for external use
+export { FileBridgeV2 } from "../infrastructure/pt/file-bridge-v2.js";
 
 // ============================================================================
 // PTController - Thin facade delegating to services
 // ============================================================================
+
+export interface PTControllerConfig {
+  /** Root directory for PT communication files */
+  devDir: string;
+}
 
 export class PTController {
   private readonly bridge: FileBridgePort;
@@ -51,28 +54,15 @@ export class PTController {
   private readonly canvasService: CanvasService;
   private _snapshot: TopologySnapshot | null = null;
   private _twin: NetworkTwin | null = null;
-  /** True when using FileBridgeV2 */
-  readonly useV2: boolean;
 
-  constructor(config: FileBridgeConfig & { useV2?: boolean });
+  constructor(config: PTControllerConfig);
   constructor(bridge: FileBridgePort);
-  constructor(configOrBridge: FileBridgeConfig | FileBridgePort, _useV2Flag?: boolean) {
-    // Detect FileBridgePort by checking for devDir (present only on FileBridgeConfig objects)
+  constructor(configOrBridge: PTControllerConfig | FileBridgePort) {
     if ("devDir" in configOrBridge) {
-      const config = configOrBridge as FileBridgeConfig & { useV2?: boolean };
-      this.useV2 = config.useV2 ?? false;
-      if (this.useV2) {
-        const v2Options: FileBridgeV2Options = { root: config.devDir };
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { FileBridgeV2 } = require("../infrastructure/pt/file-bridge-v2.js");
-        this.bridge = new FileBridgeV2Adapter(new FileBridgeV2(v2Options));
-      } else {
-        this.bridge = new FileBridge(config);
-      }
+      const config = configOrBridge as PTControllerConfig;
+      this.bridge = new FileBridgeV2Adapter(new FileBridgeV2({ root: config.devDir }));
     } else {
-      // Pre-constructed bridge (e.g., a mock or custom adapter)
       this.bridge = configOrBridge as FileBridgePort;
-      this.useV2 = false;
     }
 
     this.topologyCache = new TopologyCache(this.bridge);
@@ -101,22 +91,13 @@ export class PTController {
   // ============================================================================
 
   async start(): Promise<void> {
-    // V1.start() is async, V2Adapter.start() is sync
-    if (this.useV2) {
-      (this.bridge as FileBridgeV2Adapter).start();
-    } else {
-      await (this.bridge as FileBridge).start();
-    }
+    this.bridge.start();
     this.topologyCache.start();
   }
 
   async stop(): Promise<void> {
     this.topologyCache.stop();
-    if (this.useV2) {
-      await (this.bridge as FileBridgeV2Adapter).stop();
-    } else {
-      await (this.bridge as FileBridge).stop();
-    }
+    await this.bridge.stop();
   }
 
   getBridge(): FileBridgePort {
@@ -365,11 +346,11 @@ export class PTController {
 // Factory
 // ============================================================================
 
-export function createPTController(config: FileBridgeConfig): PTController {
+export function createPTController(config: PTControllerConfig): PTController {
   return new PTController(config);
 }
 
-const DEFAULT_DEV_DIR = process.env.PT_DEV_DIR || `${process.env.HOME ?? homedir()}/pt-dev`;
+const DEFAULT_DEV_DIR = process.env.PT_DEV_DIR || `${process.env.HOME ?? ""}/pt-dev`;
 
 export function createDefaultPTController(): PTController {
   return new PTController({ devDir: DEFAULT_DEV_DIR });

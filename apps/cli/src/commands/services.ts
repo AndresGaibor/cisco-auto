@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { ServicesGenerator } from '@cisco-auto/core';
-import { pushCommands } from '@cisco-auto/bridge';
+import { pushCommands } from '@cisco-auto/pt-control-v2';
 
 // Convierte un sufijo CIDR (ej: /24) a máscara en formato punteado
 function cidrToMask(cidr: number): string {
