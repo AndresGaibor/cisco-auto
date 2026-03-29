@@ -7,3 +7,4 @@ export * from "./link";
 export * from "./config";
 export * from "./inspect";
 export * from "./module";
+export * from "./canvas";

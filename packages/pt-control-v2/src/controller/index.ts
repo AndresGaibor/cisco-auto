@@ -14,8 +14,11 @@ import type {
   ShowRunningConfig,
   ParsedOutput,
   AddLinkPayload,
+  CanvasRect,
+  DevicesInRectResult,
 } from "../types/index.js";
 import { TopologyCache } from "./topology-cache.js";
+import { resolveCapabilities, type DeviceCapabilities } from "../ios/capabilities/pt-capability-resolver.js";
 
 // Re-export FileBridge for external use
 export { FileBridge, type FileBridgeConfig } from "./file-bridge.js";
@@ -306,6 +309,90 @@ export class PTController {
 
   async showRunningConfig(device: string): Promise<ShowRunningConfig> {
     return this.show(device, "show running-config") as Promise<ShowRunningConfig>;
+  }
+
+  // ============================================================================
+  // Interactive IOS Execution (Session-aware)
+  // ============================================================================
+
+  /**
+   * Execute an IOS command with full session state management
+   * Handles mode transitions, paging, and confirmations automatically
+   */
+  async execInteractive(
+    device: string,
+    command: string,
+    options?: {
+      timeout?: number;
+      parse?: boolean;
+      ensurePrivileged?: boolean;
+    }
+  ): Promise<{ raw: string; parsed?: ParsedOutput; session?: { mode: string } }> {
+    const { value } = await this.bridge.sendCommandAndWait<{
+      raw: string;
+      parsed?: ParsedOutput;
+      session?: { mode: string; paging?: boolean; awaitingConfirm?: boolean };
+    }>({
+      type: "execInteractive",
+      id: this.generateId(),
+      device,
+      command,
+      options: {
+        timeout: options?.timeout ?? 30000,
+        parse: options?.parse ?? true,
+        ensurePrivileged: options?.ensurePrivileged ?? false,
+      },
+    });
+
+    return value ?? { raw: "" };
+  }
+
+  // ============================================================================
+  // Device Capabilities
+  // ============================================================================
+
+  /**
+   * Get IOS device capabilities based on model
+   */
+  async resolveCapabilities(device: string): Promise<DeviceCapabilities> {
+    // First get the device model
+    const deviceState = await this.inspect(device);
+    const model = deviceState.model || "unknown";
+
+    return resolveCapabilities(model);
+  }
+
+  // ============================================================================
+  // Canvas/Rect Operations
+  // ============================================================================
+
+  /**
+   * List all canvas rectangle IDs (colored zones)
+   */
+  async listCanvasRects(): Promise<{ rects: string[]; count: number }> {
+    const { value } = await this.bridge.sendCommandAndWait<{ rects: string[]; count: number }>({
+      type: "listCanvasRects",
+      id: this.generateId(),
+    });
+
+    return value ?? { rects: [], count: 0 };
+  }
+
+  /**
+   * Get devices located within a canvas rectangle zone
+   */
+  async devicesInRect(
+    rectId: string,
+    includeClusters = false
+  ): Promise<DevicesInRectResult> {
+    const { value } = await this.bridge.sendCommandAndWait<DevicesInRectResult>({
+      type: "devicesInRect",
+      id: this.generateId(),
+      rectId,
+      includeClusters,
+    });
+
+    return value ?? { ok: false, rectId, devices: [], count: 0 };
   }
 
   // ============================================================================

@@ -179,6 +179,46 @@ export const InspectPayloadSchema = z.object({
 });
 
 // ============================================================================
+// Canvas/Rect Commands
+// ============================================================================
+
+export const ListCanvasRectsPayloadSchema = z.object({
+  id: z.string(),
+  type: z.literal('listCanvasRects'),
+});
+
+export const GetRectPayloadSchema = z.object({
+  id: z.string(),
+  type: z.literal('getRect'),
+  rectId: z.string(),
+});
+
+export const DevicesInRectPayloadSchema = z.object({
+  id: z.string(),
+  type: z.literal('devicesInRect'),
+  rectId: z.string(),
+  includeClusters: z.boolean().default(false),
+});
+
+export const ResolveCapabilitiesPayloadSchema = z.object({
+  id: z.string(),
+  type: z.literal('resolveCapabilities'),
+  device: z.string(),
+});
+
+export const ExecInteractivePayloadSchema = z.object({
+  id: z.string(),
+  type: z.literal('execInteractive'),
+  device: z.string(),
+  command: z.string(),
+  options: z.object({
+    timeout: z.number().default(30000),
+    parse: z.boolean().default(true),
+    ensurePrivileged: z.boolean().default(false),
+  }).optional(),
+});
+
+// ============================================================================
 // Hardware Commands
 // ============================================================================
 
@@ -226,6 +266,11 @@ export const CommandPayloadSchema = z.discriminatedUnion('type', [
   HardwareInfoPayloadSchema,
   HardwareCatalogPayloadSchema,
   CommandLogPayloadSchema,
+  ListCanvasRectsPayloadSchema,
+  GetRectPayloadSchema,
+  DevicesInRectPayloadSchema,
+  ResolveCapabilitiesPayloadSchema,
+  ExecInteractivePayloadSchema,
 ]);
 
 export type CommandPayload = z.infer<typeof CommandPayloadSchema>;
@@ -248,6 +293,11 @@ export interface CommandPayloadTypeMap {
   'hardwareInfo': z.infer<typeof HardwareInfoPayloadSchema>;
   'hardwareCatalog': z.infer<typeof HardwareCatalogPayloadSchema>;
   'commandLog': z.infer<typeof CommandLogPayloadSchema>;
+  'listCanvasRects': z.infer<typeof ListCanvasRectsPayloadSchema>;
+  'getRect': z.infer<typeof GetRectPayloadSchema>;
+  'devicesInRect': z.infer<typeof DevicesInRectPayloadSchema>;
+  'resolveCapabilities': z.infer<typeof ResolveCapabilitiesPayloadSchema>;
+  'execInteractive': z.infer<typeof ExecInteractivePayloadSchema>;
 }
 
 export type CommandType = keyof CommandPayloadTypeMap;

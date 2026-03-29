@@ -52,3 +52,42 @@ export {
   buildTrunkCommands,
   buildSshCommands,
 } from "./utils/ios-commands.js";
+
+// IOS Session - Stateful IOS CLI session management
+export {
+  CliSession,
+  createCliSession,
+  type CommandHandler,
+  type CommandHistoryEntry,
+  type CliSessionState,
+} from "./ios/session/cli-session.js";
+
+export {
+  inferPromptState,
+  type IosMode,
+  type PromptState,
+} from "./ios/session/prompt-state.js";
+
+export {
+  type CommandResult,
+  createSuccessResult,
+  createErrorResult,
+  isSuccessResult,
+  isErrorResult,
+  isPagingResult,
+  isConfirmPrompt,
+  isPasswordPrompt,
+  classifyOutput,
+  type OutputClassificationType,
+} from "./ios/session/command-result.js";
+
+// IOS Capabilities - Device capability resolution
+export {
+  resolveCapabilities,
+  type DeviceCapabilities,
+} from "./ios/capabilities/pt-capability-resolver.js";
+
+export {
+  IOSFamily,
+  type IosDeviceModel,
+} from "./ios/capabilities/device-capabilities.js";

@@ -26,6 +26,7 @@ import { handleAddLink, handleRemoveLink } from "./handlers/link";
 import { handleConfigHost, handleConfigIos, handleExecIos } from "./handlers/config";
 import { handleInspect, handleSnapshot } from "./handlers/inspect";
 import { handleAddModule, handleRemoveModule } from "./handlers/module";
+import { handleListCanvasRects, handleGetRect, handleDevicesInRect } from "./handlers/canvas";
 
 // ============================================================================
 // Handler Map Type
@@ -462,6 +463,149 @@ function getParser(command) {
 }
 
 // ============================================================================
+// IOS Session State Management
+// Tracks mode, paging, and confirmation state per device across commands
+// ============================================================================
+
+var IOS_SESSIONS = {};
+
+function getOrCreateSession(deviceName, term) {
+  if (!IOS_SESSIONS[deviceName]) {
+    IOS_SESSIONS[deviceName] = {
+      mode: "user-exec",
+      paging: false,
+      awaitingConfirm: false,
+      deviceName: deviceName
+    };
+  }
+  return IOS_SESSIONS[deviceName];
+}
+
+function inferPromptMode(output) {
+  var lastLine = "";
+  var lines = output.split("\n");
+  for (var i = lines.length - 1; i >= 0; i--) {
+    var line = lines[i].trim();
+    if (line) {
+      lastLine = line;
+      break;
+    }
+  }
+
+  if (/--More--/i.test(lastLine) || /\x1B\?D/.test(lastLine)) {
+    return "paging";
+  }
+  if (/^\[confirm\]/i.test(lastLine)) {
+    return "awaiting-confirm";
+  }
+  if (/^Password:/i.test(lastLine)) {
+    return "awaiting-password";
+  }
+
+  var promptMatchers = [
+    { pattern: /\(config-router\)#$/, mode: "config-router" },
+    { pattern: /\(config-line\)#$/, mode: "config-line" },
+    { pattern: /\(config-if\)#$/, mode: "config-if" },
+    { pattern: /\(config\)#$/, mode: "config" },
+    { pattern: /#$/, mode: "priv-exec" },
+    { pattern: />$/, mode: "user-exec" },
+  ];
+
+  for (var i = 0; i < promptMatchers.length; i++) {
+    if (promptMatchers[i].pattern.test(lastLine)) {
+      return promptMatchers[i].mode;
+    }
+  }
+
+  return "unknown";
+}
+
+function isPrivilegedMode(mode) {
+  return mode === "priv-exec" || mode === "config" ||
+         mode === "config-if" || mode === "config-line" || mode === "config-router";
+}
+
+function isConfigMode(mode) {
+  return mode && mode.indexOf("config") === 0;
+}
+
+function updateSessionFromOutput(session, output, term) {
+  var mode = inferPromptMode(output);
+
+  if (mode === "paging") {
+    session.paging = true;
+    return;
+  }
+  session.paging = false;
+
+  if (mode === "awaiting-confirm") {
+    session.awaitingConfirm = true;
+    return;
+  }
+  session.awaitingConfirm = false;
+
+  if (mode === "awaiting-password") {
+    return;
+  }
+
+  if (mode !== "unknown") {
+    session.mode = mode;
+  }
+}
+
+function executeIosCommand(term, cmd, session) {
+  var response = term.enterCommand(cmd);
+  if (!response || !response[0]) {
+    updateSessionFromOutput(session, response[1] || "", term);
+    return response || [0, ""];
+  }
+
+  var status = response[0];
+  var output = response[1] || "";
+
+  updateSessionFromOutput(session, output, term);
+
+  while (session.paging) {
+    var pageResponse = term.enterCommand(" ");
+    updateSessionFromOutput(session, pageResponse[1] || "", term);
+    output += pageResponse[1] || "";
+  }
+
+  if (session.awaitingConfirm) {
+    var confirmResponse = term.enterCommand("\n");
+    updateSessionFromOutput(session, confirmResponse[1] || "", term);
+    output += confirmResponse[1] || "";
+  }
+
+  return [status, output];
+}
+
+function ensurePrivileged(term, session) {
+  if (isPrivilegedMode(session.mode)) {
+    return [true, ""];
+  }
+
+  var result = executeIosCommand(term, "enable", session);
+  return [result[0] === 0, result[1]];
+}
+
+function ensureConfigMode(term, session) {
+  if (isConfigMode(session.mode)) {
+    return [true, ""];
+  }
+
+  if (!isPrivilegedMode(session.mode)) {
+    var privResult = ensurePrivileged(term, session);
+    if (!privResult[0]) {
+      return [false, privResult[1]];
+    }
+  }
+
+  var result = executeIosCommand(term, "configure terminal", session);
+  return [result[0] === 0, result[1]];
+}
+
+// ============================================================================
 // Command Handlers
 // ============================================================================
 
@@ -621,23 +765,32 @@ function handleConfigHost(payload) {
 function handleConfigIos(payload) {
   var device = getNet().getDevice(payload.device);
   if (!device) return { ok: false, error: "Device not found: " + payload.device };
-  
+
   if (device.skipBoot) device.skipBoot();
-  
+
   var term = device.getCommandLine();
   if (!term) return { ok: false, error: "Device does not support CLI" };
-  
+
+  var session = getOrCreateSession(payload.device, term);
+
+  var configResult = ensureConfigMode(term, session);
+  if (!configResult[0]) {
+    dprint("[handleConfigIos] Failed to enter config mode: " + configResult[1]);
+    return { ok: false, error: "Failed to enter config mode: " + configResult[1] };
+  }
+
   var results = [];
   for (var i = 0; i < payload.commands.length; i++) {
-    var result = term.enterCommand(payload.commands[i]);
-    results.push({ command: payload.commands[i], result: result });
+    var cmd = payload.commands[i];
+    var cmdResult = executeIosCommand(term, cmd, session);
+    results.push({ command: cmd, result: cmdResult });
   }
-  
+
   if (payload.save !== false) {
-    term.enterCommand("write memory");
+    executeIosCommand(term, "write memory", session);
   }
-  
-  return { ok: true, device: payload.device, executed: results.length };
+
+  return { ok: true, device: payload.device, executed: results.length, session: { mode: session.mode } };
 }
 
 function handleExecIos(payload) {
@@ -658,53 +811,25 @@ function handleExecIos(payload) {
     return handleShowIpCommand(device, payload);
   }
 
-  if (device.enterCommand) {
-    try {
-      var response = device.enterCommand(payload.command);
-      var status = response && response[0];
-      var output = response && response[1] || "";
-
-      dprint("[execIos] device.enterCommand: status=" + status + ", output length=" + output.length);
-
-      var result = {
-        ok: status === 0,
-        raw: output,
-        status: status
-      };
-
-      if (payload.parse !== false) {
-        var parser = getParser(payload.command);
-        if (parser) {
-          try {
-            result.parsed = parser(output);
-          } catch (e) {
-            result.parseError = String(e);
-          }
-        }
-      }
-
-      return result;
-    } catch (e) {
-      dprint("[execIos] device.enterCommand error: " + String(e));
-    }
-  }
-
   var term = device.getCommandLine();
   if (!term) {
     return { ok: false, error: "Device does not support CLI" };
   }
 
-  try {
-    var response = term.enterCommand(payload.command);
-    var status = response && response[0];
-    var output = response && response[1] || "";
+  var session = getOrCreateSession(payload.device, term);
 
-    dprint("[execIos] term.enterCommand: status=" + status + ", output length=" + output.length);
+  try {
+    var cmdResult = executeIosCommand(term, payload.command, session);
+    var status = cmdResult[0];
+    var output = cmdResult[1];
+
+    dprint("[execIos] session.execute: status=" + status + ", output length=" + output.length + ", mode=" + session.mode);
 
     var result = {
       ok: status === 0,
       raw: output,
-      status: status
+      status: status,
+      session: { mode: session.mode, paging: session.paging, awaitingConfirm: session.awaitingConfirm }
     };
 
     if (payload.parse !== false) {
@@ -720,7 +845,7 @@ function handleExecIos(payload) {
 
     return result;
   } catch (e) {
-    dprint("[execIos] term.enterCommand error: " + String(e));
+    dprint("[execIos] executeIosCommand error: " + String(e));
     return { ok: false, error: "Failed to execute command: " + String(e), raw: "" };
   }
 }
@@ -1117,6 +1242,107 @@ function handleCommandLog(payload) {
 }
 
 // ============================================================================
+// Canvas/Rect Handlers
+// ============================================================================
+
+function handleListCanvasRects(payload) {
+  var lw = getLW();
+  var rectIds = [];
+
+  try {
+    if (lw.getCanvasRectIds) {
+      rectIds = lw.getCanvasRectIds() || [];
+    }
+  } catch (e) {
+    return { ok: false, error: "Failed to get canvas rect IDs: " + String(e) };
+  }
+
+  return { ok: true, rects: rectIds, count: rectIds.length };
+}
+
+function handleGetRect(payload) {
+  var lw = getLW();
+  var rectData = null;
+
+  try {
+    if (lw.getRectItemData) {
+      rectData = lw.getRectItemData(payload.rectId) || null;
+    } else if (lw.getRectData) {
+      rectData = lw.getRectData(payload.rectId) || null;
+    }
+  } catch (e) {
+    return { ok: false, error: "Failed to get rect data: " + String(e) };
+  }
+
+  if (!rectData) {
+    return { ok: false, error: "Rect not found: " + payload.rectId };
+  }
+
+  return { ok: true, rectId: payload.rectId, data: rectData };
+}
+
+function handleDevicesInRect(payload) {
+  var lw = getLW();
+  var net = getNet();
+  var devices = [];
+  var clusters = [];
+
+  try {
+    if (lw.devicesAt) {
+      var rectData = payload.rectId && lw.getRectItemData ? lw.getRectItemData(payload.rectId) : null;
+
+      var x = 0, y = 0, width = 0, height = 0;
+
+      if (rectData && typeof rectData === "object") {
+        x = rectData.x || 0;
+        y = rectData.y || 0;
+        width = rectData.width || 0;
+        height = rectData.height || 0;
+      }
+
+      if (width > 0 && height > 0) {
+        var foundDevices = lw.devicesAt(x, y, width, height, payload.includeClusters || false);
+        if (Array.isArray(foundDevices)) {
+          for (var i = 0; i < foundDevices.length; i++) {
+            if (typeof foundDevices[i] === "string") {
+              devices.push(foundDevices[i]);
+            }
+          }
+        }
+      }
+    }
+
+    if (devices.length === 0 && payload.rectId) {
+      var rectData = lw.getRectItemData ? lw.getRectItemData(payload.rectId) : null;
+
+      if (rectData && typeof rectData === "object") {
+        var rx = rectData.x || 0;
+        var ry = rectData.y || 0;
+        var rw = rectData.width || 0;
+        var rh = rectData.height || 0;
+
+        var deviceCount = net.getDeviceCount();
+        for (var i = 0; i < deviceCount; i++) {
+          var device = net.getDeviceAt(i);
+          if (!device) continue;
+
+          var deviceX = device.getX ? device.getX() : 0;
+          var deviceY = device.getY ? device.getY() : 0;
+
+          if (deviceX >= rx && deviceX <= rx + rw && deviceY >= ry && deviceY <= ry + rh) {
+            devices.push(device.getName());
+          }
+        }
+      }
+    }
+  } catch (e) {
+    return { ok: false, error: "Failed to get devices in rect: " + String(e) };
+  }
+
+  return { ok: true, rectId: payload.rectId, devices: devices, clusters: clusters, count: devices.length };
+}
+
+// ============================================================================
 // Command Dispatcher
 // ============================================================================
 
@@ -1141,6 +1367,9 @@ return (function(payload, ipc, dprint) {
       case "hardwareInfo": return handleHardwareInfo();
       case "hardwareCatalog": return handleHardwareCatalog(payload);
       case "commandLog": return handleCommandLog(payload);
+      case "listCanvasRects": return handleListCanvasRects(payload);
+      case "getRect": return handleGetRect(payload);
+      case "devicesInRect": return handleDevicesInRect(payload);
       default: return { ok: false, error: "Unknown command: " + payload.type };
     }
   } catch (e) {
@@ -1169,4 +1398,7 @@ export const HANDLERS: HandlerMap = {
   inspect: (p, d) => handleInspect(p as unknown as Parameters<typeof handleInspect>[0], d),
   addModule: (p, d) => handleAddModule(p as unknown as Parameters<typeof handleAddModule>[0], d),
   removeModule: (p, d) => handleRemoveModule(p as unknown as Parameters<typeof handleRemoveModule>[0], d),
+  listCanvasRects: (p, d) => handleListCanvasRects(p as unknown as Parameters<typeof handleListCanvasRects>[0], d),
+  getRect: (p, d) => handleGetRect(p as unknown as Parameters<typeof handleGetRect>[0], d),
+  devicesInRect: (p, d) => handleDevicesInRect(p as unknown as Parameters<typeof handleDevicesInRect>[0], d),
 };

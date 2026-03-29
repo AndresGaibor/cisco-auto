@@ -29,15 +29,23 @@ export function buildVlanCommands(vlans: number[], name?: string): string[] {
  * Genera comandos IOS para configurar puertos en modo trunk
  * @param ports - Array de nombres de interfaces (e.g., ["GigabitEthernet0/1"])
  * @param vlans - Array de IDs de VLANs permitidas
+ * @param capabilities - DeviceCapabilities opcional para generar comandos apropiados
  * @returns Array de comandos IOS para configIos()
  */
-export function buildTrunkCommands(ports: string[], vlans: number[]): string[] {
+export function buildTrunkCommands(
+  ports: string[],
+  vlans: number[],
+  capabilities?: { supportsTrunkEncapsulationCmd: boolean }
+): string[] {
   const commands: string[] = [];
   const vlanList = vlans.join(',');
 
   for (const port of ports) {
     commands.push(`interface ${port}`);
-    commands.push(' switchport trunk encapsulation dot1q');
+    // Solo emitir encapsulación si el device lo soporta (routers, no L2 switches)
+    if (capabilities?.supportsTrunkEncapsulationCmd) {
+      commands.push(' switchport trunk encapsulation dot1q');
+    }
     commands.push(' switchport mode trunk');
     commands.push(` switchport trunk allowed vlan ${vlanList}`);
     commands.push(' no shutdown');

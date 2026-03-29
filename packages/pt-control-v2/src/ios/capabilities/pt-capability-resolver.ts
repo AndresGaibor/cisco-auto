@@ -3,13 +3,22 @@ import { IOSFamily, getDeviceModel, getIosFamilyFromModel } from "./device-capab
 export interface DeviceCapabilities {
   model: string;
   family: IOSFamily;
+  /** Whether device supports switchport trunk encapsulation command (dot1q, isl) */
+  supportsTrunkEncapsulationCmd: boolean;
+  /** Whether device supports switchport mode trunk */
+  supportsTrunkMode: boolean;
+  /** Legacy: combined trunk support (encapsulation + mode) */
   supportsTrunkEncapsulation: boolean;
+  /** Router subinterfaces (not SVI) - for routers only */
+  supportsRouterSubinterfaces: boolean;
+  /** Legacy: combined subinterface support */
   supportsSubinterfaces: boolean;
   supportsDot1qEncapsulation: boolean;
   supportsSvi: boolean;
   supportsIpRouting: boolean;
   supportsDhcpRelay: boolean;
   supportsAcl: boolean;
+  /** NAT is primarily for routers; L3 switches have limited NAT */
   supportsNat: boolean;
   supportsVlan: boolean;
   maxVlanCount: number;
@@ -19,7 +28,10 @@ function createRouterCapabilities(model: string): DeviceCapabilities {
   return {
     model,
     family: IOSFamily.ROUTER,
+    supportsTrunkEncapsulationCmd: true,
+    supportsTrunkMode: true,
     supportsTrunkEncapsulation: true,
+    supportsRouterSubinterfaces: true,
     supportsSubinterfaces: true,
     supportsDot1qEncapsulation: true,
     supportsSvi: false,
@@ -36,7 +48,10 @@ function createL2SwitchCapabilities(model: string): DeviceCapabilities {
   return {
     model,
     family: IOSFamily.SWITCH_L2,
+    supportsTrunkEncapsulationCmd: false,
+    supportsTrunkMode: true,
     supportsTrunkEncapsulation: false,
+    supportsRouterSubinterfaces: false,
     supportsSubinterfaces: false,
     supportsDot1qEncapsulation: true,
     supportsSvi: false,
@@ -53,14 +68,19 @@ function createL3SwitchCapabilities(model: string): DeviceCapabilities {
   return {
     model,
     family: IOSFamily.SWITCH_L3,
+    supportsTrunkEncapsulationCmd: true,
+    supportsTrunkMode: true,
     supportsTrunkEncapsulation: true,
-    supportsSubinterfaces: true,
+    /** L3 switches use SVI, not router subinterfaces */
+    supportsRouterSubinterfaces: false,
+    supportsSubinterfaces: false,
     supportsDot1qEncapsulation: true,
     supportsSvi: true,
     supportsIpRouting: true,
     supportsDhcpRelay: true,
     supportsAcl: true,
-    supportsNat: true,
+    /** L3 switches have limited NAT - prefer router for NAT */
+    supportsNat: false,
     supportsVlan: true,
     maxVlanCount: 255,
   };
@@ -70,7 +90,10 @@ function createUnknownCapabilities(model: string): DeviceCapabilities {
   return {
     model,
     family: IOSFamily.UNKNOWN,
+    supportsTrunkEncapsulationCmd: false,
+    supportsTrunkMode: false,
     supportsTrunkEncapsulation: false,
+    supportsRouterSubinterfaces: false,
     supportsSubinterfaces: false,
     supportsDot1qEncapsulation: false,
     supportsSvi: false,

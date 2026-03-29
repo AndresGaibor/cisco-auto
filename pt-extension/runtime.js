@@ -1,9 +1,12 @@
 /**
  * PT Runtime - Default implementation
- * 
+ *
+ * @deprecated Usar packages/pt-control-v2 en su lugar.
+ * Este runtime es legacy y será reemplazado por el generated/runtime.js de pt-control-v2.
+ *
  * Este código se ejecuta dentro del Script Engine de PT
  * y tiene acceso completo a la API IPC.
- * 
+ *
  * @param {Object} payload - Command payload
  * @param {Object} ipc - PT IPC object
  * @param {Function} dprint - Debug print function

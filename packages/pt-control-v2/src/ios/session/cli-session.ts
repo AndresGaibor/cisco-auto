@@ -23,6 +23,15 @@ export interface CommandHandler {
   enterCommand(cmd: string): [number, string];
 }
 
+export interface CliSessionOptions {
+  /** Timeout for command execution in ms (default: 30000) */
+  commandTimeout?: number;
+  /** Enable silent timeout detection (default: true) */
+  enableSilentTimeout?: boolean;
+  /** Password for enable (if required) */
+  enablePassword?: string;
+}
+
 export interface CommandHistoryEntry {
   command: string;
   result: CommandResult;
@@ -38,15 +47,23 @@ export class CliSession {
   private state: CliSessionState;
   private handler: CommandHandler;
   private history: CommandHistoryEntry[] = [];
+  private options: Required<CliSessionOptions>;
+  private lastCommandTime: number = 0;
 
-  constructor(deviceName: string, handler: CommandHandler) {
+  constructor(deviceName: string, handler: CommandHandler, options: CliSessionOptions = {}) {
     this.handler = handler;
+    this.options = {
+      commandTimeout: options.commandTimeout ?? 30000,
+      enableSilentTimeout: options.enableSilentTimeout ?? true,
+      enablePassword: options.enablePassword ?? "",
+    };
     this.state = {
       mode: "user-exec",
       deviceName,
       paging: false,
       awaitingConfirm: false,
     };
+    this.lastCommandTime = Date.now();
   }
 
   getState(): CliSessionState {
@@ -57,7 +74,21 @@ export class CliSession {
     return [...this.history];
   }
 
+  /**
+   * Check if command timed out due to silence
+   */
+  private checkSilenceTimeout(): boolean {
+    if (!this.options.enableSilentTimeout) return false;
+    const elapsed = Date.now() - this.lastCommandTime;
+    return elapsed > this.options.commandTimeout;
+  }
+
+  /**
+   * Execute a command and handle state transitions
+   */
   execute(command: string): CommandResult {
+    this.lastCommandTime = Date.now();
+
     const [status, raw] = this.handler.enterCommand(command);
     const promptState = inferPromptState(raw);
 
@@ -81,6 +112,13 @@ export class CliSession {
       this.state.awaitingConfirm = false;
     }
 
+    if (promptState.mode === "awaiting-password") {
+      // Password prompt detected - this is an error if we don't have a password
+      if (!this.options.enablePassword) {
+        result.error = "Enable password required but not provided";
+      }
+    }
+
     if (promptState.mode !== "unknown" && promptState.mode !== "paging" && promptState.mode !== "awaiting-password") {
       this.state.mode = promptState.mode;
     }
@@ -98,13 +136,70 @@ export class CliSession {
     return result;
   }
 
+  /**
+   * Execute command and accumulate all paging output
+   */
+  executeAndWait(command: string): CommandResult {
+    const result = this.execute(command);
+
+    if (result.paging) {
+      this.accumulatePagingOutput(result);
+    }
+
+    return result;
+  }
+
+  /**
+   * Accumulate all paging output until prompt returns
+   */
+  private accumulatePagingOutput(initialResult: CommandResult): void {
+    let accumulatedOutput = initialResult.raw;
+
+    while (this.state.paging) {
+      if (this.checkSilenceTimeout()) {
+        this.state.paging = false;
+        initialResult.error = "Timeout waiting for paging to complete";
+        break;
+      }
+
+      const [status, raw] = this.handler.enterCommand(" ");
+      accumulatedOutput += raw;
+
+      const promptState = inferPromptState(raw);
+
+      if (!promptState.paging && promptState.mode !== "unknown") {
+        this.state.paging = false;
+        this.state.mode = promptState.mode;
+      }
+
+      this.lastCommandTime = Date.now();
+    }
+
+    initialResult.raw = accumulatedOutput;
+  }
+
+  /**
+   * Ensure privileged exec mode, handling enable password if required
+   */
   async ensurePrivileged(): Promise<boolean> {
     if (isPrivilegedMode(this.state.mode)) {
       return true;
     }
 
     const result = this.execute("enable");
-    return result.ok;
+
+    // Check if we're now in privileged mode
+    if (isPrivilegedMode(this.state.mode)) {
+      return true;
+    }
+
+    // If password is required and we have it, send it
+    if (this.state.mode === "awaiting-password" && this.options.enablePassword) {
+      const passwordResult = this.execute(this.options.enablePassword);
+      return isPrivilegedMode(this.state.mode);
+    }
+
+    return result.ok && isPrivilegedMode(this.state.mode);
   }
 
   async ensureConfigMode(): Promise<boolean> {
@@ -118,13 +213,22 @@ export class CliSession {
     }
 
     const result = this.execute("configure terminal");
-    return result.ok;
+    return result.ok && isConfigMode(this.state.mode);
   }
 
+  /**
+   * Handle paging by sending spaces until all output is shown
+   * @deprecated Use executeAndWait() instead for automatic paging accumulation
+   */
   async handlePaging(): Promise<void> {
     if (!this.state.paging) return;
 
     while (this.state.paging) {
+      if (this.checkSilenceTimeout()) {
+        this.state.paging = false;
+        break;
+      }
+
       const [status, raw] = this.handler.enterCommand(" ");
       const promptState = inferPromptState(raw);
 
@@ -132,6 +236,8 @@ export class CliSession {
         this.state.paging = false;
         this.state.mode = promptState.mode;
       }
+
+      this.lastCommandTime = Date.now();
     }
   }
 
@@ -165,7 +271,7 @@ export class CliSession {
       return createErrorResult("Failed to enter config mode");
     }
 
-    return this.execute(command);
+    return this.executeAndWait(command);
   }
 
   reset(): void {
@@ -176,9 +282,14 @@ export class CliSession {
       awaitingConfirm: false,
     };
     this.history = [];
+    this.lastCommandTime = Date.now();
   }
 }
 
-export function createCliSession(deviceName: string, handler: CommandHandler): CliSession {
-  return new CliSession(deviceName, handler);
+export function createCliSession(
+  deviceName: string,
+  handler: CommandHandler,
+  options?: CliSessionOptions
+): CliSession {
+  return new CliSession(deviceName, handler, options);
 }

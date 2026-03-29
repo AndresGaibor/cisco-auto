@@ -1,6 +1,9 @@
 /**
  * PT Script Module - Main Entry Point
- * 
+ *
+ * @deprecated Usar packages/pt-control-v2 en su lugar.
+ * Este módulo es el entry point legacy que será reemplazado por pt-control-v2.
+ *
  * Este módulo corre DENTRO de Packet Tracer y usa FileWatcher
  * para recibir comandos desde la CLI externa.
  */
