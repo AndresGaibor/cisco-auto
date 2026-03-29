@@ -2,6 +2,16 @@ import { describe, test, expect } from 'bun:test';
 import { ptExplainPlanTool } from '@cisco-auto/tools';
 import type { TopologyPlan } from '@cisco-auto/core';
 
+interface Section {
+  title: string;
+  content: string;
+}
+
+interface ExplainData {
+  explanation: string;
+  sections: Section[];
+}
+
 function createTestPlan(): TopologyPlan {
   return {
     id: 'test-plan-explain',
@@ -132,14 +142,15 @@ describe('pt_explain_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.explanation).toContain('Test LAN Plan');
-      expect(result.data.sections).toHaveLength(6);
-      expect(result.data.sections[0].title).toBe('Resumen');
-      expect(result.data.sections[1].title).toBe('Dispositivos');
-      expect(result.data.sections[2].title).toBe('Conexiones');
-      expect(result.data.sections[3].title).toBe('Esquema IP');
-      expect(result.data.sections[4].title).toBe('Enrutamiento');
-      expect(result.data.sections[5].title).toBe('Recomendaciones');
+      const data = result.data as ExplainData;
+      expect(data.explanation).toContain('Test LAN Plan');
+      expect(data.sections).toHaveLength(6);
+      expect(data.sections[0]!.title).toBe('Resumen');
+      expect(data.sections[1]!.title).toBe('Dispositivos');
+      expect(data.sections[2]!.title).toBe('Conexiones');
+      expect(data.sections[3]!.title).toBe('Esquema IP');
+      expect(data.sections[4]!.title).toBe('Enrutamiento');
+      expect(data.sections[5]!.title).toBe('Recomendaciones');
     }
   });
 
@@ -149,13 +160,14 @@ describe('pt_explain_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.explanation).toContain('Test LAN Plan');
-      expect(result.data.sections[0].title).toBe('Overview');
-      expect(result.data.sections[1].title).toBe('Devices');
-      expect(result.data.sections[2].title).toBe('Connections');
-      expect(result.data.sections[3].title).toBe('IP Scheme');
-      expect(result.data.sections[4].title).toBe('Routing');
-      expect(result.data.sections[5].title).toBe('Recommendations');
+      const data = result.data as ExplainData;
+      expect(data.explanation).toContain('Test LAN Plan');
+      expect(data.sections[0]!.title).toBe('Overview');
+      expect(data.sections[1]!.title).toBe('Devices');
+      expect(data.sections[2]!.title).toBe('Connections');
+      expect(data.sections[3]!.title).toBe('IP Scheme');
+      expect(data.sections[4]!.title).toBe('Routing');
+      expect(data.sections[5]!.title).toBe('Recommendations');
     }
   });
 
@@ -165,7 +177,8 @@ describe('pt_explain_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      const routingSection = result.data.sections.find(s => s.title === 'Enrutamiento');
+      const data = result.data as ExplainData;
+      const routingSection = data.sections.find((s: Section) => s.title === 'Enrutamiento');
       expect(routingSection?.content).toContain('OSPF');
       expect(routingSection?.content).toContain('Router1');
     }
@@ -177,7 +190,8 @@ describe('pt_explain_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      const devicesSection = result.data.sections.find(s => s.title === 'Dispositivos');
+      const data = result.data as ExplainData;
+      const devicesSection = data.sections.find((s: Section) => s.title === 'Dispositivos');
       expect(devicesSection?.content).toContain('Switch1');
       expect(devicesSection?.content).toContain('VLANs');
     }
@@ -189,7 +203,8 @@ describe('pt_explain_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      const devicesSection = result.data.sections.find(s => s.title === 'Dispositivos');
+      const data = result.data as ExplainData;
+      const devicesSection = data.sections.find((s: Section) => s.title === 'Dispositivos');
       expect(devicesSection?.content).toContain('DHCP');
     }
   });
@@ -200,7 +215,8 @@ describe('pt_explain_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      const connectionsSection = result.data.sections.find(s => s.title === 'Conexiones');
+      const data = result.data as ExplainData;
+      const connectionsSection = data.sections.find((s: Section) => s.title === 'Conexiones');
       expect(connectionsSection?.content).toContain('Router1');
       expect(connectionsSection?.content).toContain('Switch1');
       expect(connectionsSection).toBeDefined();
@@ -213,7 +229,8 @@ describe('pt_explain_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      const ipSection = result.data.sections.find(s => s.title === 'Esquema IP');
+      const data = result.data as ExplainData;
+      const ipSection = data.sections.find((s: Section) => s.title === 'Esquema IP');
       expect(ipSection?.content).toContain('192.168.1.1');
       expect(ipSection?.content).toContain('192.168.1.10');
       expect(ipSection?.content).toContain('192.168.1.100');
@@ -260,7 +277,8 @@ describe('pt_explain_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      const ipSection = result.data.sections.find(s => s.title === 'Esquema IP');
+      const data = result.data as ExplainData;
+      const ipSection = data.sections.find((s: Section) => s.title === 'Esquema IP');
       expect(ipSection?.content).toContain('No hay direcciones IP');
     }
   });
@@ -277,7 +295,8 @@ describe('pt_explain_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      const recSection = result.data.sections.find(s => s.title === 'Recomendaciones');
+      const data = result.data as ExplainData;
+      const recSection = data.sections.find((s: Section) => s.title === 'Recomendaciones');
       expect(recSection?.content).toContain('VLANs');
     }
   });

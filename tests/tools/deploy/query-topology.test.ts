@@ -1,6 +1,12 @@
 import { describe, test, expect, afterEach } from 'bun:test';
 import { ptQueryTopologyTool } from '@cisco-auto/tools';
 
+interface QueryTopologyData {
+  devices: { id: string; type: string; status: string; ip?: string }[];
+  links: { status: string; cableType: string }[];
+  timestamp: string;
+}
+
 describe('pt_query_topology', () => {
   afterEach(() => {
     // Restore original fetch after each test
@@ -33,15 +39,16 @@ describe('pt_query_topology', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.devices).toHaveLength(2);
-      expect(result.data.links).toHaveLength(1);
-      expect(result.data.timestamp).toBeTruthy();
-      
-      const router = result.data.devices.find((d: any) => d.id === 'R1');
+      const data = result.data as QueryTopologyData;
+      expect(data.devices).toHaveLength(2);
+      expect(data.links).toHaveLength(1);
+      expect(data.timestamp).toBeTruthy();
+
+      const router = data.devices.find((d: { id: string }) => d.id === 'R1');
       expect(router).toBeDefined();
-      expect(router.type).toBe('router');
-      expect(router.status).toBe('up');
-      expect(router.ip).toBe('192.168.1.1');
+      expect(router!.type).toBe('router');
+      expect(router!.status).toBe('up');
+      expect(router!.ip).toBe('192.168.1.1');
     }
   });
 
@@ -139,11 +146,12 @@ describe('pt_query_topology', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      const devices = result.data.devices;
-      expect(devices.find((d: any) => d.id === 'R1')!.type).toBe('router');
-      expect(devices.find((d: any) => d.id === 'S1')!.type).toBe('switch');
-      expect(devices.find((d: any) => d.id === 'PC1')!.type).toBe('pc');
-      expect(devices.find((d: any) => d.id === 'SRV1')!.type).toBe('server');
+      const data = result.data as QueryTopologyData;
+      const devices = data.devices;
+      expect(devices.find((d: { id: string }) => d.id === 'R1')!.type).toBe('router');
+      expect(devices.find((d: { id: string }) => d.id === 'S1')!.type).toBe('switch');
+      expect(devices.find((d: { id: string }) => d.id === 'PC1')!.type).toBe('pc');
+      expect(devices.find((d: { id: string }) => d.id === 'SRV1')!.type).toBe('server');
     }
   });
 
@@ -172,11 +180,12 @@ describe('pt_query_topology', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      const links = result.data.links;
-      expect(links[0].status).toBe('connected');
-      expect(links[0].cableType).toBe('straight-through');
-      expect(links[1].status).toBe('disconnected');
-      expect(links[1].cableType).toBe('crossover');
+      const data = result.data as QueryTopologyData;
+      const links = data.links;
+      expect(links[0]!.status).toBe('connected');
+      expect(links[0]!.cableType).toBe('straight-through');
+      expect(links[1]!.status).toBe('disconnected');
+      expect(links[1]!.cableType).toBe('crossover');
     }
   });
 
@@ -193,7 +202,7 @@ describe('pt_query_topology', () => {
     };
 
     const before = new Date().toISOString();
-    
+
     const result = await ptQueryTopologyTool.handler(
       { bridgeUrl: 'http://localhost:54321' },
       {} as any
@@ -203,10 +212,11 @@ describe('pt_query_topology', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.timestamp).toBeTruthy();
-      expect(result.data.timestamp >= before).toBe(true);
-      expect(result.data.timestamp <= after).toBe(true);
-      expect(() => new Date(result.data.timestamp)).not.toThrow();
+      const data = result.data as QueryTopologyData;
+      expect(data.timestamp).toBeTruthy();
+      expect(data.timestamp >= before).toBe(true);
+      expect(data.timestamp <= after).toBe(true);
+      expect(() => new Date(data.timestamp)).not.toThrow();
     }
   });
 
@@ -234,8 +244,9 @@ describe('pt_query_topology', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.devices[0].type).toBe('unknown');
-      expect(result.data.devices[0].status).toBe('unknown');
+      const data = result.data as QueryTopologyData;
+      expect(data.devices[0]!.type).toBe('unknown');
+      expect(data.devices[0]!.status).toBe('unknown');
     }
   });
 

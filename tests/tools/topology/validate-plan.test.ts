@@ -2,6 +2,22 @@ import { describe, test, expect } from 'bun:test';
 import { ptValidatePlanTool } from '@cisco-auto/tools';
 import type { TopologyPlan } from '@cisco-auto/core';
 
+interface ValidationError {
+  type: string;
+  message?: string;
+}
+
+interface ValidationWarning {
+  type: string;
+  message?: string;
+}
+
+interface ValidationData {
+  valid: boolean;
+  errors: ValidationError[];
+  warnings: ValidationWarning[];
+}
+
 function createValidPlan(): TopologyPlan {
   return {
     id: 'test-plan-1',
@@ -69,8 +85,9 @@ describe('pt_validate_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.valid).toBe(true);
-      expect(result.data.errors).toHaveLength(0);
+      const data = result.data as ValidationData;
+      expect(data.valid).toBe(true);
+      expect(data.errors).toHaveLength(0);
     }
   });
 
@@ -93,8 +110,9 @@ describe('pt_validate_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.valid).toBe(false);
-      expect(result.data.errors.some((e: any) => e.type === 'invalid_model')).toBe(true);
+      const data = result.data as ValidationData;
+      expect(data.valid).toBe(false);
+      expect(data.errors.some((e: ValidationError) => e.type === 'invalid_model')).toBe(true);
     }
   });
 
@@ -112,8 +130,9 @@ describe('pt_validate_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.valid).toBe(false);
-      expect(result.data.errors.some((e: any) => e.type === 'invalid_port')).toBe(true);
+      const data = result.data as ValidationData;
+      expect(data.valid).toBe(false);
+      expect(data.errors.some((e: ValidationError) => e.type === 'invalid_port')).toBe(true);
     }
   });
 
@@ -138,8 +157,9 @@ describe('pt_validate_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.valid).toBe(false);
-      expect(result.data.errors.some((e: any) => e.type === 'ip_conflict')).toBe(true);
+      const data = result.data as ValidationData;
+      expect(data.valid).toBe(false);
+      expect(data.errors.some((e: ValidationError) => e.type === 'ip_conflict')).toBe(true);
     }
   });
 
@@ -166,8 +186,9 @@ describe('pt_validate_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.valid).toBe(false);
-      expect(result.data.errors.some((e: any) => e.type === 'missing_ip')).toBe(true);
+      const data = result.data as ValidationData;
+      expect(data.valid).toBe(false);
+      expect(data.errors.some((e: ValidationError) => e.type === 'missing_ip')).toBe(true);
     }
   });
 
@@ -177,7 +198,7 @@ describe('pt_validate_plan', () => {
       id: 'link-3',
       from: { deviceId: 'R1', deviceName: 'Router1', port: 'GigabitEthernet0/1' },
       to: { deviceId: 'S1', deviceName: 'Switch1', port: 'FastEthernet0/2' },
-      cableType: 'invalid-cable-type' as any,
+      cableType: 'invalid-cable-type' as 'straight-through',
       validated: false
     });
 
@@ -185,8 +206,9 @@ describe('pt_validate_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.valid).toBe(false);
-      expect(result.data.errors.some((e: any) => e.type === 'invalid_cable')).toBe(true);
+      const data = result.data as ValidationData;
+      expect(data.valid).toBe(false);
+      expect(data.errors.some((e: ValidationError) => e.type === 'invalid_cable')).toBe(true);
     }
   });
 
@@ -219,13 +241,14 @@ describe('pt_validate_plan', () => {
 
   test('incluye warnings para puertos sin usar', async () => {
     const plan = createValidPlan();
-    
+
     const result = await ptValidatePlanTool.handler({ plan }, {} as any);
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.warnings.length).toBeGreaterThan(0);
-      expect(result.data.warnings.some((w: any) => w.type === 'unused_port')).toBe(true);
+      const data = result.data as ValidationData;
+      expect(data.warnings.length).toBeGreaterThan(0);
+      expect(data.warnings.some((w: ValidationWarning) => w.type === 'unused_port')).toBe(true);
     }
   });
 
@@ -243,8 +266,9 @@ describe('pt_validate_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.valid).toBe(false);
-      expect(result.data.errors.some((e: any) => e.type === 'invalid_port')).toBe(true);
+      const data = result.data as ValidationData;
+      expect(data.valid).toBe(false);
+      expect(data.errors.some((e: ValidationError) => e.type === 'invalid_port')).toBe(true);
     }
   });
 });

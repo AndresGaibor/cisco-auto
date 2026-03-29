@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { pushCommands } from '@cisco-auto/bridge';
 import { RoutingGenerator } from '@cisco-auto/core';
 import { AdvancedRoutingGenerator } from '@cisco-auto/core';
-import type { EIGRP, OSPF } from '@cisco-auto/core';
+import type { OSPFSpec, EIGRPSpec } from '@cisco-auto/core';
 
 const IPV4_REGEX = /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 const CIDR_REGEX = /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}\/(?:[0-9]|[12]\d|3[0-2])$/;
@@ -49,40 +49,38 @@ export function buildStaticRouteCommands(dispositivo: string, network: string, n
       {
         network,
         nextHop: nextHop === 'null0' ? 'null0' : nextHop,
-        administrativeDistance: 1,
+        distance: 1,
       },
     ],
   });
 }
 
 export function buildOspfEnableCommands(processId: number): string[] {
-  const spec: OSPF = {
+  const spec: OSPFSpec = {
     processId,
-    networks: [],
-    defaultRoute: false,
+    areas: [],
   };
 
   return RoutingGenerator.generateRouting({ ospf: spec });
 }
 
 export function buildOspfAddNetworkCommands(processId: number, network: string, area: number | string): string[] {
-  const spec: OSPF = {
+  const spec: OSPFSpec = {
     processId,
-    networks: [
+    areas: [
       {
-        network,
-        area,
+        areaId: String(area),
+        networks: [network],
       },
     ],
-    defaultRoute: false,
   };
 
   return RoutingGenerator.generateRouting({ ospf: spec });
 }
 
 export function buildEigrpEnableCommands(asn: number): string[] {
-  const spec: EIGRP = {
-    autonomousSystem: asn,
+  const spec: EIGRPSpec = {
+    asNumber: asn,
     networks: [],
     noAutoSummary: true,
   };

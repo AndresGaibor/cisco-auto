@@ -8,6 +8,7 @@
 
 import { Command } from 'commander';
 import { createInterface } from 'readline';
+import type { ToolResult } from '@cisco-auto/core';
 import { ptListDevicesTool } from '@cisco-auto/tools';
 import { ptGetDeviceDetailsTool } from '@cisco-auto/tools';
 
@@ -62,7 +63,7 @@ async function mostrarDispositivos(tipo?: string): Promise<void> {
   const result = await ptListDevicesTool.handler(
     tipo ? { type: tipo } : {},
     { logger: console as any, config: { workingDir: process.cwd() } }
-  );
+  ) as ToolResult<{ devices: Array<{ name: string; type: string; ptType: string; description: string; portCount: number }>; total: number }>;
 
   if (!result.success) {
     console.log('❌ Error al cargar catálogo');
@@ -96,7 +97,7 @@ async function mostrarDetalles(deviceName: string): Promise<void> {
   const result = await ptGetDeviceDetailsTool.handler(
     { name: deviceName },
     { logger: console as any, config: { workingDir: process.cwd() } }
-  );
+  ) as ToolResult<{ device: { name: string; type: string; ptType: string; description: string; defaultIOS: string | null; maxModules: number; ports: Array<{ name: string; type: string; speed: string; available: boolean }> } }>;
 
   if (!result.success) {
     console.log(`❌ No se encontró el dispositivo: ${deviceName}`);
@@ -183,10 +184,10 @@ async function ejecutarSelector(): Promise<void> {
           const result = await ptListDevicesTool.handler(
             tipo ? { type: tipo } : {},
             { logger: console as any, config: { workingDir: process.cwd() } }
-          );
-          
+          ) as ToolResult<{ devices: Array<{ name: string; type: string; ptType: string; description: string; portCount: number }>; total: number }>;
+
           if (result.success && result.data.devices[deviceNum - 1]) {
-            const deviceName = result.data.devices[deviceNum - 1].name;
+            const deviceName = result.data.devices[deviceNum - 1]!.name;
             await mostrarDetalles(deviceName);
             
             const agregar = await preguntar(rl, '  ¿Agregar a selección? (s/n): ');

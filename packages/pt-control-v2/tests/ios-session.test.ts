@@ -178,11 +178,11 @@ describe("CLI Session State Management", () => {
 
       const history = session.getHistory();
       expect(history).toHaveLength(2);
-      expect(history[0].command).toBe("show version");
-      expect(history[1].command).toBe("show ip int brief");
+      expect(history[0]!.command).toBe("show version");
+      expect(history[1]!.command).toBe("show ip int brief");
     });
 
-    it("handles paging response correctly", () => {
+    it("handles paging response correctly", async () => {
       const session = new CliSession("Router1", {
         enterCommand: (cmd: string) => {
           if (cmd.startsWith("show")) {
@@ -192,8 +192,8 @@ describe("CLI Session State Management", () => {
         },
       });
 
-      const result = session.execute("show running-config");
-      
+      const result = await session.execute("show running-config");
+
       expect(result.paging).toBe(true);
     });
   });

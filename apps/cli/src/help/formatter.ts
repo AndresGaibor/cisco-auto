@@ -101,12 +101,12 @@ export function formatTable(headers: string[], rows: string[][]): string {
   });
 
   const headerRow = headers
-    .map((h, i) => h.padEnd(colWidths[i]))
+    .map((h, i) => h.padEnd(colWidths[i]!))
     .join('  ');
   const separator = colWidths.map((w) => '-'.repeat(w)).join('  ');
 
   const dataRows = rows.map((row) =>
-    row.map((cell, i) => (cell || '').padEnd(colWidths[i])).join('  ')
+    row.map((cell, i) => (cell || '').padEnd(colWidths[i]!)).join('  ')
   );
 
   return [chalk.bold(headerRow), separator, ...dataRows].join('\n');

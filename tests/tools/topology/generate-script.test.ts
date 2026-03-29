@@ -2,6 +2,22 @@ import { describe, test, expect } from 'bun:test';
 import { ptGenerateScriptTool } from '@cisco-auto/tools';
 import type { TopologyPlan } from '@cisco-auto/core';
 
+interface ScriptCommand {
+  deviceId: string;
+  deviceName: string;
+  type: string;
+  command: string;
+  params: unknown;
+}
+
+interface ScriptData {
+  script: string;
+  format: string;
+  deviceCount?: number;
+  linkCount?: number;
+  commands: ScriptCommand[];
+}
+
 function createTestPlan(): TopologyPlan {
   return {
     id: 'test-plan-1',
@@ -90,11 +106,12 @@ describe('pt_generate_script', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.script).toContain('pt.addDevice');
-      expect(result.data.script).toContain('pt.addLink');
-      expect(result.data.script).toContain('pt.configureIosDevice');
-      expect(result.data.script).toContain('pt.configurePcIp');
-      expect(result.data.format).toBe('javascript');
+      const data = result.data as ScriptData;
+      expect(data.script).toContain('pt.addDevice');
+      expect(data.script).toContain('pt.addLink');
+      expect(data.script).toContain('pt.configureIosDevice');
+      expect(data.script).toContain('pt.configurePcIp');
+      expect(data.format).toBe('javascript');
     }
   });
 
@@ -104,11 +121,12 @@ describe('pt_generate_script', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.script).toContain('pt.add_device');
-      expect(result.data.script).toContain('pt.add_link');
-      expect(result.data.script).toContain('pt.configure_ios_device');
-      expect(result.data.script).toContain('pt.configure_pc_ip');
-      expect(result.data.format).toBe('python');
+      const data = result.data as ScriptData;
+      expect(data.script).toContain('pt.add_device');
+      expect(data.script).toContain('pt.add_link');
+      expect(data.script).toContain('pt.configure_ios_device');
+      expect(data.script).toContain('pt.configure_pc_ip');
+      expect(data.format).toBe('python');
     }
   });
 
@@ -118,10 +136,11 @@ describe('pt_generate_script', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.script).toContain('pt.addDevice("R1"');
-      expect(result.data.script).toContain('pt.addDevice("S1"');
-      expect(result.data.script).toContain('pt.addDevice("PC1"');
-      expect(result.data.deviceCount).toBe(3);
+      const data = result.data as ScriptData;
+      expect(data.script).toContain('pt.addDevice("R1"');
+      expect(data.script).toContain('pt.addDevice("S1"');
+      expect(data.script).toContain('pt.addDevice("PC1"');
+      expect(data.deviceCount).toBe(3);
     }
   });
 
@@ -131,9 +150,10 @@ describe('pt_generate_script', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.script).toContain('pt.addLink("R1", "GigabitEthernet0/0"');
-      expect(result.data.script).toContain('pt.addLink("S1", "FastEthernet0/2"');
-      expect(result.data.linkCount).toBe(2);
+      const data = result.data as ScriptData;
+      expect(data.script).toContain('pt.addLink("R1", "GigabitEthernet0/0"');
+      expect(data.script).toContain('pt.addLink("S1", "FastEthernet0/2"');
+      expect(data.linkCount).toBe(2);
     }
   });
 
@@ -143,9 +163,10 @@ describe('pt_generate_script', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.script).toContain('configureIosDevice');
-      expect(result.data.script).toContain('interface GigabitEthernet0/0');
-      expect(result.data.script).toContain('ip address 192.168.1.1 255.255.255.0');
+      const data = result.data as ScriptData;
+      expect(data.script).toContain('configureIosDevice');
+      expect(data.script).toContain('interface GigabitEthernet0/0');
+      expect(data.script).toContain('ip address 192.168.1.1 255.255.255.0');
     }
   });
 
@@ -155,8 +176,9 @@ describe('pt_generate_script', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.script).toContain('configurePcIp("PC1"');
-      expect(result.data.script).toContain('192.168.1.10');
+      const data = result.data as ScriptData;
+      expect(data.script).toContain('configurePcIp("PC1"');
+      expect(data.script).toContain('192.168.1.10');
     }
   });
 
@@ -166,13 +188,14 @@ describe('pt_generate_script', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(Array.isArray(result.data.commands)).toBe(true);
-      expect(result.data.commands.length).toBeGreaterThan(0);
-      expect(result.data.commands[0]).toHaveProperty('deviceId');
-      expect(result.data.commands[0]).toHaveProperty('deviceName');
-      expect(result.data.commands[0]).toHaveProperty('type');
-      expect(result.data.commands[0]).toHaveProperty('command');
-      expect(result.data.commands[0]).toHaveProperty('params');
+      const data = result.data as ScriptData;
+      expect(Array.isArray(data.commands)).toBe(true);
+      expect(data.commands.length).toBeGreaterThan(0);
+      expect(data.commands[0]!).toHaveProperty('deviceId');
+      expect(data.commands[0]!).toHaveProperty('deviceName');
+      expect(data.commands[0]!).toHaveProperty('type');
+      expect(data.commands[0]!).toHaveProperty('command');
+      expect(data.commands[0]!).toHaveProperty('params');
     }
   });
 
@@ -182,7 +205,8 @@ describe('pt_generate_script', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.format).toBe('javascript');
+      const data = result.data as ScriptData;
+      expect(data.format).toBe('javascript');
     }
   });
 
@@ -234,8 +258,9 @@ describe('pt_generate_script', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.script).toContain('pt.addDevice("S1"');
-      expect(result.data.commands.some((c: any) => c.type === 'configureIosDevice')).toBe(false);
+      const data = result.data as ScriptData;
+      expect(data.script).toContain('pt.addDevice("S1"');
+      expect(data.commands.some((c: ScriptCommand) => c.type === 'configureIosDevice')).toBe(false);
     }
   });
 

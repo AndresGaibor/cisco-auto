@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { classifyOutput, isSuccessResult, isErrorResult, isParseErrorResult } from "../src/domain/ios/session/command-result";
+import { classifyOutput, isSuccessResult, isErrorResult, isParseErrorResult, type CommandResult } from "../src/domain/ios/session/command-result";
 
 describe("IOS Validation and Output Classification", () => {
   describe("Command Result Classification", () => {
@@ -10,13 +10,13 @@ describe("IOS Validation and Output Classification", () => {
     });
 
     it("should classify failed command result", () => {
-      const result = { ok: false, error: "Invalid input", status: 1 };
+      const result = { ok: false, error: "Invalid input", status: 1, raw: "" };
       expect(isSuccessResult(result)).toBe(false);
       expect(isErrorResult(result)).toBe(true);
     });
 
     it("should classify parse error result", () => {
-      const result = { ok: true, raw: "output", parseError: "Failed to parse" };
+      const result: CommandResult = { ok: true, raw: "output", status: 0, parseError: "Failed to parse" };
       expect(isParseErrorResult(result)).toBe(true);
     });
   });

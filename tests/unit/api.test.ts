@@ -3,7 +3,7 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
-import { createAPIServer } from '../../src/api/server.ts';
+import { createAPIServer } from '@cisco-auto/api';
 
 const TEST_PORT = 3099;
 const BASE_URL = `http://localhost:${TEST_PORT}`;

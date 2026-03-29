@@ -1,6 +1,5 @@
 export * from './parser/yaml-parser';
 export * from './types/index';
-export * from './models/index';
 export { validateLab, LabValidator } from './validation/index';
 export type { ValidationIssue, ValidationResult } from './validation/index';
 

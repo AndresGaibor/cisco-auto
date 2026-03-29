@@ -12,7 +12,7 @@ function toLabSpec(parsed: any): LabSpec {
       name: parsed.lab?.metadata?.name || 'Lab',
       version: parsed.lab?.metadata?.version || '1.0',
       author: parsed.lab?.metadata?.author || 'unknown',
-      createdAt: new Date().toISOString()
+      createdAt: new Date()
     },
     devices: (parsed.lab?.topology?.devices || []).map((d: any) => ({
       id: d.name,

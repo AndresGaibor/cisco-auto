@@ -61,6 +61,26 @@ export class BridgePathLayout {
     return join(this.consumerStateDir(), `${consumerId}.json`);
   }
 
+  /** Rotation manifest file (tracks rotated log files) */
+  rotationManifestFile(): string {
+    return join(this.logsDir(), "rotation-manifest.json");
+  }
+
+  /** Dead letter directory for corrupted command files */
+  deadLetterDir(): string {
+    return join(this.root, "dead-letter");
+  }
+
+  /** Dead letter file for a specific command */
+  deadLetterFile(basename: string): string {
+    return join(this.deadLetterDir(), basename);
+  }
+
+  /** Garbage collector state file */
+  gcStateFile(): string {
+    return join(this.root, "gc-state.json");
+  }
+
   /** Sequence number store file */
   sequenceStoreFile(): string {
     return join(this.root, "protocol.seq.json");

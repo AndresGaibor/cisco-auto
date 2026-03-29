@@ -8,14 +8,10 @@
         "@cisco-auto/api": "workspace:*",
         "@cisco-auto/bridge": "workspace:*",
         "@cisco-auto/core": "workspace:*",
-        "@cisco-auto/crypto": "workspace:*",
-        "@cisco-auto/device-catalog": "workspace:*",
         "@cisco-auto/lab-model": "workspace:*",
         "@cisco-auto/tools": "workspace:*",
-        "@cisco-auto/topology": "workspace:*",
         "fast-xml-parser": "^5.5.6",
         "pino": "^10.3.1",
-        "twofish-ts": "^1.0.2",
         "zod": "^4.3.6",
       },
       "devDependencies": {
@@ -33,11 +29,9 @@
         "@cisco-auto/api": "workspace:*",
         "@cisco-auto/bridge": "workspace:*",
         "@cisco-auto/core": "workspace:*",
-        "@cisco-auto/device-catalog": "workspace:*",
         "@cisco-auto/lab-model": "workspace:*",
         "@cisco-auto/templates": "workspace:*",
         "@cisco-auto/tools": "workspace:*",
-        "@cisco-auto/topology": "workspace:*",
         "chalk": "^5.6.2",
         "commander": "^14.0.3",
         "pino": "^10.3.1",
@@ -76,7 +70,6 @@
       "name": "@cisco-auto/core",
       "version": "0.1.0",
       "dependencies": {
-        "@cisco-auto/crypto": "workspace:*",
         "@cisco-auto/lab-model": "workspace:*",
         "chalk": "^5.6.2",
         "node-ssh": "^13.2.1",
@@ -86,25 +79,6 @@
       "devDependencies": {
         "@types/bun": "latest",
         "@types/js-yaml": "^4.0.9",
-        "typescript": "^5",
-      },
-    },
-    "packages/crypto": {
-      "name": "@cisco-auto/crypto",
-      "version": "0.1.0",
-      "devDependencies": {
-        "@types/bun": "latest",
-        "typescript": "^5",
-      },
-    },
-    "packages/device-catalog": {
-      "name": "@cisco-auto/device-catalog",
-      "version": "0.1.0",
-      "dependencies": {
-        "@cisco-auto/lab-model": "workspace:*",
-      },
-      "devDependencies": {
-        "@types/bun": "latest",
         "typescript": "^5",
       },
     },
@@ -161,17 +135,6 @@
         "typescript": "^5",
       },
     },
-    "packages/topology": {
-      "name": "@cisco-auto/topology",
-      "version": "0.1.0",
-      "dependencies": {
-        "@cisco-auto/lab-model": "workspace:*",
-      },
-      "devDependencies": {
-        "@types/bun": "latest",
-        "typescript": "^5",
-      },
-    },
   },
   "packages": {
     "@cisco-auto/api": ["@cisco-auto/api@workspace:packages/api"],
@@ -182,10 +145,6 @@
 
     "@cisco-auto/core": ["@cisco-auto/core@workspace:packages/core"],
 
-    "@cisco-auto/crypto": ["@cisco-auto/crypto@workspace:packages/crypto"],
-
-    "@cisco-auto/device-catalog": ["@cisco-auto/device-catalog@workspace:packages/device-catalog"],
-
     "@cisco-auto/lab-model": ["@cisco-auto/lab-model@workspace:packages/lab-model"],
 
     "@cisco-auto/pt-control-v2": ["@cisco-auto/pt-control-v2@workspace:packages/pt-control-v2"],
@@ -193,8 +152,6 @@
     "@cisco-auto/templates": ["@cisco-auto/templates@workspace:packages/templates"],
 
     "@cisco-auto/tools": ["@cisco-auto/tools@workspace:packages/tools"],
-
-    "@cisco-auto/topology": ["@cisco-auto/topology@workspace:packages/topology"],
 
     "@colors/colors": ["@colors/colors@1.5.0", "", {}, "sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ=="],
 
@@ -411,8 +368,6 @@
     "tinyglobby": ["tinyglobby@0.2.15", "", { "dependencies": { "fdir": "^6.5.0", "picomatch": "^4.0.3" } }, "sha512-j2Zq4NyQYG5XMST4cbs02Ak8iJUdxRM0XI5QyxXuZOzKOINmWurp3smXu3y5wDcJrptwpSjgXHzIQxR0omXljQ=="],
 
     "tweetnacl": ["tweetnacl@0.14.5", "", {}, "sha512-KXXFFdAbFXY4geFIwoyNK+f5Z1b7swfXABfL7HXCmoIWMKU3dmS26672A4EeQtDzLKy7SXmfBu51JolvEKwtGA=="],
-
-    "twofish-ts": ["twofish-ts@1.0.2", "", {}, "sha512-ogx3C6CE/zviqpFApfixBIqxzfF0P8lO1e0ep0w7squTLmGMnbYx/s7CutQCmRxQO68XUvY4iseeQ09rNITYOA=="],
 
     "type-fest": ["type-fest@0.21.3", "", {}, "sha512-t0rzBq87m3fVcduHDUFhKmyyX+9eo6WQjZvf51Ea/M0Q7+T374Jp1aUiyUl0GKxp8M/OETVHSDvmkyPgvX+X2w=="],
 

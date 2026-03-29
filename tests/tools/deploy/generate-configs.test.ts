@@ -2,6 +2,25 @@ import { describe, test, expect } from 'bun:test';
 import { ptGenerateConfigsTool } from '@cisco-auto/tools';
 import type { TopologyPlan } from '@cisco-auto/core';
 
+interface DeviceConfig {
+  deviceType: string;
+  iosConfig?: string;
+  yamlConfig?: string;
+  jsonConfig?: string;
+}
+
+interface GenerateConfigsData {
+  configs: DeviceConfig[];
+  summary: {
+    totalDevices: number;
+    routerCount: number;
+    switchCount: number;
+    pcCount: number;
+    serverCount: number;
+    totalLines?: number;
+  };
+}
+
 function createTestPlan(): TopologyPlan {
   return {
     id: 'test-plan-configs',
@@ -120,12 +139,13 @@ describe('pt_generate_configs', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.configs).toHaveLength(4);
-      expect(result.data.summary.totalDevices).toBe(4);
-      expect(result.data.summary.routerCount).toBe(1);
-      expect(result.data.summary.switchCount).toBe(1);
-      expect(result.data.summary.pcCount).toBe(1);
-      expect(result.data.summary.serverCount).toBe(1);
+      const data = result.data as GenerateConfigsData;
+      expect(data.configs).toHaveLength(4);
+      expect(data.summary.totalDevices).toBe(4);
+      expect(data.summary.routerCount).toBe(1);
+      expect(data.summary.switchCount).toBe(1);
+      expect(data.summary.pcCount).toBe(1);
+      expect(data.summary.serverCount).toBe(1);
     }
   });
 
@@ -135,12 +155,13 @@ describe('pt_generate_configs', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      const routerConfig = result.data.configs.find(c => c.deviceType === 'router');
+      const data = result.data as GenerateConfigsData;
+      const routerConfig = data.configs.find((c: DeviceConfig) => c.deviceType === 'router');
       expect(routerConfig).toBeDefined();
-      expect(routerConfig?.iosConfig).toContain('hostname Router1');
-      expect(routerConfig?.iosConfig).toContain('ip address 192.168.1.1 255.255.255.0');
-      expect(routerConfig?.iosConfig).toContain('router ospf 1');
-      expect(routerConfig?.iosConfig).toContain('network 192.168.1.0 0.0.0.255 area 0');
+      expect(routerConfig!.iosConfig).toContain('hostname Router1');
+      expect(routerConfig!.iosConfig).toContain('ip address 192.168.1.1 255.255.255.0');
+      expect(routerConfig!.iosConfig).toContain('router ospf 1');
+      expect(routerConfig!.iosConfig).toContain('network 192.168.1.0 0.0.0.255 area 0');
     }
   });
 
@@ -150,12 +171,13 @@ describe('pt_generate_configs', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      const switchConfig = result.data.configs.find(c => c.deviceType === 'switch');
+      const data = result.data as GenerateConfigsData;
+      const switchConfig = data.configs.find((c: DeviceConfig) => c.deviceType === 'switch');
       expect(switchConfig).toBeDefined();
-      expect(switchConfig?.iosConfig).toContain('hostname Switch1');
-      expect(switchConfig?.iosConfig).toContain('vlan 10');
-      expect(switchConfig?.iosConfig).toContain('vlan 20');
-      expect(switchConfig?.iosConfig).toContain('switchport mode access');
+      expect(switchConfig!.iosConfig).toContain('hostname Switch1');
+      expect(switchConfig!.iosConfig).toContain('vlan 10');
+      expect(switchConfig!.iosConfig).toContain('vlan 20');
+      expect(switchConfig!.iosConfig).toContain('switchport mode access');
     }
   });
 
@@ -165,9 +187,10 @@ describe('pt_generate_configs', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      const pcConfig = result.data.configs.find(c => c.deviceType === 'pc');
+      const data = result.data as GenerateConfigsData;
+      const pcConfig = data.configs.find((c: DeviceConfig) => c.deviceType === 'pc');
       expect(pcConfig).toBeDefined();
-      expect(pcConfig?.iosConfig).toContain('192.168.1.10');
+      expect(pcConfig!.iosConfig).toContain('192.168.1.10');
     }
   });
 
@@ -177,10 +200,11 @@ describe('pt_generate_configs', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      const serverConfig = result.data.configs.find(c => c.deviceType === 'server');
+      const data = result.data as GenerateConfigsData;
+      const serverConfig = data.configs.find((c: DeviceConfig) => c.deviceType === 'server');
       expect(serverConfig).toBeDefined();
-      expect(serverConfig?.iosConfig).toContain('ip dhcp pool LAN_POOL');
-      expect(serverConfig?.iosConfig).toContain('dns-server 192.168.1.100');
+      expect(serverConfig!.iosConfig).toContain('ip dhcp pool LAN_POOL');
+      expect(serverConfig!.iosConfig).toContain('dns-server 192.168.1.100');
     }
   });
 
@@ -190,10 +214,11 @@ describe('pt_generate_configs', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      const routerConfig = result.data.configs.find(c => c.deviceType === 'router');
-      expect(routerConfig?.yamlConfig).toBeDefined();
-      expect(routerConfig?.yamlConfig).toContain('Router1:');
-      expect(routerConfig?.yamlConfig).toContain('device_type: router');
+      const data = result.data as GenerateConfigsData;
+      const routerConfig = data.configs.find((c: DeviceConfig) => c.deviceType === 'router');
+      expect(routerConfig!.yamlConfig).toBeDefined();
+      expect(routerConfig!.yamlConfig).toContain('Router1:');
+      expect(routerConfig!.yamlConfig).toContain('device_type: router');
     }
   });
 
@@ -203,8 +228,9 @@ describe('pt_generate_configs', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      const routerConfig = result.data.configs.find(c => c.deviceType === 'router');
-      expect(routerConfig?.jsonConfig).toBeDefined();
+      const data = result.data as GenerateConfigsData;
+      const routerConfig = data.configs.find((c: DeviceConfig) => c.deviceType === 'router');
+      expect(routerConfig!.jsonConfig).toBeDefined();
       const jsonParsed = JSON.parse(routerConfig!.jsonConfig!);
       expect(jsonParsed.deviceName).toBe('Router1');
       expect(jsonParsed.deviceType).toBe('router');
@@ -235,7 +261,8 @@ describe('pt_generate_configs', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.summary.totalLines).toBeGreaterThan(0);
+      const data = result.data as GenerateConfigsData;
+      expect(data.summary.totalLines).toBeGreaterThan(0);
     }
   });
 
@@ -245,7 +272,8 @@ describe('pt_generate_configs', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      const routerConfig = result.data.configs.find(c => c.deviceType === 'router');
+      const data = result.data as GenerateConfigsData;
+      const routerConfig = data.configs.find((c: DeviceConfig) => c.deviceType === 'router');
       const jsonParsed = JSON.parse(routerConfig!.jsonConfig!);
       expect(jsonParsed.interfaces).toBeDefined();
       expect(jsonParsed.interfaces.length).toBeGreaterThan(0);

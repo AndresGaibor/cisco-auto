@@ -98,7 +98,44 @@ export interface BridgeLease {
   ownerId: string;
   pid: number;
   hostname: string;
+  startedAt: number;
   updatedAt: number;
+  expiresAt: number;
+  ttlMs: number;
+  processTitle: string;
+  version: string;
+}
+
+/**
+ * Rotation manifest entry — tracks when a log file was rotated.
+ */
+export interface RotationEntry {
+  file: string;
+  rotatedAt: number;
+  previousFile: string;
+  bytesSizeAtRotation: number;
+  lastSeqInFile: number;
+}
+
+/**
+ * Rotation manifest — written by EventLogWriter, read by DurableNdjsonConsumer
+ * to recover events from rotated files.
+ */
+export interface RotationManifest {
+  rotations: RotationEntry[];
+}
+
+/**
+ * In-flight recovery entry — used during crash recovery.
+ */
+export interface InFlightRecovery {
+  file: string;
+  cmdId: string;
+  seq: number;
+  type: string;
+  attempt: number;
+  movedAt: number;
+  action: "requeued" | "completed" | "dead-letter";
 }
 
 /**

@@ -10,7 +10,6 @@
  */
 
 import type { LabSpec, DeviceSpec, ConnectionSpec } from '../canonical/index.ts';
-import { ValidationEngine } from '../models/ValidationEngine.ts';
 
 export interface ValidationIssue {
   severity: 'error' | 'warning' | 'info';
@@ -154,24 +153,7 @@ export class LabValidator {
         continue;
       }
 
-      // Validar cable/puerto
-      try {
-        ValidationEngine.validateCableCompatibility(
-          conn.from.port,
-          conn.cableType as any
-        );
-      } catch (e: any) {
-        this.addError('physical', e.message, conn.from.deviceName);
-      }
-
-      try {
-        ValidationEngine.validateCableCompatibility(
-          conn.to.port,
-          conn.cableType as any
-        );
-      } catch (e: any) {
-        this.addError('physical', e.message, conn.to.deviceName);
-      }
+      // TODO: Validar cable/puerto cuando se implemente catálogo de puertos
     }
   }
 

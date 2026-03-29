@@ -27,7 +27,7 @@ describe("Event log parser", () => {
 
     const tail = tailEvents(events, 2);
     expect(tail).toHaveLength(2);
-    expect(tail[0].type).toBe("log");
-    expect(tail[1].type).toBe("result");
+    expect(tail[0]!.type).toBe("log");
+    expect(tail[1]!.type).toBe("result");
   });
 });

@@ -10,6 +10,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import chalk from 'chalk';
 import { createInterface } from 'readline';
 import { loadLab } from '@cisco-auto/core';
+import type { ToolResult, TopologyPlan } from '@cisco-auto/core';
 import { ptValidatePlanTool } from '@cisco-auto/tools';
 import { ptFixPlanTool } from '@cisco-auto/tools';
 
@@ -57,7 +58,7 @@ async function ejecutarPipeline(archivo: string, autoFix: boolean = false): Prom
     // Paso 1: Cargar plan
     console.log(chalk.blue('📂 Paso 1: Cargando laboratorio...'));
     const { lab } = loadLab(archivo);
-    console.log(chalk.green(`   ✅ Laboratorio cargado: ${lab.name}`));
+    console.log(chalk.green(`   ✅ Laboratorio cargado: ${lab.metadata?.name || 'Lab'}`));
     console.log(`   📊 Dispositivos: ${lab.topology?.devices?.length || 0}`);
     
     // Paso 2: Validar
@@ -65,8 +66,8 @@ async function ejecutarPipeline(archivo: string, autoFix: boolean = false): Prom
     const validateResult = await ptValidatePlanTool.handler(
       { plan: lab },
       { logger: console as any, config: { workingDir: process.cwd() } }
-    );
-    
+    ) as ToolResult<{ valid: boolean; errors: Array<{ message: string }>; warnings: Array<{ message: string }> }>;
+
     if (!validateResult.success) {
       console.log(chalk.yellow('   ⚠️  Validación completada con observaciones'));
     } else {
@@ -77,10 +78,10 @@ async function ejecutarPipeline(archivo: string, autoFix: boolean = false): Prom
         return;
       }
     }
-    
+
     // Mostrar errores y warnings
-    const errors = validateResult.data?.errors || [];
-    const warnings = validateResult.data?.warnings || [];
+    const errors = validateResult.success ? (validateResult.data?.errors || []) : [];
+    const warnings = validateResult.success ? (validateResult.data?.warnings || []) : [];
     
     if (errors.length > 0) {
       console.log(chalk.red(`\n   ❌ Errores encontrados: ${errors.length}`));
@@ -106,25 +107,25 @@ async function ejecutarPipeline(archivo: string, autoFix: boolean = false): Prom
     
     if (aplicarFixes) {
       console.log(chalk.blue('\n🔧 Paso 3: Aplicando correcciones...'));
-      
+
       const fixResult = await ptFixPlanTool.handler(
         { plan: lab, autoApply: true },
         { logger: console as any, config: { workingDir: process.cwd() } }
-      );
-      
+      ) as ToolResult<{ plan: TopologyPlan; appliedFixes: Array<{ description: string }>; remainingErrors: Array<{ message: string }> }>;
+
       if (fixResult.success) {
         console.log(chalk.green('   ✅ Correcciones aplicadas'));
-        
+
         if (fixResult.data.appliedFixes?.length > 0) {
           console.log(chalk.green(`\n   📝 Fixes aplicados: ${fixResult.data.appliedFixes.length}`));
           fixResult.data.appliedFixes.forEach((fix: any, idx: number) => {
             console.log(chalk.green(`      ${idx + 1}. ${fix.description}`));
           });
         }
-        
+
         // Guardar plan corregido
         const outputFile = archivo.replace('.yaml', '-fixed.yaml');
-        writeFileSync(outputFile, JSON.stringify(fixResult.data.fixedPlan, null, 2));
+        writeFileSync(outputFile, JSON.stringify(fixResult.data.plan, null, 2));
         console.log(chalk.green(`\n💾 Plan corregido guardado en: ${outputFile}`));
       } else {
         console.log(chalk.red('   ❌ No se pudieron aplicar correcciones'));

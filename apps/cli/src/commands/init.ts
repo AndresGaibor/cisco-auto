@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import * as fs from 'fs';
+// @ts-ignore - js-yaml lacks type declarations
 import * as yaml from 'js-yaml';
 
 export function createInitCommand(): Command {

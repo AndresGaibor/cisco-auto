@@ -15,7 +15,7 @@ function parseNetwork(input: string): { network: string; subnetMask: string } {
   if (parts.length === 2) {
     const cidr = Number(parts[1]);
     const mask = Number.isFinite(cidr) ? cidrToMask(cidr) : '255.255.255.0';
-    return { network: parts[0], subnetMask: mask };
+    return { network: parts[0]!, subnetMask: mask };
   }
   // Si no tiene / asumimos máscara /24
   return { network: input, subnetMask: '255.255.255.0' };

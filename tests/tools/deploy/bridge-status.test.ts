@@ -1,6 +1,13 @@
 import { describe, test, expect } from 'bun:test';
 import { ptBridgeStatusTool, type BridgeStatusResult } from '@cisco-auto/tools';
 
+interface BridgeStatusData {
+  connected: boolean;
+  version?: string;
+  uptime?: number;
+  lastError?: string;
+}
+
 describe('pt_bridge_status', () => {
   describe('ptBridgeStatusTool', () => {
     test('retorna connected=false cuando bridge no disponible', async () => {
@@ -11,8 +18,9 @@ describe('pt_bridge_status', () => {
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.connected).toBe(false);
-        expect(result.data.lastError).toBeDefined();
+        const data = result.data as BridgeStatusData;
+        expect(data.connected).toBe(false);
+        expect(data.lastError).toBeDefined();
       }
     });
 
@@ -24,7 +32,8 @@ describe('pt_bridge_status', () => {
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.connected).toBe(false);
+        const data = result.data as BridgeStatusData;
+        expect(data.connected).toBe(false);
       }
     });
 
@@ -60,7 +69,8 @@ describe('pt_bridge_status', () => {
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.connected).toBe(false);
+        const data = result.data as BridgeStatusData;
+        expect(data.connected).toBe(false);
       }
     });
 
@@ -72,7 +82,8 @@ describe('pt_bridge_status', () => {
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.connected).toBe(false);
+        const data = result.data as BridgeStatusData;
+        expect(data.connected).toBe(false);
       }
     });
   });

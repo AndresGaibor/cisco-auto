@@ -179,6 +179,6 @@ export function getExamplesForCommand(commandPath: string): CommandExample[] {
   const direct = commandExamples[commandPath];
   if (direct) return direct;
 
-  const parent = commandPath.split(' ')[0];
+  const parent = commandPath.split(' ')[0] ?? '';
   return commandExamples[parent] || [];
 }

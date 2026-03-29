@@ -1,6 +1,12 @@
 import { describe, test, expect } from 'bun:test';
 import { ptDeployTool } from '@cisco-auto/tools';
 
+interface DeployData {
+  message?: string;
+  charCount?: number;
+  outputPath?: string;
+}
+
 describe('pt_deploy', () => {
   test('copia configuraciones al portapapeles', async () => {
     const configs = [
@@ -15,8 +21,9 @@ describe('pt_deploy', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.message).toBe('Configuraciones copiadas al portapapeles');
-      expect(result.data.charCount).toBeGreaterThan(0);
+      const data = result.data as DeployData;
+      expect(data.message).toBe('Configuraciones copiadas al portapapeles');
+      expect(data.charCount).toBeGreaterThan(0);
     }
   });
 
@@ -33,9 +40,10 @@ describe('pt_deploy', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.message).toContain('test-config.txt');
-      expect(result.data.outputPath).toBe('configs/test-config.txt');
-      expect(result.data.charCount).toBeGreaterThan(0);
+      const data = result.data as DeployData;
+      expect(data.message).toContain('test-config.txt');
+      expect(data.outputPath).toBe('configs/test-config.txt');
+      expect(data.charCount).toBeGreaterThan(0);
     }
   });
 
@@ -51,7 +59,8 @@ describe('pt_deploy', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.outputPath).toBe('configs/deploy-config.txt');
+      const data = result.data as DeployData;
+      expect(data.outputPath).toBe('configs/deploy-config.txt');
     }
   });
 
@@ -81,7 +90,8 @@ describe('pt_deploy', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.charCount).toBeGreaterThan(
+      const data = result.data as DeployData;
+      expect(data.charCount).toBeGreaterThan(
         configs.reduce((sum, c) => sum + c.config.length, 0)
       );
     }

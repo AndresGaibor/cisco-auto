@@ -8,23 +8,28 @@
  * - Uses watcher + poll for resilience
  * - Maintains leftover buffer for partial lines
  * - Detects sequence gaps
+ * - Uses StringDecoder for proper UTF-8 multibyte handling
+ * - Supports rotation manifest to recover events from rotated files
  *
  * This replaces the v1 FastEventStream which had no checkpointing
  * and relied solely on tail-from-end behavior.
  */
 import {
   closeSync,
+  existsSync,
   openSync,
   readSync,
   statSync,
   watch,
   type FSWatcher,
 } from "node:fs";
+import { StringDecoder } from "string_decoder";
 import { EventEmitter } from "node:events";
 import { ensureDir, ensureFile } from "./shared/fs-atomic.js";
 import type {
   BridgeEvent,
   ConsumerCheckpoint,
+  RotationManifest,
 } from "./shared/protocol.js";
 import { BridgePathLayout } from "./shared/path-layout.js";
 import { PTEventSchema } from "../../contracts/index.js";
@@ -45,6 +50,8 @@ export interface DurableNdjsonConsumerOptions {
   onGap?: (expected: number, actual: number) => void;
   /** Called when a line fails to parse */
   onParseError?: (line: string, error: unknown) => void;
+  /** Called when data loss is detected (e.g., rotated file not found) */
+  onDataLoss?: (info: { reason: string; lostFromOffset: number; checkpoint: ConsumerCheckpoint }) => void;
 }
 
 export class DurableNdjsonConsumer extends EventEmitter {
@@ -60,6 +67,7 @@ export class DurableNdjsonConsumer extends EventEmitter {
 
   private readonly checkpointManager: CheckpointManager;
   private readonly fileResolver: FileResolver;
+  private decoder = new StringDecoder("utf8");
 
   constructor(
     private readonly paths: BridgePathLayout,
@@ -131,15 +139,21 @@ export class DurableNdjsonConsumer extends EventEmitter {
     if (!this.running) return;
 
     const checkpoint = this.checkpointManager.read();
-    const targetFile = this.fileResolver.resolve(checkpoint.currentFile);
+    const resolved = this.fileResolver.resolveWithRotation(checkpoint, (info) => {
+      this.emit("data-loss", info);
+      this.options.onDataLoss?.(info);
+    });
 
-    if (!targetFile) {
+    if (!resolved) {
       ensureFile(this.paths.currentEventsFile(), "");
       return;
     }
 
-    if (this.currentFilePath !== targetFile || this.fd === null) {
-      this.reopenFile(targetFile);
+    // If file changed (rotated or recreated) or fd is stale, reopen it
+    if (this.currentFilePath !== resolved.filePath || this.fd === null) {
+      this.reopenFile(resolved.filePath);
+      // Reset decoder when switching files to avoid carryover of incomplete multibyte chars
+      this.decoder = new StringDecoder("utf8");
     }
 
     if (this.fd === null || this.currentFilePath === null) return;
@@ -152,15 +166,16 @@ export class DurableNdjsonConsumer extends EventEmitter {
     }
 
     // Handle truncation: if file shrunk, reset to beginning
-    let offset = checkpoint.byteOffset;
+    let offset = resolved.offset;
     if (offset > stats.size) {
       offset = 0;
       this.leftover = "";
+      this.decoder = new StringDecoder("utf8");
     }
 
     // Nothing new to read
     if (offset >= stats.size) {
-      const nextFile = this.fileResolver.findNext(this.currentFilePath);
+      const nextFile = this.fileResolver.findNextRotatedFile(this.currentFilePath);
       if (nextFile) {
         this.reopenFile(nextFile);
         this.poll();
@@ -180,7 +195,9 @@ export class DurableNdjsonConsumer extends EventEmitter {
         break;
       }
 
-      const chunk = previousLeftover + buffer.toString("utf8", 0, bytesRead);
+      // StringDecoder handles incomplete multibyte characters correctly —
+      // it buffers bytes that don't form a complete character until the next write()
+      const chunk = previousLeftover + this.decoder.write(buffer.subarray(0, bytesRead));
       const lines = chunk.split("\n");
       this.leftover = lines.pop() ?? "";
 
@@ -233,8 +250,6 @@ export class DurableNdjsonConsumer extends EventEmitter {
         }
       }
 
-      // Advance offset by bytesRead (what we actually read from file),
-      // NOT by consumedBytes (which includes leftover bytes from previous iterations)
       offset += bytesRead;
       checkpoint.byteOffset = offset;
       checkpoint.currentFile = this.fileResolver.toRelative(this.currentFilePath);
@@ -247,6 +262,12 @@ export class DurableNdjsonConsumer extends EventEmitter {
       }
 
       if (bytesRead < buffer.length) break;
+    }
+
+    // Flush any remaining incomplete multibyte characters from the decoder
+    const remaining = this.decoder.end();
+    if (remaining) {
+      this.leftover = remaining;
     }
 
     // Final checkpoint write — ALWAYS write at end of poll
@@ -266,9 +287,9 @@ export class DurableNdjsonConsumer extends EventEmitter {
 
   private reopenFromCheckpoint(): void {
     const checkpoint = this.checkpointManager.read();
-    const file = this.fileResolver.resolve(checkpoint.currentFile);
-    if (file) {
-      this.reopenFile(file);
+    const resolved = this.fileResolver.resolveWithRotation(checkpoint);
+    if (resolved) {
+      this.reopenFile(resolved.filePath);
     }
   }
 
@@ -285,5 +306,6 @@ export class DurableNdjsonConsumer extends EventEmitter {
     this.fd = openSync(filePath, "r");
     this.currentFilePath = filePath;
     this.leftover = "";
+    this.decoder = new StringDecoder("utf8");
   }
 }

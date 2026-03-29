@@ -58,3 +58,12 @@ archivos_prueba/
 !.iflow/skills/cisco-networking-assistant/**/
 !.gemini/skills/cisco-networking-assistant/
 !.gemini/skills/cisco-networking-assistant/**/
+
+# OMC runtime state (agent orchestration)
+.omc/
+
+# Packet Tracer logs
+pt-logs/
+
+# Temporary files
+tmp/

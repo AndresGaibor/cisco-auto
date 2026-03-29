@@ -1,6 +1,20 @@
 import { describe, test, expect } from 'bun:test';
 import { ptEstimatePlanTool } from '@cisco-auto/tools';
 
+interface EstimateBreakdown {
+  item: string;
+  count: number;
+  unitCost: number;
+  unitTime: number;
+}
+
+interface EstimateData {
+  estimatedTime: number;
+  estimatedCost: number;
+  complexity: 'low' | 'medium' | 'high';
+  breakdown: EstimateBreakdown[];
+}
+
 describe('pt_estimate_plan', () => {
   test('calcula estimación correcta para 2 routers, 1 switch, 4 PCs', async () => {
     const result = await ptEstimatePlanTool.handler({
@@ -12,10 +26,11 @@ describe('pt_estimate_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.estimatedTime).toBe(60);
-      expect(result.data.estimatedCost).toBe(15000);
-      expect(result.data.complexity).toBe('low');
-      expect(result.data.breakdown).toHaveLength(3);
+      const data = result.data as EstimateData;
+      expect(data.estimatedTime).toBe(60);
+      expect(data.estimatedCost).toBe(15000);
+      expect(data.complexity).toBe('low');
+      expect(data.breakdown).toHaveLength(3);
     }
   });
 
@@ -29,8 +44,9 @@ describe('pt_estimate_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.complexity).toBe('low');
-      expect(result.data.estimatedTime).toBe(35);
+      const data = result.data as EstimateData;
+      expect(data.complexity).toBe('low');
+      expect(data.estimatedTime).toBe(35);
     }
   });
 
@@ -44,7 +60,8 @@ describe('pt_estimate_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.complexity).toBe('medium');
+      const data = result.data as EstimateData;
+      expect(data.complexity).toBe('medium');
     }
   });
 
@@ -58,7 +75,8 @@ describe('pt_estimate_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.complexity).toBe('high');
+      const data = result.data as EstimateData;
+      expect(data.complexity).toBe('high');
     }
   });
 
@@ -72,7 +90,8 @@ describe('pt_estimate_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.breakdown).toHaveLength(4);
+      const data = result.data as EstimateData;
+      expect(data.breakdown).toHaveLength(4);
     }
   });
 
@@ -86,8 +105,9 @@ describe('pt_estimate_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.breakdown).toHaveLength(1);
-      expect(result.data.breakdown[0].item).toBe('2 Routers');
+      const data = result.data as EstimateData;
+      expect(data.breakdown).toHaveLength(1);
+      expect(data.breakdown[0]!.item).toBe('2 Routers');
     }
   });
 
@@ -115,7 +135,8 @@ describe('pt_estimate_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.estimatedCost).toBe(13000);
+      const data = result.data as EstimateData;
+      expect(data.estimatedCost).toBe(13000);
     }
   });
 
@@ -129,7 +150,8 @@ describe('pt_estimate_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.estimatedTime).toBe(40);
+      const data = result.data as EstimateData;
+      expect(data.estimatedTime).toBe(40);
     }
   });
 
@@ -143,8 +165,9 @@ describe('pt_estimate_plan', () => {
 
     expect(resultSingle.success).toBe(true);
     if (resultSingle.success) {
-      expect(resultSingle.data.breakdown[0].item).toBe('1 Router');
-      expect(resultSingle.data.breakdown[1].item).toBe('1 Switch');
+      const dataSingle = resultSingle.data as EstimateData;
+      expect(dataSingle.breakdown[0]!.item).toBe('1 Router');
+      expect(dataSingle.breakdown[1]!.item).toBe('1 Switch');
     }
 
     const resultMultiple = await ptEstimatePlanTool.handler({
@@ -156,10 +179,11 @@ describe('pt_estimate_plan', () => {
 
     expect(resultMultiple.success).toBe(true);
     if (resultMultiple.success) {
-      expect(resultMultiple.data.breakdown[0].item).toBe('3 Routers');
-      expect(resultMultiple.data.breakdown[1].item).toBe('2 Switches');
-      expect(resultMultiple.data.breakdown[2].item).toBe('5 PCs');
-      expect(resultMultiple.data.breakdown[3].item).toBe('2 Servers');
+      const dataMultiple = resultMultiple.data as EstimateData;
+      expect(dataMultiple.breakdown[0]!.item).toBe('3 Routers');
+      expect(dataMultiple.breakdown[1]!.item).toBe('2 Switches');
+      expect(dataMultiple.breakdown[2]!.item).toBe('5 PCs');
+      expect(dataMultiple.breakdown[3]!.item).toBe('2 Servers');
     }
   });
 
@@ -173,10 +197,11 @@ describe('pt_estimate_plan', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.estimatedTime).toBe(0);
-      expect(result.data.estimatedCost).toBe(0);
-      expect(result.data.complexity).toBe('low');
-      expect(result.data.breakdown).toHaveLength(0);
+      const data = result.data as EstimateData;
+      expect(data.estimatedTime).toBe(0);
+      expect(data.estimatedCost).toBe(0);
+      expect(data.complexity).toBe('low');
+      expect(data.breakdown).toHaveLength(0);
     }
   });
 });

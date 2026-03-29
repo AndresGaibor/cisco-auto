@@ -9,15 +9,16 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { readFileSync, writeFileSync } from 'fs';
+// @ts-ignore - js-yaml lacks type declarations
 import * as yaml from 'js-yaml';
 import { loadLab } from '@cisco-auto/core';
 import { ptValidatePlanTool } from '@cisco-auto/tools';
 import { ptFixPlanTool } from '@cisco-auto/tools';
-import type { 
-  TopologyPlan, 
-  ValidationError, 
-  ValidationWarning, 
-  FixSuggestion 
+import type {
+  TopologyPlan,
+  ValidationError,
+  ValidationWarning,
+  FixSuggestion
 } from '@cisco-auto/core';
 
 /**
@@ -62,24 +63,17 @@ function labAPlan(lab: ReturnType<typeof loadLab>['lab']): TopologyPlan {
     else if (device.type === 'pc') deviceType = 'pc';
     else if (device.type === 'multilayer-switch') deviceType = 'multilayer-switch';
 
-    // Mapear puertos desde connections
-    const interfaces: InterfacePlan[] = [];
-    
-    // Extraer IPs de las conexiones
-    if (device.connections) {
-      for (const conn of device.connections) {
-        if (conn.ip) {
-          interfaces.push({
-            name: conn.port || `GigabitEthernet0/${index}`,
-            ip: conn.ip,
-            subnetMask: conn.subnet || '255.255.255.0',
-            configured: true
-          });
-        }
-      }
-    }
+    // Mapear puertos desde las interfaces del dispositivo
+    const interfaces: InterfacePlan[] = (device.interfaces || []).map(iface => ({
+      name: iface.name,
+      ip: iface.ip,
+      subnetMask: undefined,
+      configured: !!iface.ip,
+      vlan: iface.vlan,
+      description: iface.description
+    }));
 
-    // Puerto default si no hay conexiones
+    // Puerto default si no hay interfaces
     if (interfaces.length === 0) {
       interfaces.push({
         name: 'GigabitEthernet0/0',
@@ -112,24 +106,24 @@ function labAPlan(lab: ReturnType<typeof loadLab>['lab']): TopologyPlan {
 
   // Extraer links desde connections
   const links: LinkPlan[] = [];
-  
+
   if (lab.topology.connections) {
     for (const conn of lab.topology.connections) {
       const fromDevice = devices.find(d => d.name === conn.from);
       const toDevice = devices.find(d => d.name === conn.to);
-      
+
       if (fromDevice && toDevice) {
         links.push({
           id: `link-${fromDevice.id}-${toDevice.id}`,
           from: {
             deviceId: fromDevice.id,
             deviceName: fromDevice.name,
-            port: conn.port || 'GigabitEthernet0/0'
+            port: conn.fromInterface
           },
           to: {
             deviceId: toDevice.id,
             deviceName: toDevice.name,
-            port: conn.port || 'GigabitEthernet0/0'
+            port: conn.toInterface
           },
           cableType: (conn.type as CableTypePlan) || 'auto',
           validated: false
@@ -265,8 +259,11 @@ async function ejecutarValidacionInteractiva(filepath: string): Promise<number> 
   
   // Ejecutar validación
   console.log('\n⏳ Ejecutando validación...');
-  
-  const resultadoValidacion = await ptValidatePlanTool.handler({ plan });
+
+  const resultadoValidacion = await ptValidatePlanTool.handler(
+    { plan },
+    { logger: console as any, config: { workingDir: process.cwd() } }
+  );
   
   if (!resultadoValidacion.success) {
     console.error(chalk.red('\n❌ Error en la validación:'), resultadoValidacion.error);
@@ -295,8 +292,11 @@ async function ejecutarValidacionInteractiva(filepath: string): Promise<number> 
   
   // Obtener sugerencias de fix
   console.log('\n⏳ Analizando posibles correcciones...');
-  
-  const resultadoFix = await ptFixPlanTool.handler({ plan, applyFixes: false });
+
+  const resultadoFix = await ptFixPlanTool.handler(
+    { plan, applyFixes: false },
+    { logger: console as any, config: { workingDir: process.cwd() } }
+  );
   
   let sugerencias: FixSuggestion[] = [];
   let fixesAplicados: FixSuggestion[] = [];
@@ -334,8 +334,11 @@ async function ejecutarValidacionInteractiva(filepath: string): Promise<number> 
       if (respuesta.trim() === '1') {
         // Aplicar fixes
         console.log(chalk.cyan('\n⏳ Aplicando correcciones...'));
-        
-        const resultadoAplicarFix = await ptFixPlanTool.handler({ plan, applyFixes: true });
+
+        const resultadoAplicarFix = await ptFixPlanTool.handler(
+          { plan, applyFixes: true },
+          { logger: console as any, config: { workingDir: process.cwd() } }
+        );
         
         if (resultadoAplicarFix.success) {
           const datosFixAplicados = resultadoAplicarFix.data as { 
@@ -400,20 +403,19 @@ function convertirPlanALab(plan: TopologyPlan, labOriginal: ReturnType<typeof lo
   // Actualizar los dispositivos con las correcciones
   const devicesActualizados = plan.devices.map(devicePlan => {
     const deviceOriginal = labOriginal.topology.devices.find(d => d.name === devicePlan.name);
-    
+
     return {
       ...deviceOriginal,
       name: devicePlan.name,
       model: devicePlan.model.name,
       type: devicePlan.model.type,
-      connections: devicePlan.interfaces
-        .filter(iface => iface.configured && iface.ip)
-        .map(iface => ({
-          to: '',
-          port: iface.name,
-          ip: iface.ip,
-          subnet: iface.subnetMask
-        })),
+      interfaces: devicePlan.interfaces.map(iface => ({
+        name: iface.name,
+        ip: iface.ip,
+        description: iface.description,
+        enabled: !iface.configured,
+        vlan: iface.vlan
+      })),
       credentials: devicePlan.credentials ? {
         username: devicePlan.credentials.username,
         password: devicePlan.credentials.password,
@@ -421,21 +423,22 @@ function convertirPlanALab(plan: TopologyPlan, labOriginal: ReturnType<typeof lo
       } : undefined
     };
   });
-  
+
   // Actualizar conexiones
   const conexionesActualizadas = plan.links.map(link => ({
     from: link.from.deviceName,
     to: link.to.deviceName,
-    port: link.from.port,
-    type: link.cableType
+    fromInterface: link.from.port,
+    toInterface: link.to.port,
+    type: link.cableType === 'auto' ? 'ethernet' : link.cableType
   }));
-  
+
   return {
     ...labOriginal,
     topology: {
       ...labOriginal.topology,
-      devices: devicesActualizados,
-      connections: conexionesActualizadas
+      devices: devicesActualizados as any,
+      connections: conexionesActualizadas as any
     }
   };
 }

@@ -88,7 +88,9 @@ function parseArgs(): { config: TopologyConfig; dryRun: boolean; verbose: boolea
   const vlansIndex = args.indexOf("--vlans");
   if (vlansIndex >= 0) {
     const vlansArg = args[vlansIndex + 1];
-    config.vlans = vlansArg.split(",").map(v => ({ id: parseInt(v.trim()) }));
+    if (vlansArg) {
+      config.vlans = vlansArg.split(",").map(v => ({ id: parseInt(v.trim()) }));
+    }
   }
   
   const sshDomainIndex = args.indexOf("--ssh-domain");
@@ -97,9 +99,9 @@ function parseArgs(): { config: TopologyConfig; dryRun: boolean; verbose: boolea
   
   if (sshDomainIndex >= 0) {
     config.sshConfig = {
-      domain: args[sshDomainIndex + 1],
-      username: sshUserIndex >= 0 ? args[sshUserIndex + 1] : "admin",
-      password: sshPassIndex >= 0 ? args[sshPassIndex + 1] : "admin",
+      domain: args[sshDomainIndex + 1] ?? "cisco.local",
+      username: (sshUserIndex >= 0 ? args[sshUserIndex + 1] : undefined) ?? "admin",
+      password: (sshPassIndex >= 0 ? args[sshPassIndex + 1] : undefined) ?? "admin",
     };
   }
   

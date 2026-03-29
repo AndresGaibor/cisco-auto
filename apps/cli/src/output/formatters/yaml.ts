@@ -4,6 +4,7 @@
  * Usa js-yaml para conversión confiable
  */
 
+// @ts-ignore - js-yaml lacks type declarations
 import jsYaml from 'js-yaml';
 import type { Formatter, FormatOptions } from './types.ts';
 

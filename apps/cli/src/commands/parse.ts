@@ -2,44 +2,115 @@ import { Command } from 'commander';
 import { loadLab, YAMLParser } from '@cisco-auto/core';
 import { validateLabSafe } from '@cisco-auto/core';
 import { visualizeTopology, generateMermaidDiagram, analyzeTopology } from '@cisco-auto/core';
-import type { LabSpec } from '@cisco-auto/core';
+import { generateId, CableType } from '@cisco-auto/core';
+import type { LabSpec, DeviceSpec, ConnectionSpec, DeviceType } from '@cisco-auto/core';
 
-/**
- * Convierte Lab del parser a LabSpec
- */
-function toLabSpec(parsed: any): LabSpec {
+interface ParsedDeviceInput {
+  name: string;
+  type: string;
+  hostname?: string;
+  management?: { ip?: string };
+  interfaces?: Array<{
+    name?: string;
+    description?: string;
+    ip?: string;
+    shutdown?: boolean;
+    mode?: string;
+    vlan?: number;
+  }>;
+  security?: unknown;
+  vlans?: unknown;
+  routing?: unknown;
+  services?: unknown;
+}
+
+interface ParsedConnectionInput {
+  from: { device?: string; port?: string } | string;
+  to: { device?: string; port?: string } | string;
+  fromInterface?: string;
+  toInterface?: string;
+  cable?: string;
+  type?: string;
+}
+
+interface ParsedLabInput {
+  lab?: {
+    metadata?: { name?: string; version?: string; author?: string };
+    topology?: {
+      devices?: ParsedDeviceInput[];
+      connections?: ParsedConnectionInput[];
+    };
+  };
+}
+
+interface ParseCommandOptions {
+  format: string;
+  topology: boolean;
+  mermaid: boolean;
+  stats: boolean;
+}
+
+function toLabSpec(parsed: ParsedLabInput): LabSpec {
+  const devices: DeviceSpec[] = (parsed.lab?.topology?.devices || []).map((d) => ({
+    id: generateId(),
+    name: d.name,
+    type: d.type as DeviceType,
+    hostname: d.hostname || d.name,
+    managementIp: d.management?.ip,
+    interfaces: (d.interfaces || []).map((i) => ({
+      id: generateId(),
+      name: i.name || '',
+      description: i.description,
+      ipAddress: i.ip,
+      shutdown: i.shutdown,
+      switchport: i.mode ? {
+        mode: i.mode,
+        accessVlan: i.vlan
+      } : undefined
+    })),
+    security: d.security as DeviceSpec['security'],
+    vlans: d.vlans as DeviceSpec['vlans'],
+    routing: d.routing as DeviceSpec['routing'],
+    services: d.services as DeviceSpec['services']
+  }));
+
+  const connections = (parsed.lab?.topology?.connections || []).map((c) => {
+    const fromDeviceName = typeof c.from === 'string' ? c.from : c.from.device || '';
+    const toDeviceName = typeof c.to === 'string' ? c.to : c.to.device || '';
+    const cableTypeStr = c.cable || c.type || 'ethernet';
+    const cableTypeMap: Record<string, string> = {
+      'ethernet': 'eStraightThrough',
+      'straight': 'eStraightThrough',
+      'cross': 'eCrossOver',
+      'crossover': 'eCrossOver',
+      'serial': 'eSerialDTE',
+      'console': 'eConsole',
+    };
+    return {
+      id: generateId(),
+      from: { 
+        deviceId: generateId(), 
+        deviceName: fromDeviceName, 
+        port: c.fromInterface || (typeof c.from === 'object' ? c.from.port || '' : '')
+      },
+      to: { 
+        deviceId: generateId(), 
+        deviceName: toDeviceName, 
+        port: c.toInterface || (typeof c.to === 'object' ? c.to.port || '' : '')
+      },
+      cableType: (cableTypeMap[cableTypeStr] || 'eStraightThrough') as ConnectionSpec['cableType']
+    };
+  });
+
   return {
     metadata: {
       name: parsed.lab?.metadata?.name || 'Lab',
       version: parsed.lab?.metadata?.version || '1.0',
       author: parsed.lab?.metadata?.author || 'unknown',
-      created: new Date().toISOString()
+      createdAt: new Date()
     },
-    devices: (parsed.lab?.topology?.devices || []).map((d: any) => ({
-      name: d.name,
-      type: d.type,
-      hostname: d.hostname || d.name,
-      managementIp: d.management?.ip,
-      interfaces: (d.interfaces || []).map((i: any) => ({
-        name: i.name,
-        description: i.description,
-        ipAddress: i.ip,
-        shutdown: i.shutdown,
-        switchport: i.mode ? {
-          mode: i.mode,
-          accessVlan: i.vlan
-        } : undefined
-      })),
-      security: d.security,
-      vlans: d.vlans,
-      routing: d.routing,
-      services: d.services
-    })),
-    connections: (parsed.lab?.topology?.connections || []).map((c: any) => ({
-      from: { deviceName: c.from.device || c.from, portName: c.from.port || c.fromInterface || 'unknown' },
-      to: { deviceName: c.to.device || c.to, portName: c.to.port || c.toInterface || 'unknown' },
-      cableType: c.cable || c.type || 'ethernet'
-    }))
+    devices,
+    connections
   };
 }
 
@@ -51,7 +122,7 @@ export function createParseCommand(): Command {
     .option('-t, --topology', 'Mostrar visualización de topología', false)
     .option('-m, --mermaid', 'Generar diagrama Mermaid', false)
     .option('-s, --stats', 'Mostrar estadísticas de topología', false)
-    .action(async (file, options) => {
+    .action(async (file: string, options: ParseCommandOptions) => {
       try {
         console.log('🔍 Parseando archivo:', file);
         

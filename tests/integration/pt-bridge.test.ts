@@ -1,12 +1,40 @@
 /**
  * TESTS DE INTEGRACIÓN PARA PT BRIDGE SERVER
- * 
+ *
  * Verifica la funcionalidad del servidor bridge HTTP en puerto 54321.
  * Tests: conectividad, enqueue/dequeue de comandos, y lifetime del polling loop.
  */
 
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
-import { startBridgeServer, type ComandoPT, type HealthResponse, type NextResponse, type ExecuteResponse } from '@cisco-auto/bridge';
+import { startBridgeServer } from '@cisco-auto/bridge';
+
+// ============================================================================
+// Tipos locales (ya que no están exportados del paquete bridge)
+// ============================================================================
+
+interface ComandoPT {
+  tipo: string;
+  args: unknown[];
+  id?: string;
+  timestamp?: number;
+}
+
+interface HealthResponse {
+  status: 'ok' | 'degraded' | 'error';
+  version: string;
+  timestamp: string;
+}
+
+interface NextResponse {
+  hasCommand: boolean;
+  command: ComandoPT | null;
+}
+
+interface ExecuteResponse {
+  success: boolean;
+  commandId?: string;
+  error?: string;
+}
 
 // ============================================================================
 // Configuración

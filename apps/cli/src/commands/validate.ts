@@ -27,29 +27,27 @@ function toLabSpec(parsed: any): LabSpec {
       name: parsed.lab?.metadata?.name || 'Lab',
       version: parsed.lab?.metadata?.version || '1.0',
       author: parsed.lab?.metadata?.author || 'unknown',
-      created: new Date().toISOString()
+      createdAt: new Date()
     },
     devices: (parsed.lab?.topology?.devices || []).map((d: any) => ({
+      id: d.name,
       name: d.name,
       type: d.type,
       hostname: d.hostname || d.name,
-      managementIp: d.management?.ip,
       interfaces: (d.interfaces || []).map((i: any) => ({
         name: i.name,
         description: i.description,
-        ipAddress: i.ip,
-        shutdown: i.shutdown,
-        switchport: i.mode ? {
-          mode: i.mode,
-          accessVlan: i.vlan
-        } : undefined
-      })),
-      security: d.security
+        ip: i.ip,
+        shutdown: !i.enabled,
+        switchportMode: i.mode,
+        vlan: i.vlan
+      })) || []
     })),
     connections: (parsed.lab?.topology?.connections || []).map((c: any) => ({
-      from: { deviceName: c.from.device || c.from, portName: c.from.port || c.fromInterface || 'unknown' },
-      to: { deviceName: c.to.device || c.to, portName: c.to.port || c.toInterface || 'unknown' },
-      cableType: c.cable || c.type || 'ethernet'
+      id: `${c.from}-${c.to}`,
+      from: { deviceName: c.from, port: c.fromInterface, deviceId: '' },
+      to: { deviceName: c.to, port: c.toInterface, deviceId: '' },
+      cableType: c.type || 'ethernet'
     }))
   };
 }
@@ -83,7 +81,7 @@ function displayResults(result: ReturnType<typeof validateLab>, verbose: boolean
     }
 
     for (const [category, issues] of byCategory) {
-      console.log(`\n📁 ${CATEGORY_LABELS[category]}:`);
+      console.log(`\n📁 ${CATEGORY_LABELS[category as keyof typeof CATEGORY_LABELS] ?? category}:`);
       
       for (const issue of issues) {
         const icon = SEVERITY_ICONS[issue.severity];

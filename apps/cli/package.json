@@ -16,8 +16,6 @@
   },
   "dependencies": {
     "@cisco-auto/lab-model": "workspace:*",
-    "@cisco-auto/device-catalog": "workspace:*",
-    "@cisco-auto/topology": "workspace:*",
     "@cisco-auto/core": "workspace:*",
     "@cisco-auto/api": "workspace:*",
     "@cisco-auto/bridge": "workspace:*",

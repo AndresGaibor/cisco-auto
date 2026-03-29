@@ -101,31 +101,30 @@ export function createDeployCommand(): Command {
         // Convertir a LabSpec
         lab = {
           metadata: {
-            name: parsed.lab.name || 'Lab',
+            name: parsed.lab.metadata.name || 'Lab',
             version: '1.0',
             author: 'cisco-auto',
-            created: new Date().toISOString()
+            createdAt: new Date()
           },
           devices: parsed.lab.topology.devices.map(d => ({
+            id: `device-${d.name}-${Date.now()}`,
             name: d.name,
             type: d.type as any,
-            managementIp: d.management?.ip,
             interfaces: d.interfaces?.map(i => ({
               name: i.name,
               description: i.description,
-              ipAddress: i.ip,
-              shutdown: i.shutdown,
-              switchport: i.mode ? {
-                mode: i.mode as any,
-                accessVlan: i.vlan
-              } : undefined
-            }))
-          })),
+              ip: i.ip,
+              shutdown: !i.enabled,
+              switchportMode: i.mode,
+              vlan: i.vlan
+            })) || []
+          })) as any,
           connections: parsed.lab.topology.connections?.map(c => ({
-            from: { deviceName: c.from.device, portName: c.from.port },
-            to: { deviceName: c.to.device, portName: c.to.port },
-            cableType: c.cable as any
-          })) || []
+            id: `conn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            from: { deviceName: c.from, port: c.fromInterface, deviceId: '' },
+            to: { deviceName: c.to, port: c.toInterface, deviceId: '' },
+            cableType: c.type as any
+          })) as any
         };
       } catch (error: any) {
         console.error(`❌ Error parseando archivo: ${error.message}`);
