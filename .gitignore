@@ -85,3 +85,13 @@ tmp/
 generated/
 *.log
 *.ndjson
+
+# Build outputs
+dist/
+
+# Skills lock
+skills-lock.json
+
+# macOS
+.DS_Store
+.ai/
