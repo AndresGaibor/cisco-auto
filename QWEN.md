@@ -38,3 +38,4 @@ Test bug noted: validation-engine.test.ts line 137 compares full results but met
 - src/validation/rules/vlan-exists.rule.ts: getDeviceVlans()
 - src/validation/rules/gateway-reachability.rule.ts: ipToInt(), hasPath(), subnet check
 - src/validation/rules/index.ts: exporta loopDetectionRule
+- Implemented DeviceSpecValidator for comprehensive pre-generation device validation. Validates interfaces (names, IPs, VLANs), VLANs (IDs, duplicates, names), routing (OSPF/EIGRP/BGP router IDs, ASNs), security (ACL rules), and topology (duplicate IPs/router IDs across devices). File: packages/core/src/validation/device-spec.validator.ts with 32 tests
