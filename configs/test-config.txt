@@ -1,5 +1,0 @@
-!=== Router-1 ===!
-hostname Router-1
-
-!=== Switch-1 ===!
-hostname Switch-1
