@@ -76,3 +76,12 @@ tmp/
 generated/
 *.log
 *.ndjson
+
+# === Arquitectura Cleanup ===
+.archive/
+logs/
+pt-logs/
+tmp/
+generated/
+*.log
+*.ndjson
