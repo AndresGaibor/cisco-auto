@@ -184,12 +184,7 @@ export class DurableNdjsonConsumer extends EventEmitter {
       const lines = chunk.split("\n");
       this.leftover = lines.pop() ?? "";
 
-      let consumedBytes = 0;
-
       for (const line of lines) {
-        const fullLine = `${line}\n`;
-        consumedBytes += Buffer.byteLength(fullLine, "utf8");
-
         if (!line.trim()) continue;
 
         try {
