@@ -34,7 +34,7 @@ export const QueuePacketSchema = z.object({
   id: z.string().optional(),
   kind: QueuePacketKindSchema,
   code: z.string().optional(),
-  payload: z.any().optional(),
+  payload: z.unknown().optional(),
   withSnapshot: z.boolean().optional(),
 });
 
@@ -80,7 +80,7 @@ export const CmdLogEventSchema = BaseEventSchema.extend({
 export const ResultEventSchema = BaseEventSchema.extend({
   type: z.literal("result"),
   ok: z.boolean(),
-  value: z.any(),
+  value: z.unknown(),
   snapshot: SnapshotSchema.optional(),
 });
 

@@ -191,13 +191,13 @@ export class ValidationExecutor {
       const match = output.match(vlanRegex);
       
       const exists = match !== null;
-      const actualName = match ? match[1] : 'not found';
-      
+      const actualName: string = match ? (match[1] ?? 'unknown') : 'not found';
+
       let passed = exists;
       if (expectedName && exists) {
         passed = actualName.includes(expectedName) || output.includes(expectedName);
       }
-      
+
       return {
         name: `VLAN ${vlanId}`,
         type: 'vlan',
@@ -312,14 +312,14 @@ export function generateValidationSpec(
   
   // Validar VLANs si es switch
   if (device.type === 'switch' || device.type === 'multilayer-switch') {
-    // Extraer VLANs de interfaces access
+    // Extraer VLANs de interfaces
     const vlans = new Set<number>();
     device.interfaces?.forEach(i => {
-      if (i.switchport?.accessVlan) {
-        vlans.add(i.switchport.accessVlan);
+      if (i.vlan) {
+        vlans.add(i.vlan);
       }
     });
-    
+
     checks.vlans = Array.from(vlans).map(id => ({ id }));
   }
   

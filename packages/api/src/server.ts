@@ -14,7 +14,7 @@ export interface APIServerOptions {
   host?: string;
 }
 
-interface Route {
+export interface Route {
   method: string;
   path: string;
   handler: (req: Request, params: Record<string, string>) => Promise<Response> | Response;
@@ -81,9 +81,15 @@ export function createAPIServer(options: APIServerOptions = {}) {
       let match = true;
 
       for (let i = 0; i < routeParts.length; i++) {
-        if (routeParts[i].startsWith(':')) {
-          params[routeParts[i].slice(1)] = pathParts[i];
-        } else if (routeParts[i] !== pathParts[i]) {
+        const routePart = routeParts[i];
+        const pathPart = pathParts[i];
+        if (!routePart || !pathPart) {
+          match = false;
+          break;
+        }
+        if (routePart.startsWith(':')) {
+          params[routePart.slice(1)] = pathPart;
+        } else if (routePart !== pathPart) {
           match = false;
           break;
         }
@@ -163,7 +169,7 @@ export function createAPIServer(options: APIServerOptions = {}) {
  * Helper para leer JSON del body
  */
 export async function readJSON<T>(req: Request): Promise<T> {
-  return await req.json();
+  return await req.json() as T;
 }
 
 /**

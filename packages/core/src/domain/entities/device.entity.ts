@@ -145,7 +145,8 @@ export class Device {
     if (index === -1) {
       throw new Error(`Interfaz ${name} no encontrada en el dispositivo ${this.props.name}`);
     }
-    this.props.interfaces[index] = { ...this.props.interfaces[index], ...config };
+    const existing = this.props.interfaces[index]!;
+    this.props.interfaces[index] = { ...existing, ...config, name: existing.name };
   }
 
   removeInterface(name: string): void {

@@ -3,8 +3,8 @@
  * Endpoints para validación de laboratorios
  */
 
-import type { Route } from '../server';
-import { json, error, readJSON } from '../server';
+import type { Route } from '../server.ts';
+import { json, error, readJSON } from '../server.ts';
 import { validateLab, LabValidator } from '@cisco-auto/core';
 import type { LabSpec } from '@cisco-auto/core';
 
@@ -14,7 +14,7 @@ export function createValidationRoutes(): Route[] {
     {
       method: 'POST',
       path: '/api/validate',
-      handler: async (req) => {
+      handler: async (req: Request) => {
         const lab = await readJSON<LabSpec>(req);
         const result = validateLab(lab);
         return json(result);
@@ -25,7 +25,7 @@ export function createValidationRoutes(): Route[] {
     {
       method: 'POST',
       path: '/api/validate/detailed',
-      handler: async (req) => {
+      handler: async (req: Request) => {
         const body = await readJSON<{ lab: LabSpec; options?: { warningsAsErrors?: boolean } }>(req);
         const { lab, options } = body;
 

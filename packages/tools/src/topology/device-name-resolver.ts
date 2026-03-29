@@ -109,15 +109,15 @@ export function resolveDeviceNames(
         const m = normCandidates.map(x => x.c).find(c => c.type === desiredType);
         if (m) return m;
       }
-      return normCandidates[0].c;
+      return normCandidates[0]!.c;
     }
 
     // 6) Intención débil: buscar por número al final (Router2 -> cualquier que contenga '2')
     const trailingNumberMatch = originalName.match(/(\d+)$/);
     if (trailingNumberMatch) {
-      const num = trailingNumberMatch[1];
+      const num = trailingNumberMatch[1]!;
       const numCandidates = currentList.filter(c => String(c.name).includes(num));
-      if (numCandidates.length === 1) return numCandidates[0];
+      if (numCandidates.length === 1) return numCandidates[0]!;
       if (numCandidates.length > 1 && desiredType) {
         return numCandidates.find(c => c.type === desiredType);
       }

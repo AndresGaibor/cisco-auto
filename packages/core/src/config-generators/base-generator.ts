@@ -1,9 +1,9 @@
-import { Device } from '../types/index.ts';
+import type { DeviceSpec, LineSpec } from '../canonical/device.spec.ts';
 
 export class BaseGenerator {
-  public static generateBasic(device: Device): string[] {
+  public static generateBasic(device: DeviceSpec): string[] {
     const commands: string[] = [];
-    
+
     if (device.hostname) {
       commands.push(`hostname ${device.hostname}`);
     }
@@ -15,43 +15,51 @@ export class BaseGenerator {
     commands.push('service password-encryption');
     commands.push('logging synchronous');
     commands.push('clock timezone EST -5');
-    
-    if (device.ssh?.enabled) {
+
+    // SSH configuration moved to services.ssh in canonical model
+    if (device.services?.ssh?.enabled) {
       commands.push('ip domain-name espoch.local');
-      commands.push(`crypto key generate rsa modulus ${device.ssh.version === 2 ? 2048 : 1024}`);
-      commands.push(`ip ssh version ${device.ssh.version}`);
+      const version = device.services.ssh.version ?? 2;
+      commands.push(`crypto key generate rsa modulus ${version === 2 ? 2048 : 1024}`);
+      commands.push(`ip ssh version ${version}`);
     }
-    
+
     return commands;
   }
 
-  public static generateLines(lines: NonNullable<Device['lines']>): string[] {
+  public static generateLines(lines: LineSpec[]): string[] {
     const commands: string[] = [];
-    
-    if (lines.console) {
-      commands.push('line console 0');
-      commands.push(` exec-timeout ${lines.console.execTimeout}`);
-      if (lines.console.login) {
-        commands.push(' login');
+
+    for (const line of lines) {
+      if (line.type === 'console') {
+        commands.push('line console 0');
+        if (line.execTimeout) {
+          commands.push(` exec-timeout ${line.execTimeout.minutes} ${line.execTimeout.seconds}`);
+        }
+        if (line.login) {
+          commands.push(' login');
+        }
+        if (line.password) {
+          commands.push(` password ${line.password}`);
+        }
+        commands.push(' exit');
       }
-      if (lines.console.password) {
-        commands.push(` password ${lines.console.password}`);
+
+      if (line.type === 'vty' && line.range) {
+        commands.push(`line vty ${line.range[0]} ${line.range[1]}`);
+        if (line.transportInput) {
+          commands.push(` transport input ${line.transportInput.join(' ')}`);
+        }
+        if (line.login) {
+          commands.push(' login local');
+        }
+        if (line.password) {
+          commands.push(` password ${line.password}`);
+        }
+        commands.push(' exit');
       }
-      commands.push(' exit');
     }
-    
-    if (lines.vty) {
-      commands.push(`line vty ${lines.vty.start} ${lines.vty.end}`);
-      commands.push(` transport input ${lines.vty.transportInput}`);
-      if (lines.vty.login) {
-        commands.push(' login local');
-      }
-      if (lines.vty.password) {
-        commands.push(` password ${lines.vty.password}`);
-      }
-      commands.push(' exit');
-    }
-    
+
     return commands;
   }
 }

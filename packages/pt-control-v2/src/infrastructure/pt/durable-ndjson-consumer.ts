@@ -1,0 +1,294 @@
+/**
+ * Durable NDJSON Consumer
+ *
+ * Reads NDJSON events from the log directory without losing data.
+ * Key features:
+ * - Persists byteOffset + lastSeq checkpoint to disk
+ * - Handles file truncation and rotation
+ * - Uses watcher + poll for resilience
+ * - Maintains leftover buffer for partial lines
+ * - Detects sequence gaps
+ *
+ * This replaces the v1 FastEventStream which had no checkpointing
+ * and relied solely on tail-from-end behavior.
+ */
+import {
+  closeSync,
+  openSync,
+  readSync,
+  statSync,
+  watch,
+  type FSWatcher,
+} from "node:fs";
+import { EventEmitter } from "node:events";
+import { ensureDir, ensureFile } from "./shared/fs-atomic.js";
+import type {
+  BridgeEvent,
+  ConsumerCheckpoint,
+} from "./shared/protocol.js";
+import { BridgePathLayout } from "./shared/path-layout.js";
+import { PTEventSchema } from "../../contracts/index.js";
+import { CheckpointManager } from "./consumer-checkpoint.js";
+import { FileResolver } from "./consumer-file-resolver.js";
+
+export interface DurableNdjsonConsumerOptions {
+  consumerId: string;
+  /** Polling interval in ms (default: 300ms) */
+  pollIntervalMs?: number;
+  /** Read buffer size in bytes (default: 64KB) */
+  bufferSize?: number;
+  /** If true, start from beginning of file; if false, start from end (default: false) */
+  startFromBeginning?: boolean;
+  /** Called for each successfully parsed event */
+  onEvent?: (event: BridgeEvent) => void;
+  /** Called when a sequence gap is detected */
+  onGap?: (expected: number, actual: number) => void;
+  /** Called when a line fails to parse */
+  onParseError?: (line: string, error: unknown) => void;
+}
+
+export class DurableNdjsonConsumer extends EventEmitter {
+  private readonly pollIntervalMs: number;
+  private readonly bufferSize: number;
+
+  private watcher: FSWatcher | null = null;
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private fd: number | null = null;
+  private currentFilePath: string | null = null;
+  private leftover = "";
+  private running = false;
+
+  private readonly checkpointManager: CheckpointManager;
+  private readonly fileResolver: FileResolver;
+
+  constructor(
+    private readonly paths: BridgePathLayout,
+    private readonly options: DurableNdjsonConsumerOptions,
+  ) {
+    super();
+    this.pollIntervalMs = options.pollIntervalMs ?? 300;
+    this.bufferSize = options.bufferSize ?? 64 * 1024;
+
+    this.checkpointManager = new CheckpointManager(
+      paths,
+      options.consumerId,
+      options.startFromBeginning ?? false,
+    );
+    this.fileResolver = new FileResolver(paths);
+  }
+
+  /** Start consuming events */
+  start(): void {
+    if (this.running) return;
+    this.running = true;
+
+    ensureDir(this.paths.consumerStateDir());
+    ensureDir(this.paths.logsDir());
+    ensureFile(this.paths.currentEventsFile(), "");
+
+    this.reopenFromCheckpoint();
+
+    this.watcher = watch(this.paths.logsDir(), () => {
+      this.poll();
+    });
+
+    this.timer = setInterval(() => {
+      this.poll();
+    }, this.pollIntervalMs);
+
+    this.poll();
+  }
+
+  /** Stop consuming and release resources */
+  stop(): void {
+    this.running = false;
+
+    if (this.watcher) {
+      this.watcher.close();
+      this.watcher = null;
+    }
+
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+
+    if (this.fd !== null) {
+      try {
+        closeSync(this.fd);
+      } catch {
+        // ignore
+      }
+      this.fd = null;
+    }
+
+    this.currentFilePath = null;
+    this.leftover = "";
+  }
+
+  /** Trigger a poll manually */
+  poll(): void {
+    if (!this.running) return;
+
+    const checkpoint = this.checkpointManager.read();
+    const targetFile = this.fileResolver.resolve(checkpoint.currentFile);
+
+    if (!targetFile) {
+      ensureFile(this.paths.currentEventsFile(), "");
+      return;
+    }
+
+    if (this.currentFilePath !== targetFile || this.fd === null) {
+      this.reopenFile(targetFile);
+    }
+
+    if (this.fd === null || this.currentFilePath === null) return;
+
+    let stats: ReturnType<typeof statSync>;
+    try {
+      stats = statSync(this.currentFilePath);
+    } catch {
+      return;
+    }
+
+    // Handle truncation: if file shrunk, reset to beginning
+    let offset = checkpoint.byteOffset;
+    if (offset > stats.size) {
+      offset = 0;
+      this.leftover = "";
+    }
+
+    // Nothing new to read
+    if (offset >= stats.size) {
+      const nextFile = this.fileResolver.findNext(this.currentFilePath);
+      if (nextFile) {
+        this.reopenFile(nextFile);
+        this.poll();
+      }
+      return;
+    }
+
+    const buffer = Buffer.alloc(this.bufferSize);
+
+    while (true) {
+      const previousLeftover = this.leftover;
+      this.leftover = "";
+
+      const bytesRead = readSync(this.fd, buffer, 0, buffer.length, offset);
+      if (bytesRead <= 0) {
+        this.leftover = previousLeftover;
+        break;
+      }
+
+      const chunk = previousLeftover + buffer.toString("utf8", 0, bytesRead);
+      const lines = chunk.split("\n");
+      this.leftover = lines.pop() ?? "";
+
+      let consumedBytes = 0;
+
+      for (const line of lines) {
+        const fullLine = `${line}\n`;
+        consumedBytes += Buffer.byteLength(fullLine, "utf8");
+
+        if (!line.trim()) continue;
+
+        try {
+          const raw = JSON.parse(line);
+
+          const result = PTEventSchema.safeParse(raw);
+
+          let event: BridgeEvent;
+          if (result.success) {
+            event = result.data as BridgeEvent;
+          } else {
+            event = raw as BridgeEvent;
+            this.emit("parse-error", {
+              type: "parse-error" as const,
+              raw,
+              line,
+              error: "Validation failed",
+              issues: result.error.issues.map((issue) => ({
+                path: issue.path,
+                message: issue.message,
+              })),
+            });
+            this.options.onParseError?.(line, result.error);
+          }
+
+          if (event.seq !== undefined) {
+            this.validateSequence(checkpoint.lastSeq, event.seq);
+          }
+
+          this.emit("event", event);
+          this.options.onEvent?.(event);
+
+          if (event.seq !== undefined) {
+            checkpoint.lastSeq = event.seq;
+          }
+        } catch (err) {
+          const parseError = {
+            type: "parse-error" as const,
+            raw: null,
+            line,
+            error: String(err),
+          };
+          this.emit("parse-error", parseError);
+          this.options.onParseError?.(line, err);
+          break;
+        }
+      }
+
+      // Advance offset by bytesRead (what we actually read from file),
+      // NOT by consumedBytes (which includes leftover bytes from previous iterations)
+      offset += bytesRead;
+      checkpoint.byteOffset = offset;
+      checkpoint.currentFile = this.fileResolver.toRelative(this.currentFilePath);
+      checkpoint.updatedAt = Date.now();
+
+      // Throttle checkpoint writes during the loop
+      if (this.checkpointManager.canWriteCheckpoint()) {
+        this.checkpointManager.write(checkpoint);
+        this.checkpointManager.markCheckpointWritten();
+      }
+
+      if (bytesRead < buffer.length) break;
+    }
+
+    // Final checkpoint write — ALWAYS write at end of poll
+    checkpoint.byteOffset = offset;
+    this.checkpointManager.write(checkpoint);
+    this.checkpointManager.markCheckpointWritten();
+  }
+
+  private validateSequence(lastSeq: number, currentSeq: number): void {
+    if (lastSeq === 0) return;
+    const expected = lastSeq + 1;
+    if (currentSeq !== expected) {
+      this.emit("gap", { expected, actual: currentSeq });
+      this.options.onGap?.(expected, currentSeq);
+    }
+  }
+
+  private reopenFromCheckpoint(): void {
+    const checkpoint = this.checkpointManager.read();
+    const file = this.fileResolver.resolve(checkpoint.currentFile);
+    if (file) {
+      this.reopenFile(file);
+    }
+  }
+
+  private reopenFile(filePath: string): void {
+    if (this.fd !== null) {
+      try {
+        closeSync(this.fd);
+      } catch {
+        // ignore
+      }
+      this.fd = null;
+    }
+
+    this.fd = openSync(filePath, "r");
+    this.currentFilePath = filePath;
+    this.leftover = "";
+  }
+}

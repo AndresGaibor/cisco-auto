@@ -63,11 +63,14 @@ async function sendCommand<T = unknown>(
     throw new Error(`Bridge error: ${JSON.stringify(error)}`);
   }
 
-  const data = await res.json();
+  const data = await res.json() as { packet?: { id?: string } };
   const commandId = data.packet?.id;
 
   // Esperar el resultado en /events (simplificado para esta implementación)
   // En una implementación real, usaríamos polling o websockets
+  if (!commandId) {
+    throw new Error('No command ID in response');
+  }
   return await waitForResult<T>(commandId);
 }
 

@@ -39,10 +39,10 @@ export type GlobalFlags = {
  */
 export abstract class BaseCommand extends Command {
   // Enable JSON flag for all commands
-  static enableJsonFlag = true;
+  static override enableJsonFlag = true;
 
   // Global flags available to all commands
-  static baseFlags = {
+  static override baseFlags = {
     format: Flags.string({
       description: 'Output format: json, yaml, table, text',
       options: ['json', 'yaml', 'table', 'text'] as const,
@@ -82,7 +82,7 @@ export abstract class BaseCommand extends Command {
   protected logManager!: LogManager;
   protected logSessionId!: string;
 
-  async init(): Promise<void> {
+  override async init(): Promise<void> {
     await super.init();
     const { flags, args } = await this.parse({
       flags: this.ctor.flags,

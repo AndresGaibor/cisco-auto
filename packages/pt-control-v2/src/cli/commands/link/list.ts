@@ -7,15 +7,15 @@ import { createDefaultPTController } from '../../../controller/index.js';
 import type { LinkState } from '../../../types/index.js';
 
 export default class LinkList extends BaseCommand {
-  static description = 'List all links in the topology';
+  static override description = 'List all links in the topology';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> link list',
     '<%= config.bin %> link list --format json',
     '<%= config.bin %> link list --jq ".[].cableType"',
   ];
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
   };
 

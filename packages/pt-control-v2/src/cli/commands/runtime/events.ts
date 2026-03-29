@@ -11,16 +11,16 @@ import { ValidationError } from '../../errors/index.js';
 import { readEvents, summarizeEvents, tailEvents } from '../../../tools/event-log.js';
 
 export default class RuntimeEvents extends BaseCommand {
-  static description = 'Inspect events.ndjson log file';
+  static override description = 'Inspect events.ndjson log file';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> runtime events',
     '<%= config.bin %> runtime events --tail 50',
     '<%= config.bin %> runtime events --type addDevice,removeDevice',
     '<%= config.bin %> runtime events --format json',
   ];
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
     tail: Flags.integer({
       description: 'Number of recent events to show',

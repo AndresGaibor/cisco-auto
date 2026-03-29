@@ -9,9 +9,15 @@ export type MutationKind =
   | "configureSvi"
   | "configureSubinterface"
   | "configureStaticRoute"
+  | "configureDhcpRelay"
   | "enableDhcpPool"
   | "configureNat"
   | "saveConfig"
+  | "subnet-overlap"
+  | "vlan-exists"
+  | "acl-match-order"
+  | "nat-overlap"
+  | "gateway-reachability"
   | "generic";
 
 export interface Mutation<T = unknown> {

@@ -14,14 +14,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export default class RuntimeDeploy extends BaseCommand {
-  static description = 'Deploy runtime files to Packet Tracer development directory';
+  static override description = 'Deploy runtime files to Packet Tracer development directory';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> runtime deploy',
     '<%= config.bin %> runtime deploy --dev-dir ~/my-pt-dev',
   ];
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
   };
 

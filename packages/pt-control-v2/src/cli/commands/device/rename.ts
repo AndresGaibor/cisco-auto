@@ -11,14 +11,14 @@ import { DeviceNotFoundError, ValidationError } from '../../errors/index.js';
 import type { DeviceState } from '../../../types/index.js';
 
 export default class DeviceRename extends BaseCommand {
-  static description = 'Rename a device in the topology';
+  static override description = 'Rename a device in the topology';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> device rename R1 Router1',
     '<%= config.bin %> device rename S1 CoreSwitch',
   ];
 
-  static args = {
+  static override args = {
     oldName: Args.string({
       description: 'Current device name',
     }),
@@ -27,7 +27,7 @@ export default class DeviceRename extends BaseCommand {
     }),
   };
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
   };
 

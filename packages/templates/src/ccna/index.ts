@@ -3,7 +3,8 @@
  * Plantillas pre-configuradas para laboratorios CCNA
  */
 
-import type { LabSpec, DeviceSpec, ConnectionSpec } from '../../canonical/index.ts';
+import type { LabSpec, DeviceSpec, ConnectionSpec } from '@cisco-auto/core';
+import { CableType } from '@cisco-auto/core';
 
 export interface LabTemplate {
   id: string;
@@ -37,17 +38,18 @@ export const vlanBasicsTemplate: LabTemplate = {
       name: 'VLAN Basics Lab',
       version: '1.0',
       author: 'cisco-auto-template',
-      created: new Date().toISOString()
+      createdAt: new Date()
     },
     devices: [
       {
+        id: 'switch1',
         name: 'Switch1',
         type: 'switch',
         hostname: 'SW1',
         interfaces: [
-          { name: 'Vlan10', ipAddress: '192.168.10.1/24', description: 'VLAN 10 Gateway' },
-          { name: 'Vlan20', ipAddress: '192.168.20.1/24', description: 'VLAN 20 Gateway' },
-          { name: 'Vlan30', ipAddress: '192.168.30.1/24', description: 'VLAN 30 Gateway' }
+          { name: 'Vlan10', ip: '192.168.10.1/24', description: 'VLAN 10 Gateway' },
+          { name: 'Vlan20', ip: '192.168.20.1/24', description: 'VLAN 20 Gateway' },
+          { name: 'Vlan30', ip: '192.168.30.1/24', description: 'VLAN 30 Gateway' }
         ],
         vlans: [
           { id: 10, name: 'Sales', interfaces: ['Fa0/1', 'Fa0/2'] },
@@ -56,25 +58,28 @@ export const vlanBasicsTemplate: LabTemplate = {
         ]
       },
       {
+        id: 'pc1',
         name: 'PC1',
         type: 'pc',
-        interfaces: [{ name: 'Fa0', ipAddress: '192.168.10.10/24' }]
+        interfaces: [{ name: 'Fa0', ip: '192.168.10.10/24' }]
       },
       {
+        id: 'pc2',
         name: 'PC2',
         type: 'pc',
-        interfaces: [{ name: 'Fa0', ipAddress: '192.168.20.10/24' }]
+        interfaces: [{ name: 'Fa0', ip: '192.168.20.10/24' }]
       },
       {
+        id: 'pc3',
         name: 'PC3',
         type: 'pc',
-        interfaces: [{ name: 'Fa0', ipAddress: '192.168.30.10/24' }]
+        interfaces: [{ name: 'Fa0', ip: '192.168.30.10/24' }]
       }
     ],
     connections: [
-      { from: { deviceName: 'PC1', portName: 'Fa0' }, to: { deviceName: 'Switch1', portName: 'Fa0/1' }, cableType: 'eStraightThrough' },
-      { from: { deviceName: 'PC2', portName: 'Fa0' }, to: { deviceName: 'Switch1', portName: 'Fa0/3' }, cableType: 'eStraightThrough' },
-      { from: { deviceName: 'PC3', portName: 'Fa0' }, to: { deviceName: 'Switch1', portName: 'Fa0/5' }, cableType: 'eStraightThrough' }
+      { id: 'conn1', from: { deviceId: 'pc1', deviceName: 'PC1', port: 'Fa0' }, to: { deviceId: 'switch1', deviceName: 'Switch1', port: 'Fa0/1' }, cableType: CableType.STRAIGHT_THROUGH },
+      { id: 'conn2', from: { deviceId: 'pc2', deviceName: 'PC2', port: 'Fa0' }, to: { deviceId: 'switch1', deviceName: 'Switch1', port: 'Fa0/3' }, cableType: CableType.STRAIGHT_THROUGH },
+      { id: 'conn3', from: { deviceId: 'pc3', deviceName: 'PC3', port: 'Fa0' }, to: { deviceId: 'switch1', deviceName: 'Switch1', port: 'Fa0/5' }, cableType: CableType.STRAIGHT_THROUGH }
     ]
   })
 };
@@ -100,16 +105,17 @@ export const staticRoutingTemplate: LabTemplate = {
       name: 'Static Routing Lab',
       version: '1.0',
       author: 'cisco-auto-template',
-      created: new Date().toISOString()
+      createdAt: new Date()
     },
     devices: [
       {
+        id: 'router1',
         name: 'Router1',
         type: 'router',
         hostname: 'R1',
         interfaces: [
-          { name: 'Gi0/0', ipAddress: '192.168.1.1/24', description: 'LAN' },
-          { name: 'Gi0/1', ipAddress: '10.0.0.1/30', description: 'WAN to R2' }
+          { name: 'Gi0/0', ip: '192.168.1.1/24', description: 'LAN' },
+          { name: 'Gi0/1', ip: '10.0.0.1/30', description: 'WAN to R2' }
         ],
         routing: {
           static: [
@@ -118,12 +124,13 @@ export const staticRoutingTemplate: LabTemplate = {
         }
       },
       {
+        id: 'router2',
         name: 'Router2',
         type: 'router',
         hostname: 'R2',
         interfaces: [
-          { name: 'Gi0/0', ipAddress: '192.168.2.1/24', description: 'LAN' },
-          { name: 'Gi0/1', ipAddress: '10.0.0.2/30', description: 'WAN to R1' }
+          { name: 'Gi0/0', ip: '192.168.2.1/24', description: 'LAN' },
+          { name: 'Gi0/1', ip: '10.0.0.2/30', description: 'WAN to R1' }
         ],
         routing: {
           static: [
@@ -132,20 +139,22 @@ export const staticRoutingTemplate: LabTemplate = {
         }
       },
       {
+        id: 'pc1',
         name: 'PC1',
         type: 'pc',
-        interfaces: [{ name: 'Fa0', ipAddress: '192.168.1.10/24' }]
+        interfaces: [{ name: 'Fa0', ip: '192.168.1.10/24' }]
       },
       {
+        id: 'pc2',
         name: 'PC2',
         type: 'pc',
-        interfaces: [{ name: 'Fa0', ipAddress: '192.168.2.10/24' }]
+        interfaces: [{ name: 'Fa0', ip: '192.168.2.10/24' }]
       }
     ],
     connections: [
-      { from: { deviceName: 'Router1', portName: 'Gi0/1' }, to: { deviceName: 'Router2', portName: 'Gi0/1' }, cableType: 'eSerialDCE' },
-      { from: { deviceName: 'PC1', portName: 'Fa0' }, to: { deviceName: 'Router1', portName: 'Gi0/0' }, cableType: 'eStraightThrough' },
-      { from: { deviceName: 'PC2', portName: 'Fa0' }, to: { deviceName: 'Router2', portName: 'Gi0/0' }, cableType: 'eStraightThrough' }
+      { id: 'conn1', from: { deviceId: 'router1', deviceName: 'Router1', port: 'Gi0/1' }, to: { deviceId: 'router2', deviceName: 'Router2', port: 'Gi0/1' }, cableType: CableType.SERIAL_DCE },
+      { id: 'conn2', from: { deviceId: 'pc1', deviceName: 'PC1', port: 'Fa0' }, to: { deviceId: 'router1', deviceName: 'Router1', port: 'Gi0/0' }, cableType: CableType.STRAIGHT_THROUGH },
+      { id: 'conn3', from: { deviceId: 'pc2', deviceName: 'PC2', port: 'Fa0' }, to: { deviceId: 'router2', deviceName: 'Router2', port: 'Gi0/0' }, cableType: CableType.STRAIGHT_THROUGH }
     ]
   })
 };
@@ -171,77 +180,74 @@ export const ospfSingleAreaTemplate: LabTemplate = {
       name: 'OSPF Single Area Lab',
       version: '1.0',
       author: 'cisco-auto-template',
-      created: new Date().toISOString()
+      createdAt: new Date()
     },
     devices: [
       {
+        id: 'router1',
         name: 'Router1',
         type: 'router',
         hostname: 'R1',
         interfaces: [
-          { name: 'Gi0/0', ipAddress: '192.168.1.1/24' },
-          { name: 'Gi0/1', ipAddress: '10.0.12.1/30' },
-          { name: 'Gi0/2', ipAddress: '10.0.13.1/30' }
+          { name: 'Gi0/0', ip: '192.168.1.1/24' },
+          { name: 'Gi0/1', ip: '10.0.12.1/30' },
+          { name: 'Gi0/2', ip: '10.0.13.1/30' }
         ],
         routing: {
           ospf: {
             processId: 1,
             routerId: '1.1.1.1',
-            networks: [
-              { network: '192.168.1.0', wildcard: '0.0.0.255', area: '0' },
-              { network: '10.0.12.0', wildcard: '0.0.0.3', area: '0' },
-              { network: '10.0.13.0', wildcard: '0.0.0.3', area: '0' }
+            areas: [
+              { areaId: '0', networks: ['192.168.1.0 0.0.0.255', '10.0.12.0 0.0.0.3', '10.0.13.0 0.0.0.3'] }
             ]
           }
         }
       },
       {
+        id: 'router2',
         name: 'Router2',
         type: 'router',
         hostname: 'R2',
         interfaces: [
-          { name: 'Gi0/0', ipAddress: '192.168.2.1/24' },
-          { name: 'Gi0/1', ipAddress: '10.0.12.2/30' },
-          { name: 'Gi0/2', ipAddress: '10.0.23.1/30' }
+          { name: 'Gi0/0', ip: '192.168.2.1/24' },
+          { name: 'Gi0/1', ip: '10.0.12.2/30' },
+          { name: 'Gi0/2', ip: '10.0.23.1/30' }
         ],
         routing: {
           ospf: {
             processId: 1,
             routerId: '2.2.2.2',
-            networks: [
-              { network: '192.168.2.0', wildcard: '0.0.0.255', area: '0' },
-              { network: '10.0.12.0', wildcard: '0.0.0.3', area: '0' },
-              { network: '10.0.23.0', wildcard: '0.0.0.3', area: '0' }
+            areas: [
+              { areaId: '0', networks: ['192.168.2.0 0.0.0.255', '10.0.12.0 0.0.0.3', '10.0.23.0 0.0.0.3'] }
             ]
           }
         }
       },
       {
+        id: 'router3',
         name: 'Router3',
         type: 'router',
         hostname: 'R3',
         interfaces: [
-          { name: 'Gi0/0', ipAddress: '192.168.3.1/24' },
-          { name: 'Gi0/1', ipAddress: '10.0.13.2/30' },
-          { name: 'Gi0/2', ipAddress: '10.0.23.2/30' }
+          { name: 'Gi0/0', ip: '192.168.3.1/24' },
+          { name: 'Gi0/1', ip: '10.0.13.2/30' },
+          { name: 'Gi0/2', ip: '10.0.23.2/30' }
         ],
         routing: {
           ospf: {
             processId: 1,
             routerId: '3.3.3.3',
-            networks: [
-              { network: '192.168.3.0', wildcard: '0.0.0.255', area: '0' },
-              { network: '10.0.13.0', wildcard: '0.0.0.3', area: '0' },
-              { network: '10.0.23.0', wildcard: '0.0.0.3', area: '0' }
+            areas: [
+              { areaId: '0', networks: ['192.168.3.0 0.0.0.255', '10.0.13.0 0.0.0.3', '10.0.23.0 0.0.0.3'] }
             ]
           }
         }
       }
     ],
     connections: [
-      { from: { deviceName: 'Router1', portName: 'Gi0/1' }, to: { deviceName: 'Router2', portName: 'Gi0/1' }, cableType: 'eStraightThrough' },
-      { from: { deviceName: 'Router1', portName: 'Gi0/2' }, to: { deviceName: 'Router3', portName: 'Gi0/1' }, cableType: 'eStraightThrough' },
-      { from: { deviceName: 'Router2', portName: 'Gi0/2' }, to: { deviceName: 'Router3', portName: 'Gi0/2' }, cableType: 'eStraightThrough' }
+      { id: 'conn1', from: { deviceId: 'router1', deviceName: 'Router1', port: 'Gi0/1' }, to: { deviceId: 'router2', deviceName: 'Router2', port: 'Gi0/1' }, cableType: CableType.STRAIGHT_THROUGH },
+      { id: 'conn2', from: { deviceId: 'router1', deviceName: 'Router1', port: 'Gi0/2' }, to: { deviceId: 'router3', deviceName: 'Router3', port: 'Gi0/1' }, cableType: CableType.STRAIGHT_THROUGH },
+      { id: 'conn3', from: { deviceId: 'router2', deviceName: 'Router2', port: 'Gi0/2' }, to: { deviceId: 'router3', deviceName: 'Router3', port: 'Gi0/2' }, cableType: CableType.STRAIGHT_THROUGH }
     ]
   })
 };
@@ -267,25 +273,26 @@ export const aclBasicsTemplate: LabTemplate = {
       name: 'ACL Basics Lab',
       version: '1.0',
       author: 'cisco-auto-template',
-      created: new Date().toISOString()
+      createdAt: new Date()
     },
     devices: [
       {
+        id: 'router1',
         name: 'Router1',
         type: 'router',
         hostname: 'R1',
         interfaces: [
-          { name: 'Gi0/0', ipAddress: '192.168.1.1/24', description: 'LAN' },
-          { name: 'Gi0/1', ipAddress: '192.168.2.1/24', description: 'Server LAN' }
+          { name: 'Gi0/0', ip: '192.168.1.1/24', description: 'LAN' },
+          { name: 'Gi0/1', ip: '192.168.2.1/24', description: 'Server LAN' }
         ],
         security: {
           acls: [
             {
               name: '100',
               type: 'extended',
-              entries: [
-                { action: 'permit', protocol: 'tcp', source: '192.168.1.0 0.0.0.255', destination: '192.168.2.10 0.0.0.0', port: '80' },
-                { action: 'permit', protocol: 'tcp', source: '192.168.1.0 0.0.0.255', destination: '192.168.2.10 0.0.0.0', port: '443' },
+              rules: [
+                { action: 'permit', protocol: 'tcp', source: '192.168.1.0 0.0.0.255', destination: '192.168.2.10 0.0.0.0', destinationPort: '80' },
+                { action: 'permit', protocol: 'tcp', source: '192.168.1.0 0.0.0.255', destination: '192.168.2.10 0.0.0.0', destinationPort: '443' },
                 { action: 'deny', protocol: 'ip', source: 'any', destination: 'any' }
               ]
             }
@@ -293,19 +300,21 @@ export const aclBasicsTemplate: LabTemplate = {
         }
       },
       {
+        id: 'server1',
         name: 'Server1',
         type: 'server',
-        interfaces: [{ name: 'Fa0', ipAddress: '192.168.2.10/24' }]
+        interfaces: [{ name: 'Fa0', ip: '192.168.2.10/24' }]
       },
       {
+        id: 'pc1',
         name: 'PC1',
         type: 'pc',
-        interfaces: [{ name: 'Fa0', ipAddress: '192.168.1.10/24' }]
+        interfaces: [{ name: 'Fa0', ip: '192.168.1.10/24' }]
       }
     ],
     connections: [
-      { from: { deviceName: 'PC1', portName: 'Fa0' }, to: { deviceName: 'Router1', portName: 'Gi0/0' }, cableType: 'eStraightThrough' },
-      { from: { deviceName: 'Server1', portName: 'Fa0' }, to: { deviceName: 'Router1', portName: 'Gi0/1' }, cableType: 'eStraightThrough' }
+      { id: 'conn1', from: { deviceId: 'pc1', deviceName: 'PC1', port: 'Fa0' }, to: { deviceId: 'router1', deviceName: 'Router1', port: 'Gi0/0' }, cableType: CableType.STRAIGHT_THROUGH },
+      { id: 'conn2', from: { deviceId: 'server1', deviceName: 'Server1', port: 'Fa0' }, to: { deviceId: 'router1', deviceName: 'Router1', port: 'Gi0/1' }, cableType: CableType.STRAIGHT_THROUGH }
     ]
   })
 };
@@ -331,15 +340,16 @@ export const dhcpServerTemplate: LabTemplate = {
       name: 'DHCP Server Lab',
       version: '1.0',
       author: 'cisco-auto-template',
-      created: new Date().toISOString()
+      createdAt: new Date()
     },
     devices: [
       {
+        id: 'router1',
         name: 'Router1',
         type: 'router',
         hostname: 'R1',
         interfaces: [
-          { name: 'Gi0/0', ipAddress: '192.168.1.1/24' }
+          { name: 'Gi0/0', ip: '192.168.1.1/24' }
         ],
         services: {
           dhcp: [
@@ -355,19 +365,21 @@ export const dhcpServerTemplate: LabTemplate = {
         }
       },
       {
+        id: 'pc1',
         name: 'PC1',
         type: 'pc',
         interfaces: [{ name: 'Fa0' }] // DHCP client
       },
       {
+        id: 'pc2',
         name: 'PC2',
         type: 'pc',
         interfaces: [{ name: 'Fa0' }] // DHCP client
       }
     ],
     connections: [
-      { from: { deviceName: 'PC1', portName: 'Fa0' }, to: { deviceName: 'Router1', portName: 'Gi0/0' }, cableType: 'eStraightThrough' },
-      { from: { deviceName: 'PC2', portName: 'Fa0' }, to: { deviceName: 'Router1', portName: 'Gi0/0' }, cableType: 'eStraightThrough' }
+      { id: 'conn1', from: { deviceId: 'pc1', deviceName: 'PC1', port: 'Fa0' }, to: { deviceId: 'router1', deviceName: 'Router1', port: 'Gi0/0' }, cableType: CableType.STRAIGHT_THROUGH },
+      { id: 'conn2', from: { deviceId: 'pc2', deviceName: 'PC2', port: 'Fa0' }, to: { deviceId: 'router1', deviceName: 'Router1', port: 'Gi0/0' }, cableType: CableType.STRAIGHT_THROUGH }
     ]
   })
 };

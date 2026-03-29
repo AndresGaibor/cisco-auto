@@ -134,16 +134,19 @@ export interface PortSecuritySpec {
 export interface RIPSpec {
   /** Versión de RIP */
   version: 1 | 2;
-  
+
   /** Redes a anunciar (ej: "192.168.1.0") */
   networks: string[];
-  
+
   /** Interfaces pasivas (no envían updates) */
   passiveInterfaces?: string[];
-  
-  /** Origen de ruta default */
+
+  /** Originar ruta default */
+  defaultRoute?: boolean;
+
+  /** Alias for defaultRoute */
   defaultInformation?: 'originate' | 'originate always';
-  
+
   /** Auto-summary (default: true en RIPv1, false recomendado en RIPv2) */
   autoSummary?: boolean;
   
@@ -346,24 +349,37 @@ export interface OSPFv3Area {
 export interface ServicesSpec {
   /** DHCP Server */
   dhcp?: DHCPServerSpec[];
-  
+
   /** NTP */
   ntp?: NTPSpec;
-  
+
   /** DNS Server (para Server-PT) */
   dns?: DNSServerSpec;
-  
+
   /** HTTP/HTTPS Server */
   http?: HTTPSpec;
-  
+
   /** FTP Server */
   ftp?: FTPSpec;
-  
+
   /** SNMP */
   snmp?: SNMPSpec;
-  
+
   /** Syslog */
   syslog?: SyslogSpec;
+
+  /** SSH Server */
+  ssh?: {
+    enabled: boolean;
+    version?: 1 | 2;
+    ports?: number[];
+  };
+
+  /** Telnet Server */
+  telnet?: {
+    enabled: boolean;
+    ports?: number[];
+  };
 }
 
 /**
@@ -414,13 +430,16 @@ export interface NTPSpec {
     prefer?: boolean;
     key?: number;
   }[];
-  
+
   /** Actuar como servidor NTP */
   master?: boolean;
-  
+
+  /** Alias for master */
+  serve?: boolean;
+
   /** Stratum level */
   stratum?: number;
-  
+
   /** Autenticación */
   authentication?: {
     enabled: boolean;

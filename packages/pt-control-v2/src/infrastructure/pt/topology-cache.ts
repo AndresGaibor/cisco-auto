@@ -1,6 +1,6 @@
 import type { PTEvent, TopologySnapshot, DeviceState, LinkState } from "../../contracts/index.js";
 import { createVirtualTopology, type VirtualTopology } from "../../vdom/index.js";
-import type { FileBridge } from "./file-bridge.js";
+import type { FileBridgePort } from "../../application/ports/file-bridge.port.js";
 
 export interface TopologyCacheOptions {
   refreshIntervalMs?: number;
@@ -14,7 +14,7 @@ export class TopologyCache {
   private started = false;
 
   constructor(
-    private readonly bridge: FileBridge,
+    private readonly bridge: FileBridgePort,
     options: TopologyCacheOptions = {}
   ) {
     this.topology = createVirtualTopology();

@@ -7,9 +7,10 @@
  * 2. Generación de 40 subkeys usando la función h()
  */
 
-import { Q0_TABLE, Q1_TABLE, MDS_TABLE, RS_MATRIX } from './constants.ts';
-import { KeySchedule } from './types.ts';
-import { getWordLE, rotateLeft, splitKeyEvenOdd, validateKeySize } from './utils.ts';
+import { Q0_TABLE, Q1_TABLE, MDS_TABLE, RS_MATRIX } from './constants.js';
+import type { KeySchedule } from './types.js';
+export type { KeySchedule } from './types.js';
+import { getWordLE, rotateLeft, splitKeyEvenOdd, validateKeySize } from './utils.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GENERACIÓN DE S-BOXES
@@ -46,11 +47,11 @@ export function generateSboxes(key: Uint8Array): Uint32Array[] {
       // RS tiene 8 columnas (para key de 128 bits)
       for (let col = 0; col < 8; col++) {
         const keyByte = key[i * 8 + col] || 0;
-        const rsByte = RS_MATRIX[i * 8 + col];
+        const rsByte = RS_MATRIX[i * 8 + col] ?? 0;
         value ^= gfMultiply(rsByte, keyByte, 0x14D); // Polinomio de RS
       }
-      
-      sBoxes[i][j] = value & 0xFF;
+
+      sBoxes[i]![j] = value & 0xFF;
     }
   }
   
@@ -107,17 +108,17 @@ export function hFunction(
   
   // Aplicar S-boxes a cada byte
   // Para key de 128 bits, usamos los primeros 4 bytes de L
-  const y0 = sBoxes[0][x0] ^ L[0];
-  const y1 = sBoxes[1][x1] ^ L[1];
-  const y2 = sBoxes[2][x2] ^ L[2];
-  const y3 = sBoxes[3][x3] ^ L[3];
-  
+  const y0 = (sBoxes[0]?.[x0] ?? 0) ^ (L[0] ?? 0);
+  const y1 = (sBoxes[1]?.[x1] ?? 0) ^ (L[1] ?? 0);
+  const y2 = (sBoxes[2]?.[x2] ?? 0) ^ (L[2] ?? 0);
+  const y3 = (sBoxes[3]?.[x3] ?? 0) ^ (L[3] ?? 0);
+
   // Aplicar tablas MDS pre-calculadas
   // Esto reemplaza la multiplicación completa en GF
-  const result = MDS_TABLE[0][y0] ^
-                 MDS_TABLE[1][y1] ^
-                 MDS_TABLE[2][y2] ^
-                 MDS_TABLE[3][y3];
+  const result = (MDS_TABLE[0]?.[y0] ?? 0) ^
+                 (MDS_TABLE[1]?.[y1] ?? 0) ^
+                 (MDS_TABLE[2]?.[y2] ?? 0) ^
+                 (MDS_TABLE[3]?.[y3] ?? 0);
   
   return result >>> 0;
 }
@@ -156,10 +157,10 @@ export function makeKeySchedule(key: Uint8Array): KeySchedule {
   
   // Copiar datos
   for (let i = 0; i < Me.length && i < 8; i++) {
-    meWords[i] = Me[i];
+    meWords[i] = Me[i] ?? 0;
   }
   for (let i = 0; i < Mo.length && i < 8; i++) {
-    moWords[i] = Mo[i];
+    moWords[i] = Mo[i] ?? 0;
   }
   
   // Generar subkeys
@@ -181,7 +182,7 @@ export function makeKeySchedule(key: Uint8Array): KeySchedule {
     // K[2*i] = pht0
     // K[2*i+1] = rotateLeft(pht1, 9)
     subkeys[2 * i] = pht0;
-    subkeys[2 * i + 1] = rotateLeft(pht1, 9);
+    subkeys[2 * i + 1] = rotateLeft(pht1, 9) ?? 0;
   }
   
   return { subkeys, sBoxes };
@@ -205,8 +206,8 @@ export function gFunction(X: number, sBoxes: Uint32Array[]): number {
   const x3 = (X >>> 24) & 0xFF;
   
   // Aplicar S-boxes y luego MDS
-  return MDS_TABLE[0][sBoxes[0][x0]] ^
-         MDS_TABLE[1][sBoxes[1][x1]] ^
-         MDS_TABLE[2][sBoxes[2][x2]] ^
-         MDS_TABLE[3][sBoxes[3][x3]];
+  return (MDS_TABLE[0]?.[sBoxes[0]?.[x0] ?? 0] ?? 0) ^
+         (MDS_TABLE[1]?.[sBoxes[1]?.[x1] ?? 0] ?? 0) ^
+         (MDS_TABLE[2]?.[sBoxes[2]?.[x2] ?? 0] ?? 0) ^
+         (MDS_TABLE[3]?.[sBoxes[3]?.[x3] ?? 0] ?? 0);
 }

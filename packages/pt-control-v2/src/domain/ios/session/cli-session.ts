@@ -20,7 +20,7 @@ import {
 } from "./command-result";
 
 export interface CommandHandler {
-  enterCommand(cmd: string): [number, string];
+  enterCommand(cmd: string): [number, string] | Promise<[number, string]>;
 }
 
 export interface CliSessionOptions {
@@ -84,12 +84,13 @@ export class CliSession {
   }
 
   /**
-   * Execute a command and handle state transitions
+   * Execute a command and handle state transitions (async for bridge-backed handlers)
    */
-  execute(command: string): CommandResult {
+  async execute(command: string): Promise<CommandResult> {
     this.lastCommandTime = Date.now();
 
-    const [status, raw] = this.handler.enterCommand(command);
+    const handlerResult = this.handler.enterCommand(command);
+    const [status, raw] = handlerResult instanceof Promise ? await handlerResult : handlerResult;
     const promptState = inferPromptState(raw);
 
     const result: CommandResult = {
@@ -139,20 +140,18 @@ export class CliSession {
   /**
    * Execute command and accumulate all paging output
    */
-  executeAndWait(command: string): CommandResult {
-    const result = this.execute(command);
-
+  async executeAndWait(command: string): Promise<CommandResult> {
+    const result = await this.execute(command);
     if (result.paging) {
-      this.accumulatePagingOutput(result);
+      await this.accumulatePagingOutput(result);
     }
-
     return result;
   }
 
   /**
    * Accumulate all paging output until prompt returns
    */
-  private accumulatePagingOutput(initialResult: CommandResult): void {
+  private async accumulatePagingOutput(initialResult: CommandResult): Promise<void> {
     let accumulatedOutput = initialResult.raw;
 
     while (this.state.paging) {
@@ -162,7 +161,7 @@ export class CliSession {
         break;
       }
 
-      const [status, raw] = this.handler.enterCommand(" ");
+      const [status, raw] = await this.handler.enterCommand(" ");
       accumulatedOutput += raw;
 
       const promptState = inferPromptState(raw);
@@ -186,7 +185,7 @@ export class CliSession {
       return true;
     }
 
-    const result = this.execute("enable");
+    const result = await this.execute("enable");
 
     // Check if we're now in privileged mode
     if (isPrivilegedMode(this.state.mode)) {
@@ -195,7 +194,7 @@ export class CliSession {
 
     // If password is required and we have it, send it
     if (this.state.mode === "awaiting-password" && this.options.enablePassword) {
-      const passwordResult = this.execute(this.options.enablePassword);
+      await this.execute(this.options.enablePassword);
       return isPrivilegedMode(this.state.mode);
     }
 
@@ -212,7 +211,7 @@ export class CliSession {
       if (!privResult) return false;
     }
 
-    const result = this.execute("configure terminal");
+    const result = await this.execute("configure terminal");
     return result.ok && isConfigMode(this.state.mode);
   }
 
@@ -229,7 +228,7 @@ export class CliSession {
         break;
       }
 
-      const [status, raw] = this.handler.enterCommand(" ");
+      const [status, raw] = await this.handler.enterCommand(" ");
       const promptState = inferPromptState(raw);
 
       if (!promptState.paging && promptState.mode !== "unknown") {
@@ -244,7 +243,7 @@ export class CliSession {
   async continuePaging(): Promise<void> {
     if (!this.state.paging) return;
 
-    const [status, raw] = this.handler.enterCommand("q");
+    const [status, raw] = await this.handler.enterCommand("q");
     const promptState = inferPromptState(raw);
 
     this.state.paging = false;
@@ -259,7 +258,7 @@ export class CliSession {
     }
 
     const cmd = confirm ? "\n" : "no";
-    const result = this.execute(cmd);
+    const result = await this.execute(cmd);
 
     this.state.awaitingConfirm = false;
     return result.ok;

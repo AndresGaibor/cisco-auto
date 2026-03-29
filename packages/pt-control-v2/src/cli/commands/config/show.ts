@@ -22,9 +22,9 @@ const SHOW_COMMANDS = {
 type SupportedShowCommand = keyof typeof SHOW_COMMANDS;
 
 export default class ConfigShow extends BaseCommand {
-  static description = 'Show configuration or status information from a device';
+  static override description = 'Show configuration or status information from a device';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> config show R1',
     '<%= config.bin %> config show R1 running-config',
     '<%= config.bin %> config show S1 vlan',
@@ -32,7 +32,7 @@ export default class ConfigShow extends BaseCommand {
     '<%= config.bin %> config show R1 --format json',
   ];
 
-  static args = {
+  static override args = {
     device: Args.string({
       description: 'Device name',
       required: true,
@@ -43,7 +43,7 @@ export default class ConfigShow extends BaseCommand {
     }),
   };
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
     'no-pager': Flags.boolean({
       description: 'Disable pagination (terminal length 0)',

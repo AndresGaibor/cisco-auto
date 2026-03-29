@@ -3,25 +3,27 @@
  * Servicio de aplicación para gestionar la sesión de trabajo con un laboratorio
  */
 import { Lab } from '../../domain/entities/lab.entity.ts';
-import { Device, DeviceType, InterfaceConfig } from '../../domain/entities/device.entity.ts';
+import { Device } from '../../domain/entities/device.entity.ts';
+import type { DeviceType, InterfaceConfig } from '../../domain/entities/device.entity.ts';
 import { Connection } from '../../domain/entities/connection.entity.ts';
 import { IpAddress } from '../../domain/value-objects/ip-address.vo.ts';
 import { CableType } from '../../domain/value-objects/cable-type.vo.ts';
-import { DomainValidationService, ValidationResult } from '../../domain/services/domain-validation.service.ts';
-import { 
-  CreateLabDto, 
-  LabResponseDto, 
-  LabStatsDto, 
-  SaveLabDto 
+import { DomainValidationService } from '../../domain/services/domain-validation.service.ts';
+import type { ValidationResult } from '../../domain/services/domain-validation.service.ts';
+import type {
+  CreateLabDto,
+  LabResponseDto,
+  LabStatsDto,
+  SaveLabDto
 } from '../dto/lab.dto.ts';
-import {
+import type {
   CreateDeviceDto,
   UpdateDeviceDto,
   InterfaceConfigDto,
   DeviceResponseDto,
   DeviceListResponseDto
 } from '../dto/device.dto.ts';
-import {
+import type {
   CreateConnectionDto,
   ConnectionResponseDto,
   ConnectionListResponseDto,
@@ -246,7 +248,7 @@ export class LabSessionService {
       );
 
       if (!validation.valid) {
-        throw new Error(`Configuración IP inválida: ${validation.errors[0].message}`);
+        throw new Error(`Configuración IP inválida: ${validation.errors[0]?.message ?? 'Unknown error'}`);
       }
     }
 
@@ -298,7 +300,7 @@ export class LabSessionService {
 
     if (!validation.valid) {
       const error = validation.errors[0];
-      throw new Error(error.message);
+      throw new Error(error?.message ?? 'Validation failed');
     }
 
     // Crear la conexión

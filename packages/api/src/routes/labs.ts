@@ -3,9 +3,9 @@
  * Endpoints para gestión de laboratorios
  */
 
-import type { Route } from '../server';
-import { json, error, readJSON } from '../server';
-import { validateLab } from '@cisco-auto/core';
+import type { Route } from '../server.ts';
+import { json, error, readJSON } from '../server.ts';
+import { validateLab, IOSGenerator } from '@cisco-auto/core';
 import { visualizeTopology, generateMermaidDiagram, analyzeTopology } from '@cisco-auto/core';
 import type { LabSpec } from '@cisco-auto/core';
 
@@ -33,8 +33,8 @@ export function createLabRoutes(): Route[] {
     {
       method: 'GET',
       path: '/api/labs/:id',
-      handler: (_req, params) => {
-        const lab = labs.get(params.id);
+      handler: (_req: Request, params: Record<string, string>) => {
+        const lab = labs.get(params.id!);
         if (!lab) {
           return error('Lab not found', 404);
         }
@@ -46,9 +46,9 @@ export function createLabRoutes(): Route[] {
     {
       method: 'POST',
       path: '/api/labs',
-      handler: async (req) => {
+      handler: async (req: Request) => {
         const lab = await readJSON<LabSpec>(req);
-        
+
         // Validate basic structure
         if (!lab.metadata?.name) {
           return error('Lab name is required');
@@ -65,14 +65,14 @@ export function createLabRoutes(): Route[] {
     {
       method: 'PUT',
       path: '/api/labs/:id',
-      handler: async (req, params) => {
-        const existing = labs.get(params.id);
+      handler: async (req: Request, params: Record<string, string>) => {
+        const existing = labs.get(params.id!);
         if (!existing) {
           return error('Lab not found', 404);
         }
 
         const lab = await readJSON<LabSpec>(req);
-        labs.set(params.id, lab);
+        labs.set(params.id!, lab);
 
         return json({ message: 'Lab updated successfully' });
       }
@@ -82,11 +82,11 @@ export function createLabRoutes(): Route[] {
     {
       method: 'DELETE',
       path: '/api/labs/:id',
-      handler: (_req, params) => {
-        if (!labs.has(params.id)) {
+      handler: (_req: Request, params: Record<string, string>) => {
+        if (!labs.has(params.id!)) {
           return error('Lab not found', 404);
         }
-        labs.delete(params.id);
+        labs.delete(params.id!);
         return json({ message: 'Lab deleted successfully' });
       }
     },
@@ -95,8 +95,8 @@ export function createLabRoutes(): Route[] {
     {
       method: 'POST',
       path: '/api/labs/:id/validate',
-      handler: (_req, params) => {
-        const lab = labs.get(params.id);
+      handler: (_req: Request, params: Record<string, string>) => {
+        const lab = labs.get(params.id!);
         if (!lab) {
           return error('Lab not found', 404);
         }
@@ -110,7 +110,7 @@ export function createLabRoutes(): Route[] {
     {
       method: 'POST',
       path: '/api/validate',
-      handler: async (req) => {
+      handler: async (req: Request) => {
         const lab = await readJSON<LabSpec>(req);
         const result = validateLab(lab);
         return json(result);
@@ -121,8 +121,8 @@ export function createLabRoutes(): Route[] {
     {
       method: 'GET',
       path: '/api/labs/:id/topology',
-      handler: (req, params) => {
-        const lab = labs.get(params.id);
+      handler: (req: Request, params: Record<string, string>) => {
+        const lab = labs.get(params.id!);
         if (!lab) {
           return error('Lab not found', 404);
         }
@@ -146,23 +146,20 @@ export function createLabRoutes(): Route[] {
     {
       method: 'GET',
       path: '/api/labs/:id/devices/:deviceName/config',
-      handler: async (_req, params) => {
-        const lab = labs.get(params.id);
+      handler: async (_req: Request, params: Record<string, string>) => {
+        const lab = labs.get(params.id!);
         if (!lab) {
           return error('Lab not found', 404);
         }
 
-        const device = lab.devices.find(d => d.name === params.deviceName);
+        const device = lab.devices.find(d => d.name === params.deviceName!);
         if (!device) {
           return error('Device not found', 404);
         }
 
-        // Import generator dynamically
-        const { IOSConfigGenerator } = await import('@cisco-auto/core');
-        const generator = new IOSConfigGenerator();
-        const config = generator.generateConfig(device);
+        const config = IOSGenerator.generate(device as any);
 
-        return json({ device: device.name, config });
+        return json({ device: device.name, config: config.commands.join('\n') });
       }
     }
   ];

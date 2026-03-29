@@ -10,20 +10,20 @@ import { createDefaultPTController } from '../../../controller/index.js';
 import { ValidationError } from '../../errors/index.js';
 
 export default class LinkRemove extends BaseCommand {
-  static description = 'Remove a link from the topology';
+  static override description = 'Remove a link from the topology';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> link remove R1:GigabitEthernet0/0',
     '<%= config.bin %> link remove S1:GigabitEthernet0/1 --force',
   ];
 
-  static args = {
+  static override args = {
     port: Args.string({
       description: 'Port specification (device:port)',
     }),
   };
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
     force: Flags.boolean({
       description: 'Skip confirmation prompt',
@@ -89,11 +89,11 @@ export default class LinkRemove extends BaseCommand {
 
   private isValidPortSpec(spec: string): boolean {
     const parts = spec.split(':');
-    return parts.length >= 2 && parts[0].length > 0;
+    return parts.length >= 2 && parts[0]!.length > 0;
   }
 
   private parsePortSpec(spec: string): { device: string; port: string } {
     const [device, ...portParts] = spec.split(':');
-    return { device, port: portParts.join(':') };
+    return { device: device!, port: portParts.join(':') };
   }
 }

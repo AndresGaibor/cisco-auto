@@ -11,21 +11,21 @@ import { DeviceNotFoundError, ValidationError } from '../../errors/index.js';
 import type { DeviceState } from '../../../types/index.js';
 
 export default class ConfigIos extends BaseCommand {
-  static description = 'Execute IOS commands on a device';
+  static override description = 'Execute IOS commands on a device';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> config ios R1 --commands "conf t" "hostname Router1"',
     '<%= config.bin %> config ios S1 --file ./config.txt',
     '<%= config.bin %> config ios R1  # Interactive mode',
   ];
 
-  static args = {
+  static override args = {
     device: Args.string({
       description: 'Device name',
     }),
   };
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
     commands: Flags.string({
       description: 'IOS commands to execute (can be specified multiple times)',

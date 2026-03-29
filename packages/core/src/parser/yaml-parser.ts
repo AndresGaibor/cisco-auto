@@ -5,7 +5,8 @@
 
 import * as yaml from 'js-yaml';
 import { readFileSync } from 'fs';
-import { Lab, zodValidateLab, validateLabSafe, Device, Connection } from '../types/index.ts';
+import type { Lab, Device, Connection } from '../types/index.ts';
+import { zodValidateLab, validateLabSafe } from '../types/index.ts';
 
 export interface ParsedLab {
   lab: Lab;
@@ -53,7 +54,7 @@ export class YAMLParser {
       }
 
       // Validar con Zod
-      const lab = validateLab(data);
+      const lab = zodValidateLab(data);
 
       return {
         lab,
@@ -62,7 +63,7 @@ export class YAMLParser {
       };
     } catch (error) {
       if (error instanceof yaml.YAMLException) {
-        throw new Error(`Error de sintaxis YAML: ${error.message}`);
+        throw new Error(`Error de sintaxis YAML: ${(error as yaml.YAMLException).message}`);
       }
       throw error;
     }

@@ -14,13 +14,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export default class RuntimeWatch extends BaseCommand {
-  static description = 'Watch for changes and rebuild runtime automatically';
+  static override description = 'Watch for changes and rebuild runtime automatically';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> runtime watch',
   ];
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
   };
 

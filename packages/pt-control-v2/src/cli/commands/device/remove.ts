@@ -11,21 +11,21 @@ import { DeviceNotFoundError, ValidationError } from '../../errors/index.js';
 import type { DeviceState } from '../../../types/index.js';
 
 export default class DeviceRemove extends BaseCommand {
-  static description = 'Remove a device from the topology';
+  static override description = 'Remove a device from the topology';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> device remove R1',
     '<%= config.bin %> device remove S1 --force',
     '<%= config.bin %> device remove  # Interactive mode',
   ];
 
-  static args = {
+  static override args = {
     name: Args.string({
       description: 'Device name to remove',
     }),
   };
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
     force: Flags.boolean({
       description: 'Skip confirmation prompt',

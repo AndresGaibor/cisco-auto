@@ -9,14 +9,14 @@ import { BaseCommand } from '../../base-command.js';
 import { createDefaultPTController } from '../../../controller/index.js';
 
 export default class RuntimeStatus extends BaseCommand {
-  static description = 'Show runtime status and file health';
+  static override description = 'Show runtime status and file health';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> runtime status',
     '<%= config.bin %> runtime status --dev-dir ~/my-pt-dev',
   ];
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
   };
 

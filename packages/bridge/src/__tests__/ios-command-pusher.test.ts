@@ -19,7 +19,7 @@ test("pushCommands should succeed on first try", async () => {
   // @ts-ignore
   globalThis.fetch = async () => ({
     ok: true,
-    json: async () => ({ success: true, commandId: "cmd-1" }),
+    json: async () => ({ ok: true, queued: true, packet: { id: "cmd-1" } }),
   });
 
   const res = await pushCommands("dev1", ["interface Gig0/1", "no shutdown"]);
@@ -35,7 +35,7 @@ test("pushCommands retries on failure and eventually succeeds", async () => {
     if (calls < 3) throw new Error("temporary network");
     return {
       ok: true,
-      json: async () => ({ success: true, commandId: "cmd-2" }),
+      json: async () => ({ ok: true, queued: true, packet: { id: "cmd-2" } }),
     };
   };
 

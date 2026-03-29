@@ -21,8 +21,8 @@ export class RouteTarget {
       throw new Error(`Invalid route target: "${value}". Expected format: ASN:NN or IP:NN (e.g., 65001:100, 192.168.1.1:100)`);
     }
 
-    const asnPart = match[1];
-    const idPart = parseInt(match[2], 10);
+    const asnPart = match[1]!;
+    const idPart = parseInt(match[2]!, 10);
 
     // Validate ASN part
     const asn = /^\d+$/.test(asnPart) ? parseInt(asnPart, 10) : asnPart;

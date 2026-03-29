@@ -17,7 +17,7 @@ const BLOCK_SIZE = 16;
  */
 function incrementCounter(counter: Uint8Array): void {
   for (let i = counter.length - 1; i >= 0; i--) {
-    if (++counter[i] !== 0) {
+    if (++counter[i]! !== 0) {
       break; // No hay carry
     }
   }
@@ -58,7 +58,7 @@ export function encryptCTR(
     const blockEnd = Math.min(blockStart + BLOCK_SIZE, input.length);
     
     for (let j = blockStart; j < blockEnd; j++) {
-      output[j] = input[j] ^ keystream[j - blockStart];
+      output[j] = (input[j] ?? 0) ^ (keystream[j - blockStart] ?? 0);
     }
     
     // Incrementar counter para siguiente bloque
@@ -102,8 +102,8 @@ export function encryptCTROptimized(
   // XOR con keystream
   const output = new Uint8Array(input.length);
   for (let i = 0; i < input.length; i++) {
-    output[i] = input[i] ^ fullKeystream[i];
+    output[i] = (input[i] ?? 0) ^ (fullKeystream[i] ?? 0);
   }
-  
+
   return output;
 }

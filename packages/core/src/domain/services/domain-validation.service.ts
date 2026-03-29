@@ -3,7 +3,7 @@
  * Servicio de dominio para validaciones complejas que no pertenecen a una sola entidad
  */
 import { Lab } from '../entities/lab.entity.ts';
-import { Device, DeviceType } from '../entities/device.entity.ts';
+import type { Device, DeviceType } from '../entities/device.entity.ts';
 import { Connection } from '../entities/connection.entity.ts';
 import { IpAddress } from '../value-objects/ip-address.vo.ts';
 import { CableType } from '../value-objects/cable-type.vo.ts';
@@ -71,13 +71,13 @@ export class DomainValidationService {
       }
 
       // Validar configuración IP según el tipo de dispositivo
-      if (device.getType() !== 'switch' && device.getType() !== 'hub') {
+      if (device.getType() !== 'switch') {
         const interfaces = device.getInterfaces();
         const configuredInterfaces = interfaces.filter(i => i.ip);
         
         if (configuredInterfaces.length === 0 && connections.length > 0) {
           warnings.push({
-            type: 'configuration',
+            type: 'suggestion',
             entity: device.getName(),
             message: `${device.getName()} tiene conexiones pero no tiene IPs configuradas`,
             suggestion: 'Configura al menos una interfaz con IP/máscara'
@@ -248,13 +248,12 @@ export class DomainValidationService {
     const cidr = IpAddress.maskToCidr(mask);
     const networkParts = ip.getNetworkAddress(mask).split('.').map(Number);
     const ipParts = ip.getValue().split('.').map(Number);
-    
+
     // IP de red
-    if (ipParts[3] === (networkParts[3] & (256 - Math.pow(2, 32 - cidr) % 256))) {
+    if (ipParts[3] === (networkParts[3]! & (256 - Math.pow(2, 32 - cidr) % 256))) {
       warnings.push({
         type: 'best_practice',
         entity: device.getName(),
-        field: interfaceName,
         message: `La IP ${ip.getValue()} parece ser una dirección de red`
       });
     }
@@ -277,17 +276,14 @@ export class DomainValidationService {
         // Sugerir configurar rutas si tiene múltiples interfaces
         const interfaces = device.getInterfaces();
         const configuredInterfaces = interfaces.filter(i => i.ip);
-        
+
         if (configuredInterfaces.length > 1) {
-          const hasRoutingConfigured = device.toJSON().routing !== undefined;
-          if (!hasRoutingConfigured) {
-            suggestions.push({
-              type: 'best_practice',
-              entity: device.getName(),
-              message: `${device.getName()} tiene múltiples redes configuradas`,
-              suggestion: 'Considera configurar rutas estáticas o un protocolo de routing (OSPF, EIGRP)'
-            });
-          }
+          suggestions.push({
+            type: 'best_practice',
+            entity: device.getName(),
+            message: `${device.getName()} tiene múltiples redes configuradas`,
+            suggestion: 'Considera configurar rutas estáticas o un protocolo de routing (OSPF, EIGRP)'
+          });
         }
         break;
 

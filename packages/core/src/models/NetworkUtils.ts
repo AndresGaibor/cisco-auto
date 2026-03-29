@@ -18,10 +18,10 @@ export class NetworkUtils {
   public static isValidMask(mask: string): boolean {
     const parts = mask.split('.').map(Number);
     if (parts.length !== 4) return false;
-    
-    const fullMask = (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3];
+
+    const fullMask = (parts[0]! << 24) | (parts[1]! << 16) | (parts[2]! << 8) | parts[3]!;
     const binary = (fullMask >>> 0).toString(2);
-    
+
     // Una máscara válida debe tener 1s seguidos de 0s
     return /^1+0*$/.test(binary);
   }
@@ -66,6 +66,6 @@ export class NetworkUtils {
   public static getNetworkAddress(ip: string, mask: string): string {
     const i = ip.split('.').map(Number);
     const m = mask.split('.').map(Number);
-    return i.map((byte, idx) => byte & m[idx]).join('.');
+    return i.map((byte, idx) => byte & (m[idx] ?? 0)).join('.');
   }
 }

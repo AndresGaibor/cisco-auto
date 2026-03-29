@@ -2,14 +2,14 @@
 // TopologyService - Device and topology management
 // ============================================================================
 
-import { FileBridge } from "../../infrastructure/pt/file-bridge.js";
-import { TopologyCache } from "../../infrastructure/pt/topology-cache.js";
+import type { FileBridgePort } from "../ports/file-bridge.port.js";
+import type { TopologyCachePort } from "../ports/topology-cache.port.js";
 import type { TopologySnapshot, DeviceState, LinkState, AddLinkPayload } from "../../contracts/index.js";
 
 export class TopologyService {
   constructor(
-    private bridge: FileBridge,
-    private cache: TopologyCache,
+    private bridge: FileBridgePort,
+    private cache: TopologyCachePort,
     private generateId: () => string
   ) {}
 

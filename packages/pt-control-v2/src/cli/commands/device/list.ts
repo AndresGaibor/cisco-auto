@@ -7,16 +7,16 @@ import { createDefaultPTController, PTController } from '../../../controller/ind
 import type { DeviceState } from '../../../types/index.js';
 
 export default class DeviceList extends BaseCommand {
-  static description = 'List all devices in the topology';
+  static override description = 'List all devices in the topology';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> device list',
     '<%= config.bin %> device list --format json',
     '<%= config.bin %> device list --filter router',
     '<%= config.bin %> device list --jq ".[].name"',
   ];
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
     filter: Flags.string({
       description: 'Filter devices by type or model',

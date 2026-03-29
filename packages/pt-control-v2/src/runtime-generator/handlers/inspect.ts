@@ -2,7 +2,7 @@
 // Inspect Handlers - Pure functions for device inspection and snapshots
 // ============================================================================
 
-import { HandlerDeps, HandlerResult, PTDevice, PTPort } from "../../shared/utils/helpers";
+import type { HandlerDeps, HandlerResult, PTDevice, PTPort } from "../../shared/utils/helpers";
 import { getCableTypeName } from "../utils/constants";
 
 // ============================================================================

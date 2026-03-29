@@ -56,7 +56,7 @@ export function encryptEAX(
   // 5. Tag = N ^ H ^ MAC (primeros TAG_LENGTH bytes)
   const tag = new Uint8Array(TAG_LENGTH);
   for (let i = 0; i < TAG_LENGTH; i++) {
-    tag[i] = N[i] ^ H[i] ^ MAC_C[i];
+    tag[i] = (N[i] ?? 0) ^ (H[i] ?? 0) ^ (MAC_C[i] ?? 0);
   }
   
   return { ciphertext: C, tag };
@@ -101,7 +101,7 @@ export function decryptEAX(
   const MAC_C = omac(ciphertext, key, 2);
   const expectedTag = new Uint8Array(TAG_LENGTH);
   for (let i = 0; i < TAG_LENGTH; i++) {
-    expectedTag[i] = N[i] ^ H[i] ^ MAC_C[i];
+    expectedTag[i] = (N[i] ?? 0) ^ (H[i] ?? 0) ^ (MAC_C[i] ?? 0);
   }
   
   // 4. Verificar tag (comparación en tiempo constante)
@@ -125,9 +125,9 @@ function constantTimeEquals(a: Uint8Array, b: Uint8Array): boolean {
   
   let result = 0;
   for (let i = 0; i < a.length; i++) {
-    result |= a[i] ^ b[i];
+    result |= (a[i] ?? 0) ^ (b[i] ?? 0);
   }
-  
+
   return result === 0;
 }
 

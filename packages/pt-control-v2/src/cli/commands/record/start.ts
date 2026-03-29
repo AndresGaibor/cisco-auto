@@ -11,14 +11,14 @@ import { createDefaultPTController } from '../../../controller/index.js';
 import { ValidationError } from '../../errors/index.js';
 
 export default class RecordStart extends BaseCommand {
-  static description = 'Start recording operations to a file';
+  static override description = 'Start recording operations to a file';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> record start',
     '<%= config.bin %> record start --output my-session.ndjson',
   ];
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
     output: Flags.string({
       description: 'Output file for recording',

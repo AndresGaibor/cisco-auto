@@ -2,7 +2,7 @@
  * Aggregate Root: Lab
  * Agregado raíz que representa un laboratorio completo
  */
-import { Device, DeviceType } from './device.entity.ts';
+import type { Device, DeviceType } from './device.entity.ts';
 import { Connection } from './connection.entity.ts';
 import { IpAddress } from '../value-objects/ip-address.vo.ts';
 import { CableType } from '../value-objects/cable-type.vo.ts';

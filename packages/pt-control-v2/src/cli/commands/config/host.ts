@@ -11,21 +11,21 @@ import { DeviceNotFoundError, ValidationError } from '../../errors/index.js';
 import type { DeviceState } from '../../../types/index.js';
 
 export default class ConfigHost extends BaseCommand {
-  static description = 'Configure IP settings for a host device (PC/Server)';
+  static override description = 'Configure IP settings for a host device (PC/Server)';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> config host PC1 --ip 192.168.1.10 --mask 255.255.255.0',
     '<%= config.bin %> config host PC1 --dhcp',
     '<%= config.bin %> config host PC1 --ip 192.168.1.10 --gateway 192.168.1.1 --dns 8.8.8.8',
   ];
 
-  static args = {
+  static override args = {
     device: Args.string({
       description: 'Device name (PC or Server)',
     }),
   };
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
     ip: Flags.string({
       description: 'IP address',

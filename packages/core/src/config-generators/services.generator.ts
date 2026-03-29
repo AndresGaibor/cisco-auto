@@ -4,14 +4,15 @@
  * Genera configuración de servicios IOS (DHCP, NTP, SNMP, Syslog)
  */
 
-import type { 
-  DHCPServerSpec, 
+import type {
+  DHCPServerSpec,
   NTPSpec,
   SNMPSpec,
   SyslogSpec,
   HTTPSpec,
   FTPSpec
 } from '../canonical/protocol.spec';
+import type { ServicesSpec } from '../canonical/device.spec.js';
 
 export class ServicesGenerator {
   // ==========================================================================
@@ -563,6 +564,86 @@ export class ServicesGenerator {
   
   private static isValidHostname(hostname: string): boolean {
     return /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$/.test(hostname);
+  }
+
+  /**
+   * Generate all services from canonical ServicesSpec (protocol.spec version)
+   */
+  static generateServices(spec: ServicesSpec): string[] {
+    const commands: string[] = [];
+
+    if (spec.dhcp && spec.dhcp.length > 0) {
+      commands.push('! DHCP Server Configuration');
+      for (const pool of spec.dhcp) {
+        commands.push(`ip dhcp pool ${pool.poolName}`);
+        commands.push(` network ${pool.network} ${pool.subnetMask}`);
+        if (pool.defaultRouter) {
+          commands.push(` default-router ${pool.defaultRouter}`);
+        }
+        if (pool.dnsServers) {
+          commands.push(` dns-server ${pool.dnsServers.join(' ')}`);
+        }
+        if (pool.domainName) {
+          commands.push(` domain-name ${pool.domainName}`);
+        }
+        if (pool.lease) {
+          commands.push(` lease ${pool.lease}`);
+        }
+        commands.push(' exit');
+      }
+      // Excluded addresses
+      const allExcluded = spec.dhcp.flatMap(p => p.excludedAddresses || []);
+      if (allExcluded.length > 0) {
+        commands.push('! DHCP Excluded Addresses');
+        for (const addr of allExcluded) {
+          commands.push(`ip dhcp excluded-address ${addr}`);
+        }
+      }
+    }
+
+    if (spec.ntp) {
+      commands.push('! NTP Configuration');
+      if (spec.ntp.serve || spec.ntp.master) {
+        commands.push('ntp master');
+      }
+      if (spec.ntp.servers && spec.ntp.servers.length > 0) {
+        for (const server of spec.ntp.servers) {
+          commands.push(`ntp server ${server.ip}`);
+        }
+      }
+    }
+
+    if (spec.dns?.enabled) {
+      commands.push('! DNS Configuration');
+      // DNSServerSpec has aRecords and cnameRecords, not servers
+      // DNS server functionality would require different IOS commands
+    }
+
+    if (spec.http?.enabled) {
+      commands.push('! HTTP/HTTPS Configuration');
+      if (spec.http.secureOnly) {
+        commands.push('ip http secure-server');
+      } else {
+        commands.push('ip http server');
+      }
+    }
+
+    if (spec.ssh?.enabled) {
+      commands.push('! SSH Configuration');
+      commands.push('ip domain-name espoch.local');
+      commands.push(`crypto key generate rsa modulus ${spec.ssh.version === 2 ? 2048 : 1024}`);
+      commands.push(`ip ssh version ${spec.ssh.version ?? 2}`);
+    }
+
+    if (spec.telnet?.enabled) {
+      commands.push('! Telnet Configuration');
+      commands.push('line vty 0 15');
+      commands.push(' transport input telnet');
+      commands.push(' login local');
+      commands.push(' exit');
+    }
+
+    return commands;
   }
 }
 

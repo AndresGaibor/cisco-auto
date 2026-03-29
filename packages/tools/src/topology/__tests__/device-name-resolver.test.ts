@@ -26,8 +26,8 @@ describe('device-name-resolver', () => {
     const result = resolveDeviceNames(plan, currentTopology as any);
 
     expect(result.nameMap['Router1']).toBe('Router1(1)');
-    expect(result.plan.devices[0].name).toBe('Router1(1)');
-    expect(result.plan.links[0].from.deviceName).toBe('Router1(1)');
+    expect(result.plan.devices[0]!.name).toBe('Router1(1)');
+    expect(result.plan.links[0]!.from!.deviceName).toBe('Router1(1)');
   });
 
   it('should leave names unchanged when no match', () => {
@@ -45,6 +45,6 @@ describe('device-name-resolver', () => {
 
     const res = resolveDeviceNames(plan, currentTopology as any);
     expect(res.nameMap['PC1']).toBeUndefined();
-    expect(res.plan.devices[0].name).toBe('PC1');
+    expect(res.plan.devices[0]!.name).toBe('PC1');
   });
 });

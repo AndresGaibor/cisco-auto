@@ -13,10 +13,10 @@ import type {
   DeployResult,
   DeviceDeployResult,
   DeployError,
-  DeployErrorCode,
   CommandResult,
   DeployPlan
 } from './types';
+import { DeployErrorCode } from './types';
 import { SSHConnector } from '../connector/ssh-connector';
 import type { Device } from '../types';
 
@@ -29,7 +29,9 @@ function deviceSpecToDevice(spec: DeviceSpec, credentials?: ConnectionCredential
     type: spec.type as any,
     management: spec.managementIp ? {
       ip: spec.managementIp,
-      gateway: ''
+      subnetMask: spec.managementMask || '255.255.255.0',
+      vlan: 1,
+      gateway: spec.defaultGateway
     } : undefined,
     credentials: credentials ? {
       username: credentials.username,
@@ -38,12 +40,16 @@ function deviceSpecToDevice(spec: DeviceSpec, credentials?: ConnectionCredential
     interfaces: spec.interfaces?.map(i => ({
       name: i.name,
       description: i.description,
-      ip: i.ipAddress,
-      mode: i.switchport?.mode as any,
-      vlan: i.switchport?.accessVlan,
-      shutdown: i.shutdown
+      ip: i.ip,
+      mode: i.switchportMode as any,
+      vlan: i.vlan,
+      shutdown: i.shutdown,
+      enabled: !i.shutdown,
+      duplex: 'auto' as const,
+      speed: 'auto' as const,
+      type: 'gigabitethernet' as const
     })) || []
-  };
+  } as Device;
 }
 
 /**
@@ -286,8 +292,8 @@ export class DeployOrchestrator {
           if (iface.description) {
             lines.push(` description ${iface.description}`);
           }
-          if (iface.ipAddress) {
-            const [ip, cidr] = iface.ipAddress.split('/');
+          if (iface.ip) {
+            const [ip, cidr] = iface.ip.split('/');
             lines.push(` ip address ${ip} 255.255.255.0`);
           }
           lines.push(' no shutdown');

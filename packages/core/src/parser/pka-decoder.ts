@@ -128,7 +128,7 @@ export class PKADecoder {
     const decrypted = Buffer.alloc(fileSize);
     for (let i = 0; i < fileSize; i++) {
       const key = (fileSize - i) & 0xFF;
-      decrypted[i] = data[i] ^ key;
+      decrypted[i] = (data[i] ?? 0) ^ key;
     }
     stagesCompleted.push(1);
     
@@ -170,14 +170,14 @@ export class PKADecoder {
     
     for (let i = 0; i < length; i++) {
       // Obtener byte del final (orden inverso)
-      const ch = data[length - i - 1];
-      
+      const ch = data[length - i - 1] ?? 0;
+
       // Calcular: a = key * i
       const a = (key * i) & 0xFF;
-      
+
       // Calcular: c = length - a
       const c = (length - a) & 0xFF;
-      
+
       // XOR: result[i] = c ^ ch
       result[i] = c ^ ch;
     }
@@ -216,7 +216,7 @@ export class PKADecoder {
       
       // XOR con bloque anterior (CBC)
       for (let j = 0; j < blockSize; j++) {
-        decrypted[i + j] = plainBlock[j] ^ previousBlock[j];
+        decrypted[i + j] = (plainBlock[j] ?? 0) ^ (previousBlock[j] ?? 0);
       }
       
       // Actualizar bloque anterior
@@ -237,7 +237,7 @@ export class PKADecoder {
     
     for (let i = 0; i < length; i++) {
       const key = (length - i) & 0xFF;
-      result[i] = data[i] ^ key;
+      result[i] = (data[i] ?? 0) ^ key;
     }
     
     return result;
@@ -255,7 +255,7 @@ export class PKADecoder {
     }
     
     // Leer tamaño descomprimido (big-endian, qCompress)
-    const uncompressedSize = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
+    const uncompressedSize = ((data[0] ?? 0) << 24) | ((data[1] ?? 0) << 16) | ((data[2] ?? 0) << 8) | (data[3] ?? 0);
     
     // Verificar que el tamaño sea razonable
     if (uncompressedSize > 100 * 1024 * 1024 || uncompressedSize === 0) {
@@ -275,11 +275,11 @@ export class PKADecoder {
     
     // Descomprimir
     const decompressed = inflateSync(compressed);
-    
+
     // Convertir a string UTF-8
     // Reemplazar caracteres inválidos (menores a 0x09)
     for (let i = 0; i < decompressed.length; i++) {
-      if (decompressed[i] < 0x09) {
+      if ((decompressed[i] ?? 0) < 0x09) {
         decompressed[i] = 0x3F; // '?'
       }
     }

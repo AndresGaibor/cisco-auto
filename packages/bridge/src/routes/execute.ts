@@ -4,7 +4,7 @@
  */
 
 import type { ComandoPT } from '../server.ts';
-import { writeCommandFile } from '../file-bridge.ts';
+import { writeCommandFile, type BridgeCommandFile } from '../file-bridge.ts';
 
 // ============================================================================
 // Tipos
@@ -105,7 +105,7 @@ export async function handleExecute(req: Request): Promise<Response> {
     };
 
     getQueue().enqueue(comando);
-    writeCommandFile(comando);
+    writeCommandFile(comando as BridgeCommandFile);
 
     const response: ExecuteResponse = {
       success: true,

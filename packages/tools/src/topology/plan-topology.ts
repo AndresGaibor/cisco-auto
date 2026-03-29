@@ -19,7 +19,18 @@ function getNextIp(baseIp: string, offset: number): string {
 
 function selectDeviceModel(type: 'router' | 'switch' | 'multilayer-switch' | 'pc' | 'server'): typeof deviceCatalog[0] {
   const devices = deviceCatalog.filter(d => d.type === type);
-  return devices[0] || deviceCatalog[0];
+  return devices[0] ?? deviceCatalog[0]!;
+}
+
+type DeviceType = 'router' | 'switch' | 'multilayer-switch' | 'pc' | 'server';
+type PortType = 'ethernet' | 'serial' | 'fastethernet' | 'gigabitethernet';
+
+function toPortInfo(port: { name: string; type: string; available: boolean }) {
+  return {
+    name: port.name,
+    type: port.type as PortType,
+    available: port.available
+  };
 }
 
 function generateDevices(params: TopologyPlanParams): DevicePlan[] {
@@ -33,15 +44,15 @@ function generateDevices(params: TopologyPlanParams): DevicePlan[] {
     const model = selectDeviceModel('router');
     const routerIp = getNextIp(baseNetwork, ipOffset);
     ipOffset++;
-    
+
     devices.push({
       id: `R${i + 1}`,
       name: `Router${i + 1}`,
       model: {
         name: model.name,
-        type: model.type,
+        type: model.type as DeviceType,
         ptType: model.ptType,
-        ports: model.ports
+        ports: model.ports.map(p => toPortInfo(p))
       },
       position: { x: 100 + i * 150, y: 100 },
       interfaces: model.ports.slice(0, 2).map((port, idx) => ({
@@ -61,9 +72,9 @@ function generateDevices(params: TopologyPlanParams): DevicePlan[] {
       name: `Switch${i + 1}`,
       model: {
         name: model.name,
-        type: model.type,
+        type: model.type as DeviceType,
         ptType: model.ptType,
-        ports: model.ports
+        ports: model.ports.map(p => toPortInfo(p))
       },
       position: { x: 100 + i * 150, y: 250 },
       interfaces: model.ports.slice(0, 4).map(port => ({
@@ -78,15 +89,15 @@ function generateDevices(params: TopologyPlanParams): DevicePlan[] {
     const model = selectDeviceModel('pc');
     const pcIp = getNextIp(baseNetwork, ipOffset);
     ipOffset++;
-    
+
     devices.push({
       id: `PC${i + 1}`,
       name: `PC${i + 1}`,
       model: {
         name: model.name,
-        type: model.type,
+        type: model.type as DeviceType,
         ptType: model.ptType,
-        ports: model.ports
+        ports: model.ports.map(p => toPortInfo(p))
       },
       position: { x: 100 + i * 100, y: 400 },
       interfaces: [{
@@ -103,15 +114,15 @@ function generateDevices(params: TopologyPlanParams): DevicePlan[] {
     const model = selectDeviceModel('server');
     const serverIp = getNextIp(baseNetwork, ipOffset);
     ipOffset++;
-    
+
     devices.push({
       id: `SERVER${i + 1}`,
       name: `Server${i + 1}`,
       model: {
         name: model.name,
-        type: model.type,
+        type: model.type as DeviceType,
         ptType: model.ptType,
-        ports: model.ports
+        ports: model.ports.map(p => toPortInfo(p))
       },
       position: { x: 100 + i * 100, y: 500 },
       interfaces: [{

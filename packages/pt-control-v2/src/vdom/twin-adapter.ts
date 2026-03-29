@@ -217,7 +217,7 @@ function extractSemantics(
   if (text) {
     const vlanMatch = text.match(/vlan\s*(\d+)/i);
     if (vlanMatch) {
-      semantics.vlanId = parseInt(vlanMatch[1], 10);
+      semantics.vlanId = parseInt(vlanMatch[1]!, 10);
       semantics.vlanName = text.trim();
     }
 

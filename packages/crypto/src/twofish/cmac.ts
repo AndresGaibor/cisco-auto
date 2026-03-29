@@ -22,8 +22,8 @@ function leftShiftOne(block: Uint8Array): Uint8Array {
   let carry = 0;
   
   for (let i = BLOCK_SIZE - 1; i >= 0; i--) {
-    const newCarry = block[i] & 0x80 ? 1 : 0;
-    result[i] = ((block[i] << 1) | carry) & 0xFF;
+    const newCarry = (block[i] ?? 0) & 0x80 ? 1 : 0;
+    result[i] = (((block[i] ?? 0) << 1) | carry) & 0xFF;
     carry = newCarry;
   }
   
@@ -46,14 +46,14 @@ function generateSubkeys(key: Uint8Array): [Uint8Array, Uint8Array] {
   
   // K1 = L << 1
   const K1 = leftShiftOne(L);
-  if (L[0] & 0x80) {
-    K1[BLOCK_SIZE - 1] ^= R_CONSTANT;
+  if ((L[0] ?? 0) & 0x80) {
+    K1[BLOCK_SIZE - 1]! ^= R_CONSTANT;
   }
   
   // K2 = K1 << 1
   const K2 = leftShiftOne(K1);
-  if (K1[0] & 0x80) {
-    K2[BLOCK_SIZE - 1] ^= R_CONSTANT;
+  if ((K1[0] ?? 0) & 0x80) {
+    K2[BLOCK_SIZE - 1]! ^= R_CONSTANT;
   }
   
   return [K1, K2];
@@ -85,7 +85,7 @@ export function cmac(message: Uint8Array, key: Uint8Array): Uint8Array {
   const n = Math.ceil(message.length / BLOCK_SIZE);
   const lastBlockComplete = (message.length % BLOCK_SIZE === 0) && (message.length > 0);
   
-  let X = new Uint8Array(BLOCK_SIZE); // Estado inicial = 0
+  let X: Uint8Array = new Uint8Array(BLOCK_SIZE); // Estado inicial = 0
   
   // Procesar todos los bloques excepto el último
   for (let i = 0; i < n - 1; i++) {
@@ -94,7 +94,7 @@ export function cmac(message: Uint8Array, key: Uint8Array): Uint8Array {
   }
   
   // Procesar último bloque
-  let lastBlock = message.slice((n - 1) * BLOCK_SIZE);
+  let lastBlock: Uint8Array = message.slice((n - 1) * BLOCK_SIZE);
   
   if (lastBlockComplete) {
     // Mensaje completo: XOR con K1
@@ -137,7 +137,7 @@ export function verifyCMAC(message: Uint8Array, key: Uint8Array, expectedTag: Ui
   // Comparación en tiempo constante
   let result = 0;
   for (let i = 0; i < BLOCK_SIZE; i++) {
-    result |= computedTag[i] ^ expectedTag[i];
+    result |= (computedTag[i] ?? 0) ^ (expectedTag[i] ?? 0);
   }
   
   return result === 0;

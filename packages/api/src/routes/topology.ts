@@ -3,8 +3,8 @@
  * Endpoints para visualización y análisis de topología
  */
 
-import type { Route } from '../server';
-import { json, error, readJSON } from '../server';
+import type { Route } from '../server.ts';
+import { json, error, readJSON } from '../server.ts';
 import { visualizeTopology, generateMermaidDiagram, analyzeTopology, generateAdjacencyMatrix } from '@cisco-auto/core';
 import type { LabSpec } from '@cisco-auto/core';
 
@@ -14,7 +14,7 @@ export function createTopologyRoutes(): Route[] {
     {
       method: 'POST',
       path: '/api/topology/visualize',
-      handler: async (req) => {
+      handler: async (req: Request) => {
         const body = await readJSON<{ lab: LabSpec; options?: { showIPs?: boolean; showPorts?: boolean } }>(req);
         const { lab, options } = body;
 
@@ -27,7 +27,7 @@ export function createTopologyRoutes(): Route[] {
     {
       method: 'POST',
       path: '/api/topology/mermaid',
-      handler: async (req) => {
+      handler: async (req: Request) => {
         const body = await readJSON<{ lab: LabSpec }>(req);
         const { lab } = body;
 
@@ -40,7 +40,7 @@ export function createTopologyRoutes(): Route[] {
     {
       method: 'POST',
       path: '/api/topology/analyze',
-      handler: async (req) => {
+      handler: async (req: Request) => {
         const body = await readJSON<{ lab: LabSpec }>(req);
         const { lab } = body;
 
@@ -53,7 +53,7 @@ export function createTopologyRoutes(): Route[] {
     {
       method: 'POST',
       path: '/api/topology/matrix',
-      handler: async (req) => {
+      handler: async (req: Request) => {
         const body = await readJSON<{ lab: LabSpec }>(req);
         const { lab } = body;
 
@@ -66,7 +66,7 @@ export function createTopologyRoutes(): Route[] {
     {
       method: 'POST',
       path: '/api/topology/full',
-      handler: async (req) => {
+      handler: async (req: Request) => {
         const body = await readJSON<{ lab: LabSpec }>(req);
         const { lab } = body;
 

@@ -30,14 +30,14 @@ export function parseShowIpInterfaceBrief(output: string): ShowIpInterfaceBrief 
     // Example: GigabitEthernet0/0 192.168.1.1 YES manual up up
     const match = trimmed.match(/^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)$/);
     
-    if (match && !match[1].startsWith("Interface")) {
+    if (match && !match[1]!.startsWith("Interface")) {
       interfaces.push({
-        interface: match[1],
-        ipAddress: match[2],
-        ok: match[3],
-        method: match[4],
-        status: match[5] as "up" | "down" | "administratively down",
-        protocol: match[6] as "up" | "down",
+        interface: match[1]!,
+        ipAddress: match[2]!,
+        ok: match[3]!,
+        method: match[4]!,
+        status: match[5]! as "up" | "down" | "administratively down",
+        protocol: match[6]! as "up" | "down",
       });
     }
   }
@@ -59,17 +59,17 @@ export function parseShowVlan(output: string): ShowVlan {
     // Example: 1 default active Fa0/1, Fa0/2, Gi0/1
     const match = trimmed.match(/^(\d+)\s+(\S+)\s+(\S+)\s*(.*?)$/);
     
-    if (match && !match[1].startsWith("VLAN")) {
+    if (match && !match[1]!.startsWith("VLAN")) {
       const portsStr = match[4] || "";
       const ports = portsStr
         .split(",")
         .map((p) => p.trim())
         .filter((p) => p.length > 0);
-      
+
       vlans.push({
-        id: parseInt(match[1], 10),
-        name: match[2],
-        status: match[3] as "active" | "suspended" | "act/unsup",
+        id: parseInt(match[1]!, 10),
+        name: match[2]!,
+        status: match[3]! as "active" | "suspended" | "act/unsup",
         ports,
       });
     }
@@ -109,8 +109,8 @@ export function parseShowIpRoute(output: string): ShowIpRoute {
     const routeMatch = trimmed.match(/^([A-Z*])\s+(\S+)(?:\s+\[(\d+)\/(\d+)\])?\s*(.+)/);
     
     if (routeMatch) {
-      const typeChar = routeMatch[1];
-      const network = routeMatch[2];
+      const typeChar = routeMatch[1]!;
+      const network = routeMatch[2]!;
       const adminDist = routeMatch[3] ? parseInt(routeMatch[3], 10) : undefined;
       const metric = routeMatch[4] ? parseInt(routeMatch[4], 10) : undefined;
       const rest = routeMatch[5] || "";
@@ -133,9 +133,9 @@ export function parseShowIpRoute(output: string): ShowIpRoute {
       } else if (rest.includes("via")) {
         const viaMatch = rest.match(/via\s+(\S+)/);
         if (viaMatch) {
-          route.nextHop = viaMatch[1].replace(",", "");
+          route.nextHop = viaMatch[1]!.replace(",", "");
         }
-        
+
         // Interface after comma
         const ifaceMatch = rest.match(/,\s*(\S+)/);
         if (ifaceMatch) {
@@ -247,9 +247,9 @@ export function parseShowInterfaces(output: string): ShowInterfaces {
         interfaces.push(current);
       }
       current = {
-        name: ifaceMatch[1],
-        status: ifaceMatch[2],
-        protocol: ifaceMatch[3],
+        name: ifaceMatch[1]!,
+        status: ifaceMatch[2]!,
+        protocol: ifaceMatch[3]!,
       };
       continue;
     }
@@ -270,7 +270,7 @@ export function parseShowInterfaces(output: string): ShowInterfaces {
     if (line.includes("Internet address is")) {
       const ipMatch = line.match(/Internet address is (\S+)/);
       if (ipMatch) {
-        const [ip, cidr] = ipMatch[1].split("/");
+        const [ip, cidr] = ipMatch[1]!.split("/");
         current.ipAddress = ip;
         if (cidr) {
           current.subnetMask = cidrToMask(parseInt(cidr, 10));
@@ -312,12 +312,12 @@ export function parseShowIpArp(output: string): ShowIpArp {
     
     if (match && match[1] !== "Protocol" && match[1] !== "Internet") {
       entries.push({
-        protocol: match[1],
-        address: match[2],
-        age: match[3],
-        mac: match[4],
-        type: match[5] as "ARPA" | "SNAP" | "Other",
-        interface: match[6],
+        protocol: match[1]!,
+        address: match[2]!,
+        age: match[3]!,
+        mac: match[4]!,
+        type: match[5]! as "ARPA" | "SNAP" | "Other",
+        interface: match[6]!,
       });
     }
   }
@@ -341,10 +341,10 @@ export function parseShowMacAddressTable(output: string): ShowMacAddressTable {
     
     if (match && match[1] !== "Vlan") {
       entries.push({
-        vlan: match[1],
-        macAddress: match[2],
-        type: match[3].toLowerCase() as "dynamic" | "static" | "secure" | "self",
-        ports: [match[4]],
+        vlan: match[1]!,
+        macAddress: match[2]!,
+        type: match[3]!.toLowerCase() as "dynamic" | "static" | "secure" | "self",
+        ports: [match[4]!],
       });
     }
   }
@@ -370,7 +370,7 @@ export function parseShowSpanningTree(output: string): ShowSpanningTree {
         vlans.push(current);
       }
       current = {
-        vlan: parseInt(vlanMatch[1], 10),
+        vlan: parseInt(vlanMatch[1]!, 10),
         bridgeId: "",
         rootBridge: false,
         interfaces: [],
@@ -396,11 +396,11 @@ export function parseShowSpanningTree(output: string): ShowSpanningTree {
     
     if (ifaceMatch) {
       current.interfaces.push({
-        port: ifaceMatch[1],
-        role: ifaceMatch[2].toLowerCase() as ShowSpanningTree["vlans"][0]["interfaces"][0]["role"],
-        state: ifaceMatch[3].toLowerCase() as ShowSpanningTree["vlans"][0]["interfaces"][0]["state"],
-        cost: parseInt(ifaceMatch[4], 10),
-        priority: parseInt(ifaceMatch[5].split(".")[0], 10),
+        port: ifaceMatch[1]!,
+        role: ifaceMatch[2]!.toLowerCase() as ShowSpanningTree["vlans"][0]["interfaces"][0]["role"],
+        state: ifaceMatch[3]!.toLowerCase() as ShowSpanningTree["vlans"][0]["interfaces"][0]["state"],
+        cost: parseInt(ifaceMatch[4]!, 10),
+        priority: parseInt(ifaceMatch[5]!.split(".")[0]!, 10),
       });
     }
   }
@@ -431,7 +431,7 @@ export function parseShowVersion(output: string): ShowVersion {
     // Hostname is first word before " uptime"
     const hostMatch = line.match(/^(\S+)\s+uptime is/);
     if (hostMatch) {
-      result.hostname = hostMatch[1];
+      result.hostname = hostMatch[1]!;
     }
 
     if (line.includes("image:")) {
@@ -474,12 +474,12 @@ export function parseShowCdpNeighbors(output: string): ShowCdpNeighbors {
     
     if (parts.length >= 6) {
       neighbors.push({
-        deviceId: parts[0],
-        localInterface: parts[1],
-        holdtime: parseInt(parts[2], 10),
-        capability: parts[3],
-        platform: parts[4],
-        portId: parts[5],
+        deviceId: parts[0]!,
+        localInterface: parts[1]!,
+        holdtime: parseInt(parts[2]!, 10),
+        capability: parts[3]!,
+        platform: parts[4]!,
+        portId: parts[5]!,
       });
     }
   }

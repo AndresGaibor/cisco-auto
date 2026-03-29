@@ -2,7 +2,7 @@
  * DTOs para Lab
  * Objetos de transferencia de datos para el laboratorio
  */
-import { DifficultyLevel } from '../../domain/entities/lab.entity.ts';
+import type { DifficultyLevel } from '../../domain/entities/lab.entity.ts';
 
 export interface CreateLabDto {
   name: string;

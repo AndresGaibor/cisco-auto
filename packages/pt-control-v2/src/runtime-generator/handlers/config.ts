@@ -2,7 +2,7 @@
 // Config Handlers - Pure functions for device configuration
 // ============================================================================
 
-import { HandlerDeps, HandlerResult, PTCommandLine, PTDevice, PTPort } from "../../shared/utils/helpers";
+import type { HandlerDeps, HandlerResult, PTCommandLine, PTDevice, PTPort } from "../../shared/utils/helpers";
 
 // getParser is defined at runtime by parser-generator.ts (IOS_PARSERS + __getParser)
 // This declaration satisfies TypeScript during compilation

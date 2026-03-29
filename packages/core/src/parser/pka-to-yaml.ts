@@ -1,5 +1,6 @@
 import { XMLParser } from 'fast-xml-parser';
-import { Lab, Device, Connection, DeviceType } from '../types/index.ts';
+import type { Lab, Device, Connection } from '../types/index.ts';
+import type { DeviceType } from '../canonical';
 
 export interface PKAtoYAMLOptions {
   includeConfig?: boolean;
@@ -64,7 +65,7 @@ export class PKAtoYAML {
 
       const device: Device = {
         name,
-        type,
+        type: type as Device['type'],
         model,
         hostname: name,
         interfaces: []
@@ -147,7 +148,7 @@ export class PKAtoYAML {
     return 'router'; // Default
   }
 
-  private mapLinkType(ptLinkType: string): string {
+  private mapLinkType(ptLinkType: string): 'fiber' | 'serial' | 'console' | 'wireless' | 'coaxial' | 'ethernet' {
     const type = String(ptLinkType || "").toLowerCase();
     if (type.includes('serial')) return 'serial';
     if (type.includes('console') || type.includes('rollover')) return 'console';

@@ -2,12 +2,12 @@
 // CanvasService - Canvas rectangle operations
 // ============================================================================
 
-import { FileBridge } from "../../infrastructure/pt/file-bridge.js";
+import type { FileBridgePort } from "../ports/file-bridge.port.js";
 import type { DevicesInRectResult } from "../../contracts/index.js";
 
 export class CanvasService {
   constructor(
-    private bridge: FileBridge,
+    private bridge: FileBridgePort,
     private generateId: () => string
   ) {}
 

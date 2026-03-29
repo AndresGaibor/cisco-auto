@@ -11,15 +11,15 @@ import { DeviceNotFoundError, ValidationError } from '../../errors/index.js';
 import type { DeviceState } from '../../../types/index.js';
 
 export default class TrunkApply extends BaseCommand {
-  static description = 'Apply trunk configuration to device ports';
+  static override description = 'Apply trunk configuration to device ports';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> trunk apply S1 GigabitEthernet0/1 GigabitEthernet0/2',
     '<%= config.bin %> trunk apply S1 GigabitEthernet0/1 --vlans 10,20,30',
     '<%= config.bin %> trunk apply S1 GigabitEthernet0/1 GigabitEthernet0/2 --vlans 10-30',
   ];
 
-  static args = {
+  static override args = {
     device: Args.string({
       description: 'Device name (switch or router)',
       required: true,
@@ -31,7 +31,7 @@ export default class TrunkApply extends BaseCommand {
     }),
   };
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
     vlans: Flags.string({
       description: 'VLAN IDs allowed on trunk (e.g., "10,20,30" or "10-30")',
@@ -144,8 +144,8 @@ export default class TrunkApply extends BaseCommand {
       const trimmed = segment.trim();
       if (trimmed.includes('-')) {
         const [startStr, endStr] = trimmed.split('-');
-        const start = parseInt(startStr.trim(), 10);
-        const end = parseInt(endStr.trim(), 10);
+        const start = parseInt(startStr!.trim(), 10);
+        const end = parseInt(endStr!.trim(), 10);
         if (isNaN(start) || isNaN(end) || start > end) {
           throw new ValidationError(`Invalid VLAN range: ${trimmed}`);
         }

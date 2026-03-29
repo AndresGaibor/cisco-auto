@@ -2,9 +2,11 @@
  * YAML Lab Repository
  * Adaptador de infraestructura para persistencia en YAML
  */
-import { LabRepository } from '../../../ports/input/lab-repository.port.ts';
-import { Lab, LabMetadata, DifficultyLevel } from '../../../domain/entities/lab.entity.ts';
-import { Device, DeviceType, InterfaceConfig } from '../../../domain/entities/device.entity.ts';
+import type { LabRepository } from '../../../ports/input/lab-repository.port.ts';
+import type { LabMetadata, DifficultyLevel } from '../../../domain/entities/lab.entity.ts';
+import { Lab } from '../../../domain/entities/lab.entity.ts';
+import type { DeviceType, InterfaceConfig } from '../../../domain/entities/device.entity.ts';
+import { Device } from '../../../domain/entities/device.entity.ts';
 import { Connection } from '../../../domain/entities/connection.entity.ts';
 import { IpAddress } from '../../../domain/value-objects/ip-address.vo.ts';
 import { CableType } from '../../../domain/value-objects/cable-type.vo.ts';
@@ -254,8 +256,8 @@ export class YamlLabRepository implements LabRepository {
           cable: c.getCableType().getValue()
         }))
       },
-      instructions: lab.toJSON().instructions as string,
-      resources: lab.toJSON().resources as any
+      instructions: (lab.toJSON() as { instructions?: string }).instructions ?? '',
+      resources: (lab.toJSON() as { resources?: unknown }).resources ?? {}
     };
   }
 

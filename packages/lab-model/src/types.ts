@@ -236,42 +236,42 @@ export function parsePortName(portName: string): {
     {
       regex: /^(Fa|FastEthernet)(\d+)\/(\d+)$/i,
       type: PortType.FAST_ETHERNET,
-      extract: (m) => ({ module: parseInt(m[2]), number: parseInt(m[3]) })
+      extract: (m) => ({ module: parseInt(m[2]!), number: parseInt(m[3]!) })
     },
     {
       regex: /^(Gi|GigabitEthernet)(\d+)\/(\d+)(\/(\d+))?$/i,
       type: PortType.GIGABIT_ETHERNET,
-      extract: (m) => ({ module: parseInt(m[2]), number: parseInt(m[4] || m[3]) })
+      extract: (m) => ({ module: parseInt(m[2]!), number: parseInt(m[4] || m[3]!) })
     },
     {
       regex: /^(Te|TenGigabitEthernet)(\d+)\/(\d+)$/i,
       type: PortType.TEN_GIGABIT_ETHERNET,
-      extract: (m) => ({ module: parseInt(m[2]), number: parseInt(m[3]) })
+      extract: (m) => ({ module: parseInt(m[2]!), number: parseInt(m[3]!) })
     },
     {
       regex: /^(Se|Serial)(\d+)\/(\d+)(\/(\d+))?(:\d+)?$/i,
       type: PortType.SERIAL,
-      extract: (m) => ({ module: parseInt(m[2]), number: parseInt(m[4] || m[3]) })
+      extract: (m) => ({ module: parseInt(m[2]!), number: parseInt(m[4] || m[3]!) })
     },
     {
       regex: /^(Console|Con)(\d*)$/i,
       type: PortType.CONSOLE,
-      extract: (m) => ({ module: 0, number: parseInt(m[2]) || 0 })
+      extract: (m) => ({ module: 0, number: parseInt(m[2]!) || 0 })
     },
     {
       regex: /^(Aux)(\d*)$/i,
       type: PortType.AUXILIARY,
-      extract: (m) => ({ module: 0, number: parseInt(m[2]) || 0 })
+      extract: (m) => ({ module: 0, number: parseInt(m[2]!) || 0 })
     },
     {
       regex: /^(USB)(\d*)$/i,
       type: PortType.USB,
-      extract: (m) => ({ module: 0, number: parseInt(m[2]) || 0 })
+      extract: (m) => ({ module: 0, number: parseInt(m[2]!) || 0 })
     },
     {
       regex: /^(Eth|Ethernet)(\d+)\/(\d+)$/i,
       type: PortType.ETHERNET,
-      extract: (m) => ({ module: parseInt(m[2]), number: parseInt(m[3]) })
+      extract: (m) => ({ module: parseInt(m[2]!), number: parseInt(m[3]!) })
     }
   ];
   
@@ -433,7 +433,7 @@ export function getNetworkAddress(ip: string, mask: string): string {
   const maskOctets = mask.split('.').map(Number);
   
   return ipOctets
-    .map((octet, i) => octet & maskOctets[i])
+    .map((octet, i) => octet & (maskOctets[i] ?? 0))
     .join('.');
 }
 
@@ -445,6 +445,6 @@ export function getBroadcastAddress(ip: string, mask: string): string {
   const maskOctets = mask.split('.').map(Number);
   
   return ipOctets
-    .map((octet, i) => (octet & maskOctets[i]) | (~maskOctets[i] & 255))
+    .map((octet, i) => (octet & (maskOctets[i] ?? 0)) | (~(maskOctets[i] ?? 0) & 255))
     .join('.');
 }

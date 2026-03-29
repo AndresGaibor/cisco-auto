@@ -36,16 +36,16 @@ const DEVICE_MODELS: Record<string, { name: string; type: string }[]> = {
 };
 
 export default class DeviceAdd extends BaseCommand {
-  static description = 'Add a new device to the topology';
+  static override description = 'Add a new device to the topology';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> device add R1 2911',
     '<%= config.bin %> device add S1 2960 --x 200 --y 100',
     '<%= config.bin %> device add PC1 PC',
     '<%= config.bin %> device add  # Interactive mode',
   ];
 
-  static args = {
+  static override args = {
     name: Args.string({
       description: 'Device name (e.g., R1, S1, PC1)',
     }),
@@ -54,7 +54,7 @@ export default class DeviceAdd extends BaseCommand {
     }),
   };
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
     x: Flags.integer({
       description: 'X position on the workspace',

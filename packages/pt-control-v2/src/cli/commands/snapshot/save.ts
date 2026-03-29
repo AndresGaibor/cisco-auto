@@ -12,20 +12,20 @@ import { createDefaultPTController } from '../../../controller/index.js';
 import { ValidationError } from '../../errors/index.js';
 
 export default class SnapshotSave extends BaseCommand {
-  static description = 'Save a topology snapshot';
+  static override description = 'Save a topology snapshot';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> snapshot save base-topology',
     '<%= config.bin %> snapshot save my-lab-v1',
   ];
 
-  static args = {
+  static override args = {
     name: Args.string({
       description: 'Snapshot name',
     }),
   };
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
   };
 

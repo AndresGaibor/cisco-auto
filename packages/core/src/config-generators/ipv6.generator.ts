@@ -343,22 +343,23 @@ export class IPv6Generator {
   
   private static isValidIPv6(address: string): boolean {
     // Remove prefix length if present
-    const addr = address.split('/')[0];
-    
+    const addr = address.split('/')[0] ?? address;
+
     // Basic IPv6 validation
     const ipv6Regex = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
     const ipv6Compressed = /^::$|^([0-9a-fA-F]{0,4}:)*::([0-9a-fA-F]{0,4}:)*[0-9a-fA-F]{0,4}$/;
-    
+
     return ipv6Regex.test(addr) || ipv6Compressed.test(addr);
   }
   
   private static isValidIPv6Prefix(prefix: string): boolean {
     // Should have /prefix-length
     if (!prefix.includes('/')) return false;
-    
+
     const [addr, len] = prefix.split('/');
+    if (!addr || !len) return false;
     const prefixLen = parseInt(len);
-    
+
     return this.isValidIPv6(addr) && prefixLen >= 0 && prefixLen <= 128;
   }
   

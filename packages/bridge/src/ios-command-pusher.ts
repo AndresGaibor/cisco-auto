@@ -1,5 +1,15 @@
 import { type QueuePacket } from './schemas.ts';
 
+// Tipos para la respuesta del servidor bridge
+interface BridgeResponse {
+  ok: boolean;
+  queued?: boolean;
+  packet?: {
+    id?: string;
+  };
+  error?: string;
+}
+
 // Enviar comandos IOS al bridge server con reintentos y timeout
 export interface PushResult {
   success: boolean;
@@ -72,7 +82,7 @@ export async function pushCommands(
         throw new Error(errText);
       }
 
-      const json: any = await res.json();
+      const json = (await res.json()) as BridgeResponse;
       if (json && json.ok && json.queued) {
         return { success: true, commandId: json.packet?.id };
       }

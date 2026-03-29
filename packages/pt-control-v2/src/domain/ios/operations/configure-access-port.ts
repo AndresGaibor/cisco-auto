@@ -4,10 +4,8 @@
 
 import { CapabilitySet } from "../capabilities/capability-set.js";
 import { InterfaceName, VlanId } from "../value-objects/index.js";
-import {
-  CommandPlan,
-  CommandPlanBuilder,
-} from "./command-plan.js";
+import type { CommandPlan } from "./command-plan.js";
+import { CommandPlanBuilder } from "./command-plan.js";
 
 /**
  * Input for configuring an access port

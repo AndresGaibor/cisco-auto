@@ -11,22 +11,22 @@ import { DeviceNotFoundError, ValidationError } from '../../errors/index.js';
 import type { DeviceState } from '../../../types/index.js';
 
 export default class SshSetup extends BaseCommand {
-  static description = 'Configure SSH access on a device';
+  static override description = 'Configure SSH access on a device';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> ssh setup R1',
     '<%= config.bin %> ssh setup R1 --domain cisco.local --user admin --pass C1sco12345',
     '<%= config.bin %> ssh setup Router1 --domain mi-red.local',
   ];
 
-  static args = {
+  static override args = {
     device: Args.string({
       description: 'Device name (router or switch)',
       required: true,
     }),
   };
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
     domain: Flags.string({
       description: 'Domain name for SSH (e.g., "cisco.local")',

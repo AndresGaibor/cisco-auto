@@ -11,7 +11,6 @@
  * Stage 4: Zlib Decompress
  */
 
-import { Twofish } from 'twofish-ts';
 import * as zlib from 'zlib';
 
 export class PKADecryptor {
@@ -69,11 +68,11 @@ export class PKADecryptor {
     for (let i = 0; i < length; i++) {
       // Posición inversa
       const pos = length - i - 1;
-      const encryptedByte = encrypted[pos];
-      
+      const encryptedByte = encrypted[pos] ?? 0;
+
       // Calcular XOR key: (length - (key * i)) & 0xFF
       const xorKey = ((length - (key * i)) & 0xFF);
-      
+
       result[i] = encryptedByte ^ xorKey;
     }
     
@@ -118,7 +117,7 @@ export class PKADecryptor {
       
       // XOR con el bloque anterior (CBC)
       for (let j = 0; j < blockSize && (i + j) < data.length; j++) {
-        decrypted[i + j] = plainBlock[j] ^ previousBlock[j];
+        decrypted[i + j] = (plainBlock[j] ?? 0) ^ (previousBlock[j] ?? 0);
       }
       
       // Actualizar bloque anterior para la siguiente iteración
@@ -142,7 +141,7 @@ export class PKADecryptor {
     
     for (let i = 0; i < length; i++) {
       const key = ((length - i) & 0xFF);
-      result[i] = data[i] ^ key;
+      result[i] = (data[i] ?? 0) ^ key;
     }
     
     return result;
@@ -159,12 +158,12 @@ export class PKADecryptor {
     }
     
     // Primeros 4 bytes = tamaño descomprimido (big endian)
-    const uncompressedSize = 
-      (data[0] << 24) | 
-      (data[1] << 16) | 
-      (data[2] << 8) | 
-      (data[3]);
-    
+    const uncompressedSize =
+      ((data[0] ?? 0) << 24) |
+      ((data[1] ?? 0) << 16) |
+      ((data[2] ?? 0) << 8) |
+      (data[3] ?? 0);
+
     // Verificar header zlib (78 9C = default compression)
     if (data.length < 6 || data[4] !== 0x78 || data[5] !== 0x9C) {
       throw new Error('Invalid zlib header. Expected 78 9C');
@@ -178,7 +177,7 @@ export class PKADecryptor {
     
     // Arreglar caracteres inválidos (0x03 -> 0x3F)
     for (let i = 0; i < decompressed.length; i++) {
-      if (decompressed[i] < 0x09) {
+      if ((decompressed[i] ?? 0) < 0x09) {
         decompressed[i] = 0x3F; // '?'
       }
     }

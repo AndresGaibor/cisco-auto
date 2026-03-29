@@ -15,16 +15,14 @@ import * as yaml from 'js-yaml';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import {
+import type {
   LabSpec,
-  LabSpecFactory,
   LabMetadata,
   LabObjective,
   LabValidation,
   LabInstructions,
   LabCanvas,
   DeviceSpec,
-  DeviceSpecFactory,
   InterfaceSpec,
   VLANSpec,
   VTPSpec,
@@ -34,10 +32,14 @@ import {
   Layer2Spec,
   LineSpec,
   ConnectionSpec,
-  ConnectionSpecFactory,
   DeviceType,
-  CableType,
   DifficultyLevel,
+} from '../canonical';
+import { CableType } from '../canonical';
+import {
+  LabSpecFactory,
+  DeviceSpecFactory,
+  ConnectionSpecFactory,
   generateId,
   isValidIP,
   cidrToMask,
@@ -515,7 +517,7 @@ export class YAMLToCanonical {
       const trimmed = part.trim();
       if (trimmed.includes('-')) {
         const [start, end] = trimmed.split('-').map(Number);
-        for (let i = start; i <= end; i++) {
+        for (let i = start ?? 0; i <= (end ?? 0); i++) {
           vlans.push(i);
         }
       } else {
@@ -592,7 +594,7 @@ export class CanonicalToYAML {
         description: o.description
       })),
       validation: lab.validation ? {
-        tests: lab.validation.tests.map(t => ({
+        tests: (lab.validation?.tests ?? []).map(t => ({
           name: t.name,
           type: t.type,
           source: t.sourceDevice,

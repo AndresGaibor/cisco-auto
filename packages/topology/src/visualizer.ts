@@ -175,8 +175,8 @@ export function generateAdjacencyMatrix(lab: LabSpec): string {
     const toIdx = deviceNames.indexOf(conn.to.deviceName);
     
     if (fromIdx >= 0 && toIdx >= 0) {
-      matrix[fromIdx][toIdx] = 1;
-      matrix[toIdx][fromIdx] = 1;
+      matrix[fromIdx]![toIdx] = 1;
+      matrix[toIdx]![fromIdx] = 1;
     }
   }
   
@@ -195,9 +195,9 @@ export function generateAdjacencyMatrix(lab: LabSpec): string {
   
   // Rows
   for (let i = 0; i < n; i++) {
-    let row = deviceNames[i].padEnd(maxLen + 1);
+    let row = deviceNames[i]!.padEnd(maxLen + 1);
     for (let j = 0; j < n; j++) {
-      row += `  ${matrix[i][j]} `;
+      row += `  ${matrix[i]![j]} `;
     }
     lines.push(row);
   }

@@ -5,7 +5,7 @@
 
 import { NodeSSH } from 'node-ssh';
 import type { Config as SSHConfig, SSHExecCommandOptions, SSHExecCommandResponse } from 'node-ssh';
-import { Device } from '../types/index.ts';
+import type { Device } from '../types/index.ts';
 
 export interface ConnectionResult {
   success: boolean;
@@ -161,28 +161,48 @@ export class SSHConnector {
    * Obtiene el estado de una interfaz
    */
   public async getInterfaceStatus(interfaceName: string): Promise<ConnectionResult> {
-    return this.execCommand(`show interfaces ${interfaceName}`);
+    const result = await this.execCommand(`show interfaces ${interfaceName}`);
+    return {
+      success: result.code === 0,
+      output: result.stdout,
+      error: result.stderr
+    };
   }
 
   /**
    * Verifica la tabla de enrutamiento
    */
   public async getRoutingTable(): Promise<ConnectionResult> {
-    return this.execCommand('show ip route');
+    const result = await this.execCommand('show ip route');
+    return {
+      success: result.code === 0,
+      output: result.stdout,
+      error: result.stderr
+    };
   }
 
   /**
    * Verifica VLANs configuradas
    */
   public async getVLANs(): Promise<ConnectionResult> {
-    return this.execCommand('show vlan brief');
+    const result = await this.execCommand('show vlan brief');
+    return {
+      success: result.code === 0,
+      output: result.stdout,
+      error: result.stderr
+    };
   }
 
   /**
    * Verifica vecinos OSPF
    */
   public async getOSPFNeighbors(): Promise<ConnectionResult> {
-    return this.execCommand('show ip ospf neighbor');
+    const result = await this.execCommand('show ip ospf neighbor');
+    return {
+      success: result.code === 0,
+      output: result.stdout,
+      error: result.stderr
+    };
   }
 
   /**

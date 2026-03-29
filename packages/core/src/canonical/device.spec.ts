@@ -22,6 +22,32 @@ import type {
   generateId
 } from './types';
 
+// Import types from protocol.spec.ts - do not redefine here
+import type {
+  STPSpec,
+  EtherChannelSpec,
+  PortSecuritySpec,
+  RIPSpec,
+  BGPSpec,
+  BGPNeighbor,
+  ServicesSpec,
+  NTPSpec,
+  DHCPServerSpec
+} from './protocol.spec';
+
+// Re-export for backwards compatibility (types imported from protocol.spec)
+export type {
+  STPSpec,
+  EtherChannelSpec,
+  PortSecuritySpec,
+  RIPSpec,
+  BGPSpec,
+  BGPNeighbor,
+  ServicesSpec,
+  NTPSpec,
+  DHCPServerSpec,
+} from './protocol.spec';
+
 // =============================================================================
 // INTERFACE SPECIFICATION
 // =============================================================================
@@ -186,51 +212,6 @@ export interface EIGRPSpec {
   noAutoSummary?: boolean;
 }
 
-export interface RIPSpec {
-  /** Versión */
-  version: 1 | 2;
-  
-  /** Redes */
-  networks: string[];
-  
-  /** Interfaces pasivas */
-  passiveInterfaces?: string[];
-  
-  /** Default route */
-  defaultRoute?: boolean;
-}
-
-export interface BGPNeighborSpec {
-  /** IP del vecino */
-  ip: string;
-  
-  /** AS remoto */
-  remoteAs: number;
-  
-  /** Descripción */
-  description?: string;
-  
-  /** Update source */
-  updateSource?: string;
-  
-  /** Next-hop-self */
-  nextHopSelf?: boolean;
-}
-
-export interface BGPSpec {
-  /** AS number */
-  asn: number;
-  
-  /** Router ID */
-  routerId?: string;
-  
-  /** Vecinos */
-  neighbors: BGPNeighborSpec[];
-  
-  /** Redes a anunciar */
-  networks: string[];
-}
-
 export interface RoutingSpec {
   /** Rutas estáticas */
   static?: StaticRouteSpec[];
@@ -372,157 +353,9 @@ export interface SecuritySpec {
 // SERVICES SPECIFICATIONS
 // =============================================================================
 
-export interface DHCPSpec {
-  /** Pools DHCP */
-  pools: {
-    name: string;
-    network: string;
-    subnetMask: string;
-    defaultRouter?: string;
-    dnsServers?: string[];
-    domainName?: string;
-    leaseTime?: string;
-    excludedAddresses?: string[];
-  }[];
-  
-  /** Excluir direcciones globalmente */
-  globalExcluded?: string[];
-}
-
-export interface NTPSpec {
-  /** Servidores NTP */
-  servers: string[];
-  
-  /** Actuar como servidor NTP */
-  serve?: boolean;
-  
-  /** Autenticación */
-  authentication?: {
-    enabled: boolean;
-    keys?: { id: number; md5: string }[];
-    trustedKeys?: number[];
-  };
-}
-
-export interface ServicesSpec {
-  /** DHCP */
-  dhcp?: DHCPSpec;
-  
-  /** NTP */
-  ntp?: NTPSpec;
-  
-  /** DNS */
-  dns?: {
-    enabled: boolean;
-    servers?: string[];
-  };
-  
-  /** HTTP/HTTPS */
-  http?: {
-    enabled: boolean;
-    secureOnly?: boolean;
-  };
-  
-  /** SSH */
-  ssh?: {
-    enabled: boolean;
-    version: 1 | 2;
-    ports?: number[];
-  };
-  
-  /** Telnet */
-  telnet?: {
-    enabled: boolean;
-    ports?: number[];
-  };
-}
-
 // =============================================================================
 // STP / L2 SPECIFICATIONS
 // =============================================================================
-
-export interface STPSpec {
-  /** Modo STP */
-  mode: 'pvst' | 'rapid-pvst' | 'mst';
-  
-  /** Prioridad global */
-  priority?: number;
-  
-  /** Root primary para VLANs */
-  rootPrimary?: number[];
-  
-  /** Root secondary para VLANs */
-  rootSecondary?: number[];
-  
-  /** PortFast global */
-  portfastDefault?: boolean;
-  
-  /** BPDU Guard global */
-  bpduguardDefault?: boolean;
-  
-  /** Configuración por VLAN */
-  vlanConfig?: {
-    vlanId: number;
-    priority?: number;
-    rootPrimary?: boolean;
-    rootSecondary?: boolean;
-  }[];
-  
-  /** Configuración por interfaz */
-  interfaceConfig?: {
-    interface: string;
-    portfast?: boolean;
-    bpduguard?: boolean;
-    bpdufilter?: boolean;
-    cost?: number;
-    priority?: number;
-  }[];
-}
-
-export interface EtherChannelSpec {
-  /** ID del grupo */
-  groupId: number;
-  
-  /** Modo */
-  mode: 'active' | 'passive' | 'desirable' | 'auto' | 'on';
-  
-  /** Protocolo */
-  protocol: 'lacp' | 'pagp';
-  
-  /** Interfaces miembro */
-  interfaces: string[];
-  
-  /** Puerto lógico */
-  portChannel: string;
-  
-  /** Configuración del puerto lógico */
-  trunkMode?: SwitchportMode;
-  nativeVlan?: number;
-  allowedVlans?: number[];
-}
-
-export interface PortSecuritySpec {
-  /** Interface */
-  interface: string;
-  
-  /** Habilitado */
-  enabled: boolean;
-  
-  /** Máximo de MACs */
-  maxMacs?: number;
-  
-  /** Modo de violación */
-  violation?: 'protect' | 'restrict' | 'shutdown';
-  
-  /** Sticky MAC */
-  sticky?: boolean;
-  
-  /** MACs estáticas */
-  staticMacs?: string[];
-  
-  /** Aging time */
-  agingTime?: number;
-}
 
 export interface Layer2Spec {
   /** STP */
@@ -736,14 +569,12 @@ export class DeviceSpecFactory {
    */
   static create(partial: Partial<DeviceSpec> & { name: string; type: DeviceType }): DeviceSpec {
     const id = partial.id || `device-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
+
     return {
       id,
-      name: partial.name,
-      type: partial.type,
       hostname: partial.hostname || partial.name,
       interfaces: partial.interfaces || [],
-      ...partial
+      ...partial,
     };
   }
   

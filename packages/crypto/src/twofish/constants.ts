@@ -117,27 +117,27 @@ function generateMDS(): Uint32Array[] {
     // Calcular la multiplicación en GF(2^8) para cada columna de la matriz MDS
     // MDS = [[01, EF, 5B], [5B, EF, 01], [EF, 5B, 01], [EF, 01, 5B]]
     // Simplificado para implementación eficiente
-    
+
     // Columna 0: multiplicar por diferentes constantes
-    mds[0][x] = gfMultiply(x, 0x01, MDS_POLY) | 
+    mds[0]![x] = gfMultiply(x, 0x01, MDS_POLY) |
                 (gfMultiply(x, 0xEF, MDS_POLY) << 8) |
                 (gfMultiply(x, 0x5B, MDS_POLY) << 16) |
                 (gfMultiply(x, 0x5B, MDS_POLY) << 24);
-    
+
     // Columna 1
-    mds[1][x] = gfMultiply(x, 0x5B, MDS_POLY) | 
+    mds[1]![x] = gfMultiply(x, 0x5B, MDS_POLY) |
                 (gfMultiply(x, 0xEF, MDS_POLY) << 8) |
                 (gfMultiply(x, 0xEF, MDS_POLY) << 16) |
                 (gfMultiply(x, 0x01, MDS_POLY) << 24);
-    
-    // Columna 2  
-    mds[2][x] = gfMultiply(x, 0xEF, MDS_POLY) | 
+
+    // Columna 2
+    mds[2]![x] = gfMultiply(x, 0xEF, MDS_POLY) |
                 (gfMultiply(x, 0x5B, MDS_POLY) << 8) |
                 (gfMultiply(x, 0x01, MDS_POLY) << 16) |
                 (gfMultiply(x, 0xEF, MDS_POLY) << 24);
-    
+
     // Columna 3
-    mds[3][x] = gfMultiply(x, 0xEF, MDS_POLY) | 
+    mds[3]![x] = gfMultiply(x, 0xEF, MDS_POLY) |
                 (gfMultiply(x, 0x01, MDS_POLY) << 8) |
                 (gfMultiply(x, 0x5B, MDS_POLY) << 16) |
                 (gfMultiply(x, 0x5B, MDS_POLY) << 24);

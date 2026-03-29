@@ -9,13 +9,13 @@ import { BaseCommand, createSpinner } from '../../base-command.js';
 import { ValidationError } from '../../errors/index.js';
 
 export default class RecordStop extends BaseCommand {
-  static description = 'Stop recording operations';
+  static override description = 'Stop recording operations';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> record stop',
   ];
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
   };
 

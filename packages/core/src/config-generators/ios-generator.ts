@@ -1,8 +1,8 @@
-import { Device } from '../types/index.ts';
-import { BaseGenerator } from './base-generator.ts';
-import { VlanGenerator } from './vlan-generator.ts';
-import { RoutingGenerator } from './routing-generator.ts';
-import { SecurityGenerator } from './security-generator.ts';
+import type { DeviceSpec } from '../canonical/device.spec.ts';
+import { BaseGenerator } from './base-generator.js';
+import { VlanGenerator } from './vlan-generator.js';
+import { RoutingGenerator } from './routing-generator.js';
+import { SecurityGenerator } from './security-generator.js';
 
 export interface GeneratedConfig {
   hostname: string;
@@ -11,15 +11,15 @@ export interface GeneratedConfig {
 }
 
 export class IOSGenerator {
-  public static generate(device: Device): GeneratedConfig {
+  public static generate(device: DeviceSpec): GeneratedConfig {
     const sections: Record<string, string[]> = {
       'basic': BaseGenerator.generateBasic(device),
       'interfaces': VlanGenerator.generateInterfaces(device),
       'vlans': device.vlans ? VlanGenerator.generateVLANs(device.vlans, device.vtp) : [],
       'vtp': device.vtp ? VlanGenerator.generateVTP(device.vtp) : [],
       'routing': device.routing ? RoutingGenerator.generateRouting(device.routing) : [],
-      'security': device.acls ? SecurityGenerator.generateACLs(device.acls) : [],
-      'nat': device.nat ? SecurityGenerator.generateNAT(device.nat) : [],
+      // Security: canonical uses device.security.acls and device.security.nat
+      'security': device.security ? SecurityGenerator.generateSecurity(device.security) : [],
       'lines': device.lines ? BaseGenerator.generateLines(device.lines) : []
     };
 
@@ -55,6 +55,6 @@ export class IOSGenerator {
   }
 }
 
-export function generateIOS(device: Device): GeneratedConfig {
+export function generateIOS(device: DeviceSpec): GeneratedConfig {
   return IOSGenerator.generate(device);
 }

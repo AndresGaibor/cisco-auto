@@ -14,6 +14,7 @@ export interface DeployOutput {
   outputPath?: string;
   charCount?: number;
   failedDevices?: FailedDevice[];
+  message?: string;
 }
 
 /**

@@ -6,5 +6,4 @@ export { Switch } from './Switch.ts';
 export { Router } from './Router.ts';
 export { WirelessRouter } from './WirelessRouter.ts';
 export { Activity } from './Activity.ts';
-export * from './CableTypes.ts';
 export * from './ModuleTemplates.ts';

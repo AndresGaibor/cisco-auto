@@ -28,9 +28,9 @@ export interface CLIErrorOptions {
 }
 
 export class CLIError extends Errors.CLIError {
-  public readonly code: string;
+  public override readonly code: string;
   public readonly exitCode: ExitCode;
-  public readonly suggestions: string[];
+  public override readonly suggestions: string[];
 
   constructor(message: string, options: CLIErrorOptions = {}) {
     super(message);

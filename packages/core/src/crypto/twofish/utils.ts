@@ -15,10 +15,10 @@ import { SUPPORTED_KEY_SIZES } from './types.ts';
  */
 export function getWordLE(data: Uint8Array, offset: number): number {
   return (
-    (data[offset]) |
-    (data[offset + 1] << 8) |
-    (data[offset + 2] << 16) |
-    (data[offset + 3] << 24)
+    (data[offset] ?? 0) |
+    ((data[offset + 1] ?? 0) << 8) |
+    ((data[offset + 2] ?? 0) << 16) |
+    ((data[offset + 3] ?? 0) << 24)
   ) >>> 0; // >>> 0 para forzar unsigned
 }
 
@@ -49,7 +49,7 @@ export function bytesToWords(bytes: Uint8Array): Uint32Array {
 export function wordsToBytes(words: Uint32Array): Uint8Array {
   const bytes = new Uint8Array(words.length * 4);
   for (let i = 0; i < words.length; i++) {
-    setWordLE(bytes, i * 4, words[i]);
+    setWordLE(bytes, i * 4, words[i]!);
   }
   return bytes;
 }
@@ -136,25 +136,25 @@ export function splitKeyEvenOdd(key: Uint8Array): { Me: Uint8Array; Mo: Uint8Arr
   const k = key.length / 4; // Número de palabras de 32 bits
   const Me = new Uint8Array(4 * Math.ceil(k / 2));
   const Mo = new Uint8Array(4 * Math.floor(k / 2));
-  
+
   let meIndex = 0;
   let moIndex = 0;
-  
+
   for (let i = 0; i < k; i++) {
     const wordOffset = i * 4;
     if (i % 2 === 0) {
       // Par: va a Me
       for (let j = 0; j < 4; j++) {
-        Me[meIndex++] = key[wordOffset + j];
+        Me[meIndex++] = key[wordOffset + j]!;
       }
     } else {
       // Impar: va a Mo
       for (let j = 0; j < 4; j++) {
-        Mo[moIndex++] = key[wordOffset + j];
+        Mo[moIndex++] = key[wordOffset + j]!;
       }
     }
   }
-  
+
   return { Me, Mo };
 }
 
@@ -186,12 +186,12 @@ export function xorBuffers(a: Uint8Array, b: Uint8Array): Uint8Array {
   if (a.length !== b.length) {
     throw new Error('Buffers must have the same length for XOR');
   }
-  
+
   const result = new Uint8Array(a.length);
   for (let i = 0; i < a.length; i++) {
-    result[i] = a[i] ^ b[i];
+    result[i] = (a[i] ?? 0) ^ (b[i] ?? 0);
   }
-  
+
   return result;
 }
 
@@ -215,21 +215,21 @@ export function applyPKCS7Padding(data: Uint8Array, blockSize: number): Uint8Arr
  */
 export function removePKCS7Padding(data: Uint8Array): Uint8Array | null {
   if (data.length === 0) return data;
-  
+
   const padding = data[data.length - 1];
-  
+
   // Validar que el padding sea razonable
-  if (padding === 0 || padding > 16 || padding > data.length) {
+  if (padding === undefined || padding === 0 || padding > 16 || padding > data.length) {
     return null;
   }
-  
+
   // Verificar que todos los bytes de padding tengan el mismo valor
   for (let i = data.length - padding; i < data.length; i++) {
-    if (data[i] !== padding) {
+    if ((data[i] ?? 0) !== padding) {
       return null;
     }
   }
-  
+
   return data.slice(0, data.length - padding);
 }
 

@@ -106,21 +106,21 @@ export function getPathContext(twin: NetworkTwin, from: string, to: string): Pat
 
       hops.push({
         device: from,
-        port: fromUplinks[0].port,
-        nextHop: fromUplinks[0].to,
+        port: fromUplinks[0]!.port,
+        nextHop: fromUplinks[0]!.to,
       });
 
-      if (fromUplinks[0].to !== toUplinks[0].from) {
+      if (fromUplinks[0]!.to !== toUplinks[0]!.from) {
         hops.push({
-          device: fromUplinks[0].to,
+          device: fromUplinks[0]!.to,
           port: "N/A",
-          nextHop: toUplinks[0].from,
+          nextHop: toUplinks[0]!.from,
         });
       }
 
       hops.push({
         device: to,
-        port: toUplinks[0].port,
+        port: toUplinks[0]!.port,
         nextHop: undefined,
       });
     }

@@ -28,7 +28,7 @@ export class IpAddress {
     const ipParts = this.value.split('.').map(Number);
     const maskParts = mask.split('.').map(Number);
     
-    const networkParts = ipParts.map((part, i) => part & maskParts[i]);
+    const networkParts = ipParts.map((part, i) => part & (maskParts[i] ?? 0));
     return networkParts.join('.');
   }
 

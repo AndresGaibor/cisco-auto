@@ -72,7 +72,7 @@ export function cleanupResults(): void {
     // El ID contiene timestamp, extraerlo
     const timestampMatch = id.match(/^(\d+)/);
     if (timestampMatch) {
-      const timestamp = parseInt(timestampMatch[1], 10);
+      const timestamp = parseInt(timestampMatch[1]!, 10);
       if (now - timestamp > 30000) {
         pendingResults.delete(id);
         resultCallbacks.delete(id);

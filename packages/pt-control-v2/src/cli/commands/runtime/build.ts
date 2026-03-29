@@ -15,15 +15,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export default class RuntimeBuild extends BaseCommand {
-  static description = 'Build the Packet Tracer runtime files';
+  static override description = 'Build the Packet Tracer runtime files';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> runtime build',
     '<%= config.bin %> runtime build --deploy',
     '<%= config.bin %> runtime build --dev-dir ~/my-pt-dev',
   ];
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
     deploy: Flags.boolean({
       description: 'Deploy after building',

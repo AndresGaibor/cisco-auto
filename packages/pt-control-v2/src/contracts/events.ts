@@ -8,6 +8,8 @@ import { z } from 'zod';
 export const PTEventBaseSchema = z.object({
   type: z.string(),
   ts: z.number(),
+  /** Monotonic sequence number for ordering and gap detection */
+  seq: z.number().optional(),
 });
 
 export type PTEventBase = z.infer<typeof PTEventBaseSchema>;

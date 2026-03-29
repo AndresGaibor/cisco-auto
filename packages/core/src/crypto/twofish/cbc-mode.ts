@@ -8,7 +8,8 @@
  */
 
 import { encryptBlock, decryptBlock } from './block-cipher.ts';
-import { KeySchedule, makeKeySchedule } from './key-schedule.ts';
+import type { KeySchedule } from './key-schedule.ts';
+import { makeKeySchedule } from './key-schedule.ts';
 import { xorBuffers, applyPKCS7Padding, removePKCS7Padding } from './utils.ts';
 
 /**
@@ -48,9 +49,9 @@ export function encryptCBC(
   
   const numBlocks = data.length / blockSize;
   const ciphertext = new Uint8Array(data.length);
-  
-  let previousBlock = new Uint8Array(iv);
-  
+
+  let previousBlock: Uint8Array = new Uint8Array(iv);
+
   for (let i = 0; i < numBlocks; i++) {
     const offset = i * blockSize;
     

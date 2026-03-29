@@ -38,6 +38,17 @@ export function selectPcDevices(twin: NetworkTwin): string[] {
     .map((d) => d.name);
 }
 
+/**
+ * Edge devices are hosts at the network boundary: PCs, servers, wireless routers/APs.
+ * They are "edge" because they connect to the network infrastructure
+ * but don't typically forward traffic for other devices.
+ */
+export function selectEdgeDevices(twin: NetworkTwin): string[] {
+  return Object.values(twin.devices)
+    .filter((d) => d.family === "pc" || d.family === "server" || d.family === "wlc" || d.family === "ap")
+    .map((d) => d.name);
+}
+
 export function selectDevicesByFamily(twin: NetworkTwin, family: DeviceFamily): string[] {
   return Object.values(twin.devices)
     .filter((d) => d.family === family)

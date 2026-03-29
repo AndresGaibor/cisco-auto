@@ -2,14 +2,8 @@
 // Device Handlers - Pure functions for device operations
 // ============================================================================
 
-import {
-  HandlerDeps,
-  HandlerResult,
-  PTDevice,
-  resolveModel,
-  getDeviceTypeCandidates,
-  createDeviceWithFallback,
-} from "../../shared/utils/helpers";
+import type { HandlerDeps, HandlerResult, PTDevice } from "../../shared/utils/helpers";
+import { resolveModel, getDeviceTypeCandidates, createDeviceWithFallback } from "../../shared/utils/helpers";
 
 // ============================================================================
 // Payload Types

@@ -96,13 +96,10 @@ export class ConnectionSpecFactory {
     
     return {
       id,
-      from: partial.from,
-      to: partial.to,
-      cableType: partial.cableType,
       medium: partial.medium || getLinkMedium(partial.cableType),
       functional: partial.functional ?? true,
       linkStatus: partial.linkStatus || 'up',
-      ...partial
+      ...partial,
     };
   }
   

@@ -24,7 +24,7 @@ export class Ipv4Address {
 
     const octets: [number, number, number, number] = [0, 0, 0, 0];
     for (let i = 0; i < 4; i++) {
-      const num = parseInt(parts[i], 10);
+      const num = parseInt(parts[i]!, 10);
       if (isNaN(num) || num < 0 || num > 255 || String(num) !== parts[i]) {
         throw new Error(`Invalid IPv4 address: "${value}". Octet ${i + 1} must be 0-255.`);
       }

@@ -20,15 +20,15 @@ const CABLE_TYPES: { name: string; value: CableType }[] = [
 ];
 
 export default class LinkAdd extends BaseCommand {
-  static description = 'Add a link between two devices';
+  static override description = 'Add a link between two devices';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> link add R1:GigabitEthernet0/0 S1:GigabitEthernet0/1',
     '<%= config.bin %> link add R1:GigabitEthernet0/0 R2:GigabitEthernet0/0 --type cross',
     '<%= config.bin %> link add  # Interactive mode',
   ];
 
-  static args = {
+  static override args = {
     port1: Args.string({
       description: 'First port (device:port)',
     }),
@@ -37,7 +37,7 @@ export default class LinkAdd extends BaseCommand {
     }),
   };
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
     type: Flags.string({
       description: 'Cable type',
@@ -107,12 +107,12 @@ export default class LinkAdd extends BaseCommand {
 
   private isValidPortSpec(spec: string): boolean {
     const parts = spec.split(':');
-    return parts.length === 2 && parts[0].length > 0 && parts[1].length > 0;
+    return parts.length === 2 && parts[0]!.length > 0 && parts[1]!.length > 0;
   }
 
   private parsePortSpec(spec: string): { device: string; port: string } {
     const [device, ...portParts] = spec.split(':');
-    return { device, port: portParts.join(':') };
+    return { device: device!, port: portParts.join(':') };
   }
 
   private async promptForLink(

@@ -5,7 +5,7 @@
  * Twofish usa una red Feistel de 16 rondas con whitening de entrada y salida
  */
 
-import { KeySchedule } from './types.ts';
+import type { KeySchedule } from './types.ts';
 import { getWordLE, setWordLE, rotateLeft, rotateRight } from './utils.ts';
 import { gFunction, makeKeySchedule } from './key-schedule.ts';
 
@@ -28,10 +28,10 @@ export function encryptBlock(
   const { subkeys: K, sBoxes: S } = keySchedule;
   
   // Input whitening: XOR con K[0..3]
-  let R0 = getWordLE(plaintext, 0) ^ K[0];
-  let R1 = getWordLE(plaintext, 4) ^ K[1];
-  let R2 = getWordLE(plaintext, 8) ^ K[2];
-  let R3 = getWordLE(plaintext, 12) ^ K[3];
+  let R0 = getWordLE(plaintext, 0) ^ K[0]!;
+  let R1 = getWordLE(plaintext, 4) ^ K[1]!;
+  let R2 = getWordLE(plaintext, 8) ^ K[2]!;
+  let R3 = getWordLE(plaintext, 12) ^ K[3]!;
   
   // 16 rondas de Feistel
   for (let r = 0; r < 16; r++) {
@@ -40,8 +40,8 @@ export function encryptBlock(
     const T1 = gFunction(rotateLeft(R1, 8), S);
     
     // PHT y suma de subkeys
-    const F0 = (T0 + T1 + K[2 * r + 8]) >>> 0;
-    const F1 = (T0 + (2 * T1) + K[2 * r + 9]) >>> 0;
+    const F0 = (T0 + T1 + K[2 * r + 8]!) >>> 0;
+    const F1 = (T0 + (2 * T1) + K[2 * r + 9]!) >>> 0;
     
     // Actualizar registros con swap Feistel
     const newR2 = rotateRight(R2 ^ F0, 1);
@@ -60,10 +60,10 @@ export function encryptBlock(
   
   // Después de 16 rondas, hay un swap implícito
   // Los registros están cruzados
-  setWordLE(result, 0, R2 ^ K[6]);
-  setWordLE(result, 4, R3 ^ K[7]);
-  setWordLE(result, 8, R0 ^ K[4]);
-  setWordLE(result, 12, R1 ^ K[5]);
+  setWordLE(result, 0, R2 ^ K[6]!);
+  setWordLE(result, 4, R3 ^ K[7]!);
+  setWordLE(result, 8, R0 ^ K[4]!);
+  setWordLE(result, 12, R1 ^ K[5]!);
   
   return result;
 }
@@ -83,10 +83,10 @@ export function decryptBlock(
   const { subkeys: K, sBoxes: S } = keySchedule;
   
   // Invertir output whitening (con swap)
-  let R0 = getWordLE(ciphertext, 8) ^ K[4];
-  let R1 = getWordLE(ciphertext, 12) ^ K[5];
-  let R2 = getWordLE(ciphertext, 0) ^ K[6];
-  let R3 = getWordLE(ciphertext, 4) ^ K[7];
+  let R0 = getWordLE(ciphertext, 8) ^ K[4]!;
+  let R1 = getWordLE(ciphertext, 12) ^ K[5]!;
+  let R2 = getWordLE(ciphertext, 0) ^ K[6]!;
+  let R3 = getWordLE(ciphertext, 4) ^ K[7]!;
   
   // 16 rondas inversas
   for (let r = 15; r >= 0; r--) {
@@ -100,8 +100,8 @@ export function decryptBlock(
     const T0 = gFunction(oldR0, S);
     const T1 = gFunction(rotateLeft(oldR1, 8), S);
     
-    const F0 = (T0 + T1 + K[2 * r + 8]) >>> 0;
-    const F1 = (T0 + (2 * T1) + K[2 * r + 9]) >>> 0;
+    const F0 = (T0 + T1 + K[2 * r + 8]!) >>> 0;
+    const F1 = (T0 + (2 * T1) + K[2 * r + 9]!) >>> 0;
     
     // Invertir la transformación
     R0 = oldR0;
@@ -112,10 +112,10 @@ export function decryptBlock(
   
   // Invertir input whitening
   const result = new Uint8Array(16);
-  setWordLE(result, 0, R0 ^ K[0]);
-  setWordLE(result, 4, R1 ^ K[1]);
-  setWordLE(result, 8, R2 ^ K[2]);
-  setWordLE(result, 12, R3 ^ K[3]);
+  setWordLE(result, 0, R0 ^ K[0]!);
+  setWordLE(result, 4, R1 ^ K[1]!);
+  setWordLE(result, 8, R2 ^ K[2]!);
+  setWordLE(result, 12, R3 ^ K[3]!);
   
   return result;
 }

@@ -118,8 +118,8 @@ export class LabValidator {
           ifaceNames.add(iface.name);
 
           // Validar IP si existe
-          if (iface.ipAddress) {
-            this.validateIPFormat(iface.ipAddress, device.name, iface.name);
+          if (iface.ip) {
+            this.validateIPFormat(iface.ip, device.name, iface.name);
           }
         }
       }
@@ -157,7 +157,7 @@ export class LabValidator {
       // Validar cable/puerto
       try {
         ValidationEngine.validateCableCompatibility(
-          conn.from.portName,
+          conn.from.port,
           conn.cableType as any
         );
       } catch (e: any) {
@@ -166,7 +166,7 @@ export class LabValidator {
 
       try {
         ValidationEngine.validateCableCompatibility(
-          conn.to.portName,
+          conn.to.port,
           conn.cableType as any
         );
       } catch (e: any) {
@@ -225,7 +225,7 @@ export class LabValidator {
     };
 
     if (lab.devices.length > 0) {
-      findLoop(lab.devices[0].name, null, []);
+      findLoop(lab.devices[0]!.name, null, []);
     }
   }
 
@@ -239,19 +239,19 @@ export class LabValidator {
       if (!device.interfaces) continue;
 
       for (const iface of device.interfaces) {
-        if (!iface.ipAddress) continue;
+        if (!iface.ip) continue;
 
-        const [ip] = iface.ipAddress.split('/');
-        
-        if (ipMap.has(ip)) {
-          this.addError('logical', 
-            `IP address conflict: ${ip} is used by ${ipMap.get(ip)} and ${device.name}`,
+        const [ip] = iface.ip.split('/');
+
+        if (ipMap.has(ip ?? '')) {
+          this.addError('logical',
+            `IP address conflict: ${ip} is used by ${ipMap.get(ip ?? '')} and ${device.name}`,
             device.name,
             undefined,
             `Change IP on one of the devices`
           );
         } else {
-          ipMap.set(ip, device.name);
+          ipMap.set(ip ?? '', device.name);
         }
       }
     }
@@ -267,7 +267,7 @@ export class LabValidator {
 
     // Sugerir VLANs si hay switch sin configuración
     for (const sw of switches) {
-      const hasVlanConfig = sw.interfaces?.some(i => i.switchport?.accessVlan || i.switchport?.trunkVlans);
+      const hasVlanConfig = sw.interfaces?.some(i => i.vlan !== undefined || i.nativeVlan !== undefined);
       if (!hasVlanConfig && lab.devices.length > 3) {
         this.addInfo('best-practice',
           `Switch has no VLAN configuration`,
@@ -278,15 +278,7 @@ export class LabValidator {
       }
     }
 
-    // Verificar encriptación de passwords
-    for (const device of lab.devices) {
-      if (device.security?.enableSecret && !device.security.enableSecret.startsWith('$')) {
-        this.addWarning('best-practice',
-          `Enable secret should use encrypted format`,
-          device.name
-        );
-      }
-    }
+    // Note: enableSecret check removed - canonical SecuritySpec doesn't have this property
   }
 
   /**
@@ -294,16 +286,16 @@ export class LabValidator {
    */
   private validateIPFormat(ipWithCidr: string, device: string, iface: string): void {
     const [ip, cidrStr] = ipWithCidr.split('/');
-    
+
     // Validar formato IP
     const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
-    if (!ipRegex.test(ip)) {
+    if (!ipRegex.test(ip ?? '')) {
       this.addError('logical', `Invalid IP format: ${ip}`, device);
       return;
     }
 
     // Validar octetos
-    const octets = ip.split('.').map(Number);
+    const octets = (ip ?? '').split('.').map(Number);
     if (octets.some(o => o < 0 || o > 255)) {
       this.addError('logical', `Invalid IP octets: ${ip}`, device);
     }

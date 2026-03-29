@@ -3,8 +3,8 @@
  * Endpoints para gestión de plantillas
  */
 
-import type { Route } from '../server';
-import { json, error } from '../server';
+import type { Route } from '../server.ts';
+import { json, error } from '../server.ts';
 import { CCNATemplates, getTemplateById, getTemplatesByCategory, getTemplatesByDifficulty } from '@cisco-auto/templates';
 
 export function createTemplateRoutes(): Route[] {
@@ -13,7 +13,7 @@ export function createTemplateRoutes(): Route[] {
     {
       method: 'GET',
       path: '/api/templates',
-      handler: (req) => {
+      handler: (req: Request) => {
         const url = new URL(req.url);
         const category = url.searchParams.get('category');
         const difficulty = url.searchParams.get('difficulty');
@@ -44,8 +44,8 @@ export function createTemplateRoutes(): Route[] {
     {
       method: 'GET',
       path: '/api/templates/:id',
-      handler: (_req, params) => {
-        const template = getTemplateById(params.id);
+      handler: (_req: Request, params: Record<string, string>) => {
+        const template = getTemplateById(params.id!);
         if (!template) {
           return error('Template not found', 404);
         }
@@ -66,8 +66,8 @@ export function createTemplateRoutes(): Route[] {
     {
       method: 'POST',
       path: '/api/templates/:id/generate',
-      handler: (_req, params) => {
-        const template = getTemplateById(params.id);
+      handler: (_req: Request, params: Record<string, string>) => {
+        const template = getTemplateById(params.id!);
         if (!template) {
           return error('Template not found', 404);
         }
@@ -86,8 +86,8 @@ export function createTemplateRoutes(): Route[] {
     {
       method: 'GET',
       path: '/api/templates/:id/preview',
-      handler: (_req, params) => {
-        const template = getTemplateById(params.id);
+      handler: (_req: Request, params: Record<string, string>) => {
+        const template = getTemplateById(params.id!);
         if (!template) {
           return error('Template not found', 404);
         }
@@ -97,7 +97,7 @@ export function createTemplateRoutes(): Route[] {
         return json({
           deviceCount: lab.devices.length,
           connectionCount: lab.connections.length,
-          devices: lab.devices.map(d => ({
+          devices: lab.devices.map((d: any) => ({
             name: d.name,
             type: d.type,
             interfaceCount: d.interfaces?.length || 0

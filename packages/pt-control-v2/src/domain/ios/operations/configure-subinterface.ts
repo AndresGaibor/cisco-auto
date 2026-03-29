@@ -4,10 +4,8 @@
 
 import { CapabilitySet } from "../capabilities/capability-set.js";
 import { InterfaceName, VlanId, Ipv4Address, SubnetMask } from "../value-objects/index.js";
-import {
-  CommandPlan,
-  CommandPlanBuilder,
-} from "./command-plan.js";
+import type { CommandPlan } from "./command-plan.js";
+import { CommandPlanBuilder } from "./command-plan.js";
 
 /**
  * Input for configuring a router subinterface

@@ -3,7 +3,11 @@
 // ============================================================================
 
 import { FileBridge, type FileBridgeConfig } from "../infrastructure/pt/file-bridge.js";
+import { FileBridgeV2Adapter } from "../infrastructure/pt/file-bridge-v2-adapter.js";
+import type { FileBridgeV2Options } from "../infrastructure/pt/file-bridge-v2.js";
 import { TopologyCache } from "../infrastructure/pt/topology-cache.js";
+import type { FileBridgePort } from "../application/ports/file-bridge.port.js";
+import { topologySnapshotToNetworkTwin } from "../vdom/twin-adapter.js";
 import { homedir } from "node:os";
 import type {
   PTEvent,
@@ -18,41 +22,78 @@ import type {
   ShowRunningConfig,
   ParsedOutput,
   AddLinkPayload,
-  CanvasRect,
   DevicesInRectResult,
+  NetworkTwin,
 } from "../contracts/index.js";
 import type { DeviceCapabilities } from "../domain/ios/capabilities/pt-capability-resolver.js";
 import { TopologyService } from "../application/services/topology-service.js";
 import { DeviceService } from "../application/services/device-service.js";
 import { IosService } from "../application/services/ios-service.js";
 import { CanvasService } from "../application/services/canvas-service.js";
+import { ValidationEngine } from "../validation/validation-engine.js";
+import { defaultRules } from "../validation/rules/index.js";
+import { normalPolicy } from "../validation/policies.js";
 
 // Re-export FileBridge for external use
 export { FileBridge, type FileBridgeConfig } from "../infrastructure/pt/file-bridge.js";
+export { FileBridgeV2Adapter, createFileBridgeV2Adapter } from "../infrastructure/pt/file-bridge-v2-adapter.js";
 
 // ============================================================================
 // PTController - Thin facade delegating to services
 // ============================================================================
 
 export class PTController {
-  private readonly bridge: FileBridge;
+  private readonly bridge: FileBridgePort;
   private readonly topologyCache: TopologyCache;
   private readonly topologyService: TopologyService;
   private readonly deviceService: DeviceService;
   private readonly iosService: IosService;
   private readonly canvasService: CanvasService;
   private _snapshot: TopologySnapshot | null = null;
+  private _twin: NetworkTwin | null = null;
+  /** True when using FileBridgeV2 */
+  readonly useV2: boolean;
 
-  constructor(config: FileBridgeConfig) {
-    this.bridge = new FileBridge(config);
+  constructor(config: FileBridgeConfig & { useV2?: boolean });
+  constructor(bridge: FileBridgePort);
+  constructor(configOrBridge: FileBridgeConfig | FileBridgePort, _useV2Flag?: boolean) {
+    // Detect FileBridgePort by checking for devDir (present only on FileBridgeConfig objects)
+    if ("devDir" in configOrBridge) {
+      const config = configOrBridge as FileBridgeConfig & { useV2?: boolean };
+      this.useV2 = config.useV2 ?? false;
+      if (this.useV2) {
+        const v2Options: FileBridgeV2Options = { root: config.devDir };
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { FileBridgeV2 } = require("../infrastructure/pt/file-bridge-v2.js");
+        this.bridge = new FileBridgeV2Adapter(new FileBridgeV2(v2Options));
+      } else {
+        this.bridge = new FileBridge(config);
+      }
+    } else {
+      // Pre-constructed bridge (e.g., a mock or custom adapter)
+      this.bridge = configOrBridge as FileBridgePort;
+      this.useV2 = false;
+    }
+
     this.topologyCache = new TopologyCache(this.bridge);
 
     const generateId = () => `ctrl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
     this.topologyService = new TopologyService(this.bridge, this.topologyCache, generateId);
     this.deviceService = new DeviceService(this.bridge, this.topologyCache, generateId);
-    this.iosService = new IosService(this.bridge, generateId, (d) => this.deviceService.inspect(d));
     this.canvasService = new CanvasService(this.bridge, generateId);
+
+    // ValidationEngine is created once and shared; uses normal blocking policy
+    const validationEngine = new ValidationEngine([...defaultRules], normalPolicy);
+
+    // IosService gets the engine and a getter for the current twin
+    this.iosService = new IosService(
+      this.bridge,
+      generateId,
+      (d) => this.deviceService.inspect(d),
+      validationEngine,
+      () => this.getTwin(),
+    );
   }
 
   // ============================================================================
@@ -60,16 +101,25 @@ export class PTController {
   // ============================================================================
 
   async start(): Promise<void> {
-    await this.bridge.start();
+    // V1.start() is async, V2Adapter.start() is sync
+    if (this.useV2) {
+      (this.bridge as FileBridgeV2Adapter).start();
+    } else {
+      await (this.bridge as FileBridge).start();
+    }
     this.topologyCache.start();
   }
 
   async stop(): Promise<void> {
     this.topologyCache.stop();
-    await this.bridge.stop();
+    if (this.useV2) {
+      await (this.bridge as FileBridgeV2Adapter).stop();
+    } else {
+      await (this.bridge as FileBridge).stop();
+    }
   }
 
-  getBridge(): FileBridge {
+  getBridge(): FileBridgePort {
     return this.bridge;
   }
 
@@ -229,12 +279,14 @@ export class PTController {
 
     if (cachedSnapshot) {
       this._snapshot = cachedSnapshot;
+      this._twin = topologySnapshotToNetworkTwin(cachedSnapshot);
       return cachedSnapshot;
     }
 
     const snapshot = await this.topologyService.snapshot();
     if (snapshot) {
       this._snapshot = snapshot;
+      this._twin = topologySnapshotToNetworkTwin(snapshot);
       return snapshot;
     }
 
@@ -265,7 +317,7 @@ export class PTController {
   // Event Subscription
   // ============================================================================
 
-  on<E extends PTEventType>(eventType: E, handler: (event: PTEventTypeMap[E]) => void): () => void {
+  on<E extends PTEventType>(eventType: E, handler: (event: PTEvent) => void): () => void {
     return this.bridge.on(eventType, handler);
   }
 
@@ -291,6 +343,17 @@ export class PTController {
 
   getCachedSnapshot(): TopologySnapshot | null {
     return this.topologyCache.getSnapshot() ?? this._snapshot;
+  }
+
+  /**
+   * Returns the current NetworkTwin, rebuilding it from the cached topology snapshot.
+   * Returns null if no snapshot has been taken yet.
+   */
+  getTwin(): NetworkTwin | null {
+    const snapshot = this.topologyCache.getSnapshot() ?? this._snapshot;
+    if (!snapshot) return this._twin;
+    this._twin = topologySnapshotToNetworkTwin(snapshot);
+    return this._twin;
   }
 
   readState<T = unknown>(): T | null {

@@ -24,12 +24,14 @@
   "dependencies": {
     "@cisco-auto/crypto": "workspace:*",
     "@cisco-auto/lab-model": "workspace:*",
+    "chalk": "^5.6.2",
     "node-ssh": "^13.2.1",
     "pino": "^10.3.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/js-yaml": "^4.0.9",
     "typescript": "^5"
   }
 }

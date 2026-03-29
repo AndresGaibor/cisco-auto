@@ -3,6 +3,16 @@ import { detectOS, isPacketTracerRunning } from './os-detection';
 
 export { detectPacketTracer, isPacketTracerRunning } from './os-detection';
 
+export interface LaunchOptions {
+  rutaPT: string;
+  timeoutMs?: number;
+}
+
+export interface LaunchResult {
+  success: boolean;
+  error?: string;
+}
+
 export async function launchPacketTracer(rutaPT: string): Promise<boolean> {
   const os = detectOS();
 

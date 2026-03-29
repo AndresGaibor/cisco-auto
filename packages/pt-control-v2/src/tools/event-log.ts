@@ -49,7 +49,7 @@ export function summarizeEvents(events: PTEvent[]): EventSummary {
     counts[event.type] = (counts[event.type] ?? 0) + 1;
   }
 
-  const latest = events.length ? events[events.length - 1] : null;
+  const latest = events.length ? events[events.length - 1]! : null;
   return { total: events.length, counts, latest };
 }
 

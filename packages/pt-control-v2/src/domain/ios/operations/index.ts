@@ -44,3 +44,13 @@ export {
   planConfigureDhcpRelay,
   type ConfigureDhcpRelayInput,
 } from "./configure-dhcp-relay.js";
+
+export {
+  planConfigureVlan,
+  type ConfigureVlanInput,
+} from "./configure-vlan.js";
+
+export {
+  planConfigureDhcpPool,
+  type ConfigureDhcpPoolInput,
+} from "./configure-dhcp-pool.js";

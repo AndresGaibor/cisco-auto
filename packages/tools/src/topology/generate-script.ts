@@ -242,11 +242,11 @@ function buildSecurityCommands(device: ExtendedDevicePlan): string[] {
   const commands: string[] = [];
 
   if (device.acls && device.acls.length > 0) {
-    commands.push(...SecurityGenerator.generateACLs(device.acls));
+    commands.push(...SecurityGenerator.generateACLs(device.acls as any));
   }
 
   if (device.nat) {
-    commands.push(...SecurityGenerator.generateNAT(device.nat));
+    commands.push(...SecurityGenerator.generateNAT(device.nat as any));
   }
 
   return commands;
@@ -313,15 +313,15 @@ export function generateIosCommands(device: DevicePlan): string[] {
   const baseDevice = buildBaseDevice(dispositivo);
   const commands: string[] = [];
 
-  appendSection(commands, BaseGenerator.generateBasic(baseDevice));
-  appendSection(commands, VlanGenerator.generateInterfaces(baseDevice));
+  appendSection(commands, BaseGenerator.generateBasic(baseDevice as any));
+  appendSection(commands, VlanGenerator.generateInterfaces(baseDevice as any));
 
   if (dispositivo.vlans && dispositivo.vlans.length > 0) {
-    appendSection(commands, VlanGenerator.generateVLANs(baseDevice.vlans || [], dispositivo.vtp));
+    appendSection(commands, VlanGenerator.generateVLANs(baseDevice.vlans || [], dispositivo.vtp as any));
   }
 
   if (dispositivo.vtp) {
-    appendSection(commands, VlanGenerator.generateVTP(dispositivo.vtp));
+    appendSection(commands, VlanGenerator.generateVTP(dispositivo.vtp as any));
   }
 
   if (dispositivo.routing) {
@@ -348,7 +348,7 @@ export function generateIosCommands(device: DevicePlan): string[] {
   }
 
   if (dispositivo.lines) {
-    appendSection(commands, BaseGenerator.generateLines(dispositivo.lines));
+    appendSection(commands, BaseGenerator.generateLines(dispositivo.lines as any));
   }
 
   return commands;

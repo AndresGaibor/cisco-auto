@@ -59,7 +59,7 @@ describe('LogManager', () => {
       const lines = content.trim().split('\n');
       expect(lines.length).toBe(1);
 
-      const parsed = JSON.parse(lines[0]);
+      const parsed = JSON.parse(lines[0]!);
       expect(parsed.session_id).toBe('ses_123');
       expect(parsed.action).toBe('device list');
       expect(parsed.outcome).toBe('success');
@@ -280,8 +280,8 @@ describe('LogManager', () => {
 
       const entries = await manager.getSession('ses_123');
       expect(entries.length).toBe(1);
-      expect(entries[0].action).toBe('device list');
-      expect(entries[0].duration_ms).toBe(100);
+      expect(entries[0]!.action).toBe('device list');
+      expect(entries[0]!.duration_ms).toBe(100);
     });
   });
 

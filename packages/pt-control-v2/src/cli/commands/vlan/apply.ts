@@ -11,15 +11,15 @@ import { DeviceNotFoundError, ValidationError } from '../../errors/index.js';
 import type { DeviceState } from '../../../types/index.js';
 
 export default class VlanApply extends BaseCommand {
-  static description = 'Apply VLAN configuration to a device';
+  static override description = 'Apply VLAN configuration to a device';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> vlan apply S1 10 20 30',
     '<%= config.bin %> vlan apply S1 10 20 30 --name-prefix ADMIN',
     '<%= config.bin %> vlan apply S1 10',
   ];
 
-  static args = {
+  static override args = {
     device: Args.string({
       description: 'Device name (switch or router)',
       required: true,
@@ -31,7 +31,7 @@ export default class VlanApply extends BaseCommand {
     }),
   };
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
     'name-prefix': Flags.string({
       description: 'Base name for VLANs (e.g., "ADMIN" creates "ADMIN10", "ADMIN20")',

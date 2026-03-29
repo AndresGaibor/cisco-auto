@@ -2,7 +2,7 @@
  * DTOs para Device
  * Objetos de transferencia de datos para la capa de aplicación
  */
-import { DeviceType } from '../../domain/entities/device.entity.ts';
+import type { DeviceType } from '../../domain/entities/device.entity.ts';
 
 export interface CreateDeviceDto {
   name: string;

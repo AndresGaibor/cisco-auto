@@ -23,6 +23,7 @@ import {
   selectCoreDevices,
   selectAccessDevices,
   selectServerDevices,
+  selectEdgeDevices,
   selectDeviceByName,
   selectActiveZone,
 } from "./context-selectors.js";
@@ -247,6 +248,7 @@ export class AgentContextService {
     const coreDevices = selectCoreDevices(twin);
     const accessDevices = selectAccessDevices(twin);
     const serverDevices = selectServerDevices(twin);
+    const edgeDevices = selectEdgeDevices(twin);
 
     const zones = Object.values(twin.zones).map((zone) => {
       const devices = getDevicesInZone(twin, zone.id);
@@ -260,7 +262,6 @@ export class AgentContextService {
     });
 
     const alerts = this.computeAlerts(twin);
-
     const recentChanges = this.computeRecentChanges(twin);
 
     return {
@@ -275,7 +276,7 @@ export class AgentContextService {
         coreDevices,
         accessDevices,
         serverDevices,
-        edgeDevices: [], // TODO: compute edge devices
+        edgeDevices,
       },
       selection: {
         selectedDevice: session.selectedDevice,
@@ -329,9 +330,17 @@ export class AgentContextService {
   }
 
   private computeRecentChanges(twin: NetworkTwin): AgentBaseContext["recentChanges"] {
-    // TODO: This would be populated from an event log
-    // For now, return empty
-    return [];
+    // Recent changes are derived from the twin's updatedAt timestamp.
+    // A proper implementation would read from the FileBridgeV2 event log
+    // (events.current.ndjson) to get command-completed events.
+    // For now, report a synthetic "refresh" event if the twin was recently updated.
+    const updatedAt = twin.metadata?.updatedAt;
+    if (!updatedAt) return [];
+
+    const ageMs = Date.now() - updatedAt;
+    if (ageMs > 5 * 60 * 1000) return [];
+
+    return [{ type: "refresh", target: "lab", ts: updatedAt }];
   }
 }
 

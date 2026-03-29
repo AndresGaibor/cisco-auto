@@ -12,20 +12,20 @@ import { createDefaultPTController } from '../../../controller/index.js';
 import { ValidationError } from '../../errors/index.js';
 
 export default class SnapshotLoad extends BaseCommand {
-  static description = 'Load a topology snapshot';
+  static override description = 'Load a topology snapshot';
 
-  static examples = [
+  static override examples = [
     '<%= config.bin %> snapshot load base-topology',
     '<%= config.bin %> snapshot load my-lab-v1 --clear',
   ];
 
-  static args = {
+  static override args = {
     name: Args.string({
       description: 'Snapshot name to load',
     }),
   };
 
-  static flags = {
+  static override flags = {
     ...BaseCommand.baseFlags,
     clear: Flags.boolean({
       description: 'Clear existing topology before loading',

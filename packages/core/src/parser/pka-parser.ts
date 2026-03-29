@@ -79,14 +79,14 @@ export class PKAParser {
     
     for (let i = 0; i < length; i++) {
       // Obtener byte del final del buffer (orden inverso)
-      const encryptedByte = encrypted[length - i - 1];
-      
+      const encryptedByte = encrypted[length - i - 1] ?? 0;
+
       // Calcular: a = key * i
       const a = (key * i) & 0xFF;
-      
+
       // Calcular: c = length - a
       const c = (length - a) & 0xFF;
-      
+
       // XOR: result[i] = encryptedByte XOR c
       result[i] = encryptedByte ^ c;
     }
@@ -128,19 +128,19 @@ export class PKAParser {
     const decrypted = Buffer.alloc(fileSize);
     for (let i = 0; i < fileSize; i++) {
       const key = (fileSize - i) & 0xFF;
-      decrypted[i] = fileBuffer[i] ^ key;
+      decrypted[i] = (fileBuffer[i] ?? 0) ^ key;
     }
     
     // Debug: mostrar primeros bytes
     console.log(`[PKA Parser] Primeros 8 bytes después de XOR: ${decrypted.slice(0, 8).toString('hex')}`);
 
     // Los primeros 4 bytes contienen el tamaño descomprimido (big-endian)
-    const uncompressedSize = 
-      (decrypted[0] << 24) |
-      (decrypted[1] << 16) |
-      (decrypted[2] << 8) |
-      decrypted[3];
-      
+    const uncompressedSize =
+      ((decrypted[0] ?? 0) << 24) |
+      ((decrypted[1] ?? 0) << 16) |
+      ((decrypted[2] ?? 0) << 8) |
+      (decrypted[3] ?? 0);
+
     // Convertir a unsigned
     const unsignedSize = uncompressedSize >>> 0;
 
@@ -171,7 +171,7 @@ export class PKAParser {
 
     // Extraer versión del XML
     const versionMatch = xmlContent.match(/<VERSION>([^<]+)<\/VERSION>/i);
-    const version = versionMatch ? versionMatch[1] : 'unknown';
+    const version = versionMatch?.[1] ?? 'unknown';
 
     console.log(`[PKA Parser] Versión detectada: ${version}`);
     console.log(`[PKA Parser] XML extraído (${xmlBuffer.length} bytes):`);
@@ -195,14 +195,6 @@ export class PKAParser {
    * 
    * NOTA: Requiere implementación completa de TwoFish
    */
-  private static decodeVersion7(fileBuffer: Buffer): PKAFileInfo {
-    // Implementación futura con TwoFish
-    // Keys conocidas para versión 7.2.1:
-    // - Key: ABABABABABABABABABABABABABABABAB
-    // - IV: CDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCD
-    
-    throw new Error('Versión 7.x+ requiere implementación de TwoFish CBC');
-  }
 
   /**
    * Extrae información de dispositivos del XML parseado
@@ -260,7 +252,7 @@ export class PKAParser {
     
     for (let i = 4; i < 6; i++) {
       const key = (fileSize - i) & 0xFF;
-      testBuffer[i - 4] = fileBuffer[i] ^ key;
+      testBuffer[i - 4] = (fileBuffer[i] ?? 0) ^ key;
     }
     
     // Si los bytes 4-5 son 78 9C (zlib magic), es versión 5.x

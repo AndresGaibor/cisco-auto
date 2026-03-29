@@ -57,7 +57,7 @@ export class InterfaceName {
    */
   get parentInterface(): InterfaceName | null {
     if (!this.isSubinterface) return null;
-    const parent = this.value.split(".")[0];
+    const parent = this.value.split(".")[0]!;
     return new InterfaceName(parent);
   }
 

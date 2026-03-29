@@ -2,7 +2,7 @@
 // El archivo producido incluye la topología serializada y el bootstrap
 // que inyecta el polling HTTP en la WebView de PTBuilder.
 
-import type { TopologyPlan } from '../../packages/core/src/schemas/tool.ts';
+import type { TopologyPlan } from '@cisco-auto/core';
 
 // Valores configurables para el bridge
 const BRIDGE_HOST = process.env.PT_BRIDGE_HOST || '127.0.0.1';

@@ -40,7 +40,7 @@ export function decodePKA5x(data: Buffer): DecodeResult {
     // Cada byte se XOR con ((file_size - index) & 0xFF)
     const plain = Buffer.allocUnsafe(n);
     for (let i = 0; i < n; i++) {
-      plain[i] = data[i] ^ ((n - i) & 0xff);
+      plain[i] = (data[i] ?? 0) ^ ((n - i) & 0xff);
     }
     
     // Etapa 2: quitar 4 bytes del header qCompress
@@ -89,7 +89,7 @@ export function encodePKA5x(xml: string): EncodeResult {
     const n = plain.length;
     const out = Buffer.allocUnsafe(n);
     for (let i = 0; i < n; i++) {
-      out[i] = plain[i] ^ ((n - i) & 0xff);
+      out[i] = (plain[i] ?? 0) ^ ((n - i) & 0xff);
     }
     
     return { success: true, data: out };

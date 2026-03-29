@@ -213,6 +213,27 @@ export function startBridgeServer() {
   };
 }
 
+// ============================================================================
+// Tipos exportados para uso en routes
+// ============================================================================
+
+export interface ComandoPT {
+  id: string;
+  tipo: string;
+  args: unknown[];
+  timestamp: number;
+}
+
+export interface HealthResponse {
+  status: 'ok' | 'degraded' | 'error';
+  version: string;
+  timestamp: string;
+  uptime: {
+    seconds: number;
+    formatted: string;
+  };
+}
+
 export const VERSION = '2.0.0';
 
 if (import.meta.main) {

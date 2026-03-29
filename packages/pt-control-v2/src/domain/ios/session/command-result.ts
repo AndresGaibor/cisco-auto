@@ -8,6 +8,7 @@ export interface CommandResult {
   status: number;
   parsed?: Record<string, unknown>;
   error?: string;
+  parseError?: string;
   paging?: boolean;
   awaitingConfirm?: boolean;
 }
