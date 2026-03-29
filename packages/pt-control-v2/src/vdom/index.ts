@@ -6,6 +6,8 @@ import type {
   PTEvent,
   CableType
 } from "../contracts/index.js";
+import { topologySnapshotToNetworkTwin, enrichWithZones } from "./twin-adapter.js";
+import type { NetworkTwin } from "../contracts/twin-types.js";
 
 // ============================================================================
 // Virtual DOM - Event-Driven Topology State
@@ -200,6 +202,20 @@ export class VirtualTopology {
    */
   toJSON(): string {
     return JSON.stringify(this.snapshot, null, 2);
+  }
+
+  /**
+   * Convert to NetworkTwin for agent context
+   */
+  toNetworkTwin(): NetworkTwin {
+    return topologySnapshotToNetworkTwin(this.snapshot);
+  }
+
+  /**
+   * Enrich NetworkTwin with zone information from canvas rects
+   */
+  enrichNetworkTwinWithZones(twin: NetworkTwin, rects: unknown[]): NetworkTwin {
+    return enrichWithZones(twin, rects as Parameters<typeof enrichWithZones>[1]);
   }
 
   // ============================================================================
