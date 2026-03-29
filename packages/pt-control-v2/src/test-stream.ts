@@ -1,4 +1,4 @@
-import { FastEventStream } from "./controller/fast-event-stream.js";
+import { FastEventStream } from "./infrastructure/pt/fast-event-stream.js";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { writeFileSync } from "node:fs";

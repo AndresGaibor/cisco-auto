@@ -3,17 +3,17 @@ import {
   inferPromptState,
   type PromptState,
   IOS_PROMPT_PATTERNS,
-} from "../src/ios/session/prompt-state";
+} from "../src/domain/ios/session/prompt-state";
 import {
   CliSession,
   createCliSession,
-} from "../src/ios/session/cli-session";
+} from "../src/domain/ios/session/cli-session";
 import {
   type CommandResult,
   isSuccessResult,
   isErrorResult,
   isPagingResult,
-} from "../src/ios/session/command-result";
+} from "../src/domain/ios/session/command-result";
 
 describe("IOS Prompt State Machine", () => {
   describe("inferPromptState", () => {

@@ -9,7 +9,7 @@ export {
   createPTController, 
   createDefaultPTController 
 } from "./controller/index.js";
-export type { FileBridgeConfig } from "./controller/file-bridge.js";
+export type { FileBridgeConfig } from "./infrastructure/pt/file-bridge.js";
 
 // Types - All type definitions
 export * from "./types/index.js";
@@ -29,7 +29,7 @@ export {
   parseShowSpanningTree,
   parseShowVersion,
   parseShowCdpNeighbors,
-} from "./parsers/index.js";
+} from "./domain/ios/parsers/index.js";
 
 // Runtime Generator - Generate PT runtime files
 export { 
@@ -60,13 +60,13 @@ export {
   type CommandHandler,
   type CommandHistoryEntry,
   type CliSessionState,
-} from "./ios/session/cli-session.js";
+} from "./domain/ios/session/cli-session.js";
 
 export {
   inferPromptState,
   type IosMode,
   type PromptState,
-} from "./ios/session/prompt-state.js";
+} from "./domain/ios/session/prompt-state.js";
 
 export {
   type CommandResult,
@@ -79,15 +79,15 @@ export {
   isPasswordPrompt,
   classifyOutput,
   type OutputClassificationType,
-} from "./ios/session/command-result.js";
+} from "./domain/ios/session/command-result.js";
 
 // IOS Capabilities - Device capability resolution
 export {
   resolveCapabilities,
   type DeviceCapabilities,
-} from "./ios/capabilities/pt-capability-resolver.js";
+} from "./domain/ios/capabilities/pt-capability-resolver.js";
 
 export {
   IOSFamily,
   type IosDeviceModel,
-} from "./ios/capabilities/device-capabilities.js";
+} from "./domain/ios/capabilities/device-capabilities.js";

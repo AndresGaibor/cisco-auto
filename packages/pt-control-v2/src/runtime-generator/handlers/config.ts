@@ -2,8 +2,11 @@
 // Config Handlers - Pure functions for device configuration
 // ============================================================================
 
-import { HandlerDeps, HandlerResult, PTCommandLine, PTDevice, PTPort } from "../utils/helpers";
-import { getParser } from "./ios-parsers";
+import { HandlerDeps, HandlerResult, PTCommandLine, PTDevice, PTPort } from "../../shared/utils/helpers";
+
+// getParser is defined at runtime by parser-generator.ts (IOS_PARSERS + __getParser)
+// This declaration satisfies TypeScript during compilation
+declare function getParser(command: string): ((output: string) => Record<string, unknown>) | null;
 
 // ============================================================================
 // Payload Types

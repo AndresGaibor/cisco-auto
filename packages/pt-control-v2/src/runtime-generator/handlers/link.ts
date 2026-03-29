@@ -2,7 +2,7 @@
 // Link Handlers - Pure functions for link operations
 // ============================================================================
 
-import { HandlerDeps, HandlerResult } from "../utils/helpers";
+import { HandlerDeps, HandlerResult } from "../../shared/utils/helpers";
 import { CABLE_TYPES, getCableTypeId } from "../utils/constants";
 
 // ============================================================================

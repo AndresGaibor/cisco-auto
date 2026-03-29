@@ -1,0 +1,42 @@
+// ============================================================================
+// CanvasService - Canvas rectangle operations
+// ============================================================================
+
+import { FileBridge } from "../../infrastructure/pt/file-bridge.js";
+import type { DevicesInRectResult } from "../../contracts/index.js";
+
+export class CanvasService {
+  constructor(
+    private bridge: FileBridge,
+    private generateId: () => string
+  ) {}
+
+  /**
+   * List all canvas rectangle IDs (colored zones)
+   */
+  async listCanvasRects(): Promise<{ rects: string[]; count: number }> {
+    const { value } = await this.bridge.sendCommandAndWait<{ rects: string[]; count: number }>({
+      type: "listCanvasRects",
+      id: this.generateId(),
+    });
+
+    return value ?? { rects: [], count: 0 };
+  }
+
+  /**
+   * Get devices located within a canvas rectangle zone
+   */
+  async devicesInRect(
+    rectId: string,
+    includeClusters = false
+  ): Promise<DevicesInRectResult> {
+    const { value } = await this.bridge.sendCommandAndWait<DevicesInRectResult>({
+      type: "devicesInRect",
+      id: this.generateId(),
+      rectId,
+      includeClusters,
+    });
+
+    return value ?? { ok: false, rectId, devices: [], count: 0 };
+  }
+}

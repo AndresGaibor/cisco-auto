@@ -9,7 +9,7 @@ import {
   resolveModel,
   getDeviceTypeCandidates,
   createDeviceWithFallback,
-} from "../utils/helpers";
+} from "../../shared/utils/helpers";
 
 // ============================================================================
 // Payload Types

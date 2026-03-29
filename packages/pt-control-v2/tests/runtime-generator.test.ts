@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { renderMainSource } from "../src/runtime-generator/index.js";
-import { resolveCapabilities } from "../src/ios/capabilities/pt-capability-resolver";
+import { resolveCapabilities } from "../src/domain/ios/capabilities/pt-capability-resolver";
 
 describe("RuntimeGenerator helpers", () => {
   it("injects the DEV_DIR literal and escapes characters", () => {

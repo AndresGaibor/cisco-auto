@@ -10,7 +10,7 @@ import type {
   ShowVersion,
   ShowCdpNeighbors,
   ParsedOutput,
-} from "../types/index.js";
+} from "../../../contracts/index.js";
 
 // ============================================================================
 // IOS Output Parsers

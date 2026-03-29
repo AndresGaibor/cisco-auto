@@ -1,6 +1,6 @@
 import { openSync, readSync, statSync, existsSync, watch, type FSWatcher } from "node:fs";
 import { EventEmitter } from "node:events";
-import { PTEventSchema, type PTEvent, type PTEventType } from "../types/index.js";
+import { PTEventSchema, type PTEvent, type PTEventType } from "../../contracts/index.js";
 
 /** Parse error event emitted when JSON parsing or validation fails */
 export interface ParseErrorEvent {

@@ -1,4 +1,5 @@
-import { IOSFamily, getDeviceModel, getIosFamilyFromModel } from "./device-capabilities";
+import { IOSFamily, getDeviceModel, getIosFamilyFromModel } from "./device-capabilities.js";
+import { CapabilitySet } from "./capability-set.js";
 
 export interface DeviceCapabilities {
   model: string;
@@ -106,6 +107,10 @@ function createUnknownCapabilities(model: string): DeviceCapabilities {
   };
 }
 
+/**
+ * Resolve legacy DeviceCapabilities for a model
+ * @deprecated Use resolveCapabilitySet for new code
+ */
 export function resolveCapabilities(modelId: string): DeviceCapabilities {
   const family = getIosFamilyFromModel(modelId);
 
@@ -121,3 +126,25 @@ export function resolveCapabilities(modelId: string): DeviceCapabilities {
       return createUnknownCapabilities(modelId);
   }
 }
+
+/**
+ * Resolve CapabilitySet for a model (rich capability model)
+ */
+export function resolveCapabilitySet(modelId: string): CapabilitySet {
+  const family = getIosFamilyFromModel(modelId);
+
+  switch (family) {
+    case IOSFamily.ROUTER:
+      return CapabilitySet.router(modelId);
+    case IOSFamily.SWITCH_L2:
+      return CapabilitySet.l2Switch(modelId);
+    case IOSFamily.SWITCH_L3:
+      return CapabilitySet.l3Switch(modelId);
+    case IOSFamily.UNKNOWN:
+    default:
+      return CapabilitySet.unknown(modelId);
+  }
+}
+
+// Re-export CapabilitySet for convenience
+export { CapabilitySet } from "./capability-set.js";

@@ -2,7 +2,7 @@
 // Canvas/Rect Handlers - Pure functions for canvas rectangle operations
 // ============================================================================
 
-import { HandlerDeps, HandlerResult, PTLogicalWorkspace, PTDevice } from "../utils/helpers";
+import { HandlerDeps, HandlerResult, PTLogicalWorkspace, PTDevice } from "../../shared/utils/helpers";
 
 // PT API extended type (methods not in official typings but exist in PT)
 interface PTLogicalWorkspaceExtended extends PTLogicalWorkspace {

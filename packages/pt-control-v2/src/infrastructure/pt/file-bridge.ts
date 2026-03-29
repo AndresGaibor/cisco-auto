@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { homedir } from "node:os";
-import type { PTEvent, PTEventType, PTEventTypeMap, CommandPayload, CommandFile } from "../types/index.js";
+import type { PTEvent, PTEventType, PTEventTypeMap, CommandPayload, CommandFile } from "../../contracts/index.js";
 import { FastEventStream } from "./fast-event-stream.js";
 
 // ============================================================================

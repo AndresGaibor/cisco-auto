@@ -1,5 +1,5 @@
-import type { PTEvent, TopologySnapshot, DeviceState, LinkState } from "../types/index.js";
-import { createVirtualTopology, type VirtualTopology } from "../vdom/index.js";
+import type { PTEvent, TopologySnapshot, DeviceState, LinkState } from "../../contracts/index.js";
+import { createVirtualTopology, type VirtualTopology } from "../../vdom/index.js";
 import type { FileBridge } from "./file-bridge.js";
 
 export interface TopologyCacheOptions {

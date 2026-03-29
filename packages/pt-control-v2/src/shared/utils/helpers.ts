@@ -2,7 +2,7 @@
 // Runtime Helpers - Pure utility functions
 // ============================================================================
 
-import { DEVICE_TYPES, MODEL_ALIASES } from "./constants";
+import { DEVICE_TYPES, MODEL_ALIASES } from "../../runtime-generator/utils/constants";
 
 /** Logical workspace interface */
 export interface PTLogicalWorkspace {

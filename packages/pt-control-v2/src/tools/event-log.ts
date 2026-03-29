@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from "node:fs";
-import type { PTEvent } from "../types/index.js";
-import { PTEventSchema } from "../types/events.js";
+import type { PTEvent } from "../contracts/index.js";
+import { PTEventSchema } from "../contracts/events.js";
 
 export interface EventReadOptions {
   /** Skip invalid lines instead of throwing */

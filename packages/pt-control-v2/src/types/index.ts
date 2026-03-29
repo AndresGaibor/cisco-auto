@@ -1,9 +1,7 @@
 // ============================================================================
-// PT Control V2 - Type Exports
+// PT Control V2 - Type Exports (backwards compatibility)
+// ============================================================================
+// DEPRECATED: Use ../contracts/ instead
 // ============================================================================
 
-export * from './events.js';
-export * from './commands.js';
-export * from './snapshots.js';
-export * from './parsed-output.js';
-export * from './canvas.js';
+export * from "../contracts/index.js";

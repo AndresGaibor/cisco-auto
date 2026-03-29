@@ -1,4 +1,4 @@
-export const enum IOSFamily {
+export enum IOSFamily {
   ROUTER = "router",
   SWITCH_L2 = "switch_l2",
   SWITCH_L3 = "switch_l3",

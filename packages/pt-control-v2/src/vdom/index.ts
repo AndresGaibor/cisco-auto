@@ -1,11 +1,11 @@
-import type { 
-  TopologySnapshot, 
-  DeviceState, 
-  LinkState, 
-  TopologyDelta, 
+import type {
+  TopologySnapshot,
+  DeviceState,
+  LinkState,
+  TopologyDelta,
   PTEvent,
   CableType
-} from "../types/index.js";
+} from "../contracts/index.js";
 
 // ============================================================================
 // Virtual DOM - Event-Driven Topology State

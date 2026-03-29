@@ -2,7 +2,7 @@
 // Module Handlers - Pure functions for module operations (HWIC, NMs, etc.)
 // ============================================================================
 
-import { HandlerDeps, HandlerResult } from "../utils/helpers";
+import { HandlerDeps, HandlerResult } from "../../shared/utils/helpers";
 
 // ============================================================================
 // Payload Types
