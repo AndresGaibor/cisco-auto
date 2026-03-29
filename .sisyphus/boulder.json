@@ -1,40 +1,12 @@
 {
-  "active_plan": "/Users/andresgaibor/code/javascript/cisco-auto/.sisyphus/plans/pt-auto-config.md",
-  "started_at": "2026-03-29T02:46:31.850Z",
+  "active_plan": "/Users/andresgaibor/code/javascript/cisco-auto/.sisyphus/plans/pt-control-v2-ios-robustness.md",
+  "started_at": "2026-03-29T05:51:24.158Z",
   "session_ids": [
-    "ses_2c90571f3ffe7Zq2R65lVdMo9X",
-    "ses_2c882ad62ffeoM4D6Yk7816mNO",
-    "ses_2c882acadffeSy37kivCQ9Qmam",
-    "ses_2c882ae2fffez5Qam4rFgc5Ms7",
-    "ses_2c87aae86ffeQt5DK6n0FVE1Ya",
-    "ses_2c8751ccfffezJZWv8i6TQsjim",
-    "ses_2c86f3f26ffeuJ3PypIurKhplK",
-    "ses_2c86f3da0ffeNColxkqCzQyFpe",
-    "ses_2c86d3193ffeIoToBC5ZxFyxSg",
-    "ses_2c8681392ffeOv4qTZ2qEOKZpD",
-    "ses_2c85cc2d6ffeaMaKU8Q3L6660t",
-    "ses_2c858b1f0ffeK6yrwboe9LBvuH",
-    "ses_2c856f197ffeDYqUbc7AhI4Wjr",
-    "ses_2c856f4ecffeIXvEgOdH0QvBKA",
-    "ses_2c84bb51cffe69G7AhTHWhke6L",
-    "ses_2c83cece9ffezdYC4Urz2g2B2j",
-    "ses_2c835cf3cffehcBdXO3g7lPVgE",
-    "ses_2c82a7e4effeta8laiLQakB1MM",
-    "ses_2c828ba48ffe2E1lPsuZx6l0x8",
-    "ses_2c8278064ffe0b0k9Z0A9v36Sx",
-    "ses_2c820d3e4ffeGwy4jegUU6e7H3",
-    "ses_2c81ff500ffe3o0iCwSmoPbjN3"
+    "ses_2c7e14ad2ffeRSGb5qjNkPji42",
+    "ses_2c7d908e4ffeSqAc5i3rPPFV6Z",
+    "ses_2c7c5ddc6ffe4opleL2f4vpdFr"
   ],
-  "plan_name": "pt-auto-config",
+  "plan_name": "pt-control-v2-ios-robustness",
   "agent": "atlas",
-  "task_sessions": {
-    "final-wave:f1": {
-      "task_key": "final-wave:f1",
-      "task_label": "F1",
-      "task_title": "**Plan compliance audit** — `oracle`",
-      "session_id": "ses_2c81b9a1fffeAUtEpAsX2gV6b0",
-      "agent": "oh-my-claudecode:qa-tester",
-      "updated_at": "2026-03-29T04:40:08.936Z"
-    }
-  }
+  "task_sessions": {}
 }
