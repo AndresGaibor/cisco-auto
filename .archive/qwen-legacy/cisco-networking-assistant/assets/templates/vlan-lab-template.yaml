@@ -1,0 +1,213 @@
+# Template para laboratorio de VLANs
+# Completa los campos marcados con <...>
+
+metadata:
+  name: "Lab VLANs - <NOMBRE_DEL_TALLER>"
+  description: "Configuración de VLANs básicas e Inter-VLAN Routing"
+  version: "1.0"
+  author: "<TU_NOMBRE>"
+  difficulty: beginner  # beginner, intermediate, advanced
+  estimatedTime: "45 min"
+
+topology:
+  devices:
+    # Switch Core
+    - name: SW-CORE
+      type: switch
+      model: Cisco 2960
+      hostname: SW-CORE
+      
+      management:
+        ip: <IP_DE_MANAGEMENT>
+        subnetMask: 255.255.255.0
+        gateway: <GATEWAY_DEFAULT>
+        vlan: <VLAN_MGMT>
+      
+      credentials:
+        username: admin
+        password: "${CISCO_PASSWORD}"
+        enablePassword: "${CISCO_ENABLE}"
+      
+      vlans:
+        - id: <VLAN_ID_1>
+          name: <NOMBRE_VLAN_1>
+          # Ejemplo: 10, VENTAS
+          
+        - id: <VLAN_ID_2>
+          name: <NOMBRE_VLAN_2>
+          # Ejemplo: 20, CONTABILIDAD
+          
+        - id: <VLAN_MGMT>
+          name: MANAGEMENT
+          # VLAN para administración
+      
+      interfaces:
+        - name: GigabitEthernet0/1
+          description: "Trunk hacia SW-ACCESS-1"
+          mode: trunk
+          trunkAllowedVlans: [<VLAN_ID_1>, <VLAN_ID_2>, <VLAN_MGMT>]
+          trunkNativeVlan: <VLAN_MGMT>
+          
+        - name: GigabitEthernet0/2
+          description: "Trunk hacia Router"
+          mode: trunk
+          trunkAllowedVlans: [<VLAN_ID_1>, <VLAN_ID_2>, <VLAN_MGMT>]
+          trunkNativeVlan: <VLAN_MGMT>
+    
+    # Switch Access
+    - name: SW-ACCESS-1
+      type: switch
+      model: Cisco 2960
+      hostname: SW-ACCESS-1
+      
+      management:
+        ip: <IP_SW_ACCESS>
+        subnetMask: 255.255.255.0
+        gateway: <GATEWAY_DEFAULT>
+        vlan: <VLAN_MGMT>
+      
+      vlans:
+        - id: <VLAN_ID_1>
+          name: <NOMBRE_VLAN_1>
+        - id: <VLAN_ID_2>
+          name: <NOMBRE_VLAN_2>
+        - id: <VLAN_MGMT>
+          name: MANAGEMENT
+      
+      interfaces:
+        - name: GigabitEthernet0/1
+          description: "Trunk hacia SW-CORE"
+          mode: trunk
+          trunkAllowedVlans: [<VLAN_ID_1>, <VLAN_ID_2>, <VLAN_MGMT>]
+          
+        - name: FastEthernet0/1-12
+          description: "Puertos VLAN <VLAN_ID_1>"
+          mode: access
+          accessVlan: <VLAN_ID_1>
+          portfast: true
+          portSecurity: true
+          
+        - name: FastEthernet0/13-24
+          description: "Puertos VLAN <VLAN_ID_2>"
+          mode: access
+          accessVlan: <VLAN_ID_2>
+          portfast: true
+          portSecurity: true
+    
+    # Router
+    - name: R1
+      type: router
+      model: Cisco 2911
+      hostname: R1
+      
+      interfaces:
+        - name: GigabitEthernet0/0
+          description: "Trunk hacia SW-CORE"
+          subinterfaces:
+            - number: <VLAN_ID_1>
+              vlan: <VLAN_ID_1>
+              ip: <IP_GATEWAY_VLAN_1>
+              mask: <MASK_VLAN_1>
+              # Ejemplo: 10, 192.168.10.1, 255.255.255.0
+              
+            - number: <VLAN_ID_2>
+              vlan: <VLAN_ID_2>
+              ip: <IP_GATEWAY_VLAN_2>
+              mask: <MASK_VLAN_2>
+              # Ejemplo: 20, 192.168.20.1, 255.255.255.0
+              
+            - number: <VLAN_MGMT>
+              vlan: <VLAN_MGMT>
+              ip: <IP_GATEWAY_MGMT>
+              mask: <MASK_MGMT>
+    
+    # PCs
+    - name: PC-VLAN-1
+      type: pc
+      ip: <IP_PC_VLAN_1>
+      mask: <MASK_PC_VLAN_1>
+      gateway: <IP_GATEWAY_VLAN_1>
+      # Ejemplo: 192.168.10.10, 255.255.255.0, 192.168.10.1
+      
+    - name: PC-VLAN-2
+      type: pc
+      ip: <IP_PC_VLAN_2>
+      mask: <MASK_PC_VLAN_2>
+      gateway: <IP_GATEWAY_VLAN_2>
+      # Ejemplo: 192.168.20.10, 255.255.255.0, 192.168.20.1
+
+  connections:
+    - from: SW-CORE
+      to: SW-ACCESS-1
+      fromInterface: GigabitEthernet0/1
+      toInterface: GigabitEthernet0/1
+      type: ethernet
+      
+    - from: R1
+      to: SW-CORE
+      fromInterface: GigabitEthernet0/0
+      toInterface: GigabitEthernet0/2
+      type: ethernet
+      
+    - from: PC-VLAN-1
+      to: SW-ACCESS-1
+      fromInterface: FastEthernet0
+      toInterface: FastEthernet0/1
+      type: copper
+      
+    - from: PC-VLAN-2
+      to: SW-ACCESS-1
+      fromInterface: FastEthernet0
+      toInterface: FastEthernet0/13
+      type: copper
+
+objectives:
+  - id: obj-1
+    description: "Configurar VLANs en ambos switches"
+    points: 25
+    validation: configuration
+    
+  - id: obj-2
+    description: "Configurar enlaces trunk entre switches"
+    points: 25
+    validation: configuration
+    
+  - id: obj-3
+    description: "Configurar Router-on-a-stick para Inter-VLAN routing"
+    points: 25
+    validation: connectivity
+    
+  - id: obj-4
+    description: "Verificar conectividad entre PCs en diferentes VLANs"
+    points: 25
+    validation: connectivity
+
+validation:
+  connectivity:
+    - from: PC-VLAN-1
+      to: PC-VLAN-2
+      expected: success
+      protocol: icmp
+      description: "Ping entre VLANs debe funcionar"
+      
+    - from: PC-VLAN-1
+      to: <IP_GATEWAY_VLAN_1>
+      expected: success
+      protocol: icmp
+      description: "Gateway VLAN 1 debe responder"
+      
+    - from: PC-VLAN-2
+      to: <IP_GATEWAY_VLAN_2>
+      expected: success
+      protocol: icmp
+      description: "Gateway VLAN 2 debe responder"
+
+configuration:
+  stp:
+    mode: rapid-pvst
+    rootPrimary: SW-CORE
+    
+  security:
+    portSecurity: true
+    bpduGuard: true
+    portfast: true
