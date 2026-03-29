@@ -68,6 +68,12 @@ export const RemoveModulePayloadSchema = z.object({
 // Link Commands
 // ============================================================================
 
+export const LinkTypeSchema = z.enum([
+  'straight', 'cross', 'roll', 'fiber', 'phone',
+  'cable', 'serial', 'auto', 'console', 'wireless',
+  'coaxial', 'octal', 'cellular', 'usb', 'custom_io'
+]);
+
 export const AddLinkPayloadSchema = z.object({
   id: z.string(),
   type: z.literal('addLink'),
@@ -75,14 +81,43 @@ export const AddLinkPayloadSchema = z.object({
   port1: z.string(),
   device2: z.string(),
   port2: z.string(),
-  linkType: z.enum([
-    'straight', 'cross', 'roll', 'fiber', 'phone',
-    'cable', 'serial', 'auto', 'console', 'wireless',
-    'coaxial', 'octal', 'cellular', 'usb', 'custom_io'
-  ]).default('auto'),
+  linkType: LinkTypeSchema.default('auto'),
 });
 
 export type AddLinkPayload = z.infer<typeof AddLinkPayloadSchema>;
+
+export const AddLinkPayloadRawSchema = z.object({
+  id: z.string(),
+  type: z.literal('addLink'),
+  port1: z.string(),
+  port2: z.string(),
+  device1: z.string().optional(),
+  device2: z.string().optional(),
+  dev1: z.string().optional(),
+  dev2: z.string().optional(),
+  linkType: LinkTypeSchema.optional(),
+  cableType: LinkTypeSchema.optional(),
+});
+
+export type AddLinkPayloadRaw = z.infer<typeof AddLinkPayloadRawSchema>;
+
+export function parseAddLinkPayload(input: AddLinkPayloadRaw): AddLinkPayload {
+  if (!input.device1 && !input.dev1) {
+    throw new Error('Either device1 (v2) or dev1 (legacy) must be provided');
+  }
+  if (!input.device2 && !input.dev2) {
+    throw new Error('Either device2 (v2) or dev2 (legacy) must be provided');
+  }
+  return {
+    id: input.id,
+    type: 'addLink',
+    device1: input.device1 || input.dev1!,
+    port1: input.port1,
+    device2: input.device2 || input.dev2!,
+    port2: input.port2,
+    linkType: input.linkType || input.cableType || 'auto',
+  };
+}
 
 export const RemoveLinkPayloadSchema = z.object({
   id: z.string(),

@@ -568,52 +568,74 @@ function handleCommandLog(payload) {
  */
 return (function(payload, ipc, dprint) {
   try {
-    dprint("[Runtime] Processing: " + payload.kind);
+    var cmdType = payload.type || payload.kind;
+    
+    var normalizedPayload = Object.assign({}, payload);
+    
+    if (payload.dev1 !== undefined) {
+      normalizedPayload.dev1 = payload.dev1;
+    } else if (payload.device1 !== undefined) {
+      normalizedPayload.dev1 = payload.device1;
+    }
+    
+    if (payload.dev2 !== undefined) {
+      normalizedPayload.dev2 = payload.dev2;
+    } else if (payload.device2 !== undefined) {
+      normalizedPayload.dev2 = payload.device2;
+    }
+    
+    if (payload.cableType !== undefined) {
+      normalizedPayload.cableType = payload.cableType;
+    } else if (payload.linkType !== undefined) {
+      normalizedPayload.cableType = payload.linkType;
+    }
+    
+    dprint("[Runtime] Processing: " + cmdType);
     
     var result;
     
-    switch (payload.kind) {
+    switch (cmdType) {
       case "addDevice":
-        result = handleAddDevice(payload);
+        result = handleAddDevice(normalizedPayload);
         break;
       case "removeDevice":
-        result = handleRemoveDevice(payload);
+        result = handleRemoveDevice(normalizedPayload);
         break;
       case "listDevices":
-        result = handleListDevices(payload);
+        result = handleListDevices(normalizedPayload);
         break;
       case "addLink":
-        result = handleAddLink(payload);
+        result = handleAddLink(normalizedPayload);
         break;
       case "removeLink":
-        result = handleRemoveLink(payload);
+        result = handleRemoveLink(normalizedPayload);
         break;
       case "configHost":
-        result = handleConfigHost(payload);
+        result = handleConfigHost(normalizedPayload);
         break;
       case "configIos":
-        result = handleConfigIos(payload);
+        result = handleConfigIos(normalizedPayload);
         break;
       case "execIos":
-        result = handleExecIos(payload);
+        result = handleExecIos(normalizedPayload);
         break;
       case "snapshot":
-        result = handleSnapshot(payload);
+        result = handleSnapshot(normalizedPayload);
         break;
       case "inspect":
-        result = handleInspect(payload);
+        result = handleInspect(normalizedPayload);
         break;
       case "hardwareInfo":
         result = handleHardwareInfo();
         break;
       case "hardwareCatalog":
-        result = handleHardwareCatalog(payload || {});
+        result = handleHardwareCatalog(normalizedPayload || {});
         break;
       case "commandLog":
-        result = handleCommandLog(payload || {});
+        result = handleCommandLog(normalizedPayload || {});
         break;
       default:
-        result = { ok: false, error: "Unknown command: " + payload.kind };
+        result = { ok: false, error: "Unknown command: " + cmdType };
     }
     
     return result;

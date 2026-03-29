@@ -79,7 +79,8 @@ function runCommand() {
       return;
     }
 
-    dprint("[INFO] Executing command: " + cmd.payload.kind);
+    var commandType = cmd.payload.type || cmd.payload.kind || "unknown";
+    dprint("[INFO] Executing command: " + commandType);
 
     if (!runtimeFn) {
       appendEvent({
