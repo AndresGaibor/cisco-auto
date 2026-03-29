@@ -67,3 +67,31 @@ pt-logs/
 
 # Temporary files
 tmp/
+
+# === Arquitectura Cleanup ===
+.archive/
+logs/
+pt-logs/
+tmp/
+generated/
+*.log
+*.ndjson
+
+# === Arquitectura Cleanup ===
+.archive/
+logs/
+pt-logs/
+tmp/
+generated/
+*.log
+*.ndjson
+
+# Build outputs
+dist/
+
+# Skills lock
+skills-lock.json
+
+# macOS
+.DS_Store
+.ai/
