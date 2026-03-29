@@ -1,0 +1,257 @@
+# F2: Code Quality Review - Evidence
+
+**Fecha**: 2026-03-25  
+**Proyecto**: cisco-auto  
+**Revisor**: Code Quality Review (F2)
+
+---
+
+## RESUMEN EJECUTIVO
+
+| Métrica | Valor |
+|---------|-------|
+| Tests Totales | 544 |
+| Tests Exitosos | 536 |
+| Tests Fallidos | 1 |
+| Tests Omitidos | 7 |
+| Errores TypeScript | 4 |
+| Cobertura Estimada | ~80%+ |
+
+**VEREDICTO: REJECT** ⚠️
+
+---
+
+## 1. ERRORES DE TYPESCRIPT (CRÍTICOS)
+
+### Error 1.1: validate-interactive.ts - Sintaxis Inválida
+**Ubicación**: `apps/cli/src/commands/lab/validate-interactive.ts:326-327`
+**Severidad**: 🔴 ALTA
+
+```typescript
+// INCORRECTO (líneas 326-327):
+console.log(`   ${chalk.yellow('[2]'} Ver detalles de errores`);
+console.log(`   ${chalk.red('[3]'} Salir sin corregir`);
+
+// CORRECTO:
+console.log(`   ${chalk.yellow('[2]')} Ver detalles de errores`);
+console.log(`   ${chalk.red('[3]')} Salir sin corregir`);
+```
+
+**Problema**: Faltan paréntesis de cierre `)` después de las plantillas de cadena.
+
+---
+
+### Error 1.2: visualizer.ts - Tipo Incorrecto
+**Ubicación**: `packages/topology/src/visualizer.ts:92-93`
+**Severidad**: 🔴 ALTA
+
+```typescript
+// INCORRECTO:
+fromStr += `:${conn.from.portName}`;
+toStr += `:${conn.to.portName}`;
+
+// CORRECTO (según ConnectionEndpoint en packages/lab-model/src/connection.ts):
+fromStr += `:${conn.from.port}`;  // La propiedad es 'port', no 'portName'
+toStr += `:${conn.to.port}`;
+```
+
+**Problema**: `ConnectionEndpoint` tiene propiedad `port`, no `portName`.
+
+---
+
+## 2. TEST FALLIDO
+
+### Test 2.1: live-deploy.test.ts - BRIDGE_UNAVAILABLE
+**Ubicación**: `tests/tools/deploy/live-deploy.test.ts:240`
+**Severidad**: 🟡 MEDIA
+
+```
+Expected: false
+Received: true
+```
+
+**Descripción**: El test espera que `success` sea `false` cuando el bridge no está disponible en `http://localhost:99999`, pero recibe `true`.
+
+**Causa probable**: El método `isAvailable()` de `BridgeHTTPClient` debería retornar `false` cuando el fetch falla, pero el test recibe `success: true`. Posible problema con:
+1. El timeout de 1 segundo no funciona correctamente en el entorno de test
+2. El fetch está retornando ok=true por alguna razón
+
+**Código relevante** (`src/tools/deploy/live-deploy.ts:126-142`):
+```typescript
+async isAvailable(): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1000);
+    const response = await fetch(`${this.baseUrl}/health`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+```
+
+---
+
+## 3. ANÁLISIS DE ARQUITECTURA
+
+### ✅ FORTALEZAS
+
+1. **Estructura modular**: Sepación clara entre `src/core`, `src/tools`, `packages/`, `apps/cli/`
+2. **Sistema de tipos robusto**: Usa TypeScript strict mode con interfaces bien definidas
+3. **Tool Registry Pattern**: Sistema extensible de tools con manejo de errores consistente
+4. **Patrones de factory**: Uso de factories (`LabSpecFactory`, `ConnectionSpecFactory`) para creación de objetos
+5. **Validación comprehensiva**: `LabValidator` con validaciones de IP conflicts, device names, etc.
+6. **Documentación inline**: Comentarios en español en español para funciones públicas
+
+### ⚠️ DEBILIDADES
+
+1. **Acoplamiento en tipos**: Múltiples paquetes importan tipos de `@cisco-auto/lab-model` pero no hay validación de versiones
+2. **Manejo de errores inconsistente**: Algunas funciones usan `throw new Error()` otras retornan `success: false`
+3. **Interfaces definidas localmente vs importadas**: Hay duplicación de tipos (`TopologyPlan`, `DevicePlan`) definida tanto en `src/core/types/tool.ts` como en `packages/lab-model/src/`
+
+---
+
+## 4. CALIDAD DE CÓDIGO
+
+### 4.1 Manejo de Errores
+
+| Patrón | Uso | Calidad |
+|--------|-----|---------|
+| `ToolResultError` | Tools | ✅ Bueno |
+| `throw new Error()` | Helpers | ⚠️ Inconsistente |
+| `try/catch` en handlers | Tools | ✅ Bueno |
+| Error codes | Tools | ✅ Bueno |
+
+**Problema**: No hay un sistema unificado de errores. Algunas funciones lanzan excepciones, otras retornan objetos de error tipados.
+
+### 4.2 Type Safety
+
+**Strict Mode**: ✅ Activado  
+**Skip Lib Check**: ✅ Activado  
+**Flags relevantes**:
+- `strict: true`
+- `noImplicitOverride: true`
+- `noUncheckedIndexedAccess: true`
+- `noFallthroughCasesInSwitch: true`
+
+### 4.3 Comentarios y Documentación
+
+- ✅ Comentarios JSDoc en funciones exportadas
+- ✅ Explicaciones en español para lógica de negocio
+- ⚠️ Algunos comentarios están incompletos o son redundantes
+- ❌ No hay TSDoc para miembros privados
+
+---
+
+## 5. COBERTURA DE TESTS
+
+**Tests por categoría**:
+- Unit tests: `tests/unit/` (pka, api, context, etc.)
+- Integration tests: `tests/integration/`
+- Tool tests: `tests/tools/` (deploy, topology)
+- CLI tests: `tests/cli/`
+
+**Test Quality Assessment**:
+- ✅ Tests usan Bun test framework (rápido)
+- ✅ Tests tienen setup y teardown adecuados
+- ✅ Tests incluyen logging de operaciones
+- ⚠️ Un test fallando (live-deploy)
+- ⚠️ Algunos tests son más de integración que unitarios
+
+---
+
+## 6. DUPLICACIÓN DE CÓDIGO
+
+### ⚠️ TIPOS DUPLICADOS
+
+El tipo `TopologyPlan` y `DevicePlan` están definidos en múltiples lugares:
+1. `src/core/types/tool.ts`
+2. `packages/lab-model/src/lab.ts` (como `LabSpec`)
+3. `packages/lab-model/src/types/tool.ts` (versión diferente)
+
+**Recomendación**: Unificar en un solo módulo de tipos compartidos.
+
+---
+
+## 7. HALLADGOS ADICIONALES
+
+### 7.1 Posible Memory Leak
+En `src/tools/deploy/live-deploy.ts`, el `setTimeout` no se limpia si `response` llega antes:
+```typescript
+const timeoutId = setTimeout(() => controller.abort(), 1000);
+// Si response.ok es true, clearTimeout sí se llama
+// Pero si hay exception, no hay problema porque está en finally o catch
+```
+
+### 7.2 Configuración de Timeout
+El timeout hardcodeado de 1 segundo podría ser demasiado corto para entornos con latencia alta.
+
+---
+
+## 8. RECOMENDACIONES DE FIX
+
+### PRIORIDAD ALTA (Deben arreglarse antes de merge):
+
+1. **validate-interactive.ts:326-327** - Corregir sintaxis de chalk
+2. **visualizer.ts:92-93** - Cambiar `portName` a `port`
+3. **live-deploy.test.ts:240** - Investigar y corregir test o implementación
+
+### PRIORIDAD MEDIA (Considerar para siguiente sprint):
+
+4. Unificar tipos `TopologyPlan`/`DevicePlan` en un paquete compartido
+5. Crear sistema de errores unificado
+6. Aumentar timeout de `isAvailable()` o hacerlo configurable
+
+---
+
+## 9. ERRORES ADICIONALES DETECTADOS POR LSP
+
+El análisis profundo con LSP reveló **errores adicionales no capturados** por `bun run typecheck`:
+
+### 9.1 validate-interactive.ts (9 errores)
+- Líneas 69-70: `Property 'connections' does not exist on type...`
+- Líneas 127, 132: `Property 'port' does not exist on type...`
+- Líneas 269, 299, 338: `Expected 2 arguments, but got 1`
+- Línea 438: Problemas de tipado con arrays de conexiones
+
+### 9.2 plan-topology.ts (12 errores)
+- Tipo `undefined` no asignable en línea 22
+- `string` no asignable a union types en líneas 42, 64, 87, 112
+- Incompatibilidad de tipos en arrays de puertos
+
+### 9.3 live-deploy.test.ts (13 errores)
+- `result.data` es de tipo `unknown` - falta type assertion
+
+### 9.4 interactive.ts (4 errores)
+- `result.data` es de tipo `unknown` - falta type assertion
+
+---
+
+## 10. CONCLUSIÓN
+
+**VEREDICTO: REJECT** ❌
+
+El código tiene una arquitectura sólida y sigue patrones modernos de TypeScript. Sin embargo, hay múltiples errores de compilación que deben corregirse:
+
+### Errores Críticos:
+1. **validate-interactive.ts:326-327** - Error de sintaxis (falta paréntesis)
+2. **visualizer.ts:92-93** - Propiedad `portName` no existe (debe ser `port`)
+3. **validate-interactive.ts** - 9 errores de tipos adicionales
+4. **plan-topology.ts** - 12 errores de tipos
+5. **live-deploy.test.ts:240** - Test fallando
+
+### Issues de Calidad:
+- Tests con `result.data: unknown` sin type assertion
+- Múltiples definiciones de tipos duplicados en diferentes paquetes
+- Posible inconsistencia en manejo de errores de red
+
+**RECOMENDACIÓN**: Corregir TODOS los errores de compilación antes de proceder. La calidad del código es buena pero la presencia de errores de TypeScript indica que el proceso de type-checking no está siendo严格执行 en el CI/CD.
+
+---
+
+*Generado por F2: Code Quality Review - 2026-03-25*

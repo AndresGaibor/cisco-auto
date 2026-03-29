@@ -1,0 +1,310 @@
+# Laboratorio de VLANs - ESPOCH
+# Curso: Redes de Computadores
+# Tema: Configuración de VLANs, VTP y Trunking
+
+metadata:
+  name: "Lab VLANs Básico"
+  description: "Configuración de VLANs, VTP y puertos trunk en switches Cisco"
+  version: "1.0"
+  author: "cisco-auto"
+  difficulty: beginner
+  estimatedTime: "45 min"
+
+topology:
+  devices:
+    # Switch Principal - VTP Server
+    - name: SW-CORE
+      type: switch
+      model: "Cisco Catalyst 2960"
+      hostname: SW-CORE
+      
+      management:
+        ip: 192.168.1.2
+        subnetMask: 255.255.255.0
+        gateway: 192.168.1.1
+        vlan: 99
+      
+      credentials:
+        username: admin
+        password: "${CISCO_PASSWORD}"
+        enablePassword: "${CISCO_ENABLE}"
+      
+      vtp:
+        domain: ESPOCH-LAB
+        mode: server
+        version: "2"
+      
+      vlans:
+        - id: 10
+          name: "VENTAS"
+          description: "Departamento de Ventas"
+          ports:
+            - FastEthernet0/1
+            - FastEthernet0/2
+        - id: 20
+          name: "MARKETING"
+          description: "Departamento de Marketing"
+          ports:
+            - FastEthernet0/3
+            - FastEthernet0/4
+        - id: 30
+          name: "IT"
+          description: "Departamento de IT"
+          ports:
+            - FastEthernet0/5
+            - FastEthernet0/6
+        - id: 99
+          name: "MANAGEMENT"
+          description: "VLAN de Management"
+          active: true
+      
+      interfaces:
+        # Puerto Trunk hacia SW-ACCESS-1
+        - name: GigabitEthernet0/1
+          type: gigabitethernet
+          mode: trunk
+          description: "Trunk to SW-ACCESS-1"
+          trunkAllowedVlans: [10, 20, 30, 99]
+          encapsulation: dot1q
+          enabled: true
+        
+        # Puerto Trunk hacia SW-ACCESS-2
+        - name: GigabitEthernet0/2
+          type: gigabitethernet
+          mode: trunk
+          description: "Trunk to SW-ACCESS-2"
+          trunkAllowedVlans: [10, 20, 30, 99]
+          encapsulation: dot1q
+          enabled: true
+      
+      lines:
+        console:
+          login: true
+          execTimeout: 10
+        vty:
+          start: 0
+          end: 15
+          login: true
+          transportInput: ssh
+
+    # Switch Acceso 1 - VTP Client
+    - name: SW-ACCESS-1
+      type: switch
+      model: "Cisco Catalyst 2960"
+      hostname: SW-ACCESS-1
+      
+      management:
+        ip: 192.168.1.3
+        subnetMask: 255.255.255.0
+        gateway: 192.168.1.1
+        vlan: 99
+      
+      credentials:
+        username: admin
+        password: "${CISCO_PASSWORD}"
+        enablePassword: "${CISCO_ENABLE}"
+      
+      vtp:
+        domain: ESPOCH-LAB
+        mode: client
+        version: "2"
+      
+      interfaces:
+        # Puerto Trunk desde SW-CORE
+        - name: GigabitEthernet0/1
+          type: gigabitethernet
+          mode: trunk
+          description: "Trunk from SW-CORE"
+          trunkAllowedVlans: [10, 20, 30, 99]
+          encapsulation: dot1q
+          enabled: true
+        
+        # Puertos de acceso VLAN 10
+        - name: FastEthernet0/1
+          type: fastethernet
+          mode: access
+          vlan: 10
+          description: "PC Ventas 1"
+          enabled: true
+        
+        - name: FastEthernet0/2
+          type: fastethernet
+          mode: access
+          vlan: 10
+          description: "PC Ventas 2"
+          enabled: true
+        
+        # Puerto de acceso VLAN 20
+        - name: FastEthernet0/3
+          type: fastethernet
+          mode: access
+          vlan: 20
+          description: "PC Marketing 1"
+          enabled: true
+      
+      lines:
+        vty:
+          start: 0
+          end: 15
+          login: true
+          transportInput: ssh
+
+    # Switch Acceso 2 - VTP Client
+    - name: SW-ACCESS-2
+      type: switch
+      model: "Cisco Catalyst 2960"
+      hostname: SW-ACCESS-2
+      
+      management:
+        ip: 192.168.1.4
+        subnetMask: 255.255.255.0
+        gateway: 192.168.1.1
+        vlan: 99
+      
+      credentials:
+        username: admin
+        password: "${CISCO_PASSWORD}"
+        enablePassword: "${CISCO_ENABLE}"
+      
+      vtp:
+        domain: ESPOCH-LAB
+        mode: client
+        version: "2"
+      
+      interfaces:
+        # Puerto Trunk desde SW-CORE
+        - name: GigabitEthernet0/1
+          type: gigabitethernet
+          mode: trunk
+          description: "Trunk from SW-CORE"
+          trunkAllowedVlans: [10, 20, 30, 99]
+          encapsulation: dot1q
+          enabled: true
+        
+        # Puerto de acceso VLAN 30
+        - name: FastEthernet0/1
+          type: fastethernet
+          mode: access
+          vlan: 30
+          description: "PC IT 1"
+          enabled: true
+        
+        - name: FastEthernet0/2
+          type: fastethernet
+          mode: access
+          vlan: 30
+          description: "PC IT 2"
+          enabled: true
+      
+      lines:
+        vty:
+          start: 0
+          end: 15
+          login: true
+          transportInput: ssh
+
+  # Definición de conexiones
+  connections:
+    - from: SW-CORE
+      to: SW-ACCESS-1
+      fromInterface: GigabitEthernet0/1
+      toInterface: GigabitEthernet0/1
+      type: ethernet
+      description: "Trunk link"
+    
+    - from: SW-CORE
+      to: SW-ACCESS-2
+      fromInterface: GigabitEthernet0/2
+      toInterface: GigabitEthernet0/1
+      type: ethernet
+      description: "Trunk link"
+
+# Objetivos del laboratorio
+objectives:
+  - id: vlan-1
+    description: "Configurar VLANs 10, 20, 30 y 99 en SW-CORE"
+    points: 20
+    validation: configuration
+  
+  - id: vlan-2
+    description: "Configurar VTP Server en SW-CORE con dominio ESPOCH-LAB"
+    points: 15
+    validation: configuration
+  
+  - id: vlan-3
+    description: "Configurar VTP Client en switches de acceso"
+    points: 15
+    validation: configuration
+  
+  - id: vlan-4
+    description: "Configurar puertos trunk entre switches"
+    points: 20
+    validation: configuration
+  
+  - id: vlan-5
+    description: "Asignar puertos de acceso a VLANs correspondientes"
+    points: 20
+    validation: configuration
+  
+  - id: vlan-6
+    description: "Verificar conectividad intra-VLAN"
+    points: 10
+    validation: connectivity
+
+# Validación del laboratorio
+validation:
+  connectivity:
+    - from: PC-Ventas-1
+      to: PC-Ventas-2
+      expected: success
+      protocol: icmp
+    - from: PC-IT-1
+      to: PC-Marketing-1
+      expected: fail
+      protocol: icmp
+  
+  vlans:
+    - switch: SW-CORE
+      vlanId: 10
+      expectedPorts: 2
+    - switch: SW-CORE
+      vlanId: 20
+      expectedPorts: 2
+    - switch: SW-CORE
+      vlanId: 30
+      expectedPorts: 2
+
+instructions: |
+  ## Instrucciones del Laboratorio
+  
+  ### Parte 1: Configuración de VLANs y VTP
+  
+  1. **SW-CORE (VTP Server)**:
+     - Configurar dominio VTP: `ESPOCH-LAB`
+     - Modo: Server
+     - Crear VLANs: 10 (VENTAS), 20 (MARKETING), 30 (IT), 99 (MANAGEMENT)
+  
+  2. **SW-ACCESS-1 y SW-ACCESS-2 (VTP Client)**:
+     - Configurar dominio VTP: `ESPOCH-LAB`
+     - Modo: Client
+     - Verificar que reciben las VLANs del servidor
+  
+  ### Parte 2: Configuración de Trunking
+  
+  1. Configurar puertos Gi0/1 y Gi0/2 en SW-CORE como trunk
+  2. Configurar puerto Gi0/1 en switches de acceso como trunk
+  3. Permitir VLANs 10, 20, 30, 99 en los trunks
+  
+  ### Parte 3: Configuración de Puertos de Acceso
+  
+  1. Asignar puertos FastEthernet a las VLANs según el diagrama
+  2. Verificar configuración con `show vlan brief`
+  
+  ### Comandos Útiles
+  
+  ```
+  show vlan brief
+  show vtp status
+  show interfaces trunk
+  show interfaces switchport
+  ```

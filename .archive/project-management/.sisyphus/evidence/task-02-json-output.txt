@@ -1,0 +1,44 @@
+# Evidencia: Task 02 - JSON Output
+
+## Comando
+```
+cisco-auto legacy devices labs/vlan-basico.yaml --json
+```
+
+## Salida
+```json
+[
+  {
+    "name": "SW-CORE",
+    "type": "switch",
+    "hostname": "SW-CORE",
+    "model": "Cisco Catalyst 2960",
+    "management": "192.168.1.2",
+    "interfaces": 2,
+    "vlans": 4
+  },
+  {
+    "name": "SW-ACCESS-1",
+    "type": "switch",
+    "hostname": "SW-ACCESS-1",
+    "model": "Cisco Catalyst 2960",
+    "management": "192.168.1.3",
+    "interfaces": 4,
+    "vlans": 0
+  },
+  {
+    "name": "SW-ACCESS-2",
+    "type": "switch",
+    "hostname": "SW-ACCESS-2",
+    "model": "Cisco Catalyst 2960",
+    "management": "192.168.1.4",
+    "interfaces": 3,
+    "vlans": 0
+  }
+]
+```
+
+## Verificación
+- ✅ La salida es JSON válido
+- ✅ Se puede parsear con JSON.parse()
+- ✅ Contiene todos los dispositivos del lab

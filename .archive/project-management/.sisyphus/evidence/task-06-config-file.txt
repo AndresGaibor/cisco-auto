@@ -1,0 +1,9 @@
+Scenario: Config file is loaded
+  Tool: Bash
+  Steps:
+    1. echo "defaultRouter: 2911" > cisco-auto.yaml
+    2. cisco-auto config get defaultRouter
+    3. Assert output contains "2911"
+  Expected Result: Config value from file
+  Evidence: Output = 2911
+  Status: PASS

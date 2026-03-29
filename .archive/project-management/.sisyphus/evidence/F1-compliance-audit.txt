@@ -1,0 +1,257 @@
+# F1: Plan Compliance Audit Report
+**Fecha**: 2026-03-25
+**Auditor**: Oracle Agent
+**Proyecto**: cisco-auto - CLI Refactor + MCP Integration
+
+---
+
+## 1. VERIFICATION SUMMARY
+
+### Verification Commands Executed
+
+| Command | Result | Notes |
+|---------|--------|-------|
+| `bun test` | ⚠️ 1 FAIL, 536 pass, 7 skip | Test failure en live-deploy |
+| `bun run typecheck` | ❌ FAIL | 6 TypeScript errors |
+| `cisco-auto --help` | ✅ PASS | Muestra estructura gh-style |
+| `cisco-auto lab --help` | ✅ PASS | 8 subcomandos |
+| `cisco-auto topology --help` | ✅ PASS | Comandos de topología |
+| `cisco-auto bridge status` | ✅ PASS | Verifica conexión bridge |
+| `cisco-auto lab validate --json` | ✅ PASS | JSON output funciona |
+| `cisco-auto lab pipeline --help` | ✅ PASS | Existe comando |
+| `cisco-auto lab full-build --help` | ✅ PASS | Existe comando |
+
+---
+
+## 2. MUST HAVE CHECKLIST
+
+### ✅ Reestructuración CLI estilo gh (comandos por recurso)
+**Status**: IMPLEMENTED
+**Evidence**:
+- `cisco-auto lab` (parse, validate, create, list, interactive, pipeline, full-build)
+- `cisco-auto device` (list, get, interactive)
+- `cisco-auto topology` (visualize, analyze, export)
+- `cisco-auto config`
+- `cisco-auto bridge`
+- Comandos legacy agrupados bajo `cisco-auto legacy`
+
+### ✅ Bridge HTTP puerto 54321
+**Status**: IMPLEMENTED
+**Evidence**: `src/bridge/server.ts` líneas 261-262
+```typescript
+const PUERTO = 54321;
+const HOST = '127.0.0.1';
+```
+- Endpoints: `/health`, `/status`, `/next`, `/execute`
+- Validación localhost-only en línea 286
+- CORS headers para Packet Tracer WebView
+
+### ⚠️ Tool Registry con tools requeridas
+**Status**: PARTIALLY VERIFIED
+**Evidence**:
+- `src/core/registry/index.ts` - ToolRegistry clase implementada
+- Tools topology: `pt_plan_topology`, `pt_validate_plan`, `pt_fix_plan`, `pt_explain_plan`, `pt_estimate_plan`, `pt_generate_script`
+- Tools deploy: `pt_generate_configs`, `pt_deploy`, `pt_live_deploy`, `pt_bridge_status`, `pt_query_topology`
+- Tools catalog: `pt_list_devices`, `pt_list_templates`, `pt_get_device_details`
+
+**CONTC**: 14 tools verificadas. Plan dice 22 tools, pero el desglose de Waves 3-4 suma 16.
+
+### ✅ Output JSON opcional (--json, --jq)
+**Status**: IMPLEMENTED
+**Evidence**:
+- Flags globales en `apps/cli/src/flags.ts`
+- Formateadores en `apps/cli/src/output/formatters/` (json, yaml, table, text)
+- Flag `--json` visible en help
+
+### ⚠️ Tests con bun:test
+**Status**: 536 pass, 1 fail, 7 skip
+**Details**: Test fallando en `tests/tools/deploy/live-deploy.test.ts:240`
+
+---
+
+## 3. MUST NOT HAVE (GUARDRAILS)
+
+### ✅ NO exponer servidor MCP externamente
+**Status**: COMPLIANT
+**Evidence**: No hay código de servidor MCP en el proyecto. Solo bridge HTTP local.
+
+### ✅ NO añadir dashboard web o UI
+**Status**: COMPLIANT
+**Evidence**: No hay archivos de dashboard o UI web.
+
+### ✅ NO modificar packages stubs
+**Status**: COMPLIANT
+**Evidence**: `packages/` contiene: crypto, device-catalog, import-pka, import-yaml, lab-model, legacy, sim-engine, sim-runtime, topology - todos intactos.
+
+### ⚠️ NO auto-fix de credenciales/seguridad/routing
+**Status**: NEEDS VERIFICATION
+**Evidence**: `src/tools/topology/fix-plan.ts` existe. Se requiere revisión de código para confirmar que SOLO modifica IPs, cables, puertos.
+
+### ✅ NO soporte multi-vendor
+**Status**: COMPLIANT
+**Evidence**: Solo referencias a Cisco IOS en el código.
+
+---
+
+## 4. DEFINITION OF DONE CHECKLIST
+
+| Item | Status | Evidence |
+|------|--------|----------|
+| `cisco-auto --help` muestra ayuda por recursos | ✅ PASS | Verificado |
+| `cisco-auto lab create` funciona interactivo/batch | ✅ PASS | `lab create` existe |
+| `cisco-auto topology validate lab.yaml` | ⚠️ USAR `lab validate` | `topology validate` no existe, pero `lab validate` sí |
+| `cisco-auto config generate --dry-run` | ✅ PASS | `lab full-build --offline` cumple función |
+| `cisco-auto bridge status` | ✅ PASS | Verificado |
+| `bun test` pasa | ⚠️ 1 FAIL | 536 pass, 1 fail |
+| TypeScript compila | ❌ FAIL | 6 errores |
+
+---
+
+## 5. TYPE ERRORS FOUND
+
+### Error 1: validate-interactive.ts línea 326, 327
+```
+../../apps/cli/src/commands/lab/validate-interactive.ts(326,41): error TS1005: ',' expected.
+../../apps/cli/src/commands/lab/validate-interactive.ts(327,38): error TS1005: ',' expected.
+```
+**Causa**: Corchetes faltantes en template literals
+```typescript
+// INCORRECTO (líneas 326-327):
+console.log(`   ${chalk.yellow('[2]'} Ver detalles de errores`);
+console.log(`   ${chalk.red('[3]'} Salir sin corregir`);
+
+// CORRECTO:
+console.log(`   ${chalk.yellow('[2]')} Ver detalles de errores`);
+console.log(`   ${chalk.red('[3]')} Salir sin corregir`);
+```
+
+### Error 2: visualizer.ts líneas 92-93
+```
+src/visualizer.ts(92,32): error TS2339: Property 'portName' does not exist on type 'ConnectionEndpoint'.
+src/visualizer.ts(93,28): error TS2339: Property 'portName' does not exist on type 'ConnectionEndpoint'.
+```
+**Causa**: La propiedad `portName` no existe en el tipo `ConnectionEndpoint`.
+
+---
+
+## 6. TEST FAILURE DETAILS
+
+### Failed Test: live-deploy.test.ts
+```
+tests/tools/deploy/live-deploy.test.ts:240
+expect(result.success).toBe(false);
+Expected: false
+Received: true
+```
+
+**Análisis**:
+- El test espera `success: false` cuando el bridge no está disponible
+- El código en `live-deploy.ts` líneas 331-346 verifica disponibilidad del bridge
+- Cuando bridge NO está disponible, retorna `success: false` con error `BRIDGE_UNAVAILABLE`
+- Pero el test recibe `success: true`
+
+**Hipótesis**: El test puede estar verificando el comportamiento incorrecto, o hay un race condition.
+
+---
+
+## 7. CLI STRUCTURE VERIFICATION
+
+### gh-style Resource Commands ✅
+```
+cisco-auto --help muestra:
+  lab                    Comandos para gestionar laboratorios Cisco
+  device                 Comandos para gestionar dispositivos
+  topology               Comandos para gestionar topologías de red
+  config                 Gestionar configuración de cisco-auto
+  bridge                 Comandos para gestión del Bridge Server
+  legacy                 Comandos heredados (deprecated)
+```
+
+### Lab subcommands ✅
+```
+cisco-auto lab --help muestra:
+  parse [options] <file>       Parsear archivo de definición de lab
+  validate [options] <file>    Validar archivo YAML de laboratorio
+  create [options] <name>      Crear un nuevo archivo de laboratorio
+  list [options]               Listar laboratorios
+  interactive|wizard           Wizard interactivo
+  pipeline [options] <file>    Plan → Validate → Fix
+  full-build [options] <file>   Validate → Generate → Deploy
+```
+
+---
+
+## 8. ERROR CODES VERIFICATION
+
+### ✅ Exit Codes Standardized
+`apps/cli/src/errors/codes.ts`:
+- SUCCESS: 0
+- ERROR: 1
+- INVALID_USAGE: 2
+- NOT_FOUND: 3
+- TIMEOUT: 4
+- CONNECTION_REFUSED: 5
+
+---
+
+## 9. BRIDGE SERVER VERIFICATION
+
+### ✅ Server on port 54321
+`src/bridge/server.ts`:
+- Puerto: 54321
+- Host: 127.0.0.1 (localhost-only)
+- Endpoints implementados: `/health`, `/status`, `/next`, `/execute`
+- CORS headers para PT WebView
+- Validación de origen localhost
+
+---
+
+## 10. FINAL VERDICT
+
+### ❌ REJECT - No cumple con criterios de calidad
+
+**Razones**:
+1. **TypeScript compilation fails** - 6 errores de compilación
+2. **Test failure** - 1 test fallando
+3. **Topología validate es `lab validate`, no `topology validate`** - Discrepancia menor con el plan
+
+### Issues Bloqueantes
+
+| Issue | Severidad | Archivo |
+|-------|-----------|---------|
+| Syntax error en validate-interactive.ts | CRÍTICA | apps/cli/src/commands/lab/validate-interactive.ts |
+| Property 'portName' missing | ALTA | src/visualizer.ts |
+| Test failure en live-deploy | MEDIA | tests/tools/deploy/live-deploy.test.ts |
+
+### Items Pendientes de Verificación
+
+| Item | Status |
+|------|--------|
+| pt_fix_plan NO modifica credenciales/seguridad/routing | REQUIERE REVISIÓN |
+| 22 tools (vs 14 encontradas) | REQUIERE CLARIFICACIÓN |
+
+---
+
+## 11. RECOMENDACIONES
+
+### MUST FIX (antes de APPROVE)
+1. Corregir syntax error en validate-interactive.ts líneas 326-327
+2. Corregir error de tipo en visualizer.ts líneas 92-93
+3. Investigar y corregir test failure en live-deploy.test.ts
+4. Ejecutar `bun run typecheck` y verificar exit code 0
+
+### SHOULD VERIFY
+1. Revisar `src/tools/topology/fix-plan.ts` para confirmar guardrails de seguridad
+2. Esclarecer count de 22 tools vs 14 implementadas
+
+---
+
+## 12. EVIDENCE FILES
+
+- `.sisyphus/evidence/F1-compliance-audit.txt` - Este reporte
+- Command outputs guardadas en sesión
+
+---
+
+**Generated**: 2026-03-25
+**Auditor**: Oracle Agent (F1 Task)
