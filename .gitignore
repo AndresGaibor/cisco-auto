@@ -67,3 +67,12 @@ pt-logs/
 
 # Temporary files
 tmp/
+
+# === Arquitectura Cleanup ===
+.archive/
+logs/
+pt-logs/
+tmp/
+generated/
+*.log
+*.ndjson
