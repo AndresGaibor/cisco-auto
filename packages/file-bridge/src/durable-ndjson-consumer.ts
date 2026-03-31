@@ -64,10 +64,13 @@ export class DurableNdjsonConsumer extends EventEmitter {
   private currentFilePath: string | null = null;
   private leftover = "";
   private running = false;
+  private consecutiveParseErrors = 0;
 
   private readonly checkpointManager: CheckpointManager;
   private readonly fileResolver: FileResolver;
   private decoder = new StringDecoder("utf8");
+
+  private static readonly MAX_CONSECUTIVE_ERRORS = 50;
 
   constructor(
     private readonly paths: BridgePathLayout,
@@ -208,6 +211,9 @@ export class DurableNdjsonConsumer extends EventEmitter {
           const raw = JSON.parse(line);
           const result = BridgeEventSchema.safeParse(raw);
 
+          // Reset error counter on successful parse
+          this.consecutiveParseErrors = 0;
+
           let event: BridgeEvent;
           if (result.success) {
             event = result.data as BridgeEvent;
@@ -237,15 +243,39 @@ export class DurableNdjsonConsumer extends EventEmitter {
             checkpoint.lastSeq = event.seq;
           }
         } catch (err) {
+          // JSON parse error — increment error counter
+          this.consecutiveParseErrors++;
+
           const parseError = {
             type: "parse-error" as const,
             raw: null,
             line,
             error: String(err),
+            recoverable: true,
+            consecutiveErrors: this.consecutiveParseErrors,
           };
           this.emit("parse-error", parseError);
           this.options.onParseError?.(line, err);
-          break;
+
+          // If too many consecutive errors, the file is likely corrupted
+          if (this.consecutiveParseErrors >= DurableNdjsonConsumer.MAX_CONSECUTIVE_ERRORS) {
+            this.emit("data-loss", {
+              reason: "too many consecutive parse errors",
+              errorCount: this.consecutiveParseErrors,
+              lastError: String(err),
+              lostFromOffset: checkpoint.byteOffset,
+              checkpoint,
+            });
+
+            // Skip to end of file to avoid infinite loop
+            this.consecutiveParseErrors = 0;
+            offset = stats.size;
+            checkpoint.byteOffset = offset;
+            break;
+          }
+
+          // Skip this corrupted line and continue with next line
+          continue;
         }
       }
 

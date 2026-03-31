@@ -11,7 +11,7 @@
 import type { FileBridgePort } from "../../application/ports/file-bridge.port.js";
 import type { PTEvent, PTEventType } from "../../contracts/index.js";
 import type { CommandPayload } from "../../contracts/commands.js";
-import { FileBridgeV2, type FileBridgeV2Options } from "./file-bridge-v2.js";
+import { FileBridgeV2, type FileBridgeV2Options } from "@cisco-auto/file-bridge";
 
 export class FileBridgeV2Adapter implements FileBridgePort {
   constructor(readonly v2: FileBridgeV2) {}

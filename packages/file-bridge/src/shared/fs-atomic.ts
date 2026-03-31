@@ -44,12 +44,27 @@ export function atomicWriteFile(path: string, content: string): void {
  * Append a single line to a file (no trailing newline assumed).
  * The line parameter should NOT include the trailing newline — this function adds it.
  * Does NOT use atomic write since appends are inherently safer than overwrites.
- * For critical data that must not be lost, use atomicWriteFile instead.
+ * Retries on ENOENT to handle file rotation window.
  */
 export function appendLine(path: string, line: string): void {
   ensureDir(dirname(path));
   const content = line.endsWith("\n") ? line : `${line}\n`;
-  appendFileSync(path, content, "utf8");
+  
+  // Simple retry logic for rotation window
+  // Don't use atomicWriteFile for retry - just let appendFileSync create the file
+  const maxRetries = 3;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      appendFileSync(path, content, "utf8");
+      return;
+    } catch (err: any) {
+      if (err.code === "ENOENT" && attempt < maxRetries - 1) {
+        // File was rotated — appendFileSync will create it on next retry
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 /**

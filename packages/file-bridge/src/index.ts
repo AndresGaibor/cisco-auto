@@ -5,6 +5,10 @@
 // Core bridge implementation
 export { FileBridgeV2, type FileBridgeV2Options, type BridgeHealth, type GCReport } from "./file-bridge-v2.js";
 
+// Backpressure and resource management
+export { BackpressureManager, BackpressureError } from "./backpressure-manager.js";
+export { SharedResultWatcher } from "./shared-result-watcher.js";
+
 // Convenience helpers
 export { pushCommands, pushCode, type PushResult } from "./file-bridge-v2-commands.js";
 
@@ -31,4 +35,4 @@ export { BridgeEventSchema, type BridgeEventInput } from "./shared/protocol.js";
 // Infrastructure
 export { BridgePathLayout } from "./shared/path-layout.js";
 export { SequenceStore } from "./shared/sequence-store.js";
-export { atomicWriteFile, ensureDir, ensureFile } from "./shared/fs-atomic.js";
+export { atomicWriteFile, ensureDir, ensureFile, appendLine } from "./shared/fs-atomic.js";

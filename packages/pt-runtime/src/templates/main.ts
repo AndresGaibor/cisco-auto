@@ -32,6 +32,8 @@ var RESULTS_DIR = DEV_DIR + "/results";
 var LOGS_DIR = DEV_DIR + "/logs";
 var EVENTS_FILE = LOGS_DIR + "/events.current.ndjson";
 var STATE_FILE = DEV_DIR + "/state.json";
+var SESSIONS_FILE = DEV_DIR + "/sessions/ios-sessions.json";
+var HEARTBEAT_PATH = DEV_DIR + "/sessions/heartbeat.json";
 
 // State
 var fm = null;
@@ -40,6 +42,7 @@ var runtimeFn = null;
 var reloadTimer = null;
 var commandTimer = null;
 var snapshotInterval = null;
+var heartbeatInterval = null;
 
 // ============================================================================
 // Event Helpers
@@ -59,6 +62,43 @@ function writeState(state) {
     fm.writePlainTextToFile(STATE_FILE, JSON.stringify(state));
   } catch (e) {
     dprint("[ERROR] Failed to write state: " + String(e));
+  }
+}
+
+function writeHeartbeat() {
+  try {
+    fm.writePlainTextToFile(HEARTBEAT_PATH, JSON.stringify({ ts: Date.now(), pid: "main" }));
+  } catch (e) {
+    dprint("[WARN] Failed to write heartbeat: " + String(e));
+  }
+}
+
+function cleanStaleSessions() {
+  try {
+    if (!fm.fileExists(SESSIONS_FILE)) {
+      return;
+    }
+    var content = fm.getFileContents(SESSIONS_FILE);
+    var sessions = JSON.parse(content);
+    var heartbeatContent = null;
+    var isStale = true;
+
+    if (fm.fileExists(HEARTBEAT_PATH)) {
+      heartbeatContent = fm.getFileContents(HEARTBEAT_PATH);
+      var heartbeat = JSON.parse(heartbeatContent);
+      var age = Date.now() - heartbeat.ts;
+      isStale = age > 15000; // Consider stale if no heartbeat for > 15 seconds
+    }
+
+    if (isStale) {
+      dprint("[INFO] Stale sessions detected, resetting ios-sessions.json");
+      fm.writePlainTextToFile(SESSIONS_FILE, JSON.stringify({}));
+      if (heartbeatContent) {
+        fm.writePlainTextToFile(HEARTBEAT_PATH, JSON.stringify({ ts: Date.now(), pid: "main" }));
+      }
+    }
+  } catch (e) {
+    dprint("[WARN] Failed to clean stale sessions: " + String(e));
   }
 }
 
@@ -553,7 +593,16 @@ function main() {
     snapshotInterval = setInterval(function() {
       triggerSnapshot();
     }, 5000);
-    
+
+    // Clean stale sessions at startup (PT reopened after crash)
+    cleanStaleSessions();
+
+    // Heartbeat every 5 seconds
+    heartbeatInterval = setInterval(function() {
+      writeHeartbeat();
+    }, 5000);
+    writeHeartbeat(); // Write immediately
+
     dprint("[OK] PT Control V2 initialized (Bridge V2)");
     dprint("[INFO] Watching: " + DEV_DIR);
     dprint("[INFO] Commands dir: " + COMMANDS_DIR);
@@ -571,11 +620,12 @@ function main() {
 
 function cleanUp() {
   dprint("=== PT Control V2 Stopping ===");
-  
+
   if (reloadTimer) clearTimeout(reloadTimer);
   if (commandTimer) clearTimeout(commandTimer);
   if (snapshotInterval) clearInterval(snapshotInterval);
-  
+  if (heartbeatInterval) clearInterval(heartbeatInterval);
+
   appendEvent({ type: "log", ts: Date.now(), level: "info", message: "Module stopped" });
 }
 `;

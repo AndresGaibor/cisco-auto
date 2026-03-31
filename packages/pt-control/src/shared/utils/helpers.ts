@@ -2,7 +2,7 @@
 // Runtime Helpers - Pure utility functions
 // ============================================================================
 
-import { DEVICE_TYPES, MODEL_ALIASES } from "../../runtime-generator/utils/constants";
+import { DEVICE_TYPES, MODEL_ALIASES } from "@cisco-auto/pt-runtime";
 
 /** Logical workspace interface */
 export interface PTLogicalWorkspace {

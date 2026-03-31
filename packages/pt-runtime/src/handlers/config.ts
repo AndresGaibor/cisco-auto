@@ -36,6 +36,22 @@ export interface ExecIosPayload {
   parse?: boolean;
 }
 
+export interface ExecIosSuccessResult extends HandlerResult {
+  ok: boolean;
+  raw: string;
+  status?: number;
+  parsed?: Record<string, unknown>;
+  parseError?: string;
+  classification?: string;
+  session?: { mode: string; paging?: boolean; awaitingConfirm?: boolean };
+}
+
+export interface ExecIosErrorResult extends HandlerResult {
+  ok: false;
+  raw: "";
+  error: string;
+}
+
 // ============================================================================
 // Handlers
 // ============================================================================
@@ -152,7 +168,7 @@ export function handleExecIos(payload: ExecIosPayload, deps: HandlerDeps): Handl
 
       dprint(`[execIos] device.enterCommand: status=${status}, output length=${output.length}`);
 
-      const result = {
+      const result: ExecIosSuccessResult = {
         ok: status === 0,
         raw: output,
         status,
@@ -162,9 +178,9 @@ export function handleExecIos(payload: ExecIosPayload, deps: HandlerDeps): Handl
         const parser = getParser(payload.command);
         if (parser) {
           try {
-            (result as any).parsed = parser(output);
+            result.parsed = parser(output);
           } catch (e) {
-            (result as any).parseError = String(e);
+            result.parseError = String(e);
           }
         }
       }
@@ -187,7 +203,7 @@ export function handleExecIos(payload: ExecIosPayload, deps: HandlerDeps): Handl
 
     dprint(`[execIos] term.enterCommand: status=${status}, output length=${output.length}`);
 
-    const result = {
+    const result: ExecIosSuccessResult = {
       ok: status === 0,
       raw: output,
       status,
@@ -197,9 +213,9 @@ export function handleExecIos(payload: ExecIosPayload, deps: HandlerDeps): Handl
       const parser = getParser(payload.command);
       if (parser) {
         try {
-          (result as any).parsed = parser(output);
+          result.parsed = parser(output);
         } catch (e) {
-          (result as any).parseError = String(e);
+          result.parseError = String(e);
         }
       }
     }

@@ -39,6 +39,8 @@ import { BridgePathLayout } from "./shared/path-layout.js";
 import { SequenceStore } from "./shared/sequence-store.js";
 import { EventLogWriter } from "./event-log-writer.js";
 import { DurableNdjsonConsumer } from "./durable-ndjson-consumer.js";
+import { SharedResultWatcher } from "./shared-result-watcher.js";
+import { BackpressureManager, BackpressureError } from "./backpressure-manager.js";
 
 // ----------------------------------------------------------------------------
 // Options
@@ -55,6 +57,10 @@ export interface FileBridgeV2Options {
   leaseIntervalMs?: number;
   /** TTL for lease in ms (default: 5000ms) */
   leaseTtlMs?: number;
+  /** Maximum pending commands before backpressure (default: 100) */
+  maxPendingCommands?: number;
+  /** Enable backpressure checking (default: true) */
+  enableBackpressure?: boolean;
 }
 
 // ----------------------------------------------------------------------------
@@ -66,9 +72,12 @@ export class FileBridgeV2 extends EventEmitter {
   private readonly seq: SequenceStore;
   private readonly eventWriter: EventLogWriter;
   private readonly consumer: DurableNdjsonConsumer;
+  private readonly resultWatcher: SharedResultWatcher;
+  private readonly backpressure: BackpressureManager;
 
   private readonly ownerId = randomUUID();
   private readonly leaseTtlMs: number;
+  private readonly enableBackpressure: boolean;
   private leaseTimer: ReturnType<typeof setInterval> | null = null;
   private running = false;
 
@@ -89,6 +98,15 @@ export class FileBridgeV2 extends EventEmitter {
     this.seq = new SequenceStore(options.root);
     this.eventWriter = new EventLogWriter(this.paths);
     this.leaseTtlMs = options.leaseTtlMs ?? 5_000;
+    this.enableBackpressure = options.enableBackpressure ?? true;
+
+    // Shared result watcher to avoid fd exhaustion
+    this.resultWatcher = new SharedResultWatcher(this.paths.resultsDir());
+    
+    // Backpressure manager
+    this.backpressure = new BackpressureManager(this.paths, {
+      maxPending: options.maxPendingCommands ?? 100,
+    });
 
     this.consumer = new DurableNdjsonConsumer(this.paths, {
       consumerId: options.consumerId ?? "cli-main",
@@ -149,6 +167,9 @@ export class FileBridgeV2 extends EventEmitter {
 
     this.consumer.stop();
     this.releaseLease();
+    
+    // Clean up shared result watcher
+    this.resultWatcher.destroy();
 
     // Reject all pending results
     for (const [, pending] of this.pendingResults) {
@@ -187,12 +208,18 @@ export class FileBridgeV2 extends EventEmitter {
   /**
    * Send a command to PT by creating an individual file in commands/.
    * Returns the command envelope with id, seq, and checksum.
+   * Throws BackpressureError if queue is full and backpressure is enabled.
    */
   sendCommand<TPayload = unknown>(
     type: string,
     payload: TPayload,
     expiresAtMs?: number,
   ): BridgeCommandEnvelope<TPayload> {
+    // Check backpressure before sending
+    if (this.enableBackpressure) {
+      this.backpressure.checkCapacity();
+    }
+
     const seq = this.seq.next();
     const id = `cmd_${String(seq).padStart(12, "0")}`;
 
@@ -224,12 +251,18 @@ export class FileBridgeV2 extends EventEmitter {
 
   /**
    * Send a command and wait for its result with exponential backoff.
+   * Uses shared result watcher to avoid file descriptor exhaustion.
    */
   async sendCommandAndWait<TPayload = unknown, TResult = unknown>(
     type: string,
     payload: TPayload,
     timeoutMs?: number,
   ): Promise<BridgeResultEnvelope<TResult>> {
+    // Wait for capacity if backpressure is enabled
+    if (this.enableBackpressure) {
+      await this.backpressure.waitForCapacity();
+    }
+
     const envelope = this.sendCommand(
       type,
       payload,
@@ -242,12 +275,12 @@ export class FileBridgeV2 extends EventEmitter {
     let pollMs = 25; // initial poll interval
 
     return new Promise((resolve, reject) => {
-      let watcher: ReturnType<typeof watch> | null = null;
       let resolved = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
 
       const cleanup = () => {
-        clearTimeout(timer);
-        watcher?.close();
+        if (timer) clearTimeout(timer);
+        this.resultWatcher.unwatch(envelope.id, checkResult);
       };
 
       const resolveOnce = (result: BridgeResultEnvelope<TResult>) => {
@@ -257,11 +290,16 @@ export class FileBridgeV2 extends EventEmitter {
         resolve(result);
       };
 
+      const rejectOnce = (error: Error) => {
+        if (resolved) return;
+        resolved = true;
+        cleanup();
+        reject(error);
+      };
+
       const checkResult = () => {
         if (Date.now() - started > timeout) {
-          cleanup();
-          resolved = true;
-          reject(new Error(`Timeout waiting for result for ${envelope.id} after ${timeout}ms`));
+          rejectOnce(new Error(`Timeout waiting for result for ${envelope.id} after ${timeout}ms`));
           return;
         }
 
@@ -282,22 +320,32 @@ export class FileBridgeV2 extends EventEmitter {
         }
       };
 
-      let timer = setTimeout(checkResult, 0);
+      // Start initial check
+      timer = setTimeout(checkResult, 0);
 
-      // Try to use fs.watch for immediate notification
-      try {
-        watcher = watch(this.paths.resultsDir(), (eventType, filename) => {
-          if (filename === `${envelope.id}.json`) {
-            checkResult();
-          }
-        });
-        watcher.on("error", () => {
-          watcher = null;
-        });
-      } catch {
-        watcher = null;
-      }
+      // Register with shared watcher for immediate notification
+      this.resultWatcher.watch(envelope.id, checkResult);
     });
+  }
+
+  /**
+   * Wait for command queue capacity.
+   * Useful for scripts that send many commands in a loop.
+   */
+  async waitForCapacity(timeoutMs?: number): Promise<void> {
+    return this.backpressure.waitForCapacity(timeoutMs);
+  }
+
+  /**
+   * Get backpressure statistics.
+   */
+  getBackpressureStats(): {
+    maxPending: number;
+    currentPending: number;
+    availableCapacity: number;
+    utilizationPercent: number;
+  } {
+    return this.backpressure.getStats();
   }
 
   // ============================================================================

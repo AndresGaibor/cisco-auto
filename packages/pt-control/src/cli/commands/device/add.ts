@@ -92,6 +92,7 @@ export default class DeviceAdd extends BaseCommand {
         }
 
         const controller = createDefaultPTController();
+        this.trackController(controller);
         const spinner = createSpinner(`Adding device ${pc.cyan(name)}...`);
 
         await controller.start();

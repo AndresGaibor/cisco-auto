@@ -55,6 +55,7 @@ export default class DeviceRemove extends BaseCommand {
         }
 
         const controller = createDefaultPTController();
+        this.trackController(controller);
         const spinner = createSpinner(`Removing device ${pc.cyan(name)}...`);
 
         await controller.start();

@@ -81,6 +81,7 @@ export abstract class BaseCommand extends Command {
   protected devDir!: string;
   protected logManager!: LogManager;
   protected logSessionId!: string;
+  private trackedControllers: Array<{ drainCommandTrace?: () => Array<{ id?: string }> }> = [];
 
   override async init(): Promise<void> {
     await super.init();
@@ -201,6 +202,36 @@ export abstract class BaseCommand extends Command {
     }
   }
 
+  protected trackController(controller: { drainCommandTrace?: () => Array<{ id?: string }> }): void {
+    if (controller && typeof controller.drainCommandTrace === 'function') {
+      this.trackedControllers.push(controller);
+    }
+  }
+
+  private drainTrackedCommandIds(): string[] {
+    if (this.trackedControllers.length === 0) {
+      return [];
+    }
+
+    const ids = new Set<string>();
+
+    for (const controller of this.trackedControllers) {
+      try {
+        const entries = controller.drainCommandTrace?.() ?? [];
+        for (const entry of entries) {
+          if (entry && typeof entry.id === 'string') {
+            ids.add(entry.id);
+          }
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    this.trackedControllers = [];
+    return Array.from(ids);
+  }
+
   protected async runLoggedCommand<T>(options: {
     action: string;
     targetDevice?: string | (() => string | undefined);
@@ -216,10 +247,13 @@ export abstract class BaseCommand extends Command {
       const targetDevice = typeof options.targetDevice === 'function'
         ? options.targetDevice()
         : options.targetDevice;
-      await this.logManager.logAction(this.logSessionId, correlationId, options.action, successOutcome, {
+      const commandIds = this.drainTrackedCommandIds();
+      const primaryCorrelationId = commandIds[0] ?? correlationId;
+      await this.logManager.logAction(this.logSessionId, primaryCorrelationId, options.action, successOutcome, {
         target_device: targetDevice,
         duration_ms: Date.now() - startedAt,
         context: options.context,
+        command_ids: commandIds.length ? commandIds : undefined,
       });
       return result;
     } catch (error) {
@@ -228,10 +262,13 @@ export abstract class BaseCommand extends Command {
         const targetDevice = typeof options.targetDevice === 'function'
           ? options.targetDevice()
           : options.targetDevice;
-        await this.logManager.logAction(this.logSessionId, correlationId, options.action, cancelledOutcome, {
+        const commandIds = this.drainTrackedCommandIds();
+        const primaryCorrelationId = commandIds[0] ?? correlationId;
+        await this.logManager.logAction(this.logSessionId, primaryCorrelationId, options.action, cancelledOutcome, {
           target_device: targetDevice,
           duration_ms: Date.now() - startedAt,
           context: options.context,
+          command_ids: commandIds.length ? commandIds : undefined,
         });
         return undefined as T;
       }
@@ -240,11 +277,14 @@ export abstract class BaseCommand extends Command {
       const targetDevice = typeof options.targetDevice === 'function'
         ? options.targetDevice()
         : options.targetDevice;
-      await this.logManager.logAction(this.logSessionId, correlationId, options.action, failureOutcome, {
+      const commandIds = this.drainTrackedCommandIds();
+      const primaryCorrelationId = commandIds[0] ?? correlationId;
+      await this.logManager.logAction(this.logSessionId, primaryCorrelationId, options.action, failureOutcome, {
         target_device: targetDevice,
         duration_ms: Date.now() - startedAt,
         error: error instanceof Error ? error.message : String(error),
         context: options.context,
+        command_ids: commandIds.length ? commandIds : undefined,
       });
       throw error;
     }

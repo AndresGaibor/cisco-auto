@@ -67,7 +67,38 @@ export interface HandlerDeps {
 export interface HandlerResult {
   ok: boolean;
   error?: string;
+  code?: HandlerErrorCode;
+  details?: unknown;
   [key: string]: unknown;
+}
+
+/** Error codes for structured error handling */
+export const HandlerErrorCode = {
+  DEVICE_NOT_FOUND: "DEVICE_NOT_FOUND",
+  DEVICE_NOT_READY: "DEVICE_NOT_READY",
+  INVALID_INPUT: "INVALID_INPUT",
+  COMMAND_FAILED: "COMMAND_FAILED",
+  SESSION_ERROR: "SESSION_ERROR",
+  INTERNAL_ERROR: "INTERNAL_ERROR",
+} as const;
+
+export type HandlerErrorCode = (typeof HandlerErrorCode)[keyof typeof HandlerErrorCode];
+
+/** Structured error interface */
+export interface HandlerError {
+  ok: false;
+  error: string;
+  code: HandlerErrorCode;
+  details?: unknown;
+}
+
+/** Helper function to create structured errors */
+export function makeHandlerError(
+  code: HandlerErrorCode,
+  error: string,
+  details?: unknown
+): HandlerError {
+  return { ok: false, error, code, details };
 }
 
 /** Resolve model name from alias or return as-is */

@@ -128,3 +128,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 // ============================================================================
 
 export { MAIN_JS_TEMPLATE, RUNTIME_JS_TEMPLATE };
+export * from "./utils/index.js";

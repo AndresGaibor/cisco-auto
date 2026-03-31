@@ -2,58 +2,78 @@
 // PT Control V2 - Runtime Watch Command
 // ============================================================================
 
-import { spawn } from 'child_process';
-import { existsSync } from 'fs';
-import { join, dirname } from 'path';
+import { RuntimeGenerator } from '@cisco-auto/pt-runtime';
+import { watch, existsSync } from 'fs';
+import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
 import pc from 'picocolors';
 import { BaseCommand } from '../../base-command.js';
-import { ValidationError } from '../../errors/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const PACKAGE_ROOT = resolve(__dirname, '..', '..', '..', '..');
+const GENERATED_DIR = join(PACKAGE_ROOT, 'generated');
+const require = createRequire(import.meta.url);
+const runtimePackagePath = dirname(require.resolve('@cisco-auto/pt-runtime/package.json'));
+const runtimeSrcDirCandidates = [
+  join(runtimePackagePath, 'src'),
+  join(runtimePackagePath, 'dist'),
+];
+const RUNTIME_WATCH_DIR = runtimeSrcDirCandidates.find((dir) => existsSync(dir)) ?? runtimePackagePath;
 
 export default class RuntimeWatch extends BaseCommand {
   static override description = 'Watch for changes and rebuild runtime automatically';
 
-  static override examples = [
-    '<%= config.bin %> runtime watch',
-  ];
+  static override examples = ['<%= config.bin %> runtime watch'];
 
   static override flags = {
     ...BaseCommand.baseFlags,
   };
 
   async run(): Promise<void> {
-    const runtimeGeneratorPath = join(__dirname, '..', '..', '..', 'runtime-generator', 'index.ts');
+    this.print(`${pc.cyan('Watching for runtime changes...')} (Press Ctrl+C to stop)\n`);
+    this.print(pc.gray(`Source directory: ${RUNTIME_WATCH_DIR}`));
 
-    if (!existsSync(runtimeGeneratorPath)) {
-      throw new ValidationError(`Runtime generator watch script not found at: ${runtimeGeneratorPath}`);
-    }
+    const generator = new RuntimeGenerator({
+      outputDir: GENERATED_DIR,
+      devDir: this.devDir,
+    });
 
-    this.print(`${pc.cyan('Watching for changes...')} (Press Ctrl+C to stop)\n`);
-
-    await this.runBunScript(runtimeGeneratorPath, 'watch');
+    await this.buildOnce(generator);
+    await this.watchLoop(generator);
   }
 
-  private runBunScript(scriptPath: string, ...args: string[]): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const proc = spawn('bun', ['run', scriptPath, ...args], {
-        stdio: 'inherit',
-        shell: false,
-      });
+  private async buildOnce(generator: RuntimeGenerator): Promise<void> {
+    try {
+      await generator.generate();
+      this.printSuccess('Runtime generated');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.printWarning(`Runtime build failed: ${message}`);
+    }
+  }
 
-      proc.on('close', (code) => {
-        if (code === 0) {
-          resolve();
-        } else {
-          reject(new Error(`Script exited with code ${code}`));
-        }
-      });
+  private async watchLoop(generator: RuntimeGenerator): Promise<void> {
+    let scheduled: NodeJS.Timeout | null = null;
 
-      proc.on('error', (err) => {
-        reject(err);
-      });
+    const schedule = () => {
+      if (scheduled) return;
+      scheduled = setTimeout(async () => {
+        scheduled = null;
+        await this.buildOnce(generator);
+      }, 250);
+    };
+
+    watch(RUNTIME_WATCH_DIR, { recursive: true }, (_event, filename) => {
+      if (filename && !filename.endsWith('.ts') && !filename.endsWith('.js')) {
+        return;
+      }
+      schedule();
+    });
+
+    await new Promise(() => {
+      // Keep process alive until Ctrl+C
     });
   }
 }

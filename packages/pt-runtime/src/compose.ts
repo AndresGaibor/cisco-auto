@@ -199,12 +199,39 @@ ${generateParserCode()}
 // ============================================================================
 
 var IOS_SESSIONS = {};
+var SESSION_DIRTY = false; // Track if sessions need saving
+var LAST_CLEANUP_TIME = 0;
+var CLEANUP_INTERVAL_MS = 30000; // Every 30 seconds
+var SESSION_ACCESS_COUNT = 0;
 var SESSION_MAX_AGE_MS = 300000; // 5 minutes
 var MAX_SESSIONS = 200; // Increased from 50 to support larger labs
 var SESSIONS_FILE = DEV_DIR + "/sessions/ios-sessions.json";
+var HEARTBEAT_FILE = DEV_DIR + "/sessions/heartbeat.json";
+
+function isSessionStale() {
+  try {
+    if (!fm.fileExists(HEARTBEAT_FILE)) {
+      return true; // No heartbeat = definitely stale
+    }
+    var content = fm.getFileContents(HEARTBEAT_FILE);
+    var heartbeat = JSON.parse(content);
+    var age = Date.now() - heartbeat.ts;
+    return age > 15000; // Stale if no heartbeat for > 15 seconds
+  } catch (e) {
+    dprint("[Sessions] Heartbeat check failed, assuming stale: " + e);
+    return true;
+  }
+}
 
 function loadSessionsFromDisk() {
   try {
+    // Check if sessions are stale (PT reopened after crash)
+    if (isSessionStale()) {
+      dprint("[Sessions] Sessions are stale (PT was restarted), clearing ios-sessions.json");
+      fm.writePlainTextToFile(SESSIONS_FILE, JSON.stringify({}));
+      return;
+    }
+
     if (fm.fileExists(SESSIONS_FILE)) {
       var content = fm.getFileContents(SESSIONS_FILE);
       var loaded = JSON.parse(content);
@@ -226,10 +253,12 @@ function loadSessionsFromDisk() {
 }
 
 function saveSessionsToDisk() {
+  if (!SESSION_DIRTY) return;
   try {
     var tempFile = SESSIONS_FILE + ".tmp";
     fm.writeFile(tempFile, JSON.stringify(IOS_SESSIONS, null, 2));
     fm.renameFile(tempFile, SESSIONS_FILE);
+    SESSION_DIRTY = false;
   } catch (e) {
     dprint("[Sessions] Failed to save to disk: " + e);
   }
@@ -237,6 +266,15 @@ function saveSessionsToDisk() {
 
 function cleanupStaleSessions() {
   var now = Date.now();
+  var timeSinceCleanup = now - LAST_CLEANUP_TIME;
+  var shouldCleanupByTime = timeSinceCleanup >= CLEANUP_INTERVAL_MS;
+  var shouldCleanupByCount = SESSION_ACCESS_COUNT >= 10;
+
+  if (!shouldCleanupByTime && !shouldCleanupByCount) return;
+
+  LAST_CLEANUP_TIME = now;
+  SESSION_ACCESS_COUNT = 0;
+
   var keys = Object.keys(IOS_SESSIONS);
   var activeKeys = [];
 
@@ -248,11 +286,13 @@ function cleanupStaleSessions() {
       var age = now - session.lastUsed;
       if (age > SESSION_MAX_AGE_MS) {
         delete IOS_SESSIONS[key];
+        SESSION_DIRTY = true;
       } else {
         activeKeys.push(key);
       }
     } else {
       delete IOS_SESSIONS[key];
+      SESSION_DIRTY = true;
     }
   }
 
@@ -268,10 +308,18 @@ function cleanupStaleSessions() {
     for (var j = 0; j < toRemove; j++) {
       dprint("[Sessions] Evicting session for " + activeKeys[j] + " (LRU)");
       delete IOS_SESSIONS[activeKeys[j]];
+      SESSION_DIRTY = true;
     }
   }
 
-  saveSessionsToDisk();
+  if (SESSION_DIRTY) {
+    try {
+      var tempFile = SESSIONS_FILE + ".tmp";
+      fm.writeFile(tempFile, JSON.stringify(IOS_SESSIONS, null, 2));
+      fm.renameFile(tempFile, SESSIONS_FILE);
+      SESSION_DIRTY = false;
+    } catch (e) { dprint("[Sessions] Save failed: " + e); }
+  }
 }
 
 function getOrCreateSession(deviceName, term) {
@@ -280,6 +328,7 @@ function getOrCreateSession(deviceName, term) {
     loadSessionsFromDisk();
   }
 
+  SESSION_ACCESS_COUNT++;
   cleanupStaleSessions();
 
   if (!IOS_SESSIONS[deviceName]) {
@@ -291,10 +340,12 @@ function getOrCreateSession(deviceName, term) {
       lastUsed: Date.now(),
       createdAt: Date.now()
     };
-    saveSessionsToDisk();
+    SESSION_DIRTY = true;
+    saveSessionsToDisk(); // Only save new sessions immediately
+  } else {
+    IOS_SESSIONS[deviceName].lastUsed = Date.now();
   }
 
-  IOS_SESSIONS[deviceName].lastUsed = Date.now();
   return IOS_SESSIONS[deviceName];
 }
 

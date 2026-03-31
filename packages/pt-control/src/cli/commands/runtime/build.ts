@@ -3,16 +3,15 @@
 // ============================================================================
 
 import { Flags } from '@oclif/core';
-import { spawn } from 'child_process';
-import { existsSync } from 'fs';
-import { join, dirname } from 'path';
+import { RuntimeGenerator } from '@cisco-auto/pt-runtime';
+import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
-import pc from 'picocolors';
 import { BaseCommand, createSpinner } from '../../base-command.js';
-import { ValidationError } from '../../errors/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const PACKAGE_ROOT = resolve(__dirname, '..', '..', '..', '..');
+const GENERATED_DIR = join(PACKAGE_ROOT, 'generated');
 
 export default class RuntimeBuild extends BaseCommand {
   static override description = 'Build the Packet Tracer runtime files';
@@ -37,16 +36,16 @@ export default class RuntimeBuild extends BaseCommand {
     const spinner = createSpinner('Building runtime files...');
     spinner.start();
 
-    const runtimeGeneratorPath = join(__dirname, '..', '..', '..', 'runtime-generator', 'index.ts');
-
-    if (!existsSync(runtimeGeneratorPath)) {
-      spinner.fail('Runtime generator not found');
-      throw new ValidationError(`Runtime generator build script not found at: ${runtimeGeneratorPath}`);
-    }
-
     try {
-      await this.runBunScript(runtimeGeneratorPath, 'build');
+      const generator = this.createGenerator();
+      await generator.generate();
       spinner.succeed('Runtime build complete');
+
+      if (!this.globalFlags.quiet) {
+        this.print(`\nArtifacts written to ${GENERATED_DIR}:`);
+        this.print('  - main.js');
+        this.print('  - runtime.js');
+      }
 
       if (deploy) {
         const { default: RuntimeDeploy } = await import('./deploy.js');
@@ -62,24 +61,10 @@ export default class RuntimeBuild extends BaseCommand {
     }
   }
 
-  private runBunScript(scriptPath: string, ...args: string[]): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const proc = spawn('bun', ['run', scriptPath, ...args], {
-        stdio: this.globalFlags.quiet ? 'ignore' : 'inherit',
-        shell: false,
-      });
-
-      proc.on('close', (code) => {
-        if (code === 0) {
-          resolve();
-        } else {
-          reject(new Error(`Script exited with code ${code}`));
-        }
-      });
-
-      proc.on('error', (err) => {
-        reject(err);
-      });
+  private createGenerator(): RuntimeGenerator {
+    return new RuntimeGenerator({
+      outputDir: GENERATED_DIR,
+      devDir: this.devDir,
     });
   }
 }

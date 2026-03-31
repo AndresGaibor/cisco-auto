@@ -5,8 +5,8 @@
 
 import * as yaml from 'js-yaml';
 import { readFileSync } from 'fs';
-import type { Lab, Device, Connection } from '../types/index.ts';
-import { zodValidateLab, validateLabSafe } from '../types/index.ts';
+import type { Lab } from '@cisco-auto/types';
+import { zodValidateLab, validateLabSafe } from '@cisco-auto/types';
 
 export interface ParsedLab {
   lab: Lab;

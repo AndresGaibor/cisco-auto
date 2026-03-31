@@ -18,7 +18,7 @@ import type {
 } from './types';
 import { DeployErrorCode } from './types';
 import { SSHConnector } from '../connector/ssh-connector';
-import type { Device } from '../types';
+import type { Device } from '@cisco-auto/types';
 
 /**
  * Convierte DeviceSpec a Device para compatibilidad con SSHConnector

@@ -1,5 +1,24 @@
 import { DEFAULT_CONFIG, type CiscoAutoConfig, type ResolveOptions, type ResolvedConfig } from './types.ts';
 import * as loader from './loader.ts';
+import { z } from 'zod';
+
+const CiscoAutoConfigSchema = z.object({
+  defaultRouter: z.string().optional(),
+  defaultSwitch: z.string().optional(),
+  defaultPc: z.string().optional(),
+  defaultVlan: z.number().int().min(1).max(4094).optional(),
+  defaultSubnet: z.string().optional(),
+  outputDir: z.string().optional(),
+  logLevel: z.enum(['debug', 'info', 'warn', 'error']).optional(),
+  format: z.enum(['json', 'yaml', 'table']).optional(),
+});
+
+export class ConfigValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConfigValidationError';
+  }
+}
 
 export class ConfigResolver {
   private config: Partial<CiscoAutoConfig>;
@@ -57,7 +76,21 @@ export class ConfigResolver {
   }
 
   resolve(): CiscoAutoConfig {
-    return { ...DEFAULT_CONFIG, ...this.config };
+    const merged = { ...DEFAULT_CONFIG, ...this.config };
+    const result = CiscoAutoConfigSchema.safeParse(merged);
+
+    if (!result.success) {
+      const issues = result.error.issues
+        .map((issue) => {
+          const field = issue.path.join('.') || '<root>';
+          return `  ${field}: ${issue.message}`;
+        })
+        .join('\n');
+
+      throw new ConfigValidationError(`Invalid configuration:\n${issues}`);
+    }
+
+    return result.data as CiscoAutoConfig;
   }
 
   getResolved(key: string): ResolvedConfig | undefined {

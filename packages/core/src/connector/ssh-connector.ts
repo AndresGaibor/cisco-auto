@@ -5,7 +5,7 @@
 
 import { NodeSSH } from 'node-ssh';
 import type { Config as SSHConfig, SSHExecCommandOptions, SSHExecCommandResponse } from 'node-ssh';
-import type { Device } from '../types/index.ts';
+import type { Device } from '@cisco-auto/types';
 
 export interface ConnectionResult {
   success: boolean;
@@ -13,18 +13,66 @@ export interface ConnectionResult {
   error?: string;
 }
 
+export interface SSHConnectorOptions {
+  maxRetries?: number;
+  retryDelayMs?: number;
+  commandTimeoutMs?: number;
+  connectionTimeoutMs?: number;
+}
+
+// Custom error classes
+export class SSHConnectionError extends Error {
+  constructor(
+    message: string,
+    public readonly host: string,
+    public readonly attempt: number
+  ) {
+    super(message);
+    this.name = 'SSHConnectionError';
+  }
+}
+
+export class SSHCommandError extends Error {
+  constructor(
+    message: string,
+    public readonly command: string,
+    public readonly output: string
+  ) {
+    super(message);
+    this.name = 'SSHCommandError';
+  }
+}
+
+export class SSHTimeoutError extends Error {
+  constructor(
+    message: string,
+    public readonly command: string,
+    public readonly timeoutMs: number
+  ) {
+    super(message);
+    this.name = 'SSHTimeoutError';
+  }
+}
+
 export class SSHConnector {
   private ssh: NodeSSH;
   private device: Device;
   private isConnected: boolean = false;
+  private options: Required<SSHConnectorOptions>;
 
-  constructor(device: Device) {
+  constructor(device: Device, options?: SSHConnectorOptions) {
     this.ssh = new NodeSSH();
     this.device = device;
+    this.options = {
+      maxRetries: options?.maxRetries ?? 3,
+      retryDelayMs: options?.retryDelayMs ?? 2000,
+      commandTimeoutMs: options?.commandTimeoutMs ?? 30_000,
+      connectionTimeoutMs: options?.connectionTimeoutMs ?? 10_000,
+    };
   }
 
   /**
-   * Conecta al dispositivo via SSH
+   * Conecta al dispositivo via SSH con retry logic
    */
   public async connect(): Promise<void> {
     if (!this.device.management?.ip) {
@@ -35,41 +83,59 @@ export class SSHConnector {
       host: this.device.management.ip,
       username: this.device.credentials?.username || 'admin',
       port: this.device.ssh?.port || 22,
+      readyTimeout: this.options.connectionTimeoutMs,
     };
 
     // Obtener password (soporta variables de entorno)
-    const password = this.device.credentials?.password || '';
-    if (password.startsWith('${') && password.endsWith('}')) {
-      const envVar = password.slice(2, -1);
-      config.password = process.env[envVar];
-      if (!config.password) {
-        throw new Error(`Variable de entorno ${envVar} no definida`);
-      }
-    } else {
-      config.password = password;
-    }
+    config.password = this.resolveEnvVar(this.device.credentials?.password || '');
 
     // Intentar conexión con retry
-    const maxRetries = 3;
-    let lastError: Error | undefined;
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    for (let attempt = 1; attempt <= this.options.maxRetries; attempt++) {
       try {
-        console.log(`🔌 Conectando a ${this.device.name} (${config.host}) - Intento ${attempt}/${maxRetries}...`);
+        console.log(`🔌 Conectando a ${this.device.name} (${config.host}) - Intento ${attempt}/${this.options.maxRetries}...`);
         await this.ssh.connect(config);
         this.isConnected = true;
         console.log(`✅ Conectado a ${this.device.name}`);
         return;
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-        if (attempt < maxRetries) {
-          console.log(`⏳ Reintentando en 2 segundos...`);
-          await new Promise(resolve => setTimeout(resolve, 2000));
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        
+        if (attempt === this.options.maxRetries) {
+          throw new SSHConnectionError(
+            `Failed to connect to ${this.device.name} after ${this.options.maxRetries} attempts: ${message}`,
+            config.host,
+            attempt
+          );
         }
+
+        console.log(`⏳ Reintentando en ${this.options.retryDelayMs}ms...`);
+        await this.delay(this.options.retryDelayMs);
       }
     }
+  }
 
-    throw new Error(`No se pudo conectar a ${this.device.name}: ${lastError?.message}`);
+  /**
+   * Resuelve variables de entorno en formato ${VAR_NAME}
+   */
+  private resolveEnvVar(value: string): string {
+    if (!value) return value;
+    
+    return value.replace(/\$\{(\w+)\}/g, (_, varName) => {
+      const envValue = process.env[varName];
+      if (envValue === undefined) {
+        throw new Error(
+          `Environment variable ${varName} not set (referenced in SSH config for ${this.device.name})`
+        );
+      }
+      return envValue;
+    });
+  }
+
+  /**
+   * Helper para delay con Promise
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
@@ -84,43 +150,61 @@ export class SSHConnector {
   }
 
   /**
-   * Ejecuta múltiples comandos (configuración)
+   * Ejecuta múltiples comandos (configuración) con cleanup garantizado
    */
-  public async execCommands(commands: string[], timeout: number = 30000): Promise<ConnectionResult> {
+  public async execCommands(commands: string[], timeout?: number): Promise<ConnectionResult> {
     if (!this.isConnected) {
       return { success: false, error: 'No hay conexión SSH activa' };
     }
 
+    const actualTimeout = timeout ?? this.options.commandTimeoutMs;
+
     try {
       // Entrar en modo configuración
-      const configCommands = ['configure terminal', ...commands, 'end'];
-      const fullCommand = configCommands.join('\n');
+      await this.execCommand('configure terminal');
 
-      const result = await this.ssh.execCommand(fullCommand, {
-        execOptions: { timeout },
-        onStdout: (chunk) => {
-          const output = chunk.toString('utf8');
-          if (output.includes('%')) {
-            console.log(`⚠️  ${this.device.name}: ${output.trim()}`);
+      try {
+        // Ejecutar comandos
+        const results: string[] = [];
+        for (const command of commands) {
+          const result = await this.ssh.execCommand(command, {
+            execOptions: { timeout: actualTimeout },
+          });
+
+          if (result.code !== 0 || result.stderr.includes('% Invalid input')) {
+            throw new SSHCommandError(
+              `IOS rejected command: ${command}`,
+              command,
+              result.stderr || result.stdout
+            );
           }
-        },
-        onStderr: (chunk) => {
-          console.error(`❌ ${this.device.name} (stderr): ${chunk.toString('utf8').trim()}`);
-        }
-      });
 
-      if (result.code !== 0) {
+          if (result.stdout.includes('%')) {
+            console.log(`⚠️  ${this.device.name}: ${result.stdout.trim()}`);
+          }
+
+          results.push(result.stdout);
+        }
+
+        return {
+          success: true,
+          output: results.join('\n')
+        };
+      } finally {
+        // SIEMPRE salir de config mode, incluso si hubo error
+        try {
+          await this.ssh.execCommand('end');
+        } catch {
+          // Best effort — si "end" falla, no ocultar el error original
+        }
+      }
+    } catch (error) {
+      if (error instanceof SSHCommandError) {
         return {
           success: false,
-          error: result.stderr || `Código de salida: ${result.code}`
+          error: error.message
         };
       }
-
-      return {
-        success: true,
-        output: result.stdout
-      };
-    } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error)
@@ -210,7 +294,11 @@ export class SSHConnector {
    */
   public async disconnect(): Promise<void> {
     if (this.isConnected) {
-      this.ssh.dispose();
+      try {
+        this.ssh.dispose();
+      } catch {
+        // Best effort cleanup
+      }
       this.isConnected = false;
       console.log(`🔌 Desconectado de ${this.device.name}`);
     }
@@ -221,6 +309,25 @@ export class SSHConnector {
    */
   public isConnectedToDevice(): boolean {
     return this.isConnected;
+  }
+
+  /**
+   * Ejecuta una función con la conexión SSH, garantizando cleanup
+   * Pattern: "using" / "try-with-resources"
+   */
+  static async withConnection<T>(
+    device: Device,
+    fn: (connector: SSHConnector) => Promise<T>,
+    options?: SSHConnectorOptions
+  ): Promise<T> {
+    const connector = new SSHConnector(device, options);
+    await connector.connect();
+
+    try {
+      return await fn(connector);
+    } finally {
+      await connector.disconnect();
+    }
   }
 }
 

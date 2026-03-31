@@ -39,6 +39,7 @@ export interface LogEntry {
   is_destructive?: boolean;
 
   confirmation_status?: 'cancelled' | 'confirmed' | 'timeout' | 'not_required';
+  command_ids?: string[];
 }
 
 /**

@@ -2,10 +2,11 @@
 // PTController - High-level API for controlling Packet Tracer
 // ============================================================================
 
-import { FileBridgeV2 } from "../infrastructure/pt/file-bridge-v2.js";
+import { FileBridgeV2 } from "@cisco-auto/file-bridge";
 import { FileBridgeV2Adapter } from "../infrastructure/pt/file-bridge-v2-adapter.js";
 import { TopologyCache } from "../infrastructure/pt/topology-cache.js";
 import type { FileBridgePort } from "../application/ports/file-bridge.port.js";
+import { TraceableBridgePort, type CommandTraceEntry } from "./traceable-bridge.js";
 import { topologySnapshotToNetworkTwin } from "../vdom/twin-adapter.js";
 import { homedir } from "node:os";
 import type {
@@ -34,7 +35,7 @@ import { defaultRules } from "../validation/rules/index.js";
 import { normalPolicy } from "../validation/policies.js";
 
 // Re-export FileBridgeV2 for external use
-export { FileBridgeV2 } from "../infrastructure/pt/file-bridge-v2.js";
+export { FileBridgeV2 } from "@cisco-auto/file-bridge";
 
 // ============================================================================
 // PTController - Thin facade delegating to services
@@ -52,17 +53,24 @@ export class PTController {
   private readonly deviceService: DeviceService;
   private readonly iosService: IosService;
   private readonly canvasService: CanvasService;
+  private readonly commandTrace: CommandTraceEntry[] = [];
   private _snapshot: TopologySnapshot | null = null;
   private _twin: NetworkTwin | null = null;
 
   constructor(config: PTControllerConfig);
   constructor(bridge: FileBridgePort);
   constructor(configOrBridge: PTControllerConfig | FileBridgePort) {
+    const recordCommand = (entry: CommandTraceEntry) => {
+      this.commandTrace.push(entry);
+    };
+
     if ("devDir" in configOrBridge) {
       const config = configOrBridge as PTControllerConfig;
-      this.bridge = new FileBridgeV2Adapter(new FileBridgeV2({ root: config.devDir }));
+      const baseBridge = new FileBridgeV2Adapter(new FileBridgeV2({ root: config.devDir }));
+      this.bridge = new TraceableBridgePort(baseBridge, recordCommand);
     } else {
-      this.bridge = configOrBridge as FileBridgePort;
+      const externalBridge = configOrBridge as FileBridgePort;
+      this.bridge = new TraceableBridgePort(externalBridge, recordCommand);
     }
 
     this.topologyCache = new TopologyCache(this.bridge);
@@ -106,6 +114,10 @@ export class PTController {
 
   getTopologyCache(): TopologyCache {
     return this.topologyCache;
+  }
+
+  drainCommandTrace(): CommandTraceEntry[] {
+    return this.commandTrace.splice(0, this.commandTrace.length);
   }
 
   // ============================================================================

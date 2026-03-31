@@ -3,6 +3,7 @@ import { BaseGenerator } from './base-generator.js';
 import { VlanGenerator } from './vlan-generator.js';
 import { RoutingGenerator } from './routing-generator.js';
 import { SecurityGenerator } from './security-generator.js';
+import { validateGeneratedConfig } from './output-validator.js';
 
 export interface GeneratedConfig {
   hostname: string;
@@ -75,6 +76,15 @@ export class SectionOrderConfig {
         commands.push(`! --- ${name.toUpperCase()} (unlisted) ---`);
         commands.push(...sectionCommands);
         commands.push('');
+      }
+    }
+
+    // Validación ligera del output (no lanza, solo añade comentarios)
+    const validation = validateGeneratedConfig(commands);
+    if (!validation.valid) {
+      commands.push('! CONFIG VALIDATION ERRORS:');
+      for (const err of validation.errors) {
+        commands.push(`! [${err.code}] line ${err.line}: ${err.message}`);
       }
     }
 

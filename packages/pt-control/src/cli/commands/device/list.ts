@@ -36,6 +36,7 @@ export default class DeviceList extends BaseCommand {
       },
       execute: async () => {
         const controller = createDefaultPTController();
+        this.trackController(controller);
 
         await controller.start();
 

@@ -36,41 +36,59 @@ const allDevices: DeviceCatalogEntry[] = [
 // CATALOG SERVICE
 // =============================================================================
 
+export interface DeviceCatalogConfig {
+  extraDevices?: DeviceCatalogEntry[];
+  skipDefaults?: boolean;
+}
+
 export class DeviceCatalog {
   private devices: Map<string, DeviceCatalogEntry>;
   private byType: Map<DeviceType, DeviceCatalogEntry[]>;
   private byFamily: Map<DeviceFamily, DeviceCatalogEntry[]>;
   private byVendor: Map<string, DeviceCatalogEntry[]>;
   
-  constructor() {
-    // Indexar dispositivos
+  constructor(config?: DeviceCatalogConfig) {
     this.devices = new Map();
     this.byType = new Map();
     this.byFamily = new Map();
     this.byVendor = new Map();
     
-    for (const device of allDevices) {
-      // Por ID
-      this.devices.set(device.id, device);
-      
-      // Por tipo
-      if (!this.byType.has(device.type)) {
-        this.byType.set(device.type, []);
+    if (!config?.skipDefaults) {
+      for (const device of allDevices) {
+        this.register(device);
       }
-      this.byType.get(device.type)!.push(device);
-      
-      // Por familia
-      if (!this.byFamily.has(device.deviceFamily)) {
-        this.byFamily.set(device.deviceFamily, []);
-      }
-      this.byFamily.get(device.deviceFamily)!.push(device);
-      
-      // Por vendor
-      if (!this.byVendor.has(device.vendor)) {
-        this.byVendor.set(device.vendor, []);
-      }
-      this.byVendor.get(device.vendor)!.push(device);
     }
+
+    if (config?.extraDevices) {
+      for (const device of config.extraDevices) {
+        this.register(device);
+      }
+    }
+  }
+
+  /** Registra un dispositivo en el catálogo en todos los índices */
+  register(device: DeviceCatalogEntry): void {
+    // Por ID
+    this.devices.set(device.id, device);
+    
+    // Por tipo
+    if (!this.byType.has(device.type)) {
+      this.byType.set(device.type, []);
+    }
+    this.byType.get(device.type)!.push(device);
+    
+    // Por familia
+    if (!this.byFamily.has(device.deviceFamily)) {
+      this.byFamily.set(device.deviceFamily, []);
+    }
+    this.byFamily.get(device.deviceFamily)!.push(device);
+    
+    // Por vendor
+    const vendorKey = device.vendor.toLowerCase();
+    if (!this.byVendor.has(vendorKey)) {
+      this.byVendor.set(vendorKey, []);
+    }
+    this.byVendor.get(vendorKey)!.push(device);
   }
   
   /**
@@ -115,6 +133,15 @@ export class DeviceCatalog {
    */
   getByVendor(vendor: string): DeviceCatalogEntry[] {
     return this.byVendor.get(vendor.toLowerCase()) || [];
+  }
+
+  /**
+   * Permite inyectar dispositivos adicionales en runtime.
+   */
+  addDevices(devices: DeviceCatalogEntry[]): void {
+    for (const device of devices) {
+      this.register(device);
+    }
   }
   
   /**
@@ -384,6 +411,19 @@ export class DeviceCatalog {
 // SINGLETON INSTANCE
 // =============================================================================
 
-export const deviceCatalog = new DeviceCatalog();
+let defaultCatalog: DeviceCatalog | null = null;
+
+export function getDefaultCatalog(): DeviceCatalog {
+  if (!defaultCatalog) {
+    defaultCatalog = new DeviceCatalog();
+  }
+  return defaultCatalog;
+}
+
+export function resetDefaultCatalog(): void {
+  defaultCatalog = null;
+}
+
+export const deviceCatalog = getDefaultCatalog();
 
 export default deviceCatalog;

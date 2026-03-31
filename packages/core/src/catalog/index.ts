@@ -15,7 +15,7 @@ export { wirelessCatalog, securityCatalog, otherDeviceCatalog } from './wireless
 export { moduleCatalog, getModuleByCode, getModulesBySlotType, getModuleTotalPorts } from './modules';
 
 // Servicio principal
-export { DeviceCatalog, deviceCatalog } from './service';
+export { DeviceCatalog, deviceCatalog, getDefaultCatalog, resetDefaultCatalog } from './service';
 
 // Default export
 export { deviceCatalog as default } from './service';

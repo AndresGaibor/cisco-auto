@@ -17,6 +17,8 @@
     "runtime:deploy": "bun run scripts/build.ts"
   },
   "dependencies": {
+    "@cisco-auto/file-bridge": "workspace:*",
+    "@cisco-auto/pt-runtime": "workspace:*",
     "@cisco-auto/types": "workspace:*",
     "@inquirer/prompts": "^8.3.2",
     "cli-table3": "^0.6.5",

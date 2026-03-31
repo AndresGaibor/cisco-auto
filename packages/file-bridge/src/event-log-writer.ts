@@ -30,6 +30,7 @@ export class EventLogWriter {
   private readonly currentFile: string;
   private readonly logsDir: string;
   private lastSeqWritten = 0;
+  private rotationCounter = 0;  // Ensure unique filenames
 
   constructor(
     private readonly paths: BridgePathLayout,
@@ -49,11 +50,16 @@ export class EventLogWriter {
    * If the file exceeds rotateAtBytes, rotation happens automatically.
    */
   append(event: BridgeEvent): void {
+    // Check rotation BEFORE updating sequence to avoid capturing seq without writing event
+    this.rotateIfNeeded();
+    
+    // Write the event
+    appendLine(this.currentFile, JSON.stringify(event));
+    
+    // Update sequence counter AFTER successful write
     if (event.seq !== undefined && event.seq > this.lastSeqWritten) {
       this.lastSeqWritten = event.seq;
     }
-    this.rotateIfNeeded();
-    appendLine(this.currentFile, JSON.stringify(event));
   }
 
   /**
@@ -65,7 +71,7 @@ export class EventLogWriter {
 
   /**
    * Check if rotation is needed and perform it atomically.
-   * Creates the new file BEFORE renaming, eliminating the ENOENT window.
+   * Captures metadata BEFORE rename to avoid data loss window.
    * Updates the rotation manifest so consumers can recover rotated files.
    */
   private rotateIfNeeded(): void {
@@ -79,26 +85,28 @@ export class EventLogWriter {
     if (size < this.rotateAtBytes) return;
 
     const timestamp = Date.now();
-    const rotated = join(this.logsDir, `events.${timestamp}.ndjson`);
+    const counter = this.rotationCounter++;
+    const rotated = join(this.logsDir, `events.${timestamp}-${counter}.ndjson`);
 
-    // Step 1: Create the new empty current file BEFORE renaming the old one.
-    // This eliminates the ENOENT window where events.current.ndjson doesn't exist.
-    ensureFile(this.currentFile, "");
-
-    // Step 2: Capture metadata before rename (size may change during rename)
+    // Step 1: Capture metadata BEFORE moving the file
     const sizeAtRotation = size;
     const seqAtRotation = this.lastSeqWritten;
 
-    // Step 3: Rename current → rotated
-    renameSync(this.currentFile, rotated);
+    // Step 2: Atomic rename — moves the complete file with all data
+    // After this, the current file doesn't exist
+    // The next appendLine() will create it automatically
+    try {
+      renameSync(this.currentFile, rotated);
+    } catch {
+      // If rename fails, keep current file intact — no data loss
+      return;
+    }
 
-    // Step 4: Truncate the new current file (already exists from step 1)
-    // We use atomicWriteFile to ensure a clean, empty file
-    atomicWriteFile(this.currentFile, "");
-
-    // Step 5: Update the rotation manifest
+    // Step 3: Update the rotation manifest
+    // Don't create the new file here - let the next append do it
+    // This avoids race conditions with concurrent appends
     this.appendToManifest({
-      file: `events.${timestamp}.ndjson`,
+      file: `events.${timestamp}-${counter}.ndjson`,
       rotatedAt: timestamp,
       previousFile: "events.current.ndjson",
       bytesSizeAtRotation: sizeAtRotation,

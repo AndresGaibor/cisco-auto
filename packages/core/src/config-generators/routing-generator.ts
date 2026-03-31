@@ -95,8 +95,8 @@ export class RoutingGenerator {
       commands.push(` router-id ${ospf.routerId}`);
     }
 
-    // Canonical OSPF: networks are grouped by area
-    for (const area of ospf.areas) {
+    // Canonical OSPF: networks are grouped by area (optional)
+    for (const area of ospf.areas || []) {
       for (const network of area.networks) {
         // Networks in canonical are simple network addresses, need to convert to wildcard
         if (network.includes('/')) {

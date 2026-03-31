@@ -9,10 +9,10 @@
  */
 
 import { $ } from "bun";
-import { resolve, dirname } from "node:path";
+import { resolve } from "node:path";
 import { existsSync, mkdirSync, writeFileSync, copyFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { RuntimeGenerator } from "../src/runtime-generator/index.js";
+import { RuntimeGenerator } from "@cisco-auto/pt-runtime";
 
 // ============================================================================
 // Configuration
