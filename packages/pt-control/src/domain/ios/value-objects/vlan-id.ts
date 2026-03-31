@@ -21,6 +21,18 @@ export class VlanId {
     this.value = value;
   }
 
+  static fromJSON(value: number): VlanId {
+    return new VlanId(value);
+  }
+
+  toJSON(): number {
+    return this.value;
+  }
+
+  get raw(): number {
+    return this.value;
+  }
+
   /**
    * Check if this is a reserved VLAN (VLAN 1 or VLAN 1002-1005)
    */

@@ -2,6 +2,7 @@
 // CLI Session - Stateful IOS command execution
 // ============================================================================
 
+import { Buffer } from "node:buffer";
 import {
   inferPromptState,
   type IosMode,
@@ -30,6 +31,10 @@ export interface CliSessionOptions {
   enableSilentTimeout?: boolean;
   /** Password for enable (if required) */
   enablePassword?: string;
+  /** Max in-memory history entries (default: 500) */
+  maxHistorySize?: number;
+  /** Max bytes of paging output to accumulate before truncating (default: 1MB) */
+  maxPagingBufferBytes?: number;
 }
 
 export interface CommandHistoryEntry {
@@ -42,6 +47,14 @@ export interface CliSessionState extends PromptState {
   paging: boolean;
   awaitingConfirm: boolean;
 }
+
+export interface CliSessionMemoryStats {
+  historyEntries: number;
+  estimatedBytes: number;
+}
+
+const DEFAULT_MAX_HISTORY = 500;
+const DEFAULT_MAX_PAGING_BUFFER = 1024 * 1024; // 1MB
 
 export class CliSession {
   private state: CliSessionState;
@@ -56,6 +69,8 @@ export class CliSession {
       commandTimeout: options.commandTimeout ?? 30000,
       enableSilentTimeout: options.enableSilentTimeout ?? true,
       enablePassword: options.enablePassword ?? "",
+      maxHistorySize: options.maxHistorySize ?? DEFAULT_MAX_HISTORY,
+      maxPagingBufferBytes: options.maxPagingBufferBytes ?? DEFAULT_MAX_PAGING_BUFFER,
     };
     this.state = {
       mode: "user-exec",
@@ -72,6 +87,20 @@ export class CliSession {
 
   getHistory(): CommandHistoryEntry[] {
     return [...this.history];
+  }
+
+  private addToHistory(entry: CommandHistoryEntry): void {
+    this.history.push(entry);
+
+    const maxSize = this.options.maxHistorySize;
+    if (maxSize <= 0) {
+      return;
+    }
+
+    if (this.history.length > maxSize) {
+      const removeCount = Math.max(1, Math.floor(maxSize * 0.2));
+      this.history.splice(0, removeCount);
+    }
   }
 
   /**
@@ -128,7 +157,7 @@ export class CliSession {
       this.state.deviceName = promptState.deviceName;
     }
 
-    this.history.push({
+    this.addToHistory({
       command,
       result,
       timestamp: Date.now(),
@@ -153,6 +182,9 @@ export class CliSession {
    */
   private async accumulatePagingOutput(initialResult: CommandResult): Promise<void> {
     let accumulatedOutput = initialResult.raw;
+    let totalBytes = Buffer.byteLength(accumulatedOutput, "utf8");
+    const maxBytes = this.options.maxPagingBufferBytes;
+    let truncated = false;
 
     while (this.state.paging) {
       if (this.checkSilenceTimeout()) {
@@ -161,8 +193,21 @@ export class CliSession {
         break;
       }
 
-      const [status, raw] = await this.handler.enterCommand(" ");
+      const [, raw] = await this.handler.enterCommand(" ");
       accumulatedOutput += raw;
+      totalBytes += Buffer.byteLength(raw, "utf8");
+
+      if (maxBytes > 0 && totalBytes > maxBytes) {
+        truncated = true;
+        accumulatedOutput += `\n... [OUTPUT TRUNCATED: exceeded ${(maxBytes / 1024).toFixed(0)}KB limit] ...\n`;
+        try {
+          await this.handler.enterCommand("q");
+        } catch {
+          // ignore attempts to exit paging
+        }
+        this.state.paging = false;
+        break;
+      }
 
       const promptState = inferPromptState(raw);
 
@@ -175,6 +220,9 @@ export class CliSession {
     }
 
     initialResult.raw = accumulatedOutput;
+    if (truncated) {
+      initialResult.truncated = true;
+    }
   }
 
   /**
@@ -273,6 +321,23 @@ export class CliSession {
     return this.executeAndWait(command);
   }
 
+  clearHistory(): void {
+    this.history = [];
+  }
+
+  getMemoryStats(): CliSessionMemoryStats {
+    const estimatedBytes = this.history.reduce((total, entry) => {
+      return total
+        + Buffer.byteLength(entry.command, "utf8")
+        + Buffer.byteLength(entry.result?.raw ?? "", "utf8");
+    }, 0);
+
+    return {
+      historyEntries: this.history.length,
+      estimatedBytes,
+    };
+  }
+
   reset(): void {
     this.state = {
       mode: "user-exec",
@@ -280,7 +345,7 @@ export class CliSession {
       paging: false,
       awaitingConfirm: false,
     };
-    this.history = [];
+    this.clearHistory();
     this.lastCommandTime = Date.now();
   }
 }

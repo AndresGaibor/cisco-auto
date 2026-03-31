@@ -53,6 +53,7 @@ export class PTController {
   private readonly deviceService: DeviceService;
   private readonly iosService: IosService;
   private readonly canvasService: CanvasService;
+  private readonly validationEngine: ValidationEngine;
   private readonly commandTrace: CommandTraceEntry[] = [];
   private _snapshot: TopologySnapshot | null = null;
   private _twin: NetworkTwin | null = null;
@@ -82,14 +83,14 @@ export class PTController {
     this.canvasService = new CanvasService(this.bridge, generateId);
 
     // ValidationEngine is created once and shared; uses normal blocking policy
-    const validationEngine = new ValidationEngine([...defaultRules], normalPolicy);
+    this.validationEngine = new ValidationEngine([...defaultRules], normalPolicy);
 
     // IosService gets the engine and a getter for the current twin
     this.iosService = new IosService(
       this.bridge,
       generateId,
       (d) => this.deviceService.inspect(d),
-      validationEngine,
+      this.validationEngine,
       () => this.getTwin(),
     );
   }
@@ -120,6 +121,14 @@ export class PTController {
     return this.commandTrace.splice(0, this.commandTrace.length);
   }
 
+  private invalidateValidationCache(deviceName?: string): void {
+    if (!deviceName) {
+      this.validationEngine.invalidateCache();
+    } else {
+      this.validationEngine.invalidateCacheFor(deviceName);
+    }
+  }
+
   // ============================================================================
   // Device Operations (delegated to TopologyService)
   // ============================================================================
@@ -129,15 +138,19 @@ export class PTController {
     model: string,
     options?: { x?: number; y?: number }
   ): Promise<DeviceState> {
-    return this.topologyService.addDevice(name, model, options);
+    const deviceState = await this.topologyService.addDevice(name, model, options);
+    this.invalidateValidationCache();
+    return deviceState;
   }
 
   async removeDevice(name: string): Promise<void> {
-    return this.topologyService.removeDevice(name);
+    await this.topologyService.removeDevice(name);
+    this.invalidateValidationCache();
   }
 
   async renameDevice(oldName: string, newName: string): Promise<void> {
-    return this.topologyService.renameDevice(oldName, newName);
+    await this.topologyService.renameDevice(oldName, newName);
+    this.invalidateValidationCache();
   }
 
   async listDevices(filter?: string | number | string[]): Promise<DeviceState[]> {
@@ -149,11 +162,13 @@ export class PTController {
   // ============================================================================
 
   async addModule(device: string, slot: number, module: string): Promise<void> {
-    return this.deviceService.addModule(device, slot, module);
+    await this.deviceService.addModule(device, slot, module);
+    this.invalidateValidationCache(device);
   }
 
   async removeModule(device: string, slot: number): Promise<void> {
-    return this.deviceService.removeModule(device, slot);
+    await this.deviceService.removeModule(device, slot);
+    this.invalidateValidationCache(device);
   }
 
   // ============================================================================
@@ -167,11 +182,15 @@ export class PTController {
     port2: string,
     linkType: AddLinkPayload["linkType"] = "auto"
   ): Promise<LinkState> {
-    return this.topologyService.addLink(device1, port1, device2, port2, linkType);
+    const link = await this.topologyService.addLink(device1, port1, device2, port2, linkType);
+    this.invalidateValidationCache(device1);
+    this.invalidateValidationCache(device2);
+    return link;
   }
 
   async removeLink(device: string, port: string): Promise<void> {
-    return this.topologyService.removeLink(device, port);
+    await this.topologyService.removeLink(device, port);
+    this.invalidateValidationCache(device);
   }
 
   // ============================================================================
@@ -188,7 +207,8 @@ export class PTController {
       dhcp?: boolean;
     }
   ): Promise<void> {
-    return this.deviceService.configHost(device, options);
+    await this.deviceService.configHost(device, options);
+    this.invalidateValidationCache(device);
   }
 
   // ============================================================================
@@ -200,7 +220,8 @@ export class PTController {
     commands: string[],
     options?: { save?: boolean }
   ): Promise<void> {
-    return this.iosService.configIos(device, commands, options);
+    await this.iosService.configIos(device, commands, options);
+    this.invalidateValidationCache(device);
   }
 
   async execIos<T = ParsedOutput>(

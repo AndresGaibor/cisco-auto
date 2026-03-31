@@ -18,9 +18,16 @@ export interface ValidationResult {
   };
 }
 
+interface CacheEntry {
+  diagnostics: Diagnostic[];
+  timestamp: number;
+  ttlMs: number;
+  targetDevice?: string;
+}
+
 export class ValidationEngine {
-  private cache: Map<string, { diagnostics: Diagnostic[]; timestamp: number }> | null = null;
-  private readonly CACHE_TTL_MS = 5000;
+  private cache: Map<string, CacheEntry> | null = null;
+  private readonly DEFAULT_CACHE_TTL_MS = 5000;
   private readonly MAX_CACHE_SIZE = 100;
 
   constructor(
@@ -31,11 +38,12 @@ export class ValidationEngine {
   run<TInput>(ctx: ValidationContext<TInput>): ValidationResult {
     const startTime = performance.now();
     const cacheKey = this.getCacheKey(ctx);
+    const ttlMs = this.getCacheTtl(ctx.mutation.kind);
+    const now = Date.now();
 
-    // Check cache first
     if (this.cache) {
       const cached = this.cache.get(cacheKey);
-      if (cached && Date.now() - cached.timestamp < this.CACHE_TTL_MS) {
+      if (cached && now - cached.timestamp < cached.ttlMs) {
         return {
           diagnostics: cached.diagnostics,
           blocked: this.policy.shouldBlock(cached.diagnostics),
@@ -61,7 +69,6 @@ export class ValidationEngine {
           diagnostics.push(...ruleDiagnostics);
         }
       } catch (error) {
-        // Capture rule execution errors as diagnostics
         diagnostics.push({
           severity: "warning",
           code: "RULE_ERROR",
@@ -74,12 +81,10 @@ export class ValidationEngine {
 
     const durationMs = performance.now() - startTime;
 
-    // Cache the result
     if (!this.cache) {
       this.cache = new Map();
     }
 
-    // Evict old entries if cache is full
     if (this.cache.size >= this.MAX_CACHE_SIZE) {
       const oldestKey = this.cache.keys().next().value;
       if (oldestKey) {
@@ -87,7 +92,12 @@ export class ValidationEngine {
       }
     }
 
-    this.cache.set(cacheKey, { diagnostics, timestamp: Date.now() });
+    this.cache.set(cacheKey, {
+      diagnostics,
+      timestamp: now,
+      ttlMs,
+      targetDevice: ctx.mutation.targetDevice,
+    });
 
     return {
       diagnostics,
@@ -122,13 +132,52 @@ export class ValidationEngine {
   }
 
   /**
-   * Invalidate validation cache (call when topology changes or rules modified)
+   * Invalidate the entire cache (call when topology changes globally)
    */
   invalidateCache(): void {
     this.cache = null;
   }
 
+  /**
+   * Invalidate cache entries for a specific device
+   */
+  invalidateCacheFor(deviceName: string): void {
+    if (!deviceName || !this.cache) return;
+    for (const [key, entry] of this.cache.entries()) {
+      if (entry.targetDevice === deviceName) {
+        this.cache.delete(key);
+      }
+    }
+    if (this.cache.size === 0) {
+      this.cache = null;
+    }
+  }
+
   private getCacheKey<TInput>(ctx: ValidationContext<TInput>): string {
     return `${ctx.phase}:${ctx.mutation.kind}:${ctx.mutation.targetDevice}:${ctx.mutation.targetInterface || ""}:${JSON.stringify(ctx.mutation.input || {})}`;
+  }
+
+  private getCacheTtl(kind: ValidationContext["mutation"]["kind"]): number {
+    switch (kind) {
+      case "assignHostIp":
+      case "configureAccessPort":
+      case "configureTrunkPort":
+      case "configureSvi":
+      case "configureSubinterface":
+      case "configureNat":
+      case "vlan-exists":
+        return 1000;
+      case "configureStaticRoute":
+      case "configureDhcpRelay":
+      case "nat-overlap":
+      case "acl-match-order":
+        return 2000;
+      case "saveConfig":
+        return 750;
+      case "gateway-reachability":
+        return 1500;
+      default:
+        return this.DEFAULT_CACHE_TTL_MS;
+    }
   }
 }

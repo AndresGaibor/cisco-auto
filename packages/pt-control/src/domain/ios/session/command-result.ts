@@ -11,6 +11,7 @@ export interface CommandResult {
   parseError?: string;
   paging?: boolean;
   awaitingConfirm?: boolean;
+  truncated?: boolean;
 }
 
 export function isSuccessResult(result: CommandResult): boolean {

@@ -16,6 +16,18 @@ export class Ipv4Address {
     this._octets = octets;
   }
 
+  static fromJSON(value: string): Ipv4Address {
+    return new Ipv4Address(value);
+  }
+
+  toJSON(): string {
+    return this.value;
+  }
+
+  get raw(): string {
+    return this.value;
+  }
+
   private parseAndValidate(value: string): [number, number, number, number] {
     const parts = value.split(".");
     if (parts.length !== 4) {

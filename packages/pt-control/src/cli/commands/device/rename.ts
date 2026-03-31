@@ -57,6 +57,7 @@ export default class DeviceRename extends BaseCommand {
         }
 
         const controller = createDefaultPTController();
+        this.trackController(controller);
         const spinner = createSpinner(`Renaming device ${pc.cyan(oldName)} to ${pc.cyan(newName)}...`);
 
         await controller.start();
@@ -95,6 +96,7 @@ export default class DeviceRename extends BaseCommand {
     providedNewName?: string
   ): Promise<{ oldName: string; newName: string }> {
     const controller = createDefaultPTController();
+    this.trackController(controller);
     await controller.start();
 
     try {

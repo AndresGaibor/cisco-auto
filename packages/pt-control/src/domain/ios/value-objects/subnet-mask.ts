@@ -31,6 +31,18 @@ export class SubnetMask {
     this.cidr = this.calculateCidr(normalized);
   }
 
+  static fromJSON(value: string): SubnetMask {
+    return new SubnetMask(value);
+  }
+
+  toJSON(): string {
+    return this.value;
+  }
+
+  get raw(): string {
+    return this.value;
+  }
+
   /**
    * Create from CIDR notation (e.g., 24 for 255.255.255.0)
    */

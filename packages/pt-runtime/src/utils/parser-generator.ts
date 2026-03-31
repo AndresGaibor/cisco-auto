@@ -12,9 +12,22 @@ export function generateParserCode(): string {
   return `var IOS_PARSERS = {
   "show ip interface brief": function(output) {
     var interfaces = [];
-    var lines = output.split("\\n");
-    for (var i = 0; i < lines.length; i++) {
+    var warnings = [];
+    var lines = output.split("\\n").filter(function(l) { return l.trim().length > 0; });
+    if (lines.length === 0) return { entries: [], warnings: ["Empty output"] };
+
+    // Validate header contains expected columns
+    var header = lines[0].toLowerCase();
+    var expectedCols = ["interface", "ip-address", "status", "protocol"];
+    for (var c = 0; c < expectedCols.length; c++) {
+      if (header.indexOf(expectedCols[c]) === -1) {
+        warnings.push("Header missing expected column: " + expectedCols[c] + ". Got: " + lines[0]);
+      }
+    }
+
+    for (var i = 1; i < lines.length; i++) {
       var line = lines[i].trim();
+      if (line.indexOf("---") >= 0) continue; // skip separators
       var match = line.match(/^(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)$/);
       if (match && match[1] !== "Interface") {
         interfaces.push({
@@ -27,21 +40,31 @@ export function generateParserCode(): string {
         });
       }
     }
-    return { raw: output, interfaces: interfaces };
+    return { entries: interfaces, warnings: warnings };
   },
 
   "show vlan brief": function(output) {
     var vlans = [];
-    var lines = output.split("\\n");
+    var warnings = [];
+    var lines = output.split("\\n").filter(function(l) { return l.trim().length > 0; });
+    if (lines.length === 0) return { entries: [], warnings: ["Empty output"] };
+
+    // Validate header
+    var header = lines[0].toLowerCase();
+    if (header.indexOf("vlan") === -1 && header.indexOf("name") === -1) {
+      warnings.push("Header may be unexpected for show vlan brief: " + lines[0]);
+    }
+
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
+      if (line.indexOf("---") >= 0) continue; // skip separators
       var match = line.match(/^(\\d+)\\s+(\\S+)\\s+(\\S+)\\s*(.*?)$/);
       if (match) {
         var ports = match[4] ? match[4].split(",").map(function(p) { return p.trim(); }).filter(function(p) { return p; }) : [];
         vlans.push({ id: parseInt(match[1]), name: match[2], status: match[3], ports: ports });
       }
     }
-    return { raw: output, vlans: vlans };
+    return { entries: vlans, warnings: warnings };
   },
 
   "show vlan": function(output) {
@@ -51,7 +74,10 @@ export function generateParserCode(): string {
   "show ip route": function(output) {
     var routes = [];
     var gatewayOfLastResort = null;
-    var lines = output.split("\\n");
+    var warnings = [];
+    var lines = output.split("\\n").filter(function(l) { return l.trim().length > 0; });
+    if (lines.length === 0) return { entries: [], warnings: ["Empty output"] };
+
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
       var gwMatch = line.match(/Gateway of last resort is (.+)/i);
@@ -73,7 +99,7 @@ export function generateParserCode(): string {
         routes.push(route);
       }
     }
-    return { raw: output, routes: routes, gatewayOfLastResort: gatewayOfLastResort };
+    return { entries: routes, gatewayOfLastResort: gatewayOfLastResort, warnings: warnings };
   },
 
   "show running-config": function(output) {
@@ -82,7 +108,10 @@ export function generateParserCode(): string {
     var currentSection = null;
     var currentContent = [];
     var hostname = null;
+    var warnings = [];
     var lines = output.split("\\n");
+    if (lines.length === 0) return { entries: [], warnings: ["Empty output"] };
+
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i];
       if (line.startsWith("hostname ")) hostname = line.substring(9).trim();
@@ -101,13 +130,19 @@ export function generateParserCode(): string {
         currentContent.push(line);
       }
     }
-    return { raw: output, hostname: hostname, sections: sections, interfaces: interfaces };
+    if (Object.keys(sections).length === 0 && Object.keys(interfaces).length === 0 && !hostname) {
+      warnings.push("No config sections parsed - output format may have changed");
+    }
+    return { entries: { sections: sections, interfaces: interfaces, hostname: hostname }, warnings: warnings };
   },
 
   "show interfaces": function(output) {
     var interfaces = [];
+    var warnings = [];
+    var lines = output.split("\\n").filter(function(l) { return l.trim().length > 0; });
+    if (lines.length === 0) return { entries: [], warnings: ["Empty output"] };
+
     var current = null;
-    var lines = output.split("\\n");
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i];
       var ifaceMatch = line.match(/^(\\S+)\\s+is\\s+(\\S+),\\s+line protocol is (\\S+)/);
@@ -129,39 +164,50 @@ export function generateParserCode(): string {
       }
     }
     if (current) interfaces.push(current);
-    return { raw: output, interfaces: interfaces };
+    return { entries: interfaces, warnings: warnings };
   },
 
   "show ip arp": function(output) {
     var entries = [];
-    var lines = output.split("\\n");
+    var warnings = [];
+    var lines = output.split("\\n").filter(function(l) { return l.trim().length > 0; });
+    if (lines.length === 0) return { entries: [], warnings: ["Empty output"] };
+
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
+      if (line.indexOf("---") >= 0) continue;
       var match = line.match(/^(Internet)\\s+(\\S+)\\s+(\\S+)\\s+([0-9a-fA-F.]+)\\s+(\\S+)\\s+(\\S+)$/i);
       if (match) {
         entries.push({ protocol: match[1], address: match[2], age: match[3], mac: match[4], type: match[5], interface: match[6] });
       }
     }
-    return { raw: output, entries: entries };
+    return { entries: entries, warnings: warnings };
   },
 
   "show mac address-table": function(output) {
     var entries = [];
-    var lines = output.split("\\n");
+    var warnings = [];
+    var lines = output.split("\\n").filter(function(l) { return l.trim().length > 0; });
+    if (lines.length === 0) return { entries: [], warnings: ["Empty output"] };
+
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
+      if (line.indexOf("---") >= 0) continue;
       var match = line.match(/^(\\S+)\\s+([0-9a-fA-F.]+)\\s+(\\S+)\\s+(\\S+)$/);
       if (match) {
         entries.push({ vlan: match[1], macAddress: match[2], type: match[3].toLowerCase(), ports: [match[4]] });
       }
     }
-    return { raw: output, entries: entries };
+    return { entries: entries, warnings: warnings };
   },
 
   "show spanning-tree": function(output) {
     var vlans = [];
+    var warnings = [];
+    var lines = output.split("\\n").filter(function(l) { return l.trim().length > 0; });
+    if (lines.length === 0) return { entries: [], warnings: ["Empty output"] };
+
     var current = null;
-    var lines = output.split("\\n");
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i];
       var vlanMatch = line.match(/^VLAN(\\d+)/);
@@ -179,12 +225,14 @@ export function generateParserCode(): string {
       }
     }
     if (current) vlans.push(current);
-    return { raw: output, vlans: vlans };
+    return { entries: vlans, warnings: warnings };
   },
 
   "show version": function(output) {
-    var result = { raw: output };
+    var result = { warnings: [] };
     var lines = output.split("\\n");
+    if (lines.length === 0) return { entries: [], warnings: ["Empty output"] };
+
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i];
       if (line.includes("Version ")) {
@@ -195,15 +243,19 @@ export function generateParserCode(): string {
       var uptimeMatch = line.match(/^(\\S+)\\s+uptime is /);
       if (uptimeMatch) result.hostname = uptimeMatch[1];
     }
-    return result;
+    return { entries: [result], warnings: result.warnings };
   },
 
   "show cdp neighbors": function(output) {
     var neighbors = [];
+    var warnings = [];
     var started = false;
-    var lines = output.split("\\n");
+    var lines = output.split("\\n").filter(function(l) { return l.trim().length > 0; });
+    if (lines.length === 0) return { entries: [], warnings: ["Empty output"] };
+
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
+      if (line.indexOf("---") >= 0) continue;
       if (line.includes("Device ID")) { started = true; continue; }
       if (!started || !line) continue;
       var parts = line.split(/\\s+/);
@@ -211,7 +263,7 @@ export function generateParserCode(): string {
         neighbors.push({ deviceId: parts[0], localInterface: parts[1], holdtime: parseInt(parts[2]), capability: parts[3], platform: parts[4], portId: parts[5] });
       }
     }
-    return { raw: output, neighbors: neighbors };
+    return { entries: neighbors, warnings: warnings };
   }
 };
 

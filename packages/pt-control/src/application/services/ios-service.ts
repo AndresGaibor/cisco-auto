@@ -118,6 +118,10 @@ export class IosService {
 
     // Run postflight validation
     this._maybeValidate(device, options?.mutationKind ?? "generic", "postflight");
+
+    if (this.validationEngine) {
+      this.validationEngine.invalidateCacheFor(device);
+    }
   }
 
   private _maybeValidate(

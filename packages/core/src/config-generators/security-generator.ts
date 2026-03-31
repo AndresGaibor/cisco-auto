@@ -11,9 +11,14 @@ export class SecurityGenerator {
     for (const acl of acls) {
       commands.push(`! ACL: ${acl.name}`);
 
+      const rules = acl.rules || [];
+      if (rules.length === 0) {
+        continue;
+      }
+
       if (acl.type === 'named') {
         // Named ACL requires ip access-list {standard|extended} <name>
-        const aclType = this.inferACLType(acl.rules);
+        const aclType = this.inferACLType(rules);
         commands.push(`ip access-list ${aclType} ${acl.name}`);
 
         for (const rule of acl.rules) {

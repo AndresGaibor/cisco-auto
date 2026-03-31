@@ -32,6 +32,18 @@ export class RouteTarget {
     this.id = idPart;
   }
 
+  static fromJSON(value: string): RouteTarget {
+    return new RouteTarget(value);
+  }
+
+  toJSON(): string {
+    return this.value;
+  }
+
+  get raw(): string {
+    return this.value;
+  }
+
   /**
    * Check if the ASN part is an IP address (four-octet format)
    */

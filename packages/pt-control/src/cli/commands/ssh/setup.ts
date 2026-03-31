@@ -89,6 +89,7 @@ export default class SshSetup extends BaseCommand {
         this.logDebug(`Generated ${commands.length} IOS commands for SSH setup`);
 
         const controller = createDefaultPTController();
+        this.trackController(controller);
         const spinner = createSpinner(`Configuring SSH on ${pc.cyan(device)}...`);
 
         await controller.start();

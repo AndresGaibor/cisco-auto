@@ -65,6 +65,7 @@ export default class LinkRemove extends BaseCommand {
         });
 
         const controller = createDefaultPTController();
+        this.trackController(controller);
         const spinner = createSpinner(`Removing link on ${pc.cyan(portSpec)}...`);
 
         await controller.start();

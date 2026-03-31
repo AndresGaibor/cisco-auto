@@ -26,6 +26,7 @@ export default class LinkList extends BaseCommand {
       context: { format: this.globalFlags.format },
       execute: async () => {
         const controller = createDefaultPTController();
+        this.trackController(controller);
 
         await controller.start();
 

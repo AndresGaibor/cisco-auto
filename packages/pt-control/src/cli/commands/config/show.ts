@@ -80,6 +80,7 @@ export default class ConfigShow extends BaseCommand {
         }
 
         const controller = createDefaultPTController();
+        this.trackController(controller);
         const spinner = createSpinner(`Fetching ${pc.cyan(showCommand)} from ${pc.cyan(device)}...`);
 
         await controller.start();

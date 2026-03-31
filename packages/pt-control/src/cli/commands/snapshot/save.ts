@@ -50,6 +50,7 @@ export default class SnapshotSave extends BaseCommand {
         name = name.replace(/[^a-zA-Z0-9-_]/g, '-');
 
         const controller = createDefaultPTController();
+        this.trackController(controller);
         const spinner = createSpinner(`Saving snapshot ${pc.cyan(name)}...`);
 
         await controller.start();

@@ -155,9 +155,10 @@ function mapRoutingPlanToSpec(routing: RoutingPlan): Parameters<typeof RoutingGe
 
   if (routing.static && routing.static.length > 0) {
     routingSpec.static = routing.static.map(route => ({
-      network: `${route.network}/${maskToCidr(route.mask)}`,
+      network: route.network,
+      mask: route.network === '0.0.0.0' && route.mask === '0.0.0.0' ? '255.255.255.255' : route.mask,
       nextHop: route.nextHop,
-      administrativeDistance: 1,
+      distance: 1,
       description: undefined,
     }));
   }
@@ -177,7 +178,7 @@ function mapRoutingPlanToSpec(routing: RoutingPlan): Parameters<typeof RoutingGe
 
   if (routing.eigrp) {
     routingSpec.eigrp = {
-      autonomousSystem: routing.eigrp.asNumber,
+      asNumber: routing.eigrp.asNumber,
       networks: routing.eigrp.networks,
       noAutoSummary: (routing.eigrp as RoutingPlan['eigrp'] & { noAutoSummary?: boolean }).noAutoSummary ?? true,
     };
@@ -242,7 +243,25 @@ function buildSecurityCommands(device: ExtendedDevicePlan): string[] {
   const commands: string[] = [];
 
   if (device.acls && device.acls.length > 0) {
-    commands.push(...SecurityGenerator.generateACLs(device.acls as any));
+    const canonicalAcls = (device.acls as any[]).map((acl) => {
+      if (acl.rules) return acl;
+      if (acl.entries) {
+        return {
+          name: acl.name,
+          type: acl.type,
+          rules: (acl.entries || []).map((entry: any) => ({
+            action: entry.action,
+            protocol: entry.protocol || 'ip',
+            source: entry.source,
+            destination: entry.destination,
+            destinationPort: entry.port,
+            log: entry.log,
+          })),
+        };
+      }
+      return acl;
+    });
+    commands.push(...SecurityGenerator.generateACLs(canonicalAcls as any));
   }
 
   if (device.nat) {
@@ -347,7 +366,7 @@ export function generateIosCommands(device: DevicePlan): string[] {
     appendSection(commands, IPv6Generator.generate(ipv6Spec));
   }
 
-  if (dispositivo.lines) {
+  if (Array.isArray(dispositivo.lines) && dispositivo.lines.length > 0) {
     appendSection(commands, BaseGenerator.generateLines(dispositivo.lines as any));
   }
 

@@ -83,6 +83,7 @@ export default class ConfigHost extends BaseCommand {
         }
 
         const controller = createDefaultPTController();
+        this.trackController(controller);
         const spinner = createSpinner(`Configuring ${pc.cyan(device)}...`);
 
         await controller.start();
@@ -150,6 +151,7 @@ export default class ConfigHost extends BaseCommand {
 
   private async promptForHost(providedDevice?: string): Promise<{ device: string }> {
     const controller = createDefaultPTController();
+    this.trackController(controller);
     await controller.start();
 
     try {

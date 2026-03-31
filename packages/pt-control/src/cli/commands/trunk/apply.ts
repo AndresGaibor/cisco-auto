@@ -88,6 +88,7 @@ export default class TrunkApply extends BaseCommand {
         this.logDebug(`Generated ${commands.length} IOS commands for trunk ports`);
 
         const controller = createDefaultPTController();
+        this.trackController(controller);
         const spinner = createSpinner(`Applying trunk configuration to ${pc.cyan(device)}...`);
 
         await controller.start();

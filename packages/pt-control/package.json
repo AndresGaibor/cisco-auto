@@ -21,6 +21,7 @@
     "@cisco-auto/pt-runtime": "workspace:*",
     "@cisco-auto/types": "workspace:*",
     "@inquirer/prompts": "^8.3.2",
+    "@oclif/core": "^3.26.4",
     "cli-table3": "^0.6.5",
     "ora": "^9.3.0",
     "picocolors": "^1.1.1",

@@ -73,6 +73,7 @@ export default class RuntimeStatus extends BaseCommand {
       this.print('\n');
       try {
         const controller = createDefaultPTController();
+        this.trackController(controller);
         await controller.start();
         const state = controller.readState() as { devices?: Record<string, unknown> } | null;
         await controller.stop();

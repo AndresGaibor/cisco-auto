@@ -84,6 +84,7 @@ export default class ConfigIos extends BaseCommand {
         }
 
         const controller = createDefaultPTController();
+        this.trackController(controller);
         const spinner = createSpinner(`Configuring ${pc.cyan(device)}...`);
 
         await controller.start();
@@ -121,6 +122,7 @@ export default class ConfigIos extends BaseCommand {
     providedCommands?: string[]
   ): Promise<{ device: string; commands: string[] }> {
     const controller = createDefaultPTController();
+    this.trackController(controller);
     await controller.start();
 
     try {

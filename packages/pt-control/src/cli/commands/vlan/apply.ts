@@ -74,6 +74,7 @@ export default class VlanApply extends BaseCommand {
         this.logDebug(`Generated ${commands.length} IOS commands for VLANs`);
 
         const controller = createDefaultPTController();
+        this.trackController(controller);
         const spinner = createSpinner(`Applying VLANs to ${pc.cyan(device)}...`);
 
         await controller.start();

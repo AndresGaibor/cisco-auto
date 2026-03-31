@@ -61,11 +61,20 @@ export class RoutingGenerator {
     if (routing.static && routing.static.length > 0) {
       commands.push('! Rutas estáticas');
       for (const route of routing.static) {
-        const mask = route.mask || (route.network.includes('/') ? NetworkUtils.cidrToMask(parseInt(route.network.split('/')[1] || '24')) : '');
-        const routeCmd = `ip route ${route.network} ${mask} ${route.nextHop}`;
-        const fullCmd = route.distance !== 1
-          ? `${routeCmd} ${route.distance}`
-          : routeCmd;
+        let network = route.network;
+        let mask = route.mask || '';
+
+        if (!mask && route.network.includes('/')) {
+          const [net, cidrPart] = route.network.split('/');
+          network = net;
+          if (cidrPart) {
+            mask = NetworkUtils.cidrToMask(parseInt(cidrPart, 10));
+          }
+        }
+
+        const distance = (route as any).distance ?? 1;
+        const routeCmd = `ip route ${network} ${mask} ${route.nextHop}`;
+        const fullCmd = distance !== 1 ? `${routeCmd} ${distance}` : routeCmd;
         commands.push(fullCmd);
       }
     }

@@ -39,6 +39,7 @@ export default class RecordStart extends BaseCommand {
     }
 
     const controller = createDefaultPTController();
+    this.trackController(controller);
     const spinner = createSpinner('Starting recording...');
 
     await controller.start();

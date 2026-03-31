@@ -78,6 +78,7 @@ export default class SnapshotLoad extends BaseCommand {
         }
 
         const controller = createDefaultPTController();
+        this.trackController(controller);
         const spinner = createSpinner(`Loading snapshot ${pc.cyan(name)}...`);
 
         await controller.start();

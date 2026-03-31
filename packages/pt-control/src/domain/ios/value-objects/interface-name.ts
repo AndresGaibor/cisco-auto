@@ -22,6 +22,18 @@ export class InterfaceName {
     this.value = normalized;
   }
 
+  static fromJSON(value: string): InterfaceName {
+    return new InterfaceName(value);
+  }
+
+  toJSON(): string {
+    return this.value;
+  }
+
+  get raw(): string {
+    return this.value;
+  }
+
   /**
    * Get the short form of the interface name (e.g., Gi0/0 instead of GigabitEthernet0/0)
    */

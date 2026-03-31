@@ -76,6 +76,7 @@ export default class LinkAdd extends BaseCommand {
         const { device: device2, port: port2 } = this.parsePortSpec(port2Spec);
 
         const controller = createDefaultPTController();
+        this.trackController(controller);
         const spinner = createSpinner(
           `Creating link ${pc.cyan(port1Spec)} <-> ${pc.cyan(port2Spec)}...`
         );
@@ -120,6 +121,7 @@ export default class LinkAdd extends BaseCommand {
     providedPort2?: string
   ): Promise<{ port1Spec: string; port2Spec: string; cableType: CableType }> {
     const controller = createDefaultPTController();
+    this.trackController(controller);
     await controller.start();
 
     try {
