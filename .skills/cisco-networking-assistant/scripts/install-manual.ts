@@ -14,7 +14,7 @@ interface PTStatus {
   version: string | null;
 }
 
-// Helper to run pt CLI (pt-control-v2) intelligently
+// Helper to run pt CLI (pt-control) intelligently
 async function runPtCommand(args: string[]): Promise<{ success: boolean; stdout?: string; stderr?: string }> {
   try {
     const { promisify } = await import('util');
@@ -25,7 +25,7 @@ async function runPtCommand(args: string[]): Promise<{ success: boolean; stdout?
       const { stdout, stderr } = await execAsync(`pt ${args.map(a => String(a)).join(' ')}`);
       return { success: true, stdout, stderr };
     }
-    const { stdout, stderr } = await execAsync(`bun run packages/pt-control-v2/dist/cli/index.js ${args.map(a => String(a)).join(' ')}`);
+    const { stdout, stderr } = await execAsync(`bun run packages/pt-control/dist/cli/index.js ${args.map(a => String(a)).join(' ')}`);
     return { success: true, stdout, stderr };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

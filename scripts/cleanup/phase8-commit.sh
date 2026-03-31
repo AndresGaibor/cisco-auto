@@ -16,8 +16,8 @@ cat > MIGRATION.md << 'EOF'
 
 | Paquete Anterior | Estado | Alternativa |
 |------------------|--------|-------------|
-| `@cisco-auto/api` | ❌ Eliminado | Usar `@cisco-auto/pt-control-v2` |
-| `@cisco-auto/bridge` | ❌ Eliminado | Usar `@cisco-auto/pt-control-v2/FileBridgeV2` |
+| `@cisco-auto/api` | ❌ Eliminado | Usar `@cisco-auto/pt-control` |
+| `@cisco-auto/bridge` | ❌ Eliminado | Usar `@cisco-auto/pt-control/FileBridgeV2` |
 | `@cisco-auto/device-catalog` | ❌ Eliminado | Usar `@cisco-auto/core/catalog` |
 
 ## AI Skills
@@ -46,7 +46,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
 - Reorganized examples/
 
 BREAKING CHANGES:
-- @cisco-auto/bridge → @cisco-auto/pt-control-v2
+- @cisco-auto/bridge → @cisco-auto/pt-control
 - @cisco-auto/device-catalog → @cisco-auto/core/catalog
 
 Co-Authored-By: Claude <noreply@anthropic.com>"

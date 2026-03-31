@@ -24,7 +24,7 @@ bun run pt device list
 ## 🏁 Flujo Moderno Recomendado
 
 1. **Evita YAML/.pka para nuevos laboratorios**: esos flujos son legacy y solo deben usarse para migraciones puntuales.
-2. **Usa la CLI pt-control-v2** para toda la configuración y automatización:
+2. **Usa la CLI pt-control** para toda la configuración y automatización:
    - `pt vlan apply` — Aplica VLANs a switches Cisco en tiempo real.
    - `pt trunk apply` — Configura puertos trunk automáticamente.
    - `pt ssh setup` — Configura SSHv2 en routers Cisco.
@@ -58,7 +58,7 @@ bun run scripts/topologia-apply.ts
 ---
 
 ## 📚 Documentación y Ayuda
-- Consulta [packages/pt-control-v2/README.md](../packages/pt-control-v2/README.md) para detalles y ejemplos avanzados.
+- Consulta [packages/pt-control/README.md](../packages/pt-control/README.md) para detalles y ejemplos avanzados.
 - El soporte YAML/.pka está deprecado para nuevos flujos.
 - Para troubleshooting, revisa la sección correspondiente en este archivo.
 

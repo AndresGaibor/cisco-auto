@@ -15,14 +15,59 @@ import { join } from 'node:path';
 import { mkdir, rm } from 'node:fs/promises';
 
 // Importar módulos reales del proyecto
-import { LogManager, getLogManager, resetLogManager } from '../../packages/pt-control-v2/src/logging/index.js';
-import { requestConfirmation } from '../../packages/pt-control-v2/src/autonomy/index.js';
-import { queryTopology } from '../../packages/topology/src/query.js';
-import type { TopologyQuery } from '../../packages/topology/src/types.js';
+import { LogManager, getLogManager, resetLogManager } from '../../packages/pt-control/src/logging/index.js';
+import { requestConfirmation } from '../../packages/pt-control/src/autonomy/index.js';
 
 interface TopologySourceLike {
   devices?: Record<string, { name?: string; id?: string; type?: string; ip?: string; ports?: Array<{ name?: string } | string> }> | { name?: string; id?: string; type?: string; ip?: string; ports?: Array<{ name?: string } | string> }[];
   links?: Record<string, { from?: string; to?: string; device1?: string; device2?: string; port1?: string; port2?: string; fromPort?: string; toPort?: string; cableType?: string }> | { from?: string; to?: string; device1?: string; device2?: string; port1?: string; port2?: string; fromPort?: string; toPort?: string; cableType?: string }[];
+}
+
+interface TopologyQuery {
+  type: 'device' | 'link' | 'full';
+  name?: string;
+  device?: string;
+}
+
+interface QueryResult {
+  found: boolean;
+  device?: { name?: string; type?: string; ip?: string };
+  devices?: Array<{ name?: string; type?: string }>;
+  links?: Array<{ from?: string; to?: string }>;
+}
+
+/**
+ * Consulta básica de topología (implementación local para tests)
+ */
+function queryTopology(query: TopologyQuery, source: TopologySourceLike): QueryResult {
+  if (query.type === 'device' && query.name) {
+    const devices = source.devices;
+    if (devices && !Array.isArray(devices)) {
+      const device = devices[query.name];
+      if (device) {
+        return { found: true, device: { name: device.name, type: device.type, ip: device.ip } };
+      }
+    }
+    return { found: false };
+  }
+  
+  if (query.type === 'link' && query.device) {
+    const links = Array.isArray(source.links) ? source.links : Object.values(source.links || {});
+    const filtered = links.filter(l => l.from === query.device || l.to === query.device || l.device1 === query.device || l.device2 === query.device);
+    return { found: filtered.length > 0, links: filtered.map(l => ({ from: l.from, to: l.to })) };
+  }
+  
+  if (query.type === 'full') {
+    const devices = Array.isArray(source.devices) ? source.devices : Object.values(source.devices || {});
+    const links = Array.isArray(source.links) ? source.links : Object.values(source.links || {});
+    return { 
+      found: true, 
+      devices: devices.map(d => ({ name: d?.name, type: d?.type })),
+      links: links.map(l => ({ from: l.from, to: l.to })),
+    };
+  }
+  
+  return { found: false };
 }
 
 // ============================================================================

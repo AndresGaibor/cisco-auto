@@ -13,7 +13,7 @@ A complete real-time control system for Cisco Packet Tracer using TypeScript/Bun
 - Event streaming to NDJSON
 - Debounced file change handling
 
--#### 2. TypeScript Bridge (`packages/pt-control-v2/`)
+-#### 2. TypeScript Bridge (`packages/pt-control/`)
 - **FileBridge**: FileWatcher-based bridge para CLI ↔ PT (migrado a v2)
 - **Types**: Complete Zod schemas for commands, events, operations
 - **Constants**: PT IPC constants (cable types, command status, etc)
@@ -72,7 +72,7 @@ A complete real-time control system for Cisco Packet Tracer using TypeScript/Bun
 
 ```
 cisco-auto/
-├── packages/pt-control-v2/
+├── packages/pt-control/
 │   ├── src/
 │   │   ├── bridge/
 │   │   │   ├── file-bridge.ts          # FileBridge implementation
@@ -250,12 +250,12 @@ Based on the research in PT_CONTROL_RESEARCH.md:
 # Run setup
 bash scripts/setup-pt-control.sh
 
-# Run test suite (pt-control-v2)
+# Run test suite (pt-control)
 bun run pt:test
 ```
 
 ### Test Coverage
-The test suite (`packages/pt-control-v2/tests`) covers:
+The test suite (`packages/pt-control/tests`) covers:
 1. ✅ Snapshot (empty topology)
 2. ✅ Add device (router)
 3. ✅ List devices
@@ -337,7 +337,7 @@ All documentation is comprehensive and ready:
 - ✅ `PT_CONTROL_RESEARCH.md` - 1125 lines of API research
 - ✅ `PT_CONTROL_QUICKSTART.md` - Quick start guide
 - ✅ `pt-extension/README.md` - Installation guide
-- ✅ `packages/pt-control-v2/README.md` - Package documentation (v2)
+- ✅ `packages/pt-control/README.md` - Package documentation
 
 ## 🎉 Conclusion
 

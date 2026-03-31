@@ -12,10 +12,10 @@ Diseñado especialmente para estudiantes de Redes de Computadores (con enfoque e
 
 ## ✨ Características Principales
 
-- **🎮 Control en Tiempo Real de Packet Tracer**: Nueva CLI para controlar PT desde TypeScript/Bun sin dependencias externas (migrado a pt-control-v2).
+- **🎮 Control en Tiempo Real de Packet Tracer**: Nueva CLI para controlar PT desde TypeScript/Bun sin dependencias externas (migrado a pt-control).
 - **⚙️ Despliegue Automático**: Configuración directa a dispositivos Cisco vía SSH/Telnet con ejecución paralela para máxima velocidad.
-- **🏗️ Topologías Declarativas (LEGACY)**: ⚠️ **DEPRECADO** para nuevos flujos. Define la arquitectura usando archivos **YAML** o **JSON** validados (Zod) solo para migraciones o casos heredados. Para trabajo nuevo, usa **pt-control-v2** con la CLI o el script `topologia-apply.ts`.
-- **🔍 Análisis Avanzado PKA/PKT**: Ingeniería inversa integrada para decodificar archivos de Packet Tracer (XOR + Twofish CBC + zlib), extrayendo dispositivos y topologías. ⚠️ **El soporte .pka está deprecado y solo debe usarse para migraciones o extracción puntual. Para nuevos flujos, usa pt-control-v2.**
+- **🏗️ Topologías Declarativas (LEGACY)**: ⚠️ **DEPRECADO** para nuevos flujos. Define la arquitectura usando archivos **YAML** o **JSON** validados (Zod) solo para migraciones o casos heredados. Para trabajo nuevo, usa **pt-control** con la CLI o el script `topologia-apply.ts`.
+- **🔍 Análisis Avanzado PKA/PKT**: Ingeniería inversa integrada para decodificar archivos de Packet Tracer (XOR + Twofish CBC + zlib), extrayendo dispositivos y topologías. ⚠️ **El soporte .pka está deprecado y solo debe usarse para migraciones o extracción puntual. Para nuevos flujos, usa pt-control.**
 - **🛠️ Protocolos Soportados**:
   - **L2 (Switching)**: VLANs, VTP, STP, EtherChannel (LACP/PAgP).
   - **L3 (Routing)**: OSPF (Single/Multi-área, Stub, NSSA), EIGRP, BGP.
@@ -83,19 +83,19 @@ cat docs/PT_CONTROL_QUICKSTART.md
 
 ### Analizar Laboratorios
 ```bash
-# ⚠️ YAML/.pka son LEGACY para análisis - usa pt-control-v2 para flujos nuevos
+# ⚠️ YAML/.pka son LEGACY para análisis - usa pt-control para flujos nuevos
 
 # Parsear la definición YAML de un laboratorio (LEGACY)
 bun run src/cli/index.ts parse labs/vlan-basico.yaml
 
 # Parsear un archivo .pka (LEGACY, solo para migraciones)
-# ⚠️ DEPRECATED: El soporte .pka es legacy y solo para migraciones puntuales. Para cualquier flujo nuevo, usa pt-control-v2.
+# ⚠️ DEPRECATED: El soporte .pka es legacy y solo para migraciones puntuales. Para cualquier flujo nuevo, usa pt-control.
 bun run src/cli/index.ts parse-pka archivo.pka
 ```
 
 ### Generar y Desplegar Configuraciones
 ```bash
-# ⚠️ YAML es LEGACY para generación - usa pt-control-v2 para flujos nuevos
+# ⚠️ YAML es LEGACY para generación - usa pt-control para flujos nuevos
 
 # Generar archivos de configuración IOS basados en YAML (LEGACY)
 bun run src/cli/index.ts config labs/vlan-basico.yaml --output ./configs
@@ -106,7 +106,7 @@ bun run src/cli/index.ts deploy labs/vlan-basico.yaml --save-config
 
 ### Validación e Información
 ```bash
-# ⚠️ YAML es LEGACY para validación - usa pt-control-v2 para flujos nuevos
+# ⚠️ YAML es LEGACY para validación - usa pt-control para flujos nuevos
 
 # Validar un archivo de laboratorio (LEGACY)
 bun run src/cli/index.ts validate labs/vlan-basico.yaml
@@ -119,7 +119,7 @@ bun run src/cli/index.ts devices labs/vlan-basico.yaml
 
 ## 📝 Logging, Autonomía y Confirmación
 
-La CLI de cisco-auto (basada en pt-control-v2) implementa:
+La CLI de cisco-auto (basada en pt-control) implementa:
 
 - **Logging estructurado:** Cada comando ejecutado queda registrado en archivos NDJSON, permitiendo auditoría y análisis histórico. Puedes consultar logs con `pt logs` o desde la skill de IA.
 - **Autonomía proactiva:** El sistema ejecuta pasos seguros automáticamente y sugiere acciones recomendadas, minimizando la intervención manual y acelerando flujos repetitivos.
@@ -170,13 +170,13 @@ cisco-auto/
 │   └── cli/                # Aplicación de línea de comandos (Commander.js)
 ├── packages/
 │   ├── core/               # Lógica de negocio y orquestadores
-│   ├── pt-control-v2/         # 🎮 Control en tiempo real de Packet Tracer (NUEVO)
+│   ├── pt-control/         # 🎮 Control en tiempo real de Packet Tracer (NUEVO)
 │   ├── lab-model/          # Modelo de dominio canónico
 │   ├── bridge/             # Integración con Packet Tracer
 │   ├── crypto/             # Implementación de Twofish
 │   ├── device-catalog/     # Base de datos de equipos Cisco
-│   ├── import-yaml/        # ⚠️ DEPRECADÍSIMO: NO usar para nuevos flujos, solo compatibilidad interna. Usa pt-control-v2.
-│   ├── import-pka/         # Decodificador de archivos Packet Tracer (⚠️ DEPRECATED, LEGACY: solo para migraciones puntuales; usa pt-control-v2)
+│   ├── import-yaml/        # ⚠️ DEPRECADÍSIMO: NO usar para nuevos flujos, solo compatibilidad interna. Usa pt-control.
+│   ├── import-pka/         # Decodificador de archivos Packet Tracer (⚠️ DEPRECATED, LEGACY: solo para migraciones puntuales; usa pt-control)
 
 │   ├── topology/           # Análisis y visualización
 │   └── tools/              # Herramientas de alto nivel

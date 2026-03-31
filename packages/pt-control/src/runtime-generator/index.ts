@@ -1,0 +1,130 @@
+import { writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { resolve } from "node:path";
+import { MAIN_JS_TEMPLATE } from "./templates/main.js";
+import { RUNTIME_JS_TEMPLATE } from "./templates/runtime.js";
+
+const DEV_DIR_PLACEHOLDER = "{{DEV_DIR_LITERAL}}";
+
+// ============================================================================ 
+// Configuration
+// ============================================================================
+
+export interface RuntimeGeneratorConfig {
+  /** Output directory for generated files */
+  outputDir: string;
+  /** PT dev directory (where PT reads files from) */
+  devDir: string;
+}
+
+const DEFAULT_CONFIG: RuntimeGeneratorConfig = {
+  outputDir: resolve(import.meta.dirname, "../../generated"),
+  devDir: process.env.PT_DEV_DIR || `${process.env.HOME ?? homedir()}/pt-dev`,
+};
+
+// ============================================================================ 
+// Template helpers
+// ============================================================================
+
+export function renderMainSource(devDir: string): string {
+  return MAIN_JS_TEMPLATE.replace(DEV_DIR_PLACEHOLDER, JSON.stringify(devDir));
+}
+
+export function renderRuntimeSource(): string {
+  return RUNTIME_JS_TEMPLATE;
+}
+
+// ============================================================================ 
+// Generator
+// ============================================================================
+
+export class RuntimeGenerator {
+  protected config: RuntimeGeneratorConfig;
+
+  constructor(config: Partial<RuntimeGeneratorConfig> = {}) {
+    this.config = { ...DEFAULT_CONFIG, ...config };
+  }
+
+  generateMain(): string {
+    return renderMainSource(this.config.devDir);
+  }
+
+  generateRuntime(): string {
+    return renderRuntimeSource();
+  }
+
+  async generate(): Promise<{ main: string; runtime: string }> {
+    const outputDir = this.config.outputDir;
+
+    if (!existsSync(outputDir)) {
+      mkdirSync(outputDir, { recursive: true });
+    }
+
+    const main = this.generateMain();
+    const runtime = this.generateRuntime();
+
+    writeFileSync(resolve(outputDir, "main.js"), main, "utf-8");
+    writeFileSync(resolve(outputDir, "runtime.js"), runtime, "utf-8");
+
+    console.log(`[Generator] Generated to ${outputDir}`);
+
+    return { main, runtime };
+  }
+
+  async deploy(): Promise<void> {
+    const devDir = this.config.devDir;
+
+    if (!existsSync(devDir)) {
+      mkdirSync(devDir, { recursive: true });
+    }
+
+    const { main, runtime } = await this.generate();
+    writeFileSync(resolve(devDir, "main.js"), main, "utf-8");
+    writeFileSync(resolve(devDir, "runtime.js"), runtime, "utf-8");
+
+    console.log(`[Generator] Deployed to ${devDir}`);
+  }
+
+  async build(): Promise<void> {
+    await this.deploy();
+    console.log("[Generator] Build complete");
+  }
+}
+
+// ============================================================================ 
+// CLI Entry Point
+// ============================================================================
+
+export async function runGenerator(args: string[]): Promise<void> {
+  const generator = new RuntimeGenerator();
+  const command = args[0];
+
+  try {
+    switch (command) {
+      case "generate":
+      case "build":
+        await generator.generate();
+        break;
+      case "deploy":
+        await generator.deploy();
+        break;
+      case "all":
+      default:
+        await generator.build();
+        break;
+    }
+  } catch (err) {
+    console.error(err);
+    process.exit(1);
+  }
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  runGenerator(process.argv.slice(2));
+}
+
+// ============================================================================ 
+// Re-exports
+// ============================================================================
+
+export { MAIN_JS_TEMPLATE, RUNTIME_JS_TEMPLATE };

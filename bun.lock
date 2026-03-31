@@ -5,11 +5,10 @@
     "": {
       "name": "cisco-auto",
       "dependencies": {
-        "@cisco-auto/api": "workspace:*",
-        "@cisco-auto/bridge": "workspace:*",
         "@cisco-auto/core": "workspace:*",
-        "@cisco-auto/lab-model": "workspace:*",
-        "@cisco-auto/tools": "workspace:*",
+        "@cisco-auto/file-bridge": "workspace:*",
+        "@cisco-auto/pt-control": "workspace:*",
+        "@cisco-auto/pt-runtime": "workspace:*",
         "fast-xml-parser": "^5.5.6",
         "pino": "^10.3.1",
         "zod": "^4.3.6",
@@ -19,20 +18,17 @@
         "typescript": "^5",
       },
     },
-    "apps/cli": {
-      "name": "@cisco-auto/cli",
+    "apps/pt-cli": {
+      "name": "@cisco-auto/pt-cli",
       "version": "0.2.0",
       "bin": {
         "cisco-auto": "./src",
       },
       "dependencies": {
-        "@cisco-auto/api": "workspace:*",
-        "@cisco-auto/bridge": "workspace:*",
         "@cisco-auto/core": "workspace:*",
-        "@cisco-auto/lab-model": "workspace:*",
-        "@cisco-auto/pt-control-v2": "workspace:*",
-        "@cisco-auto/templates": "workspace:*",
-        "@cisco-auto/tools": "workspace:*",
+        "@cisco-auto/file-bridge": "workspace:*",
+        "@cisco-auto/pt-control": "workspace:*",
+        "@cisco-auto/pt-runtime": "workspace:*",
         "chalk": "^5.6.2",
         "commander": "^14.0.3",
         "pino": "^10.3.1",
@@ -43,35 +39,10 @@
         "typescript": "^5",
       },
     },
-    "packages/api": {
-      "name": "@cisco-auto/api",
-      "version": "0.1.0",
-      "dependencies": {
-        "@cisco-auto/bridge": "workspace:*",
-        "@cisco-auto/core": "workspace:*",
-        "@cisco-auto/templates": "workspace:*",
-      },
-      "devDependencies": {
-        "@types/bun": "latest",
-        "typescript": "^5",
-      },
-    },
-    "packages/bridge": {
-      "name": "@cisco-auto/bridge",
-      "version": "0.1.0",
-      "dependencies": {
-        "@cisco-auto/core": "workspace:*",
-      },
-      "devDependencies": {
-        "@types/bun": "latest",
-        "typescript": "^5",
-      },
-    },
     "packages/core": {
       "name": "@cisco-auto/core",
       "version": "0.1.0",
       "dependencies": {
-        "@cisco-auto/lab-model": "workspace:*",
         "chalk": "^5.6.2",
         "node-ssh": "^13.2.1",
         "pino": "^10.3.1",
@@ -83,10 +54,11 @@
         "typescript": "^5",
       },
     },
-    "packages/lab-model": {
-      "name": "@cisco-auto/lab-model",
+    "packages/file-bridge": {
+      "name": "@cisco-auto/file-bridge",
       "version": "0.1.0",
       "dependencies": {
+        "pino": "^10.3.1",
         "zod": "^4.3.6",
       },
       "devDependencies": {
@@ -94,8 +66,8 @@
         "typescript": "^5",
       },
     },
-    "packages/pt-control-v2": {
-      "name": "@cisco-auto/pt-control-v2",
+    "packages/pt-control": {
+      "name": "@cisco-auto/pt-control",
       "version": "2.0.0",
       "bin": {
         "pt": "./bin/run.js",
@@ -117,22 +89,11 @@
         "typescript": "^5.4.0",
       },
     },
-    "packages/templates": {
-      "name": "@cisco-auto/templates",
+    "packages/pt-runtime": {
+      "name": "@cisco-auto/pt-runtime",
       "version": "0.1.0",
-      "dependencies": {
-        "@cisco-auto/core": "workspace:*",
-      },
-      "devDependencies": {
-        "@types/bun": "latest",
-        "typescript": "^5",
-      },
-    },
-    "packages/tools": {
-      "name": "@cisco-auto/tools",
-      "version": "0.1.0",
-      "dependencies": {
-        "@cisco-auto/core": "workspace:*",
+      "bin": {
+        "pt-runtime": "./bin/run.js",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -141,21 +102,15 @@
     },
   },
   "packages": {
-    "@cisco-auto/api": ["@cisco-auto/api@workspace:packages/api"],
-
-    "@cisco-auto/bridge": ["@cisco-auto/bridge@workspace:packages/bridge"],
-
-    "@cisco-auto/cli": ["@cisco-auto/cli@workspace:apps/cli"],
-
     "@cisco-auto/core": ["@cisco-auto/core@workspace:packages/core"],
 
-    "@cisco-auto/lab-model": ["@cisco-auto/lab-model@workspace:packages/lab-model"],
+    "@cisco-auto/file-bridge": ["@cisco-auto/file-bridge@workspace:packages/file-bridge"],
 
-    "@cisco-auto/pt-control-v2": ["@cisco-auto/pt-control-v2@workspace:packages/pt-control-v2"],
+    "@cisco-auto/pt-cli": ["@cisco-auto/pt-cli@workspace:apps/pt-cli"],
 
-    "@cisco-auto/templates": ["@cisco-auto/templates@workspace:packages/templates"],
+    "@cisco-auto/pt-control": ["@cisco-auto/pt-control@workspace:packages/pt-control"],
 
-    "@cisco-auto/tools": ["@cisco-auto/tools@workspace:packages/tools"],
+    "@cisco-auto/pt-runtime": ["@cisco-auto/pt-runtime@workspace:packages/pt-runtime"],
 
     "@colors/colors": ["@colors/colors@1.5.0", "", {}, "sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ=="],
 
@@ -515,7 +470,7 @@
 
     "zod": ["zod@4.3.6", "", {}, "sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg=="],
 
-    "@cisco-auto/pt-control-v2/zod": ["zod@3.25.76", "", {}, "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="],
+    "@cisco-auto/pt-control/zod": ["zod@3.25.76", "", {}, "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="],
 
     "@eslint-community/eslint-utils/eslint-visitor-keys": ["eslint-visitor-keys@3.4.3", "", {}, "sha512-wpc+LXeiyiisxPlEkUzU6svyS1frIO3Mgxj1fdy7Pm8Ygzguax2N3Fa/D/ag1WqbOprdI+uY6wMUl8/a2G+iag=="],
 

@@ -40,18 +40,18 @@ const DEFAULT_TIMEOUT = 5000; // 5 segundos
 // ============================================================================
 
 // ============================================================================
-// Helper to run pt CLI (pt-control-v2) intelligently
+// Helper to run pt CLI (pt-control) intelligently
 // ============================================================================
 async function runPtCommand(args: string[]): Promise<{ success: boolean; stdout?: string; stderr?: string }> {
   try {
-    // Prefer global 'pt' binary (pt-control-v2)
+    // Prefer global 'pt' binary (pt-control)
     const which = await execAsync('which pt').then(r => r.stdout.trim()).catch(() => '');
     if (which) {
       const { stdout, stderr } = await execAsync(`pt ${args.map(a => String(a)).join(' ')}`);
       return { success: true, stdout, stderr };
     }
     // Fallback: use bin/run.js entry point (oclif)
-    const { stdout, stderr } = await execAsync(`node packages/pt-control-v2/bin/run.js ${args.map(a => String(a)).join(' ')}`);
+    const { stdout, stderr } = await execAsync(`node packages/pt-control/bin/run.js ${args.map(a => String(a)).join(' ')}`);
     return { success: true, stdout, stderr };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

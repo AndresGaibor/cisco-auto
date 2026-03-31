@@ -1,3 +1,7 @@
+// =============================================================================
+// CORE MODULES
+// =============================================================================
+
 export * from './parser/yaml-parser';
 export * from './types/index';
 export { validateLab, LabValidator } from './validation/index';
@@ -11,3 +15,13 @@ export * from './config/types.ts';
 export * from './config/resolver.ts';
 export * from './config/loader.ts';
 export * from './context/index.ts';
+
+// =============================================================================
+// FUSED MODULES (from tools, templates)
+// =============================================================================
+
+// Tools - herramientas para PT
+export * from './tools/index';
+
+// Templates - plantillas de laboratorio
+export * from './templates/index';

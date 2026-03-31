@@ -17,7 +17,7 @@ export async function runPtCommand(args: string[]): Promise<{ success: boolean; 
       // continue to fallback
     }
 
-    const comando = ['bun', 'run', 'packages/pt-control-v2/bin/run.js', ...args.map((a) => String(a))].join(' ');
+    const comando = ['bun', 'run', 'packages/pt-control/bin/run.js', ...args.map((a) => String(a))].join(' ');
     const { stdout, stderr } = await execAsync(comando);
     return { success: true, stdout, stderr };
   } catch (err) {
