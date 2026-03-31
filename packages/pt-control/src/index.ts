@@ -1,5 +1,5 @@
 // ============================================================================
-// PT Control V2 - Main Entry Point
+// PT Control - Main Entry Point
 // ============================================================================
 
 // Controller - High-level API for controlling Packet Tracer
@@ -9,9 +9,6 @@ export {
   createDefaultPTController,
   type PTControllerConfig,
 } from "./controller/index.js";
-export { FileBridgeV2 } from "./infrastructure/pt/file-bridge-v2.js";
-export type { FileBridgePort } from "./application/ports/file-bridge.port.js";
-export { pushCommands, pushCode, type PushResult } from "./infrastructure/pt/file-bridge-v2-commands.js";
 
 // Types - All type definitions
 export * from "./types/index.js";
@@ -32,17 +29,6 @@ export {
   parseShowVersion,
   parseShowCdpNeighbors,
 } from "./domain/ios/parsers/index.js";
-
-// Runtime Generator - Generate PT runtime files
-export { 
-  RuntimeGenerator, 
-  runGenerator,
-  renderMainSource,
-  renderRuntimeSource,
-  MAIN_JS_TEMPLATE, 
-  RUNTIME_JS_TEMPLATE 
-} from "./runtime-generator/index.js";
-export type { RuntimeGeneratorConfig } from "./runtime-generator/index.js";
 
 // Logging - NDJSON logging with session tracking
 export { LogManager, getLogManager, resetLogManager } from "./logging/index.js";

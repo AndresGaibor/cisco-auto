@@ -12,16 +12,15 @@ Diseñado especialmente para estudiantes de Redes de Computadores (con enfoque e
 
 ## ✨ Características Principales
 
-- **🎮 Control en Tiempo Real de Packet Tracer**: Nueva CLI para controlar PT desde TypeScript/Bun sin dependencias externas (migrado a pt-control).
+- **🎮 Control en Tiempo Real de Packet Tracer**: CLI para controlar PT desde TypeScript/Bun sin dependencias externas.
 - **⚙️ Despliegue Automático**: Configuración directa a dispositivos Cisco vía SSH/Telnet con ejecución paralela para máxima velocidad.
-- **🏗️ Topologías Declarativas (LEGACY)**: ⚠️ **DEPRECADO** para nuevos flujos. Define la arquitectura usando archivos **YAML** o **JSON** validados (Zod) solo para migraciones o casos heredados. Para trabajo nuevo, usa **pt-control** con la CLI o el script `topologia-apply.ts`.
-- **🔍 Análisis Avanzado PKA/PKT**: Ingeniería inversa integrada para decodificar archivos de Packet Tracer (XOR + Twofish CBC + zlib), extrayendo dispositivos y topologías. ⚠️ **El soporte .pka está deprecado y solo debe usarse para migraciones o extracción puntual. Para nuevos flujos, usa pt-control.**
+- **🏗️ Topologías Declarativas**: Define la arquitectura usando archivos **YAML** o **JSON** validados con Zod.
+- **🔍 Análisis PKA/PKT**: Ingeniería inversa para decodificar archivos de Packet Tracer (XOR + Twofish CBC + zlib), extrayendo dispositivos y topologías.
 - **🛠️ Protocolos Soportados**:
   - **L2 (Switching)**: VLANs, VTP, STP, EtherChannel (LACP/PAgP).
   - **L3 (Routing)**: OSPF (Single/Multi-área, Stub, NSSA), EIGRP, BGP.
   - **Seguridad y Servicios**: ACLs, NAT (Static, Dynamic, Overload), VPN IPsec, IPv6.
 - **✅ Validación Automática**: Verificación post-despliegue de conectividad (ping), estado de interfaces, tablas de enrutamiento y vecinos.
-- **🤖 Integración IA (Skills)**: Incluye la skill *Cisco Networking Assistant* para interactuar con agentes como iFlow CLI, Gemini CLI o Claude Code.
 
 ---
 
@@ -55,7 +54,7 @@ cd cisco-auto
 bun install
 
 # 3. Verificar instalación
-bun run src/cli/index.ts --help
+bun run cisco-auto --help
 ```
 
 ---
@@ -64,7 +63,7 @@ bun run src/cli/index.ts --help
 
 La CLI proporciona acceso rápido a todas las funcionalidades principales.
 
-### 🎮 Control en Tiempo Real de Packet Tracer (NUEVO)
+### 🎮 Control en Tiempo Real de Packet Tracer
 
 ```bash
 # Setup inicial (solo una vez)
@@ -82,37 +81,22 @@ cat docs/PT_CONTROL_QUICKSTART.md
 ```
 
 ### Analizar Laboratorios
+
 ```bash
-# ⚠️ YAML/.pka son LEGACY para análisis - usa pt-control para flujos nuevos
+# Parsear la definición YAML de un laboratorio
+bun run cisco-auto lab parse labs/vlan-basico.yaml
 
-# Parsear la definición YAML de un laboratorio (LEGACY)
-bun run src/cli/index.ts parse labs/vlan-basico.yaml
+# Generar archivos de configuración IOS basados en YAML
+bun run cisco-auto config labs/vlan-basico.yaml --output ./configs
 
-# Parsear un archivo .pka (LEGACY, solo para migraciones)
-# ⚠️ DEPRECATED: El soporte .pka es legacy y solo para migraciones puntuales. Para cualquier flujo nuevo, usa pt-control.
-bun run src/cli/index.ts parse-pka archivo.pka
-```
+# Desplegar las configuraciones a los dispositivos reales/virtuales en paralelo
+bun run cisco-auto topology deploy labs/vlan-basico.yaml --save-config
 
-### Generar y Desplegar Configuraciones
-```bash
-# ⚠️ YAML es LEGACY para generación - usa pt-control para flujos nuevos
+# Validar un archivo de laboratorio
+bun run cisco-auto lab validate labs/vlan-basico.yaml
 
-# Generar archivos de configuración IOS basados en YAML (LEGACY)
-bun run src/cli/index.ts config labs/vlan-basico.yaml --output ./configs
-
-# Desplegar las configuraciones a los dispositivos reales/virtuales en paralelo (LEGACY)
-bun run src/cli/index.ts deploy labs/vlan-basico.yaml --save-config
-```
-
-### Validación e Información
-```bash
-# ⚠️ YAML es LEGACY para validación - usa pt-control para flujos nuevos
-
-# Validar un archivo de laboratorio (LEGACY)
-bun run src/cli/index.ts validate labs/vlan-basico.yaml
-
-# Listar dispositivos de un laboratorio (LEGACY)
-bun run src/cli/index.ts devices labs/vlan-basico.yaml
+# Listar dispositivos de un laboratorio
+bun run cisco-auto device list labs/vlan-basico.yaml
 ```
 
 ---
@@ -167,23 +151,15 @@ La CLI de cisco-auto (basada en pt-control) implementa:
 ```text
 cisco-auto/
 ├── apps/
-│   └── cli/                # Aplicación de línea de comandos (Commander.js)
+│   └── pt-cli/             # CLI principal (Commander.js)
 ├── packages/
 │   ├── core/               # Lógica de negocio y orquestadores
-│   ├── pt-control/         # 🎮 Control en tiempo real de Packet Tracer (NUEVO)
-│   ├── lab-model/          # Modelo de dominio canónico
-│   ├── bridge/             # Integración con Packet Tracer
-│   ├── crypto/             # Implementación de Twofish
-│   ├── device-catalog/     # Base de datos de equipos Cisco
-│   ├── import-yaml/        # ⚠️ DEPRECADÍSIMO: NO usar para nuevos flujos, solo compatibilidad interna. Usa pt-control.
-│   ├── import-pka/         # Decodificador de archivos Packet Tracer (⚠️ DEPRECATED, LEGACY: solo para migraciones puntuales; usa pt-control)
-
-│   ├── topology/           # Análisis y visualización
-│   └── tools/              # Herramientas de alto nivel
-├── pt-extension/           # 🎮 PT Script Module (JavaScript que corre en PT)
+│   ├── pt-control/         # 🎮 Control en tiempo real de Packet Tracer
+│   ├── file-bridge/        # Bridge para comunicación CLI ↔ Packet Tracer
+│   └── pt-runtime/         # Generador de runtime para Packet Tracer
 ├── labs/                   # Archivos YAML de topologías de ejemplo
 ├── docs/                   # Documentación técnica y guías
-└── tests/                  # Pruebas globales
+└── scripts/                # Scripts de utilidad
 ```
 
 ---

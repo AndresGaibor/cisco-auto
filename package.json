@@ -1,7 +1,7 @@
 {
   "name": "cisco-auto",
   "version": "0.2.0",
-  "description": "Manipulación de archivos PKA de Cisco Packet Tracer",
+  "description": "Control en tiempo real de Packet Tracer - Automation toolkit Bun-first",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -17,8 +17,8 @@
     "build:apps": "bun run --filter './apps/*' build",
     "typecheck": "bun run --filter './packages/*' typecheck && bun run --filter './apps/*' typecheck",
     "cisco-auto": "bun run --cwd apps/pt-cli start",
-    "pt": "bun run --cwd packages/pt-control bin/run.js",
-    "pt:test": "bun run --cwd packages/pt-control test"
+    "pt": "bun run --cwd apps/pt-cli start",
+    "pt:test": "bun run --cwd apps/pt-cli test"
   },
   "devDependencies": {
     "@types/bun": "latest",
@@ -29,6 +29,7 @@
     "@cisco-auto/file-bridge": "workspace:*",
     "@cisco-auto/pt-control": "workspace:*",
     "@cisco-auto/pt-runtime": "workspace:*",
+    "@cisco-auto/types": "workspace:*",
     "fast-xml-parser": "^5.5.6",
     "pino": "^10.3.1",
     "zod": "^4.3.6"

@@ -1,40 +1,12 @@
-import { z } from 'zod';
-import { IPAddressSchema } from './common.ts';
+/**
+ * @deprecated Import directly from @cisco-auto/types instead
+ * This file is kept for backwards compatibility during migration
+ */
 
-// Schema para ACL
-export const ACLSchema = z.object({
-  name: z.string().describe('Nombre de la ACL'),
-  type: z.enum(['standard', 'extended']).default('extended'),
-  entries: z.array(z.object({
-    action: z.enum(['permit', 'deny']),
-    protocol: z.enum(['ip', 'tcp', 'udp', 'icmp']).default('ip'),
-    source: z.string(),
-    sourceWildcard: z.string().optional(),
-    destination: z.string().optional(),
-    destinationWildcard: z.string().optional(),
-    port: z.string().optional(),
-    log: z.boolean().default(false)
-  }))
-});
-
-// Schema para NAT
-export const NATSchema = z.object({
-  type: z.enum(['static', 'dynamic', 'overload']).describe('Tipo de NAT'),
-  insideInterface: z.string().describe('Interfaz inside'),
-  outsideInterface: z.string().describe('Interfaz outside'),
-  mappings: z.array(z.object({
-    insideLocal: IPAddressSchema.describe('IP local interna'),
-    insideGlobal: IPAddressSchema.optional().describe('IP pública (para static NAT)'),
-    poolName: z.string().optional().describe('Nombre del pool (para dynamic NAT)')
-  })).optional(),
-  pool: z.object({
-    name: z.string(),
-    startIp: IPAddressSchema,
-    endIp: IPAddressSchema,
-    netmask: IPAddressSchema
-  }).optional(),
-  acl: z.string().optional().describe('ACL para NAT overload')
-});
-
-export type ACL = z.infer<typeof ACLSchema>;
-export type NAT = z.infer<typeof NATSchema>;
+// Re-export from @cisco-auto/types for backwards compatibility
+export {
+  ACLSchema,
+  NATSchema,
+  type ACL,
+  type NAT,
+} from '@cisco-auto/types';

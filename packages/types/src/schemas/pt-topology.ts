@@ -1,10 +1,8 @@
 import { z } from 'zod';
 
 /**
- * PT Control - Topology Snapshot Types
- * 
- * PT-specific types for representing real-time Packet Tracer topology state
- * These differ from the core @cisco-auto/types which are focused on lab configuration
+ * PT Control - Topology Snapshot Schemas
+ * For representing real-time Packet Tracer topology state
  */
 
 // ============================================================================
@@ -29,7 +27,7 @@ export const PortStateSchema = z.object({
 export type PortState = z.infer<typeof PortStateSchema>;
 
 // ============================================================================
-// Device Types - PT-specific (different from core DeviceType)
+// Device Types
 // ============================================================================
 
 export const DeviceTypeSchema = z.enum([

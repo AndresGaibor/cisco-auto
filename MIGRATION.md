@@ -5,7 +5,7 @@
 | Paquete Anterior | Estado | Alternativa |
 |------------------|--------|-------------|
 | `@cisco-auto/api` | ❌ Eliminado | Usar `@cisco-auto/pt-control` |
-| `@cisco-auto/bridge` | ❌ Eliminado | Usar `@cisco-auto/pt-control/FileBridgeV2` |
+| `@cisco-auto/bridge` | ❌ Eliminado | Usar `@cisco-auto/file-bridge` |
 | `@cisco-auto/device-catalog` | ❌ Eliminado | Usar `@cisco-auto/core/catalog` |
 
 ## AI Skills

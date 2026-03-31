@@ -24,6 +24,7 @@
     "./templates/*": "./src/templates/*"
   },
   "dependencies": {
+    "@cisco-auto/types": "workspace:*",
     "chalk": "^5.6.2",
     "node-ssh": "^13.2.1",
     "pino": "^10.3.1",
