@@ -207,3 +207,18 @@ export function createDeviceWithFallback(
   }
   return null;
 }
+
+/** Convert device type number to string (DeviceType enum value) */
+export function getDeviceTypeString(typeId: number): string {
+  const typeMap: Record<number, string> = {
+    [DEVICE_TYPES.router]: 'router',
+    [DEVICE_TYPES.switch]: 'switch',
+    [DEVICE_TYPES.hub]: 'generic',
+    [DEVICE_TYPES.pc]: 'pc',
+    [DEVICE_TYPES.server]: 'server',
+    [DEVICE_TYPES.printer]: 'generic',
+    [DEVICE_TYPES.wireless]: 'access_point',
+    [DEVICE_TYPES.cloud]: 'cloud',
+  };
+  return typeMap[typeId] || 'generic';
+}

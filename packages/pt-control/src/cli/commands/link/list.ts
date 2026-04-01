@@ -3,7 +3,6 @@
 // ============================================================================
 
 import { BaseCommand } from '../../base-command.js';
-import { createDefaultPTController } from '../../../controller/index.js';
 import type { LinkState } from '../../../types/index.js';
 
 export default class LinkList extends BaseCommand {
@@ -27,7 +26,7 @@ export default class LinkList extends BaseCommand {
       targetDevice: 'all',
       context: { format: this.globalFlags.format },
       execute: async () => {
-        const controller = createDefaultPTController();
+        const controller = this.createController();
         this.trackController(controller);
 
         await controller.start();

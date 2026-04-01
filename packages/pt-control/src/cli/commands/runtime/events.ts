@@ -11,7 +11,7 @@ import { ValidationError } from '../../errors/index.js';
 import { readEvents, summarizeEvents, tailEvents } from '../../../tools/event-log.js';
 
 export default class RuntimeEvents extends BaseCommand {
-  static override description = 'Inspect events.ndjson log file';
+  static override description = 'Inspect PT event log (V2: logs/events.current.ndjson, V1: events.ndjson)';
 
   static override examples = [
     '<%= config.bin %> runtime events',
@@ -37,10 +37,13 @@ export default class RuntimeEvents extends BaseCommand {
     const tail = this.flags.tail as number;
     const typeFilter = this.flags.type as string | undefined;
 
-    const eventsPath = join(this.devDir, 'events.ndjson');
+    const v2EventsPath = join(this.devDir, 'logs', 'events.current.ndjson');
+    const v1EventsPath = join(this.devDir, 'events.ndjson');
+
+    const eventsPath = existsSync(v2EventsPath) ? v2EventsPath : v1EventsPath;
 
     if (!existsSync(eventsPath)) {
-      throw new ValidationError(`No events file found at ${eventsPath}`);
+      throw new ValidationError(`No events file found. Tried:\n  V2: ${v2EventsPath}\n  V1: ${v1EventsPath}`);
     }
 
     // Parse type filter

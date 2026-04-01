@@ -98,6 +98,10 @@ export class VirtualTopology {
     return this.cacheManager.getLastUpdate();
   }
 
+  isMaterialized(): boolean {
+    return this.cacheManager.isMaterialized();
+  }
+
   // ============================================================================
   // Event Handling
   // ============================================================================

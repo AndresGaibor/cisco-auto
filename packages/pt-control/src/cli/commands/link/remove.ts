@@ -6,7 +6,6 @@ import { Args, Flags } from '@oclif/core';
 import { input } from '@inquirer/prompts';
 import pc from 'picocolors';
 import { BaseCommand, createSpinner } from '../../base-command.js';
-import { createDefaultPTController } from '../../../controller/index.js';
 import { ValidationError } from '../../errors/index.js';
 
 export default class LinkRemove extends BaseCommand {
@@ -64,7 +63,7 @@ export default class LinkRemove extends BaseCommand {
           skipPrompt: force || this.globalFlags.format === 'json',
         });
 
-        const controller = createDefaultPTController();
+        const controller = this.createController();
         this.trackController(controller);
         const spinner = createSpinner(`Removing link on ${pc.cyan(portSpec)}...`);
 

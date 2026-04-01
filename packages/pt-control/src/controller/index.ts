@@ -19,6 +19,7 @@ import type {
   ParsedOutput,
   AddLinkPayload,
   DevicesInRectResult,
+  GetRectResult,
   NetworkTwin,
 } from "../contracts/index.js";
 import type { DeviceCapabilities } from "../domain/ios/capabilities/pt-capability-resolver.js";
@@ -111,6 +112,14 @@ export class PTController {
 
   async renameDevice(oldName: string, newName: string): Promise<void> {
     await this.topologyService.renameDevice(oldName, newName);
+  }
+
+  async moveDevice(
+    name: string,
+    x: number,
+    y: number
+  ): Promise<{ ok: true; name: string; x: number; y: number } | { ok: false; error: string; code: string }> {
+    return this.deviceService.moveDevice(name, x, y);
   }
 
   async listDevices(filter?: string | number | string[]): Promise<DeviceState[]> {
@@ -220,20 +229,23 @@ export class PTController {
     return this.canvasService.devicesInRect(rectId, includeClusters);
   }
 
+  async getRect(rectId: string): Promise<GetRectResult> {
+    return this.canvasService.getRect(rectId);
+  }
+
   async snapshot(): Promise<TopologySnapshot> {
-    const cachedSnapshot = this.topologyCache.getSnapshot();
-
-    if (cachedSnapshot) {
-      this._snapshot = cachedSnapshot;
-      this._twin = topologySnapshotToNetworkTwin(cachedSnapshot);
-      return cachedSnapshot;
-    }
-
     const snapshot = await this.topologyService.snapshot();
     if (snapshot) {
       this._snapshot = snapshot;
       this._twin = topologySnapshotToNetworkTwin(snapshot);
       return snapshot;
+    }
+
+    if (this.topologyCache.isMaterialized()) {
+      const cached = this.topologyCache.getSnapshot();
+      this._snapshot = cached;
+      this._twin = topologySnapshotToNetworkTwin(cached);
+      return cached;
     }
 
     return this._snapshot ?? { timestamp: Date.now(), version: "1.0", devices: {}, links: {} };

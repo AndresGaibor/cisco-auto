@@ -8,6 +8,7 @@ import { formatOutput, applyJqFilter, type OutputFormat } from './formatters/ind
 import { LogManager, getLogManager } from '../logging/index.js';
 import type { LogEntry } from '../logging/index.js';
 import { requestConfirmation } from '../autonomy/index.js';
+import type { PTController } from '../controller/index.js';
 
 export class CommandCancelledError extends Error {
   constructor() {
@@ -177,8 +178,8 @@ export abstract class BaseCommand extends Command {
   /**
    * Create a controller instance with configured dev directory
    */
-  protected createController() {
-    // Dynamic import to avoid circular dependencies
+  protected createController(): PTController {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { PTController } = require('../controller/index.js');
     return new PTController({ devDir: this.devDir });
   }

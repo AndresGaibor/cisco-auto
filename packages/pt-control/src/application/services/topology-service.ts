@@ -6,6 +6,21 @@ import type { FileBridgePort } from "../ports/file-bridge.port.js";
 import type { TopologyCachePort } from "../ports/topology-cache.port.js";
 import type { TopologySnapshot, DeviceState, LinkState, AddLinkPayload } from "../../contracts/index.js";
 
+function ptDeviceTypeToString(typeId: number): DeviceState["type"] {
+  const map: Record<number, DeviceState["type"]> = {
+    0: "router",
+    1: "switch",
+    2: "generic",
+    3: "pc",
+    4: "server",
+    5: "generic",
+    6: "access_point",
+    7: "cloud",
+    8: "generic",
+  };
+  return map[typeId] ?? "generic";
+}
+
 export class TopologyService {
   constructor(
     private bridge: FileBridgePort,
@@ -14,28 +29,41 @@ export class TopologyService {
   ) {}
 
   /**
-   * Get current cached snapshot or fetch from PT
+   * Get current snapshot. Queries PT first; falls back to cache only if PT is unreachable.
+   * Returns null only if there is no materialized snapshot anywhere.
    */
   async snapshot(): Promise<TopologySnapshot | null> {
-    const cachedSnapshot = this.cache.getSnapshot();
+    try {
+      const { value } = await this.bridge.sendCommandAndWait<TopologySnapshot>({
+        type: "snapshot",
+        id: this.generateId(),
+      }, 30000);
 
-    if (cachedSnapshot) {
-      return cachedSnapshot;
+      if (value && typeof value === "object" && "devices" in value && "links" in value) {
+        this.cache.applySnapshot(value);
+        return value;
+      }
+
+      const freshSnapshot = this.bridge.readState<TopologySnapshot>();
+      if (freshSnapshot) {
+        this.cache.applySnapshot(freshSnapshot);
+        return freshSnapshot;
+      }
+    } catch {
+      // PT no responde; usar caché si está materializada
     }
 
-    const { value } = await this.bridge.sendCommandAndWait<TopologySnapshot>({
-      type: "snapshot",
-      id: this.generateId(),
-    }, 30000);
-
-    if (value) {
-      this.cache.applySnapshot(value);
+    if (this.cache.isMaterialized()) {
+      return this.cache.getSnapshot();
     }
-    return value ?? null;
+
+    return null;
   }
 
   /**
-   * List all devices, optionally filtered
+   * List all devices, optionally filtered.
+   * Filter can be: string (matches name/model/type), number (PT device type ID),
+   * or string[] (match any).
    */
   async listDevices(filter?: string | number | string[]): Promise<DeviceState[]> {
     const cachedDevices = this.cache.getDevices();
@@ -43,6 +71,11 @@ export class TopologyService {
     if (cachedDevices.length > 0) {
       if (typeof filter === "undefined") {
         return cachedDevices;
+      }
+
+      if (typeof filter === "number") {
+        const targetType = ptDeviceTypeToString(filter);
+        return cachedDevices.filter((device) => device.type === targetType);
       }
 
       const normalizedFilter = String(filter).toLowerCase();
@@ -82,7 +115,16 @@ export class TopologyService {
     model: string,
     options?: { x?: number; y?: number }
   ): Promise<DeviceState> {
-    const { event } = await this.bridge.sendCommandAndWait({
+    const { value } = await this.bridge.sendCommandAndWait<{
+      ok: boolean;
+      name: string;
+      model: string;
+      type: string;
+      power: boolean;
+      x: number;
+      y: number;
+      ports: unknown[];
+    }>({
       type: "addDevice",
       id: this.generateId(),
       name,
@@ -91,7 +133,15 @@ export class TopologyService {
       y: options?.y ?? 100,
     });
 
-    return (event as { value: DeviceState }).value;
+    return {
+      name: value.name,
+      model: value.model,
+      type: value.type as DeviceState["type"],
+      power: value.power,
+      x: value.x,
+      y: value.y,
+      ports: value.ports as DeviceState["ports"],
+    };
   }
 
   /**
@@ -127,7 +177,15 @@ export class TopologyService {
     port2: string,
     linkType: AddLinkPayload["linkType"] = "auto"
   ): Promise<LinkState> {
-    const { event } = await this.bridge.sendCommandAndWait({
+    const { value } = await this.bridge.sendCommandAndWait<{
+      ok: boolean;
+      id: string;
+      device1: string;
+      port1: string;
+      device2: string;
+      port2: string;
+      cableType: string;
+    }>({
       type: "addLink",
       id: this.generateId(),
       device1,
@@ -137,7 +195,14 @@ export class TopologyService {
       linkType,
     });
 
-    return (event as { value: LinkState }).value;
+    return {
+      id: value.id,
+      device1: value.device1,
+      port1: value.port1,
+      device2: value.device2,
+      port2: value.port2,
+      cableType: value.cableType as LinkState["cableType"],
+    };
   }
 
   /**

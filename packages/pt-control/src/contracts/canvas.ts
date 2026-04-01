@@ -33,3 +33,10 @@ export interface DevicesInRectResult {
   count: number;
   clusters?: string[];
 }
+
+export interface GetRectResult {
+  ok: boolean;
+  rectId: string;
+  data?: Record<string, unknown>;
+  error?: string;
+}

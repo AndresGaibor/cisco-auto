@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { BaseCommand, Flags } from '../../base-command.js';
-import { createDefaultPTController, PTController } from '../../../controller/index.js';
+import { PTController } from '../../../controller/index.js';
 import type { DeviceState } from '../../../types/index.js';
 import { formatDeviceType } from '../../../utils/device-type.js';
 
@@ -38,7 +38,7 @@ export default class DeviceList extends BaseCommand {
         hasFilter: Boolean(filter),
       },
       execute: async () => {
-        const controller = createDefaultPTController();
+        const controller = this.createController();
         this.trackController(controller);
 
         await controller.start();

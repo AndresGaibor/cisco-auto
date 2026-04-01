@@ -51,4 +51,10 @@ export interface TopologyCachePort {
    * Find a link between two devices
    */
   findLinkBetween(device1: string, device2: string): LinkState | undefined;
+
+  /**
+   * Returns true if we have received at least one snapshot from PT.
+   * False means the cache only holds the empty initial state.
+   */
+  isMaterialized(): boolean;
 }

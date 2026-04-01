@@ -1,7 +1,6 @@
 import { Args, Flags } from '@oclif/core';
 import pc from 'picocolors';
 import { BaseCommand, createSpinner } from '../../base-command.js';
-import { createDefaultPTController } from '../../../controller/index.js';
 import { DeviceNotFoundError, ValidationError } from '../../errors/index.js';
 import type { DeviceState, ParsedOutput } from '../../../types/index.js';
 
@@ -79,7 +78,7 @@ export default class ConfigShow extends BaseCommand {
           );
         }
 
-        const controller = createDefaultPTController();
+        const controller = this.createController();
         this.trackController(controller);
         const spinner = createSpinner(`Fetching ${pc.cyan(showCommand)} from ${pc.cyan(device)}...`);
 

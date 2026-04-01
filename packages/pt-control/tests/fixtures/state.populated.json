@@ -1,0 +1,96 @@
+{
+  "version": "1.0",
+  "timestamp": 1711929600000,
+  "devices": {
+    "Router1": {
+      "name": "Router1",
+      "model": "2911",
+      "type": "router",
+      "power": true,
+      "ports": [
+        {
+          "name": "GigabitEthernet0/0",
+          "type": "ethernet",
+          "status": "up",
+          "protocol": "up",
+          "ipAddress": "192.168.1.1",
+          "subnetMask": "255.255.255.0"
+        },
+        {
+          "name": "GigabitEthernet0/1",
+          "type": "ethernet",
+          "status": "down",
+          "protocol": "down"
+        }
+      ],
+      "x": 100,
+      "y": 100,
+      "uuid": "uuid-router-001"
+    },
+    "Switch1": {
+      "name": "Switch1",
+      "model": "2960-24TT",
+      "type": "switch",
+      "power": true,
+      "ports": [
+        {
+          "name": "FastEthernet0/1",
+          "type": "ethernet",
+          "status": "up",
+          "protocol": "up"
+        },
+        {
+          "name": "FastEthernet0/2",
+          "type": "ethernet",
+          "status": "up",
+          "protocol": "up"
+        }
+      ],
+      "x": 300,
+      "y": 100,
+      "uuid": "uuid-switch-001"
+    },
+    "PC1": {
+      "name": "PC1",
+      "model": "PC1",
+      "type": "pc",
+      "power": true,
+      "ports": [
+        {
+          "name": "Ethernet0",
+          "type": "ethernet",
+          "status": "up",
+          "protocol": "up",
+          "ipAddress": "192.168.1.10",
+          "subnetMask": "255.255.255.0"
+        }
+      ],
+      "x": 500,
+      "y": 100,
+      "uuid": "uuid-pc-001"
+    }
+  },
+  "links": {
+    "link-001": {
+      "id": "link-001",
+      "device1": "Router1",
+      "port1": "GigabitEthernet0/0",
+      "device2": "Switch1",
+      "port2": "FastEthernet0/1",
+      "cableType": "straight"
+    },
+    "link-002": {
+      "id": "link-002",
+      "device1": "Switch1",
+      "port1": "FastEthernet0/2",
+      "device2": "PC1",
+      "port2": "Ethernet0",
+      "cableType": "straight"
+    }
+  },
+  "metadata": {
+    "deviceCount": 3,
+    "linkCount": 2,
+    "generatedBy": "pt-control"
+  }
+}

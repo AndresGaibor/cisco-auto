@@ -6,7 +6,6 @@ import { Args, Flags } from '@oclif/core';
 import { input, select } from '@inquirer/prompts';
 import pc from 'picocolors';
 import { BaseCommand, createSpinner } from '../../base-command.js';
-import { createDefaultPTController } from '../../../controller/index.js';
 import { ValidationError } from '../../errors/index.js';
 import type { DeviceState, CableType } from '../../../types/index.js';
 
@@ -75,7 +74,7 @@ export default class LinkAdd extends BaseCommand {
         const { device: device1, port: port1 } = this.parsePortSpec(port1Spec);
         const { device: device2, port: port2 } = this.parsePortSpec(port2Spec);
 
-        const controller = createDefaultPTController();
+        const controller = this.createController();
         this.trackController(controller);
         const spinner = createSpinner(
           `Creating link ${pc.cyan(port1Spec)} <-> ${pc.cyan(port2Spec)}...`
@@ -134,7 +133,7 @@ export default class LinkAdd extends BaseCommand {
     providedPort1?: string,
     providedPort2?: string
   ): Promise<{ port1Spec: string; port2Spec: string; cableType: CableType }> {
-    const controller = createDefaultPTController();
+    const controller = this.createController();
     this.trackController(controller);
     await controller.start();
 

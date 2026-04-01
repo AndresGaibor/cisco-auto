@@ -1,14 +1,29 @@
 import type { TopologySnapshot, DeviceState, LinkState, CableType } from '../contracts/index.js';
 
 /**
- * Manages topology cache, snapshots, and initialization
+ * Manages topology cache, snapshots, and initialization.
+ *
+ * Distinguimos entre:
+ * - snapshot vacía inicial (nunca PT escribió state.json): no materializada
+ * - snapshot materializada: proviene de PT, puede ser vacía o no
+ *
+ * Esto evita que la snapshot vacía de arranque tape una real.
  */
 export class TopologyCacheManager {
   private snapshot: TopologySnapshot;
   private version: number = 0;
+  private materialized: boolean = false;
 
   constructor(initialSnapshot?: TopologySnapshot) {
     this.snapshot = initialSnapshot || this.createEmpty();
+  }
+
+  /**
+   * Indica si ya recibimos al menos una snapshot real de PT.
+   * False = solo tenemos la vacía inicial.
+   */
+  isMaterialized(): boolean {
+    return this.materialized;
   }
 
   getSnapshot(): TopologySnapshot {
@@ -46,6 +61,7 @@ export class TopologyCacheManager {
   updateSnapshot(newSnapshot: TopologySnapshot): void {
     this.snapshot = newSnapshot;
     this.version++;
+    this.materialized = true;
   }
 
   invalidateCache(): void {

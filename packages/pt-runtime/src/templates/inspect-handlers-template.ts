@@ -99,25 +99,20 @@ function handleSnapshot() {
     devices[name] = {
       name: name,
       model: device.getModel(),
-      type: device.getType(),
+      type: DEVICE_TYPE_NAMES[device.getType()] || "generic",
       power: device.getPower(),
       ports: ports
     };
   }
 
-  // Convert linksMap to array
-  var links = [];
-  for (var linkId in linksMap) {
-    links.push(linksMap[linkId]);
-  }
-
+  // Return links as Record (consistent with TopologySnapshot schema)
   return {
     ok: true,
     version: "1.0",
     timestamp: Date.now(),
     devices: devices,
-    links: links,
-    metadata: { deviceCount: count, linkCount: Object.keys(links).length }
+    links: linksMap,
+    metadata: { deviceCount: count, linkCount: Object.keys(linksMap).length }
   };
 }
 
@@ -147,7 +142,7 @@ function handleInspect(payload) {
     ok: true,
     name: device.getName(),
     model: device.getModel(),
-    type: device.getType(),
+    type: DEVICE_TYPE_NAMES[device.getType()] || "generic",
     power: device.getPower(),
     ports: ports
   };

@@ -3,7 +3,7 @@
 // ============================================================================
 
 import type { HandlerDeps, HandlerResult, PTDevice } from "../utils/helpers";
-import { resolveModel, getDeviceTypeCandidates, createDeviceWithFallback } from "../utils/helpers";
+import { resolveModel, getDeviceTypeCandidates, createDeviceWithFallback, getDeviceTypeString } from "../utils/helpers";
 
 // ============================================================================
 // Payload Types
@@ -31,6 +31,13 @@ export interface RenameDevicePayload {
   type: "renameDevice";
   oldName: string;
   newName: string;
+}
+
+export interface MoveDevicePayload {
+  type: "moveDevice";
+  name: string;
+  x: number;
+  y: number;
 }
 
 // ============================================================================
@@ -69,12 +76,16 @@ export function handleAddDevice(payload: AddDevicePayload, deps: HandlerDeps): H
     device.skipBoot();
   }
 
+  // Return DeviceState compatible response
   return {
     ok: true,
     name,
-    autoName,
     model,
-    deviceType: typeId,
+    type: getDeviceTypeString(typeId),
+    power: true,
+    x: x,
+    y: y,
+    ports: [],
   };
 }
 
@@ -97,8 +108,9 @@ export function handleListDevices(payload: ListDevicesPayload, deps: HandlerDeps
   const devices: Array<{
     name: string;
     model: string;
-    type: number;
+    type: string;
     power: boolean;
+    ports: unknown[];
   }> = [];
 
   for (let i = 0; i < count; i++) {
@@ -107,8 +119,9 @@ export function handleListDevices(payload: ListDevicesPayload, deps: HandlerDeps
       devices.push({
         name: device.getName(),
         model: device.getModel(),
-        type: device.getType(),
+        type: getDeviceTypeString(device.getType()),
         power: device.getPower(),
+        ports: [],
       });
     }
   }
@@ -129,4 +142,32 @@ export function handleRenameDevice(payload: RenameDevicePayload, deps: HandlerDe
 
   device.setName(payload.newName);
   return { ok: true, oldName: payload.oldName, newName: payload.newName };
+}
+
+/**
+ * Move a device to a new position on the canvas
+ */
+export function handleMoveDevice(payload: MoveDevicePayload, deps: HandlerDeps): HandlerResult {
+  const { getNet } = deps;
+  const device = getNet().getDevice(payload.name);
+
+  if (!device) {
+    return { ok: false, error: `Device not found: ${payload.name}` };
+  }
+
+  const deviceAny = device as unknown as Record<string, unknown>;
+
+  if (typeof deviceAny.setX === "function") {
+    (deviceAny.setX as (x: number) => void)(payload.x);
+  } else if (typeof deviceAny.setLogicalPosition === "function") {
+    (deviceAny.setLogicalPosition as (x: number, y: number) => void)(payload.x, payload.y);
+  } else {
+    return {
+      ok: false,
+      error: "Device positioning is not supported in this PT API version",
+      code: "INTERNAL_ERROR",
+    };
+  }
+
+  return { ok: true, name: payload.name, x: payload.x, y: payload.y };
 }

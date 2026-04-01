@@ -23,9 +23,12 @@ const runtimeSrcDirCandidates = [
 const RUNTIME_WATCH_DIR = runtimeSrcDirCandidates.find((dir) => existsSync(dir)) ?? runtimePackagePath;
 
 export default class RuntimeWatch extends BaseCommand {
-  static override description = 'Watch for changes and rebuild runtime automatically';
+  static override description = 'Watch for changes and rebuild runtime automatically (generates only, does not reload PT)';
 
-  static override examples = ['<%= config.bin %> runtime watch'];
+  static override examples = [
+    '<%= config.bin %> runtime watch',
+    '<%= config.bin %> runtime watch --dev-dir ./my-topology',
+  ];
 
   static override flags = {
     ...BaseCommand.baseFlags,

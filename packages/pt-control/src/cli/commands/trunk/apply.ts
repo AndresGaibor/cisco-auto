@@ -5,7 +5,6 @@
 import { Args, Flags } from '@oclif/core';
 import pc from 'picocolors';
 import { BaseCommand, createSpinner } from '../../base-command.js';
-import { createDefaultPTController } from '../../../controller/index.js';
 import { buildTrunkCommands } from '../../../utils/ios-commands.js';
 import { DeviceNotFoundError, ValidationError } from '../../errors/index.js';
 import type { DeviceState } from '../../../types/index.js';
@@ -82,7 +81,7 @@ export default class TrunkApply extends BaseCommand {
 
         this.logDebug(`Generated ${commands.length} IOS commands for trunk ports`);
 
-        const controller = createDefaultPTController();
+        const controller = this.createController();
         this.trackController(controller);
         const spinner = createSpinner(`Applying trunk configuration to ${pc.cyan(device)}...`);
 

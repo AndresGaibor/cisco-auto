@@ -3,7 +3,6 @@
 // ============================================================================
 
 import { BaseCommand } from '../../base-command.js';
-import { createDefaultPTController } from '../../../controller/index.js';
 
 export default class CanvasList extends BaseCommand {
   static override description = 'List all canvas rectangles in Packet Tracer';
@@ -24,7 +23,7 @@ export default class CanvasList extends BaseCommand {
         format: this.globalFlags.format,
       },
       execute: async () => {
-        const controller = createDefaultPTController();
+        const controller = this.createController();
         this.trackController(controller);
 
         await controller.start();

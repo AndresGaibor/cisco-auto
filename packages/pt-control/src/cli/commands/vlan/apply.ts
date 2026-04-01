@@ -5,7 +5,6 @@
 import { Args, Flags } from '@oclif/core';
 import pc from 'picocolors';
 import { BaseCommand, createSpinner } from '../../base-command.js';
-import { createDefaultPTController } from '../../../controller/index.js';
 import { buildVlanCommands } from '../../../utils/ios-commands.js';
 import { DeviceNotFoundError, ValidationError } from '../../errors/index.js';
 import type { DeviceState } from '../../../types/index.js';
@@ -73,7 +72,7 @@ export default class VlanApply extends BaseCommand {
 
         this.logDebug(`Generated ${commands.length} IOS commands for VLANs`);
 
-        const controller = createDefaultPTController();
+        const controller = this.createController();
         this.trackController(controller);
         const spinner = createSpinner(`Applying VLANs to ${pc.cyan(device)}...`);
 

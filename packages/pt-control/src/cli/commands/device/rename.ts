@@ -6,7 +6,6 @@ import { Args } from '@oclif/core';
 import { input } from '@inquirer/prompts';
 import pc from 'picocolors';
 import { BaseCommand, createSpinner } from '../../base-command.js';
-import { createDefaultPTController } from '../../../controller/index.js';
 import { DeviceNotFoundError, ValidationError } from '../../errors/index.js';
 import type { DeviceState } from '../../../types/index.js';
 
@@ -56,7 +55,7 @@ export default class DeviceRename extends BaseCommand {
           throw new ValidationError('New name must be different from current name');
         }
 
-        const controller = createDefaultPTController();
+        const controller = this.createController();
         this.trackController(controller);
         const spinner = createSpinner(`Renaming device ${pc.cyan(oldName)} to ${pc.cyan(newName)}...`);
 
@@ -95,7 +94,7 @@ export default class DeviceRename extends BaseCommand {
     providedOldName?: string,
     providedNewName?: string
   ): Promise<{ oldName: string; newName: string }> {
-    const controller = createDefaultPTController();
+    const controller = this.createController();
     this.trackController(controller);
     await controller.start();
 

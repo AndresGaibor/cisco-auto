@@ -3,7 +3,6 @@
 // ============================================================================
 
 import { BaseCommand } from '../../base-command.js';
-import { createDefaultPTController } from '../../../controller/index.js';
 
 export default class TopologyValidate extends BaseCommand {
   static override description = 'Validate current topology for common issues';
@@ -27,7 +26,7 @@ export default class TopologyValidate extends BaseCommand {
         strict: this.flags.strict,
       },
       execute: async () => {
-        const controller = createDefaultPTController();
+        const controller = this.createController();
         this.trackController(controller);
 
         await controller.start();

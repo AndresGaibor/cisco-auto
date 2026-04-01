@@ -8,7 +8,6 @@ import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import pc from 'picocolors';
 import { BaseCommand, createSpinner } from '../../base-command.js';
-import { createDefaultPTController } from '../../../controller/index.js';
 import { ValidationError } from '../../errors/index.js';
 
 export default class SnapshotSave extends BaseCommand {
@@ -49,7 +48,7 @@ export default class SnapshotSave extends BaseCommand {
 
         name = name.replace(/[^a-zA-Z0-9-_]/g, '-');
 
-        const controller = createDefaultPTController();
+        const controller = this.createController();
         this.trackController(controller);
         const spinner = createSpinner(`Saving snapshot ${pc.cyan(name)}...`);
 

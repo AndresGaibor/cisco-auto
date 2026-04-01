@@ -8,11 +8,10 @@ import { readFileSync, readdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import pc from 'picocolors';
 import { BaseCommand, createSpinner } from '../../base-command.js';
-import { createDefaultPTController } from '../../../controller/index.js';
 import { ValidationError } from '../../errors/index.js';
 
 export default class SnapshotLoad extends BaseCommand {
-  static override description = 'Load a topology snapshot';
+  static override description = 'Load a topology snapshot (experimental — may not restore full state)';
 
   static override examples = [
     '<%= config.bin %> snapshot load base-topology',
@@ -77,7 +76,7 @@ export default class SnapshotLoad extends BaseCommand {
           });
         }
 
-        const controller = createDefaultPTController();
+        const controller = this.createController();
         this.trackController(controller);
         const spinner = createSpinner(`Loading snapshot ${pc.cyan(name)}...`);
 

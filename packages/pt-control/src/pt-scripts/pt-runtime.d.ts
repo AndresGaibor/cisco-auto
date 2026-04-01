@@ -27,6 +27,7 @@ interface PTPort {
   getSubnetMask(): string;
   setSubnetMask(mask: string): void;
   getMacAddress(): string;
+  getLink(): unknown;
   getLinkStatus(): 'up' | 'down';
   getSpeed(): string;
   getDuplex(): 'auto' | 'full' | 'half';

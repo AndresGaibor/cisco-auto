@@ -29,8 +29,7 @@ describe("CLI commands smoke", () => {
     expect(controller.getBridge()).toBeDefined();
   });
 
-  it("readState returns null in V2 (topology derived from events)", () => {
-    // V2 derives topology from events, not a single state file
+  it("readState returns null when no state.json exists", () => {
     const state = controller.readState();
     expect(state).toBeNull();
   });
