@@ -49,9 +49,19 @@ export class TopologyCache {
 
   refreshFromState(): void {
     const state = this.bridge.readState<TopologySnapshot>();
-    if (state) {
-      this.topology.replaceSnapshot(state);
+    if (!state) return;
+
+    const deviceCount = state.devices ? Object.keys(state.devices).length : 0;
+    const linkCount = state.links ? Object.keys(state.links).length : 0;
+    const isEmpty = deviceCount === 0 && linkCount === 0;
+
+    if (isEmpty) {
+      if (!this.topology.isMaterialized()) {
+        return;
+      }
     }
+
+    this.topology.replaceSnapshot(state);
   }
 
   applySnapshot(snapshot: TopologySnapshot): void {
@@ -60,6 +70,10 @@ export class TopologyCache {
 
   getSnapshot(): TopologySnapshot {
     return this.topology.getSnapshot();
+  }
+
+  isMaterialized(): boolean {
+    return this.topology.isMaterialized();
   }
 
   getDevice(name: string): DeviceState | undefined {
@@ -100,7 +114,16 @@ export class TopologyCache {
       case "result":
         if (event.ok && event.parsed && typeof event.parsed === "object") {
           const parsed = event.parsed as Record<string, unknown>;
-          if (Array.isArray(parsed.devices) && Array.isArray(parsed.links)) {
+          if (
+            parsed.devices && typeof parsed.devices === "object" && !Array.isArray(parsed.devices) &&
+            parsed.links && typeof parsed.links === "object" && !Array.isArray(parsed.links)
+          ) {
+            const parsedDevices = parsed.devices as Record<string, unknown>;
+            const parsedLinks = parsed.links as Record<string, unknown>;
+            const isEmpty = Object.keys(parsedDevices).length === 0 && Object.keys(parsedLinks).length === 0;
+            if (isEmpty && !this.topology.isMaterialized()) {
+              return;
+            }
             this.applySnapshot(parsed as TopologySnapshot);
           }
         }

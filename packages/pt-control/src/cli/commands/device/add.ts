@@ -6,7 +6,6 @@ import { Args, Flags } from '@oclif/core';
 import { input, select } from '@inquirer/prompts';
 import pc from 'picocolors';
 import { BaseCommand, createSpinner, Flags as BaseFlags } from '../../base-command.js';
-import { createDefaultPTController } from '../../../controller/index.js';
 import { ValidationError } from '../../errors/index.js';
 import type { DeviceState } from '../../../types/index.js';
 import { formatDeviceType } from '../../../utils/device-type.js';
@@ -92,7 +91,7 @@ export default class DeviceAdd extends BaseCommand {
           throw new ValidationError('Device model is required');
         }
 
-        const controller = createDefaultPTController();
+        const controller = this.createController();
         this.trackController(controller);
         const spinner = createSpinner(`Adding device ${pc.cyan(name)}...`);
 

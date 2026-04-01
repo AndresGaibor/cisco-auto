@@ -49,6 +49,14 @@ export const RenameDevicePayloadSchema = z.object({
   newName: z.string(),
 });
 
+export const MoveDevicePayloadSchema = z.object({
+  id: z.string(),
+  type: z.literal('moveDevice'),
+  name: z.string(),
+  x: z.number(),
+  y: z.number(),
+});
+
 // ============================================================================
 // Module Commands
 // ============================================================================
@@ -258,6 +266,7 @@ export const CommandPayloadSchema = z.discriminatedUnion('type', [
   RemoveDevicePayloadSchema,
   ListDevicesPayloadSchema,
   RenameDevicePayloadSchema,
+  MoveDevicePayloadSchema,
   AddModulePayloadSchema,
   RemoveModulePayloadSchema,
   AddLinkPayloadSchema,
@@ -285,6 +294,7 @@ export interface CommandPayloadTypeMap {
   'removeDevice': z.infer<typeof RemoveDevicePayloadSchema>;
   'listDevices': z.infer<typeof ListDevicesPayloadSchema>;
   'renameDevice': z.infer<typeof RenameDevicePayloadSchema>;
+  'moveDevice': z.infer<typeof MoveDevicePayloadSchema>;
   'addModule': z.infer<typeof AddModulePayloadSchema>;
   'removeModule': z.infer<typeof RemoveModulePayloadSchema>;
   'addLink': z.infer<typeof AddLinkPayloadSchema>;

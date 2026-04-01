@@ -112,6 +112,29 @@ function safeValue(getter, fallback) {
   }
 }
 
+function getCableTypeNameFromConnType(connType) {
+  switch (connType) {
+    case 0: return "straight";
+    case 1: return "cross";
+    case 2: return "fiber";
+    case 3:
+    case 4: return "serial";
+    case 5: return "console";
+    default: return "auto";
+  }
+}
+
+function getDeviceTypeNameFromTypeId(typeId) {
+  switch (typeId) {
+    case 0: return "router";
+    case 1: return "switch";
+    case 2: return "generic"; // hub
+    case 3: return "pc";
+    case 4: return "server";
+    default: return "generic";
+  }
+}
+
 function readDeviceState(device) {
   try {
     var name = safeValue(function() { return device.getName(); }, "");
@@ -131,10 +154,12 @@ function readDeviceState(device) {
       } catch (e) {}
     }
 
+    var typeId = safeValue(function() { return device.getType(); }, 0);
+
     return {
       name: name,
       model: safeValue(function() { return device.getModel(); }, ""),
-      type: safeValue(function() { return device.getType(); }, 0),
+      type: getDeviceTypeNameFromTypeId(typeId),
       power: safeValue(function() { return device.getPower(); }, false),
       ports: ports
     };
@@ -163,6 +188,87 @@ function collectDevices() {
     devices: devices,
     list: deviceList
   };
+}
+
+function collectLinks() {
+  var net = ipc.network();
+  var count = net.getDeviceCount();
+  var links = {};
+
+  for (var i = 0; i < count; i++) {
+    try {
+      var device = net.getDeviceAt(i);
+      if (!device) continue;
+
+      var name = safeValue(function() { return device.getName(); }, "");
+      var portCount = safeValue(function() { return device.getPortCount(); }, 0);
+
+      for (var p = 0; p < portCount; p++) {
+        try {
+          var port = device.getPortAt(p);
+          if (!port) continue;
+
+          var link = port.getLink();
+          if (!link) continue;
+
+          for (var j = 0; j < count; j++) {
+            try {
+              var otherDevice = net.getDeviceAt(j);
+              if (!otherDevice || otherDevice.getName() === name) continue;
+
+              var otherPortCount = safeValue(function() { return otherDevice.getPortCount(); }, 0);
+              for (var op = 0; op < otherPortCount; op++) {
+                try {
+                  var otherPort = otherDevice.getPortAt(op);
+                  if (!otherPort) continue;
+
+                  var otherLink = otherPort.getLink();
+                  if (otherLink && otherLink === link) {
+                    var dev1 = name;
+                    var pt1 = port.getName();
+                    var dev2 = otherDevice.getName();
+                    var pt2 = otherPort.getName();
+
+                    if (dev2 < dev1 || (dev2 === dev1 && pt2 < pt1)) {
+                      dev1 = otherDevice.getName();
+                      pt1 = otherPort.getName();
+                      dev2 = name;
+                      pt2 = port.getName();
+                    }
+
+                    var linkId = dev1 + ":" + pt1 + "--" + dev2 + ":" + pt2;
+                    if (!links[linkId]) {
+                      var connType = null;
+                      try {
+                        var linkAny = link;
+                        if (typeof linkAny.connType === "number") {
+                          connType = linkAny.connType;
+                        }
+                      } catch (e) {}
+
+                      links[linkId] = {
+                        id: linkId,
+                        device1: dev1,
+                        port1: pt1,
+                        device2: dev2,
+                        port2: pt2,
+                        cableType: getCableTypeNameFromConnType(connType),
+                        connected: true
+                      };
+                    }
+
+                    break;
+                  }
+                } catch (e) {}
+              }
+            } catch (e) {}
+          }
+        } catch (e) {}
+      }
+    } catch (e) {}
+  }
+
+  return links;
 }
 
 // ============================================================================
@@ -438,7 +544,7 @@ function setupEventListeners() {
 function generateSnapshot() {
   try {
     var collected = collectDevices();
-    var links = {};
+    var links = collectLinks();
     
     return {
       version: "1.0",

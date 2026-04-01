@@ -1,5 +1,12 @@
 /**
  * Path layout for Bridge V2 directory structure.
+ *
+ * NOTE: FileBridge V2 uses a single-file command protocol (command.json at root)
+ * for the primary sendCommand/sendCommandAndWait API.
+ * The commands/, in-flight/, and results/ directories exist to support:
+ *   - Crash recovery (recovering in-flight commands after restart)
+ *   - Consumer integrations that use CommandProcessor directly
+ *
  * All paths are derived from a single root (pt-dev directory).
  */
 import { join } from "node:path";

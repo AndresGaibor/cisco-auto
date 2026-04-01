@@ -3,7 +3,6 @@
 // ============================================================================
 
 import { BaseCommand } from '../../base-command.js';
-import { createDefaultPTController } from '../../../controller/index.js';
 import { formatDeviceType } from '../../../utils/device-type.js';
 
 export default class TopologyRead extends BaseCommand {
@@ -28,7 +27,7 @@ export default class TopologyRead extends BaseCommand {
         format: this.globalFlags.format,
       },
       execute: async () => {
-        const controller = createDefaultPTController();
+        const controller = this.createController();
         this.trackController(controller);
 
         await controller.start();

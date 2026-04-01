@@ -6,7 +6,6 @@ import { Args, Flags } from '@oclif/core';
 import { input, confirm } from '@inquirer/prompts';
 import pc from 'picocolors';
 import { BaseCommand, createSpinner } from '../../base-command.js';
-import { createDefaultPTController } from '../../../controller/index.js';
 import { DeviceNotFoundError, ValidationError } from '../../errors/index.js';
 import type { DeviceState } from '../../../types/index.js';
 
@@ -82,7 +81,7 @@ export default class ConfigHost extends BaseCommand {
           throw new ValidationError(`Invalid IP address: ${ip}`);
         }
 
-        const controller = createDefaultPTController();
+        const controller = this.createController();
         this.trackController(controller);
         const spinner = createSpinner(`Configuring ${pc.cyan(device)}...`);
 
@@ -150,7 +149,7 @@ export default class ConfigHost extends BaseCommand {
   }
 
   private async promptForHost(providedDevice?: string): Promise<{ device: string }> {
-    const controller = createDefaultPTController();
+    const controller = this.createController();
     this.trackController(controller);
     await controller.start();
 

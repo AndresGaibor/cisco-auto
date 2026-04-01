@@ -3,7 +3,6 @@
 // ============================================================================
 
 import { BaseCommand } from '../../base-command.js';
-import { createDefaultPTController } from '../../../controller/index.js';
 import { Args } from '@oclif/core';
 
 export default class CanvasInspect extends BaseCommand {
@@ -40,7 +39,7 @@ export default class CanvasInspect extends BaseCommand {
         includeClusters,
       },
       execute: async () => {
-        const controller = createDefaultPTController();
+        const controller = this.createController();
         this.trackController(controller);
 
         await controller.start();

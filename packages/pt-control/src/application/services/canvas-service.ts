@@ -3,7 +3,7 @@
 // ============================================================================
 
 import type { FileBridgePort } from "../ports/file-bridge.port.js";
-import type { DevicesInRectResult } from "../../contracts/index.js";
+import type { DevicesInRectResult, GetRectResult } from "../../contracts/index.js";
 
 export class CanvasService {
   constructor(
@@ -38,5 +38,18 @@ export class CanvasService {
     });
 
     return value ?? { ok: false, rectId, devices: [], count: 0 };
+  }
+
+  /**
+   * Get detailed data for a specific canvas rectangle
+   */
+  async getRect(rectId: string): Promise<GetRectResult> {
+    const { value } = await this.bridge.sendCommandAndWait<GetRectResult>({
+      type: "getRect",
+      id: this.generateId(),
+      rectId,
+    });
+
+    return value ?? { ok: false, rectId, error: "Rect not found" };
   }
 }

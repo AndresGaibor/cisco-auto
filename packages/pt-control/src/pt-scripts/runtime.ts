@@ -55,13 +55,37 @@ interface PTDeviceSnapshot {
   ports: PTPortInfo[];
 }
 
+interface PTLinkSnapshot {
+  id: string;
+  device1: string;
+  port1: string;
+  device2: string;
+  port2: string;
+  cableType: string;
+  connected: boolean;
+}
+
 interface PTTopologySnapshot {
   version: string;
   timestamp: number;
   devices: Record<string, PTDeviceSnapshot>;
+  links: Record<string, PTLinkSnapshot>;
   metadata: {
     deviceCount: number;
+    linkCount: number;
   };
+}
+
+function getCableTypeNameFromConnType(connType?: number): string {
+  switch (connType) {
+    case 0: return "straight";
+    case 1: return "cross";
+    case 2: return "fiber";
+    case 3:
+    case 4: return "serial";
+    case 5: return "console";
+    default: return "auto";
+  }
 }
 
 function generateSnapshot(): PTTopologySnapshot | null {
@@ -69,6 +93,7 @@ function generateSnapshot(): PTTopologySnapshot | null {
     var net = ipc.network();
     var count = net.getDeviceCount();
     var devices: Record<string, PTDeviceSnapshot> = {};
+    var links: Record<string, PTLinkSnapshot> = {};
 
     for (var i = 0; i < count; i++) {
       var device = net.getDeviceAt(i);
@@ -84,6 +109,59 @@ function generateSnapshot(): PTTopologySnapshot | null {
           try { portInfo.subnetMask = port.getSubnetMask(); } catch(e2) {}
           try { portInfo.macAddress = port.getMacAddress(); } catch(e3) {}
           ports.push(portInfo);
+
+          try {
+            var link = port.getLink();
+            if (link) {
+              for (var j = 0; j < count; j++) {
+                var otherDevice = net.getDeviceAt(j);
+                if (!otherDevice || otherDevice.getName() === name) continue;
+
+                var otherPortCount = otherDevice.getPortCount();
+                for (var op = 0; op < otherPortCount; op++) {
+                  try {
+                    var otherPort = otherDevice.getPortAt(op);
+                    if (!otherPort) continue;
+
+                    var otherLink = otherPort.getLink();
+                    if (otherLink && otherLink === link) {
+                      var dev1 = name;
+                      var pt1 = portInfo.name;
+                      var dev2 = otherDevice.getName();
+                      var pt2 = otherPort.getName();
+
+                      if (dev2 < dev1 || (dev2 === dev1 && pt2 < pt1)) {
+                        dev1 = otherDevice.getName();
+                        pt1 = otherPort.getName();
+                        dev2 = name;
+                        pt2 = portInfo.name;
+                      }
+
+                      var linkId = dev1 + ":" + pt1 + "--" + dev2 + ":" + pt2;
+                      if (!links[linkId]) {
+                        var connType: number | undefined = undefined;
+                        try {
+                          var linkAny = link as any;
+                          if (typeof linkAny.connType === "number") connType = linkAny.connType;
+                        } catch (e4) {}
+
+                        links[linkId] = {
+                          id: linkId,
+                          device1: dev1,
+                          port1: pt1,
+                          device2: dev2,
+                          port2: pt2,
+                          cableType: getCableTypeNameFromConnType(connType),
+                          connected: true,
+                        };
+                      }
+                      break;
+                    }
+                  } catch (e5) {}
+                }
+              }
+            }
+          } catch (e6) {}
         } catch (e) {}
       }
 
@@ -100,7 +178,8 @@ function generateSnapshot(): PTTopologySnapshot | null {
       version: "2.0",
       timestamp: Date.now(),
       devices: devices,
-      metadata: { deviceCount: count }
+      links: links,
+      metadata: { deviceCount: count, linkCount: Object.keys(links).length }
     };
   } catch (e) {
     return null;

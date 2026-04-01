@@ -6,7 +6,6 @@ import { existsSync, statSync } from 'fs';
 import { join } from 'path';
 import pc from 'picocolors';
 import { BaseCommand } from '../../base-command.js';
-import { createDefaultPTController } from '../../../controller/index.js';
 
 export default class RuntimeStatus extends BaseCommand {
   static override description = 'Show runtime status and file health';
@@ -74,7 +73,7 @@ export default class RuntimeStatus extends BaseCommand {
     if (existsSync(stateFile)) {
       this.print('\n');
       try {
-        const controller = createDefaultPTController();
+        const controller = this.createController();
         this.trackController(controller);
         await controller.start();
         const state = controller.readState() as { devices?: Record<string, unknown> } | null;

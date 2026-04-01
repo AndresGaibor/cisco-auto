@@ -7,11 +7,10 @@ import { writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import pc from 'picocolors';
 import { BaseCommand, createSpinner } from '../../base-command.js';
-import { createDefaultPTController } from '../../../controller/index.js';
 import { ValidationError } from '../../errors/index.js';
 
 export default class RecordStart extends BaseCommand {
-  static override description = 'Start recording operations to a file';
+  static override description = 'Start recording operations to a file (experimental — replay not yet implemented)';
 
   static override examples = [
     '<%= config.bin %> record start',
@@ -38,7 +37,7 @@ export default class RecordStart extends BaseCommand {
       throw new ValidationError('Recording already in progress. Run `pt record stop` first.');
     }
 
-    const controller = createDefaultPTController();
+    const controller = this.createController();
     this.trackController(controller);
     const spinner = createSpinner('Starting recording...');
 

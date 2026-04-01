@@ -51,13 +51,20 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
     return { ok: false, error: "Failed to create link" };
   }
 
+  // Normalize cable type string
+  const normalizedCableType = payload.linkType || "auto";
+
+  // Generate link ID (consistent with LinkState schema)
+  const linkId = `${payload.device1}:${payload.port1}--${payload.device2}:${payload.port2}`;
+
   return {
     ok: true,
+    id: linkId,
     device1: payload.device1,
     port1: payload.port1,
     device2: payload.device2,
     port2: payload.port2,
-    linkType: payload.linkType || "auto",
+    cableType: normalizedCableType,
   };
 }
 

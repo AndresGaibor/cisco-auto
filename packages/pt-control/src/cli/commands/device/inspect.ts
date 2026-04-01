@@ -3,7 +3,6 @@
 // ============================================================================
 
 import { BaseCommand } from '../../base-command.js';
-import { createDefaultPTController } from '../../../controller/index.js';
 import { Args } from '@oclif/core';
 import { formatDeviceType } from '../../../utils/device-type.js';
 
@@ -41,7 +40,7 @@ export default class DeviceInspect extends BaseCommand {
         includeConfig,
       },
       execute: async () => {
-        const controller = createDefaultPTController();
+        const controller = this.createController();
         this.trackController(controller);
 
         await controller.start();
