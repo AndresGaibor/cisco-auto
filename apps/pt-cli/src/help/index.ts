@@ -7,16 +7,25 @@ export { getExamples, getExamplesForCommand, commandExamples, type CommandExampl
 export { getRelatedCommands, getRelatedForCommand, relatedCommands, type RelatedCommand } from './related.ts';
 
 /**
+ * Interfaz mínima de Commander.Command para agregar texto de ayuda
+ */
+interface CommanderCommand {
+  addHelpText(position: 'beforeAll' | 'before' | 'after' | 'afterAll', text: string): unknown;
+}
+
+/**
  * Agrega help personalizado a un comando de Commander
+ * @param command - Comando de Commander al que agregar ayuda
+ * @param commandPath - Ruta del comando para buscar ejemplos (no usada directamente, legacy)
+ * @param examples - Array de ejemplos con descripción y comando
+ * @param related - Array de comandos relacionados con nombre y descripción
  */
 export function addHelpToCommand(
-  command: any,
+  command: CommanderCommand,
   commandPath: string,
-  examples: any[],
-  related: any[]
+  examples: CommandExample[],
+  related: RelatedCommand[]
 ): void {
-  const { formatExamples, formatRelatedCommands } = require('./formatter.ts');
-
   const examplesText = formatExamples(examples);
   const relatedText = formatRelatedCommands(related);
 

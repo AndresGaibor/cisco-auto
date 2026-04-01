@@ -14,9 +14,9 @@ export default class TrunkApply extends BaseCommand {
   static override description = 'Apply trunk configuration to device ports';
 
   static override examples = [
-    '<%= config.bin %> trunk apply S1 GigabitEthernet0/1 GigabitEthernet0/2',
-    '<%= config.bin %> trunk apply S1 GigabitEthernet0/1 --vlans 10,20,30',
-    '<%= config.bin %> trunk apply S1 GigabitEthernet0/1 GigabitEthernet0/2 --vlans 10-30',
+    '<%= config.bin %> trunk apply S1 FastEthernet0/1,FastEthernet0/2',
+    '<%= config.bin %> trunk apply S1 "FastEthernet0/1 FastEthernet0/2" --vlans 10,20,30',
+    '<%= config.bin %> trunk apply S1 FastEthernet0/1 --vlans 10-30',
   ];
 
   static override args = {
@@ -25,9 +25,8 @@ export default class TrunkApply extends BaseCommand {
       required: true,
     }),
     ports: Args.string({
-      description: 'Interface names to configure as trunk (e.g., GigabitEthernet0/1)',
+      description: 'Interface names to configure as trunk (e.g., "FastEthernet0/1,FastEthernet0/2" or "FastEthernet0/1 FastEthernet0/2")',
       required: true,
-      multiple: true,
     }),
   };
 
@@ -45,7 +44,8 @@ export default class TrunkApply extends BaseCommand {
 
   async run(): Promise<void> {
     const device = this.args.device as string;
-    const ports = this.args.ports as string[];
+    const portsRaw = this.args.ports as string;
+    const ports = this.parsePortList(portsRaw);
     const vlansArg = this.flags.vlans as string | undefined;
     const save = this.flags.save as boolean;
 
@@ -62,11 +62,6 @@ export default class TrunkApply extends BaseCommand {
         // Validar device
         if (!device || device.trim() === '') {
           throw new ValidationError('Device name is required');
-        }
-
-        // Validar ports
-        if (!ports || ports.length === 0) {
-          throw new ValidationError('At least one port is required');
         }
 
         // Parsear VLANs
@@ -137,6 +132,17 @@ export default class TrunkApply extends BaseCommand {
    * - "10-30" -> [10, 11, 12, ..., 30]
    * - "10,20,30-35" -> [10, 20, 30, 31, 32, 33, 34, 35]
    */
+  private parsePortList(raw: string): string[] {
+    if (!raw || raw.trim() === '') {
+      throw new ValidationError('At least one port is required');
+    }
+    const ports = raw.split(/[,\s]+/).filter(p => p.length > 0);
+    if (ports.length === 0) {
+      throw new ValidationError('No valid port names provided');
+    }
+    return ports;
+  }
+
   private parseVlanString(vlanStr: string): number[] {
     const vlans: number[] = [];
     const segments = vlanStr.split(',');

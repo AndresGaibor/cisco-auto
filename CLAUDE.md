@@ -104,3 +104,48 @@ bun --hot ./index.ts
 ```
 
 For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+
+## PT Control (Cisco Packet Tracer)
+
+**PT Control** es la CLI profesional para controlar Cisco Packet Tracer en tiempo real. Ubicación: `/packages/pt-control/`
+
+### Setup Inicial
+```bash
+# 1. Instalar módulo de scripting en PT (requiere PT abierto)
+cd packages/pt-control && bun run scripts/setup-pt-control.sh
+
+# 2. Dentro de PT: cargar el script desde File > Open > select pt-scripts/main.ts
+```
+
+### Comandos principales
+```bash
+# Listar dispositivos
+cd packages/pt-control && bun run scripts/topologia-apply.ts
+
+# Aplicar VLANs
+bun run pt vlan apply <SWITCH> <VLAN_ID>...
+
+# Configurar puertos trunk
+bun run pt trunk apply <SWITCH> <PORT>...
+
+# Setup SSH en routers
+bun run pt ssh setup <ROUTER> --domain <DOMAIN> --user <USER> --pass <PASS>
+
+# Aplicar topología completa (config JSON)
+cp topology-config.example.json topology-config.json
+bun run scripts/topologia-apply.ts --config topology-config.json
+
+# Con flags adicionales
+bun run scripts/topologia-apply.ts --vlans 10,20,30 --ssh-domain cisco.local --dry-run --verbose
+```
+
+### Requisitos
+- Packet Tracer debe estar corriendo
+- Módulo de scripting cargado en PT (ver setup-pt-control.sh)
+- Timeout default: 120s para descubrimiento de dispositivos
+
+### Archivos clave
+- `src/cli/commands/device/list.ts` - Listar dispositivos
+- `src/vdom/index.ts` - Motor de topología virtual
+- `topology-config.example.json` - Plantilla de configuración
+- `scripts/topologia-apply.ts` - Script de automatización completa

@@ -69,15 +69,16 @@ export class ValidationExecutor {
           checks.push(await this.validateVlan(connector, vlan.id, vlan.name));
         }
       }
-      
+
       // Ejecutar validaciones de routing
       if (spec.checks.routing) {
         for (const route of spec.checks.routing) {
           checks.push(await this.validateRoute(connector, route.destination));
         }
       }
-      
-    } catch (error: any) {
+
+    } catch (error) {
+      const err = error as Error;
       checks.push({
         name: 'Connection',
         type: 'interface',
@@ -85,12 +86,12 @@ export class ValidationExecutor {
         expected: 'Connected',
         actual: 'Failed',
         passed: false,
-        message: error.message
+        message: err.message
       });
     } finally {
       await connector.disconnect();
     }
-    
+
     return {
       passed: checks.every(c => c.passed),
       checks
@@ -113,7 +114,7 @@ export class ValidationExecutor {
       const success = output.includes('!!!') || 
                       output.includes('Success rate is 100 percent') ||
                       output.includes('!!!!');
-      
+
       return {
         name: `Ping to ${destination}`,
         type: 'ping',
@@ -123,7 +124,8 @@ export class ValidationExecutor {
         passed: success === expected,
         message: success ? 'Ping successful' : 'Ping failed'
       };
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       return {
         name: `Ping to ${destination}`,
         type: 'ping',
@@ -131,7 +133,7 @@ export class ValidationExecutor {
         expected: expected ? 'Success' : 'Failure',
         actual: 'Error',
         passed: false,
-        message: error.message
+        message: err.message
       };
     }
   }
@@ -147,11 +149,11 @@ export class ValidationExecutor {
     try {
       const result = await connector.execCommand(`show interface ${interfaceName}`);
       const output = result.stdout || '';
-      
+
       // Detectar estado de la interfaz
       const isUp = (output.includes('is up') || output.includes('line protocol is up')) &&
                    !output.includes('administratively down');
-      
+
       return {
         name: `Interface ${interfaceName}`,
         type: 'interface',
@@ -161,7 +163,8 @@ export class ValidationExecutor {
         passed: isUp === expectedUp,
         message: isUp ? 'Interface is up' : 'Interface is down'
       };
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       return {
         name: `Interface ${interfaceName}`,
         type: 'interface',
@@ -169,7 +172,7 @@ export class ValidationExecutor {
         expected: expectedUp ? 'up' : 'down',
         actual: 'Error',
         passed: false,
-        message: error.message
+        message: err.message
       };
     }
   }
@@ -185,11 +188,11 @@ export class ValidationExecutor {
     try {
       const result = await connector.execCommand('show vlan brief');
       const output = result.stdout || '';
-      
+
       // Buscar la VLAN
       const vlanRegex = new RegExp(`${vlanId}\\s+(\\S+)`, 'i');
       const match = output.match(vlanRegex);
-      
+
       const exists = match !== null;
       const actualName: string = match ? (match[1] ?? 'unknown') : 'not found';
 
@@ -207,7 +210,8 @@ export class ValidationExecutor {
         passed,
         message: exists ? `VLAN found: ${actualName}` : 'VLAN not found'
       };
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       return {
         name: `VLAN ${vlanId}`,
         type: 'vlan',
@@ -215,7 +219,7 @@ export class ValidationExecutor {
         expected: expectedName || `VLAN ${vlanId} exists`,
         actual: 'Error',
         passed: false,
-        message: error.message
+        message: err.message
       };
     }
   }
@@ -230,16 +234,16 @@ export class ValidationExecutor {
     try {
       const result = await connector.execCommand(`show ip route ${destination}`);
       const output = result.stdout || '';
-      
+
       // Verificar si hay ruta
       const hasRoute = !output.includes('% Subnet not in table') &&
                        !output.includes('Network not in table') &&
                        output.length > 10;
-      
+
       // Extraer next-hop si existe
       const nextHopMatch = output.match(/via\s+(\d+\.\d+\.\d+\.\d+)/);
       const nextHop = nextHopMatch ? nextHopMatch[1] : 'directly connected';
-      
+
       return {
         name: `Route to ${destination}`,
         type: 'routing',
@@ -249,7 +253,8 @@ export class ValidationExecutor {
         passed: hasRoute,
         message: hasRoute ? `Route found via ${nextHop}` : 'No route found'
       };
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       return {
         name: `Route to ${destination}`,
         type: 'routing',
@@ -257,7 +262,7 @@ export class ValidationExecutor {
         expected: 'Route exists',
         actual: 'Error',
         passed: false,
-        message: error.message
+        message: err.message
       };
     }
   }
@@ -316,7 +321,7 @@ export function generateValidationSpec(
     const vlans = new Set<number>();
     device.interfaces?.forEach(i => {
       if (i.vlan) {
-        vlans.add(i.vlan);
+        vlans.add(i.vlan.value);
       }
     });
 

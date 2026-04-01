@@ -230,10 +230,11 @@ export class DeployOrchestrator {
         }
       }
 
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       errors.push({
         code: DeployErrorCode.CONNECTION_FAILED,
-        message: error.message || 'Connection failed',
+        message: err.message ?? 'Connection failed',
         recoverable: false
       });
 
@@ -242,10 +243,11 @@ export class DeployOrchestrator {
         try {
           await this.rollback(connector, device.name);
           warnings.push('Rollback executed');
-        } catch (rollbackError: any) {
+        } catch (rollbackError) {
+          const rollbackErr = rollbackError as Error;
           errors.push({
             code: DeployErrorCode.ROLLBACK_FAILED,
-            message: rollbackError.message,
+            message: rollbackErr.message,
             recoverable: false
           });
         }

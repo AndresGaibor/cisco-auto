@@ -28,6 +28,8 @@ export {
   parseShowSpanningTree,
   parseShowVersion,
   parseShowCdpNeighbors,
+  getParser,
+  PARSERS,
 } from "./domain/ios/parsers/index.js";
 
 // Logging - NDJSON logging with session tracking

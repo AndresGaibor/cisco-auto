@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { SectionOrderConfig, DEFAULT_SECTION_ORDER, IOSGenerator } from './ios-generator';
 import type { DeviceSpec } from '../canonical/device.spec';
+import { VlanId, VlanName } from '../value-objects/index.js';
 
 describe('SectionOrderConfig', () => {
   const mockDevice: Partial<DeviceSpec> = {
@@ -11,7 +12,7 @@ describe('SectionOrderConfig', () => {
     interfaces: [
       { name: 'GigabitEthernet0/0', ip: '192.168.1.1/24', shutdown: false }
     ],
-    vlans: [{ id: 10, name: 'DATA' }],
+    vlans: [{ id: VlanId.from(10), name: VlanName.from('DATA') }],
     routing: {
       ospf: {
         processId: 1,

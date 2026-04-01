@@ -9,6 +9,8 @@ import type { LinkState } from '../../../types/index.js';
 export default class LinkList extends BaseCommand {
   static override description = 'List all links in the topology';
 
+  static override aliases = ['links'];
+
   static override examples = [
     '<%= config.bin %> link list',
     '<%= config.bin %> link list --format json',

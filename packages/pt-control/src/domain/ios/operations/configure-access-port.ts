@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { CapabilitySet } from "../capabilities/capability-set.js";
-import { InterfaceName, VlanId } from "../value-objects/index.js";
+import { InterfaceName, VlanId, InterfaceDescription } from "../value-objects/index.js";
 import type { CommandPlan } from "./command-plan.js";
 import { CommandPlanBuilder } from "./command-plan.js";
 
@@ -13,7 +13,7 @@ import { CommandPlanBuilder } from "./command-plan.js";
 export interface ConfigureAccessPortInput {
   port: InterfaceName;
   vlan: VlanId;
-  description?: string;
+  description?: InterfaceDescription | string;
   portfast?: boolean;
   bpduguard?: boolean;
 }
@@ -39,7 +39,8 @@ export function planConfigureAccessPort(
     .iface(`switchport access vlan ${vlan.value}`, `Assign VLAN ${vlan.value}`);
 
   if (description) {
-    builder.iface(`description ${description}`, "Set port description");
+    const descValue = description instanceof InterfaceDescription ? description.value : description;
+    builder.iface(`description ${descValue}`, "Set port description");
   }
 
   if (portfast && caps.switchport.portfast) {
@@ -58,7 +59,7 @@ export function planConfigureAccessPort(
     );
   }
 
-  builder.iface("switchport nonegotiate", "Disable DTP negotiation", "switchport nonegotiate");
+  builder.iface("switchport nonegotiate", "Disable DTP negotiation", "no switchport nonegotiate");
 
   return builder.build();
 }

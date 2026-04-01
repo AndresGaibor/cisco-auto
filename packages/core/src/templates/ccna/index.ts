@@ -5,6 +5,7 @@
 
 import type { LabSpec, DeviceSpec, ConnectionSpec } from '../../canonical';
 import { CableType } from '../../canonical';
+import { VlanId, VlanName } from '../../value-objects/index.js';
 
 export interface LabTemplate {
   id: string;
@@ -52,9 +53,9 @@ export const vlanBasicsTemplate: LabTemplate = {
           { name: 'Vlan30', ip: '192.168.30.1/24', description: 'VLAN 30 Gateway' }
         ],
         vlans: [
-          { id: 10, name: 'Sales', interfaces: ['Fa0/1', 'Fa0/2'] },
-          { id: 20, name: 'HR', interfaces: ['Fa0/3', 'Fa0/4'] },
-          { id: 30, name: 'IT', interfaces: ['Fa0/5', 'Fa0/6'] }
+          { id: VlanId.from(10), name: VlanName.from('Sales'), interfaces: ['Fa0/1', 'Fa0/2'] },
+          { id: VlanId.from(20), name: VlanName.from('HR'), interfaces: ['Fa0/3', 'Fa0/4'] },
+          { id: VlanId.from(30), name: VlanName.from('IT'), interfaces: ['Fa0/5', 'Fa0/6'] }
         ]
       },
       {

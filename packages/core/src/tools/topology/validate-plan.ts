@@ -337,31 +337,22 @@ export const ptValidatePlanTool: Tool = {
     // Validación básica de estructura
     if (!plan || typeof plan !== 'object') {
       return {
-        success: false,
-        error: {
-          code: 'INVALID_INPUT',
-          message: 'Se requiere un plan de topología válido'
-        }
+        ok: false,
+        error: 'Se requiere un plan de topología válido'
       };
     }
     
     if (!plan.devices || !Array.isArray(plan.devices)) {
       return {
-        success: false,
-        error: {
-          code: 'INVALID_STRUCTURE',
-          message: 'El plan debe contener un array de devices'
-        }
+        ok: false,
+        error: 'El plan debe contener un array de devices'
       };
     }
     
     if (!plan.links || !Array.isArray(plan.links)) {
       return {
-        success: false,
-        error: {
-          code: 'INVALID_STRUCTURE',
-          message: 'El plan debe contener un array de links'
-        }
+        ok: false,
+        error: 'El plan debe contener un array de links'
       };
     }
     
@@ -369,12 +360,8 @@ export const ptValidatePlanTool: Tool = {
     const result = validateTopologyPlan(plan);
     
     return {
-      success: true,
-      data: result,
-      metadata: {
-        itemCount: plan.devices.length + plan.links.length,
-        warnings: result.warnings.map(w => w.message)
-      }
+      ok: true,
+      data: result
     };
   }
 };

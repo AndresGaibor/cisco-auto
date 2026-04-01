@@ -28,17 +28,21 @@ else
     echo "✓ Directory exists"
 fi
 
-# Copy runtime
-RUNTIME_SRC="pt-extension/runtime.js"
-RUNTIME_DEST="$DEV_DIR/runtime.js"
+# Copy V2 runtime files from generated source-of-truth
+GENERATED_DIR="packages/pt-control/generated"
 
-if [ -f "$RUNTIME_SRC" ]; then
-    cp "$RUNTIME_SRC" "$RUNTIME_DEST"
-    echo "✓ Copied runtime.js"
-else
-    echo "❌ Runtime source not found: $RUNTIME_SRC"
-    exit 1
-fi
+for FILE in main.js runtime.js; do
+    SRC="$GENERATED_DIR/$FILE"
+    DEST="$DEV_DIR/$FILE"
+    
+    if [ -f "$SRC" ]; then
+        cp "$SRC" "$DEST"
+        echo "✓ Copied $FILE"
+    else
+        echo "❌ Source not found: $SRC"
+        exit 1
+    fi
+done
 
 # Install dependencies
 echo
@@ -53,7 +57,7 @@ echo
 echo "1. Install PT Script Module:"
 echo "   - Open Packet Tracer"
 echo "   - Go to Extensions > Scripting > New PT Script Module"
-echo "   - Add pt-extension/main.js as main script"
+echo "   - Add packages/pt-control/generated/main.js as main script"
 echo "   - Save and restart PT"
 echo
 echo "2. Verify installation:"

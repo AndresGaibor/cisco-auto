@@ -2,221 +2,275 @@
 // Config Handlers - Pure functions for device configuration
 // ============================================================================
 
-import type { HandlerDeps, HandlerResult, PTCommandLine, PTDevice, PTPort } from "../utils/helpers";
-
-// getParser is defined at runtime by parser-generator.ts (IOS_PARSERS + __getParser)
-// This declaration satisfies TypeScript during compilation
-declare function getParser(command: string): ((output: string) => Record<string, unknown>) | null;
+import type { HandlerDeps, HandlerResult, PTCommandLine, PTDevice } from "../utils/helpers";
+import type {
+  ConfigHostPayload,
+  ConfigIosPayload,
+  ExecIosPayload,
+  ExecIosSuccessResult,
+  ExecIosErrorResult,
+} from "./config-types";
+import {
+  inferModeFromPrompt,
+  updateSessionFromOutput,
+  isInConfigMode,
+  isInPrivilegedMode,
+  type RuntimeSessionState,
+} from "./ios-session";
+import {
+  classifyCommandOutput,
+  isFailureClassification,
+  isSuccessClassification,
+  requiresUserInput,
+} from "./ios-output-classifier";
 
 // ============================================================================
-// Payload Types
+// Local getParser - Inline implementation for PT runtime
+// This avoids the workspace dependency issue for the test
 // ============================================================================
 
-export interface ConfigHostPayload {
-  type: "configHost";
-  device: string;
-  ip?: string;
-  mask?: string;
-  gateway?: string;
-  dns?: string;
-  dhcp?: boolean;
+type ParserFn = (output: string) => Record<string, unknown>;
+
+const PARSERS: Record<string, ParserFn> = {
+  "show ip interface brief": (output: string) => {
+    const interfaces: Array<{interface: string; ipAddress: string; ok: string; method: string; status: string; protocol: string}> = [];
+    const lines = output.split("\n").filter(l => l.trim().length > 0);
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.includes("---")) continue;
+      const match = line.match(/^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)$/);
+      if (match) {
+        interfaces.push({
+          interface: match[1],
+          ipAddress: match[2],
+          ok: match[3],
+          method: match[4],
+          status: match[5],
+          protocol: match[6]
+        });
+      }
+    }
+    return { entries: interfaces };
+  },
+  "show vlan brief": (output: string) => {
+    const vlans: Array<{id: number; name: string; status: string; ports: string[]}> = [];
+    const lines = output.split("\n").filter(l => l.trim().length > 0);
+    for (const line of lines) {
+      if (line.includes("---")) continue;
+      const match = line.match(/^(\d+)\s+(\S+)\s+(\S+)\s*(.*)$/);
+      if (match) {
+        vlans.push({
+          id: parseInt(match[1]),
+          name: match[2],
+          status: match[3],
+          ports: match[4] ? match[4].split(",").map(p => p.trim()).filter(p => p) : []
+        });
+      }
+    }
+    return { entries: vlans };
+  },
+  "show running-config": (output: string) => {
+    const sections: Record<string, string> = {};
+    const interfaces: Record<string, string> = {};
+    let currentSection: string | null = null;
+    const lines = output.split("\n");
+    for (const line of lines) {
+      if (line === "!") {
+        if (currentSection) sections[currentSection] = "";
+        currentSection = null;
+      } else if (line.startsWith("interface ")) {
+        currentSection = line.trim();
+        interfaces[line.substring(10).trim()] = "";
+      } else if (currentSection) {
+        interfaces[currentSection] = (interfaces[currentSection] || "") + line + "\n";
+      }
+    }
+    return { entries: { sections, interfaces } };
+  },
+};
+
+function getParser(command: string): ParserFn | null {
+  const cmd = command.toLowerCase().trim();
+  if (PARSERS[cmd]) return PARSERS[cmd];
+  for (const key in PARSERS) {
+    if (cmd.startsWith(key)) return PARSERS[key];
+  }
+  return null;
 }
 
-export interface ConfigIosPayload {
-  type: "configIos";
-  device: string;
-  commands: string[];
-  save?: boolean;
-}
+// ============================================================================
+// Helper Functions
+// ============================================================================
 
-export interface ExecIosPayload {
-  type: "execIos";
-  device: string;
-  command: string;
-  parse?: boolean;
-}
-
-export interface ExecIosSuccessResult extends HandlerResult {
-  ok: boolean;
-  raw: string;
-  status?: number;
-  parsed?: Record<string, unknown>;
-  parseError?: string;
-  classification?: string;
-  session?: { mode: string; paging?: boolean; awaitingConfirm?: boolean };
-}
-
-export interface ExecIosErrorResult extends HandlerResult {
-  ok: false;
-  raw: "";
-  error: string;
+function ensureIosTerm(device: PTDevice): PTCommandLine | null {
+  return device.getCommandLine() ?? null;
 }
 
 // ============================================================================
 // Handlers
 // ============================================================================
 
-/**
- * Configure a host device (PC, Server, etc.)
- */
 export function handleConfigHost(payload: ConfigHostPayload, deps: HandlerDeps): HandlerResult {
   const { getNet } = deps;
-  const net = getNet();
-
-  const device = net.getDevice(payload.device);
-  if (!device) {
-    return { ok: false, error: `Device not found: ${payload.device}` };
-  }
+  const device = getNet().getDevice(payload.device);
+  if (!device) return { ok: false, error: `Device not found: ${payload.device}` };
 
   const port = device.getPortAt(0);
-  if (!port) {
-    return { ok: false, error: "No ports on device" };
-  }
+  if (!port) return { ok: false, error: "No ports on device" };
 
   if (payload.dhcp === true) {
-    // Enable DHCP
-    try {
-      port.setDhcpEnabled(true);
-    } catch {
-      // Some PT versions don't support this
-    }
+    try { port.setDhcpEnabled(true); } catch {}
   } else {
-    if (payload.ip && payload.mask) {
-      port.setIpSubnetMask(payload.ip, payload.mask);
-    }
-    if (payload.gateway) {
-      port.setDefaultGateway(payload.gateway);
-    }
-    if (payload.dns) {
-      port.setDnsServerIp(payload.dns);
-    }
+    if (payload.ip && payload.mask) port.setIpSubnetMask(payload.ip, payload.mask);
+    if (payload.gateway) port.setDefaultGateway(payload.gateway);
+    if (payload.dns) port.setDnsServerIp(payload.dns);
   }
 
-  return {
-    ok: true,
-    device: payload.device,
-    ip: payload.ip,
-    mask: payload.mask,
-    gateway: payload.gateway,
-  };
+  return { ok: true, device: payload.device, ip: payload.ip, mask: payload.mask, gateway: payload.gateway };
 }
 
-/**
- * Configure IOS device with multiple commands
- */
 export function handleConfigIos(payload: ConfigIosPayload, deps: HandlerDeps): HandlerResult {
-  const { getNet } = deps;
-  const net = getNet();
-
-  const device = net.getDevice(payload.device);
-  if (!device) {
-    return { ok: false, error: `Device not found: ${payload.device}` };
-  }
+  const { getNet, dprint } = deps;
+  const device = getNet().getDevice(payload.device);
+  if (!device) return { ok: false, error: `Device not found: ${payload.device}`, device: payload.device };
 
   const term = ensureIosTerm(device);
-  if (!term) {
-    return { ok: false, error: "Device does not support CLI" };
+  if (!term) return { ok: false, error: "Device does not support CLI", device: payload.device };
+
+  if (!payload.commands?.length) {
+    return { ok: true, device: payload.device, executed: 0, results: [], skipped: true };
   }
 
-  const results: Array<{ command: string; result: [number, string] }> = [];
-  for (const cmd of payload.commands) {
-    const result = term.enterCommand(cmd);
-    results.push({ command: cmd, result });
+  // Runtime session state tracking
+  const session: RuntimeSessionState = {
+    mode: "unknown",
+    paging: false,
+    awaitingConfirm: false,
+    awaitingPassword: false,
+    awaitingDnsLookup: false,
+  };
+
+  // Probe current mode
+  try {
+    const [, promptOutput] = term.enterCommand("");
+    if (promptOutput) {
+      const lastLine = promptOutput.trim().split('\n').filter(Boolean).at(-1) ?? "";
+      session.mode = inferModeFromPrompt(lastLine);
+    }
+  } catch {}
+
+  // Ensure privileged mode if requested
+  if (payload.ensurePrivileged !== false && !session.mode.startsWith("config") && session.mode !== "priv-exec") {
+    const [privStatus, privOutput] = term.enterCommand("enable");
+    if (privStatus === 0 && !privOutput.includes("Password:")) {
+      session.mode = "priv-exec";
+    } else if (privOutput.includes("Password:")) {
+      return {
+        ok: false, device: payload.device, executed: 0,
+        error: "Enable password required but not provided",
+        failedAtIndex: 0, failedCommand: "enable",
+        failedClassification: "permission-denied",
+        session: { mode: session.mode },
+      };
+    }
   }
 
-  // Save configuration by default
+  // Ensure config mode
+  if (!session.mode.startsWith("config")) {
+    const [configStatus, configOutput] = term.enterCommand("configure terminal");
+    if (configStatus === 0) {
+      session.mode = "config";
+    } else {
+      return {
+        ok: false, device: payload.device, executed: 0,
+        error: `Failed to enter config mode: ${configOutput}`,
+        failedAtIndex: 0, failedCommand: "configure terminal",
+        failedClassification: "error",
+        session: { mode: session.mode },
+      };
+    }
+  }
+
+  const results: Array<{ command: string; status: number; output: string; classification: string }> = [];
+  const stopOnError = payload.stopOnError !== false;
+
+  for (let i = 0; i < payload.commands.length; i++) {
+    const cmd = payload.commands[i]!;
+    const [status, output] = term.enterCommand(cmd);
+    updateSessionFromOutput(session, output);
+    const classification = classifyCommandOutput(output);
+    results.push({ command: cmd, status, output, classification });
+    dprint(`[configIos] cmd[${i}]: "${cmd}" -> status=${status}, classification=${classification}, mode=${session.mode}`);
+
+    if (stopOnError && isFailureClassification(classification)) {
+      return {
+        ok: false, device: payload.device, executed: i, modeFinal: session.mode, results,
+        failedAtIndex: i, failedCommand: cmd,
+        failedOutput: output.length > 500 ? output.slice(0, 500) + "\n... [TRUNCATED]" : output,
+        failedClassification: classification,
+        error: output || `Command failed: ${cmd}`,
+        saveAttempted: false, saveOk: false,
+        session: { mode: session.mode },
+      };
+    }
+  }
+
+  let saveAttempted = false;
+  let saveOk = false;
+  let saveOutput: string | undefined;
+
   if (payload.save !== false) {
-    term.enterCommand("write memory");
+    saveAttempted = true;
+    const [saveStatus, saveOut] = term.enterCommand("write memory");
+    saveOutput = saveOut;
+    const saveClassification = classifyCommandOutput(saveOut);
+    saveOk = saveStatus === 0 && !isFailureClassification(saveClassification);
+    dprint(`[configIos] save: status=${saveStatus}, ok=${saveOk}`);
+
+    if (!saveOk) {
+      return {
+        ok: false, device: payload.device, executed: results.length, modeFinal: session.mode, results,
+        error: "Configuration succeeded but save failed",
+        saveAttempted, saveOk: false, saveOutput,
+        session: { mode: session.mode },
+      };
+    }
   }
 
   return {
-    ok: true,
-    device: payload.device,
-    executed: results.length,
-    results,
+    ok: true, device: payload.device, executed: results.length, modeFinal: session.mode, results,
+    saveAttempted, saveOk,
+    session: { mode: session.mode },
   };
 }
 
 export function handleExecIos(payload: ExecIosPayload, deps: HandlerDeps): HandlerResult & { raw: string; status?: number } {
   const { getNet, dprint } = deps;
-  const net = getNet();
-
-  const device = net.getDevice(payload.device);
-  if (!device) {
-    return { ok: false, error: `Device not found: ${payload.device}`, raw: "" };
-  }
+  const device = getNet().getDevice(payload.device);
+  if (!device) return { ok: false, error: `Device not found: ${payload.device}`, raw: "" };
 
   const cmd = payload.command.toLowerCase().trim();
 
-  if (cmd === "show running-config" || cmd === "show startup-config") {
-    return handleShowConfig(device, payload, deps);
-  }
-
-  if (cmd === "show version") {
-    return handleShowVersion(device, payload, deps);
-  }
-
-  if (cmd.startsWith("show ip ")) {
-    return handleShowIpCommand(device, payload, deps);
-  }
-
-  if (device.enterCommand) {
-    try {
-      const response = device.enterCommand(payload.command);
-      const status = response?.[0];
-      const output = response?.[1] || "";
-
-      dprint(`[execIos] device.enterCommand: status=${status}, output length=${output.length}`);
-
-      const result: ExecIosSuccessResult = {
-        ok: status === 0,
-        raw: output,
-        status,
-      };
-
-      if (payload.parse !== false) {
-        const parser = getParser(payload.command);
-        if (parser) {
-          try {
-            result.parsed = parser(output);
-          } catch (e) {
-            result.parseError = String(e);
-          }
-        }
-      }
-
-      return result;
-    } catch (e) {
-      dprint(`[execIos] device.enterCommand error: ${String(e)}`);
-    }
-  }
+  if (cmd === "show running-config" || cmd === "show startup-config") return handleShowConfig(device, payload, deps);
+  if (cmd === "show version") return handleShowVersion(device, payload, deps);
+  if (cmd.startsWith("show ip ")) return handleShowIpCommand(device, payload, deps);
 
   const term = device.getCommandLine();
-  if (!term) {
-    return { ok: false, error: `Device not ready: ${payload.device} is still booting or in ROMMON`, raw: "" };
-  }
+  if (!term) return { ok: false, error: `Device not ready: ${payload.device} is still booting or in ROMMON`, raw: "" };
 
   try {
     const response = term.enterCommand(payload.command);
     const status = response?.[0];
     const output = response?.[1] || "";
-
     dprint(`[execIos] term.enterCommand: status=${status}, output length=${output.length}`);
 
-    const result: ExecIosSuccessResult = {
-      ok: status === 0,
-      raw: output,
-      status,
-    };
+    const result: ExecIosSuccessResult = { ok: status === 0, raw: output, status };
 
     if (payload.parse !== false) {
       const parser = getParser(payload.command);
       if (parser) {
-        try {
-          result.parsed = parser(output);
-        } catch (e) {
-          result.parseError = String(e);
-        }
+        try { result.parsed = parser(output); }
+        catch (e) { result.parseError = String(e); }
       }
     }
 
@@ -227,57 +281,36 @@ export function handleExecIos(payload: ExecIosPayload, deps: HandlerDeps): Handl
   }
 }
 
-function handleShowConfig(device: any, payload: ExecIosPayload, deps: HandlerDeps): HandlerResult & { raw: string; status?: number } {
+function handleShowConfig(device: PTDevice, payload: ExecIosPayload, deps: HandlerDeps): HandlerResult & { raw: string; status?: number } {
   const { dprint } = deps;
-
   try {
-    const name = device.getName ? device.getName() : "Unknown";
-    const model = device.getModel ? device.getModel() : "Unknown";
-    const type = device.getType ? device.getType() : 0;
-    const power = device.getPower ? device.getPower() : false;
+    const name = device.getName?.() ?? "Unknown";
+    const model = device.getModel?.() ?? "Unknown";
+    const power = device.getPower?.() ?? false;
 
-    const portCount = device.getPortCount ? device.getPortCount() : 0;
+    const portCount = device.getPortCount?.() ?? 0;
     const ports: string[] = [];
     for (let i = 0; i < portCount; i++) {
       try {
         const port = device.getPortAt(i);
         if (port) {
-          const portName = port.getName ? port.getName() : `Port${i}`;
-          const ip = port.getIpAddress ? port.getIpAddress() : "0.0.0.0";
-          const mask = port.getSubnetMask ? port.getSubnetMask() : "0.0.0.0";
+          const ip = port.getIpAddress?.() ?? "0.0.0.0";
+          const mask = port.getSubnetMask?.() ?? "0.0.0.0";
           if (ip && ip !== "0.0.0.0") {
-            ports.push(`interface ${portName}\n ip address ${ip} ${mask}`);
+            ports.push(`interface ${port.getName?.() ?? `Port${i}`}\n ip address ${ip} ${mask}`);
           }
         }
-      } catch (e) {}
+      } catch {}
     }
-
-    const isRouter = type === 0;
-    const isSwitch = type === 1 || type === 16;
 
     let config = `!\nversion 15.2\nhostname ${name}\n!\n`;
-
-    if (ports.length > 0) {
-      config += ports.join("\n!\n") + "\n";
-    }
-
-    if (!power) {
-      config += `!\n% Device is powered off\n`;
-    }
+    if (ports.length > 0) config += ports.join("\n!\n") + "\n";
+    if (!power) config += `!\n% Device is powered off\n`;
 
     dprint(`[execIos] Generated config for ${name}: ${config.length} chars`);
-
     return {
-      ok: true,
-      raw: config,
-      status: 0,
-      parsed: {
-        raw: config,
-        hostname: name,
-        version: "15.2",
-        sections: [],
-        interfaces: {},
-      }
+      ok: true, raw: config, status: 0, source: "synthetic",
+      parsed: { raw: config, hostname: name, version: "15.2", sections: [], interfaces: {} },
     };
   } catch (e) {
     dprint(`[execIos] handleShowConfig error: ${String(e)}`);
@@ -285,20 +318,14 @@ function handleShowConfig(device: any, payload: ExecIosPayload, deps: HandlerDep
   }
 }
 
-function handleShowVersion(device: any, payload: ExecIosPayload, deps: HandlerDeps): HandlerResult & { raw: string; status?: number } {
+function handleShowVersion(device: PTDevice, payload: ExecIosPayload, deps: HandlerDeps): HandlerResult & { raw: string; status?: number } {
   const { dprint } = deps;
-
   try {
-    const name = device.getName ? device.getName() : "Unknown";
-    const model = device.getModel ? device.getModel() : "Unknown";
-    const power = device.getPower ? device.getPower() : false;
-
-    const typeMap: Record<number, string> = {
-      0: "ISR Router",
-      1: "Switch",
-      16: "Multilayer Switch",
-    };
-    const type = device.getType ? device.getType() : 0;
+    const name = device.getName?.() ?? "Unknown";
+    const model = device.getModel?.() ?? "Unknown";
+    const power = device.getPower?.() ?? false;
+    const type = device.getType?.() ?? 0;
+    const typeMap: Record<number, string> = { 0: "ISR Router", 1: "Switch", 16: "Multilayer Switch" };
     const typeStr = typeMap[type] || "Unknown";
 
     const versionOutput = `Cisco IOS Software, ${model} Software (${model}-LANBASE-M), Version 15.2(4)E, RELEASE SOFTWARE (fc1)
@@ -322,19 +349,9 @@ Configuration register is 0x2102
 ${power ? "Device is operational" : "Device is powered off"}`;
 
     dprint(`[execIos] Generated version for ${name}: ${versionOutput.length} chars`);
-
     return {
-      ok: true,
-      raw: versionOutput,
-      status: 0,
-      parsed: {
-        raw: versionOutput,
-        hostname: name,
-        version: "15.2(4)E",
-        uptime: "1 day, 3 hours, 22 minutes",
-        image: `${model}-LANBASE-M`,
-        processor: typeStr,
-      }
+      ok: true, raw: versionOutput, status: 0, source: "synthetic",
+      parsed: { raw: versionOutput, hostname: name, version: "15.2(4)E", uptime: "1 day, 3 hours, 22 minutes", image: `${model}-LANBASE-M`, processor: typeStr },
     };
   } catch (e) {
     dprint(`[execIos] handleShowVersion error: ${String(e)}`);
@@ -342,56 +359,46 @@ ${power ? "Device is operational" : "Device is powered off"}`;
   }
 }
 
-function handleShowIpCommand(device: any, payload: ExecIosPayload, deps: HandlerDeps): HandlerResult & { raw: string; status?: number } {
+function handleShowIpCommand(device: PTDevice, payload: ExecIosPayload, deps: HandlerDeps): HandlerResult & { raw: string; status?: number } {
   const { dprint } = deps;
-
   try {
     const cmd = payload.command.toLowerCase();
 
     if (cmd === "show ip interface brief" || cmd === "show ip int brief") {
-      const portCount = device.getPortCount ? device.getPortCount() : 0;
+      const portCount = device.getPortCount?.() ?? 0;
       const interfaces: Array<{interface: string; ipAddress: string; ok: string; method: string; status: string; protocol: string}> = [];
-
       interfaces.push({ interface: "Vlan1", ipAddress: "unassigned", ok: "NVRAM", method: "manual", status: "down", protocol: "down" });
 
       for (let i = 0; i < portCount; i++) {
         try {
           const port = device.getPortAt(i);
           if (port) {
-            const portName = port.getName ? port.getName() : `Port${i}`;
-            const ip = port.getIpAddress ? port.getIpAddress() : "unassigned";
+            const ip = port.getIpAddress?.() ?? "unassigned";
             const status = ip && ip !== "0.0.0.0" && ip !== "unassigned" ? "up" : "down";
             interfaces.push({
-              interface: portName,
+              interface: port.getName?.() ?? `Port${i}`,
               ipAddress: ip === "0.0.0.0" ? "unassigned" : ip,
-              ok: "NVRAM",
-              method: "manual",
-              status,
-              protocol: status === "up" ? "up" : "down"
+              ok: "NVRAM", method: "manual", status, protocol: status === "up" ? "up" : "down"
             });
           }
-        } catch (e) {}
+        } catch {}
       }
 
       const header = "Interface              IP-Address      OK? Method Status                Protocol";
-      const lines = interfaces.map(iface => 
+      const lines = interfaces.map(iface =>
         `${iface.interface.padEnd(20)}${iface.ipAddress.padEnd(16)}YES   ${iface.method.padEnd(8)}${iface.status.padEnd(20)}${iface.protocol}`
       );
       const output = [header, ...lines].join("\n");
 
       dprint(`[execIos] Generated IP interface brief: ${output.length} chars`);
-
       return {
-        ok: true,
-        raw: output,
-        status: 0,
+        ok: true, raw: output, status: 0, source: "synthetic",
         parsed: {
           raw: output,
           interfaces: interfaces.map(iface => ({
             interface: iface.interface,
             ipAddress: iface.ipAddress === "unassigned" ? "" : iface.ipAddress,
-            ok: iface.ok,
-            method: iface.method,
+            ok: iface.ok, method: iface.method,
             status: iface.status as "up" | "down",
             protocol: iface.protocol as "up" | "down"
           }))
@@ -401,17 +408,7 @@ function handleShowIpCommand(device: any, payload: ExecIosPayload, deps: Handler
 
     if (cmd === "show ip route") {
       const output = "Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP\n     D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area\n     N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2\n     E1 - OSPF external type 1, E2 - OSPF external type 2, E - EGP\n     i - IS-IS, L1 - IS-IS level-1, L2 - IS-IS level-2, ia - IS-IS inter area\n     * - candidate default, U - per-user static route, o - ODR\n     P - periodic downloaded static route\n\nGateway of last resort is not set";
-
-      return {
-        ok: true,
-        raw: output,
-        status: 0,
-        parsed: {
-          raw: output,
-          routes: [],
-          gatewayOfLastResort: "not set"
-        }
-      };
+      return { ok: true, raw: output, status: 0, source: "synthetic", parsed: { raw: output, routes: [], gatewayOfLastResort: "not set" } };
     }
 
     return { ok: false, error: `Unsupported show ip command: ${payload.command}`, raw: "" };
@@ -419,13 +416,4 @@ function handleShowIpCommand(device: any, payload: ExecIosPayload, deps: Handler
     dprint(`[execIos] handleShowIpCommand error: ${String(e)}`);
     return { ok: false, error: `Failed to execute: ${String(e)}`, raw: "" };
   }
-}
-
-function ensureIosTerm(device: PTDevice): PTCommandLine | null {
-  let term = device.getCommandLine();
-  if (term) {
-    return term;
-  }
-
-  return null;
 }

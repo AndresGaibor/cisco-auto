@@ -98,6 +98,7 @@
         "pt-runtime": "./bin/run.js",
       },
       "devDependencies": {
+        "@cisco-auto/pt-control": "workspace:*",
         "@types/bun": "latest",
         "typescript": "^5",
       },

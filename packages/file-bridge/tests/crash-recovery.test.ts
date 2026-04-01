@@ -49,7 +49,7 @@ describe("Crash Recovery", () => {
       id: "cmd_000000000001",
       seq: 1,
       completedAt: Date.now(),
-      status: "success",
+      status: "completed",
       ok: true,
       value: { result: "done" }
     } as BridgeResultEnvelope));
@@ -120,9 +120,9 @@ describe("Crash Recovery", () => {
     expect(commands.length).toBe(1);
 
     const requeued: BridgeCommandEnvelope = JSON.parse(
-      readFileSync(join(commandsDir, commands[0]), "utf-8")
+      readFileSync(join(commandsDir, commands[0]!), "utf-8")
     );
-    
+
     expect(requeued.attempt).toBe(2);
   });
 

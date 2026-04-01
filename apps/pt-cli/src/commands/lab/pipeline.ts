@@ -80,35 +80,35 @@ async function ejecutarPipeline(archivo: string, autoFix: boolean = false): Prom
     // Mostrar errores y warnings
     const errors = validateResult.success ? (validateResult.data?.errors || []) : [];
     const warnings = validateResult.success ? (validateResult.data?.warnings || []) : [];
-    
+
     if (errors.length > 0) {
       console.log(chalk.red(`\n   ❌ Errores encontrados: ${errors.length}`));
-      errors.forEach((err: any, idx: number) => {
+      errors.forEach((err, idx) => {
         console.log(chalk.red(`      ${idx + 1}. ${err.message}`));
       });
     }
-    
+
     if (warnings.length > 0) {
       console.log(chalk.yellow(`\n   ⚠️  Warnings encontrados: ${warnings.length}`));
-      warnings.forEach((warn: any, idx: number) => {
+      warnings.forEach((warn, idx) => {
         console.log(chalk.yellow(`      ${idx + 1}. ${warn.message}`));
       });
     }
-    
+
     // Paso 3: Preguntar si aplicar fixes
     let aplicarFixes = autoFix;
-    
+
     if (!autoFix && rl) {
       const respuesta = await preguntar(rl, chalk.cyan('\n¿Deseas aplicar correcciones automáticas? (s/n): '));
       aplicarFixes = respuesta.toLowerCase() === 's';
     }
-    
+
     if (aplicarFixes) {
       console.log(chalk.blue('\n🔧 Paso 3: Aplicando correcciones...'));
 
       const fixResult = await ptFixPlanTool.handler(
         { plan: lab, autoApply: true },
-        { logger: console as any, config: { workingDir: process.cwd() } }
+        { logger: console, config: { workingDir: process.cwd() } }
       ) as ToolResult<{ plan: TopologyPlan; appliedFixes: Array<{ description: string }>; remainingErrors: Array<{ message: string }> }>;
 
       if (fixResult.success) {
@@ -116,7 +116,7 @@ async function ejecutarPipeline(archivo: string, autoFix: boolean = false): Prom
 
         if (fixResult.data.appliedFixes?.length > 0) {
           console.log(chalk.green(`\n   📝 Fixes aplicados: ${fixResult.data.appliedFixes.length}`));
-          fixResult.data.appliedFixes.forEach((fix: any, idx: number) => {
+          fixResult.data.appliedFixes.forEach((fix, idx) => {
             console.log(chalk.green(`      ${idx + 1}. ${fix.description}`));
           });
         }

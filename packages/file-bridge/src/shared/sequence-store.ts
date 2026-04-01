@@ -13,6 +13,7 @@ import {
   writeSync,
 } from "node:fs";
 import { atomicWriteFile } from "./fs-atomic.js";
+import { CommandSeq } from "./command-seq.js";
 
 interface SequenceState {
   nextSeq: number;
@@ -45,6 +46,9 @@ export class SequenceStore {
       const seq = current.nextSeq;
       this.write({ nextSeq: seq + 1 });
       return seq;
+    } catch (err) {
+      const error = err as Error;
+      throw new Error(`SequenceStore: failed to increment sequence: ${error.message}`);
     } finally {
       this.releaseLock(lockFd);
     }
@@ -55,6 +59,13 @@ export class SequenceStore {
    */
   peek(): number {
     return this.read().nextSeq;
+  }
+
+  /**
+   * Read the current sequence as a value object
+   */
+  peekAsSeq(): CommandSeq {
+    return new CommandSeq(this.peek());
   }
 
   private read(): SequenceState {
@@ -85,8 +96,9 @@ export class SequenceStore {
         const fd = openSync(this.lockFile, "wx");
         writeSync(fd, `${process.pid}\n`);
         return fd;
-      } catch (err: any) {
-        if (err.code !== "EEXIST") throw err;
+      } catch (err) {
+        const error = err as NodeJS.ErrnoException;
+        if (error.code !== "EEXIST") throw err;
 
         // Lock exists — check if it's stale and remove it
         if (this.isLockStale()) {

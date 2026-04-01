@@ -222,3 +222,25 @@ export {
   generateBridgeCommandId,
   calculatePayloadChecksum,
 } from './bridge.js';
+
+// IOS Results
+export {
+  OutputClassificationSchema,
+  IosModeSchema,
+  SessionStateSchema,
+  CommandResultSchema,
+  ConfigIosResultSchema,
+  ExecIosResultSchema,
+  ExecInteractiveResultSchema,
+  IosErrorCodeSchema,
+  IosErrorSchema,
+  type OutputClassification,
+  type IosMode,
+  type SessionState,
+  type CommandResult,
+  type ConfigIosResult,
+  type ExecIosResult,
+  type ExecInteractiveResult,
+  type IosErrorCode,
+  type IosError,
+} from './ios-results.js';

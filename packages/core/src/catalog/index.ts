@@ -11,7 +11,9 @@ export * from './schema';
 export { routerCatalog } from './routers';
 export { switchCatalog } from './switches';
 export { endDeviceCatalog } from './end-devices';
-export { wirelessCatalog, securityCatalog, otherDeviceCatalog } from './wireless-security';
+export { wirelessCatalog } from './wireless';
+export { securityCatalog } from './security';
+export { otherDeviceCatalog } from './other-devices';
 export { moduleCatalog, getModuleByCode, getModulesBySlotType, getModuleTotalPorts } from './modules';
 
 // Servicio principal

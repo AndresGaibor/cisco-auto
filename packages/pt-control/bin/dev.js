@@ -6,6 +6,6 @@
 import { execute } from '@oclif/core';
 
 await execute({
-  dir: new URL('../src/cli/commands', import.meta.url).pathname,
+  dir: new URL('..', import.meta.url).pathname,
   development: true,
 });

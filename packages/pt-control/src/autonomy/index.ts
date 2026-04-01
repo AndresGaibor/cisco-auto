@@ -11,7 +11,7 @@ export {
   getConfirmationPrompt,
   getDestructiveActions,
   type DestructiveAction,
-} from './destructive-actions';
+} from './destructive-actions.js';
 
 export {
   requestConfirmation,
@@ -20,4 +20,4 @@ export {
   isInteractive,
   type ConfirmationOptions,
   type ConfirmationResult,
-} from './confirmation';
+} from './confirmation.js';

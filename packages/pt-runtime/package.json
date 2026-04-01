@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "description": "Packet Tracer runtime generator - generates main.js and runtime.js for PT",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./dist/index.js"
   },
   "bin": {
     "pt-runtime": "./bin/run.js"
@@ -21,6 +21,7 @@
   },
   "dependencies": {},
   "devDependencies": {
+    "@cisco-auto/pt-control": "workspace:*",
     "@types/bun": "latest",
     "typescript": "^5"
   }

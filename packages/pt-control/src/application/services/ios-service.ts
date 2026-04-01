@@ -16,8 +16,6 @@ import {
   resolveCapabilities,
   type DeviceCapabilities,
 } from "../../domain/ios/capabilities/pt-capability-resolver.js";
-import { ValidationEngine, type ValidationResult } from "../../validation/validation-engine.js";
-import type { Mutation, MutationKind, NetworkTwinLike } from "../../validation/validation-context.js";
 import {
   planConfigureSvi,
   planConfigureAccessPort,
@@ -36,8 +34,6 @@ export class IosService {
     private bridge: FileBridgePort,
     private generateId: () => string,
     private inspectDevice: (device: string) => Promise<DeviceState>,
-    private validationEngine?: ValidationEngine,
-    private getTwin?: () => NetworkTwin | null,
   ) {}
 
   // CLI sessions — one per device, created on demand
@@ -95,15 +91,8 @@ export class IosService {
   async configIos(
     device: string,
     commands: string[],
-    options?: { save?: boolean; mutationKind?: MutationKind }
+    options?: { save?: boolean }
   ): Promise<void> {
-    // Run preflight validation if engine is wired
-    const validation = this._maybeValidate(device, options?.mutationKind ?? "generic", "preflight");
-    if (validation?.blocked) {
-      const msgs = validation.diagnostics.map((d) => `[${d.severity}] ${d.message}`).join("; ");
-      throw new Error(`Preflight blocked: ${msgs}`);
-    }
-
     const { value } = await this.bridge.sendCommandAndWait<{ ok: boolean; error?: string }>({
       type: "configIos",
       id: this.generateId(),
@@ -113,33 +102,20 @@ export class IosService {
     });
 
     if (value && typeof value === "object" && value.ok === false) {
-      throw new Error(value.error || "IOS configuration failed");
+      const errorMsg = (value as { error?: string }).error || "IOS configuration failed";
+      const phase = (value as { phase?: string }).phase;
+      if (errorMsg.includes("Cannot read property")) {
+        throw new Error(
+          `IOS simulator error on device '${device}'. The PT IOS simulator may not be available or the device may not support IOS commands in the current PT session.\n` +
+          `Details: ${errorMsg}\n` +
+          `Suggestion: Verify that Packet Tracer is running with the runtime scripts loaded, and that the device model supports IOS.`
+        );
+      }
+      if (phase) {
+        throw new Error(`IOS configuration failed (${phase}): ${errorMsg}`);
+      }
+      throw new Error(errorMsg);
     }
-
-    // Run postflight validation
-    this._maybeValidate(device, options?.mutationKind ?? "generic", "postflight");
-
-    if (this.validationEngine) {
-      this.validationEngine.invalidateCacheFor(device);
-    }
-  }
-
-  private _maybeValidate(
-    device: string,
-    mutationKind: MutationKind,
-    phase: "preflight" | "postflight",
-  ): ValidationResult | null {
-    if (!this.validationEngine || !this.getTwin) return null;
-    const twin = this.getTwin();
-    if (!twin) return null;
-
-    const mutation: Mutation = { kind: mutationKind, targetDevice: device, input: {} };
-    // NetworkTwin has more fields than NetworkTwinLike but shares the required ones
-    const ctx = { twin: twin as unknown as NetworkTwinLike, mutation, phase };
-
-    return phase === "preflight"
-      ? this.validationEngine.preflight(ctx)
-      : this.validationEngine.postflight(ctx);
   }
 
   /**
@@ -252,7 +228,7 @@ export class IosService {
       enableRouting: options?.enableRouting,
     });
     if (!plan) throw new Error(`${device} does not support SVIs`);
-    await this._executePlan(device, plan, "configureSvi", options?.save);
+    await this._executePlan(device, plan, options?.save);
   }
 
   /**
@@ -273,7 +249,7 @@ export class IosService {
       bpduguard: options?.bpduguard,
     });
     if (!plan) throw new Error(`${device} does not support access port configuration`);
-    await this._executePlan(device, plan, "configureAccessPort", options?.save);
+    await this._executePlan(device, plan, options?.save);
   }
 
   /**
@@ -293,7 +269,7 @@ export class IosService {
       description: options?.description,
     });
     if (!plan) throw new Error(`${device} does not support trunk configuration`);
-    await this._executePlan(device, plan, "configureTrunkPort", options?.save);
+    await this._executePlan(device, plan, options?.save);
   }
 
   /**
@@ -316,7 +292,7 @@ export class IosService {
       description: options?.description,
     });
     if (!plan) throw new Error(`${device} does not support subinterfaces`);
-    await this._executePlan(device, plan, "configureSubinterface", options?.save);
+    await this._executePlan(device, plan, options?.save);
   }
 
   /**
@@ -337,7 +313,7 @@ export class IosService {
       description: options?.description,
     });
     if (!plan) throw new Error(`${device} does not support static routes`);
-    await this._executePlan(device, plan, "configureStaticRoute", options?.save);
+    await this._executePlan(device, plan, options?.save);
   }
 
   /**
@@ -355,7 +331,7 @@ export class IosService {
       helperAddress: new Ipv4Address(helperAddress),
     });
     if (!plan) throw new Error(`${device} does not support DHCP relay`);
-    await this._executePlan(device, plan, "configureDhcpRelay", options?.save);
+    await this._executePlan(device, plan, options?.save);
   }
 
   // ==========================================================================
@@ -371,10 +347,9 @@ export class IosService {
   private async _executePlan(
     device: string,
     plan: { steps: { command: string }[]; rollback?: { command: string }[] },
-    mutationKind: MutationKind,
     save?: boolean
   ): Promise<void> {
     const commands = plan.steps.map((s) => s.command);
-    await this.configIos(device, commands, { save: save ?? true, mutationKind });
+    await this.configIos(device, commands, { save: save ?? true });
   }
 }

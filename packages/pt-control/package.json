@@ -54,5 +54,10 @@
     "automation"
   ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "oclif": {
+    "commands": "./dist/cli/commands",
+    "bin": "pt",
+    "topicSeparator": "colons"
+  }
 }

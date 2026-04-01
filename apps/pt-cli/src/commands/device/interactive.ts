@@ -61,7 +61,7 @@ function mostrarBanner() {
 async function mostrarDispositivos(tipo?: string): Promise<void> {
   const result = await ptListDevicesTool.handler(
     tipo ? { type: tipo } : {},
-    { logger: console as any, config: { workingDir: process.cwd() } }
+    { logger: console, config: { workingDir: process.cwd() } }
   ) as ToolResult<{ devices: Array<{ name: string; type: string; ptType: string; description: string; portCount: number }>; total: number }>;
 
   if (!result.success) {
@@ -70,22 +70,22 @@ async function mostrarDispositivos(tipo?: string): Promise<void> {
   }
 
   const devices = result.data.devices;
-  
+
   console.log('\n📋 Dispositivos disponibles:\n');
   console.log('─'.repeat(70));
-  
-  devices.forEach((device: any, index: number) => {
-    const icono = device.type === 'router' ? '🔴' : 
-                  device.type === 'switch' ? '🔵' : 
-                  device.type === 'multilayer-switch' ? '🟣' : 
+
+  devices.forEach((device, index) => {
+    const icono = device.type === 'router' ? '🔴' :
+                  device.type === 'switch' ? '🔵' :
+                  device.type === 'multilayer-switch' ? '🟣' :
                   device.type === 'pc' ? '💻' : '🖥️';
-    
+
     console.log(`\n  ${index + 1}. ${icono} ${device.name}`);
     console.log(`     Tipo: ${device.type}`);
     console.log(`     Descripción: ${device.description}`);
     console.log(`     Puertos: ${device.portCount}`);
   });
-  
+
   console.log('\n' + '─'.repeat(70));
 }
 
@@ -95,7 +95,7 @@ async function mostrarDispositivos(tipo?: string): Promise<void> {
 async function mostrarDetalles(deviceName: string): Promise<void> {
   const result = await ptGetDeviceDetailsTool.handler(
     { name: deviceName },
-    { logger: console as any, config: { workingDir: process.cwd() } }
+    { logger: console, config: { workingDir: process.cwd() } }
   ) as ToolResult<{ device: { name: string; type: string; ptType: string; description: string; defaultIOS: string | null; maxModules: number; ports: Array<{ name: string; type: string; speed: string; available: boolean }> } }>;
 
   if (!result.success) {
@@ -104,25 +104,25 @@ async function mostrarDetalles(deviceName: string): Promise<void> {
   }
 
   const device = result.data.device;
-  
+
   console.log(`
 ╔══════════════════════════════════════════════════════════════╗
 ║  📱 ${device.name.padEnd(54)} ║
 ╚══════════════════════════════════════════════════════════════╝
 `);
-  
+
   console.log(`  Tipo: ${device.type}`);
   console.log(`  Modelo PT: ${device.ptType}`);
   console.log(`  Descripción: ${device.description}`);
   console.log(`  IOS por defecto: ${device.defaultIOS || 'N/A'}`);
   console.log(`  Módulos máximos: ${device.maxModules || 'N/A'}`);
-  
+
   console.log('\n  📎 Puertos disponibles:');
-  device.ports.forEach((port: any) => {
+  device.ports.forEach((port) => {
     const status = port.available ? '✅' : '❌';
     console.log(`    ${status} ${port.name} (${port.type}, ${port.speed})`);
   });
-  
+
   console.log('\n');
 }
 

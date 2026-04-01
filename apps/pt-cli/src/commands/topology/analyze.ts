@@ -5,42 +5,7 @@ import type { LabSpec } from '@cisco-auto/core';
 import { formatExamples, formatRelatedCommands } from '../../help/formatter';
 import { getExamples } from '../../help/examples';
 import { getRelatedCommands } from '../../help/related';
-
-function toLabSpec(parsed: any): LabSpec {
-  return {
-    metadata: {
-      name: parsed.lab?.metadata?.name || 'Lab',
-      version: parsed.lab?.metadata?.version || '1.0',
-      author: parsed.lab?.metadata?.author || 'unknown',
-      createdAt: new Date()
-    },
-    devices: (parsed.lab?.topology?.devices || []).map((d: any) => ({
-      id: d.name,
-      name: d.name,
-      type: d.type,
-      hostname: d.hostname || d.name,
-      managementIp: d.management?.ip,
-      interfaces: (d.interfaces || []).map((i: any) => ({
-        id: i.name,
-        name: i.name,
-        description: i.description,
-        ipAddress: i.ip,
-        shutdown: i.shutdown,
-        switchport: i.mode ? { mode: i.mode, accessVlan: i.vlan } : undefined
-      })),
-      security: d.security,
-      vlans: d.vlans,
-      routing: d.routing,
-      services: d.services
-    })),
-    connections: (parsed.lab?.topology?.connections || []).map((c: any) => ({
-      id: `${c.from}-${c.to}`,
-      from: { deviceName: c.from?.device || c.from, portName: c.from?.port || c.fromInterface || 'unknown' },
-      to: { deviceName: c.to?.device || c.to, portName: c.to?.port || c.toInterface || 'unknown' },
-      cableType: c.cable || c.type || 'ethernet'
-    }))
-  };
-}
+import { toLabSpec } from '../../types/lab-spec.types';
 
 export function createTopologyAnalyzeCommand(): Command {
   const cmd = new Command('analyze')

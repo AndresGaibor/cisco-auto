@@ -21,6 +21,8 @@ import type {
   VLANPlan,
 } from '../..';
 import type { Device, ACL, NAT } from '../..';
+import type { ACLSpec, NATSpec } from '../../canonical/index.js';
+import { VlanId, VlanName } from '../../value-objects/index.js';
 import type {
   BGPSpec,
   DHCPServerSpec,
@@ -151,7 +153,11 @@ function mapVlanPlanToSpec(vlan: VLANPlan) {
 }
 
 function mapRoutingPlanToSpec(routing: RoutingPlan): Parameters<typeof RoutingGenerator.generateRouting>[0] {
-  const routingSpec: any = {};
+  const routingSpec: {
+    static?: Array<{ network: string; mask: string; nextHop: string; distance: number; description?: string }>;
+    ospf?: { processId: number; routerId: string; areas: Array<{ areaId: string; networks: string[] }>; networks: Array<{ network: string; area: string }>; defaultRoute: boolean; passiveInterfaces?: string[] };
+    eigrp?: { asNumber: number; networks: string[]; noAutoSummary: boolean };
+  } = {};
 
   if (routing.static && routing.static.length > 0) {
     routingSpec.static = routing.static.map(route => ({
@@ -166,10 +172,14 @@ function mapRoutingPlanToSpec(routing: RoutingPlan): Parameters<typeof RoutingGe
   if (routing.ospf) {
     routingSpec.ospf = {
       processId: routing.ospf.processId,
-      routerId: routing.ospf.routerId,
+      routerId: routing.ospf.routerId || '0.0.0.0',
+      areas: routing.ospf.areas.map(area => ({
+        areaId: area.area.toString(),
+        networks: area.networks,
+      })),
       networks: routing.ospf.areas.flatMap(area => area.networks.map(network => ({
         network,
-        area: area.area,
+        area: area.area.toString(),
       }))),
       defaultRoute: Boolean(routing.ospf.defaultRoute),
       passiveInterfaces: undefined,
@@ -243,15 +253,15 @@ function buildSecurityCommands(device: ExtendedDevicePlan): string[] {
   const commands: string[] = [];
 
   if (device.acls && device.acls.length > 0) {
-    const canonicalAcls = (device.acls as any[]).map((acl) => {
+    const canonicalAcls = (device.acls as Array<{ name: string; type?: string; rules?: unknown[]; entries?: Array<{ action: string; protocol?: string; source: string; destination: string; port?: string; log?: boolean }> }>).map((acl) => {
       if (acl.rules) return acl;
       if (acl.entries) {
         return {
           name: acl.name,
           type: acl.type,
-          rules: (acl.entries || []).map((entry: any) => ({
+          rules: acl.entries.map((entry) => ({
             action: entry.action,
-            protocol: entry.protocol || 'ip',
+            protocol: entry.protocol ?? 'ip',
             source: entry.source,
             destination: entry.destination,
             destinationPort: entry.port,
@@ -261,11 +271,11 @@ function buildSecurityCommands(device: ExtendedDevicePlan): string[] {
       }
       return acl;
     });
-    commands.push(...SecurityGenerator.generateACLs(canonicalAcls as any));
+    commands.push(...SecurityGenerator.generateACLs(canonicalAcls as ACLSpec[]));
   }
 
   if (device.nat) {
-    commands.push(...SecurityGenerator.generateNAT(device.nat as any));
+    commands.push(...SecurityGenerator.generateNAT(device.nat as NATSpec));
   }
 
   return commands;
@@ -336,7 +346,12 @@ export function generateIosCommands(device: DevicePlan): string[] {
   appendSection(commands, VlanGenerator.generateInterfaces(baseDevice as any));
 
   if (dispositivo.vlans && dispositivo.vlans.length > 0) {
-    appendSection(commands, VlanGenerator.generateVLANs(baseDevice.vlans || [], dispositivo.vtp as any));
+    // Convert primitive VLANs to VLANSpec with VlanId/VlanName value objects
+    const vlanSpecs = dispositivo.vlans.map(vlan => ({
+      id: VlanId.from(vlan.id),
+      name: VlanName.from(vlan.name),
+    }));
+    appendSection(commands, VlanGenerator.generateVLANs(vlanSpecs, dispositivo.vtp as any));
   }
 
   if (dispositivo.vtp) {
@@ -647,31 +662,22 @@ El script puede generarse en formato JavaScript o Python.`,
     // Validación de entrada
     if (!plan || typeof plan !== 'object') {
       return {
-        success: false,
-        error: {
-          code: 'INVALID_INPUT',
-          message: 'Se requiere un plan de topología válido'
-        }
+        ok: false,
+        error: 'Se requiere un plan de topología válido'
       };
     }
 
     if (!plan.devices || !Array.isArray(plan.devices)) {
       return {
-        success: false,
-        error: {
-          code: 'INVALID_STRUCTURE',
-          message: 'El plan debe contener un array de devices'
-        }
+        ok: false,
+        error: 'El plan debe contener un array de devices'
       };
     }
 
     if (!plan.links || !Array.isArray(plan.links)) {
       return {
-        success: false,
-        error: {
-          code: 'INVALID_STRUCTURE',
-          message: 'El plan debe contener un array de links'
-        }
+        ok: false,
+        error: 'El plan debe contener un array de links'
       };
     }
 
@@ -681,20 +687,13 @@ El script puede generarse en formato JavaScript o Python.`,
       : generateJavaScript(plan);
 
     return {
-      success: true,
+      ok: true,
       data: {
         script: result.script,
         commands: result.commands,
         format,
         deviceCount: plan.devices.length,
         linkCount: plan.links.length
-      },
-      metadata: {
-        itemCount: result.commands.length,
-        extras: {
-          deviceCount: plan.devices.length,
-          linkCount: plan.links.length
-        }
       }
     };
   }

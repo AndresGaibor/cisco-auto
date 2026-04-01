@@ -5,9 +5,12 @@
 import { BaseCommand, Flags } from '../../base-command.js';
 import { createDefaultPTController, PTController } from '../../../controller/index.js';
 import type { DeviceState } from '../../../types/index.js';
+import { formatDeviceType } from '../../../utils/device-type.js';
 
 export default class DeviceList extends BaseCommand {
   static override description = 'List all devices in the topology';
+
+  static override aliases = ['devices', 'ls'];
 
   static override examples = [
     '<%= config.bin %> device list',
@@ -47,13 +50,16 @@ export default class DeviceList extends BaseCommand {
           if (filter) {
             const filterLower = filter.toLowerCase();
             filtered = devices.filter(d =>
-              d.type.toLowerCase() === filterLower ||
+              formatDeviceType(d.type).toLowerCase() === filterLower ||
               d.model.toLowerCase().includes(filterLower)
             );
           }
 
           if (this.globalFlags.format === 'json' || this.globalFlags.jq) {
-            this.outputData(filtered);
+            this.outputData(filtered.map(d => ({
+              ...d,
+              type: formatDeviceType(d.type),
+            })));
             return;
           }
 
@@ -65,7 +71,7 @@ export default class DeviceList extends BaseCommand {
           const tableData = filtered.map(d => ({
             name: d.name,
             model: d.model,
-            type: d.type,
+            type: formatDeviceType(d.type),
             status: d.power ? 'on' : 'off',
           }));
 

@@ -17,7 +17,9 @@
     "build:apps": "bun run --filter './apps/*' build",
     "typecheck": "bun run --filter './packages/*' typecheck && bun run --filter './apps/*' typecheck",
     "cisco-auto": "bun run --cwd apps/pt-cli start",
-    "pt": "bun run --cwd apps/pt-cli start",
+    "pt": "bun run packages/pt-control/bin/dev.js",
+    "pt:build": "bun run --filter '@cisco-auto/pt-control' build",
+    "pt:generate": "bun run --filter '@cisco-auto/pt-control' runtime:generate",
     "pt:test": "bun run --cwd apps/pt-cli test"
   },
   "devDependencies": {

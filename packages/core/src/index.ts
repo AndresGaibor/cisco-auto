@@ -4,6 +4,7 @@
 
 export * from './parser/yaml-parser';
 export * from './types/index';
+export * from './value-objects/index.ts';
 export { validateLab, LabValidator } from './validation/index';
 export type { ValidationIssue, ValidationResult } from './validation/index';
 

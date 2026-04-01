@@ -706,3 +706,238 @@ describe("Edge cases", () => {
     expect(device?.ports).toEqual([]);
   });
 });
+
+// ============================================================================
+// Zone Detection Tests (Integration with Value Objects)
+// ============================================================================
+
+describe("Zone Detection (getDevicesInZone)", () => {
+  test("getDevicesInZone returns devices within zone bounds", () => {
+    const topology = new VirtualTopology(createEmptySnapshot());
+
+    // Add devices at specific positions
+    topology.applyEvent({
+      type: "device-added",
+      name: "R1",
+      model: "ISR 2911",
+      x: 50,
+      y: 50,
+      ts: Date.now(),
+    });
+
+    topology.applyEvent({
+      type: "device-added",
+      name: "SW1",
+      model: "2960-24TT",
+      x: 150,
+      y: 50,
+      ts: Date.now() + 1,
+    });
+
+    topology.applyEvent({
+      type: "device-added",
+      name: "PC1",
+      model: "PC",
+      x: 300,
+      y: 50,
+      ts: Date.now() + 2,
+    });
+
+    // Zone that contains R1 and SW1 (0,0 to 200,100)
+    const devicesInZone = topology.getDevicesInZone({
+      x1: 0,
+      y1: 0,
+      x2: 200,
+      y2: 100,
+    });
+
+    expect(devicesInZone).toHaveLength(2);
+    expect(devicesInZone).toContain("R1");
+    expect(devicesInZone).toContain("SW1");
+    expect(devicesInZone).not.toContain("PC1");
+  });
+
+  test("getDevicesInZone handles edge cases", () => {
+    const topology = new VirtualTopology(createEmptySnapshot());
+
+    // Device exactly on the edge
+    topology.applyEvent({
+      type: "device-added",
+      name: "EdgeDevice",
+      model: "PC",
+      x: 100,
+      y: 100,
+      ts: Date.now(),
+    });
+
+    // Zone that ends exactly at device position
+    const devicesInZone = topology.getDevicesInZone({
+      x1: 0,
+      y1: 0,
+      x2: 100,
+      y2: 100,
+    });
+
+    // Edge should be included (inclusive bounds)
+    expect(devicesInZone).toContain("EdgeDevice");
+  });
+
+  test("getDevicesInZone returns empty array for zone with no devices", () => {
+    const topology = new VirtualTopology(createEmptySnapshot());
+
+    topology.applyEvent({
+      type: "device-added",
+      name: "R1",
+      model: "ISR 2911",
+      x: 50,
+      y: 50,
+      ts: Date.now(),
+    });
+
+    // Zone far from device
+    const devicesInZone = topology.getDevicesInZone({
+      x1: 500,
+      y1: 500,
+      x2: 600,
+      y2: 600,
+    });
+
+    expect(devicesInZone).toHaveLength(0);
+  });
+
+  test("isDeviceInZone returns true for device inside zone", () => {
+    const topology = new VirtualTopology(createEmptySnapshot());
+
+    topology.applyEvent({
+      type: "device-added",
+      name: "Server1",
+      model: "Server",
+      x: 100,
+      y: 100,
+      ts: Date.now(),
+    });
+
+    const inside = topology.isDeviceInZone("Server1", {
+      x1: 0,
+      y1: 0,
+      x2: 200,
+      y2: 200,
+    });
+
+    expect(inside).toBe(true);
+  });
+
+  test("isDeviceInZone returns false for device outside zone", () => {
+    const topology = new VirtualTopology(createEmptySnapshot());
+
+    topology.applyEvent({
+      type: "device-added",
+      name: "Server1",
+      model: "Server",
+      x: 300,
+      y: 300,
+      ts: Date.now(),
+    });
+
+    const inside = topology.isDeviceInZone("Server1", {
+      x1: 0,
+      y1: 0,
+      x2: 200,
+      y2: 200,
+    });
+
+    expect(inside).toBe(false);
+  });
+
+  test("isDeviceInZone returns false for non-existent device", () => {
+    const topology = new VirtualTopology(createEmptySnapshot());
+
+    const inside = topology.isDeviceInZone("NonExistent", {
+      x1: 0,
+      y1: 0,
+      x2: 200,
+      y2: 200,
+    });
+
+    expect(inside).toBe(false);
+  });
+
+  test("isDeviceInZone returns false for device without position", () => {
+    const topology = new VirtualTopology(createEmptySnapshot());
+
+    topology.applyEvent({
+      type: "device-added",
+      name: "FloatingDevice",
+      model: "PC",
+      // No x, y coordinates
+      ts: Date.now(),
+    });
+
+    const inside = topology.isDeviceInZone("FloatingDevice", {
+      x1: 0,
+      y1: 0,
+      x2: 200,
+      y2: 200,
+    });
+
+    expect(inside).toBe(false);
+  });
+
+  test("getZonesForDevice returns zones containing device", () => {
+    const topology = new VirtualTopology(createEmptySnapshot());
+
+    topology.applyEvent({
+      type: "device-added",
+      name: "Server1",
+      model: "Server",
+      x: 100,
+      y: 100,
+      ts: Date.now(),
+    });
+
+    // Multiple overlapping zones
+    const zones = [
+      { id: "zone1", geometry: { x1: 0, y1: 0, x2: 150, y2: 150 } },
+      { id: "zone2", geometry: { x1: 50, y1: 50, x2: 200, y2: 200 } },
+      { id: "zone3", geometry: { x1: 300, y1: 300, x2: 400, y2: 400 } },
+    ];
+
+    const deviceZones = topology.getZonesForDevice("Server1", zones);
+
+    expect(deviceZones).toHaveLength(2);
+    expect(deviceZones).toContain("zone1");
+    expect(deviceZones).toContain("zone2");
+    expect(deviceZones).not.toContain("zone3");
+  });
+
+  test("getZonesForDevice returns empty array for device without position", () => {
+    const topology = new VirtualTopology(createEmptySnapshot());
+
+    topology.applyEvent({
+      type: "device-added",
+      name: "FloatingDevice",
+      model: "PC",
+      ts: Date.now(),
+    });
+
+    const zones = [
+      { id: "zone1", geometry: { x1: 0, y1: 0, x2: 100, y2: 100 } },
+    ];
+
+    const deviceZones = topology.getZonesForDevice("FloatingDevice", zones);
+
+    expect(deviceZones).toHaveLength(0);
+  });
+
+  test("getZonesForDevice returns empty array for non-existent device", () => {
+    const topology = new VirtualTopology(createEmptySnapshot());
+
+    const zones = [
+      { id: "zone1", geometry: { x1: 0, y1: 0, x2: 100, y2: 100 } },
+    ];
+
+    const deviceZones = topology.getZonesForDevice("NonExistent", zones);
+
+    expect(deviceZones).toHaveLength(0);
+  });
+});

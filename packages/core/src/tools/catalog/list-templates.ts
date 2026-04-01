@@ -101,13 +101,10 @@ export const ptListTemplatesTool: Tool = {
   },
   handler: async (): Promise<ToolResult> => {
     return {
-      success: true,
+      ok: true,
       data: {
         templates: topologyTemplates,
         total: topologyTemplates.length
-      },
-      metadata: {
-        itemCount: topologyTemplates.length
       }
     };
   }

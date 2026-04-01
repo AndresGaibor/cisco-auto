@@ -22,11 +22,8 @@ export const ptGetDeviceDetailsTool: Tool = {
     
     if (!model) {
       return {
-        success: false,
-        error: {
-          code: 'INVALID_INPUT',
-          message: 'El parametro model es requerido'
-        }
+        ok: false,
+        error: 'El parametro model es requerido'
       };
     }
     
@@ -34,20 +31,13 @@ export const ptGetDeviceDetailsTool: Tool = {
     
     if (!device) {
       return {
-        success: false,
-        error: {
-          code: 'DEVICE_NOT_FOUND',
-          message: `Dispositivo '${model}' no encontrado en el catalogo`,
-          suggestions: [
-            'Use pt_list_devices para ver los modelos disponibles',
-            `Verifique que el modelo '${model}' este escrito correctamente`
-          ]
-        }
+        ok: false,
+        error: `Dispositivo '${model}' no encontrado en el catalogo`
       };
     }
     
     return {
-      success: true,
+      ok: true,
       data: {
         device: {
           name: device.name,

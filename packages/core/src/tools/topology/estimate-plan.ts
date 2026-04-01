@@ -194,11 +194,8 @@ export const ptEstimatePlanTool: Tool = {
     const validation = validateInput({ routerCount, switchCount, pcCount, serverCount });
     if (!validation.valid) {
       return {
-        success: false,
-        error: {
-          code: 'INVALID_INPUT',
-          message: validation.error || 'Parámetros de entrada inválidos'
-        }
+        ok: false,
+        error: validation.error || 'Parámetros de entrada inválidos'
       };
     }
 
@@ -210,15 +207,12 @@ export const ptEstimatePlanTool: Tool = {
     const breakdown = generateBreakdown(routerCount, switchCount, pcCount, serverCount);
 
     return {
-      success: true,
+      ok: true,
       data: {
         estimatedTime,
         estimatedCost,
         complexity,
         breakdown
-      },
-      metadata: {
-        itemCount: totalDevices
       }
     };
   }

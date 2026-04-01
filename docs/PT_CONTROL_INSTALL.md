@@ -22,9 +22,9 @@ Launch Cisco Packet Tracer.
 ### 1.3 Add main.js
 
 1. In the **Script Engine** section, click **Add File**
-2. Navigate to your project: `cisco-auto/pt-extension/main.js`
-3. Select the file
-4. Check the box to mark it as the **main script**
+2. Navega a: `cisco-auto/packages/pt-control/generated/main.js`
+3. Selecciona el archivo
+4. Marca la casilla para definirlo como **main script**
 
 ### 1.4 Save and Restart
 
@@ -40,9 +40,12 @@ Launch Cisco Packet Tracer.
    === PT Control Module Starting ===
    [OK] PT Control Module initialized
    [INFO] Watching: ~/pt-dev
-   [INFO] Runtime: ~/pt-dev/runtime.js
-   [INFO] Commands: ~/pt-dev/command.json
-   [INFO] Events: ~/pt-dev/events.ndjson
+[INFO] Runtime: ~/pt-dev/runtime.js
+[INFO] Main: ~/pt-dev/main.js
+[INFO] Commands: ~/pt-dev/commands/
+[INFO] In-Flight: ~/pt-dev/in-flight/
+[INFO] Results: ~/pt-dev/results/
+[INFO] Logs: ~/pt-dev/logs/events.current.ndjson
    ```
 
 ✅ **PT Module is now installed!**
@@ -58,7 +61,7 @@ bash scripts/setup-pt-control.sh
 
 This will:
 - Create `~/pt-dev` directory
-- Copy `runtime.js` to `~/pt-dev/`
+- Copia `main.js` y `runtime.js` desde `packages/pt-control/generated/` a `~/pt-dev/`
 - Install dependencies
 
 ### 2.2 Test CLI
@@ -147,7 +150,8 @@ bun run pt device list
 
 **Solution**:
 ```bash
-cp pt-extension/runtime.js ~/pt-dev/runtime.js
+cp packages/pt-control/generated/runtime.js ~/pt-dev/runtime.js
+cp packages/pt-control/generated/main.js ~/pt-dev/main.js
 ```
 
 ### Commands not executing

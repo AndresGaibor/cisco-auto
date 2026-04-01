@@ -64,31 +64,31 @@ export const ptDeployTool: Tool = {
     const filename = (input.filename as string) || 'deploy-config.txt';
 
     // Normalizar ambas formas de entrada (legacy {name, config} y nuevo DeployedDevice)
-    const configs: DeployedDevice[] = rawConfigs.map((c: any) => {
+    const configs: DeployedDevice[] = rawConfigs.map((c) => {
       if (!c) return { deviceId: 'unknown', deviceName: 'unknown', deviceType: 'router', iosConfig: '' } as DeployedDevice;
-      if ('iosConfig' in c || 'deviceId' in c) {
-        return c as DeployedDevice;
+      
+      const configObj = c as Partial<DeployedDevice> & { name?: string; config?: string };
+      
+      if ('iosConfig' in configObj || 'deviceId' in configObj) {
+        return configObj as DeployedDevice;
       }
       // legacy shape: { name, config }
-      const deviceType = (c.name && typeof c.name === 'string' && c.name.toLowerCase().startsWith('router')) ? 'router' : (c.name && c.name.toLowerCase().startsWith('switch')) ? 'switch' : 'pc';
+      const deviceType = (configObj.name && typeof configObj.name === 'string' && configObj.name.toLowerCase().startsWith('router')) ? 'router' : (configObj.name && configObj.name.toLowerCase().startsWith('switch')) ? 'switch' : 'pc';
       return {
-        deviceId: c.name || c.deviceId || 'unknown',
-        deviceName: c.name || c.deviceName || c.deviceId || 'unknown',
+        deviceId: configObj.name ?? configObj.deviceId ?? 'unknown',
+        deviceName: configObj.name ?? configObj.deviceName ?? configObj.deviceId ?? 'unknown',
         deviceType,
-        iosConfig: c.config || '' ,
-        yamlConfig: c.yamlConfig,
-        jsonConfig: c.jsonConfig
+        iosConfig: configObj.config ?? '',
+        yamlConfig: configObj.yamlConfig,
+        jsonConfig: configObj.jsonConfig
       } as DeployedDevice;
     });
 
     // Validar que haya configuraciones
     if (!configs || configs.length === 0) {
       return {
-        success: false,
-        error: {
-          code: 'INVALID_INPUT',
-          message: 'Se requiere al menos una configuración de dispositivo'
-        }
+        ok: false,
+        error: 'Se requiere al menos una configuración de dispositivo'
       };
     }
 
@@ -119,7 +119,7 @@ export const ptDeployTool: Tool = {
       console.log(joinedConfig);
 
       return {
-        success: true,
+        ok: true,
         data: { summary, message: 'Configuraciones copiadas al portapapeles', charCount, failedDevices: [] }
       };
     }
@@ -134,27 +134,21 @@ export const ptDeployTool: Tool = {
         await Bun.write(file, joinedConfig);
 
         return {
-          success: true,
+          ok: true,
           data: { summary, message: `Configuraciones guardadas en ${outputPath}`, outputPath, charCount, failedDevices: [] }
         };
       } catch (err) {
         return {
-          success: false,
-          error: {
-            code: 'FILE_WRITE_ERROR',
-            message: `Error al escribir el archivo: ${(err as Error).message}`
-          }
+          ok: false,
+          error: `Error al escribir el archivo: ${(err as Error).message}`
         };
       }
     }
 
     // Caso no alcanzado (validación del schema debería prevenir esto)
     return {
-      success: false,
-      error: {
-        code: 'INVALID_TARGET',
-        message: 'Target debe ser "clipboard" o "file"'
-      }
+      ok: false,
+      error: 'Target debe ser "clipboard" o "file"'
     };
   }
 };

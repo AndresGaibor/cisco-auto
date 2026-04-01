@@ -277,12 +277,8 @@ export const ptPlanTopologyTool: Tool = {
     };
 
     return {
-      success: true,
-      data: plan,
-      metadata: {
-        itemCount: devices.length + links.length,
-        duration: 0
-      }
+      ok: true,
+      data: plan
     };
   }
 };

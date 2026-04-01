@@ -39,22 +39,20 @@ export class FileBridgeV2Adapter implements FileBridgePort {
       id: result.id,
       ok: result.ok,
       value: result.value as T,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      parsed: (result.value as any)?.parsed ?? result.value,
+      parsed: (result.value as Partial<{ parsed: unknown }>)?.parsed ?? result.value,
     } as PTEvent;
 
     return { event, value: result.value as T };
   }
 
   readState<T = unknown>(): T | null {
-    // V2 does not use a single state.json — topology is derived from events
-    return null;
+    // Delegate to V2 readState (reads state.json)
+    return this.v2.readState<T>();
   }
 
   on<E extends PTEventType>(
     eventType: E,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    handler: (event: any) => void,
+    handler: (event: PTEvent) => void,
   ): () => void {
     this.v2.on(eventType, handler as (event: unknown) => void);
     return () => this.v2.off(eventType, handler as (event: unknown) => void);
@@ -62,7 +60,6 @@ export class FileBridgeV2Adapter implements FileBridgePort {
 
   onAll(
     handler: (event: PTEvent) => void,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ): () => void {
     this.v2.on("*", handler as (event: unknown) => void);
     return () => this.v2.off("*", handler as (event: unknown) => void);
@@ -86,6 +83,10 @@ export class FileBridgeV2Adapter implements FileBridgePort {
 
   async stop(): Promise<void> {
     await this.v2.stop();
+  }
+
+  isReady(): boolean {
+    return this.v2.isReady();
   }
 }
 

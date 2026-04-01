@@ -15,7 +15,9 @@ import { getTotalPorts } from './schema';
 import routerCatalog from './routers';
 import switchCatalog from './switches';
 import endDeviceCatalog from './end-devices';
-import { wirelessCatalog, securityCatalog, otherDeviceCatalog } from './wireless-security';
+import { wirelessCatalog } from './wireless';
+import { securityCatalog } from './security';
+import { otherDeviceCatalog } from './other-devices';
 
 import type { DeviceType, DeviceFamily } from '../canonical/types';
 

@@ -1,5 +1,76 @@
 import type { NetworkTwin } from "../contracts/twin-types.js";
 
+// ============================================================================
+// Discriminated Union Types for Sandbox Mutations
+// ============================================================================
+
+interface AssignIpMutation {
+  type: "assign-ip";
+  device: string;
+  port: string;
+  ip: string;
+  mask: string;
+}
+
+interface SetPortUpMutation {
+  type: "set-port-up";
+  device: string;
+  port: string;
+}
+
+interface SetPortDownMutation {
+  type: "set-port-down";
+  device: string;
+  port: string;
+}
+
+interface AddVlanMutation {
+  type: "add-vlan";
+  device: string;
+  vlanId: number;
+}
+
+interface RemoveVlanMutation {
+  type: "remove-vlan";
+  device: string;
+  vlanId: number;
+}
+
+export type SandboxMutation =
+  | AssignIpMutation
+  | SetPortUpMutation
+  | SetPortDownMutation
+  | AddVlanMutation
+  | RemoveVlanMutation;
+
+// ============================================================================
+// Type Guards for Sandbox Mutations
+// ============================================================================
+
+function isAssignIpMutation(m: SandboxMutation): m is AssignIpMutation {
+  return m.type === "assign-ip";
+}
+
+function isSetPortUpMutation(m: SandboxMutation): m is SetPortUpMutation {
+  return m.type === "set-port-up";
+}
+
+function isSetPortDownMutation(m: SandboxMutation): m is SetPortDownMutation {
+  return m.type === "set-port-down";
+}
+
+function isAddVlanMutation(m: SandboxMutation): m is AddVlanMutation {
+  return m.type === "add-vlan";
+}
+
+function isRemoveVlanMutation(m: SandboxMutation): m is RemoveVlanMutation {
+  return m.type === "remove-vlan";
+}
+
+// ============================================================================
+// SandboxTwin Class
+// ============================================================================
+
 export class SandboxTwin {
   private twin: NetworkTwin;
   private readonly original: NetworkTwin;
@@ -16,22 +87,16 @@ export class SandboxTwin {
    * actually running IOS commands, but we can simulate config changes.
    */
   applyMutation(mutation: SandboxMutation): void {
-    switch (mutation.type) {
-      case "assign-ip":
-        this.applyAssignIp(mutation as SandboxMutation & { type: "assign-ip" });
-        break;
-      case "set-port-up":
-        this.applySetPortUp(mutation as SandboxMutation & { type: "set-port-up" });
-        break;
-      case "set-port-down":
-        this.applySetPortDown(mutation as SandboxMutation & { type: "set-port-down" });
-        break;
-      case "add-vlan":
-        this.applyAddVlan(mutation as SandboxMutation & { type: "add-vlan" });
-        break;
-      case "remove-vlan":
-        this.applyRemoveVlan(mutation as SandboxMutation & { type: "remove-vlan" });
-        break;
+    if (isAssignIpMutation(mutation)) {
+      this.applyAssignIp(mutation);
+    } else if (isSetPortUpMutation(mutation)) {
+      this.applySetPortUp(mutation);
+    } else if (isSetPortDownMutation(mutation)) {
+      this.applySetPortDown(mutation);
+    } else if (isAddVlanMutation(mutation)) {
+      this.applyAddVlan(mutation);
+    } else if (isRemoveVlanMutation(mutation)) {
+      this.applyRemoveVlan(mutation);
     }
     this.twin.metadata.updatedAt = Date.now();
   }
@@ -53,7 +118,7 @@ export class SandboxTwin {
     return JSON.parse(JSON.stringify(obj));
   }
 
-  private applyAssignIp(m: SandboxMutation & { type: "assign-ip" }): void {
+  private applyAssignIp(m: AssignIpMutation): void {
     const device = this.twin.devices[m.device];
     if (device && m.port && device.ports[m.port]) {
       device.ports[m.port]!.ipAddress = m.ip;
@@ -61,7 +126,7 @@ export class SandboxTwin {
     }
   }
 
-  private applySetPortUp(m: SandboxMutation & { type: "set-port-up" }): void {
+  private applySetPortUp(m: SetPortUpMutation): void {
     const device = this.twin.devices[m.device];
     if (device && m.port && device.ports[m.port]) {
       device.ports[m.port]!.adminStatus = "up";
@@ -69,7 +134,7 @@ export class SandboxTwin {
     }
   }
 
-  private applySetPortDown(m: SandboxMutation & { type: "set-port-down" }): void {
+  private applySetPortDown(m: SetPortDownMutation): void {
     const device = this.twin.devices[m.device];
     if (device && m.port && device.ports[m.port]) {
       device.ports[m.port]!.adminStatus = "administratively down";
@@ -77,23 +142,14 @@ export class SandboxTwin {
     }
   }
 
-  private applyAddVlan(m: SandboxMutation & { type: "add-vlan" }): void {
+  private applyAddVlan(m: AddVlanMutation): void {
     // For VLAN simulation, we'd need to track VLAN membership
     // Just mark that something changed
   }
 
-  private applyRemoveVlan(m: SandboxMutation & { type: "remove-vlan" }): void {
+  private applyRemoveVlan(m: RemoveVlanMutation): void {
     // Similar to add
   }
-}
-
-export interface SandboxMutation {
-  type: "assign-ip" | "set-port-up" | "set-port-down" | "add-vlan" | "remove-vlan";
-  device: string;
-  port?: string;
-  ip?: string;
-  mask?: string;
-  vlanId?: number;
 }
 
 export interface TwinDiff {

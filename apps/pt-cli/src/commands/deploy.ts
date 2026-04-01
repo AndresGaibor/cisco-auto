@@ -1,8 +1,49 @@
 import { Command } from 'commander';
 import { loadLab } from '@cisco-auto/core';
 import { DeployOrchestrator, deployToDevice } from '@cisco-auto/core';
-import type { ConnectionCredentials, DeployOptions, DeployResult } from '@cisco-auto/core';
+import type { ConnectionCredentials, DeployOptions, DeployResult, DeviceType } from '@cisco-auto/core';
 import type { DeviceSpec, LabSpec } from '@cisco-auto/core';
+import type { ParsedLabYaml } from '../types/lab-spec.types';
+
+/**
+ * Convierte un YAML parsed a LabSpec con tipos explícitos
+ */
+function convertParsedLabToLabSpec(parsed: ParsedLabYaml): LabSpec {
+  return {
+    metadata: {
+      name: parsed.lab?.metadata?.name ?? 'Lab',
+      version: '1.0',
+      author: 'cisco-auto',
+      createdAt: new Date()
+    },
+    devices: parsed.lab?.topology?.devices?.map(d => ({
+      id: `device-${d.name}-${Date.now()}`,
+      name: d.name ?? '',
+      type: d.type as DeviceType,
+      interfaces: d.interfaces?.map(i => ({
+        name: i.name ?? '',
+        description: i.description,
+        ip: i.ip,
+        shutdown: !(i as { enabled?: boolean }).enabled,
+        switchportMode: i.mode,
+        vlan: i.vlan
+      })) ?? []
+    })) ?? [],
+    connections: parsed.lab?.topology?.connections?.map(c => {
+      const fromDevice = typeof c.from === 'string' ? c.from : (c.from?.device ?? '');
+      const fromPort = typeof c.from === 'string' ? (c.fromInterface ?? 'unknown') : (c.from?.port ?? c.fromInterface ?? 'unknown');
+      const toDevice = typeof c.to === 'string' ? c.to : (c.to?.device ?? '');
+      const toPort = typeof c.to === 'string' ? (c.toInterface ?? 'unknown') : (c.to?.port ?? c.toInterface ?? 'unknown');
+
+      return {
+        id: `conn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        from: { deviceName: fromDevice, port: fromPort, deviceId: '' },
+        to: { deviceName: toDevice, port: toPort, deviceId: '' },
+        cableType: c.type ?? 'ethernet'
+      };
+    }) ?? []
+  };
+}
 
 /**
  * Obtiene credenciales para un dispositivo
@@ -98,36 +139,11 @@ export function createDeployCommand(): Command {
       let lab: LabSpec;
       try {
         const parsed = loadLab(file);
-        // Convertir a LabSpec
-        lab = {
-          metadata: {
-            name: parsed.lab.metadata.name || 'Lab',
-            version: '1.0',
-            author: 'cisco-auto',
-            createdAt: new Date()
-          },
-          devices: parsed.lab.topology.devices.map(d => ({
-            id: `device-${d.name}-${Date.now()}`,
-            name: d.name,
-            type: d.type as any,
-            interfaces: d.interfaces?.map(i => ({
-              name: i.name,
-              description: i.description,
-              ip: i.ip,
-              shutdown: !i.enabled,
-              switchportMode: i.mode,
-              vlan: i.vlan
-            })) || []
-          })) as any,
-          connections: parsed.lab.topology.connections?.map(c => ({
-            id: `conn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            from: { deviceName: c.from, port: c.fromInterface, deviceId: '' },
-            to: { deviceName: c.to, port: c.toInterface, deviceId: '' },
-            cableType: c.type as any
-          })) as any
-        };
-      } catch (error: any) {
-        console.error(`❌ Error parseando archivo: ${error.message}`);
+        // Convertir a LabSpec usando función tipada
+        lab = convertParsedLabToLabSpec(parsed);
+      } catch (error) {
+        const err = error as Error;
+        console.error(`❌ Error parseando archivo: ${err.message}`);
         process.exit(1);
       }
 
@@ -168,13 +184,14 @@ export function createDeployCommand(): Command {
         
         // Mostrar resultado
         console.log(formatResult(result));
-        
+
         // Salir con código de error si falló
         if (!result.success) {
           process.exit(1);
         }
-      } catch (error: any) {
-        console.error(`\n❌ Error durante el despliegue: ${error.message}`);
+      } catch (error) {
+        const err = error as Error;
+        console.error(`\n❌ Error durante el despliegue: ${err.message}`);
         process.exit(1);
       }
     });

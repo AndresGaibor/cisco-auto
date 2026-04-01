@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { DeviceSpecValidator, ValidationCodes } from './device-spec.validator';
 import type { DeviceSpec } from '../canonical/device.spec';
+import { VlanId, VlanName, VlanRange } from '../value-objects/index.js';
 
 describe('DeviceSpecValidator', () => {
   const createBaseDevice = (overrides: Partial<DeviceSpec> = {}): DeviceSpec => ({
@@ -107,39 +108,20 @@ describe('DeviceSpecValidator', () => {
     });
 
     it('should validate VLAN range', () => {
-      const device = createBaseDevice({
-        interfaces: [
-          { name: 'FastEthernet0/1', switchportMode: 'access', vlan: 5000 },
-        ]
-      });
-
-      const result = DeviceSpecValidator.validate(device);
-
-      expect(result.errors.some(e => e.code === ValidationCodes.INVALID_VLAN_RANGE)).toBe(true);
+      // VlanId throws on construction for invalid values, so we test with tryFrom
+      const invalidVlan = VlanId.tryFrom(5000);
+      expect(invalidVlan).toBeNull();
     });
 
     it('should validate native VLAN range', () => {
-      const device = createBaseDevice({
-        interfaces: [
-          { name: 'GigabitEthernet0/1', switchportMode: 'trunk', nativeVlan: 0 },
-        ]
-      });
-
-      const result = DeviceSpecValidator.validate(device);
-
-      expect(result.errors.some(e => e.code === ValidationCodes.NATIVE_VLAN_MISMATCH)).toBe(true);
+      const invalidVlan = VlanId.tryFrom(0);
+      expect(invalidVlan).toBeNull();
     });
 
     it('should validate allowed VLANs', () => {
-      const device = createBaseDevice({
-        interfaces: [
-          { name: 'GigabitEthernet0/1', switchportMode: 'trunk', allowedVlans: [1, 5000, 6000] },
-        ]
-      });
-
-      const result = DeviceSpecValidator.validate(device);
-
-      expect(result.errors.some(e => e.code === ValidationCodes.INVALID_VLAN_RANGE)).toBe(true);
+      // VlanRange throws on construction for invalid values
+      const invalidRange = VlanRange.tryFrom([1, 5000, 6000]);
+      expect(invalidRange).toBeNull();
     });
   });
 
@@ -147,9 +129,9 @@ describe('DeviceSpecValidator', () => {
     it('should accept valid VLANs', () => {
       const device = createBaseDevice({
         vlans: [
-          { id: 10, name: 'DATA' },
-          { id: 20, name: 'VOICE' },
-          { id: 99, name: 'GUEST' },
+          { id: VlanId.from(10), name: VlanName.from('DATA') },
+          { id: VlanId.from(20), name: VlanName.from('VOICE') },
+          { id: VlanId.from(99), name: VlanName.from('GUEST') },
         ]
       });
 
@@ -159,21 +141,15 @@ describe('DeviceSpecValidator', () => {
     });
 
     it('should reject invalid VLAN IDs', () => {
-      const device = createBaseDevice({
-        vlans: [
-          { id: 0, name: 'INVALID' },
-          { id: 4095, name: 'ALSO_INVALID' },
-        ]
-      });
-
-      const result = DeviceSpecValidator.validate(device);
-
-      expect(result.errors.some(e => e.code === ValidationCodes.VLAN_INVALID_ID)).toBe(true);
+      // Invalid VLANs are caught at VlanId construction time
+      // This test verifies that tryFrom returns null for invalid values
+      expect(VlanId.tryFrom(0)).toBeNull();
+      expect(VlanId.tryFrom(4095)).toBeNull();
     });
 
     it('should warn about VLAN 1', () => {
       const device = createBaseDevice({
-        vlans: [{ id: 1, name: 'DEFAULT' }]
+        vlans: [{ id: VlanId.from(1), name: VlanName.from('DEFAULT') }]
       });
 
       const result = DeviceSpecValidator.validate(device);
@@ -184,8 +160,8 @@ describe('DeviceSpecValidator', () => {
     it('should detect duplicate VLANs', () => {
       const device = createBaseDevice({
         vlans: [
-          { id: 10, name: 'DATA' },
-          { id: 10, name: 'DATA2' },
+          { id: VlanId.from(10), name: VlanName.from('DATA') },
+          { id: VlanId.from(10), name: VlanName.from('DATA2') },
         ]
       });
 
@@ -195,13 +171,22 @@ describe('DeviceSpecValidator', () => {
     });
 
     it('should warn about long VLAN names', () => {
+      // VlanName truncates automatically to 32 chars
+      const longName = 'A'.repeat(50);
+      const vlanName = VlanName.from(longName);
+      expect(vlanName.truncated).toBe(true);
+      expect(vlanName.value.length).toBe(32);
+      
+      // The validator checks the truncated name, so no warning is generated
+      // This test verifies that VlanName handles truncation correctly
       const device = createBaseDevice({
-        vlans: [{ id: 10, name: 'ThisIsAVeryLongVLANNameThatExceeds32Characters' }]
+        vlans: [{ id: VlanId.from(10), name: vlanName }]
       });
 
       const result = DeviceSpecValidator.validate(device);
-
-      expect(result.warnings.some(w => w.message.includes('32 characters'))).toBe(true);
+      
+      // No warning because VlanName already truncated the value
+      expect(result.warnings.some(w => w.message.includes('32 characters'))).toBe(false);
     });
   });
 
@@ -480,12 +465,12 @@ describe('DeviceSpecValidator', () => {
         interfaces: [
           { name: 'Vlan10', ip: '192.168.10.1/24' },
           { name: 'Vlan20', ip: '192.168.20.1/24' },
-          { name: 'GigabitEthernet0/1', switchportMode: 'trunk', nativeVlan: 99, allowedVlans: [10, 20, 99] },
+          { name: 'GigabitEthernet0/1', switchportMode: 'trunk', nativeVlan: VlanId.from(99), allowedVlans: VlanRange.from([10, 20, 99]) },
         ],
         vlans: [
-          { id: 10, name: 'DATA' },
-          { id: 20, name: 'VOICE' },
-          { id: 99, name: 'MANAGEMENT' },
+          { id: VlanId.from(10), name: VlanName.from('DATA') },
+          { id: VlanId.from(20), name: VlanName.from('VOICE') },
+          { id: VlanId.from(99), name: VlanName.from('MANAGEMENT') },
         ],
         routing: {
           ospf: {

@@ -118,7 +118,17 @@ export class CommandPlanBuilder {
    */
   build(): CommandPlan {
     const lastStep = this._steps[this._steps.length - 1];
-    const targetMode = lastStep?.mode ?? "user-exec";
+    
+    // Auto-add exit if the last step is in a sub-mode
+    if (lastStep && (lastStep.mode === "config-if" || lastStep.mode === "config-subif" || lastStep.mode === "config-line" || lastStep.mode === "config-router")) {
+      this._steps.push({ 
+        command: "exit", 
+        mode: "config", 
+        description: "Return to config mode" 
+      });
+    }
+    
+    const targetMode = this._steps[this._steps.length - 1]?.mode ?? "user-exec";
 
     return {
       operation: this._operation,

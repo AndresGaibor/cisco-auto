@@ -14,8 +14,8 @@ export default class VlanApply extends BaseCommand {
   static override description = 'Apply VLAN configuration to a device';
 
   static override examples = [
-    '<%= config.bin %> vlan apply S1 10 20 30',
-    '<%= config.bin %> vlan apply S1 10 20 30 --name-prefix ADMIN',
+    '<%= config.bin %> vlan apply S1 10,20,30',
+    '<%= config.bin %> vlan apply S1 "10 20 30" --name-prefix ADMIN',
     '<%= config.bin %> vlan apply S1 10',
   ];
 
@@ -25,9 +25,8 @@ export default class VlanApply extends BaseCommand {
       required: true,
     }),
     vlans: Args.string({
-      description: 'VLAN IDs to create (e.g., 10 20 30)',
+      description: 'VLAN IDs to create (e.g., "10,20,30" or "10 20 30")',
       required: true,
-      multiple: true,
     }),
   };
 
@@ -45,7 +44,8 @@ export default class VlanApply extends BaseCommand {
 
   async run(): Promise<void> {
     const device = this.args.device as string;
-    const vlanIds = (this.args.vlans as string[]).map(v => parseInt(v, 10));
+    const vlansRaw = this.args.vlans as string;
+    const vlanIds = this.parseVlanIds(vlansRaw);
     const namePrefix = this.flags['name-prefix'] as string | undefined;
     const save = this.flags.save as boolean;
 
@@ -117,5 +117,23 @@ export default class VlanApply extends BaseCommand {
         }
       },
     });
+  }
+
+  private parseVlanIds(raw: string): number[] {
+    if (!raw || raw.trim() === '') {
+      throw new ValidationError('VLAN IDs are required');
+    }
+    const tokens = raw.split(/[,\s]+/).filter(t => t.length > 0);
+    if (tokens.length === 0) {
+      throw new ValidationError('No valid VLAN IDs provided');
+    }
+    const ids = tokens.map(t => {
+      const n = parseInt(t, 10);
+      if (isNaN(n) || n < 1 || n > 4094) {
+        throw new ValidationError(`Invalid VLAN ID: "${t}". Must be between 1 and 4094.`);
+      }
+      return n;
+    });
+    return [...new Set(ids)].sort((a, b) => a - b);
   }
 }

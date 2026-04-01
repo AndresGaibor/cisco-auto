@@ -31,10 +31,10 @@ export function planConfigureVlan(
   const builder = new CommandPlanBuilder()
     .operation("configure-vlan")
     .target(`Vlan${vlan.value}`)
-    .config(`vlan ${vlan.value}`, `Create VLAN ${vlan.value}`);
+    .config(`vlan ${vlan.value}`, `Create VLAN ${vlan.value}`, `no vlan ${vlan.value}`);
 
   if (name) {
-    builder.config(`name ${name}`, `Set VLAN name to ${name}`);
+    builder.config(`name ${name}`, `Set VLAN name to ${name}`, "no name");
   }
 
   // Exit config mode

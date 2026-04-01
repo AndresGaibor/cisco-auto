@@ -2,6 +2,8 @@
 // SubnetMask Value Object
 // ============================================================================
 
+import { CidrPrefix } from "./cidr-prefix.js";
+
 // All valid subnet masks in dotted decimal notation
 const VALID_MASKS = [
   "0.0.0.0",
@@ -20,7 +22,7 @@ const VALID_MASKS = [
  */
 export class SubnetMask {
   public readonly value: string;
-  public readonly cidr: number;
+  private readonly _cidrPrefix: CidrPrefix;
 
   constructor(value: string) {
     const normalized = value.trim();
@@ -28,7 +30,7 @@ export class SubnetMask {
       throw new Error(`Invalid subnet mask: "${value}". Must be a valid mask like 255.255.255.0`);
     }
     this.value = normalized;
-    this.cidr = this.calculateCidr(normalized);
+    this._cidrPrefix = new CidrPrefix(this.calculateCidr(normalized));
   }
 
   static fromJSON(value: string): SubnetMask {
@@ -44,14 +46,26 @@ export class SubnetMask {
   }
 
   /**
+   * Get the CIDR prefix as a value object
+   */
+  get cidrPrefix(): CidrPrefix {
+    return this._cidrPrefix;
+  }
+
+  /**
+   * Get the CIDR prefix length (0-32)
+   */
+  get cidr(): number {
+    return this._cidrPrefix.value;
+  }
+
+  /**
    * Create from CIDR notation (e.g., 24 for 255.255.255.0)
    */
   static fromCidr(cidr: number): SubnetMask {
-    if (cidr < 0 || cidr > 32) {
-      throw new Error(`Invalid CIDR: ${cidr}. Must be 0-32.`);
-    }
-    if (cidr === 0) return new SubnetMask("0.0.0.0");
-    const mask = (~0 << (32 - cidr)) >>> 0;
+    const prefix = new CidrPrefix(cidr);
+    if (prefix.value === 0) return new SubnetMask("0.0.0.0");
+    const mask = (~0 << (32 - prefix.value)) >>> 0;
     const dotted = `${(mask >>> 24) & 255}.${(mask >>> 16) & 255}.${(mask >>> 8) & 255}.${mask & 255}`;
     return new SubnetMask(dotted);
   }
@@ -77,17 +91,35 @@ export class SubnetMask {
    * Get the number of usable hosts in the subnet
    */
   get usableHosts(): number {
-    const total = Math.pow(2, 32 - this.cidr);
-    if (this.cidr === 32) return 1;
-    if (this.cidr === 31) return 2;
-    return total - 2;
+    return this._cidrPrefix.usableHosts;
   }
 
   /**
    * Get the total number of addresses in the subnet
    */
   get totalAddresses(): number {
-    return Math.pow(2, 32 - this.cidr);
+    return this._cidrPrefix.totalAddresses;
+  }
+
+  /**
+   * Check if this is a valid mask for hosts (not /31 or /32)
+   */
+  get isValidForHosts(): boolean {
+    return this._cidrPrefix.isValidForHosts;
+  }
+
+  /**
+   * Check if this is a point-to-point mask (/31)
+   */
+  get isPointToPoint(): boolean {
+    return this._cidrPrefix.isPointToPoint;
+  }
+
+  /**
+   * Check if this is a loopback mask (/32)
+   */
+  get isLoopback(): boolean {
+    return this._cidrPrefix.isLoopback;
   }
 
   equals(other: SubnetMask): boolean {
@@ -102,7 +134,7 @@ export class SubnetMask {
    * Return CIDR notation (e.g., "/24")
    */
   toCidrString(): string {
-    return `/${this.cidr}`;
+    return this._cidrPrefix.toString();
   }
 }
 

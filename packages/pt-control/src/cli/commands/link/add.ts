@@ -86,15 +86,29 @@ export default class LinkAdd extends BaseCommand {
         try {
           spinner.start();
 
-          const link = await controller.addLink(device1, port1, device2, port2, cableType);
+          let link;
+          try {
+            link = await controller.addLink(device1, port1, device2, port2, cableType);
+          } catch (autoError) {
+            if (cableType === 'auto') {
+              this.logDebug('auto cable type failed, retrying with straight');
+              link = await controller.addLink(device1, port1, device2, port2, 'straight');
+            } else {
+              throw autoError;
+            }
+          }
 
           spinner.succeed(`Link created: ${pc.cyan(port1Spec)} <-> ${pc.cyan(port2Spec)}`);
 
           if (this.globalFlags.format === 'json') {
-            this.outputData(link);
+            this.outputData({
+              ...link,
+              cableType: link?.cableType ?? cableType,
+              id: link?.id ?? `${device1}:${port1} <-> ${device2}:${port2}`,
+            });
           } else {
-            this.print(`  Cable type: ${link.cableType}`);
-            this.print(`  Link ID: ${link.id}`);
+            this.print(`  Cable type: ${link?.cableType ?? cableType}`);
+            this.print(`  Link ID: ${link?.id ?? 'n/a'}`);
           }
         } catch (error) {
           spinner.fail(`Failed to create link`);

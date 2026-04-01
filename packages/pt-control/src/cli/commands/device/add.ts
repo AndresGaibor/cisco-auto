@@ -9,6 +9,7 @@ import { BaseCommand, createSpinner, Flags as BaseFlags } from '../../base-comma
 import { createDefaultPTController } from '../../../controller/index.js';
 import { ValidationError } from '../../errors/index.js';
 import type { DeviceState } from '../../../types/index.js';
+import { formatDeviceType } from '../../../utils/device-type.js';
 
 // Common device models
 const DEVICE_MODELS: Record<string, { name: string; type: string }[]> = {
@@ -100,16 +101,22 @@ export default class DeviceAdd extends BaseCommand {
         try {
           spinner.start();
 
-          const device = await controller.addDevice(name, model, { x, y });
+          await controller.addDevice(name, model, { x, y });
+
+          const device = await controller.inspectDevice(name);
 
           spinner.succeed(`Device ${pc.cyan(name)} added successfully`);
 
           if (this.globalFlags.format === 'json') {
-            this.outputData(device);
+            this.outputData({
+              ...device,
+              type: formatDeviceType(device.type),
+            });
           } else {
-            this.print(`  Type: ${device.type}`);
+            this.print(`  Name: ${device.name}`);
+            this.print(`  Type: ${formatDeviceType(device.type)}`);
             this.print(`  Model: ${device.model}`);
-            this.print(`  Position: (${device.x}, ${device.y})`);
+            this.print(`  Status: ${device.power ? 'on' : 'off'}`);
             if (device.ports?.length) {
               this.print(`  Ports: ${device.ports.length}`);
             }

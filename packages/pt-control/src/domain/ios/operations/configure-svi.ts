@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { CapabilitySet } from "../capabilities/capability-set.js";
-import { VlanId, Ipv4Address, SubnetMask } from "../value-objects/index.js";
+import { VlanId, Ipv4Address, SubnetMask, InterfaceDescription, Hostname } from "../value-objects/index.js";
 import type { CommandPlan } from "./command-plan.js";
 import { CommandPlanBuilder } from "./command-plan.js";
 
@@ -14,8 +14,9 @@ export interface ConfigureSviInput {
   vlan: VlanId;
   ip: Ipv4Address;
   mask: SubnetMask;
-  description?: string;
+  description?: InterfaceDescription | string;
   enableRouting?: boolean;
+  hostname?: Hostname | string;
 }
 
 /**
@@ -29,25 +30,34 @@ export function planConfigureSvi(
     return null;
   }
 
-  const { vlan, ip, mask, description, enableRouting } = input;
+  const { vlan, ip, mask, description, enableRouting, hostname } = input;
 
   const builder = new CommandPlanBuilder()
     .operation("configure-svi")
-    .target(`Vlan${vlan.value}`)
-    .config(`interface Vlan${vlan.value}`, `Create SVI for VLAN ${vlan.value}`)
-    .config(`ip address ${ip.value} ${mask.value}`, `Assign IP ${ip.value}/${mask.cidr}`);
+    .target(`Vlan${vlan.value}`);
 
-  if (description) {
-    builder.config(`description ${description}`, "Set interface description");
-  }
-
-  // Enable IP routing if requested and supported
+  // Enable IP routing BEFORE entering interface (global command)
   if (enableRouting !== false && caps.routing.ipRouting) {
     builder.config(
       "ip routing",
       "Enable IP routing",
       "no ip routing"
     );
+  }
+
+  // Set hostname if provided (global command)
+  if (hostname) {
+    const hostnameValue = hostname instanceof Hostname ? hostname.value : hostname;
+    builder.config(`hostname ${hostnameValue}`, "Set device hostname");
+  }
+
+  builder
+    .config(`interface Vlan${vlan.value}`, `Create SVI for VLAN ${vlan.value}`)
+    .config(`ip address ${ip.value} ${mask.value}`, `Assign IP ${ip.value}/${mask.cidr}`);
+
+  if (description) {
+    const descValue = description instanceof InterfaceDescription ? description.value : description;
+    builder.config(`description ${descValue}`, "Set interface description");
   }
 
   // Enable SVI (no shutdown)

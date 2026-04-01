@@ -49,7 +49,7 @@ export function atomicWriteFile(path: string, content: string): void {
 export function appendLine(path: string, line: string): void {
   ensureDir(dirname(path));
   const content = line.endsWith("\n") ? line : `${line}\n`;
-  
+
   // Simple retry logic for rotation window
   // Don't use atomicWriteFile for retry - just let appendFileSync create the file
   const maxRetries = 3;
@@ -57,8 +57,9 @@ export function appendLine(path: string, line: string): void {
     try {
       appendFileSync(path, content, "utf8");
       return;
-    } catch (err: any) {
-      if (err.code === "ENOENT" && attempt < maxRetries - 1) {
+    } catch (err) {
+      const error = err as NodeJS.ErrnoException;
+      if (error.code === "ENOENT" && attempt < maxRetries - 1) {
         // File was rotated — appendFileSync will create it on next retry
         continue;
       }

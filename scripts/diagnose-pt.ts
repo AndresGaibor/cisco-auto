@@ -12,7 +12,7 @@ console.log("🔍 PT Control Diagnostics\n");
 
 // Check files
 console.log("📁 Checking files:");
-const files = ["runtime.js", "command.json", "events.ndjson"];
+const files = ["main.js", "runtime.js", "commands/", "in-flight/", "results/", "logs/events.current.ndjson"];
 for (const file of files) {
   const path = `${DEV_DIR}/${file}`;
   const exists = existsSync(path);
@@ -28,8 +28,8 @@ console.log();
 
 // Check events
 console.log("📋 Recent events:");
-if (existsSync(`${DEV_DIR}/events.ndjson`)) {
-  const content = readFileSync(`${DEV_DIR}/events.ndjson`, "utf-8");
+if (existsSync(`${DEV_DIR}/logs/events.current.ndjson`)) {
+  const content = readFileSync(`${DEV_DIR}/logs/events.current.ndjson`, "utf-8");
   const lines = content.trim().split("\n").filter(l => l.trim());
   
   if (lines.length === 0) {
@@ -59,8 +59,11 @@ const testCmd = {
   payload: { kind: "snapshot" }
 };
 
-writeFileSync(`${DEV_DIR}/command.json`, JSON.stringify(testCmd, null, 2));
-console.log("   ✅ Command written");
+const commandsDir = `${DEV_DIR}/commands/`;
+const fs = require("fs");
+if (!fs.existsSync(commandsDir)) fs.mkdirSync(commandsDir, { recursive: true });
+writeFileSync(`${commandsDir}${testCmd.id}.json`, JSON.stringify(testCmd, null, 2));
+console.log("   ✅ Command written (V2 layout)");
 console.log(`   ID: ${testCmd.id}`);
 
 console.log();
@@ -71,7 +74,7 @@ await new Promise(resolve => setTimeout(resolve, 5000));
 // Check for response
 console.log();
 console.log("📬 Checking for response:");
-const afterContent = readFileSync(`${DEV_DIR}/events.ndjson`, "utf-8");
+const afterContent = readFileSync(`${DEV_DIR}/logs/events.current.ndjson`, "utf-8");
 const afterLines = afterContent.trim().split("\n").filter(l => l.trim());
 const newLines = afterLines.slice(-(afterLines.length));
 

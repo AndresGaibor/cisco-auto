@@ -431,37 +431,28 @@ export const ptExplainPlanTool: Tool = {
     // Validación básica de estructura
     if (!plan || typeof plan !== 'object') {
       return {
-        success: false,
-        error: {
-          code: 'INVALID_INPUT',
-          message: language === 'es'
-            ? 'Se requiere un plan de topología válido'
-            : 'A valid topology plan is required'
-        }
+        ok: false,
+        error: language === 'es'
+          ? 'Se requiere un plan de topología válido'
+          : 'A valid topology plan is required'
       };
     }
 
     if (!plan.devices || !Array.isArray(plan.devices)) {
       return {
-        success: false,
-        error: {
-          code: 'INVALID_STRUCTURE',
-          message: language === 'es'
-            ? 'El plan debe contener un array de devices'
-            : 'The plan must contain a devices array'
-        }
+        ok: false,
+        error: language === 'es'
+          ? 'El plan debe contener un array de devices'
+          : 'The plan must contain a devices array'
       };
     }
 
     if (!plan.links || !Array.isArray(plan.links)) {
       return {
-        success: false,
-        error: {
-          code: 'INVALID_STRUCTURE',
-          message: language === 'es'
-            ? 'El plan debe contener un array de links'
-            : 'The plan must contain a links array'
-        }
+        ok: false,
+        error: language === 'es'
+          ? 'El plan debe contener un array de links'
+          : 'The plan must contain a links array'
       };
     }
 
@@ -469,12 +460,8 @@ export const ptExplainPlanTool: Tool = {
     const result = explainTopologyPlan(plan, language);
 
     return {
-      success: true,
-      data: result,
-      metadata: {
-        itemCount: plan.devices.length + plan.links.length,
-        warnings: []
-      }
+      ok: true,
+      data: result
     };
   }
 };

@@ -24,10 +24,9 @@ export const MAIN_JS_TEMPLATE = `
 // Configuration
 var DEV_DIR = {{DEV_DIR_LITERAL}};
 var RUNTIME_FILE = DEV_DIR + "/runtime.js";
+var COMMAND_FILE = DEV_DIR + "/command.json";
 
-// V2 Directory layout
-var COMMANDS_DIR = DEV_DIR + "/commands";
-var IN_FLIGHT_DIR = DEV_DIR + "/in-flight";
+// Directory layout
 var RESULTS_DIR = DEV_DIR + "/results";
 var LOGS_DIR = DEV_DIR + "/logs";
 var EVENTS_FILE = LOGS_DIR + "/events.current.ndjson";
@@ -43,6 +42,8 @@ var reloadTimer = null;
 var commandTimer = null;
 var snapshotInterval = null;
 var heartbeatInterval = null;
+var commandPollInterval = null;
+var lastCommandContent = "";
 
 // ============================================================================
 // Event Helpers
@@ -51,7 +52,8 @@ var heartbeatInterval = null;
 function appendEvent(evt) {
   try {
     var line = JSON.stringify(evt) + "\\n";
-    fm.appendToFile(EVENTS_FILE, line);
+    var prev = fm.fileExists(EVENTS_FILE) ? fm.getFileContents(EVENTS_FILE) : "";
+    fm.writePlainTextToFile(EVENTS_FILE, prev + line);
   } catch (e) {
     dprint("[ERROR] Failed to append event: " + String(e));
   }
@@ -249,66 +251,29 @@ function loadRuntime() {
 }
 
 // ============================================================================
-// Command Execution (V2 - uses commands/ directory)
+// Command Execution (Single command.json file with FileWatcher)
 // ============================================================================
 
-function pickNextCommand() {
+function processCommandFile() {
   try {
-    if (!fm.directoryExists(COMMANDS_DIR)) {
-      return null;
-    }
-    
-    var files = fm.listDirectory(COMMANDS_DIR);
-    if (!files || files.length === 0) {
-      return null;
-    }
-    
-    // Sort files to get deterministic order
-    var jsonFiles = [];
-    for (var i = 0; i < files.length; i++) {
-      if (files[i].endsWith(".json")) {
-        jsonFiles.push(files[i]);
-      }
-    }
-    
-    if (jsonFiles.length === 0) {
-      return null;
-    }
-    
-    // Sort to ensure deterministic ordering
-    jsonFiles.sort();
-    
-    var cmdFile = jsonFiles[0];
-    var cmdPath = COMMANDS_DIR + "/" + cmdFile;
-    var inFlightPath = IN_FLIGHT_DIR + "/" + cmdFile;
-    
-    // Move to in-flight
-    var cmdContent = fm.getFileContents(cmdPath);
-    fm.deleteFile(cmdPath);
-    
-    // Ensure in-flight dir exists
-    if (!fm.directoryExists(IN_FLIGHT_DIR)) {
-      fm.makeDirectory(IN_FLIGHT_DIR);
-    }
-    
-    // Write to in-flight
-    fm.writePlainTextToFile(inFlightPath, cmdContent);
-    
-    return JSON.parse(cmdContent);
-  } catch (e) {
-    dprint("[ERROR] Failed to pick command: " + String(e));
-    return null;
-  }
-}
-
-function runCommand() {
-  try {
-    // V2: Pick command from commands/ directory
-    var cmd = pickNextCommand();
-    
-    if (!cmd) {
+    if (!fm.fileExists(COMMAND_FILE)) {
       return;
     }
+    
+    var content = fm.getFileContents(COMMAND_FILE);
+    
+    // Skip if empty or same as last processed
+    if (!content || content.length === 0 || content === lastCommandContent) {
+      return;
+    }
+    
+    lastCommandContent = content;
+    dprint("[DEBUG] New command detected");
+    
+    // Clear the file first to avoid re-processing
+    fm.writePlainTextToFile(COMMAND_FILE, "");
+    
+    var cmd = JSON.parse(content);
     
     if (!cmd || !cmd.payload) {
       appendEvent({
@@ -337,7 +302,7 @@ function runCommand() {
     // Execute runtime with payload
     var result = runtimeFn(cmd.payload, ipc, dprint);
 
-    // V2: Write result to results/<id>.json
+    // Write result to results/<id>.json
     if (cmd.id) {
       try {
         if (!fm.directoryExists(RESULTS_DIR)) {
@@ -364,23 +329,13 @@ function runCommand() {
       ts: Date.now(),
       id: cmd.id,
       ok: result && result.ok !== false,
-      value: result,
-      parsed: result && result.parsed ? result.parsed : undefined
+      value: result
     });
 
-    // V2: Clean up in-flight file
-    if (cmd.id) {
-      try {
-        var inFlightFile = IN_FLIGHT_DIR + "/" + String(cmd.seq || "0").padStart(12, "0") + "-" + (cmd.payload.type || "unknown") + ".json";
-        if (fm.fileExists(inFlightFile)) {
-          fm.deleteFile(inFlightFile);
-        }
-      } catch (e) {
-        dprint("[WARN] Failed to clean up in-flight: " + String(e));
-      }
-    }
-
     dprint("[OK] Command executed successfully");
+    
+    // Reset lastCommandContent after successful processing
+    lastCommandContent = "";
 
   } catch (e) {
     appendEvent({
@@ -519,6 +474,35 @@ function triggerSnapshot() {
 // File Watcher (V2 - watches commands/ directory)
 // ============================================================================
 
+var lastProcessedId = "";
+
+function pollCommandFile() {
+  try {
+    if (!fm.fileExists(COMMAND_FILE)) {
+      lastProcessedId = "";
+      return;
+    }
+    var content = fm.getFileContents(COMMAND_FILE);
+    if (!content || content.length === 0) {
+      return;
+    }
+    var cmd;
+    try {
+      cmd = JSON.parse(content);
+    } catch (e) {
+      return;
+    }
+    if (!cmd || !cmd.id || cmd.id === lastProcessedId) {
+      return;
+    }
+    dprint("[DEBUG] Poll detected new command: " + cmd.id);
+    processCommandFile();
+    lastProcessedId = cmd.id;
+  } catch (e) {
+    dprint("[WARN] Poll error: " + String(e));
+  }
+}
+
 function ensureDirectory(path) {
   try {
     if (!fm.directoryExists(path)) {
@@ -539,12 +523,11 @@ function onFileChanged(src, args) {
     }, 80);
   }
   
-  // V2: Watch for new command files in commands/
-  if (path.indexOf(COMMANDS_DIR) === 0 && path.endsWith(".json")) {
-    if (commandTimer) clearTimeout(commandTimer);
-    commandTimer = setTimeout(function() {
-      runCommand();
-    }, 50);
+  // Reload main.js when it changes (hot reload via FileWatcher)
+  if (path === DEV_DIR + "/main.js") {
+    dprint("[INFO] main.js changed, reloading...");
+    appendEvent({ type: "main-reload", ts: Date.now() });
+    // PT will reload the script on next evaluation
   }
 }
 
@@ -565,14 +548,12 @@ function main() {
       dprint("[INFO] Created dev directory: " + DEV_DIR);
     }
     
-    ensureDirectory(COMMANDS_DIR);
-    ensureDirectory(IN_FLIGHT_DIR);
     ensureDirectory(RESULTS_DIR);
     ensureDirectory(LOGS_DIR);
 
     // Setup file watcher
     fw.addPath(RUNTIME_FILE);
-    fw.addPath(COMMANDS_DIR);  // V2: Watch the commands directory
+    fw.addPath(COMMAND_FILE);
     fw.registerEvent("fileChanged", null, onFileChanged);
 
     // Init event
@@ -594,6 +575,11 @@ function main() {
       triggerSnapshot();
     }, 5000);
 
+    // Poll command.json every 500ms (FileWatcher doesn't detect external changes)
+    commandPollInterval = setInterval(function() {
+      pollCommandFile();
+    }, 500);
+
     // Clean stale sessions at startup (PT reopened after crash)
     cleanStaleSessions();
 
@@ -605,7 +591,7 @@ function main() {
 
     dprint("[OK] PT Control V2 initialized (Bridge V2)");
     dprint("[INFO] Watching: " + DEV_DIR);
-    dprint("[INFO] Commands dir: " + COMMANDS_DIR);
+    dprint("[INFO] Command file: " + COMMAND_FILE);
 
   } catch (e) {
     dprint("[FATAL] Failed to initialize: " + String(e));
@@ -620,12 +606,9 @@ function main() {
 
 function cleanUp() {
   dprint("=== PT Control V2 Stopping ===");
-
-  if (reloadTimer) clearTimeout(reloadTimer);
-  if (commandTimer) clearTimeout(commandTimer);
-  if (snapshotInterval) clearInterval(snapshotInterval);
-  if (heartbeatInterval) clearInterval(heartbeatInterval);
-
-  appendEvent({ type: "log", ts: Date.now(), level: "info", message: "Module stopped" });
+  // Solo log - no limpiar timers para evitar crashes en PT
+  try {
+    appendEvent({ type: "log", ts: Date.now(), level: "info", message: "Module stopped" });
+  } catch (e) {}
 }
 `;

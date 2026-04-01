@@ -163,7 +163,7 @@ export const ptListDevicesTool: Tool = {
     }
     
     return {
-      success: true,
+      ok: true,
       data: {
         devices: devices.map(d => ({
           name: d.name,
@@ -173,9 +173,6 @@ export const ptListDevicesTool: Tool = {
           portCount: d.ports.length
         })),
         total: devices.length
-      },
-      metadata: {
-        itemCount: devices.length
       }
     };
   }

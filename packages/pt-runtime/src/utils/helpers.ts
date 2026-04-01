@@ -3,6 +3,10 @@
 // ============================================================================
 
 import { DEVICE_TYPES, MODEL_ALIASES } from "./constants.js";
+import type { DeviceName } from "../value-objects/device-name.js";
+import type { InterfaceName } from "../value-objects/interface-name.js";
+import type { SessionMode } from "../value-objects/session-mode.js";
+import type { CableType } from "../value-objects/cable-type.js";
 
 /** Logical workspace interface */
 export interface PTLogicalWorkspace {

@@ -124,7 +124,6 @@ describe("Lease Management", () => {
     // Create an expired lease manually
     const leasePath = join(tempDir, "bridge-lease.json");
     const expiredLease: BridgeLease = {
-      protocolVersion: 2,
       ownerId: "expired-owner",
       pid: 99999, // Non-existent PID
       hostname: "old-host",

@@ -9,16 +9,16 @@ export class VlanGenerator {
   public static generateVLANs(vlans: VLANSpec[], vtp?: VTPSpec): string[] {
     const commands: string[] = [];
 
-    if (vtp?.mode === 'client') {
+    if (vtp?.mode.isClient) {
       return commands;
     }
 
     commands.push('! Configuración de VLANs');
 
     for (const vlan of vlans) {
-      commands.push(`vlan ${vlan.id}`);
+      commands.push(`vlan ${vlan.id.value}`);
       if (vlan.name) {
-        commands.push(` name ${vlan.name}`);
+        commands.push(` name ${vlan.name.value}`);
       }
       commands.push(' exit');
     }
@@ -71,13 +71,13 @@ export class VlanGenerator {
   public static generateVTP(vtp: VTPSpec): string[] {
     const commands: string[] = [];
     commands.push('! Configuración VTP');
-    commands.push('vtp domain ' + vtp.domain);
-    commands.push('vtp mode ' + vtp.mode);
+    commands.push('vtp domain ' + vtp.domain.value);
+    commands.push('vtp mode ' + vtp.mode.value);
     if (vtp.version) {
-      commands.push('vtp version ' + String(vtp.version));
+      commands.push('vtp version ' + vtp.version.value);
     }
     if (vtp.password) {
-      commands.push('vtp password ' + vtp.password);
+      commands.push('vtp password ' + vtp.password.value);
     }
     return commands;
   }
@@ -111,25 +111,14 @@ export class VlanGenerator {
       if (iface.switchportMode) {
         commands.push(' switchport mode ' + iface.switchportMode);
         if (iface.switchportMode === 'access' && iface.vlan) {
-          commands.push(` switchport access vlan ${iface.vlan}`);
+          commands.push(` switchport access vlan ${iface.vlan.value}`);
         }
         if (iface.switchportMode === 'trunk') {
           if (iface.nativeVlan) {
-            if (iface.nativeVlan < 1 || iface.nativeVlan > 4094) {
-              throw new Error(`Native VLAN ${iface.nativeVlan} out of range (1-4094) on interface ${iface.name}`);
-            }
-            commands.push(` switchport trunk native vlan ${iface.nativeVlan}`);
+            commands.push(` switchport trunk native vlan ${iface.nativeVlan.value}`);
           }
           if (iface.allowedVlans) {
-            // Validate all VLANs are in valid range
-            const invalidVlans = iface.allowedVlans.filter(v => v < 1 || v > 4094);
-            if (invalidVlans.length > 0) {
-              throw new Error(
-                `Invalid VLANs in allowedVlans on interface ${iface.name}: ${invalidVlans.join(', ')}. Must be 1-4094`
-              );
-            }
-            // Sort and deduplicate for cleaner output
-            const uniqueVlans = Array.from(new Set(iface.allowedVlans)).sort((a, b) => a - b);
+            const uniqueVlans = iface.allowedVlans.toNumbers();
             commands.push(` switchport trunk allowed vlan ${uniqueVlans.join(',')}`);
           }
         }

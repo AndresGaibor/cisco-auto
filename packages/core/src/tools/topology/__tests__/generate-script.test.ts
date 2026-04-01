@@ -147,8 +147,8 @@ describe('generate-script', () => {
     const plan = crearPlan();
     const result = await ptGenerateScriptTool.handler({ plan, format: 'javascript' } as any, {} as any);
 
-    expect(result.success).toBe(true);
-    if (!result.success) return;
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
 
     const data = result.data as any;
     expect(data.script).toContain('pt.configureIosDevice("S1", [');
@@ -160,8 +160,8 @@ describe('generate-script', () => {
     const plan = crearPlan();
     const result = await ptGenerateScriptTool.handler({ plan, format: 'python' } as any, {} as any);
 
-    expect(result.success).toBe(true);
-    if (!result.success) return;
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
 
     const data = result.data as any;
     expect(data.script).toContain('pt.configure_ios_device("S1", """');

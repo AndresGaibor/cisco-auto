@@ -1,14 +1,31 @@
 import { Command } from 'commander';
-import { STPGenerator } from '@cisco-auto/core';
+import { STPGenerator, VlanId } from '@cisco-auto/core';
 import { pushCommands } from '@cisco-auto/file-bridge';
 
-function generateConfigureCommands(mode: 'pvst' | 'rapid-pvst' | 'mst') {
-  const spec = { mode } as any;
+/**
+ * Spec para configuración de modo STP
+ */
+interface StpModeSpec {
+  mode: 'pvst' | 'rapid-pvst' | 'mst';
+}
+
+/**
+ * Spec para configuración de root bridge
+ */
+interface StpRootSpec {
+  mode: 'pvst' | 'rapid-pvst' | 'mst';
+  vlanConfig: Array<{ vlanId: number; priority?: number }>;
+  rootPrimary?: number[];
+  rootSecondary?: number[];
+}
+
+function generateConfigureCommands(mode: 'pvst' | 'rapid-pvst' | 'mst'): string[] {
+  const spec: StpModeSpec = { mode };
   return STPGenerator.generate(spec);
 }
 
-function generateSetRootCommands(vlan: number, priority?: number) {
-  const spec: any = {
+function generateSetRootCommands(vlan: number, priority?: number): string[] {
+  const spec: StpRootSpec = {
     mode: 'pvst',
     vlanConfig: [],
     rootPrimary: [vlan]
@@ -31,15 +48,15 @@ export function createStpCommand(): Command {
     .option('--dry-run', 'Imprimir comandos en lugar de enviarlos', false)
     .action(async (options) => {
       try {
-        const device = options.device as string;
-        const mode = options.mode as string;
+        const device = options.device;
+        const mode = options.mode;
 
         if (!['pvst', 'rapid-pvst', 'mst'].includes(mode)) {
           console.error('Modo inválido. Use pvst, rapid-pvst o mst');
           process.exit(1);
         }
 
-        const commands = generateConfigureCommands(mode as any);
+        const commands = generateConfigureCommands(mode);
 
         if (options.dryRun) {
           console.log(commands.join('\n'));
@@ -67,14 +84,17 @@ export function createStpCommand(): Command {
     .option('--dry-run', 'Imprimir comandos en lugar de enviarlos', false)
     .action(async (options) => {
       try {
-        const device = options.device as string;
-        const vlan = Number(options.vlan) as number;
+        const device = options.device;
+        const vlan = Number(options.vlan);
         const priority = options.priority !== undefined ? Number(options.priority) : undefined;
 
         if (Number.isNaN(vlan) || vlan < 1 || vlan > 4094) {
           console.error('VLAN inválida. Debe estar entre 1 y 4094');
           process.exit(1);
         }
+
+        // Validate VLAN using value object
+        new VlanId(vlan);
 
         const commands = generateSetRootCommands(vlan, priority);
 

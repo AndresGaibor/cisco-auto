@@ -29,7 +29,7 @@ export function validateGeneratedConfig(lines: string[]): ConfigValidationResult
   const errors: ConfigError[] = [];
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i]!;
     const lineNum = i + 1;
 
     if (/["\t]/.test(line)) {
@@ -52,7 +52,8 @@ export function validateGeneratedConfig(lines: string[]): ConfigValidationResult
 
     const ipMatch = line.match(/ip address\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)/);
     if (ipMatch) {
-      const [, ip, mask] = ipMatch;
+      const ip = ipMatch[1]!;
+      const mask = ipMatch[2]!;
       if (!isValidIPv4(ip)) {
         errors.push({
           line: lineNum,
@@ -73,7 +74,7 @@ export function validateGeneratedConfig(lines: string[]): ConfigValidationResult
 
     const vlanMatch = line.match(/^vlan\s+(\d+)/);
     if (vlanMatch) {
-      const vlanId = parseInt(vlanMatch[1], 10);
+      const vlanId = parseInt(vlanMatch[1]!, 10);
       if (vlanId < 1 || vlanId > 4094) {
         errors.push({
           line: lineNum,

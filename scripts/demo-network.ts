@@ -7,20 +7,30 @@
 import { writeFileSync, readFileSync, existsSync } from "fs";
 
 const DEV_DIR = `${process.env.HOME ?? "/Users/andresgaibor"}/pt-dev`;
-const COMMAND_FILE = `${DEV_DIR}/command.json`;
-const EVENTS_FILE = `${DEV_DIR}/events.ndjson`;
+const COMMAND_FILE = `${DEV_DIR}/commands/command.json`;
+const EVENTS_FILE = `${DEV_DIR}/logs/events.current.ndjson`;
 
-type PTEvent = { type: string; id?: string; ok?: boolean; value?: any };
+interface PTEvent {
+  type: string;
+  id?: string;
+  ok?: boolean;
+  value?: unknown;
+}
 
-function writeCommand(payload: any) {
+interface PTCommandPayload {
+  kind: string;
+  [key: string]: unknown;
+}
+
+function writeCommand(payload: PTCommandPayload): string {
   const command = {
     id: `cmd_${Date.now()}`,
     ts: Date.now(),
     payload,
   };
-  
+
   console.log(`📤 Sending: ${payload.kind}...`);
-  writeFileSync(COMMAND_FILE, JSON.stringify(command, null, 2));
+  writeFileSync(COMMAND_FILE, JSON.stringify(command, null, 2)); // V2: commands/command.json
   return command.id;
 }
 
@@ -73,7 +83,13 @@ async function waitForResult(cmdId: string, timeoutMs = 10000): Promise<PTEvent>
   throw new Error(`Timeout waiting for result ${cmdId}`);
 }
 
-async function removeIfExists(name: string, devices: any[]) {
+interface PTDeviceSnapshot {
+  name: string;
+  type?: string;
+  [key: string]: unknown;
+}
+
+async function removeIfExists(name: string, devices: PTDeviceSnapshot[]) {
   if (!Array.isArray(devices)) return;
   const matches = devices.filter((d) => d && d.name === name).length;
   if (!matches) return;
@@ -91,7 +107,7 @@ async function removeIfExists(name: string, devices: any[]) {
 
 async function main() {
   console.log("🚀 Creating simple network in Packet Tracer...\n");
-  
+
   try {
     // Step 1: Check initial state
     console.log("Step 1: Getting initial snapshot");
@@ -100,13 +116,13 @@ async function main() {
     const currentDevices = result.value?.devices ?? [];
     console.log(`✅ Current devices: ${result.value?.count ?? currentDevices.length}`);
     if (currentDevices.length) {
-      console.log("   Devices: " + currentDevices.map((d: any) => d.name).join(", "));
+      console.log("   Devices: " + currentDevices.map((d: PTDeviceSnapshot) => d.name).join(", "));
     }
     await removeIfExists("R1", currentDevices);
     await removeIfExists("S1", currentDevices);
     await removeIfExists("PC1", currentDevices);
     console.log();
-    
+
     // Step 2: Add Router
     console.log("Step 2: Adding Router R1");
     id = writeCommand({
@@ -230,16 +246,16 @@ async function main() {
       console.log(`   Links: ${snap.linkCount ?? "N/A"}`);
       console.log();
       console.log("   Devices:");
-      snap.devices.forEach((dev: any) => {
+      snap.devices.forEach((dev: PTDeviceSnapshot & { model?: string; power?: boolean }) => {
         console.log(`   - ${dev.name} (${dev.model}) [${dev.power ? "ON" : "OFF"}]`);
       });
     }
     console.log();
-    
+
     console.log("🎉 Network created successfully!");
     console.log();
     console.log("Check Packet Tracer to see your network!");
-    
+
   } catch (error) {
     console.error("❌ Error:", error);
     process.exit(1);

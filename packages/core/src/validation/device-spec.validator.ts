@@ -6,77 +6,21 @@
  */
 
 import type { DeviceSpec, InterfaceSpec, VLANSpec, RoutingSpec, OSPFSpec, EIGRPSpec, BGPSpec } from '../canonical/device.spec';
-import { switchCatalog } from '../catalog/switches';
-import { routerCatalog } from '../catalog/routers';
+import { VlanId, VlanName } from '../value-objects/index.js';
 
-export interface ValidationResult {
-  valid: boolean;
-  errors: ValidationError[];
-  warnings: ValidationWarning[];
-  info: ValidationInfo[];
-}
+// Re-export types and constants for backwards compatibility
+export type {
+  ValidationResult,
+  ValidationError,
+  ValidationWarning,
+  ValidationInfo,
+} from './validator-types';
 
-export interface ValidationError {
-  code: string;
-  message: string;
-  field: string;
-  severity: 'error';
-}
+export { ValidationCodes } from './validator-types';
 
-export interface ValidationWarning {
-  code: string;
-  message: string;
-  field: string;
-  severity: 'warning';
-}
-
-export interface ValidationInfo {
-  code: string;
-  message: string;
-  field: string;
-  severity: 'info';
-}
-
-/**
- * Códigos de error de validación
- */
-export const ValidationCodes = {
-  // Interfaces
-  INVALID_INTERFACE_NAME: 'IFACE_INVALID_NAME',
-  INTERFACE_NOT_ON_DEVICE: 'IFACE_NOT_ON_DEVICE',
-  DUPLICATE_INTERFACE: 'IFACE_DUPLICATE',
-  INVALID_IP_FORMAT: 'IFACE_INVALID_IP',
-  INVALID_SUBNET_MASK: 'IFACE_INVALID_MASK',
-  INVALID_VLAN_RANGE: 'IFACE_INVALID_VLAN',
-  NATIVE_VLAN_MISMATCH: 'IFACE_NATIVE_VLAN_MISMATCH',
-  
-  // VLANs
-  VLAN_INVALID_ID: 'VLAN_INVALID_ID',
-  VLAN_DUPLICATE: 'VLAN_DUPLICATE',
-  VLAN_INVALID_NAME: 'VLAN_INVALID_NAME',
-  VLAN_RANGE_EXCEEDED: 'VLAN_RANGE_EXCEEDED',
-  
-  // Routing
-  ROUTER_ID_INVALID: 'ROUTING_ROUTER_ID_INVALID',
-  ROUTER_ID_DUPLICATE: 'ROUTING_ROUTER_ID_DUPLICATE',
-  OSPF_AREA_INVALID: 'ROUTING_OSPF_AREA_INVALID',
-  OSPF_NETWORK_INVALID: 'ROUTING_OSPF_NETWORK_INVALID',
-  EIGRP_ASN_INVALID: 'ROUTING_EIGRP_ASN_INVALID',
-  BGP_ASN_INVALID: 'ROUTING_BGP_ASN_INVALID',
-  
-  // Security
-  ACL_INVALID_NAME: 'SECURITY_ACL_INVALID_NAME',
-  ACL_INVALID_RULE: 'SECURITY_ACL_INVALID_RULE',
-  
-  // Device capabilities
-  DEVICE_EXCEEDS_VLAN_LIMIT: 'DEVICE_VLAN_LIMIT',
-  DEVICE_EXCEEDS_ACL_LIMIT: 'DEVICE_ACL_LIMIT',
-  DEVICE_UNSUPPORTED_FEATURE: 'DEVICE_UNSUPPORTED_FEATURE',
-  
-  // Topology
-  TOPOLOGY_DUPLICATE_IP: 'TOPO_DUPLICATE_IP',
-  TOPOLOGY_DUPLICATE_ROUTER_ID: 'TOPO_DUPLICATE_ROUTER_ID',
-} as const;
+import type { ValidationResult, ValidationError, ValidationWarning, ValidationInfo } from './validator-types';
+import { ValidationCodes } from './validator-types';
+import { ValidatorHelpers } from './validator-helpers';
 
 /**
  * Valida especificaciones de dispositivo
@@ -167,7 +111,7 @@ export class DeviceSpecValidator {
 
     for (const iface of device.interfaces) {
       // Validar nombre de interfaz
-      if (!this.isValidInterfaceName(iface.name)) {
+      if (!ValidatorHelpers.isValidInterfaceName(iface.name)) {
         errors.push({
           code: ValidationCodes.INVALID_INTERFACE_NAME,
           message: `Invalid interface name: '${iface.name}'`,
@@ -178,7 +122,7 @@ export class DeviceSpecValidator {
       }
 
       // Validar que la interfaz existe en el dispositivo
-      if (!this.interfaceExistsOnDevice(device, iface.name)) {
+      if (!ValidatorHelpers.interfaceExistsOnDevice(device, iface.name)) {
         warnings.push({
           code: ValidationCodes.INTERFACE_NOT_ON_DEVICE,
           message: `Interface '${iface.name}' may not exist on this device model`,
@@ -211,7 +155,7 @@ export class DeviceSpecValidator {
         }
         seenIPs.set(ipKey, iface.name);
 
-        if (!this.isValidIP(iface.ip.split('/')[0] || '')) {
+        if (!ValidatorHelpers.isValidIP(iface.ip.split('/')[0] || '')) {
           errors.push({
             code: ValidationCodes.INVALID_IP_FORMAT,
             message: `Invalid IP format: '${iface.ip}'`,
@@ -222,37 +166,32 @@ export class DeviceSpecValidator {
       }
 
       // Validar VLAN en access ports
-      if (iface.vlan && (iface.vlan < 1 || iface.vlan > 4094)) {
-        errors.push({
-          code: ValidationCodes.INVALID_VLAN_RANGE,
-          message: `VLAN ${iface.vlan} out of range (1-4094)`,
-          field: `interfaces.${iface.name}.vlan`,
-          severity: 'error'
-        });
-      }
-
-      // Validar native VLAN en trunk
-      if (iface.nativeVlan !== undefined && (iface.nativeVlan < 1 || iface.nativeVlan > 4094)) {
-        errors.push({
-          code: ValidationCodes.NATIVE_VLAN_MISMATCH,
-          message: `Native VLAN ${iface.nativeVlan} out of range (1-4094)`,
-          field: `interfaces.${iface.name}.nativeVlan`,
-          severity: 'error'
-        });
-      }
-
-      // Validar allowed VLANs en trunk
-      if (iface.allowedVlans) {
-        const invalidVlans = iface.allowedVlans.filter(v => v < 1 || v > 4094);
-        if (invalidVlans.length > 0) {
+      if (iface.vlan) {
+        const vlanValue = iface.vlan.value;
+        if (vlanValue < 1 || vlanValue > 4094) {
           errors.push({
             code: ValidationCodes.INVALID_VLAN_RANGE,
-            message: `Invalid VLANs in allowedVlans: ${invalidVlans.join(', ')}`,
-            field: `interfaces.${iface.name}.allowedVlans`,
+            message: `VLAN ${vlanValue} out of range (1-4094)`,
+            field: `interfaces.${iface.name}.vlan`,
             severity: 'error'
           });
         }
       }
+
+      // Validar native VLAN en trunk
+      if (iface.nativeVlan) {
+        const nativeVlanValue = iface.nativeVlan.value;
+        if (nativeVlanValue < 1 || nativeVlanValue > 4094) {
+          errors.push({
+            code: ValidationCodes.NATIVE_VLAN_MISMATCH,
+            message: `Native VLAN ${nativeVlanValue} out of range (1-4094)`,
+            field: `interfaces.${iface.name}.nativeVlan`,
+            severity: 'error'
+          });
+        }
+      }
+
+      // Validar allowed VLANs en trunk (ya validado por VlanRange constructor)
 
       // Validar CIDR si se usa notación IP/CIDR
       if (iface.ip && iface.ip.includes('/')) {
@@ -287,50 +226,52 @@ export class DeviceSpecValidator {
     const seenVlans = new Set<number>();
 
     for (const vlan of device.vlans) {
-      // Validar ID de VLAN
-      if (vlan.id < 1 || vlan.id > 4094) {
+      const vlanIdValue = vlan.id.value;
+
+      // Validar ID de VLAN (ya validado por VlanId constructor, pero chequeamos por seguridad)
+      if (vlanIdValue < 1 || vlanIdValue > 4094) {
         errors.push({
           code: ValidationCodes.VLAN_INVALID_ID,
-          message: `VLAN ID ${vlan.id} out of range (1-4094)`,
-          field: `vlans.${vlan.id}`,
+          message: `VLAN ID ${vlanIdValue} out of range (1-4094)`,
+          field: `vlans.${vlanIdValue}`,
           severity: 'error'
         });
       }
 
       // VLAN 1 es reservada
-      if (vlan.id === 1) {
+      if (vlanIdValue === 1) {
         warnings.push({
           code: ValidationCodes.VLAN_INVALID_ID,
           message: 'VLAN 1 is the default VLAN. Consider using a different VLAN ID',
-          field: `vlans.${vlan.id}`,
+          field: `vlans.${vlanIdValue}`,
           severity: 'warning'
         });
       }
 
       // Validar duplicados
-      if (seenVlans.has(vlan.id)) {
+      if (seenVlans.has(vlanIdValue)) {
         errors.push({
           code: ValidationCodes.VLAN_DUPLICATE,
-          message: `Duplicate VLAN ID: ${vlan.id}`,
-          field: `vlans.${vlan.id}`,
+          message: `Duplicate VLAN ID: ${vlanIdValue}`,
+          field: `vlans.${vlanIdValue}`,
           severity: 'error'
         });
       }
-      seenVlans.add(vlan.id);
+      seenVlans.add(vlanIdValue);
 
-      // Validar nombre de VLAN
-      if (vlan.name && vlan.name.length > 32) {
+      // Validar nombre de VLAN (ya validado por VlanName constructor)
+      if (vlan.name && vlan.name.value.length > 32) {
         warnings.push({
           code: ValidationCodes.VLAN_INVALID_NAME,
-          message: `VLAN name '${vlan.name}' exceeds 32 characters. It will be truncated`,
-          field: `vlans.${vlan.id}.name`,
+          message: `VLAN name '${vlan.name.value}' exceeds 32 characters. It will be truncated`,
+          field: `vlans.${vlanIdValue}.name`,
           severity: 'warning'
         });
       }
     }
 
     // Validar límite de VLANs del dispositivo
-    const maxVlans = this.getMaxVlansForDevice(device);
+    const maxVlans = ValidatorHelpers.getMaxVlansForDevice(device);
     if (device.vlans.length > maxVlans) {
       errors.push({
         code: ValidationCodes.VLAN_RANGE_EXCEEDED,
@@ -379,7 +320,7 @@ export class DeviceSpecValidator {
     warnings: ValidationWarning[]
   ): void {
     // Validar router ID
-    if (ospf.routerId && !this.isValidIP(ospf.routerId)) {
+    if (ospf.routerId && !ValidatorHelpers.isValidIP(ospf.routerId)) {
       errors.push({
         code: ValidationCodes.ROUTER_ID_INVALID,
         message: `Invalid OSPF router-id: '${ospf.routerId}'`,
@@ -391,7 +332,7 @@ export class DeviceSpecValidator {
     // Validar áreas
     for (const area of ospf.areas) {
       // Área ID puede ser número o IP
-      if (!/^\d+$/.test(area.areaId) && !this.isValidIP(area.areaId)) {
+      if (!/^\d+$/.test(area.areaId) && !ValidatorHelpers.isValidIP(area.areaId)) {
         errors.push({
           code: ValidationCodes.OSPF_AREA_INVALID,
           message: `Invalid OSPF area ID: '${area.areaId}'`,
@@ -444,7 +385,7 @@ export class DeviceSpecValidator {
     }
 
     // Validar router ID
-    if (eigrp.routerId && !this.isValidIP(eigrp.routerId)) {
+    if (eigrp.routerId && !ValidatorHelpers.isValidIP(eigrp.routerId)) {
       errors.push({
         code: ValidationCodes.ROUTER_ID_INVALID,
         message: `Invalid EIGRP router-id: '${eigrp.routerId}'`,
@@ -474,7 +415,7 @@ export class DeviceSpecValidator {
     }
 
     // Validar router ID
-    if (bgp.routerId && !this.isValidIP(bgp.routerId)) {
+    if (bgp.routerId && !ValidatorHelpers.isValidIP(bgp.routerId)) {
       errors.push({
         code: ValidationCodes.ROUTER_ID_INVALID,
         message: `Invalid BGP router-id: '${bgp.routerId}'`,
@@ -533,7 +474,7 @@ export class DeviceSpecValidator {
     warnings: ValidationWarning[]
   ): void {
     // Validar límite de VLANs
-    const maxVlans = this.getMaxVlansForDevice(device);
+    const maxVlans = ValidatorHelpers.getMaxVlansForDevice(device);
     if (device.vlans && device.vlans.length > maxVlans) {
       errors.push({
         code: ValidationCodes.DEVICE_EXCEEDS_VLAN_LIMIT,
@@ -596,119 +537,6 @@ export class DeviceSpecValidator {
   // =============================================================================
   // UTILITY FUNCTIONS
   // =============================================================================
-
-  /**
-   * Verifica si un nombre de interfaz es válido
-   */
-  private static isValidInterfaceName(name: string): boolean {
-    const patterns = [
-      /^FastEthernet\d+\/\d+$/i,
-      /^GigabitEthernet\d+\/\d+$/i,
-      /^TenGigabitEthernet\d+\/\d+$/i,
-      /^Serial\d+\/\d+(\/\d+)?$/i,  // Allow Serial0/0 and Serial0/0/0
-      /^Vlan\d+$/i,
-      /^Port-channel\d+$/i,
-      /^Loopback\d+$/i,
-      /^Tunnel\d+$/i,
-    ];
-
-    return patterns.some(p => p.test(name));
-  }
-
-  /**
-   * Verifica si una interfaz existe en el dispositivo
-   */
-  private static interfaceExistsOnDevice(device: DeviceSpec, interfaceName: string): boolean {
-    // Para SVIs (VlanX) y interfaces lógicas, siempre son válidas
-    if (/^(Vlan|Port-channel|Loopback|Tunnel)/i.test(interfaceName)) {
-      return true;
-    }
-
-    // Buscar en catálogos
-    const allPorts = this.getAllDevicePorts(device);
-    const normalized = interfaceName.toLowerCase();
-
-    // Verificar si el nombre coincide con algún puerto
-    return allPorts.some(port => {
-      const portName = `${port.prefix}${port.module}/${port.range[0]}`.toLowerCase();
-      return normalized.startsWith(portName.substring(0, portName.lastIndexOf('/')));
-    });
-  }
-
-  /**
-   * Obtiene todos los puertos de un dispositivo desde el catálogo
-   */
-  private static getAllDevicePorts(device: DeviceSpec): Array<{ prefix: string; module: number; range: [number, number] }> {
-    const ports: Array<{ prefix: string; module: number; range: [number, number] }> = [];
-
-    // Buscar en switch catalog
-    const switchEntry = switchCatalog.find(s =>
-      s.model.toLowerCase() === device.model?.model?.toLowerCase() ||
-      s.id.toLowerCase() === device.model?.model?.toLowerCase()
-    );
-
-    if (switchEntry) {
-      for (const port of switchEntry.fixedPorts) {
-        if (port.type !== 'Console') {
-          ports.push({ prefix: port.prefix, module: port.module, range: port.range });
-        }
-      }
-    }
-
-    // Buscar en router catalog
-    const routerEntry = routerCatalog.find(r =>
-      r.model.toLowerCase() === device.model?.model?.toLowerCase()
-    );
-
-    if (routerEntry) {
-      for (const port of routerEntry.fixedPorts) {
-        if (port.type !== 'Console') {
-          ports.push({ prefix: port.prefix, module: port.module, range: port.range });
-        }
-      }
-    }
-
-    return ports;
-  }
-
-  /**
-   * Obtiene el máximo de VLANs soportadas por el dispositivo
-   */
-  private static getMaxVlansForDevice(device: DeviceSpec): number {
-    // Default para switches L2
-    let maxVlans = 255;
-
-    // Buscar en switch catalog
-    const switchEntry = switchCatalog.find(s =>
-      s.model.toLowerCase() === device.model?.model?.toLowerCase()
-    );
-
-    if (switchEntry) {
-      maxVlans = switchEntry.capabilities.maxVlans;
-    }
-
-    // Buscar en router catalog (routers soportan menos VLANs)
-    const routerEntry = routerCatalog.find(r =>
-      r.model.toLowerCase() === device.model?.model?.toLowerCase()
-    );
-
-    if (routerEntry) {
-      maxVlans = routerEntry.capabilities.maxVlans;
-    }
-
-    return maxVlans;
-  }
-
-  /**
-   * Verifica si una IP es válida
-   */
-  private static isValidIP(ip: string): boolean {
-    const pattern = /^(\d{1,3}\.){3}\d{1,3}$/;
-    if (!pattern.test(ip)) return false;
-
-    const octets = ip.split('.').map(Number);
-    return octets.every(octet => octet >= 0 && octet <= 255);
-  }
 }
 
 export default DeviceSpecValidator;

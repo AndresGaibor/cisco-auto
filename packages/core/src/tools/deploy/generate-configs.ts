@@ -410,21 +410,15 @@ export const ptGenerateConfigsTool: Tool = {
     // Validación básica de entrada
     if (!plan || typeof plan !== 'object') {
       return {
-        success: false,
-        error: {
-          code: 'INVALID_INPUT',
-          message: 'Se requiere un plan de topología válido'
-        }
+        ok: false,
+        error: 'Se requiere un plan de topología válido'
       };
     }
     
     if (!plan.devices || !Array.isArray(plan.devices)) {
       return {
-        success: false,
-        error: {
-          code: 'INVALID_STRUCTURE',
-          message: 'El plan debe contener un array de devices'
-        }
+        ok: false,
+        error: 'El plan debe contener un array de devices'
       };
     }
     
@@ -432,15 +426,8 @@ export const ptGenerateConfigsTool: Tool = {
     const { configs, summary } = generateConfigs(plan, format);
     
     return {
-      success: true,
-      data: { configs, summary },
-      metadata: {
-        itemCount: configs.length,
-        extras: {
-          format,
-          totalLines: summary.totalLines
-        }
-      }
+      ok: true,
+      data: { configs, summary }
     };
   }
 };

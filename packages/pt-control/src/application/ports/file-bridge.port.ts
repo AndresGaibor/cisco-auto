@@ -65,4 +65,10 @@ export interface FileBridgePort {
    * Load runtime from file
    */
   loadRuntimeFromFile(filePath: string): Promise<void>;
+
+  /**
+   * Check if the bridge is ready to accept commands
+   * Bridge is ready when running and holding a valid lease
+   */
+  isReady(): boolean;
 }

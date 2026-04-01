@@ -50,3 +50,38 @@ export {
   type Validation,
   type Lab,
 } from '@cisco-auto/types';
+
+// Re-export tool types (backwards compatible)
+export type {
+  Tool,
+  ToolInput,
+  ToolResult,
+  ToolHandler,
+} from './tool.ts';
+
+// Re-export topology types
+export type {
+  TopologyPlan,
+  TopologyPlanParams,
+  DevicePlan,
+  LinkPlan,
+  InterfacePlan,
+  VLANPlan,
+  DHCPPlan,
+  RoutingPlan,
+  ValidationError,
+  ValidationWarning,
+  FixSuggestion,
+  FixAction,
+  ValidationErrorType,
+  ValidationWarningType,
+  NetworkType,
+  RoutingProtocol,
+} from './topology-types';
+
+// Re-export deploy types
+export type {
+  DeployedDevice,
+  FailedDevice,
+  DeploySummary,
+} from './deploy-types';

@@ -17,6 +17,7 @@ import type {
   TwinIndexes,
 } from "../contracts/twin-types.js";
 import type { TopologySnapshot, DeviceState, LinkState, PortState } from "../contracts/snapshots.js";
+import { ColorHex, ZoneGeometry, Coordinate2D, inferVlanFromColor } from "../domain/topology/value-objects/index.js";
 
 // ============================================================================
 // Device Family Mapping
@@ -185,29 +186,31 @@ function mapCanvasRectToZone(rect: CanvasRect): ZoneTwin | null {
     return null;
   }
 
+  // Use ZoneGeometry VO for normalized, validated geometry
+  const geometry = ZoneGeometry.fromPosition(rect.x, rect.y, rect.width, rect.height);
+
+  // Use ColorHex VO for validated color and semantics
+  const fillColorResult = rect.fillColor ? ColorHex.tryFrom(rect.fillColor) : undefined;
+  const fillColor = fillColorResult ?? undefined;
+
   return {
     id: rect.id,
     kind: rect.type as ZoneTwin["kind"],
     label: rect.text,
-    geometry: {
-      x1: rect.x,
-      y1: rect.y,
-      x2: rect.x + rect.width,
-      y2: rect.y + rect.height,
-    },
+    geometry: geometry.toObject(),
     style: {
-      fillColor: rect.fillColor,
-      textColor: rect.textColor,
+      fillColor: fillColor?.toString(),
+      textColor: rect.textColor || fillColor?.contrastingTextColor,
       borderColor: rect.borderColor,
     },
-    semantics: extractSemantics(rect.text, rect.fillColor),
+    semantics: extractSemantics(rect.text, fillColor),
     membershipRule: { mode: "center-inside" },
   };
 }
 
 function extractSemantics(
   text: string | undefined,
-  fillColor: string | undefined
+  fillColor: ColorHex | string | undefined
 ): ZoneTwin["semantics"] {
   const semantics: ZoneTwin["semantics"] = {
     tags: [],
@@ -234,17 +237,9 @@ function extractSemantics(
 
   // Infer VLAN from color (if no VLAN from text)
   if (!semantics.vlanId && fillColor) {
-    const normalizedColor = fillColor.toLowerCase();
-    if (normalizedColor === "#0000ff" || normalizedColor === "#0000FF") {
-      semantics.vlanId = 10;
-    } else if (normalizedColor === "#ff00ff" || normalizedColor === "#FF00FF") {
-      semantics.vlanId = 20;
-    } else if (normalizedColor === "#ffff00" || normalizedColor === "#FFFF00") {
-      semantics.vlanId = 30;
-    } else if (normalizedColor === "#00ff00" || normalizedColor === "#00FF00") {
-      semantics.vlanId = 40;
-    } else if (normalizedColor === "#ffa500" || normalizedColor === "#FFA500") {
-      semantics.vlanId = 50;
+    const colorHex = fillColor instanceof ColorHex ? fillColor : ColorHex.tryFrom(fillColor);
+    if (colorHex?.inferredVlanId) {
+      semantics.vlanId = colorHex.inferredVlanId;
     }
   }
 
@@ -309,13 +304,19 @@ function buildIndexes(twin: NetworkTwin): TwinIndexes {
     }
   }
 
-  // Index by zone
+  // Index by zone - use ZoneGeometry for spatial containment check
   for (const [zoneId, zone] of Object.entries(twin.zones)) {
+    const zoneGeom = ZoneGeometry.from(
+      zone.geometry.x1,
+      zone.geometry.y1,
+      zone.geometry.x2,
+      zone.geometry.y2
+    );
+
     const devicesInZone = Object.values(twin.devices)
       .filter((d) => {
-        const { centerX, centerY } = d.logicalPosition;
-        const { x1, y1, x2, y2 } = zone.geometry;
-        return centerX >= x1 && centerX <= x2 && centerY >= y1 && centerY <= y2;
+        const center = Coordinate2D.from(d.logicalPosition.centerX, d.logicalPosition.centerY);
+        return zoneGeom.containsCoordinate(center);
       })
       .map((d) => d.name);
 

@@ -36,3 +36,7 @@ export { BridgeEventSchema, type BridgeEventInput } from "./shared/protocol.js";
 export { BridgePathLayout } from "./shared/path-layout.js";
 export { SequenceStore } from "./shared/sequence-store.js";
 export { atomicWriteFile, ensureDir, ensureFile, appendLine } from "./shared/fs-atomic.js";
+
+// Value Objects
+export { CommandSeq, parseCommandSeq, isValidCommandSeq } from "./shared/command-seq.js";
+export { CommandId, parseCommandId, isValidCommandId, generateCommandId } from "./shared/command-id.js";

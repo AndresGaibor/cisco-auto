@@ -15,6 +15,10 @@ export class TraceableBridgePort implements FileBridgePort {
     private readonly record: (entry: CommandTraceEntry) => void,
   ) {}
 
+  isReady(): boolean {
+    return this.inner.isReady();
+  }
+
   start(): void {
     this.inner.start();
   }

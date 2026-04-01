@@ -323,31 +323,22 @@ NO modifica: credenciales, seguridad, routing protocols, o IPs que ya funcionan 
 
     if (!plan || typeof plan !== 'object') {
       return {
-        success: false,
-        error: {
-          code: 'INVALID_INPUT',
-          message: 'Se requiere un plan de topología válido'
-        }
+        ok: false,
+        error: 'Se requiere un plan de topología válido'
       };
     }
 
     if (!plan.devices || !Array.isArray(plan.devices)) {
       return {
-        success: false,
-        error: {
-          code: 'INVALID_STRUCTURE',
-          message: 'El plan debe contener un array de devices'
-        }
+        ok: false,
+        error: 'El plan debe contener un array de devices'
       };
     }
 
     if (!plan.links || !Array.isArray(plan.links)) {
       return {
-        success: false,
-        error: {
-          code: 'INVALID_STRUCTURE',
-          message: 'El plan debe contener un array de links'
-        }
+        ok: false,
+        error: 'El plan debe contener un array de links'
       };
     }
 
@@ -355,7 +346,7 @@ NO modifica: credenciales, seguridad, routing protocols, o IPs que ya funcionan 
 
     if (unfixableErrors.length > 0) {
       return {
-        success: true,
+        ok: true,
         data: {
           plan: plan,
           appliedFixes: [],
@@ -367,15 +358,11 @@ NO modifica: credenciales, seguridad, routing protocols, o IPs que ya funcionan 
     const result = applyFixesToPlan(plan);
 
     return {
-      success: true,
+      ok: true,
       data: {
         plan: result.plan,
         appliedFixes: result.appliedFixes,
         remainingErrors: result.remainingErrors
-      },
-      metadata: {
-        itemCount: result.appliedFixes.length,
-        warnings: result.remainingErrors.map((e: ValidationError) => e.message)
       }
     };
   }

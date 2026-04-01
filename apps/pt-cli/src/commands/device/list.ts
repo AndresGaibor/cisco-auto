@@ -3,6 +3,7 @@ import { loadLab } from '@cisco-auto/core';
 import { formatExamples, formatRelatedCommands } from '../../help/formatter';
 import { getExamples } from '../../help/examples';
 import { getRelatedCommands } from '../../help/related';
+import type { ParsedDevice } from '../../types/lab-spec.types';
 
 export function createDeviceListCommand(): Command {
   const cmd = new Command('list')
@@ -12,25 +13,25 @@ export function createDeviceListCommand(): Command {
     .action(async (file, options) => {
       try {
         const parsedLab = loadLab(file);
-        let devices = parsedLab.lab.topology.devices;
-        
+        let devices = parsedLab.lab?.topology?.devices ?? [];
+
         if (options.type) {
-          devices = devices.filter((d: any) => d.type === options.type);
+          devices = devices.filter((d: ParsedDevice) => d.type === options.type);
         }
-        
+
         console.log(`\n📱 Dispositivos (${devices.length}):`);
         console.log('━'.repeat(60));
-        
-        devices.forEach((device: any, i: number) => {
+
+        devices.forEach((device, i) => {
           console.log(`\n${i + 1}. ${device.name}`);
           console.log(`   Tipo: ${device.type}`);
           console.log(`   Hostname: ${device.hostname || 'N/A'}`);
           console.log(`   Modelo: ${device.model || 'N/A'}`);
-          
+
           if (device.management) {
             console.log(`   Management: ${device.management.ip}`);
           }
-          
+
           if (device.interfaces) {
             console.log(`   Interfaces: ${device.interfaces.length}`);
           }

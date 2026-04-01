@@ -1,0 +1,251 @@
+/**
+ * Tests for EventLogWriter - append-only NDJSON logging
+ */
+
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { mkdirSync, rmSync, readFileSync, statSync } from 'node:fs';
+import { BridgePathLayout } from './shared/path-layout';
+import { EventLogWriter } from './event-log-writer';
+import type { BridgeEvent } from './shared/protocol';
+
+const TEST_ROOT = '/tmp/event-log-writer-test-' + Math.random().toString(36).slice(2);
+
+describe('EventLogWriter', () => {
+  let paths: BridgePathLayout;
+  let writer: EventLogWriter;
+
+  beforeEach(() => {
+    mkdirSync(TEST_ROOT, { recursive: true });
+    paths = new BridgePathLayout(TEST_ROOT);
+    writer = new EventLogWriter(paths);
+  });
+
+  afterEach(() => {
+    try {
+      rmSync(TEST_ROOT, { recursive: true, force: true });
+    } catch {}
+  });
+
+  describe('append', () => {
+    test('should append event to file', () => {
+      const event: BridgeEvent = {
+        type: 'command-sent',
+        ts: Date.now(),
+        seq: 1,
+        data: { id: 'cmd-1' },
+      };
+
+      writer.append(event);
+
+      const content = readFileSync(paths.currentEventsFile(), 'utf8');
+      const lines = content.trim().split('\n');
+      expect(lines).toHaveLength(1);
+      expect(JSON.parse(lines[0]!)).toMatchObject(event);
+    });
+
+    test('should append multiple events in order', () => {
+      const events: BridgeEvent[] = [
+        { type: 'command-sent', ts: 1000, seq: 1, data: { id: 'cmd-1' } },
+        { type: 'command-ack', ts: 1100, seq: 2, data: { id: 'cmd-1' } },
+        { type: 'result-ready', ts: 1200, seq: 3, data: { id: 'cmd-1' } },
+      ];
+
+      events.forEach(e => writer.append(e));
+
+      const content = readFileSync(paths.currentEventsFile(), 'utf8');
+      const lines = content.trim().split('\n');
+      expect(lines).toHaveLength(3);
+      expect(JSON.parse(lines[0]!).seq).toBe(1);
+      expect(JSON.parse(lines[1]!).seq).toBe(2);
+      expect(JSON.parse(lines[2]!).seq).toBe(3);
+    });
+
+    test('should handle events with no sequence number', () => {
+      const event: BridgeEvent = {
+        type: 'debug',
+        ts: Date.now(),
+        seq: 1,
+        data: { msg: 'debug event' },
+      };
+
+      writer.append(event);
+
+      const content = readFileSync(paths.currentEventsFile(), 'utf8');
+      const parsed = JSON.parse(content.trim());
+      expect(parsed.type).toBe('debug');
+      expect(parsed.seq).toBe(1);
+    });
+
+    test('should handle events with arbitrary data', () => {
+      const event: BridgeEvent = {
+        type: 'error',
+        ts: Date.now(),
+        seq: 1,
+        data: {
+          error: 'Connection timeout',
+          retryCount: 3,
+          backoffMs: 1000,
+          metadata: { key: 'value' },
+        },
+      };
+
+      writer.append(event);
+
+      const content = readFileSync(paths.currentEventsFile(), 'utf8');
+      const parsed = JSON.parse(content.trim());
+      expect(parsed.data.error).toBe('Connection timeout');
+      expect(parsed.data.retryCount).toBe(3);
+      expect(parsed.data.metadata).toEqual({ key: 'value' });
+    });
+
+    test('should preserve order across multiple calls', () => {
+      for (let i = 1; i <= 10; i++) {
+        writer.append({
+          type: 'event',
+          ts: i * 100,
+          seq: i,
+          data: { index: i },
+        });
+      }
+
+      const content = readFileSync(paths.currentEventsFile(), 'utf8');
+      const lines = content.trim().split('\n');
+      
+      lines.forEach((line, idx) => {
+        expect(JSON.parse(line).seq).toBe(idx + 1);
+      });
+    });
+  });
+
+  describe('createCurrentFile', () => {
+    test('should create log directory and files on first write', () => {
+      const event: BridgeEvent = {
+        type: 'init',
+        ts: Date.now(),
+        seq: 1,
+        data: {},
+      };
+
+      writer.append(event);
+
+      const currentFile = paths.currentEventsFile();
+      expect(readFileSync(currentFile, 'utf8')).toContain('init');
+    });
+  });
+
+  describe('JSON formatting', () => {
+    test('should write valid JSON lines', () => {
+      const events: BridgeEvent[] = [
+        { type: 'event1', ts: 1000, seq: 1, data: { a: 1 } },
+        { type: 'event2', ts: 2000, seq: 2, data: { b: 'test' } },
+        { type: 'event3', ts: 3000, seq: 3, data: { c: { nested: true } } },
+      ];
+
+      events.forEach(e => writer.append(e));
+
+      const content = readFileSync(paths.currentEventsFile(), 'utf8');
+      const lines = content.trim().split('\n');
+      
+      expect(lines).toHaveLength(3);
+      lines.forEach(line => {
+        expect(() => JSON.parse(line)).not.toThrow();
+      });
+    });
+
+    test('should handle special characters in data', () => {
+      const event: BridgeEvent = {
+        type: 'message',
+        ts: Date.now(),
+        seq: 1,
+        data: {
+          msg: 'Special chars: "quotes", \\backslash, \nnewline, unicode: 🚀',
+        },
+      };
+
+      writer.append(event);
+
+      const content = readFileSync(paths.currentEventsFile(), 'utf8');
+      const parsed = JSON.parse(content.trim());
+      expect(parsed.data.msg).toContain('quotes');
+      expect(parsed.data.msg).toContain('🚀');
+    });
+  });
+
+  describe('concurrent appends', () => {
+    test('should handle rapid sequential appends', () => {
+      const count = 100;
+      
+      for (let i = 0; i < count; i++) {
+        writer.append({
+          type: 'rapid',
+          ts: Date.now(),
+          seq: i + 1,
+          data: { index: i },
+        });
+      }
+
+      const content = readFileSync(paths.currentEventsFile(), 'utf8');
+      const lines = content.trim().split('\n');
+
+      expect(lines).toHaveLength(count);
+      expect(JSON.parse(lines[count - 1]!).seq).toBe(count);
+    });
+  });
+
+  describe('file size and rotation', () => {
+    test('should accept custom rotation size', () => {
+      const smallWriter = new EventLogWriter(paths, {
+        rotateAtBytes: 200,
+      });
+
+      // Add events totaling more than 200 bytes
+      for (let i = 0; i < 5; i++) {
+        smallWriter.append({
+          type: 'event',
+          ts: 1000 + i,
+          seq: i + 1,
+          data: {
+            largeField: 'x'.repeat(100),
+          },
+        });
+      }
+
+      // Should have created rotated files
+      const currentSize = statSync(paths.currentEventsFile()).size;
+      expect(currentSize).toBeGreaterThan(0);
+    });
+  });
+
+  describe('event types', () => {
+    test('should support various event types', () => {
+      const eventTypes = [
+        'command-sent',
+        'command-ack',
+        'result-ready',
+        'error',
+        'warning',
+        'info',
+        'debug',
+        'lease-renewal',
+        'cleanup',
+      ];
+
+      eventTypes.forEach((type, idx) => {
+        writer.append({
+          type,
+          ts: 1000 + idx,
+          seq: idx + 1,
+          data: {},
+        });
+      });
+
+      const content = readFileSync(paths.currentEventsFile(), 'utf8');
+      const lines = content.trim().split('\n');
+      
+      expect(lines).toHaveLength(eventTypes.length);
+      lines.forEach((line, idx) => {
+        expect(JSON.parse(line).type).toBe(eventTypes[idx]);
+      });
+    });
+  });
+});

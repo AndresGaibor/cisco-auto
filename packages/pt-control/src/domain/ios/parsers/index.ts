@@ -27,8 +27,8 @@ export function parseShowIpInterfaceBrief(output: string): ShowIpInterfaceBrief 
     const trimmed = line.trim();
     
     // Match: Interface IP-Address OK? Method Status Protocol
-    // Example: GigabitEthernet0/0 192.168.1.1 YES manual up up
-    const match = trimmed.match(/^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)$/);
+    // Status can be "administratively down" (2 words), "up", or "down"
+    const match = trimmed.match(/^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+((?:administratively\s+)?(?:up|down))\s+(up|down)$/i);
     
     if (match && !match[1]!.startsWith("Interface")) {
       interfaces.push({
@@ -36,7 +36,7 @@ export function parseShowIpInterfaceBrief(output: string): ShowIpInterfaceBrief 
         ipAddress: match[2]!,
         ok: match[3]!,
         method: match[4]!,
-        status: match[5]! as "up" | "down" | "administratively down",
+        status: match[5]!.trim() as "up" | "down" | "administratively down",
         protocol: match[6]! as "up" | "down",
       });
     }
@@ -51,6 +51,7 @@ export function parseShowIpInterfaceBrief(output: string): ShowIpInterfaceBrief 
 export function parseShowVlan(output: string): ShowVlan {
   const lines = output.split("\n");
   const vlans: ShowVlan["vlans"] = [];
+  let currentVlan: ShowVlan["vlans"][0] | null = null;
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -66,12 +67,19 @@ export function parseShowVlan(output: string): ShowVlan {
         .map((p) => p.trim())
         .filter((p) => p.length > 0);
 
-      vlans.push({
+      currentVlan = {
         id: parseInt(match[1]!, 10),
         name: match[2]!,
         status: match[3]! as "active" | "suspended" | "act/unsup",
         ports,
-      });
+      };
+      vlans.push(currentVlan);
+    } else if (currentVlan && line.match(/^\s+[FGS]/)) {
+      // Continuation line with additional ports
+      const ports = trimmed.split(",").map(p => p.trim()).filter(Boolean);
+      currentVlan.ports.push(...ports);
+    } else if (!line.match(/^\s/) || line.trim().length === 0) {
+      currentVlan = null;
     }
   }
 
@@ -105,18 +113,19 @@ export function parseShowIpRoute(output: string): ShowIpRoute {
     // Examples:
     // C    192.168.1.0/24 is directly connected, GigabitEthernet0/0
     // S    0.0.0.0/0 [1/0] via 192.168.1.1
-    // R    10.0.0.0/8 [120/1] via 192.168.1.1, 00:00:15, GigabitEthernet0/0
-    const routeMatch = trimmed.match(/^([A-Z*])\s+(\S+)(?:\s+\[(\d+)\/(\d+)\])?\s*(.+)/);
+    // O IA 10.0.2.0/24 [110/2] via 192.168.1.1
+    // D EX 10.0.3.0/24 [170/2816] via 192.168.1.2
+    const routeMatch = trimmed.match(/^([A-Z*](?:\s+[A-Z*]+)?)\s+(\S+)(?:\s+\[(\d+)\/(\d+)\])?\s*(.*)/);
     
     if (routeMatch) {
-      const typeChar = routeMatch[1]!;
+      const typeChar = routeMatch[1]!.trim();
       const network = routeMatch[2]!;
       const adminDist = routeMatch[3] ? parseInt(routeMatch[3], 10) : undefined;
       const metric = routeMatch[4] ? parseInt(routeMatch[4], 10) : undefined;
       const rest = routeMatch[5] || "";
 
       const route: ShowIpRoute["routes"][0] = {
-        type: typeMap[typeChar] || "C",
+        type: typeMap[typeChar.split(/\s+/)[0]!] || "C",
         network,
         administrativeDistance: adminDist,
         metric,
@@ -388,7 +397,13 @@ export function parseShowSpanningTree(output: string): ShowSpanningTree {
     // Root ID (if present and different, not root bridge)
     if (line.includes("Root ID")) {
       current.rootBridgeId = line.match(/Root ID\s+(.+)/)?.[1]?.trim();
-      current.rootBridge = false;
+      // Check if this bridge IS the root by comparing Bridge ID and Root ID
+      current.rootBridge = current.bridgeId === current.rootBridgeId;
+    }
+
+    // Also check for explicit "This bridge is the root" statement
+    if (line.includes("This bridge is the root")) {
+      current.rootBridge = true;
     }
 
     // Interface line: Fa0/1 root FWD 19 128.1 P2p
@@ -470,16 +485,17 @@ export function parseShowCdpNeighbors(output: string): ShowCdpNeighbors {
     if (!started || !trimmed) continue;
 
     // Device ID Local Intrfce Holdtme Capability Platform Port ID
-    const parts = trimmed.split(/\s+/);
+    // Capability can be multiple tokens like "R S" or "R S I"
+    const match = trimmed.match(/^(\S+)\s+(\S+)\s+(\d+)\s+((?:[A-Z]\s*)+)\s+(\S+)\s+(\S+)$/);
     
-    if (parts.length >= 6) {
+    if (match) {
       neighbors.push({
-        deviceId: parts[0]!,
-        localInterface: parts[1]!,
-        holdtime: parseInt(parts[2]!, 10),
-        capability: parts[3]!,
-        platform: parts[4]!,
-        portId: parts[5]!,
+        deviceId: match[1]!,
+        localInterface: match[2]!,
+        holdtime: parseInt(match[3]!, 10),
+        capability: match[4]!.trim(),
+        platform: match[5]!,
+        portId: match[6]!,
       });
     }
   }

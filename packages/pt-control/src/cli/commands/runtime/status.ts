@@ -11,6 +11,8 @@ import { createDefaultPTController } from '../../../controller/index.js';
 export default class RuntimeStatus extends BaseCommand {
   static override description = 'Show runtime status and file health';
 
+  static override aliases = ['status'];
+
   static override examples = [
     '<%= config.bin %> runtime status',
     '<%= config.bin %> runtime status --dev-dir ~/my-pt-dev',
@@ -26,7 +28,7 @@ export default class RuntimeStatus extends BaseCommand {
       { name: 'runtime.js', desc: 'Runtime code' },
       { name: 'state.json', desc: 'State file' },
       { name: 'command.json', desc: 'Command file' },
-      { name: 'response', desc: 'Response directory' },
+      { name: 'results/', desc: 'Results directory' },
     ];
 
     this.print(`Runtime Status (${this.devDir})\n`);

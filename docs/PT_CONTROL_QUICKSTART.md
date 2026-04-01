@@ -9,13 +9,14 @@ Controla Cisco Packet Tracer en tiempo real desde la CLI de TypeScript/Bun. Este
 - **Bun** runtime
 
 ### 1. Instala el módulo de scripting en PT
-Sigue los pasos detallados en la sección original para instalar el módulo y habilitar permisos de sistema de archivos.
+Sigue los pasos detallados en la sección original para instalar el módulo, usando los archivos de `packages/pt-control/generated/` como fuente.
 
 ### 2. Configura la CLI
 ```bash
 bun install
 mkdir -p ~/pt-dev
-cp pt-extension/runtime.js ~/pt-dev/runtime.js
+cp packages/pt-control/generated/runtime.js ~/pt-dev/runtime.js
+cp packages/pt-control/generated/main.js ~/pt-dev/main.js
 bun run pt device list
 ```
 

@@ -1,56 +1,38 @@
-// ============================================================================
-// CLI Session - Stateful IOS command execution
-// ============================================================================
-
 import { Buffer } from "node:buffer";
+import { inferPromptState, isPrivilegedMode, isConfigMode } from "./prompt-state";
+import { createErrorResult } from "./command-result";
+import type { CommandResult } from "./command-result";
+import type { CommandHandler } from "./command-handler";
+import type {
+  SessionTranscript,
+  CommandTranscriptEntry,
+} from "./session-transcript";
 import {
-  inferPromptState,
-  type IosMode,
-  type PromptState,
-  isPrivilegedMode,
-  isConfigMode,
-  needsResponse,
-} from "./prompt-state";
+  type CliSessionState,
+  type CommandHistoryEntry,
+  type CliSessionMemoryStats,
+  type SessionHealth,
+  createInitialState,
+  calculateMemoryStats,
+  calculateSessionHealth,
+  isInteractivePrompt,
+} from "./cli-session-state";
 import {
-  type CommandResult,
-  createSuccessResult,
-  createErrorResult,
-  isPagingResult,
-  isPasswordPrompt,
-  isConfirmPrompt,
-} from "./command-result";
+  processCommandOutput,
+  updateStateFromResult,
+  maintainHistory,
+} from "./cli-session-utils";
+import { InteractiveStateHandler } from "./cli-session-handlers";
 
-export interface CommandHandler {
-  enterCommand(cmd: string): [number, string] | Promise<[number, string]>;
-}
+export type { CommandHandler };
+export type { CliSessionState, CommandHistoryEntry, CliSessionMemoryStats, SessionHealth };
 
 export interface CliSessionOptions {
-  /** Timeout for command execution in ms (default: 30000) */
   commandTimeout?: number;
-  /** Enable silent timeout detection (default: true) */
   enableSilentTimeout?: boolean;
-  /** Password for enable (if required) */
   enablePassword?: string;
-  /** Max in-memory history entries (default: 500) */
   maxHistorySize?: number;
-  /** Max bytes of paging output to accumulate before truncating (default: 1MB) */
   maxPagingBufferBytes?: number;
-}
-
-export interface CommandHistoryEntry {
-  command: string;
-  result: CommandResult;
-  timestamp: number;
-}
-
-export interface CliSessionState extends PromptState {
-  paging: boolean;
-  awaitingConfirm: boolean;
-}
-
-export interface CliSessionMemoryStats {
-  historyEntries: number;
-  estimatedBytes: number;
 }
 
 const DEFAULT_MAX_HISTORY = 500;
@@ -62,6 +44,8 @@ export class CliSession {
   private history: CommandHistoryEntry[] = [];
   private options: Required<CliSessionOptions>;
   private lastCommandTime: number = 0;
+  private desyncReason?: string;
+  private interactiveHandler: InteractiveStateHandler;
 
   constructor(deviceName: string, handler: CommandHandler, options: CliSessionOptions = {}) {
     this.handler = handler;
@@ -72,13 +56,14 @@ export class CliSession {
       maxHistorySize: options.maxHistorySize ?? DEFAULT_MAX_HISTORY,
       maxPagingBufferBytes: options.maxPagingBufferBytes ?? DEFAULT_MAX_PAGING_BUFFER,
     };
-    this.state = {
-      mode: "user-exec",
-      deviceName,
-      paging: false,
-      awaitingConfirm: false,
-    };
+    this.state = createInitialState(deviceName);
     this.lastCommandTime = Date.now();
+    this.interactiveHandler = new InteractiveStateHandler(
+      this.state,
+      handler,
+      this.options.enablePassword,
+      () => this.checkSilenceTimeout(),
+    );
   }
 
   getState(): CliSessionState {
@@ -89,97 +74,59 @@ export class CliSession {
     return [...this.history];
   }
 
-  private addToHistory(entry: CommandHistoryEntry): void {
-    this.history.push(entry);
-
-    const maxSize = this.options.maxHistorySize;
-    if (maxSize <= 0) {
-      return;
-    }
-
-    if (this.history.length > maxSize) {
-      const removeCount = Math.max(1, Math.floor(maxSize * 0.2));
-      this.history.splice(0, removeCount);
-    }
+  getHealth(): SessionHealth {
+    const stats = this.getMemoryStats();
+    return calculateSessionHealth(this.state, stats, this.lastCommandTime);
   }
 
-  /**
-   * Check if command timed out due to silence
-   */
   private checkSilenceTimeout(): boolean {
     if (!this.options.enableSilentTimeout) return false;
     const elapsed = Date.now() - this.lastCommandTime;
     return elapsed > this.options.commandTimeout;
   }
 
-  /**
-   * Execute a command and handle state transitions (async for bridge-backed handlers)
-   */
   async execute(command: string): Promise<CommandResult> {
     this.lastCommandTime = Date.now();
+    const modeBefore = this.state.mode;
 
     const handlerResult = this.handler.enterCommand(command);
     const [status, raw] = handlerResult instanceof Promise ? await handlerResult : handlerResult;
-    const promptState = inferPromptState(raw);
 
-    const result: CommandResult = {
-      ok: status === 0,
-      raw,
-      status,
-    };
+    const result = processCommandOutput(raw, command, status, modeBefore);
+    updateStateFromResult(this.state, result);
 
-    if (promptState.mode === "paging") {
-      result.paging = true;
-      this.state.paging = true;
-    } else {
-      this.state.paging = false;
+    if (!result.ok && !result.failedCommand) {
+      result.failedCommand = command;
     }
 
-    if (promptState.mode === "awaiting-confirm") {
-      result.awaitingConfirm = true;
-      this.state.awaitingConfirm = true;
-    } else {
-      this.state.awaitingConfirm = false;
-    }
+    maintainHistory(
+      this.history,
+      { command, result, timestamp: Date.now() },
+      this.options.maxHistorySize,
+    );
 
-    if (promptState.mode === "awaiting-password") {
-      // Password prompt detected - this is an error if we don't have a password
-      if (!this.options.enablePassword) {
-        result.error = "Enable password required but not provided";
+    return result;
+  }
+
+  async executeAndWait(command: string): Promise<CommandResult> {
+    const result = await this.execute(command);
+
+    if (result.awaitingDnsLookup || this.state.awaitingDnsLookup) {
+      const resolved = await this.handleDnsLookup();
+      if (!resolved) {
+        result.classification = "dns-lookup-timeout";
+        result.ok = false;
+        result.error = "DNS lookup did not resolve in time";
       }
     }
 
-    if (promptState.mode !== "unknown" && promptState.mode !== "paging" && promptState.mode !== "awaiting-password") {
-      this.state.mode = promptState.mode;
-    }
-
-    if (promptState.deviceName) {
-      this.state.deviceName = promptState.deviceName;
-    }
-
-    this.addToHistory({
-      command,
-      result,
-      timestamp: Date.now(),
-    });
-
-    return result;
-  }
-
-  /**
-   * Execute command and accumulate all paging output
-   */
-  async executeAndWait(command: string): Promise<CommandResult> {
-    const result = await this.execute(command);
-    if (result.paging) {
+    if (result.paging || this.state.paging) {
       await this.accumulatePagingOutput(result);
     }
+
     return result;
   }
 
-  /**
-   * Accumulate all paging output until prompt returns
-   */
   private async accumulatePagingOutput(initialResult: CommandResult): Promise<void> {
     let accumulatedOutput = initialResult.raw;
     let totalBytes = Buffer.byteLength(accumulatedOutput, "utf8");
@@ -189,7 +136,8 @@ export class CliSession {
     while (this.state.paging) {
       if (this.checkSilenceTimeout()) {
         this.state.paging = false;
-        initialResult.error = "Timeout waiting for paging to complete";
+        initialResult.error = initialResult.error ?? "Timeout waiting for paging to complete";
+        initialResult.truncated = true;
         break;
       }
 
@@ -210,10 +158,13 @@ export class CliSession {
       }
 
       const promptState = inferPromptState(raw);
-
-      if (!promptState.paging && promptState.mode !== "unknown") {
+      if (promptState.mode === "paging") {
+        this.state.paging = true;
+      } else {
         this.state.paging = false;
-        this.state.mode = promptState.mode;
+        if (promptState.mode !== "unknown") {
+          this.state.mode = promptState.mode;
+        }
       }
 
       this.lastCommandTime = Date.now();
@@ -225,100 +176,130 @@ export class CliSession {
     }
   }
 
-  /**
-   * Ensure privileged exec mode, handling enable password if required
-   */
+  async handleDnsLookup(): Promise<boolean> {
+    if (!this.state.awaitingDnsLookup) return true;
+
+    const startedAt = Date.now();
+    const maxWaitMs = Math.min(this.options.commandTimeout, 5000);
+
+    while (this.state.awaitingDnsLookup) {
+      if (Date.now() - startedAt > maxWaitMs) {
+        this.state.awaitingDnsLookup = false;
+        this.state.mode = "unknown";
+        this.state.desynced = true;
+        this.desyncReason = "DNS lookup timeout";
+        return false;
+      }
+
+      const [, raw] = await this.handler.enterCommand("");
+      const promptState = inferPromptState(raw);
+
+      if (promptState.mode !== "resolving-hostname") {
+        this.state.awaitingDnsLookup = false;
+        if (promptState.mode !== "unknown") {
+          this.state.mode = promptState.mode;
+          this.state.desynced = false;
+          this.desyncReason = undefined;
+        }
+        return true;
+      }
+    }
+
+    return true;
+  }
+
+  async resyncPrompt(): Promise<void> {
+    const [, raw] = await this.handler.enterCommand("");
+    const promptState = inferPromptState(raw);
+
+    this.state.awaitingConfirm = false;
+    this.state.paging = false;
+    this.state.awaitingDnsLookup = false;
+
+    if (promptState.mode !== "unknown") {
+      this.state.mode = promptState.mode;
+      this.state.desynced = false;
+      this.desyncReason = undefined;
+    } else {
+      this.state.desynced = true;
+      this.desyncReason = "Could not determine prompt after resync";
+    }
+
+    if (promptState.deviceName) {
+      this.state.deviceName = promptState.deviceName;
+    }
+  }
+
+  markDesynced(reason: string): void {
+    this.state.desynced = true;
+    this.desyncReason = reason;
+  }
+
+  async recoverFromUnknownState(): Promise<boolean> {
+    if (!this.state.desynced && this.state.mode !== "unknown") {
+      return true;
+    }
+
+    await this.resyncPrompt();
+
+    if (this.state.mode === "unknown") {
+      try {
+        await this.handler.enterCommand("end");
+        await this.resyncPrompt();
+      } catch {}
+    }
+
+    if (this.state.mode === "unknown") {
+      try {
+        await this.handler.enterCommand("disable");
+        await this.resyncPrompt();
+      } catch {}
+    }
+
+    if (this.state.mode === "unknown") {
+      try {
+        await this.handler.enterCommand("\x03");
+        await this.resyncPrompt();
+      } catch {}
+    }
+
+    return this.state.mode !== "unknown" && !this.state.desynced;
+  }
+
   async ensurePrivileged(): Promise<boolean> {
-    if (isPrivilegedMode(this.state.mode)) {
-      return true;
-    }
-
-    const result = await this.execute("enable");
-
-    // Check if we're now in privileged mode
-    if (isPrivilegedMode(this.state.mode)) {
-      return true;
-    }
-
-    // If password is required and we have it, send it
-    if (this.state.mode === "awaiting-password" && this.options.enablePassword) {
-      await this.execute(this.options.enablePassword);
-      return isPrivilegedMode(this.state.mode);
-    }
-
-    return result.ok && isPrivilegedMode(this.state.mode);
+    return this.interactiveHandler.ensurePrivileged();
   }
 
   async ensureConfigMode(): Promise<boolean> {
-    if (isConfigMode(this.state.mode)) {
-      return true;
-    }
-
-    if (!isPrivilegedMode(this.state.mode)) {
-      const privResult = await this.ensurePrivileged();
-      if (!privResult) return false;
-    }
-
-    const result = await this.execute("configure terminal");
-    return result.ok && isConfigMode(this.state.mode);
-  }
-
-  /**
-   * Handle paging by sending spaces until all output is shown
-   * @deprecated Use executeAndWait() instead for automatic paging accumulation
-   */
-  async handlePaging(): Promise<void> {
-    if (!this.state.paging) return;
-
-    while (this.state.paging) {
-      if (this.checkSilenceTimeout()) {
-        this.state.paging = false;
-        break;
-      }
-
-      const [status, raw] = await this.handler.enterCommand(" ");
-      const promptState = inferPromptState(raw);
-
-      if (!promptState.paging && promptState.mode !== "unknown") {
-        this.state.paging = false;
-        this.state.mode = promptState.mode;
-      }
-
-      this.lastCommandTime = Date.now();
-    }
-  }
-
-  async continuePaging(): Promise<void> {
-    if (!this.state.paging) return;
-
-    const [status, raw] = await this.handler.enterCommand("q");
-    const promptState = inferPromptState(raw);
-
-    this.state.paging = false;
-    if (promptState.mode !== "unknown") {
-      this.state.mode = promptState.mode;
-    }
-  }
-
-  async handleConfirmation(confirm: boolean): Promise<boolean> {
-    if (!this.state.awaitingConfirm) {
-      return true;
-    }
-
-    const cmd = confirm ? "\n" : "no";
-    const result = await this.execute(cmd);
-
-    this.state.awaitingConfirm = false;
-    return result.ok;
+    return this.interactiveHandler.ensureConfigMode();
   }
 
   async enterConfigCommand(command: string): Promise<CommandResult> {
-    const configResult = await this.ensureConfigMode();
-    if (!configResult) {
-      return createErrorResult("Failed to enter config mode");
-    }
+    return this.interactiveHandler.enterConfigCommand(command);
+  }
 
-    return this.executeAndWait(command);
+  async handlePaging(): Promise<void> {
+    return this.interactiveHandler.handlePaging();
+  }
+
+  async continuePaging(): Promise<void> {
+    return this.interactiveHandler.continuePaging();
+  }
+
+  async handleConfirmation(confirm: boolean): Promise<boolean> {
+    return this.interactiveHandler.handleConfirmation(confirm);
+  }
+
+  async handleCopyDestination(filename = ""): Promise<boolean> {
+    return this.interactiveHandler.handleCopyDestination(filename);
+  }
+
+  async handleReloadConfirm(confirm: boolean): Promise<boolean> {
+    return this.interactiveHandler.handleReloadConfirm(confirm);
+  }
+
+  async handleEraseConfirm(confirm = false): Promise<boolean> {
+    return this.interactiveHandler.handleEraseConfirm(confirm);
   }
 
   clearHistory(): void {
@@ -326,27 +307,50 @@ export class CliSession {
   }
 
   getMemoryStats(): CliSessionMemoryStats {
-    const estimatedBytes = this.history.reduce((total, entry) => {
-      return total
-        + Buffer.byteLength(entry.command, "utf8")
-        + Buffer.byteLength(entry.result?.raw ?? "", "utf8");
-    }, 0);
-
-    return {
-      historyEntries: this.history.length,
-      estimatedBytes,
-    };
+    return calculateMemoryStats(this.history);
   }
 
   reset(): void {
-    this.state = {
-      mode: "user-exec",
-      deviceName: this.state.deviceName,
-      paging: false,
-      awaitingConfirm: false,
-    };
+    try { this.handler.enterCommand("end"); } catch {}
+    try { this.handler.enterCommand("disable"); } catch {}
+
+    this.state = createInitialState(this.state.deviceName ?? "unknown");
+    this.desyncReason = undefined;
     this.clearHistory();
     this.lastCommandTime = Date.now();
+  }
+
+  exportTranscript(): SessionTranscript {
+    const deviceName = this.state.deviceName ?? "unknown";
+    const entries: CommandTranscriptEntry[] = this.history.map((entry) => ({
+      command: entry.command,
+      raw: entry.result.raw,
+      modeBefore: entry.result.modeBefore ?? "unknown",
+      modeAfter: entry.result.modeAfter ?? "unknown",
+      classification: entry.result.classification ?? "unknown",
+      ok: entry.result.ok,
+      durationMs: entry.timestamp ? entry.timestamp - this.lastCommandTime : 0,
+      truncated: entry.result.truncated,
+      source: "terminal" as const,
+      sessionId: deviceName,
+      timestamp: entry.timestamp,
+      error: entry.result.error,
+      warnings: entry.result.warnings,
+    }));
+
+    const allWarnings = entries.flatMap((e) => e.warnings ?? []);
+
+    return {
+      sessionId: deviceName,
+      device: deviceName,
+      entries,
+      modeFinal: this.state.mode,
+      desynced: this.state.desynced,
+      lastError: this.desyncReason,
+      warnings: allWarnings,
+      startedAt: entries[0]?.timestamp ?? Date.now(),
+      endedAt: entries[entries.length - 1]?.timestamp,
+    };
   }
 }
 

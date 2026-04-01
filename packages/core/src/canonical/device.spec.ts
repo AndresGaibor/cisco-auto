@@ -1,6 +1,6 @@
 /**
  * DEVICE SPECIFICATION - MODELO CANÓNICO DE DISPOSITIVO
- * 
+ *
  * Este es el modelo único y completo para representar un dispositivo de red.
  * Incluye todos los campos necesarios para:
  * - Configuración de red (IP, VLANs, routing)
@@ -35,6 +35,9 @@ import type {
   DHCPServerSpec
 } from './protocol.spec';
 
+// Import VLAN value objects
+import type { VlanId, VlanName, VlanRange, VtpDomain, VtpMode, VtpModeType, VtpVersion, VtpVersionType, VtpPassword } from '../value-objects/index.js';
+
 // Re-export for backwards compatibility (types imported from protocol.spec)
 export type {
   STPSpec,
@@ -55,49 +58,49 @@ export type {
 export interface InterfaceSpec {
   /** Nombre de la interfaz (ej: GigabitEthernet0/0) */
   name: string;
-  
+
   /** Descripción */
   description?: string;
-  
+
   /** Dirección IP */
   ip?: string;
-  
+
   /** Máscara de subred */
   subnetMask?: string;
-  
+
   /** CIDR (alternativa a subnetMask) */
   cidr?: number;
-  
+
   /** Dirección MAC */
   mac?: string;
-  
+
   /** VLAN (para access ports) */
-  vlan?: number;
-  
+  vlan?: VlanId;
+
   /** VLAN nativa (para trunk) */
-  nativeVlan?: number;
-  
+  nativeVlan?: VlanId;
+
   /** VLANs permitidas (para trunk) */
-  allowedVlans?: number[];
-  
+  allowedVlans?: VlanRange;
+
   /** Modo de switchport */
   switchportMode?: SwitchportMode;
-  
+
   /** Estado administrativo */
   shutdown?: boolean;
-  
+
   /** Estado del link */
   status?: InterfaceStatus;
-  
+
   /** Velocidad */
   speed?: Speed;
-  
+
   /** Duplex */
   duplex?: DuplexMode;
-  
+
   /** Channel group (EtherChannel) */
   channelGroup?: number;
-  
+
   /** Descripción del puerto conectado */
   connectedTo?: string;
 }
@@ -108,11 +111,11 @@ export interface InterfaceSpec {
 
 export interface VLANSpec {
   /** ID de VLAN (1-4094) */
-  id: number;
-  
+  id: VlanId;
+
   /** Nombre de la VLAN */
-  name?: string;
-  
+  name?: VlanName;
+
   /** Interfaces asignadas */
   interfaces?: string[];
 }
@@ -123,17 +126,17 @@ export interface VLANSpec {
 
 export interface VTPSpec {
   /** Dominio VTP */
-  domain: string;
-  
+  domain: VtpDomain;
+
   /** Modo VTP */
-  mode: 'server' | 'client' | 'transparent';
-  
+  mode: VtpMode;
+
   /** Versión */
-  version?: 1 | 2 | 3;
-  
+  version?: VtpVersion;
+
   /** Password */
-  password?: string;
-  
+  password?: VtpPassword;
+
   /** Pruning habilitado */
   pruning?: boolean;
 }

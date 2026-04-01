@@ -8,14 +8,14 @@ import { copyFileSync, existsSync, readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
 
 const DEV_DIR = `${process.env.HOME ?? "/Users/andresgaibor"}/pt-dev`;
-const RUNTIME_SRC = resolve(import.meta.dir, "../pt-extension/runtime.js");
+const RUNTIME_SRC = resolve(import.meta.dir, "../packages/pt-control/generated/runtime.js");
 const RUNTIME_DEST = `${DEV_DIR}/runtime.js`;
 
 console.log("🔄 Forcing PT runtime reload...\n");
 
-// Read the runtime source
+// Leer el runtime V2 generado
 if (!existsSync(RUNTIME_SRC)) {
-  console.error("❌ Runtime source not found:", RUNTIME_SRC);
+  console.error("❌ Runtime V2 no encontrado:", RUNTIME_SRC);
   process.exit(1);
 }
 
@@ -30,7 +30,7 @@ console.log("\n⏳ Waiting for PT to detect and load runtime...");
 await new Promise(resolve => setTimeout(resolve, 1000));
 
 // Check if runtime was loaded
-const eventsFile = `${DEV_DIR}/events.ndjson`;
+const eventsFile = `${DEV_DIR}/logs/events.current.ndjson`;
 if (existsSync(eventsFile)) {
   const content = readFileSync(eventsFile, "utf-8");
   const lines = content.trim().split("\n");

@@ -25,6 +25,19 @@ description: |
 - El usuario menciona archivos de laboratorio Packet Tracer (.pka, .pkt, .yaml) o flujos relacionados
 - El usuario solicita configuración, análisis, troubleshooting, validación o automatización de Packet Tracer, aunque no mencione archivos
 - El usuario requiere comandos IOS, análisis de archivos, o guía paso a paso
+- El usuario pregunta "¿Qué dispositivos están en PT?" o similares → USAR PT CONTROL AUTOMÁTICAMENTE
+
+## PT Control - Detección Automática de Dispositivos
+**SIEMPRE usar PT Control cuando el usuario pregunte sobre dispositivos en PT.**
+
+```bash
+# Descubrimiento de dispositivos (requiere PT corriendo + scripting module)
+cd packages/pt-control && bun run scripts/topologia-apply.ts
+
+# Si PT no está corriendo o timeout: informar al usuario y proporcionar instrucciones setup
+```
+
+Si PT no está disponible → redirigir a: `bun run scripts/setup-pt-control.sh`
 
 ## Flujo estándar
 1. **Detectar intención**: ¿Guía paso a paso, modificación automática, análisis, troubleshooting?

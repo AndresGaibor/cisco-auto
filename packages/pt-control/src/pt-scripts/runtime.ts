@@ -2,14 +2,14 @@
 // Core Runtime - All logic resides here
 // ============================================================================
 
-declare var ipc: any;
-declare var dprint: (msg: string) => void;
-declare var DEV_DIR: string;
+// Type definitions are in pt-runtime.d.ts
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference
+/// <reference path="./pt-runtime.d.ts" />
 
 // State
-var fm: any = null;
-var fw: any = null;
-var snapshotInterval: any = null;
+var fm: PTFileManager | null = null;
+var fw: PTFileWatcher | null = null;
+var snapshotInterval: number | null = null;
 var COMMAND_FILE = DEV_DIR + "/command.json";
 var EVENTS_FILE = DEV_DIR + "/events.ndjson";
 var STATE_FILE = DEV_DIR + "/state.json";
@@ -18,19 +18,19 @@ var STATE_FILE = DEV_DIR + "/state.json";
 // Event Helpers
 // ============================================================================
 
-function appendEvent(evt: any) {
+function appendEvent(evt: PTEvent) {
   try {
     var line = JSON.stringify(evt) + "\n";
-    var prev = fm.fileExists(EVENTS_FILE) ? fm.getFileContents(EVENTS_FILE) : "";
-    fm.writePlainTextToFile(EVENTS_FILE, prev + line);
+    var prev = fm!.fileExists(EVENTS_FILE) ? fm!.getFileContents(EVENTS_FILE) : "";
+    fm!.writePlainTextToFile(EVENTS_FILE, prev + line);
   } catch (e) {
     dprint("[Runtime ERROR] Failed to append event: " + String(e));
   }
 }
 
-function writeState(state: any) {
+function writeState(state: PTTopologySnapshot) {
   try {
-    fm.writePlainTextToFile(STATE_FILE, JSON.stringify(state));
+    fm!.writePlainTextToFile(STATE_FILE, JSON.stringify(state));
   } catch (e) {
     dprint("[Runtime ERROR] Failed to write state: " + String(e));
   }
@@ -40,29 +40,53 @@ function writeState(state: any) {
 // Snapshot
 // ============================================================================
 
-function generateSnapshot() {
+interface PTPortInfo {
+  name: string;
+  ipAddress?: string;
+  subnetMask?: string;
+  macAddress?: string;
+}
+
+interface PTDeviceSnapshot {
+  name: string;
+  model: string;
+  type: string;
+  power: boolean;
+  ports: PTPortInfo[];
+}
+
+interface PTTopologySnapshot {
+  version: string;
+  timestamp: number;
+  devices: Record<string, PTDeviceSnapshot>;
+  metadata: {
+    deviceCount: number;
+  };
+}
+
+function generateSnapshot(): PTTopologySnapshot | null {
   try {
     var net = ipc.network();
     var count = net.getDeviceCount();
-    var devices: any = {};
-    
+    var devices: Record<string, PTDeviceSnapshot> = {};
+
     for (var i = 0; i < count; i++) {
       var device = net.getDeviceAt(i);
       var name = device.getName();
       var portCount = device.getPortCount();
-      var ports = [];
-      
+      var ports: PTPortInfo[] = [];
+
       for (var p = 0; p < portCount; p++) {
         try {
           var port = device.getPortAt(p);
-          var portInfo: any = { name: port.getName() };
+          var portInfo: PTPortInfo = { name: port.getName() };
           try { portInfo.ipAddress = port.getIpAddress(); } catch(e1) {}
           try { portInfo.subnetMask = port.getSubnetMask(); } catch(e2) {}
           try { portInfo.macAddress = port.getMacAddress(); } catch(e3) {}
           ports.push(portInfo);
         } catch (e) {}
       }
-      
+
       devices[name] = {
         name: name,
         model: device.getModel(),
@@ -71,7 +95,7 @@ function generateSnapshot() {
         ports: ports
       };
     }
-    
+
     return {
       version: "2.0",
       timestamp: Date.now(),
@@ -95,7 +119,7 @@ function triggerSnapshot() {
 // Command Handlers
 // ============================================================================
 
-var HANDLERS: Record<string, (p: any) => any> = {
+var HANDLERS: PTCommandHandlers = {
   "listDevices": function(p) {
     return { ok: true, data: [1, 2, 3] };
   },
@@ -108,13 +132,13 @@ var HANDLERS: Record<string, (p: any) => any> = {
 
 function runCommand() {
   try {
-    if (!fm.fileExists(COMMAND_FILE)) return;
-    var cmd = JSON.parse(fm.getFileContents(COMMAND_FILE));
+    if (!fm!.fileExists(COMMAND_FILE)) return;
+    var cmd: PTCommand = JSON.parse(fm!.getFileContents(COMMAND_FILE));
     if (!cmd || !cmd.payload) return;
 
     var handler = HANDLERS[cmd.payload.type];
-    var result: any;
-    
+    var result: Record<string, unknown>;
+
     if (handler) {
       result = handler(cmd.payload);
     } else {
@@ -128,7 +152,7 @@ function runCommand() {
       ok: result.ok !== false,
       value: result
     });
-  } catch (e: any) {
+  } catch (e) {
     appendEvent({ type: "error", ts: Date.now(), message: String(e) });
   }
 }
@@ -138,9 +162,9 @@ function runCommand() {
 // ============================================================================
 
 // Compatibility export for old loaders
-export function executeRuntime(payload: any, ipcRef: any, dprintRef: any) {
-  var handler = HANDLERS[payload.type];
-  var res: any;
+export function executeRuntime(payload: Record<string, unknown>, ipcRef: unknown, dprintRef: unknown): string {
+  var handler = HANDLERS[payload.type as string];
+  var res: Record<string, unknown>;
   if (handler) {
     res = handler(payload);
   } else {
@@ -152,21 +176,23 @@ export function executeRuntime(payload: any, ipcRef: any, dprintRef: any) {
 export function start() {
   dprint("[Runtime] Starting...");
   fm = ipc.systemFileManager();
+  // @ts-ignore - getFileWatcher no existe en PTFileManager type definitions
   fw = fm.getFileWatcher();
-  
+
+  if (!fw) return;
   // Watch for commands
   fw.addPath(COMMAND_FILE);
-  fw.registerEvent("fileChanged", null, function(src: any, args: any) {
+  fw.registerEvent("fileChanged", null, function(src: string, args: { path: string; type: string }) {
     if (args.path === COMMAND_FILE) {
       setTimeout(runCommand, 50);
     }
   });
-  
+
   // Initial snapshot
   triggerSnapshot();
-  
+
   // Periodic snapshot
-  snapshotInterval = setInterval(triggerSnapshot, 10000);
+  snapshotInterval = setInterval(triggerSnapshot, 10000) as unknown as number;
 }
 
 export function stop() {

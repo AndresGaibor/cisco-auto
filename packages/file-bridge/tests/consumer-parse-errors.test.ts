@@ -9,7 +9,6 @@ import { tmpdir } from "node:os";
 import { BridgePathLayout } from "../src/shared/path-layout.js";
 import { DurableNdjsonConsumer } from "../src/durable-ndjson-consumer.js";
 import type { BridgeEvent } from "../src/shared/protocol.js";
-import type { BridgeEvent } from "../src/shared/protocol.js";
 
 describe("Consumer Parse Errors", () => {
   let tempDir: string;
