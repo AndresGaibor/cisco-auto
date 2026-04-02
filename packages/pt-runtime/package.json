@@ -6,7 +6,8 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./value-objects/validated-models": "./dist/value-objects/validated-models.js"
   },
   "bin": {
     "pt-runtime": "./bin/run.js"
@@ -15,11 +16,14 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "generate": "bun run src/index.ts generate",
+    "generate-models": "bun run src/scripts/generate-model-map.ts",
+    "generate": "bun run src/scripts/generate-model-map.ts && bun run src/index.ts generate",
     "deploy": "bun run src/index.ts deploy",
     "test": "bun test"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@cisco-auto/core": "workspace:*"
+  },
   "devDependencies": {
     "@cisco-auto/pt-control": "workspace:*",
     "@types/bun": "latest",

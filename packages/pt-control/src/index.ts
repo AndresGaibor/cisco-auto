@@ -81,3 +81,9 @@ export {
   IOSFamily,
   type IosDeviceModel,
 } from "@cisco-auto/ios-domain";
+
+// Device Validation - Validate devices against core catalog
+export {
+  validatePTModel,
+  resolveModel,
+} from "./shared/utils/helpers.js";

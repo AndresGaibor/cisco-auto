@@ -2,7 +2,19 @@
 // Runtime Helpers - Pure utility functions
 // ============================================================================
 
-import { DEVICE_TYPES, MODEL_ALIASES } from "@cisco-auto/file-bridge";
+import { PT_MODEL_MAP, PT_DEVICE_TYPE_MAP } from "@cisco-auto/pt-runtime/value-objects/validated-models";
+
+// Device type IDs (from PT schema)
+const DEVICE_TYPES = {
+  router: 0,
+  switch: 1,
+  generic: 2,
+  pc: 3,
+  server: 4,
+  end: 5,
+  wireless: 6,
+  cloud: 7,
+};
 
 /** Logical workspace interface */
 export interface PTLogicalWorkspace {
@@ -70,11 +82,26 @@ export interface HandlerResult {
   [key: string]: unknown;
 }
 
-/** Resolve model name from alias or return as-is */
-export function resolveModel(model: string | undefined): string {
-  if (!model) return "2911";
+/** 
+ * Valida y resuelve modelo contra catálogo de core
+ * THROWS si modelo inválido
+ */
+export function validatePTModel(model: string): string {
   const key = model.toLowerCase();
-  return MODEL_ALIASES[key] || model;
+  if (!(key in PT_MODEL_MAP)) {
+    throw new Error(
+      `Invalid device model: "${model}". ` +
+      `Check packages/core/src/catalog/ for valid models. ` +
+      `Available aliases: pc, server, cloud, ap, router, switch, 1941, 2960, ...`
+    );
+  }
+  return PT_MODEL_MAP[key];
+}
+
+/** Resolve model name from alias - VALIDATES against catalog */
+export function resolveModel(model: string | undefined): string {
+  if (!model) return "1941"; // default router from catalog
+  return validatePTModel(model);
 }
 
 /** Get device type ID for a model name */

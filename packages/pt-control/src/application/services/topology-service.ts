@@ -5,6 +5,7 @@
 import type { FileBridgePort } from "../ports/file-bridge.port.js";
 import type { TopologyCachePort } from "../ports/topology-cache.port.js";
 import type { TopologySnapshot, DeviceState, LinkState, AddLinkPayload } from "../../contracts/index.js";
+import { validatePTModel } from "../../shared/utils/helpers.js";
 
 function ptDeviceTypeToString(typeId: number): DeviceState["type"] {
   const map: Record<number, DeviceState["type"]> = {
@@ -113,12 +114,16 @@ export class TopologyService {
 
   /**
    * Add a device to the topology
+   * VALIDATES model against catalog before sending to PT
    */
   async addDevice(
     name: string,
     model: string,
     options?: { x?: number; y?: number }
   ): Promise<DeviceState> {
+    // Validar modelo contra catálogo de core - THROWS si inválido
+    const validatedModel = validatePTModel(model);
+    
     const result = await this.bridge.sendCommandAndWait<{
       ok: boolean;
       name: string;
@@ -133,7 +138,7 @@ export class TopologyService {
       {
         id: this.generateId(),
         name,
-        model,
+        model: validatedModel,
         x: options?.x ?? 100,
         y: options?.y ?? 100,
       },
