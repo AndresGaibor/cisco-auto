@@ -32,6 +32,7 @@ return (function(payload, ipc, dprint) {
       case "listCanvasRects": return handleListCanvasRects(payload);
       case "getRect": return handleGetRect(payload);
       case "devicesInRect": return handleDevicesInRect(payload);
+      case "moveDevice": return handleMoveDevice(payload);
       default: return { ok: false, error: "Unknown command: " + payload.type };
     }
   } catch (e) {

@@ -160,5 +160,49 @@ function handleConfigHost(payload) {
   
   return { ok: true, device: payload.device, ip: payload.ip };
 }
+
+function handleMoveDevice(payload) {
+  var net = getNet();
+  var device = net.getDevice(payload.name);
+  if (!device) return { ok: false, error: "Device not found: " + payload.name };
+
+  var x = payload.x !== undefined ? payload.x : 0;
+  var y = payload.y !== undefined ? payload.y : 0;
+
+  try {
+    if (typeof device.setX === "function" && typeof device.setY === "function") {
+      device.setX(x);
+      device.setY(y);
+      return { ok: true, name: payload.name, x: x, y: y };
+    }
+
+    var lp = device.logicalPosition;
+    if (lp && typeof lp === "object" && "setX" in lp && "setY" in lp) {
+      lp.setX(x);
+      lp.setY(y);
+      return { ok: true, name: payload.name, x: x, y: y };
+    }
+
+    var dev = device;
+    var moved = false;
+    while (dev) {
+      if (typeof dev.setX === "function" && typeof dev.setY === "function") {
+        dev.setX(x);
+        dev.setY(y);
+        moved = true;
+        break;
+      }
+      dev = dev.prototype || null;
+    }
+
+    if (moved) {
+      return { ok: true, name: payload.name, x: x, y: y };
+    }
+
+    return { ok: false, error: "setX/setY not available in this PT API version", code: "INTERNAL_ERROR" };
+  } catch (e) {
+    return { ok: false, error: "Failed to move device: " + String(e), code: "INTERNAL_ERROR" };
+  }
+}
 `;
 }

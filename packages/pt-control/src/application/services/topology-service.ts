@@ -168,6 +168,28 @@ export class TopologyService {
   }
 
   /**
+   * Move a device to a new position on the canvas
+   */
+  async moveDevice(
+    name: string,
+    x: number,
+    y: number
+  ): Promise<{ ok: true; name: string; x: number; y: number } | { ok: false; error: string; code: string }> {
+    const { value } = await this.bridge.sendCommandAndWait<{ ok: boolean; name?: string; x?: number; y?: number; error?: string; code?: string }>({
+      type: "moveDevice",
+      id: this.generateId(),
+      name,
+      x,
+      y,
+    });
+
+    if (value.ok) {
+      return { ok: true, name: value.name!, x: value.x!, y: value.y! };
+    }
+    return { ok: false, error: value.error ?? "Unknown error", code: value.code ?? "UNKNOWN" };
+  }
+
+  /**
    * Add a link between two devices
    */
   async addLink(

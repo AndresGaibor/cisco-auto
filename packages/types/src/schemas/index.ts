@@ -149,6 +149,7 @@ export {
   RemoveDevicePayloadSchema,
   ListDevicesPayloadSchema,
   RenameDevicePayloadSchema,
+  MoveDevicePayloadSchema,
   AddModulePayloadSchema,
   RemoveModulePayloadSchema,
   LinkTypeSchema,

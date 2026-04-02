@@ -12,6 +12,7 @@ export {
   RemoveDevicePayloadSchema,
   ListDevicesPayloadSchema,
   RenameDevicePayloadSchema,
+  MoveDevicePayloadSchema,
   AddModulePayloadSchema,
   RemoveModulePayloadSchema,
   LinkTypeSchema,
@@ -51,6 +52,7 @@ export interface PTControlCommandPayloadTypeMap {
   'removeDevice': z.infer<typeof RemoveDevicePayloadSchema>;
   'listDevices': z.infer<typeof ListDevicesPayloadSchema>;
   'renameDevice': z.infer<typeof RenameDevicePayloadSchema>;
+  'moveDevice': z.infer<typeof MoveDevicePayloadSchema>;
   'addModule': z.infer<typeof AddModulePayloadSchema>;
   'removeModule': z.infer<typeof RemoveModulePayloadSchema>;
   'addLink': z.infer<typeof AddLinkPayloadSchema>;
@@ -76,6 +78,7 @@ import {
   RemoveDevicePayloadSchema,
   ListDevicesPayloadSchema,
   RenameDevicePayloadSchema,
+  MoveDevicePayloadSchema,
   AddModulePayloadSchema,
   RemoveModulePayloadSchema,
   AddLinkPayloadSchema,

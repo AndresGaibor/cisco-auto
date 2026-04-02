@@ -1,52 +1,62 @@
 // ============================================================================
 // PT Control V2 - Topology Apply Command
 // ============================================================================
-// Declarative topology reconciler: ensures PT topology matches desired config.
 
 import { Flags } from '@oclif/core';
 import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
 import pc from 'picocolors';
 import { BaseCommand, createSpinner } from '../../base-command.js';
+import { createDefaultPTController } from '../../../controller/index.js';
 import { ValidationError } from '../../errors/index.js';
-import type { TopologySnapshot, DeviceState, LinkState, AddLinkPayload } from '../../../contracts/index.js';
-import { calculateDelta, type DeviceDelta, type LinkDelta } from '../../../contracts/index.js';
+import type { DeviceState, TopologySnapshot } from '../../../types/index.js';
 
-interface DesiredDevice {
-  name: string;
-  model: string;
-  x?: number;
-  y?: number;
+interface VlanConfig {
+  id: number;
+  name?: string;
 }
 
-interface DesiredLink {
-  device1: string;
-  port1: string;
-  device2: string;
-  port2: string;
-  cableType?: "auto" | "straight" | "cross" | "roll" | "fiber" | "phone" | "cable" | "serial" | "console" | "wireless" | "coaxial" | "octal" | "cellular" | "usb" | "custom_io";
+interface TrunkPortsConfig {
+  [deviceName: string]: string[];
+}
+
+interface HostIpConfig {
+  ip: string;
+  mask?: string;
+  gateway?: string;
+  dns?: string;
+  dhcp?: boolean;
+}
+
+interface HostIpConfigMap {
+  [deviceName: string]: HostIpConfig;
+}
+
+interface SshConfig {
+  domain: string;
+  username: string;
+  password: string;
 }
 
 interface TopologyConfig {
-  devices?: DesiredDevice[];
-  links?: DesiredLink[];
+  vlans?: VlanConfig[];
+  trunkPorts?: TrunkPortsConfig;
+  hostIpConfig?: HostIpConfigMap;
+  sshConfig?: SshConfig;
 }
 
 interface ApplyResult {
-  action: 'add' | 'remove' | 'skip';
-  kind: 'device' | 'link';
-  name?: string;
-  details?: string;
-  error?: string;
+  action: 'apply' | 'skip' | 'error';
+  target: string;
+  details: string;
 }
 
 export default class TopologyApply extends BaseCommand {
-  static override description = 'Apply a declarative topology configuration to Packet Tracer';
+  static override description = 'Apply configuration to topology devices';
 
   static override examples = [
-    '<%= config.bin %> topology apply --config ./topology.json',
-    '<%= config.bin %> topology apply --config ./topology.json --dry-run',
-    '<%= config.bin %> topology apply --config ./topology.json --force',
+    '<%= config.bin %> topology apply --config ./topology-config.json',
+    '<%= config.bin %> topology apply --config ./topology-config.json --dry-run',
+    '<%= config.bin %> topology apply --config ./topology-config.json --force',
   ];
 
   static override flags = {
@@ -61,7 +71,7 @@ export default class TopologyApply extends BaseCommand {
       default: false,
     }),
     force: Flags.boolean({
-      description: 'Remove devices/links not in the desired config',
+      description: 'Apply changes even to powered-off devices',
       default: false,
     }),
   };
@@ -74,7 +84,6 @@ export default class TopologyApply extends BaseCommand {
       context: {
         format: this.globalFlags.format,
         dryRun: flags['dry-run'],
-        force: flags.force,
       },
       execute: async () => {
         const configPath = flags.config as string;
@@ -87,15 +96,15 @@ export default class TopologyApply extends BaseCommand {
         try {
           const raw = readFileSync(configPath, 'utf-8');
           config = JSON.parse(raw) as TopologyConfig;
-        } catch (error) {
+        } catch {
           throw new ValidationError(`Invalid JSON in config file: ${configPath}`);
         }
 
-        if (!config.devices && !config.links) {
-          throw new ValidationError('Config must contain at least one of: devices, links');
+        if (Object.keys(config).length === 0) {
+          throw new ValidationError('Config file is empty');
         }
 
-        const controller = this.createController();
+        const controller = createDefaultPTController();
         this.trackController(controller);
         const spinner = createSpinner('Loading current topology...');
 
@@ -103,116 +112,103 @@ export default class TopologyApply extends BaseCommand {
 
         try {
           spinner.start();
-
-          const currentSnapshot = await controller.snapshot();
-
-          if (!currentSnapshot) {
-            throw new ValidationError('No topology snapshot available from PT');
-          }
-
-          const desiredSnapshot = this.buildDesiredSnapshot(config);
-
-          spinner.start();
-
-          const delta = calculateDelta(currentSnapshot as TopologySnapshot, desiredSnapshot);
-
+          const snapshot = await controller.snapshot() as TopologySnapshot;
+          const devices = Object.values(snapshot.devices);
           const results: ApplyResult[] = [];
 
+          const hasVlanConfig = config.vlans && config.vlans.length > 0;
+          const hasTrunkConfig = config.trunkPorts && Object.keys(config.trunkPorts).length > 0;
+          const hasIpConfig = config.hostIpConfig && Object.keys(config.hostIpConfig).length > 0;
+          const hasSshConfig = config.sshConfig != null;
+
+          if (!hasVlanConfig && !hasTrunkConfig && !hasIpConfig && !hasSshConfig) {
+            this.print('No configuration sections found in config file.');
+            this.print('Expected at least one of: vlans, trunkPorts, hostIpConfig, sshConfig');
+            return;
+          }
+
           if (flags['dry-run']) {
-            this.print(pc.bold('Dry-run mode — no changes will be made\n'));
+            this.print(pc.bold('\nDry-run mode — no changes will be made\n'));
           }
 
-          for (const deviceDelta of delta.devices) {
-            if (deviceDelta.op === 'add') {
-              const d = deviceDelta.device;
-              const details = `${d.model} at (${d.x ?? 100}, ${d.y ?? 100})`;
-              if (flags['dry-run']) {
-                results.push({ action: 'add', kind: 'device', name: d.name, details });
-                this.print(`  ${pc.green('+')} Would add device ${pc.cyan(d.name)} (${details})`);
-              } else {
-                try {
-                  await controller.addDevice(d.name, d.model, { x: d.x, y: d.y });
-                  results.push({ action: 'add', kind: 'device', name: d.name, details });
-                  this.print(`  ${pc.green('+')} Added device ${pc.cyan(d.name)}`);
-                } catch (err) {
-                  const msg = err instanceof Error ? err.message : String(err);
-                  results.push({ action: 'skip', kind: 'device', name: d.name, error: msg });
-                  this.print(`  ${pc.red('!')} Failed to add ${pc.cyan(d.name)}: ${msg}`);
-                }
-              }
-            } else if (deviceDelta.op === 'remove' && flags.force) {
-              const name = deviceDelta.name;
-              if (flags['dry-run']) {
-                results.push({ action: 'remove', kind: 'device', name, details: 'Not in desired config' });
-                this.print(`  ${pc.red('-')} Would remove device ${pc.cyan(name)}`);
-              } else {
-                try {
-                  await controller.removeDevice(name);
-                  results.push({ action: 'remove', kind: 'device', name });
-                  this.print(`  ${pc.red('-')} Removed device ${pc.cyan(name)}`);
-                } catch (err) {
-                  const msg = err instanceof Error ? err.message : String(err);
-                  results.push({ action: 'skip', kind: 'device', name, error: msg });
-                  this.print(`  ${pc.red('!')} Failed to remove ${pc.cyan(name)}: ${msg}`);
-                }
-              }
-            } else if (deviceDelta.op === 'remove' && !flags.force) {
-              this.print(`  ${pc.yellow('~')} Device ${pc.cyan(deviceDelta.name)} not in desired config (use --force to remove)`);
-            }
-          }
+          for (const device of devices) {
+            const isPowered = device.power;
+            const shouldSkip = !isPowered && !flags.force;
 
-          for (const linkDelta of delta.links) {
-            if (linkDelta.op === 'add') {
-              const l = linkDelta.link;
-              const details = `${l.device1}:${l.port1} ↔ ${l.device2}:${l.port2}`;
-              if (flags['dry-run']) {
-                results.push({ action: 'add', kind: 'link', details });
-                this.print(`  ${pc.green('+')} Would add link ${details}`);
-              } else {
-                try {
-                  await controller.addLink(l.device1, l.port1, l.device2, l.port2, l.cableType as AddLinkPayload["linkType"]);
-                  results.push({ action: 'add', kind: 'link', details });
-                  this.print(`  ${pc.green('+')} Added link ${details}`);
-                } catch (err) {
-                  const msg = err instanceof Error ? err.message : String(err);
-                  results.push({ action: 'skip', kind: 'link', details, error: msg });
-                  this.print(`  ${pc.red('!')} Failed to add link ${details}: ${msg}`);
+            if (hasIpConfig && config.hostIpConfig) {
+              const ipConfig = config.hostIpConfig[device.name];
+              if (ipConfig) {
+                if (shouldSkip) {
+                  results.push({ action: 'skip', target: device.name, details: 'Device is powered off' });
+                  this.print(`  ${pc.yellow('~')} ${pc.cyan(device.name)}: ${pc.dim('skip (powered off)')}`);
+                  continue;
                 }
-              }
-            } else if (linkDelta.op === 'remove' && flags.force) {
-              const id = linkDelta.id;
-              if (flags['dry-run']) {
-                results.push({ action: 'remove', kind: 'link', details: id });
-                this.print(`  ${pc.red('-')} Would remove link ${id}`);
-              } else {
-                const parts = id.split('-');
-                if (parts.length >= 2) {
-                  const [d1, p1] = parts[0].split(':');
-                  const d2Part = parts.slice(1).join('-');
+
+                const details = `IP ${ipConfig.dhcp ? 'DHCP' : `${ipConfig.ip}/${ipConfig.mask ?? '??'}`}`;
+                if (flags['dry-run']) {
+                  results.push({ action: 'apply', target: device.name, details });
+                  this.print(`  ${pc.green('+')} ${pc.cyan(device.name)}: Would apply host IP config (${details})`);
+                } else {
                   try {
-                    await controller.removeLink(d1, p1);
-                    results.push({ action: 'remove', kind: 'link', details: id });
-                    this.print(`  ${pc.red('-')} Removed link ${id}`);
+                    await controller.configHost(device.name, {
+                      ip: ipConfig.ip,
+                      mask: ipConfig.mask,
+                      gateway: ipConfig.gateway,
+                      dns: ipConfig.dns,
+                      dhcp: ipConfig.dhcp,
+                    });
+                    results.push({ action: 'apply', target: device.name, details });
+                    this.print(`  ${pc.green('+')} ${pc.cyan(device.name)}: Applied host IP config (${details})`);
                   } catch (err) {
                     const msg = err instanceof Error ? err.message : String(err);
-                    results.push({ action: 'skip', kind: 'link', details: id, error: msg });
-                    this.print(`  ${pc.red('!')} Failed to remove link ${id}: ${msg}`);
+                    results.push({ action: 'error', target: device.name, details: msg });
+                    this.print(`  ${pc.red('!')} ${pc.cyan(device.name)}: Failed - ${msg}`);
                   }
                 }
               }
-            } else if (linkDelta.op === 'remove' && !flags.force) {
-              this.print(`  ${pc.yellow('~')} Link ${linkDelta.id} not in desired config (use --force to remove)`);
+            }
+
+            if (hasSshConfig && config.sshConfig) {
+              if (device.type === 'router' || device.type === 'switch' || device.type === 'switch_layer3') {
+                if (shouldSkip) {
+                  results.push({ action: 'skip', target: device.name, details: 'Device is powered off' });
+                  this.print(`  ${pc.yellow('~')} ${pc.cyan(device.name)}: ${pc.dim('skip SSH config (powered off)')}`);
+                  continue;
+                }
+
+                const details = `SSH for ${config.sshConfig.username}@${config.sshConfig.domain}`;
+                if (flags['dry-run']) {
+                  results.push({ action: 'apply', target: device.name, details });
+                  this.print(`  ${pc.green('+')} ${pc.cyan(device.name)}: Would apply SSH config (${details})`);
+                } else {
+                  this.print(`  ${pc.dim('-')} ${pc.cyan(device.name)}: SSH config not yet implemented via CLI`);
+                }
+              }
+            }
+          }
+
+          if (hasVlanConfig && config.vlans) {
+            this.print(`\n${pc.bold('VLANs to apply:')}`);
+            for (const vlan of config.vlans) {
+              this.print(`  ${pc.cyan(`VLAN ${vlan.id}`)}: ${vlan.name ?? '(no name)'}`);
+            }
+          }
+
+          if (hasTrunkConfig && config.trunkPorts) {
+            this.print(`\n${pc.bold('Trunk ports to apply:')}`);
+            for (const [deviceName, ports] of Object.entries(config.trunkPorts)) {
+              this.print(`  ${pc.cyan(deviceName)}: ${ports.join(', ')}`);
             }
           }
 
           spinner.stop();
 
-          const added = results.filter(r => r.action === 'add').length;
-          const removed = results.filter(r => r.action === 'remove').length;
+          const applied = results.filter(r => r.action === 'apply').length;
           const skipped = results.filter(r => r.action === 'skip').length;
+          const errors = results.filter(r => r.action === 'error').length;
 
           this.print(`\n${'─'.repeat(50)}`);
-          this.print(`Summary: ${pc.green(`+${added}`)} added, ${pc.red(`-${removed}`)} removed, ${skipped > 0 ? pc.red(`!${skipped}`) : '0'} skipped`);
+          this.print(`Summary: ${pc.green(`+${applied}`)} applied, ${pc.yellow(`~${skipped}`)} skipped, ${pc.red(`!${errors}`)} errors`);
 
           if (flags['dry-run']) {
             this.print(pc.yellow('\nDry-run complete. Run without --dry-run to apply changes.'));
@@ -221,9 +217,9 @@ export default class TopologyApply extends BaseCommand {
           if (this.globalFlags.format === 'json' || this.globalFlags.jq) {
             this.outputData({
               dryRun: flags['dry-run'],
-              added,
-              removed,
+              applied,
               skipped,
+              errors,
               results,
             });
           }
@@ -232,52 +228,5 @@ export default class TopologyApply extends BaseCommand {
         }
       },
     });
-  }
-
-  private buildDesiredSnapshot(config: TopologyConfig): TopologySnapshot {
-    const devices: Record<string, DeviceState> = {};
-    const links: Record<string, LinkState> = {};
-
-    for (const d of config.devices ?? []) {
-      devices[d.name] = {
-        name: d.name,
-        model: d.model,
-        type: 'generic',
-        power: true,
-        x: d.x,
-        y: d.y,
-        ports: [],
-      };
-    }
-
-    for (const l of config.links ?? []) {
-      const id = this.makeLinkId(l.device1, l.port1, l.device2, l.port2);
-      links[id] = {
-        id,
-        device1: l.device1,
-        port1: l.port1,
-        device2: l.device2,
-        port2: l.port2,
-        cableType: l.cableType ?? 'auto',
-      };
-    }
-
-    return {
-      version: '1.0',
-      timestamp: Date.now(),
-      devices,
-      links,
-      metadata: {
-        deviceCount: Object.keys(devices).length,
-        linkCount: Object.keys(links).length,
-      },
-    };
-  }
-
-  private makeLinkId(device1: string, port1: string, device2: string, port2: string): string {
-    const a = `${device1}:${port1}`;
-    const b = `${device2}:${port2}`;
-    const [x, y] = [a, b].sort();
-    return `${x}-${y}`;
   }
 }
