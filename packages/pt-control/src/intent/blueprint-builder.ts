@@ -3,17 +3,17 @@
 // ============================================================================
 
 import type { NetworkTwin, DeviceTwin } from "../contracts/twin-types.js";
-import type { CommandPlan } from "../domain/ios/operations/command-plan.js";
+import type { CommandPlan } from "@cisco-auto/ios-domain";
 import type { ParsedIntent, IntentKind } from "./intent-parser.js";
-import { InterfaceName, VlanId, Ipv4Address, SubnetMask } from "../domain/ios/value-objects/index.js";
-import { planConfigureAccessPort, type ConfigureAccessPortInput } from "../domain/ios/operations/configure-access-port.js";
-import { planConfigureTrunkPort, type ConfigureTrunkPortInput } from "../domain/ios/operations/configure-trunk-port.js";
-import { planConfigureStaticRoute, type ConfigureStaticRouteInput } from "../domain/ios/operations/configure-static-route.js";
-import { planConfigureSvi, type ConfigureSviInput } from "../domain/ios/operations/configure-svi.js";
-import { planConfigureVlan, type ConfigureVlanInput } from "../domain/ios/operations/configure-vlan.js";
-import { planConfigureDhcpPool, type ConfigureDhcpPoolInput } from "../domain/ios/operations/configure-dhcp-pool.js";
-import { resolveCapabilitySet } from "../domain/ios/capabilities/pt-capability-resolver.js";
-import type { CapabilitySet } from "../domain/ios/capabilities/capability-set.js";
+import { InterfaceName, VlanId, Ipv4Address, SubnetMask } from "@cisco-auto/ios-domain";
+import { planConfigureAccessPort, type ConfigureAccessPortInput } from "@cisco-auto/ios-domain";
+import { planConfigureTrunkPort, type ConfigureTrunkPortInput } from "@cisco-auto/ios-domain";
+import { planConfigureStaticRoute, type ConfigureStaticRouteInput } from "@cisco-auto/ios-domain";
+import { planConfigureSvi, type ConfigureSviInput } from "@cisco-auto/ios-domain";
+import { planConfigureVlan, type ConfigureVlanInput } from "@cisco-auto/ios-domain";
+import { planConfigureDhcpPool, type ConfigureDhcpPoolInput } from "@cisco-auto/ios-domain";
+import { resolveCapabilitySet } from "@cisco-auto/ios-domain";
+import type { CapabilitySet } from "@cisco-auto/ios-domain";
 
 // ============================================================================
 // Blueprint Types

@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { ptExplainPlanTool } from '@cisco-auto/tools';
+import { ptExplainPlanTool } from '@cisco-auto/core/tools';
 import type { TopologyPlan } from '@cisco-auto/core';
 
 interface Section {

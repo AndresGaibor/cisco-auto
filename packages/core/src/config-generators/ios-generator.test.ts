@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { SectionOrderConfig, DEFAULT_SECTION_ORDER, IOSGenerator } from './ios-generator';
 import type { DeviceSpec } from '../canonical/device.spec';
-import { VlanId, VlanName } from '../value-objects/index.js';
+import { VlanId, VlanName } from '@cisco-auto/ios-domain/value-objects';
 
 describe('SectionOrderConfig', () => {
   const mockDevice: Partial<DeviceSpec> = {

@@ -1,4 +1,4 @@
-import type { CliSession } from "../../domain/ios/session/cli-session.js";
+import type { CliSession } from "@cisco-auto/ios-domain";
 import type {
   ParsedOutput,
   ShowIpInterfaceBrief,
@@ -7,7 +7,7 @@ import type {
   ShowRunningConfig,
 } from "../../contracts/index.js";
 import { resolveCapabilities, type DeviceCapabilities } from "../../domain/ios/capabilities/pt-capability-resolver.js";
-import type { CapabilitySet } from "../../domain/ios/capabilities/capability-set.js";
+import type { CapabilitySet } from "@cisco-auto/ios-domain";
 
 export class IosQueryOperations {
   constructor(

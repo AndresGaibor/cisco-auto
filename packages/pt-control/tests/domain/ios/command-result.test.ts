@@ -8,7 +8,7 @@ import {
   isPagingResult,
   isConfirmPrompt,
   isPasswordPrompt,
-} from "../../../src/domain/ios/session/command-result";
+} from "@cisco-auto/ios-domain";
 
 describe("classifyOutput", () => {
   describe("success classification", () => {

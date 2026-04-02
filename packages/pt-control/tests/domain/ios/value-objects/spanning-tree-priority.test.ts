@@ -7,7 +7,7 @@ import {
   SpanningTreePriority,
   parseSpanningTreePriority,
   isValidSpanningTreePriority,
-} from "../../../../src/domain/ios/value-objects/spanning-tree-priority";
+} from "@cisco-auto/ios-domain";
 
 describe("SpanningTreePriority", () => {
   describe("constructor", () => {

@@ -59,7 +59,14 @@ export class TopologyCacheManager {
   }
 
   updateSnapshot(newSnapshot: TopologySnapshot): void {
-    this.snapshot = newSnapshot;
+    this.snapshot = {
+      ...newSnapshot,
+      metadata: {
+        ...newSnapshot.metadata,
+        deviceCount: Object.keys(newSnapshot.devices).length,
+        linkCount: Object.keys(newSnapshot.links).length,
+      },
+    };
     this.version++;
     this.materialized = true;
   }
@@ -82,7 +89,9 @@ export class TopologyCacheManager {
   }
 
   createLinkId(device1: string, port1: string, device2: string, port2: string): string {
-    return `${device1}:${port1}--${device2}:${port2}`;
+    const a = `${device1}:${this.normalizePortName(port1)}`;
+    const b = `${device2}:${this.normalizePortName(port2)}`;
+    return [a, b].sort().join("--");
   }
 
   normalizePortName(name: string): string {
@@ -97,22 +106,34 @@ export class TopologyCacheManager {
       .replace(/^ser/, 's');
   }
 
-  inferDeviceType(model: string): 'router' | 'switch' | 'server' | 'unknown' {
+  inferDeviceType(model: string): string {
     const lower = model.toLowerCase();
 
-    if (lower.includes('2911') || lower.includes('2921') || lower.includes('4331')) {
+    if (lower.includes('router') || lower.includes('isr') || lower.includes('1941') || lower.includes('2911') || lower.includes('2921') || lower.includes('4331')) {
       return 'router';
     }
 
-    if (lower.includes('2960') || lower.includes('3650') || lower.includes('catalyst')) {
+    if (lower.includes('switch') || lower.includes('2960') || lower.includes('3560') || lower.includes('3650') || lower.includes('catalyst')) {
       return 'switch';
     }
 
-    if (lower.includes('server') || lower.includes('pc')) {
+    if (lower.includes('pc') || lower.includes('laptop') || lower.includes('workstation')) {
+      return 'pc';
+    }
+
+    if (lower.includes('server')) {
       return 'server';
     }
 
-    return 'unknown';
+    if (lower.includes('accesspoint') || lower.includes('access point') || lower.includes('ap') || lower.includes('wireless')) {
+      return 'wireless_router';
+    }
+
+    if (lower.includes('cloud')) {
+      return 'cloud';
+    }
+
+    return 'generic';
   }
 
   cableTypeFromNumber(num?: number): CableType {
@@ -129,7 +150,7 @@ export class TopologyCacheManager {
       case 5:
         return 'console';
       default:
-        return 'straight';
+        return 'auto';
     }
   }
 }

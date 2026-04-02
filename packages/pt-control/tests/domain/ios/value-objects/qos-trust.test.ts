@@ -8,7 +8,7 @@ import {
   parseQosTrust,
   isValidQosTrust,
   type QosTrustMode,
-} from "../../../../src/domain/ios/value-objects/qos-trust";
+} from "@cisco-auto/ios-domain";
 
 describe("QosTrust", () => {
   describe("constructor", () => {

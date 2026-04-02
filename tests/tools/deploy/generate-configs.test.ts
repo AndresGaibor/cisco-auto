@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { ptGenerateConfigsTool } from '@cisco-auto/tools';
+import { ptGenerateConfigsTool } from '@cisco-auto/core/tools';
 import type { TopologyPlan } from '@cisco-auto/core';
 
 interface DeviceConfig {

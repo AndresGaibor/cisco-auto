@@ -319,9 +319,43 @@ export function generateValidationSpec(
   if (device.type === 'switch' || device.type === 'multilayer-switch') {
     // Extraer VLANs de interfaces
     const vlans = new Set<number>();
+
     device.interfaces?.forEach(i => {
-      if (i.vlan) {
-        vlans.add(i.vlan.value);
+      const iface = i as typeof i & {
+        vlan?: { value?: number } | number;
+        switchport?: {
+          mode?: string;
+          accessVlan?: number;
+          nativeVlan?: number;
+          allowedVlans?: Array<number | { value?: number }>;
+        };
+      };
+
+      if (typeof iface.vlan === 'number') {
+        vlans.add(iface.vlan);
+      } else if (iface.vlan && typeof iface.vlan.value === 'number') {
+        vlans.add(iface.vlan.value);
+      }
+
+      const accessVlan = iface.switchport?.accessVlan;
+      if (typeof accessVlan === 'number') {
+        vlans.add(accessVlan);
+      }
+
+      const nativeVlan = iface.switchport?.nativeVlan;
+      if (typeof nativeVlan === 'number') {
+        vlans.add(nativeVlan);
+      }
+
+      const allowedVlans = iface.switchport?.allowedVlans;
+      if (Array.isArray(allowedVlans)) {
+        for (const vlan of allowedVlans) {
+          if (typeof vlan === 'number') {
+            vlans.add(vlan);
+          } else if (vlan && typeof vlan.value === 'number') {
+            vlans.add(vlan.value);
+          }
+        }
       }
     });
 

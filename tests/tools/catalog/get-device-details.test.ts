@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { ptGetDeviceDetailsTool } from '@cisco-auto/tools';
+import { ptGetDeviceDetailsTool } from '@cisco-auto/core/tools';
 
 describe('pt_get_device_details', () => {
   test('retorna detalles de router 2911', async () => {

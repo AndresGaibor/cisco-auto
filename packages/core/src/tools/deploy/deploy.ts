@@ -88,7 +88,8 @@ export const ptDeployTool: Tool = {
     if (!configs || configs.length === 0) {
       return {
         ok: false,
-        error: 'Se requiere al menos una configuración de dispositivo'
+        error: 'Se requiere al menos una configuración de dispositivo',
+        code: 'INVALID_INPUT'
       };
     }
 
@@ -140,7 +141,8 @@ export const ptDeployTool: Tool = {
       } catch (err) {
         return {
           ok: false,
-          error: `Error al escribir el archivo: ${(err as Error).message}`
+          error: `Error al escribir el archivo: ${(err as Error).message}`,
+          code: 'FILE_WRITE_ERROR'
         };
       }
     }
@@ -148,7 +150,8 @@ export const ptDeployTool: Tool = {
     // Caso no alcanzado (validación del schema debería prevenir esto)
     return {
       ok: false,
-      error: 'Target debe ser "clipboard" o "file"'
+      error: 'Target debe ser "clipboard" o "file"',
+      code: 'INVALID_INPUT'
     };
   }
 };

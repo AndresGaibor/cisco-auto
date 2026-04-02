@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { DeviceSpecValidator, ValidationCodes } from './device-spec.validator';
 import type { DeviceSpec } from '../canonical/device.spec';
-import { VlanId, VlanName, VlanRange } from '../value-objects/index.js';
+import { VlanId, VlanName, VlanRange } from '@cisco-auto/ios-domain/value-objects';
 
 describe('DeviceSpecValidator', () => {
   const createBaseDevice = (overrides: Partial<DeviceSpec> = {}): DeviceSpec => ({

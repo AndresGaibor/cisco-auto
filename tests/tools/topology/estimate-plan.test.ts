@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { ptEstimatePlanTool } from '@cisco-auto/tools';
+import { ptEstimatePlanTool } from '@cisco-auto/core/tools';
 
 interface EstimateBreakdown {
   item: string;

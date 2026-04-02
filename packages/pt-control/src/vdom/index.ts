@@ -239,6 +239,14 @@ export class VirtualTopology {
   }
 
   /**
+   * Create a symmetric link identifier from two endpoints.
+   */
+  createLinkId(device1: string, port1: string, device2: string, port2: string): string {
+    return (this.cacheManager as unknown as { createLinkId: (a: string, b: string, c: string, d: string) => string })
+      .createLinkId(device1, port1, device2, port2);
+  }
+
+  /**
    * Get devices located within a zone/rectangle
    * Uses center-point containment check
    */

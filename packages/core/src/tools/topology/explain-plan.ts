@@ -434,7 +434,8 @@ export const ptExplainPlanTool: Tool = {
         ok: false,
         error: language === 'es'
           ? 'Se requiere un plan de topología válido'
-          : 'A valid topology plan is required'
+          : 'A valid topology plan is required',
+        code: 'INVALID_INPUT'
       };
     }
 
@@ -443,7 +444,8 @@ export const ptExplainPlanTool: Tool = {
         ok: false,
         error: language === 'es'
           ? 'El plan debe contener un array de devices'
-          : 'The plan must contain a devices array'
+          : 'The plan must contain a devices array',
+        code: 'INVALID_STRUCTURE'
       };
     }
 
@@ -452,7 +454,8 @@ export const ptExplainPlanTool: Tool = {
         ok: false,
         error: language === 'es'
           ? 'El plan debe contener un array de links'
-          : 'The plan must contain a links array'
+          : 'The plan must contain a links array',
+        code: 'INVALID_STRUCTURE'
       };
     }
 

@@ -11,8 +11,8 @@ import {
   moduleCatalog,
   getModuleByCode,
   getModulesBySlotType
-} from '../../src/core/catalog';
-import { getTotalPorts } from '../../src/core/catalog/schema';
+} from '../../packages/core/src/catalog';
+import { getTotalPorts } from '../../packages/core/src/catalog/schema';
 
 describe('DeviceCatalog', () => {
   describe('Stats', () => {

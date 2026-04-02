@@ -1,0 +1,39 @@
+{
+  "name": "@cisco-auto/ios-domain",
+  "version": "0.1.0",
+  "description": "Shared IOS domain for Cisco automation",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./value-objects": "./dist/value-objects/index.js",
+    "./value-objects/*": "./dist/value-objects/*",
+    "./parsers": "./dist/parsers/index.js",
+    "./parsers/*": "./dist/parsers/*",
+    "./operations": "./dist/operations/index.js",
+    "./operations/*": "./dist/operations/*",
+    "./session": "./dist/session/index.js",
+    "./session/*": "./dist/session/*",
+    "./utils": "./dist/utils/index.js",
+    "./utils/*": "./dist/utils/*",
+    "./capabilities": "./dist/capabilities/index.js",
+    "./capabilities/*": "./dist/capabilities/*",
+    "./errors": "./dist/errors.js",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@cisco-auto/types": "workspace:*",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  }
+}

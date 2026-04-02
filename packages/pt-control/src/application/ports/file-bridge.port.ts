@@ -4,7 +4,8 @@
 // This port defines the contract for communicating with Packet Tracer.
 // Infrastructure implementations (e.g., FileBridge, FileBridgeV2) must satisfy this interface.
 
-import type { PTEvent, PTEventType, CommandPayload } from "../../contracts/index.js";
+import type { PTEvent, PTEventType } from "../../contracts/index.js";
+import type { BridgeResultEnvelope } from "@cisco-auto/file-bridge";
 
 /**
  * Event handler signature for PT events
@@ -34,9 +35,10 @@ export interface FileBridgePort {
    * Send a command to PT and wait for its result
    */
   sendCommandAndWait<T = unknown>(
-    payload: CommandPayload,
+    type: string,
+    payload: unknown,
     timeoutMs?: number
-  ): Promise<{ event: PTEvent; value: T }>;
+  ): Promise<BridgeResultEnvelope<T>>;
 
   /**
    * Read current state from PT
@@ -49,12 +51,12 @@ export interface FileBridgePort {
   on<E extends PTEventType>(
     eventType: E,
     handler: EventHandler<E>
-  ): () => void;
+  ): this;
 
   /**
    * Subscribe to all events
    */
-  onAll(handler: EventHandler): () => void;
+  onAll(handler: (event: any) => void): () => void;
 
   /**
    * Load runtime JavaScript code into PT

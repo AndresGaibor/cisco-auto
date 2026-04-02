@@ -15,12 +15,14 @@ export class CanvasService {
    * List all canvas rectangle IDs (colored zones)
    */
   async listCanvasRects(): Promise<{ rects: string[]; count: number }> {
-    const { value } = await this.bridge.sendCommandAndWait<{ rects: string[]; count: number }>({
-      type: "listCanvasRects",
-      id: this.generateId(),
-    });
+    const result = await this.bridge.sendCommandAndWait<{ rects: string[]; count: number }>(
+      "listCanvasRects",
+      {
+        id: this.generateId(),
+      },
+    );
 
-    return value ?? { rects: [], count: 0 };
+    return result.value ?? { rects: [], count: 0 };
   }
 
   /**
@@ -30,26 +32,30 @@ export class CanvasService {
     rectId: string,
     includeClusters = false
   ): Promise<DevicesInRectResult> {
-    const { value } = await this.bridge.sendCommandAndWait<DevicesInRectResult>({
-      type: "devicesInRect",
-      id: this.generateId(),
-      rectId,
-      includeClusters,
-    });
+    const result = await this.bridge.sendCommandAndWait<DevicesInRectResult>(
+      "devicesInRect",
+      {
+        id: this.generateId(),
+        rectId,
+        includeClusters,
+      },
+    );
 
-    return value ?? { ok: false, rectId, devices: [], count: 0 };
+    return result.value ?? { ok: false, rectId, devices: [], count: 0 };
   }
 
   /**
    * Get detailed data for a specific canvas rectangle
    */
   async getRect(rectId: string): Promise<GetRectResult> {
-    const { value } = await this.bridge.sendCommandAndWait<GetRectResult>({
-      type: "getRect",
-      id: this.generateId(),
-      rectId,
-    });
+    const result = await this.bridge.sendCommandAndWait<GetRectResult>(
+      "getRect",
+      {
+        id: this.generateId(),
+        rectId,
+      },
+    );
 
-    return value ?? { ok: false, rectId, error: "Rect not found" };
+    return result.value ?? { ok: false, rectId, error: "Rect not found" };
   }
 }

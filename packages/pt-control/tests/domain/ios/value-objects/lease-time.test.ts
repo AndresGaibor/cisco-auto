@@ -9,7 +9,7 @@ import {
   fromSeconds,
   standardEnterpriseLease,
   isValidLeaseTime,
-} from "../../../../src/domain/ios/value-objects/lease-time";
+} from "@cisco-auto/ios-domain";
 
 describe("LeaseTime", () => {
   describe("constructor", () => {

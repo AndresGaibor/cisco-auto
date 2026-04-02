@@ -30,18 +30,18 @@ export {
   parseShowCdpNeighbors,
   getParser,
   PARSERS,
-} from "./domain/ios/parsers/index.js";
+} from "@cisco-auto/ios-domain";
 
 // Logging - NDJSON logging with session tracking
 export { LogManager, getLogManager, resetLogManager } from "./logging/index.js";
 export type { LogEntry, LogSession, LogConfig, LogQueryOptions, LogStats } from "./logging/index.js";
 
-// IOS Command Utilities
+// IOS Command Utilities - Re-export from core
 export {
-  buildVlanCommands,
+  VlanGenerator,
   buildTrunkCommands,
   buildSshCommands,
-} from "./utils/ios-commands.js";
+} from "../../core/src/index.ts";
 
 // IOS Session - Stateful IOS CLI session management
 export {
@@ -50,13 +50,13 @@ export {
   type CommandHandler,
   type CommandHistoryEntry,
   type CliSessionState,
-} from "./domain/ios/session/cli-session.js";
+} from "@cisco-auto/ios-domain";
 
 export {
   inferPromptState,
   type IosMode,
   type PromptState,
-} from "./domain/ios/session/prompt-state.js";
+} from "@cisco-auto/ios-domain";
 
 export {
   type CommandResult,
@@ -69,7 +69,7 @@ export {
   isPasswordPrompt,
   classifyOutput,
   type OutputClassificationType,
-} from "./domain/ios/session/command-result.js";
+} from "@cisco-auto/ios-domain";
 
 // IOS Capabilities - Device capability resolution
 export {
@@ -80,4 +80,4 @@ export {
 export {
   IOSFamily,
   type IosDeviceModel,
-} from "./domain/ios/capabilities/device-capabilities.js";
+} from "@cisco-auto/ios-domain";

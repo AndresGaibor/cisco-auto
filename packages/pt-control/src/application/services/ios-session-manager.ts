@@ -3,7 +3,7 @@
  * Handles session lifecycle, state tracking, and persistence
  */
 
-import type { CliSession } from "../../domain/ios/session/cli-session.js";
+import type { CliSession } from "@cisco-auto/ios-domain";
 
 export interface SessionInfo {
   sessionId: string;

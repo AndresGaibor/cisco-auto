@@ -44,7 +44,7 @@ export {
   type CommandPayloadTypeMap,
   type CommandType,
   type CommandFile,
-} from '@cisco-auto/types';
+} from '@cisco-auto/types/schemas/pt-commands';
 
 // Re-export the type map interface (not a Zod schema)
 export interface PTControlCommandPayloadTypeMap {
@@ -96,4 +96,4 @@ import {
   DevicesInRectPayloadSchema,
   ResolveCapabilitiesPayloadSchema,
   ExecInteractivePayloadSchema,
-} from '@cisco-auto/types';
+} from '@cisco-auto/types/schemas/pt-commands';

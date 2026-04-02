@@ -221,9 +221,10 @@ export class LabValidator {
       if (!device.interfaces) continue;
 
       for (const iface of device.interfaces) {
-        if (!iface.ip) continue;
+        const rawIp = iface.ip ?? (iface as unknown as { ipAddress?: string }).ipAddress;
+        if (!rawIp) continue;
 
-        const [ip] = iface.ip.split('/');
+        const [ip] = rawIp.split('/');
 
         if (ipMap.has(ip ?? '')) {
           this.addError('logical',

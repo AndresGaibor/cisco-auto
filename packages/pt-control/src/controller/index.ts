@@ -1,8 +1,6 @@
 import { FileBridgeV2 } from "@cisco-auto/file-bridge";
-import { FileBridgeV2Adapter } from "../infrastructure/pt/file-bridge-v2-adapter.js";
 import { TopologyCache } from "../infrastructure/pt/topology-cache.js";
 import type { FileBridgePort } from "../application/ports/file-bridge.port.js";
-import { TraceableBridgePort, type CommandTraceEntry } from "./traceable-bridge.js";
 import { topologySnapshotToNetworkTwin } from "../vdom/twin-adapter.js";
 import { homedir } from "node:os";
 import type {
@@ -33,6 +31,13 @@ export interface PTControllerConfig {
   devDir: string;
 }
 
+export interface CommandTraceEntry {
+  id: string;
+  type: string;
+  completedAt: number;
+  ok?: boolean;
+}
+
 export class PTController {
   private readonly bridge: FileBridgePort;
   private readonly topologyCache: TopologyCache;
@@ -47,18 +52,25 @@ export class PTController {
   constructor(config: PTControllerConfig);
   constructor(bridge: FileBridgePort);
   constructor(configOrBridge: PTControllerConfig | FileBridgePort) {
-    const recordCommand = (entry: CommandTraceEntry) => {
-      this.commandTrace.push(entry);
-    };
-
     if ("devDir" in configOrBridge) {
       const config = configOrBridge as PTControllerConfig;
-      const baseBridge = new FileBridgeV2Adapter(new FileBridgeV2({ root: config.devDir }));
-      this.bridge = new TraceableBridgePort(baseBridge, recordCommand);
+      this.bridge = new FileBridgeV2({ root: config.devDir });
     } else {
       const externalBridge = configOrBridge as FileBridgePort;
-      this.bridge = new TraceableBridgePort(externalBridge, recordCommand);
+      this.bridge = externalBridge;
     }
+
+    this.bridge.onAll((event) => {
+      const evt = event as Partial<CommandTraceEntry> & { type?: string; id?: string; ok?: boolean; ts?: number };
+      if (!evt.id) return;
+      if (!String(evt.type ?? "").startsWith("command-")) return;
+      this.commandTrace.push({
+        id: evt.id,
+        type: evt.type ?? "command-event",
+        completedAt: typeof evt.ts === "number" ? evt.ts : Date.now(),
+        ok: typeof evt.ok === "boolean" ? evt.ok : undefined,
+      });
+    });
 
     this.topologyCache = new TopologyCache(this.bridge);
 
@@ -221,6 +233,10 @@ export class PTController {
     return this.canvasService.listCanvasRects();
   }
 
+  async getRect(rectId: string): Promise<unknown> {
+    return this.canvasService.getRect(rectId);
+  }
+
   async devicesInRect(
     rectId: string,
     includeClusters = false
@@ -263,12 +279,14 @@ export class PTController {
     return this.deviceService.commandLog(device, limit);
   }
 
-  on<E extends PTEventType>(eventType: E, handler: (event: PTEvent) => void): () => void {
-    return this.bridge.on(eventType, handler);
+  on<E extends PTEventType>(eventType: E, handler: (event: PTEvent) => void): this {
+    this.bridge.on(eventType, handler);
+    return this;
   }
 
-  onAll(handler: (event: PTEvent) => void): () => void {
-    return this.bridge.onAll(handler);
+  onAll(handler: (event: PTEvent) => void): this {
+    this.bridge.onAll(handler);
+    return this;
   }
 
   async loadRuntime(code: string): Promise<void> {

@@ -6,7 +6,7 @@
  */
 
 import { describe, test, expect } from 'bun:test';
-import { generateIosCommands, ptGenerateScriptTool } from '@cisco-auto/tools';
+import { generateIosCommands, ptGenerateScriptTool } from '@cisco-auto/core/tools';
 import type { TopologyPlan, DevicePlan, LinkPlan } from '@cisco-auto/core';
 
 // ============================================================================

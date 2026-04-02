@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { ptQueryTopologyTool, type TopologyQueryResult, type QueriedDevice, type QueriedLink } from '@cisco-auto/tools';
-import { ptValidatePlanTool } from '@cisco-auto/tools';
+import { ptQueryTopologyTool, type TopologyQueryResult, type QueriedDevice, type QueriedLink } from '@cisco-auto/core/tools';
+import { ptValidatePlanTool } from '@cisco-auto/core/tools';
 import type { TopologyPlan } from '@cisco-auto/core';
 import type { ToolResult } from '@cisco-auto/core';
 
@@ -126,6 +126,7 @@ function clearMockFetch() {
 }
 
 const originalFetch = globalThis.fetch;
+const MOCK_BRIDGE_URL = 'https://mock-bridge.local/topology';
 
 describe('PT Query Topology - Validación Post-Deploy', () => {
   beforeEach(() => {

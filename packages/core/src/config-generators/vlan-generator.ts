@@ -3,6 +3,26 @@ import { NetworkUtils } from './utils.ts';
 
 export class VlanGenerator {
   /**
+   * Generate VLAN commands from simple number array
+   * @param vlanIds - Array of VLAN IDs (1-4094)
+   * @param namePrefix - Optional prefix for VLAN names (e.g., "ADMIN" creates "ADMIN10", "ADMIN20")
+   * @returns Array of IOS commands
+   */
+  public static generateVLANsFromIds(vlanIds: number[], namePrefix?: string): string[] {
+    const commands: string[] = [];
+    commands.push('! Configuración de VLANs');
+
+    for (const vlanId of vlanIds) {
+      const vlanName = namePrefix ? `${namePrefix}${vlanId}` : `VLAN${vlanId}`;
+      commands.push(`vlan ${vlanId}`);
+      commands.push(` name ${vlanName}`);
+      commands.push(' exit');
+    }
+
+    return commands;
+  }
+
+  /**
    * Generate VLAN commands
    * Note: In canonical model, SVI IPs are on interfaces (name: 'Vlan<id>'), not on VLAN spec
    */

@@ -5,33 +5,33 @@
 import type { NetworkTwin, DeviceTwin } from "../contracts/twin-types.js";
 import type { IntentPattern } from "./intent-parser.js";
 import type { Blueprint, BlueprintStep } from "./blueprint-builder.js";
-import type { CommandPlan } from "../domain/ios/operations/command-plan.js";
-import { InterfaceName, VlanId, Ipv4Address, SubnetMask } from "../domain/ios/value-objects/index.js";
-import { CapabilitySet } from "../domain/ios/capabilities/capability-set.js";
+import type { CommandPlan } from "@cisco-auto/ios-domain";
+import { InterfaceName, VlanId, Ipv4Address, SubnetMask } from "@cisco-auto/ios-domain";
+import { CapabilitySet } from "@cisco-auto/ios-domain";
 import {
   planConfigureAccessPort,
   type ConfigureAccessPortInput,
-} from "../domain/ios/operations/configure-access-port.js";
+} from "@cisco-auto/ios-domain";
 import {
   planConfigureTrunkPort,
   type ConfigureTrunkPortInput,
-} from "../domain/ios/operations/configure-trunk-port.js";
+} from "@cisco-auto/ios-domain";
 import {
   planConfigureStaticRoute,
   type ConfigureStaticRouteInput,
-} from "../domain/ios/operations/configure-static-route.js";
+} from "@cisco-auto/ios-domain";
 import {
   planConfigureSvi,
   type ConfigureSviInput,
-} from "../domain/ios/operations/configure-svi.js";
+} from "@cisco-auto/ios-domain";
 import {
   planConfigureVlan,
   type ConfigureVlanInput,
-} from "../domain/ios/operations/configure-vlan.js";
+} from "@cisco-auto/ios-domain";
 import {
   planConfigureDhcpPool,
   type ConfigureDhcpPoolInput,
-} from "../domain/ios/operations/configure-dhcp-pool.js";
+} from "@cisco-auto/ios-domain";
 
 // ============================================================================
 // Template Types

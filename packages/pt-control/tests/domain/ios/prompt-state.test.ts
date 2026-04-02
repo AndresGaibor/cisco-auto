@@ -8,7 +8,7 @@ import {
   isInteractiveDialog,
   isRecoverableState,
   type IosMode,
-} from "../../../src/domain/ios/session/prompt-state";
+} from "@cisco-auto/ios-domain";
 
 describe("IOS Prompt Patterns", () => {
   test("userExec pattern matches basic prompt", () => {

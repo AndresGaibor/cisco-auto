@@ -1,6 +1,5 @@
 import { Command } from 'commander';
 import { pushCommands } from '@cisco-auto/file-bridge';
-import { VlanGenerator } from '@cisco-auto/core';
 
 const VLAN_LIST_SEPARATOR = ',';
 
@@ -19,30 +18,35 @@ function parseVlanIds(raw: string): number[] {
 }
 
 export function buildVlanCreateCommands(name: string, id: number, description?: string): string[] {
-  return VlanGenerator.generateVLANs([
-    { id, name, description } as any,
-  ]);
+  const commands = ['! Configuración de VLANs'];
+  commands.push(`vlan ${id}`);
+  commands.push(` name ${name}`);
+  if (description) {
+    commands.push(` description ${description}`);
+  }
+  commands.push(' exit');
+  return commands;
 }
 
 export function buildVlanApplyCommands(vlanIds: number[]): string[] {
-  const vlans = vlanIds.map((id) => ({ id, name: `VLAN${id}` }));
-  return VlanGenerator.generateVLANs(vlans as any);
+  const commands = ['! Configuración de VLANs'];
+  for (const id of vlanIds) {
+    commands.push(`vlan ${id}`);
+    commands.push(` name VLAN${id}`);
+    commands.push(' exit');
+  }
+  return commands;
 }
 
 export function buildVlanTrunkCommands(iface: string, allowedVlans: number[]): string[] {
-  const device = {
-    name: 'cli-trunk-helper',
-    type: 'switch',
-    interfaces: [
-      {
-        name: iface,
-        mode: 'trunk',
-        trunkAllowedVlans: allowedVlans,
-      },
-    ],
-  } as any;
-
-  return VlanGenerator.generateInterfaces(device as any);
+  return [
+    '! Configuración de interfaces',
+    `interface ${iface}`,
+    ' switchport mode trunk',
+    ` switchport trunk allowed vlan ${allowedVlans.join(',')}`,
+    ' no shutdown',
+    ' exit',
+  ];
 }
 
 function logCommands(commands: string[], title: string) {

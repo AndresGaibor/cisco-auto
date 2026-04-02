@@ -23,16 +23,19 @@ export const ptGetDeviceDetailsTool: Tool = {
     if (!model) {
       return {
         ok: false,
-        error: 'El parametro model es requerido'
+        error: 'El parametro model es requerido',
+        code: 'INVALID_INPUT'
       };
     }
     
     const device = deviceCatalog.find(d => d.name === model);
-    
+
     if (!device) {
       return {
         ok: false,
-        error: `Dispositivo '${model}' no encontrado en el catalogo`
+        error: `Dispositivo '${model}' no encontrado en el catalogo`,
+        code: 'DEVICE_NOT_FOUND',
+        details: { suggestions: deviceCatalog.slice(0, 3).map(d => d.name) }
       };
     }
     

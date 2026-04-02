@@ -17,6 +17,8 @@ export class ValidatorHelpers {
       's', 'se', 'serial',
       'po', 'port-channel',
       'lo', 'loopback',
+      'vl', 'vlan',
+      'te', 'tengigabitethernet',
     ];
     
     for (const prefix of validPrefixes) {

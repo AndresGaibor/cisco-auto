@@ -7,7 +7,7 @@ import {
   buildVlanCommands, 
   buildTrunkCommands,
   buildSshCommands
-} from './ios-commands';
+} from '@cisco-auto/ios-domain';
 
 describe('iOS Command Builders', () => {
   describe('buildVlanCommands', () => {

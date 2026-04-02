@@ -10,7 +10,7 @@
  */
 import type { DeviceType, CanvasPosition, InterfaceStatus, SwitchportMode, DuplexMode, Speed } from './types';
 import type { STPSpec, EtherChannelSpec, PortSecuritySpec, RIPSpec, BGPSpec, ServicesSpec } from './protocol.spec';
-import type { VlanId, VlanName, VlanRange, VtpDomain, VtpMode, VtpVersion, VtpPassword } from '../value-objects/index.js';
+import type { VlanId, VlanName, VlanRange, VtpDomain, VtpMode, VtpVersion, VtpPassword } from '@cisco-auto/ios-domain/value-objects';
 export type { STPSpec, EtherChannelSpec, PortSecuritySpec, RIPSpec, BGPSpec, BGPNeighbor, ServicesSpec, NTPSpec, DHCPServerSpec, } from './protocol.spec';
 export interface InterfaceSpec {
     /** Nombre de la interfaz (ej: GigabitEthernet0/0) */

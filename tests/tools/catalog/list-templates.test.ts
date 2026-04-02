@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { ptListTemplatesTool, topologyTemplates } from '@cisco-auto/tools';
+import { ptListTemplatesTool, topologyTemplates } from '@cisco-auto/core/tools';
 
 interface Template {
   name: string;

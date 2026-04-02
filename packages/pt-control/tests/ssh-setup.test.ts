@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { buildSshCommands } from "../src/utils/ios-commands.js";
+import { buildSshCommands } from "@cisco-auto/ios-domain";
 
 describe("ssh utilities", () => {
   describe("buildSshCommands", () => {

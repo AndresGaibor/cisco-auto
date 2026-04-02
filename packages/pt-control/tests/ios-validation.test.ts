@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { classifyOutput, isSuccessResult, isErrorResult, isParseErrorResult, type CommandResult } from "../src/domain/ios/session/command-result";
+import { classifyOutput, isSuccessResult, isErrorResult, isParseErrorResult, type CommandResult } from "@cisco-auto/ios-domain";
 
 describe("IOS Validation and Output Classification", () => {
   describe("Command Result Classification", () => {

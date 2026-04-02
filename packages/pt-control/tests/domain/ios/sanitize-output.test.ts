@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { sanitizeOutput } from "../../../src/domain/ios/utils/sanitize-output";
+import { sanitizeOutput } from "@cisco-auto/ios-domain";
 
 describe("sanitizeOutput", () => {
   test("passes through clean output unchanged", () => {

@@ -18,9 +18,11 @@
     "typecheck": "bun run --filter './packages/*' typecheck && bun run --filter './apps/*' typecheck",
     "cisco-auto": "bun run --cwd apps/pt-cli start",
     "pt": "bun run packages/pt-control/bin/dev.js",
-    "pt:build": "bun run --filter '@cisco-auto/pt-control' build",
+    "pt:build": "bun run --filter '@cisco-auto/file-bridge' build && bun run --filter '@cisco-auto/pt-control' build",
     "pt:generate": "bun run --filter '@cisco-auto/pt-control' runtime:generate",
-    "pt:test": "bun run --cwd apps/pt-cli test"
+    "pt:test": "bun run --cwd apps/pt-cli test",
+    "bridge:dev": "bun run --cwd packages/http-bridge dev",
+    "bridge:start": "bun run --cwd packages/http-bridge start"
   },
   "devDependencies": {
     "@types/bun": "latest",
@@ -29,8 +31,9 @@
   "dependencies": {
     "@cisco-auto/core": "workspace:*",
     "@cisco-auto/file-bridge": "workspace:*",
+    "@cisco-auto/http-bridge": "workspace:*",
+    "@cisco-auto/ios-domain": "workspace:*",
     "@cisco-auto/pt-control": "workspace:*",
-    "@cisco-auto/pt-runtime": "workspace:*",
     "@cisco-auto/types": "workspace:*",
     "fast-xml-parser": "^5.5.6",
     "pino": "^10.3.1",

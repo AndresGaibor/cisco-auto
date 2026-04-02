@@ -25,22 +25,28 @@ export class DeviceService {
       }
     }
 
-    const { value } = await this.bridge.sendCommandAndWait<DeviceState>({
-      type: "inspect",
-      id: this.generateId(),
-      device,
-      includeXml,
-    }, 30000);
+    const result = await this.bridge.sendCommandAndWait<DeviceState>(
+      "inspect",
+      {
+        id: this.generateId(),
+        device,
+        includeXml,
+      },
+      30000,
+    );
 
-    return value;
+    if (!result.value) {
+      throw new Error(`Failed to inspect device '${device}'`);
+    }
+
+    return result.value;
   }
 
   /**
    * Add a module to a device
    */
   async addModule(device: string, slot: number, module: string): Promise<void> {
-    await this.bridge.sendCommandAndWait({
-      type: "addModule",
+    await this.bridge.sendCommandAndWait("addModule", {
       id: this.generateId(),
       device,
       slot,
@@ -52,8 +58,7 @@ export class DeviceService {
    * Remove a module from a device
    */
   async removeModule(device: string, slot: number): Promise<void> {
-    await this.bridge.sendCommandAndWait({
-      type: "removeModule",
+    await this.bridge.sendCommandAndWait("removeModule", {
       id: this.generateId(),
       device,
       slot,
@@ -73,8 +78,7 @@ export class DeviceService {
       dhcp?: boolean;
     }
   ): Promise<void> {
-    await this.bridge.sendCommandAndWait({
-      type: "configHost",
+    await this.bridge.sendCommandAndWait("configHost", {
       id: this.generateId(),
       device,
       ...options,
@@ -85,37 +89,34 @@ export class DeviceService {
    * Get hardware info for a device
    */
   async hardwareInfo(device: string): Promise<unknown> {
-    const { value } = await this.bridge.sendCommandAndWait({
-      type: "hardwareInfo",
+    const result = await this.bridge.sendCommandAndWait("hardwareInfo", {
       id: this.generateId(),
       device,
     });
-    return value;
+    return result.value;
   }
 
   /**
    * Get hardware catalog
    */
   async hardwareCatalog(deviceType?: string): Promise<unknown> {
-    const { value } = await this.bridge.sendCommandAndWait({
-      type: "hardwareCatalog",
+    const result = await this.bridge.sendCommandAndWait("hardwareCatalog", {
       id: this.generateId(),
       deviceType,
     });
-    return value;
+    return result.value;
   }
 
   /**
    * Get command log
    */
   async commandLog(device?: string, limit = 100): Promise<unknown[]> {
-    const { value } = await this.bridge.sendCommandAndWait<unknown[]>({
-      type: "commandLog",
+    const result = await this.bridge.sendCommandAndWait<unknown[]>("commandLog", {
       id: this.generateId(),
       device,
       limit,
     });
-    return value ?? [];
+    return result.value ?? [];
   }
 
   /**
@@ -126,17 +127,20 @@ export class DeviceService {
     x: number,
     y: number
   ): Promise<{ ok: true; name: string; x: number; y: number } | { ok: false; error: string; code: string }> {
-    const { value } = await this.bridge.sendCommandAndWait<{ ok: boolean; name?: string; x?: number; y?: number; error?: string; code?: string }>({
-      type: "moveDevice",
-      id: this.generateId(),
-      name,
-      x,
-      y,
-    });
+    const result = await this.bridge.sendCommandAndWait<{ ok: boolean; name?: string; x?: number; y?: number; error?: string; code?: string }>(
+      "moveDevice",
+      {
+        id: this.generateId(),
+        name,
+        x,
+        y,
+      },
+    );
 
-    if (value.ok) {
+    const value = result.value;
+    if (value?.ok) {
       return { ok: true, name: value.name!, x: value.x!, y: value.y! };
     }
-    return { ok: false, error: value.error ?? "Unknown error", code: value.code ?? "UNKNOWN" };
+    return { ok: false, error: value?.error ?? "Unknown error", code: value?.code ?? "UNKNOWN" };
   }
 }

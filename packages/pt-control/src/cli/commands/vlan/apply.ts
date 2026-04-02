@@ -5,7 +5,7 @@
 import { Args, Flags } from '@oclif/core';
 import pc from 'picocolors';
 import { BaseCommand, createSpinner } from '../../base-command.js';
-import { buildVlanCommands } from '../../../utils/ios-commands.js';
+import { VlanGenerator } from '../../../core/src/index.ts';
 import { DeviceNotFoundError, ValidationError } from '../../errors/index.js';
 import type { DeviceState } from '../../../types/index.js';
 
@@ -67,8 +67,8 @@ export default class VlanApply extends BaseCommand {
           throw new ValidationError('Device name is required');
         }
 
-        // Generar comandos IOS usando utilitaria T1
-        const commands = buildVlanCommands(vlanIds, namePrefix);
+        // Generar comandos IOS usando VlanGenerator
+        const commands = VlanGenerator.generateVLANsFromIds(vlanIds, namePrefix);
 
         this.logDebug(`Generated ${commands.length} IOS commands for VLANs`);
 

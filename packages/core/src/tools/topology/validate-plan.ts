@@ -28,6 +28,16 @@ interface ValidatePlanResult {
   warnings: ValidationWarning[];
 }
 
+type ValidatePlanErrorCode = 'INVALID_INPUT' | 'INVALID_STRUCTURE';
+
+function buildValidatePlanError(message: string, code: ValidatePlanErrorCode): ToolResult<ValidatePlanResult> {
+  return {
+    ok: false,
+    error: message,
+    code,
+  };
+}
+
 /**
  * Verifica si un modelo existe en el catálogo
  */
@@ -336,24 +346,15 @@ export const ptValidatePlanTool: Tool = {
     
     // Validación básica de estructura
     if (!plan || typeof plan !== 'object') {
-      return {
-        ok: false,
-        error: 'Se requiere un plan de topología válido'
-      };
+      return buildValidatePlanError('Se requiere un plan de topología válido', 'INVALID_INPUT');
     }
     
     if (!plan.devices || !Array.isArray(plan.devices)) {
-      return {
-        ok: false,
-        error: 'El plan debe contener un array de devices'
-      };
+      return buildValidatePlanError('El plan debe contener un array de devices', 'INVALID_STRUCTURE');
     }
     
     if (!plan.links || !Array.isArray(plan.links)) {
-      return {
-        ok: false,
-        error: 'El plan debe contener un array de links'
-      };
+      return buildValidatePlanError('El plan debe contener un array de links', 'INVALID_STRUCTURE');
     }
     
     // Ejecutar validación

@@ -3,10 +3,10 @@
  */
 
 import { describe, test, expect } from 'bun:test';
-import { DeployOrchestrator } from '../../src/core/executor/deploy.orchestrator';
-import { ValidationExecutor, generateValidationSpec } from '../../src/core/executor/validation.executor';
-import type { DeviceSpec, LabSpec } from '../../src/core/canonical';
-import type { DeployOptions, ConnectionCredentials } from '../../src/core/executor/types';
+import { DeployOrchestrator } from '../../packages/core/src/executor/deploy.orchestrator';
+import { ValidationExecutor, generateValidationSpec } from '../../packages/core/src/executor/validation.executor';
+import type { DeviceSpec, LabSpec } from '../../packages/core/src/canonical';
+import type { DeployOptions, ConnectionCredentials } from '../../packages/core/src/executor/types';
 
 describe('DeployOrchestrator', () => {
   describe('createDeployPlan', () => {

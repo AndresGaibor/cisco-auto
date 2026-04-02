@@ -8,7 +8,7 @@ import {
   generateMermaidDiagram, 
   generateAdjacencyMatrix,
   analyzeTopology
-} from '../../src/core/topology/visualizer';
+} from '../../packages/core/src/topology/visualizer';
 import type { LabSpec } from '@cisco-auto/core';
 
 const createTestLab = (): LabSpec => ({

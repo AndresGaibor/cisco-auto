@@ -27,7 +27,7 @@ export class TopologyCache {
     this.started = true;
     this.refreshFromState();
 
-    this.unsubscribeBridge = this.bridge.onAll((event) => this.handleEvent(event));
+    this.unsubscribeBridge = this.bridge.onAll((event) => this.handleEvent(event as PTEvent));
     this.refreshTimer = setInterval(() => {
       this.refreshFromState();
     }, this.refreshIntervalMs);

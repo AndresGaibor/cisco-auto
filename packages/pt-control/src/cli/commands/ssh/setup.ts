@@ -5,7 +5,7 @@
 import { Args, Flags } from '@oclif/core';
 import pc from 'picocolors';
 import { BaseCommand, createSpinner } from '../../base-command.js';
-import { buildSshCommands } from '../../../utils/ios-commands.js';
+import { buildSshCommands } from '../../../core/src/index.ts';
 import { DeviceNotFoundError, ValidationError } from '../../errors/index.js';
 import type { DeviceState } from '../../../types/index.js';
 

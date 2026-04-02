@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { resolveCapabilities, type DeviceCapabilities } from "../src/domain/ios/capabilities/pt-capability-resolver";
-import { IOSFamily, getIosFamilyFromModel } from "../src/domain/ios/capabilities/device-capabilities";
+import { IOSFamily, getIosFamilyFromModel } from "@cisco-auto/ios-domain";
 
 // Test cases for capability resolver
 describe("IOS Capability Resolver", () => {

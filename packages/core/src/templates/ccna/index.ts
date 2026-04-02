@@ -5,7 +5,7 @@
 
 import type { LabSpec, DeviceSpec, ConnectionSpec } from '../../canonical';
 import { CableType } from '../../canonical';
-import { VlanId, VlanName } from '../../value-objects/index.js';
+import { VlanId, VlanName } from '@cisco-auto/ios-domain/value-objects';
 
 export interface LabTemplate {
   id: string;
@@ -198,10 +198,15 @@ export const ospfSingleAreaTemplate: LabTemplate = {
           ospf: {
             processId: 1,
             routerId: '1.1.1.1',
+            networks: [
+              { area: '0', network: '192.168.1.0/24' },
+              { area: '0', network: '10.0.12.0/30' },
+              { area: '0', network: '10.0.13.0/30' },
+            ],
             areas: [
               { areaId: '0', networks: ['192.168.1.0 0.0.0.255', '10.0.12.0 0.0.0.3', '10.0.13.0 0.0.0.3'] }
             ]
-          }
+          } as any
         }
       },
       {
@@ -218,10 +223,15 @@ export const ospfSingleAreaTemplate: LabTemplate = {
           ospf: {
             processId: 1,
             routerId: '2.2.2.2',
+            networks: [
+              { area: '0', network: '192.168.2.0/24' },
+              { area: '0', network: '10.0.12.0/30' },
+              { area: '0', network: '10.0.23.0/30' },
+            ],
             areas: [
               { areaId: '0', networks: ['192.168.2.0 0.0.0.255', '10.0.12.0 0.0.0.3', '10.0.23.0 0.0.0.3'] }
             ]
-          }
+          } as any
         }
       },
       {
@@ -238,10 +248,15 @@ export const ospfSingleAreaTemplate: LabTemplate = {
           ospf: {
             processId: 1,
             routerId: '3.3.3.3',
+            networks: [
+              { area: '0', network: '192.168.3.0/24' },
+              { area: '0', network: '10.0.13.0/30' },
+              { area: '0', network: '10.0.23.0/30' },
+            ],
             areas: [
               { areaId: '0', networks: ['192.168.3.0 0.0.0.255', '10.0.13.0 0.0.0.3', '10.0.23.0 0.0.0.3'] }
             ]
-          }
+          } as any
         }
       }
     ],

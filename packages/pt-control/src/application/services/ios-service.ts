@@ -12,10 +12,7 @@ import type {
   DeviceState,
   NetworkTwin,
 } from "../../contracts/index.js";
-import {
-  resolveCapabilities,
-  type DeviceCapabilities,
-} from "../../domain/ios/capabilities/pt-capability-resolver.js";
+import { resolveCapabilities, type DeviceCapabilities } from "../../domain/ios/capabilities/pt-capability-resolver.js";
 import {
   planConfigureSvi,
   planConfigureAccessPort,
@@ -23,11 +20,11 @@ import {
   planConfigureSubinterface,
   planConfigureStaticRoute,
   planConfigureDhcpRelay,
-} from "../../domain/ios/operations/index.js";
-import { resolveCapabilitySet } from "../../domain/ios/capabilities/pt-capability-resolver.js";
-import type { CapabilitySet } from "../../domain/ios/capabilities/capability-set.js";
-import { VlanId, Ipv4Address, SubnetMask, InterfaceName } from "../../domain/ios/value-objects/index.js";
-import { CliSession, type CommandHistoryEntry } from "../../domain/ios/session/cli-session.js";
+} from "@cisco-auto/ios-domain";
+import { resolveCapabilitySet } from "@cisco-auto/ios-domain";
+import type { CapabilitySet } from "@cisco-auto/ios-domain";
+import { VlanId, Ipv4Address, SubnetMask, InterfaceName } from "@cisco-auto/ios-domain";
+import { CliSession, type CommandHistoryEntry } from "@cisco-auto/ios-domain";
 
 export class IosService {
   constructor(
@@ -66,17 +63,19 @@ export class IosService {
   private _createBridgeHandler(device: string) {
     return {
       enterCommand: async (cmd: string): Promise<[number, string]> => {
-        const { value } = await this.bridge.sendCommandAndWait<{
+        const result = await this.bridge.sendCommandAndWait<{
           raw: string;
           session?: { mode: string; paging?: boolean; awaitingConfirm?: boolean };
-        }>({
-          type: "execInteractive",
-          id: this.generateId(),
-          device,
-          command: cmd,
-          options: { timeout: 30000, parse: false, ensurePrivileged: false },
-        });
-        const raw = value?.raw ?? "";
+        }>(
+          "execInteractive",
+          {
+            id: this.generateId(),
+            device,
+            command: cmd,
+            options: { timeout: 30000, parse: false, ensurePrivileged: false },
+          },
+        );
+        const raw = result.value?.raw ?? "";
         // execInteractive returns ok=1 for success in its value structure
         // Infer status from raw presence
         const status = raw.includes("%") || raw.includes("Invalid") ? 1 : 0;
@@ -93,13 +92,17 @@ export class IosService {
     commands: string[],
     options?: { save?: boolean }
   ): Promise<void> {
-    const { value } = await this.bridge.sendCommandAndWait<{ ok: boolean; error?: string }>({
-      type: "configIos",
-      id: this.generateId(),
-      device,
-      commands,
-      save: options?.save ?? true,
-    });
+    const result = await this.bridge.sendCommandAndWait<{ ok: boolean; error?: string }>(
+      "configIos",
+      {
+        id: this.generateId(),
+        device,
+        commands,
+        save: options?.save ?? true,
+      },
+    );
+
+    const value = result.value;
 
     if (value && typeof value === "object" && value.ok === false) {
       const errorMsg = (value as { error?: string }).error || "IOS configuration failed";
@@ -127,17 +130,18 @@ export class IosService {
     parse = true,
     timeout = 5000
   ): Promise<{ raw: string; parsed?: T }> {
-    const { event } = await this.bridge.sendCommandAndWait<{ raw: string; parsed?: T }>({
-      type: "execIos",
-      id: this.generateId(),
-      device,
-      command,
-      parse,
-      timeout,
-    });
+    const result = await this.bridge.sendCommandAndWait<{ raw: string; parsed?: T }>(
+      "execIos",
+      {
+        id: this.generateId(),
+        device,
+        command,
+        parse,
+        timeout,
+      },
+    );
 
-    const value = (event as { value?: { raw: string; parsed?: T } }).value;
-    return value ?? { raw: "", parsed: undefined };
+    return result.value ?? { raw: "", parsed: undefined };
   }
 
   /**
@@ -160,23 +164,25 @@ export class IosService {
       ensurePrivileged?: boolean;
     }
   ): Promise<{ raw: string; parsed?: ParsedOutput; session?: { mode: string } }> {
-    const { value } = await this.bridge.sendCommandAndWait<{
+    const result = await this.bridge.sendCommandAndWait<{
       raw: string;
       parsed?: ParsedOutput;
       session?: { mode: string; paging?: boolean; awaitingConfirm?: boolean };
-    }>({
-      type: "execInteractive",
-      id: this.generateId(),
-      device,
-      command,
-      options: {
-        timeout: options?.timeout ?? 30000,
-        parse: options?.parse ?? true,
-        ensurePrivileged: options?.ensurePrivileged ?? false,
+    }>(
+      "execInteractive",
+      {
+        id: this.generateId(),
+        device,
+        command,
+        options: {
+          timeout: options?.timeout ?? 30000,
+          parse: options?.parse ?? true,
+          ensurePrivileged: options?.ensurePrivileged ?? false,
+        },
       },
-    });
+    );
 
-    return value ?? { raw: "" };
+    return result.value ?? { raw: "" };
   }
 
   /**

@@ -34,11 +34,15 @@ export class TopologyService {
    */
   async snapshot(): Promise<TopologySnapshot | null> {
     try {
-      const { value } = await this.bridge.sendCommandAndWait<TopologySnapshot>({
-        type: "snapshot",
-        id: this.generateId(),
-      }, 30000);
+      const result = await this.bridge.sendCommandAndWait<TopologySnapshot>(
+        "snapshot",
+        {
+          id: this.generateId(),
+        },
+        30000,
+      );
 
+      const value = result.value;
       if (value && typeof value === "object" && "devices" in value && "links" in value) {
         this.cache.applySnapshot(value);
         return value;
@@ -88,13 +92,13 @@ export class TopologyService {
       });
     }
 
-    const { value } = await this.bridge.sendCommandAndWait<
+    const result = await this.bridge.sendCommandAndWait<
       DeviceState[] | { devices?: DeviceState[]; data?: unknown }
-    >({
-      type: "listDevices",
+    >("listDevices", {
       id: this.generateId(),
       filter,
     });
+    const value = result.value;
 
     if (Array.isArray(value)) {
       return value;
@@ -115,7 +119,7 @@ export class TopologyService {
     model: string,
     options?: { x?: number; y?: number }
   ): Promise<DeviceState> {
-    const { value } = await this.bridge.sendCommandAndWait<{
+    const result = await this.bridge.sendCommandAndWait<{
       ok: boolean;
       name: string;
       model: string;
@@ -124,14 +128,21 @@ export class TopologyService {
       x: number;
       y: number;
       ports: unknown[];
-    }>({
-      type: "addDevice",
-      id: this.generateId(),
-      name,
-      model,
-      x: options?.x ?? 100,
-      y: options?.y ?? 100,
-    });
+    }>(
+      "addDevice",
+      {
+        id: this.generateId(),
+        name,
+        model,
+        x: options?.x ?? 100,
+        y: options?.y ?? 100,
+      },
+    );
+
+    const value = result.value;
+    if (!value) {
+      throw new Error(`Failed to add device '${name}'`);
+    }
 
     return {
       name: value.name,
@@ -148,8 +159,7 @@ export class TopologyService {
    * Remove a device from the topology
    */
   async removeDevice(name: string): Promise<void> {
-    await this.bridge.sendCommandAndWait({
-      type: "removeDevice",
+    await this.bridge.sendCommandAndWait("removeDevice", {
       id: this.generateId(),
       name,
     });
@@ -159,8 +169,7 @@ export class TopologyService {
    * Rename a device
    */
   async renameDevice(oldName: string, newName: string): Promise<void> {
-    await this.bridge.sendCommandAndWait({
-      type: "renameDevice",
+    await this.bridge.sendCommandAndWait("renameDevice", {
       id: this.generateId(),
       oldName,
       newName,
@@ -175,18 +184,21 @@ export class TopologyService {
     x: number,
     y: number
   ): Promise<{ ok: true; name: string; x: number; y: number } | { ok: false; error: string; code: string }> {
-    const { value } = await this.bridge.sendCommandAndWait<{ ok: boolean; name?: string; x?: number; y?: number; error?: string; code?: string }>({
-      type: "moveDevice",
-      id: this.generateId(),
-      name,
-      x,
-      y,
-    });
+    const result = await this.bridge.sendCommandAndWait<{ ok: boolean; name?: string; x?: number; y?: number; error?: string; code?: string }>(
+      "moveDevice",
+      {
+        id: this.generateId(),
+        name,
+        x,
+        y,
+      },
+    );
 
-    if (value.ok) {
+    const value = result.value;
+    if (value?.ok) {
       return { ok: true, name: value.name!, x: value.x!, y: value.y! };
     }
-    return { ok: false, error: value.error ?? "Unknown error", code: value.code ?? "UNKNOWN" };
+    return { ok: false, error: value?.error ?? "Unknown error", code: value?.code ?? "UNKNOWN" };
   }
 
   /**
@@ -199,7 +211,7 @@ export class TopologyService {
     port2: string,
     linkType: AddLinkPayload["linkType"] = "auto"
   ): Promise<LinkState> {
-    const { value } = await this.bridge.sendCommandAndWait<{
+    const result = await this.bridge.sendCommandAndWait<{
       ok: boolean;
       id: string;
       device1: string;
@@ -207,15 +219,22 @@ export class TopologyService {
       device2: string;
       port2: string;
       cableType: string;
-    }>({
-      type: "addLink",
-      id: this.generateId(),
-      device1,
-      port1,
-      device2,
-      port2,
-      linkType,
-    });
+    }>(
+      "addLink",
+      {
+        id: this.generateId(),
+        device1,
+        port1,
+        device2,
+        port2,
+        linkType,
+      },
+    );
+
+    const value = result.value;
+    if (!value) {
+      throw new Error(`Failed to add link between ${device1}:${port1} and ${device2}:${port2}`);
+    }
 
     return {
       id: value.id,
@@ -231,8 +250,7 @@ export class TopologyService {
    * Remove a link
    */
   async removeLink(device: string, port: string): Promise<void> {
-    await this.bridge.sendCommandAndWait({
-      type: "removeLink",
+    await this.bridge.sendCommandAndWait("removeLink", {
       id: this.generateId(),
       device,
       port,

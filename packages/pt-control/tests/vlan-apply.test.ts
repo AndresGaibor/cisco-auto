@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { buildVlanCommands } from "../src/utils/ios-commands.js";
+import { buildVlanCommands } from "@cisco-auto/ios-domain";
 
 describe("vlan utilities", () => {
   describe("buildVlanCommands", () => {

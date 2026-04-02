@@ -4,9 +4,30 @@
 
 export * from './parser/yaml-parser';
 export * from './types/index';
-export * from './value-objects/index.ts';
+// Re-export VLAN value objects from ios-domain
+export {
+  VlanId,
+  VlanName,
+  VlanRange,
+  VtpMode,
+  VtpDomain,
+  VtpPassword,
+  VtpVersion,
+  parseVlanId,
+  parseVlanName,
+  parseVlanRange,
+  parseVtpMode,
+  parseVtpDomain,
+  parseVtpVersion,
+  isValidVlanId,
+  isValidVlanName,
+  isValidVlanRange,
+} from '@cisco-auto/ios-domain/value-objects';
+export type {
+  VtpModeType,
+  VtpVersionType,
+} from '@cisco-auto/ios-domain/value-objects';
 export { validateLab, LabValidator } from './validation/index';
-export type { ValidationIssue, ValidationResult } from './validation/index';
 
 export * from './topology/index';
 export * from './canonical/index.ts';

@@ -22,7 +22,7 @@ import type {
 } from '../..';
 import type { Device, ACL, NAT } from '../..';
 import type { ACLSpec, NATSpec } from '../../canonical/index.js';
-import { VlanId, VlanName } from '../../value-objects/index.js';
+import { VlanId, VlanName } from '@cisco-auto/ios-domain/value-objects';
 import type {
   BGPSpec,
   DHCPServerSpec,
@@ -66,6 +66,16 @@ export interface GenerateScriptResult {
   format: 'javascript' | 'python';
   deviceCount: number;
   linkCount: number;
+}
+
+type GenerateScriptErrorCode = 'INVALID_INPUT' | 'INVALID_STRUCTURE';
+
+function buildScriptError(message: string, code: GenerateScriptErrorCode): ToolResult<GenerateScriptResult> {
+  return {
+    ok: false,
+    error: message,
+    code,
+  };
 }
 
 type ExtendedRoutingPlan = RoutingPlan & {
@@ -661,24 +671,15 @@ El script puede generarse en formato JavaScript o Python.`,
 
     // Validación de entrada
     if (!plan || typeof plan !== 'object') {
-      return {
-        ok: false,
-        error: 'Se requiere un plan de topología válido'
-      };
+      return buildScriptError('Se requiere un plan de topología válido', 'INVALID_INPUT');
     }
 
     if (!plan.devices || !Array.isArray(plan.devices)) {
-      return {
-        ok: false,
-        error: 'El plan debe contener un array de devices'
-      };
+      return buildScriptError('El plan debe contener un array de devices', 'INVALID_STRUCTURE');
     }
 
     if (!plan.links || !Array.isArray(plan.links)) {
-      return {
-        ok: false,
-        error: 'El plan debe contener un array de links'
-      };
+      return buildScriptError('El plan debe contener un array de links', 'INVALID_STRUCTURE');
     }
 
     // Generar el script según el formato

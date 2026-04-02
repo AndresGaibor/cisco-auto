@@ -16,7 +16,7 @@ import type {
   IPv6Spec,
   DHCPServerSpec,
   NTPSpec
-} from '../../src/core/canonical/protocol.spec';
+} from '../../packages/core/src/canonical/protocol.spec';
 
 describe('STPGenerator', () => {
   describe('generate', () => {

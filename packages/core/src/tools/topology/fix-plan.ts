@@ -324,21 +324,24 @@ NO modifica: credenciales, seguridad, routing protocols, o IPs que ya funcionan 
     if (!plan || typeof plan !== 'object') {
       return {
         ok: false,
-        error: 'Se requiere un plan de topología válido'
+        error: 'Se requiere un plan de topología válido',
+        code: 'INVALID_INPUT'
       };
     }
 
     if (!plan.devices || !Array.isArray(plan.devices)) {
       return {
         ok: false,
-        error: 'El plan debe contener un array de devices'
+        error: 'El plan debe contener un array de devices',
+        code: 'INVALID_STRUCTURE'
       };
     }
 
     if (!plan.links || !Array.isArray(plan.links)) {
       return {
         ok: false,
-        error: 'El plan debe contener un array de links'
+        error: 'El plan debe contener un array de links',
+        code: 'INVALID_STRUCTURE'
       };
     }
 

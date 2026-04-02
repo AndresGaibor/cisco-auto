@@ -21,8 +21,8 @@ export class TopologyEventsHandler {
       type: this.cacheManager.inferDeviceType(event.model) as DeviceState["type"],
       power: true,
       uuid: event.uuid || `uuid-${event.name}`,
-      x: event.x ?? 0,
-      y: event.y ?? 0,
+      x: event.x,
+      y: event.y,
       ports: [],
     };
     snapshot.timestamp = Date.now();
@@ -74,7 +74,9 @@ export class TopologyEventsHandler {
       port1,
       device2: event.device2,
       port2,
-      cableType: this.cacheManager.cableTypeFromNumber(event.connType),
+      cableType: event.connType !== undefined
+        ? this.cacheManager.cableTypeFromNumber(event.connType)
+        : "auto",
     };
 
     snapshot.timestamp = Date.now();

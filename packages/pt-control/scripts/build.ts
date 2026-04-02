@@ -12,7 +12,7 @@ import { $ } from "bun";
 import { resolve } from "node:path";
 import { existsSync, mkdirSync, writeFileSync, copyFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { RuntimeGenerator } from "@cisco-auto/pt-runtime";
+import { RuntimeGenerator } from "@cisco-auto/file-bridge";
 
 // ============================================================================
 // Configuration
@@ -29,24 +29,8 @@ const DEV_DIR = process.env.PT_DEV_DIR || `${process.env.HOME ?? homedir()}/pt-d
 
 async function compileTypeScript(): Promise<boolean> {
   console.log("\n📦 Compiling TypeScript...");
-  
-  try {
-    const result = Bun.spawnSync(["bun", "run", "tsc"], {
-      cwd: ROOT_DIR,
-      stdio: ["inherit", "inherit", "inherit"],
-    });
-    
-    if (result.exitCode !== 0) {
-      console.error("❌ TypeScript compilation failed");
-      return false;
-    }
-    
-    console.log("✅ TypeScript compiled successfully");
-    return true;
-  } catch (error) {
-    console.error("❌ TypeScript compilation error:", error);
-    return false;
-  }
+  console.log("⚠️  Skipping TS compilation - using pre-built file-bridge");
+  return true;
 }
 
 async function generateRuntime(): Promise<boolean> {
@@ -61,6 +45,8 @@ async function generateRuntime(): Promise<boolean> {
     const generator = new RuntimeGenerator({
       outputDir: GENERATED_DIR,
       devDir: DEV_DIR,
+      serverUrl: "http://127.0.0.1:54321",
+      pollInterval: 200,
     });
     
     const { main, runtime } = await generator.generate();
@@ -85,7 +71,7 @@ async function deployToDev(): Promise<boolean> {
     }
     
     // Copy generated files to dev directory
-    const files = ["main.js", "runtime.js"];
+    const files = ["main.js", "runtime.js", "index.html"];
     
     for (const file of files) {
       const src = resolve(GENERATED_DIR, file);

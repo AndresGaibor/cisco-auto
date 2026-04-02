@@ -195,7 +195,8 @@ export const ptEstimatePlanTool: Tool = {
     if (!validation.valid) {
       return {
         ok: false,
-        error: validation.error || 'Parámetros de entrada inválidos'
+        error: validation.error || 'Parámetros de entrada inválidos',
+        code: 'INVALID_INPUT'
       };
     }
 

@@ -1,6 +1,6 @@
-import type { CliSession } from "../../domain/ios/session/cli-session.js";
-import type { CommandResult } from "../../domain/ios/session/command-result.js";
-import type { CapabilitySet } from "../../domain/ios/capabilities/capability-set.js";
+import type { CliSession } from "@cisco-auto/ios-domain";
+import type { CommandResult } from "@cisco-auto/ios-domain";
+import type { CapabilitySet } from "@cisco-auto/ios-domain";
 import {
   planConfigureSvi,
   planConfigureAccessPort,
@@ -14,14 +14,14 @@ import {
   type ConfigureSubinterfaceInput,
   type ConfigureStaticRouteInput,
   type ConfigureDhcpRelayInput,
-} from "../../domain/ios/operations/index.js";
-import type { CommandPlan } from "../../domain/ios/operations/command-plan.js";
+} from "@cisco-auto/ios-domain";
+import type { CommandPlan } from "@cisco-auto/ios-domain";
 import {
   parseVlanId as VlanId,
   parseIpv4Address as Ipv4Address,
   parseSubnetMask as SubnetMask,
   parseInterfaceName as InterfaceName,
-} from "../../domain/ios/value-objects/index.js";
+} from "@cisco-auto/ios-domain";
 
 export class IosConfigOperations {
   constructor(

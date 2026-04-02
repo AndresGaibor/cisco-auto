@@ -3,7 +3,7 @@
 // ============================================================================
 
 import type { NetworkTwin } from "../contracts/twin-types.js";
-import type { CommandPlan } from "../domain/ios/operations/command-plan.js";
+import type { CommandPlan } from "@cisco-auto/ios-domain";
 
 // ============================================================================
 // Intent Kinds

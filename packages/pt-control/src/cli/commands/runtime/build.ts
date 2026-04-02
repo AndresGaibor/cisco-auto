@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { Flags } from '@oclif/core';
-import { RuntimeGenerator } from '@cisco-auto/pt-runtime';
+import { RuntimeGenerator } from '@cisco-auto/file-bridge';
 import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { BaseCommand, createSpinner } from '../../base-command.js';

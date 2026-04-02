@@ -3,24 +3,23 @@
   "version": "0.1.0",
   "description": "Core networking logic for cisco-auto (includes lab-model, tools, templates)",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/src/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "bun build ./src --outdir ./dist --target bun",
+    "build": "bun build ./src --outdir ./dist --target bun --format esm && tsc --project tsconfig.build.json",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "exports": {
-    ".": "./src/index.ts",
-    "./parser/*": "./src/parser/*",
-    "./config-generators/*": "./src/config-generators/*",
-    "./topology/*": "./src/topology/*",
-    "./canonical/*": "./src/canonical/*",
-    "./executor/*": "./src/executor/*",
-    "./models/*": "./src/models/*",
-    "./validation/*": "./src/validation/*",
-    "./tools/*": "./src/tools/*",
-    "./templates/*": "./src/templates/*"
+    ".": "./dist/src/index.js",
+    "./config-generators": "./dist/src/index.js",
+    "./parser": "./dist/src/index.js",
+    "./topology": "./dist/src/index.js",
+    "./canonical": "./dist/src/index.js",
+    "./executor": "./dist/src/index.js",
+    "./validation": "./dist/src/index.js",
+    "./tools": "./dist/src/index.js",
+    "./templates": "./dist/src/index.js"
   },
   "dependencies": {
     "@cisco-auto/types": "workspace:*",

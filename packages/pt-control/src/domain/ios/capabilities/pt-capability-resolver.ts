@@ -1,5 +1,4 @@
-import { IOSFamily, getDeviceModel, getIosFamilyFromModel } from "./device-capabilities.js";
-import { CapabilitySet } from "./capability-set.js";
+import { IOSFamily, getDeviceModel, getIosFamilyFromModel, CapabilitySet } from "@cisco-auto/ios-domain";
 
 export interface DeviceCapabilities {
   model: string;
@@ -147,4 +146,4 @@ export function resolveCapabilitySet(modelId: string): CapabilitySet {
 }
 
 // Re-export CapabilitySet for convenience
-export { CapabilitySet } from "./capability-set.js";
+export { CapabilitySet } from "@cisco-auto/ios-domain";

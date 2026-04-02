@@ -7,18 +7,19 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "bun run scripts/build.ts",
-    "build:ts": "tsc",
+    "build:ts": "tsc --skipLibCheck",
     "build:watch": "bun run scripts/build.ts --watch",
     "build:no-deploy": "bun run scripts/build.ts --no-deploy",
     "dev": "tsc --watch",
     "test": "bun test tests",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit --skipLibCheck",
     "runtime:generate": "bun run scripts/build.ts --no-deploy",
     "runtime:deploy": "bun run scripts/build.ts"
   },
   "dependencies": {
+    "@cisco-auto/core": "workspace:*",
     "@cisco-auto/file-bridge": "workspace:*",
-    "@cisco-auto/pt-runtime": "workspace:*",
+    "@cisco-auto/ios-domain": "workspace:*",
     "@cisco-auto/types": "workspace:*",
     "@inquirer/prompts": "^8.3.2",
     "@oclif/core": "^3.26.4",

@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { ptDeployTool } from '@cisco-auto/tools';
+import { ptDeployTool } from '@cisco-auto/core/tools';
 
 interface DeployData {
   message?: string;

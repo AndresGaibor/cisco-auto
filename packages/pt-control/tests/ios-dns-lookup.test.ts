@@ -3,9 +3,9 @@
 // ============================================================================
 
 import { describe, test, expect } from "bun:test";
-import { classifyOutput } from "../src/domain/ios/session/command-result";
-import { inferPromptState, needsResponse, IOS_PROMPT_PATTERNS } from "../src/domain/ios/session/prompt-state";
-import { CliSession, createCliSession } from "../src/domain/ios/session/cli-session";
+import { classifyOutput } from "@cisco-auto/ios-domain";
+import { inferPromptState, needsResponse, IOS_PROMPT_PATTERNS } from "@cisco-auto/ios-domain";
+import { CliSession, createCliSession } from "@cisco-auto/ios-domain";
 
 describe("DNS Lookup Detection", () => {
   describe("classifyOutput", () => {

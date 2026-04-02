@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { VlanId, parseVlanId, isValidVlanId } from "../../../../src/domain/ios/value-objects/vlan-id";
+import { VlanId, parseVlanId, isValidVlanId } from "@cisco-auto/ios-domain";
 
 describe("VlanId", () => {
   describe("constructor", () => {

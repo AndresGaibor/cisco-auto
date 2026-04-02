@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { ptGenerateScriptTool } from '@cisco-auto/tools';
+import { ptGenerateScriptTool } from '@cisco-auto/core/tools';
 import type { TopologyPlan } from '@cisco-auto/core';
 
 interface ScriptCommand {

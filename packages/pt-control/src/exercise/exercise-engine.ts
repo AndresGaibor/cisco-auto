@@ -7,7 +7,7 @@
 
 import type { LabExercise, ExerciseTask, Objective, Constraint } from "./lab-exercise.js";
 import type { Hint } from "./hint.js";
-import type { CommandResult } from "../domain/ios/session/command-result.js";
+import type { CommandResult } from "@cisco-auto/ios-domain";
 
 // ============================================================================
 // Event types emitted during exercise flow

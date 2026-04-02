@@ -3,17 +3,17 @@ import {
   inferPromptState,
   type PromptState,
   IOS_PROMPT_PATTERNS,
-} from "../src/domain/ios/session/prompt-state";
+} from "@cisco-auto/ios-domain";
 import {
   CliSession,
   createCliSession,
-} from "../src/domain/ios/session/cli-session";
+} from "@cisco-auto/ios-domain";
 import {
   type CommandResult,
   isSuccessResult,
   isErrorResult,
   isPagingResult,
-} from "../src/domain/ios/session/command-result";
+} from "@cisco-auto/ios-domain";
 
 describe("IOS Prompt State Machine", () => {
   describe("inferPromptState", () => {

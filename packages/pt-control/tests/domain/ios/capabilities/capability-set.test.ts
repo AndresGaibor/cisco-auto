@@ -1,6 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { CapabilitySet } from "../../../../src/domain/ios/capabilities/capability-set";
-import { IOSFamily } from "../../../../src/domain/ios/capabilities/device-capabilities";
+import { CapabilitySet, IOSFamily } from "@cisco-auto/ios-domain";
 
 describe("CapabilitySet", () => {
   describe("factory methods", () => {
