@@ -2,7 +2,7 @@
 // PT Control V2 - Runtime Watch Command
 // ============================================================================
 
-import { RuntimeGenerator } from '@cisco-auto/file-bridge';
+import { RuntimeGenerator } from '@cisco-auto/pt-runtime';
 import { watch, existsSync } from 'fs';
 import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
@@ -15,9 +15,9 @@ const __dirname = dirname(__filename);
 const PACKAGE_ROOT = resolve(__dirname, '..', '..', '..', '..');
 const GENERATED_DIR = join(PACKAGE_ROOT, 'generated');
 const require = createRequire(import.meta.url);
-const runtimePackagePath = dirname(require.resolve('@cisco-auto/file-bridge/package.json'));
+const runtimePackagePath = dirname(require.resolve('@cisco-auto/pt-runtime/package.json'));
 const runtimeSrcDirCandidates = [
-  join(runtimePackagePath, 'src', 'pt-runtime'),
+  join(runtimePackagePath, 'src'),
   join(runtimePackagePath, 'dist'),
 ];
 const RUNTIME_WATCH_DIR = runtimeSrcDirCandidates.find((dir) => existsSync(dir)) ?? runtimePackagePath;

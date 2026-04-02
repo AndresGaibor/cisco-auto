@@ -112,3 +112,38 @@ export async function calculatePayloadChecksum(payload: unknown): Promise<string
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
+
+// ============================================================================
+// Snapshot Types (para auto-snapshot y diff events)
+// ============================================================================
+
+export interface DeviceSnapshot {
+  name: string;
+  model?: string;
+  type?: string;
+  ports?: Array<{ 
+    name: string; 
+    ip?: string; 
+    mac?: string; 
+  }>;
+  power?: boolean;
+}
+
+export interface LinkSnapshot {
+  id: string;
+  device1: string; 
+  port1: string;
+  device2: string; 
+  port2: string;
+  cableType?: string;
+}
+
+export interface Snapshot {
+  devices: Record<string, DeviceSnapshot>;
+  links: Record<string, LinkSnapshot>;
+  metadata?: { 
+    deviceCount: number; 
+    linkCount: number; 
+    capturedAt?: number;
+  };
+}

@@ -2,7 +2,7 @@
 // PT Control V2 - Runtime Deploy Command
 // ============================================================================
 
-import { RuntimeGenerator } from '@cisco-auto/file-bridge';
+import { RuntimeGenerator } from '@cisco-auto/pt-runtime';
 import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import pc from 'picocolors';

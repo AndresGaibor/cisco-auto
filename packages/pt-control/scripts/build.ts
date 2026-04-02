@@ -12,7 +12,7 @@ import { $ } from "bun";
 import { resolve } from "node:path";
 import { existsSync, mkdirSync, writeFileSync, copyFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { RuntimeGenerator } from "@cisco-auto/file-bridge";
+import { RuntimeGenerator } from "@cisco-auto/pt-runtime";
 
 // ============================================================================
 // Configuration

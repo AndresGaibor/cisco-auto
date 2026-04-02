@@ -220,6 +220,9 @@ export {
   type BridgeEvent,
   type BridgeCheckpoint,
   type BridgeQueueStatus,
+  type DeviceSnapshot,
+  type LinkSnapshot,
+  type Snapshot,
   generateBridgeCommandId,
   calculatePayloadChecksum,
 } from './bridge.js';

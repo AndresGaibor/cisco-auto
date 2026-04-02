@@ -12,6 +12,11 @@ import type {
   BridgeResultEnvelope,
   BridgeEvent,
 } from "./shared/protocol.js";
+import type {
+  Snapshot,
+  DeviceSnapshot, 
+  LinkSnapshot,
+} from "@cisco-auto/types";
 import { BridgePathLayout } from "./shared/path-layout.js";
 import { SequenceStore } from "./shared/sequence-store.js";
 import { EventLogWriter } from "./event-log-writer.js";
@@ -32,6 +37,8 @@ export interface FileBridgeV2Options {
   leaseTtlMs?: number;
   maxPendingCommands?: number;
   enableBackpressure?: boolean;
+  autoSnapshotIntervalMs?: number; // Intervalo para auto-snapshot (default: 5000ms)
+  heartbeatIntervalMs?: number;    // Intervalo para monitorear heartbeat (default: 2000ms)
 }
 
 export class FileBridgeV2 extends EventEmitter {
@@ -48,7 +55,10 @@ export class FileBridgeV2 extends EventEmitter {
   private readonly garbageCollector: GarbageCollector;
 
   private leaseTimer: ReturnType<typeof setInterval> | null = null;
+  private autoSnapshotTimer: ReturnType<typeof setInterval> | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private running = false;
+  private lastSnapshot: Snapshot | null = null;
 
   constructor(private readonly options: FileBridgeV2Options) {
     super();
@@ -130,6 +140,8 @@ export class FileBridgeV2 extends EventEmitter {
       this.leaseTimer = null;
     }
 
+    this.stopMonitoring(); // Parar auto-snapshot y heartbeat monitoring
+
     this.consumer.stop();
     this.leaseManager.releaseLease();
     this.resultWatcher.destroy();
@@ -160,16 +172,22 @@ export class FileBridgeV2 extends EventEmitter {
     const seq = this.seq.next();
     const id = `cmd_${String(seq).padStart(12, "0")}`;
 
+    // Asegurar que el payload tenga el campo 'type' que espera el runtime
+    const payloadWithType = {
+      type,
+      ...(payload as object)
+    } as TPayload;
+
     const envelope: BridgeCommandEnvelope<TPayload> = {
       protocolVersion: 2,
       id,
       seq,
       createdAt: Date.now(),
       type,
-      payload,
+      payload: payloadWithType,
       attempt: 1,
       expiresAt: expiresAtMs,
-      checksum: this.checksumOf({ type, payload }),
+      checksum: this.checksumOf({ type, payload: payloadWithType }),
     };
 
     const { atomicWriteFile } = require("./shared/fs-atomic.js");
@@ -334,6 +352,175 @@ export class FileBridgeV2 extends EventEmitter {
 
   gc(options: { resultTtlMs?: number; logTtlMs?: number } = {}): GCReport {
     return this.garbageCollector.collect(options);
+  }
+
+  /**
+   * Inicia auto-snapshot cada X segundos
+   * Toma snapshots automáticamente y detecta diffs para generar eventos
+   */
+  startAutoSnapshot(): void {
+    if (this.autoSnapshotTimer) return;
+
+    const intervalMs = this.options.autoSnapshotIntervalMs ?? 5_000;
+    
+    this.autoSnapshotTimer = setInterval(async () => {
+      try {
+        // Solo hacer snapshot si tenemos lease activo
+        if (!this.leaseManager.hasValidLease()) return;
+
+        // Solicitar snapshot a PT
+        const result = await this.sendCommandAndWait<{}, Snapshot>('snapshot', {}, 10_000);
+        
+        if (result.ok && result.value) {
+          const newSnapshot = result.value;
+          
+          // Si tenemos snapshot anterior, calcular diff
+          if (this.lastSnapshot) {
+            const diff = this.calculateSnapshotDiff(this.lastSnapshot, newSnapshot);
+            if (diff.hasChanges) {
+              this.appendEvent({
+                type: 'topology-changed',
+                diff,
+                snapshot: newSnapshot,
+              });
+            }
+          } else {
+            // Primer snapshot
+            this.appendEvent({
+              type: 'topology-initial',
+              snapshot: newSnapshot,
+            });
+          }
+
+          this.lastSnapshot = newSnapshot;
+        }
+      } catch (error) {
+        this.appendEvent({
+          type: 'auto-snapshot-error', 
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }, intervalMs);
+  }
+
+  /**
+   * Inicia monitoreo de heartbeat.json
+   * Detecta cuando PT deja de escribir heartbeat
+   */
+  startHeartbeatMonitoring(): void {
+    if (this.heartbeatTimer) return;
+
+    const intervalMs = this.options.heartbeatIntervalMs ?? 2_000;
+    const { join } = require("node:path");
+    const heartbeatFile = join(this.paths.root, "heartbeat.json");
+
+    this.heartbeatTimer = setInterval(() => {
+      try {
+        const { readFileSync, statSync } = require("node:fs");
+        const stats = statSync(heartbeatFile);
+        const age = Date.now() - stats.mtime.getTime();
+        
+        // Si el heartbeat tiene más de 10 segundos, PT probablemente murió
+        if (age > 10_000) {
+          this.appendEvent({
+            type: 'pt-heartbeat-stale',
+            ageMs: age,
+            lastModified: stats.mtime.getTime(),
+          });
+        } else {
+          // Heartbeat OK - leer contenido opcional
+          try {
+            const content = readFileSync(heartbeatFile, 'utf8');
+            const heartbeat = JSON.parse(content);
+            this.appendEvent({
+              type: 'pt-heartbeat-ok',
+              heartbeat,
+              ageMs: age,
+            });
+          } catch {
+            // Heartbeat file existe pero no es JSON válido
+            this.appendEvent({
+              type: 'pt-heartbeat-ok',
+              ageMs: age,
+            });
+          }
+        }
+      } catch (error) {
+        const err = error as NodeJS.ErrnoException;
+        if (err.code === 'ENOENT') {
+          this.appendEvent({
+            type: 'pt-heartbeat-missing',
+          });
+        } else {
+          this.appendEvent({
+            type: 'pt-heartbeat-error',
+            error: err.message,
+          });
+        }
+      }
+    }, intervalMs);
+  }
+
+  /**
+   * Para auto-snapshot y heartbeat monitoring
+   */
+  stopMonitoring(): void {
+    if (this.autoSnapshotTimer) {
+      clearInterval(this.autoSnapshotTimer);
+      this.autoSnapshotTimer = null;
+    }
+    
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
+
+  /**
+   * Calcula diferencias entre dos snapshots
+   */
+  private calculateSnapshotDiff(prev: Snapshot, curr: Snapshot): { 
+    hasChanges: boolean;
+    devicesAdded: string[];
+    devicesRemoved: string[];
+    devicesChanged: string[];
+    linksAdded: string[];
+    linksRemoved: string[];
+  } {
+    const prevDevices = new Set(Object.keys(prev.devices));
+    const currDevices = new Set(Object.keys(curr.devices));
+    const prevLinks = new Set(Object.keys(prev.links));
+    const currLinks = new Set(Object.keys(curr.links));
+
+    const devicesAdded = [...currDevices].filter(d => !prevDevices.has(d));
+    const devicesRemoved = [...prevDevices].filter(d => !currDevices.has(d));
+    const linksAdded = [...currLinks].filter(l => !prevLinks.has(l));
+    const linksRemoved = [...prevLinks].filter(l => !currLinks.has(l));
+
+    // Detectar dispositivos que cambiaron (mismo nombre, diferentes propiedades)
+    const devicesChanged: string[] = [];
+    for (const deviceName of [...currDevices].filter(d => prevDevices.has(d))) {
+      const prevDevice = prev.devices[deviceName];
+      const currDevice = curr.devices[deviceName];
+      if (JSON.stringify(prevDevice) !== JSON.stringify(currDevice)) {
+        devicesChanged.push(deviceName);
+      }
+    }
+
+    const hasChanges = devicesAdded.length > 0 || 
+                      devicesRemoved.length > 0 || 
+                      devicesChanged.length > 0 ||
+                      linksAdded.length > 0 || 
+                      linksRemoved.length > 0;
+
+    return {
+      hasChanges,
+      devicesAdded,
+      devicesRemoved,
+      devicesChanged,
+      linksAdded,
+      linksRemoved,
+    };
   }
 
   private handleEvent(event: BridgeEvent): void {
