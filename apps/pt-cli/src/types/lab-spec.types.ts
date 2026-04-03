@@ -1,9 +1,41 @@
-/**
- * Tipos compartidos para conversión de YAML parsed a LabSpec
- * Evita duplicación y uso de `any` en múltiples comandos
- */
+import type { LabSpec, SwitchportMode, CableType } from '@cisco-auto/core';
+import { DeviceType as DT } from '@cisco-auto/core';
 
-import type { LabSpec } from '@cisco-auto/core';
+/**
+ * Convierte string a DeviceType válido
+ */
+function toDeviceType(type?: string): DeviceType {
+  if (!type) return 'router';
+  const lower = type.toLowerCase();
+  if (['router', 'switch', 'pc', 'server', 'firewall', 'ids', 'voip'].includes(lower)) {
+    return lower as DeviceType;
+  }
+  return 'router';
+}
+
+/**
+ * Convierte string a SwitchportMode válido
+ */
+function toSwitchportMode(mode?: string): SwitchportMode | undefined {
+  if (!mode) return undefined;
+  const lower = mode.toLowerCase();
+  if (['access', 'trunk', 'dynamic'].includes(lower)) {
+    return lower as SwitchportMode;
+  }
+  return undefined;
+}
+
+/**
+ * Convierte string a CableType válido
+ */
+function toCableType(cable?: string): CableType {
+  if (!cable) return 'straight-through' as CableType;
+  const lower = cable.toLowerCase();
+  if (['straight-through', 'crossover', 'rollover'].includes(lower)) {
+    return lower as CableType;
+  }
+  return 'straight-through' as CableType;
+}
 
 /**
  * Estructura mínima de un archivo YAML de laboratorio parsed
@@ -68,11 +100,6 @@ export interface ParsedConnection {
   [key: string]: unknown;
 }
 
-/**
- * Convierte un YAML parsed a LabSpec de forma tipada
- * @param parsed - Objeto YAML parsed
- * @returns LabSpec tipado
- */
 export function toLabSpec(parsed: ParsedLabYaml): LabSpec {
   return {
     metadata: {
@@ -84,16 +111,17 @@ export function toLabSpec(parsed: ParsedLabYaml): LabSpec {
     devices: (parsed.lab?.topology?.devices || []).map((d) => ({
       id: d.name ?? '',
       name: d.name ?? '',
-      type: d.type ?? 'unknown',
+      type: toDeviceType(d.type),
       hostname: d.hostname ?? d.name ?? '',
       managementIp: d.management?.ip,
       interfaces: (d.interfaces || []).map((i) => ({
-        id: i.name ?? '',
         name: i.name ?? '',
         description: i.description,
-        ipAddress: i.ip,
+        ip: i.ip,
+        subnetMask: i.subnetMask,
         shutdown: i.shutdown,
-        switchport: i.mode ? { mode: i.mode, accessVlan: i.vlan } : undefined,
+        switchportMode: toSwitchportMode(i.mode),
+        vlan: i.vlan ? { brandedValue: i.vlan.toString() } as any : undefined, // TODO: Use proper VlanId
       })),
       security: d.security,
       vlans: d.vlans,
@@ -108,9 +136,9 @@ export function toLabSpec(parsed: ParsedLabYaml): LabSpec {
 
       return {
         id: `${fromDevice}-${toDevice}`,
-        from: { deviceName: fromDevice, portName: fromPort },
-        to: { deviceName: toDevice, portName: toPort },
-        cableType: c.cable ?? c.type ?? 'ethernet',
+        from: { deviceId: '', deviceName: fromDevice, port: fromPort },
+        to: { deviceId: '', deviceName: toDevice, port: toPort },
+        cableType: toCableType(c.cable ?? c.type as string),
       };
     }),
   };

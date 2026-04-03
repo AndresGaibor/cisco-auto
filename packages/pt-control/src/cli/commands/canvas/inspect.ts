@@ -83,12 +83,12 @@ export default class CanvasInspect extends BaseCommand {
           this.print(`Total: ${result.count} device(s)\n`);
 
           const tableData = rectDevices.map(d => ({
-            name: d.name,
-            model: d.model,
-            type: d.type,
-            status: d.power ? 'on' : 'off',
-            x: d.x,
-            y: d.y,
+            name: d?.name,
+            model: d?.model,
+            type: d?.type,
+            status: d?.power ? 'on' : 'off',
+            x: d?.x,
+            y: d?.y,
           }));
 
           this.outputData(tableData);

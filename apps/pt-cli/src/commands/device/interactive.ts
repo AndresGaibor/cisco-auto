@@ -9,8 +9,7 @@
 import { Command } from 'commander';
 import { createInterface } from 'readline';
 import type { ToolResult } from '@cisco-auto/core';
-import { ptListDevicesTool, ptGetDeviceDetailsTool } from '@cisco-auto/core';
-import { isToolResultSuccess, getToolResultError, getToolResultData } from '../../utils/tool-result';
+import { ptListDevicesTool, ptGetDeviceDetailsTool, isToolResultSuccess, getToolResultError, createToolContext } from '@cisco-auto/core';
 
 /**
  * Crea interfaz readline
@@ -62,7 +61,7 @@ function mostrarBanner() {
 async function mostrarDispositivos(tipo?: string): Promise<void> {
   const result = await ptListDevicesTool.handler(
     tipo ? { type: tipo } : {},
-    { logger: console }
+    createToolContext('list-devices')
   ) as ToolResult<{ devices: Array<{ name: string; type: string; ptType: string; description: string; portCount: number }>; total: number }>;
 
   if (!isToolResultSuccess(result)) {
@@ -96,7 +95,7 @@ async function mostrarDispositivos(tipo?: string): Promise<void> {
 async function mostrarDetalles(deviceName: string): Promise<void> {
   const result = await ptGetDeviceDetailsTool.handler(
     { name: deviceName },
-    { logger: console }
+    createToolContext('list-devices')
   ) as ToolResult<{ device: { name: string; type: string; ptType: string; description: string; defaultIOS: string | null; maxModules: number; ports: Array<{ name: string; type: string; speed: string; available: boolean }> } }>;
 
   if (!isToolResultSuccess(result)) {
@@ -183,7 +182,7 @@ async function ejecutarSelector(): Promise<void> {
           // Obtener lista para mapear número a nombre
           const result = await ptListDevicesTool.handler(
             tipo ? { type: tipo } : {},
-            { logger: console as any, config: { workingDir: process.cwd() } }
+            createToolContext('select-devices')
           ) as ToolResult<{ devices: Array<{ name: string; type: string; ptType: string; description: string; portCount: number }>; total: number }>;
 
           if (isToolResultSuccess(result) && result.data.devices[deviceNum - 1]) {

@@ -134,8 +134,8 @@ function generateYAML(lab: LabSpec): string {
       lines.push('        interfaces:');
       for (const iface of device.interfaces) {
         lines.push(`          - name: ${iface.name}`);
-        if (iface.ipAddress) {
-          lines.push(`            ip: ${iface.ipAddress}`);
+        if (iface.ip) {
+          lines.push(`            ip: ${iface.ip}`);
         }
         if (iface.description) {
           lines.push(`            description: "${iface.description}"`);
@@ -155,11 +155,15 @@ function generateYAML(lab: LabSpec): string {
         lines.push('          ospf:');
         lines.push(`            processId: ${device.routing.ospf.processId}`);
         lines.push(`            routerId: ${device.routing.ospf.routerId}`);
-        lines.push('            networks:');
-        for (const net of device.routing.ospf.networks) {
-          lines.push(`              - network: ${net.network}`);
-          lines.push(`                wildcard: ${net.wildcard}`);
-          lines.push(`                area: ${net.area}`);
+        lines.push('            areas:');
+        for (const area of device.routing.ospf.areas) {
+          lines.push(`              - areaId: ${area.areaId}`);
+          if (area.networks && area.networks.length > 0) {
+            lines.push('                networks:');
+            for (const net of area.networks) {
+              lines.push(`                  - ${net}`);
+            }
+          }
         }
       }
     }
@@ -182,10 +186,10 @@ function generateYAML(lab: LabSpec): string {
   for (const conn of lab.connections) {
     lines.push(`      - from:`);
     lines.push(`          device: ${conn.from.deviceName}`);
-    lines.push(`          port: ${conn.from.portName}`);
+    lines.push(`          port: ${conn.from.port}`);
     lines.push(`        to:`);
     lines.push(`          device: ${conn.to.deviceName}`);
-    lines.push(`          port: ${conn.to.portName}`);
+    lines.push(`          port: ${conn.to.port}`);
     lines.push(`        cable: ${conn.cableType}`);
   }
   

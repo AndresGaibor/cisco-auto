@@ -2,7 +2,7 @@
  * Tool Result Helpers - Type guards and utilities for ToolResult
  */
 
-import type { ToolResult } from './tool-core';
+import type { ToolResult, ToolExecutionContext, ToolLogger } from './tool-execution';
 
 /**
  * Type guard para ToolResultSuccess
@@ -36,4 +36,32 @@ export function getToolResultError(result: ToolResult): string {
     return result.error;
   }
   return 'Unknown error';
+}
+
+export function createToolContext(toolId: string = 'cli-tool'): ToolExecutionContext {
+  const logger: ToolLogger = {
+    debug(message: string, data?: unknown): void {
+      if (process.env.DEBUG) console.debug(message, data);
+    },
+    info(message: string, data?: unknown): void {
+      console.log(message, data);
+    },
+    warn(message: string, data?: unknown): void {
+      console.warn(message, data);
+    },
+    error(message: string, error?: unknown): void {
+      console.error(message, error);
+    },
+    trace(message: string): void {
+      if (process.env.DEBUG) console.trace(message);
+    },
+  };
+
+  return {
+    toolId,
+    requestId: `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    logger,
+    metadata: {},
+    startTime: Date.now(),
+  };
 }

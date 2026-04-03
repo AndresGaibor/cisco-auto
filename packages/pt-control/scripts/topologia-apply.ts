@@ -22,7 +22,7 @@
 import pc from "picocolors";
 import { readFileSync, existsSync } from "fs";
 import { createDefaultPTController } from "../src/controller/index.js";
-import { buildVlanCommands, buildTrunkCommands, buildSshCommands } from "../src/utils/ios-commands.js";
+import { buildVlanCommands, buildTrunkCommands, buildSshCommands } from '@cisco-auto/core';
 import type { DeviceState } from "../src/types/index.js";
 
 // ============================================================================

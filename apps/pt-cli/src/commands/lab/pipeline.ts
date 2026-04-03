@@ -9,9 +9,8 @@ import { Command } from 'commander';
 import { readFileSync, writeFileSync } from 'fs';
 import chalk from 'chalk';
 import { createInterface } from 'readline';
-import { loadLab, ptValidatePlanTool, ptFixPlanTool } from '@cisco-auto/core';
 import type { ToolResult, TopologyPlan } from '@cisco-auto/core';
-import { isToolResultSuccess, getToolResultError } from '../../utils/tool-result';
+import { loadLab, ptValidatePlanTool, ptFixPlanTool, isToolResultSuccess, getToolResultError, createToolContext } from '@cisco-auto/core';
 
 /**
  * Crea interfaz readline
@@ -64,7 +63,7 @@ async function ejecutarPipeline(archivo: string, autoFix: boolean = false): Prom
     console.log(chalk.blue('\n🔍 Paso 2: Validando plan...'));
     const validateResult = await ptValidatePlanTool.handler(
       { plan: lab },
-      { logger: console as any, config: { workingDir: process.cwd() } }
+      createToolContext('pipeline')
     ) as ToolResult<{ valid: boolean; errors: Array<{ message: string }>; warnings: Array<{ message: string }> }>;
 
     if (!isToolResultSuccess(validateResult)) {
@@ -109,7 +108,7 @@ async function ejecutarPipeline(archivo: string, autoFix: boolean = false): Prom
 
       const fixResult = await ptFixPlanTool.handler(
         { plan: lab, autoApply: true },
-        { logger: console }
+        createToolContext('pipeline')
       ) as ToolResult<{ plan: TopologyPlan; appliedFixes: Array<{ description: string }>; remainingErrors: Array<{ message: string }> }>;
 
       if (isToolResultSuccess(fixResult)) {

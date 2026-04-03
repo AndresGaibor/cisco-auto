@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { loadLab } from '@cisco-auto/core';
 import { validateLab } from '@cisco-auto/core';
 import type { LabSpec } from '@cisco-auto/core';
-import type { ValidationError, ValidationWarning } from '@cisco-auto/core';
+import type { ValidationIssue } from '@cisco-auto/core';
 import { toLabSpec, type ParsedLabYaml } from '../types/lab-spec.types';
 
 const SEVERITY_ICONS = {
@@ -38,7 +38,7 @@ function displayResults(result: ReturnType<typeof validateLab>, verbose: boolean
   if (result.issues.length > 0) {
     console.log('\n' + '─'.repeat(60));
     
-    const byCategory = new Map<string, ValidationError | ValidationWarning[]>();
+    const byCategory = new Map<string, ValidationIssue[]>();
     for (const issue of result.issues) {
       const cat = issue.category;
       if (!byCategory.has(cat)) {

@@ -5,7 +5,7 @@
 import { Args, Flags } from '@oclif/core';
 import pc from 'picocolors';
 import { BaseCommand, createSpinner } from '../../base-command.js';
-import { VlanGenerator } from '../../../core/src/index.ts';
+import { VlanGenerator } from '@cisco-auto/core';
 import { DeviceNotFoundError, ValidationError } from '../../errors/index.js';
 import type { DeviceState } from '../../../types/index.js';
 

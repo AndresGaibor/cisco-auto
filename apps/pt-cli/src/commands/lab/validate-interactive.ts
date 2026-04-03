@@ -11,11 +11,11 @@ import chalk from 'chalk';
 import { readFileSync, writeFileSync } from 'fs';
 // @ts-ignore - js-yaml lacks type declarations
 import * as yaml from 'js-yaml';
-import { loadLab, ptValidatePlanTool, ptFixPlanTool } from '@cisco-auto/core';
+import { loadLab, ptValidatePlanTool, ptFixPlanTool, isToolResultSuccess, isToolResultError, createToolContext } from '@cisco-auto/core';
 import type {
   TopologyPlan,
-  ValidationError,
-  ValidationWarning,
+  ValidationIssue,
+  
   FixSuggestion
 } from '@cisco-auto/core';
 
@@ -260,7 +260,7 @@ async function ejecutarValidacionInteractiva(filepath: string): Promise<number> 
 
   const resultadoValidacion = await ptValidatePlanTool.handler(
     { plan },
-    { logger: console as any, config: { workingDir: process.cwd() } }
+    createToolContext('validate')
   );
   
   if (!resultadoValidacion.success) {
@@ -293,7 +293,7 @@ async function ejecutarValidacionInteractiva(filepath: string): Promise<number> 
 
   const resultadoFix = await ptFixPlanTool.handler(
     { plan, applyFixes: false },
-    { logger: console as any, config: { workingDir: process.cwd() } }
+    createToolContext('validate')
   );
   
   let sugerencias: FixSuggestion[] = [];
@@ -335,7 +335,7 @@ async function ejecutarValidacionInteractiva(filepath: string): Promise<number> 
 
         const resultadoAplicarFix = await ptFixPlanTool.handler(
           { plan, applyFixes: true },
-          { logger: console as any, config: { workingDir: process.cwd() } }
+          createToolContext('validate')
         );
         
         if (resultadoAplicarFix.success) {

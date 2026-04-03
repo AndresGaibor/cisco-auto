@@ -12,7 +12,7 @@ import {
   parseVtpVersion,
   parseVtpDomain,
   parseOptionalVtpPassword,
-} from '../../src/value-objects/vtp-types';
+} from '@cisco-auto/ios-domain/value-objects';
 
 describe('VtpMode', () => {
   describe('construction', () => {

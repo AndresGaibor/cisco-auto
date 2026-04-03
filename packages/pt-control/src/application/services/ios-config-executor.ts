@@ -3,7 +3,9 @@
  * Handles command submission, mode transitions, and response handling
  */
 
-import type { PTDevice, PTCommandLine } from "@cisco-auto/file-bridge";
+// TODO: Import proper types from file-bridge when available
+type PTDevice = any;
+type PTCommandLine = any;
 
 export interface ConfigExecutionRequest {
   deviceId: string;

@@ -536,4 +536,4 @@ export class FileBridgeV2 extends EventEmitter {
   }
 }
 
-export { BridgeHealth, GCReport };
+export type { BridgeHealth, GCReport };

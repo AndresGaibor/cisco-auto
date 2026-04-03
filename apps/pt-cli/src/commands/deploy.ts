@@ -31,6 +31,13 @@ function parseCableType(cableTypeStr?: string): CableType {
  * Convierte un YAML parsed a LabSpec con tipos explícitos
  */
 function convertParsedLabToLabSpec(parsed: ParsedLabYaml): LabSpec {
+  function toSwitchportMode(mode?: string) {
+    if (!mode) return undefined;
+    const lower = mode.toLowerCase();
+    if (['access', 'trunk', 'dynamic'].includes(lower)) return lower as any;
+    return undefined;
+  }
+
   return {
     metadata: {
       name: parsed.lab?.metadata?.name ?? 'Lab',
@@ -47,7 +54,7 @@ function convertParsedLabToLabSpec(parsed: ParsedLabYaml): LabSpec {
         description: i.description,
         ip: i.ip,
         shutdown: !(i as { enabled?: boolean }).enabled,
-        switchportMode: i.mode,
+        switchportMode: toSwitchportMode(i.mode),
         vlan: i.vlan ? parseVlanId(i.vlan) : undefined
       })) ?? []
     })) ?? [],
