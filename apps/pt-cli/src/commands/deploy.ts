@@ -1,9 +1,31 @@
 import { Command } from 'commander';
-import { loadLab } from '@cisco-auto/core';
+import { loadLab, CableType } from '@cisco-auto/core';
 import { DeployOrchestrator, deployToDevice } from '@cisco-auto/core';
 import type { ConnectionCredentials, DeployOptions, DeployResult, DeviceType } from '@cisco-auto/core';
 import type { DeviceSpec, LabSpec } from '@cisco-auto/core';
+import { parseVlanId } from '@cisco-auto/ios-domain/value-objects';
 import type { ParsedLabYaml } from '../types/lab-spec.types';
+
+/**
+ * Convierte un string a CableType enum
+ */
+function parseCableType(cableTypeStr?: string): CableType {
+  const normalized = (cableTypeStr ?? 'ethernet').toLowerCase();
+  const mapping: Record<string, CableType> = {
+    'straight': CableType.STRAIGHT_THROUGH,
+    'straight-through': CableType.STRAIGHT_THROUGH,
+    'straightthrough': CableType.STRAIGHT_THROUGH,
+    'crossover': CableType.CROSSOVER,
+    'cross': CableType.CROSSOVER,
+    'fiber': CableType.FIBER,
+    'serial': CableType.SERIAL_DCE,
+    'serial-dce': CableType.SERIAL_DCE,
+    'serialdce': CableType.SERIAL_DCE,
+    'console': CableType.CONSOLE,
+    'ethernet': CableType.STRAIGHT_THROUGH
+  };
+  return mapping[normalized] ?? CableType.STRAIGHT_THROUGH;
+}
 
 /**
  * Convierte un YAML parsed a LabSpec con tipos explícitos
@@ -26,7 +48,7 @@ function convertParsedLabToLabSpec(parsed: ParsedLabYaml): LabSpec {
         ip: i.ip,
         shutdown: !(i as { enabled?: boolean }).enabled,
         switchportMode: i.mode,
-        vlan: i.vlan
+        vlan: i.vlan ? parseVlanId(i.vlan) : undefined
       })) ?? []
     })) ?? [],
     connections: parsed.lab?.topology?.connections?.map(c => {
@@ -39,7 +61,7 @@ function convertParsedLabToLabSpec(parsed: ParsedLabYaml): LabSpec {
         id: `conn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         from: { deviceName: fromDevice, port: fromPort, deviceId: '' },
         to: { deviceName: toDevice, port: toPort, deviceId: '' },
-        cableType: c.type ?? 'ethernet'
+        cableType: parseCableType(c.type)
       };
     }) ?? []
   };

@@ -1,3 +1,4 @@
+import { isToolResultSuccess } from '@cisco-auto/core';
 import { describe, test, expect } from 'bun:test';
 import { ptListDevicesTool, deviceCatalog } from '@cisco-auto/core/tools';
 
@@ -5,8 +6,8 @@ describe('pt_list_devices', () => {
   test('retorna todos los dispositivos sin filtro', async () => {
     const result = await ptListDevicesTool.handler({}, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as { devices: unknown[]; total: number };
       expect(data.devices).toHaveLength(deviceCatalog.length);
       expect(data.total).toBe(deviceCatalog.length);
@@ -16,8 +17,8 @@ describe('pt_list_devices', () => {
   test('filtra por tipo router', async () => {
     const result = await ptListDevicesTool.handler({ type: 'router' }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as { devices: { type: string }[] };
       expect(data.devices.every((d: { type: string }) => d.type === 'router')).toBe(true);
     }
@@ -26,8 +27,8 @@ describe('pt_list_devices', () => {
   test('filtra por tipo switch', async () => {
     const result = await ptListDevicesTool.handler({ type: 'switch' }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as { devices: { type: string }[] };
       expect(data.devices.every((d: { type: string }) => d.type === 'switch')).toBe(true);
     }
@@ -36,8 +37,8 @@ describe('pt_list_devices', () => {
   test('incluye metadatos correctos', async () => {
     const result = await ptListDevicesTool.handler({}, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       expect(result.metadata?.itemCount).toBe(deviceCatalog.length);
     }
   });

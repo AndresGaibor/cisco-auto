@@ -9,20 +9,20 @@ import {
   generateAdjacencyMatrix,
   analyzeTopology
 } from '../../packages/core/src/topology/visualizer';
+import { CableType } from '../../packages/core/src/canonical/types';
 import type { LabSpec } from '@cisco-auto/core';
 
 const createTestLab = (): LabSpec => ({
-  metadata: { name: 'Test Lab', version: '1.0', author: 'test', created: new Date().toISOString() },
   devices: [
-    { name: 'Router1', type: 'router', interfaces: [{ name: 'Gi0/0', ipAddress: '192.168.1.1/24' }] },
-    { name: 'Switch1', type: 'switch', interfaces: [{ name: 'Vlan1', ipAddress: '192.168.1.2/24' }] },
-    { name: 'PC1', type: 'pc', interfaces: [{ name: 'Fa0', ipAddress: '192.168.1.10/24' }] },
-    { name: 'PC2', type: 'pc', interfaces: [{ name: 'Fa0', ipAddress: '192.168.1.11/24' }] }
+    { id: '1', name: 'Router1', type: 'router', interfaces: [{ id: '1-1', name: 'Gi0/0', ip: '192.168.1.1/24' }] },
+    { id: '2', name: 'Switch1', type: 'switch', interfaces: [{ id: '2-1', name: 'Vlan1', ip: '192.168.1.2/24' }] },
+    { id: '3', name: 'PC1', type: 'pc', interfaces: [{ id: '3-1', name: 'Fa0', ip: '192.168.1.10/24' }] },
+    { id: '4', name: 'PC2', type: 'pc', interfaces: [{ id: '4-1', name: 'Fa0', ip: '192.168.1.11/24' }] }
   ],
   connections: [
-    { from: { deviceName: 'Router1', portName: 'Gi0/0' }, to: { deviceName: 'Switch1', portName: 'Fa0/1' }, cableType: 'eStraightThrough' },
-    { from: { deviceName: 'Switch1', portName: 'Fa0/2' }, to: { deviceName: 'PC1', portName: 'Fa0' }, cableType: 'eStraightThrough' },
-    { from: { deviceName: 'Switch1', portName: 'Fa0/3' }, to: { deviceName: 'PC2', portName: 'Fa0' }, cableType: 'eStraightThrough' }
+    { id: 'c1', from: { deviceName: 'Router1', port: 'Gi0/0', deviceId: '1' }, to: { deviceName: 'Switch1', port: 'Fa0/1', deviceId: '2' }, cableType: CableType.STRAIGHT_THROUGH },
+    { id: 'c2', from: { deviceName: 'Switch1', port: 'Fa0/2', deviceId: '2' }, to: { deviceName: 'PC1', port: 'Fa0', deviceId: '3' }, cableType: CableType.STRAIGHT_THROUGH },
+    { id: 'c3', from: { deviceName: 'Switch1', port: 'Fa0/3', deviceId: '2' }, to: { deviceName: 'PC2', port: 'Fa0', deviceId: '4' }, cableType: CableType.STRAIGHT_THROUGH }
   ]
 });
 
@@ -152,7 +152,7 @@ describe('Topology Visualizer', () => {
 
     test('should handle empty lab', () => {
       const lab: LabSpec = {
-        metadata: { name: 'Empty', version: '1.0', author: 'test', created: new Date().toISOString() },
+        metadata: { name: 'Empty', version: '1.0', author: 'test', createdAt: new Date().toISOString() },
         devices: [],
         connections: []
       };

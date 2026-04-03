@@ -1,3 +1,4 @@
+import { isToolResultSuccess } from '../../apps/pt-cli/src/utils/tool-result';
 import { describe, test, expect } from 'bun:test';
 import { ptValidatePlanTool } from '@cisco-auto/core/tools';
 import type { TopologyPlan } from '@cisco-auto/core';
@@ -83,8 +84,8 @@ describe('pt_validate_plan', () => {
     const plan = createValidPlan();
     const result = await ptValidatePlanTool.handler({ plan }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as ValidationData;
       expect(data.valid).toBe(true);
       expect(data.errors).toHaveLength(0);
@@ -108,8 +109,8 @@ describe('pt_validate_plan', () => {
 
     const result = await ptValidatePlanTool.handler({ plan }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as ValidationData;
       expect(data.valid).toBe(false);
       expect(data.errors.some((e: ValidationError) => e.type === 'invalid_model')).toBe(true);
@@ -128,8 +129,8 @@ describe('pt_validate_plan', () => {
 
     const result = await ptValidatePlanTool.handler({ plan }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as ValidationData;
       expect(data.valid).toBe(false);
       expect(data.errors.some((e: ValidationError) => e.type === 'invalid_port')).toBe(true);
@@ -155,8 +156,8 @@ describe('pt_validate_plan', () => {
 
     const result = await ptValidatePlanTool.handler({ plan }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as ValidationData;
       expect(data.valid).toBe(false);
       expect(data.errors.some((e: ValidationError) => e.type === 'ip_conflict')).toBe(true);
@@ -184,8 +185,8 @@ describe('pt_validate_plan', () => {
 
     const result = await ptValidatePlanTool.handler({ plan }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as ValidationData;
       expect(data.valid).toBe(false);
       expect(data.errors.some((e: ValidationError) => e.type === 'missing_ip')).toBe(true);
@@ -204,8 +205,8 @@ describe('pt_validate_plan', () => {
 
     const result = await ptValidatePlanTool.handler({ plan }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as ValidationData;
       expect(data.valid).toBe(false);
       expect(data.errors.some((e: ValidationError) => e.type === 'invalid_cable')).toBe(true);
@@ -215,8 +216,8 @@ describe('pt_validate_plan', () => {
   test('retorna error si no se proporciona plan', async () => {
     const result = await ptValidatePlanTool.handler({}, {} as any);
 
-    expect(result.success).toBe(false);
-    if (!result.success) {
+    expect(isToolResultSuccess(result)).toBe(false);
+    if (!isToolResultSuccess(result)) {
       expect(result.error.code).toBe('INVALID_INPUT');
     }
   });
@@ -224,8 +225,8 @@ describe('pt_validate_plan', () => {
   test('retorna error si el plan no tiene devices', async () => {
     const result = await ptValidatePlanTool.handler({ plan: { links: [] } }, {} as any);
 
-    expect(result.success).toBe(false);
-    if (!result.success) {
+    expect(isToolResultSuccess(result)).toBe(false);
+    if (!isToolResultSuccess(result)) {
       expect(result.error.code).toBe('INVALID_STRUCTURE');
     }
   });
@@ -233,8 +234,8 @@ describe('pt_validate_plan', () => {
   test('retorna error si el plan no tiene links', async () => {
     const result = await ptValidatePlanTool.handler({ plan: { devices: [] } }, {} as any);
 
-    expect(result.success).toBe(false);
-    if (!result.success) {
+    expect(isToolResultSuccess(result)).toBe(false);
+    if (!isToolResultSuccess(result)) {
       expect(result.error.code).toBe('INVALID_STRUCTURE');
     }
   });
@@ -244,8 +245,8 @@ describe('pt_validate_plan', () => {
 
     const result = await ptValidatePlanTool.handler({ plan }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as ValidationData;
       expect(data.warnings.length).toBeGreaterThan(0);
       expect(data.warnings.some((w: ValidationWarning) => w.type === 'unused_port')).toBe(true);
@@ -264,8 +265,8 @@ describe('pt_validate_plan', () => {
 
     const result = await ptValidatePlanTool.handler({ plan }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as ValidationData;
       expect(data.valid).toBe(false);
       expect(data.errors.some((e: ValidationError) => e.type === 'invalid_port')).toBe(true);

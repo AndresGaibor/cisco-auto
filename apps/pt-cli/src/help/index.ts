@@ -6,6 +6,10 @@ export { formatExamples, formatRelatedCommands, formatGlobalOptions, generateHel
 export { getExamples, getExamplesForCommand, commandExamples, type CommandExample } from './examples.ts';
 export { getRelatedCommands, getRelatedForCommand, relatedCommands, type RelatedCommand } from './related.ts';
 
+import type { CommandExample } from './examples.ts';
+import type { RelatedCommand } from './related.ts';
+import { formatExamples, formatRelatedCommands } from './formatter.ts';
+
 /**
  * Interfaz mínima de Commander.Command para agregar texto de ayuda
  */

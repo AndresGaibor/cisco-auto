@@ -1,3 +1,4 @@
+import { isToolResultSuccess } from '../../apps/pt-cli/src/utils/tool-result';
 import { describe, test, expect } from 'bun:test';
 import { ptExplainPlanTool } from '@cisco-auto/core/tools';
 import type { TopologyPlan } from '@cisco-auto/core';
@@ -140,8 +141,8 @@ describe('pt_explain_plan', () => {
     const plan = createTestPlan();
     const result = await ptExplainPlanTool.handler({ plan }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as ExplainData;
       expect(data.explanation).toContain('Test LAN Plan');
       expect(data.sections).toHaveLength(6);
@@ -158,8 +159,8 @@ describe('pt_explain_plan', () => {
     const plan = createTestPlan();
     const result = await ptExplainPlanTool.handler({ plan, language: 'en' }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as ExplainData;
       expect(data.explanation).toContain('Test LAN Plan');
       expect(data.sections[0]!.title).toBe('Overview');
@@ -175,8 +176,8 @@ describe('pt_explain_plan', () => {
     const plan = createTestPlan();
     const result = await ptExplainPlanTool.handler({ plan }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as ExplainData;
       const routingSection = data.sections.find((s: Section) => s.title === 'Enrutamiento');
       expect(routingSection?.content).toContain('OSPF');
@@ -188,8 +189,8 @@ describe('pt_explain_plan', () => {
     const plan = createTestPlan();
     const result = await ptExplainPlanTool.handler({ plan }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as ExplainData;
       const devicesSection = data.sections.find((s: Section) => s.title === 'Dispositivos');
       expect(devicesSection?.content).toContain('Switch1');
@@ -201,8 +202,8 @@ describe('pt_explain_plan', () => {
     const plan = createTestPlan();
     const result = await ptExplainPlanTool.handler({ plan }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as ExplainData;
       const devicesSection = data.sections.find((s: Section) => s.title === 'Dispositivos');
       expect(devicesSection?.content).toContain('DHCP');
@@ -213,8 +214,8 @@ describe('pt_explain_plan', () => {
     const plan = createTestPlan();
     const result = await ptExplainPlanTool.handler({ plan }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as ExplainData;
       const connectionsSection = data.sections.find((s: Section) => s.title === 'Conexiones');
       expect(connectionsSection?.content).toContain('Router1');
@@ -227,8 +228,8 @@ describe('pt_explain_plan', () => {
     const plan = createTestPlan();
     const result = await ptExplainPlanTool.handler({ plan }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as ExplainData;
       const ipSection = data.sections.find((s: Section) => s.title === 'Esquema IP');
       expect(ipSection?.content).toContain('192.168.1.1');
@@ -240,8 +241,8 @@ describe('pt_explain_plan', () => {
   test('retorna error si no se proporciona plan', async () => {
     const result = await ptExplainPlanTool.handler({}, {} as any);
 
-    expect(result.success).toBe(false);
-    if (!result.success) {
+    expect(isToolResultSuccess(result)).toBe(false);
+    if (!isToolResultSuccess(result)) {
       expect(result.error.code).toBe('INVALID_INPUT');
     }
   });
@@ -249,8 +250,8 @@ describe('pt_explain_plan', () => {
   test('retorna error si el plan no tiene devices', async () => {
     const result = await ptExplainPlanTool.handler({ plan: { links: [] } }, {} as any);
 
-    expect(result.success).toBe(false);
-    if (!result.success) {
+    expect(isToolResultSuccess(result)).toBe(false);
+    if (!isToolResultSuccess(result)) {
       expect(result.error.code).toBe('INVALID_STRUCTURE');
     }
   });
@@ -258,8 +259,8 @@ describe('pt_explain_plan', () => {
   test('retorna error si el plan no tiene links', async () => {
     const result = await ptExplainPlanTool.handler({ plan: { devices: [] } }, {} as any);
 
-    expect(result.success).toBe(false);
-    if (!result.success) {
+    expect(isToolResultSuccess(result)).toBe(false);
+    if (!isToolResultSuccess(result)) {
       expect(result.error.code).toBe('INVALID_STRUCTURE');
     }
   });
@@ -275,8 +276,8 @@ describe('pt_explain_plan', () => {
 
     const result = await ptExplainPlanTool.handler({ plan }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as ExplainData;
       const ipSection = data.sections.find((s: Section) => s.title === 'Esquema IP');
       expect(ipSection?.content).toContain('No hay direcciones IP');
@@ -293,8 +294,8 @@ describe('pt_explain_plan', () => {
 
     const result = await ptExplainPlanTool.handler({ plan }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as ExplainData;
       const recSection = data.sections.find((s: Section) => s.title === 'Recomendaciones');
       expect(recSection?.content).toContain('VLANs');
@@ -305,8 +306,8 @@ describe('pt_explain_plan', () => {
     const plan = createTestPlan();
     const result = await ptExplainPlanTool.handler({ plan }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       expect(result.metadata).toBeDefined();
       expect(result.metadata?.itemCount).toBe(6); // 4 devices + 2 links
     }

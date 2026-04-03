@@ -58,6 +58,12 @@ export type {
   ToolResult,
   ToolHandler,
 } from './tool.ts';
+export {
+  isToolResultSuccess,
+  isToolResultError,
+  getToolResultData,
+  getToolResultError,
+} from './tool-result-helpers.ts';
 
 // Re-export topology types
 export type {

@@ -10,6 +10,7 @@ import { Command } from 'commander';
 import { createInterface } from 'readline';
 import type { ToolResult } from '@cisco-auto/core';
 import { ptListDevicesTool, ptGetDeviceDetailsTool } from '@cisco-auto/core';
+import { isToolResultSuccess, getToolResultError, getToolResultData } from '../../utils/tool-result';
 
 /**
  * Crea interfaz readline
@@ -61,11 +62,11 @@ function mostrarBanner() {
 async function mostrarDispositivos(tipo?: string): Promise<void> {
   const result = await ptListDevicesTool.handler(
     tipo ? { type: tipo } : {},
-    { logger: console, config: { workingDir: process.cwd() } }
+    { logger: console }
   ) as ToolResult<{ devices: Array<{ name: string; type: string; ptType: string; description: string; portCount: number }>; total: number }>;
 
-  if (!result.success) {
-    console.log('❌ Error al cargar catálogo');
+  if (!isToolResultSuccess(result)) {
+    console.log(`❌ Error al cargar catálogo: ${getToolResultError(result)}`);
     return;
   }
 
@@ -95,10 +96,10 @@ async function mostrarDispositivos(tipo?: string): Promise<void> {
 async function mostrarDetalles(deviceName: string): Promise<void> {
   const result = await ptGetDeviceDetailsTool.handler(
     { name: deviceName },
-    { logger: console, config: { workingDir: process.cwd() } }
+    { logger: console }
   ) as ToolResult<{ device: { name: string; type: string; ptType: string; description: string; defaultIOS: string | null; maxModules: number; ports: Array<{ name: string; type: string; speed: string; available: boolean }> } }>;
 
-  if (!result.success) {
+  if (!isToolResultSuccess(result)) {
     console.log(`❌ No se encontró el dispositivo: ${deviceName}`);
     return;
   }
@@ -185,7 +186,7 @@ async function ejecutarSelector(): Promise<void> {
             { logger: console as any, config: { workingDir: process.cwd() } }
           ) as ToolResult<{ devices: Array<{ name: string; type: string; ptType: string; description: string; portCount: number }>; total: number }>;
 
-          if (result.success && result.data.devices[deviceNum - 1]) {
+          if (isToolResultSuccess(result) && result.data.devices[deviceNum - 1]) {
             const deviceName = result.data.devices[deviceNum - 1]!.name;
             await mostrarDetalles(deviceName);
             

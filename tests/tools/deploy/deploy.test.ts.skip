@@ -1,3 +1,4 @@
+import { isToolResultSuccess } from '@cisco-auto/core';
 import { describe, test, expect } from 'bun:test';
 import { ptDeployTool } from '@cisco-auto/core/tools';
 
@@ -19,8 +20,8 @@ describe('pt_deploy', () => {
       {} as any
     );
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as DeployData;
       expect(data.message).toBe('Configuraciones copiadas al portapapeles');
       expect(data.charCount).toBeGreaterThan(0);
@@ -38,8 +39,8 @@ describe('pt_deploy', () => {
       {} as any
     );
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as DeployData;
       expect(data.message).toContain('test-config.txt');
       expect(data.outputPath).toBe('configs/test-config.txt');
@@ -57,8 +58,8 @@ describe('pt_deploy', () => {
       {} as any
     );
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as DeployData;
       expect(data.outputPath).toBe('configs/deploy-config.txt');
     }
@@ -70,8 +71,8 @@ describe('pt_deploy', () => {
       {} as any
     );
 
-    expect(result.success).toBe(false);
-    if (!result.success) {
+    expect(isToolResultSuccess(result)).toBe(false);
+    if (!isToolResultSuccess(result)) {
       expect(result.error.code).toBe('INVALID_INPUT');
     }
   });
@@ -88,8 +89,8 @@ describe('pt_deploy', () => {
       {} as any
     );
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as DeployData;
       expect(data.charCount).toBeGreaterThan(
         configs.reduce((sum, c) => sum + c.config.length, 0)

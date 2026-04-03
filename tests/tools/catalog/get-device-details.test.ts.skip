@@ -1,3 +1,4 @@
+import { isToolResultSuccess } from '@cisco-auto/core';
 import { describe, test, expect } from 'bun:test';
 import { ptGetDeviceDetailsTool } from '@cisco-auto/core/tools';
 
@@ -5,8 +6,8 @@ describe('pt_get_device_details', () => {
   test('retorna detalles de router 2911', async () => {
     const result = await ptGetDeviceDetailsTool.handler({ model: '2911' }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as { device: { name: string; type: string; ports: unknown; portCount: number } };
       expect(data.device.name).toBe('2911');
       expect(data.device.type).toBe('router');
@@ -18,8 +19,8 @@ describe('pt_get_device_details', () => {
   test('retorna detalles de switch 2960-24TT', async () => {
     const result = await ptGetDeviceDetailsTool.handler({ model: '2960-24TT' }, {} as any);
 
-    expect(result.success).toBe(true);
-    if (result.success) {
+    expect(isToolResultSuccess(result)).toBe(true);
+    if (isToolResultSuccess(result)) {
       const data = result.data as { device: { name: string; type: string; portCount: number } };
       expect(data.device.name).toBe('2960-24TT');
       expect(data.device.type).toBe('switch');
@@ -30,8 +31,8 @@ describe('pt_get_device_details', () => {
   test('retorna error para modelo inexistente', async () => {
     const result = await ptGetDeviceDetailsTool.handler({ model: 'XYZ123' }, {} as any);
 
-    expect(result.success).toBe(false);
-    if (!result.success) {
+    expect(isToolResultSuccess(result)).toBe(false);
+    if (!isToolResultSuccess(result)) {
       expect(result.error.code).toBe('DEVICE_NOT_FOUND');
       expect(result.error.suggestions).toBeDefined();
     }
@@ -40,8 +41,8 @@ describe('pt_get_device_details', () => {
   test('retorna error si no se proporciona modelo', async () => {
     const result = await ptGetDeviceDetailsTool.handler({}, {} as any);
 
-    expect(result.success).toBe(false);
-    if (!result.success) {
+    expect(isToolResultSuccess(result)).toBe(false);
+    if (!isToolResultSuccess(result)) {
       expect(result.error.code).toBe('INVALID_INPUT');
     }
   });

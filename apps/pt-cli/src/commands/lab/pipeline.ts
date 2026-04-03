@@ -11,6 +11,7 @@ import chalk from 'chalk';
 import { createInterface } from 'readline';
 import { loadLab, ptValidatePlanTool, ptFixPlanTool } from '@cisco-auto/core';
 import type { ToolResult, TopologyPlan } from '@cisco-auto/core';
+import { isToolResultSuccess, getToolResultError } from '../../utils/tool-result';
 
 /**
  * Crea interfaz readline
@@ -66,7 +67,7 @@ async function ejecutarPipeline(archivo: string, autoFix: boolean = false): Prom
       { logger: console as any, config: { workingDir: process.cwd() } }
     ) as ToolResult<{ valid: boolean; errors: Array<{ message: string }>; warnings: Array<{ message: string }> }>;
 
-    if (!validateResult.success) {
+    if (!isToolResultSuccess(validateResult)) {
       console.log(chalk.yellow('   ⚠️  Validación completada con observaciones'));
     } else {
       console.log(chalk.green('   ✅ Validación exitosa'));
@@ -78,8 +79,8 @@ async function ejecutarPipeline(archivo: string, autoFix: boolean = false): Prom
     }
 
     // Mostrar errores y warnings
-    const errors = validateResult.success ? (validateResult.data?.errors || []) : [];
-    const warnings = validateResult.success ? (validateResult.data?.warnings || []) : [];
+    const errors = isToolResultSuccess(validateResult) ? (validateResult.data?.errors || []) : [];
+    const warnings = isToolResultSuccess(validateResult) ? (validateResult.data?.warnings || []) : [];
 
     if (errors.length > 0) {
       console.log(chalk.red(`\n   ❌ Errores encontrados: ${errors.length}`));
@@ -108,10 +109,10 @@ async function ejecutarPipeline(archivo: string, autoFix: boolean = false): Prom
 
       const fixResult = await ptFixPlanTool.handler(
         { plan: lab, autoApply: true },
-        { logger: console, config: { workingDir: process.cwd() } }
+        { logger: console }
       ) as ToolResult<{ plan: TopologyPlan; appliedFixes: Array<{ description: string }>; remainingErrors: Array<{ message: string }> }>;
 
-      if (fixResult.success) {
+      if (isToolResultSuccess(fixResult)) {
         console.log(chalk.green('   ✅ Correcciones aplicadas'));
 
         if (fixResult.data.appliedFixes?.length > 0) {
@@ -127,7 +128,7 @@ async function ejecutarPipeline(archivo: string, autoFix: boolean = false): Prom
         console.log(chalk.green(`\n💾 Plan corregido guardado en: ${outputFile}`));
       } else {
         console.log(chalk.red('   ❌ No se pudieron aplicar correcciones'));
-        console.log(chalk.red(`      ${fixResult.error?.message || 'Error desconocido'}`));
+        console.log(chalk.red(`      ${getToolResultError(fixResult)}`));
       }
     } else {
       console.log(chalk.yellow('\n⏭️  Correcciones omitidas por el usuario'));

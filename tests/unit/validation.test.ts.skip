@@ -50,7 +50,7 @@ describe('LabValidator', () => {
 
     test('should detect empty devices', () => {
       const lab = {
-        metadata: { name: 'Test', version: '1.0', author: 'test' },
+        metadata: { name: 'Test', version: '1.0', author: 'test', createdAt: new Date() },
         devices: [],
         connections: []
       };
@@ -104,8 +104,8 @@ describe('LabValidator', () => {
 describe('validateLab convenience function', () => {
   test('should work as shortcut', () => {
     const lab = {
-      metadata: { name: 'Test', version: '1.0', author: 'test' },
-      devices: [{ name: 'R1', type: 'router' }],
+      metadata: { name: 'Test', version: '1.0', author: 'test', createdAt: new Date() },
+      devices: [{ id: '1', name: 'R1', type: 'router', interfaces: [] }],
       connections: []
     };
     

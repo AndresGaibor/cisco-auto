@@ -14,7 +14,7 @@ describe('DeployOrchestrator', () => {
       const orchestrator = new DeployOrchestrator({ dryRun: true });
       
       const lab: LabSpec = {
-        metadata: { name: 'Test', version: '1.0', author: 'test', created: new Date().toISOString() },
+        metadata: { name: 'Test', version: '1.0', author: 'test', createdAt: new Date().toISOString() },
         devices: [
           { name: 'Switch1', type: 'switch' },
           { name: 'PC1', type: 'pc' },
@@ -35,7 +35,7 @@ describe('DeployOrchestrator', () => {
       const orchestrator = new DeployOrchestrator({ dryRun: true });
       
       const lab: LabSpec = {
-        metadata: { name: 'Test', version: '1.0', author: 'test', created: new Date().toISOString() },
+        metadata: { name: 'Test', version: '1.0', author: 'test', createdAt: new Date().toISOString() },
         devices: [
           { name: 'PC1', type: 'pc' },
           { name: 'Switch1', type: 'switch' },
@@ -108,7 +108,7 @@ describe('DeployOrchestrator', () => {
       const orchestrator = new DeployOrchestrator({ dryRun: true, verbose: false });
       
       const lab: LabSpec = {
-        metadata: { name: 'Test', version: '1.0', author: 'test', created: new Date().toISOString() },
+        metadata: { name: 'Test', version: '1.0', author: 'test', createdAt: new Date().toISOString() },
         devices: [
           { name: 'Router1', type: 'router' },
           { name: 'Switch1', type: 'switch' }
@@ -133,7 +133,7 @@ describe('DeployOrchestrator', () => {
       const orchestrator = new DeployOrchestrator({ dryRun: true });
       
       const lab: LabSpec = {
-        metadata: { name: 'Test', version: '1.0', author: 'test', created: new Date().toISOString() },
+        metadata: { name: 'Test', version: '1.0', author: 'test', createdAt: new Date().toISOString() },
         devices: [
           { name: 'Router1', type: 'router' },
           { name: 'Switch1', type: 'switch' }
