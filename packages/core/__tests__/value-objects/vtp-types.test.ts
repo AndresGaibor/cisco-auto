@@ -12,7 +12,7 @@ import {
   parseVtpVersion,
   parseVtpDomain,
   parseOptionalVtpPassword,
-} from '../../src/value-objects/vtp-types.js';
+} from '../../src/value-objects/vtp-types';
 
 describe('VtpMode', () => {
   describe('construction', () => {

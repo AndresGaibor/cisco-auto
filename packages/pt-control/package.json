@@ -3,18 +3,9 @@
   "version": "2.0.0",
   "description": "Professional CLI for controlling Cisco Packet Tracer",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./src/index.ts",
   "scripts": {
-    "build": "bun run scripts/build.ts",
-    "build:ts": "tsc --skipLibCheck",
-    "build:watch": "bun run scripts/build.ts --watch",
-    "build:no-deploy": "bun run scripts/build.ts --no-deploy",
-    "dev": "tsc --watch",
-    "test": "bun test tests",
-    "typecheck": "tsc --noEmit --skipLibCheck",
-    "runtime:generate": "bun run scripts/build.ts --no-deploy",
-    "runtime:deploy": "bun run scripts/build.ts"
+    "test": "bun test tests"
   },
   "dependencies": {
     "@cisco-auto/core": "workspace:*",
@@ -37,15 +28,15 @@
     "typescript": "^5.4.0"
   },
   "exports": {
-    ".": "./dist/index.js",
-    "./controller": "./dist/controller/index.js",
-    "./vdom": "./dist/vdom/index.js",
-    "./parsers": "./dist/parsers/index.js",
-    "./types": "./dist/types/index.js",
-    "./logging": "./dist/logging/index.js"
+    ".": "./src/index.ts",
+    "./controller": "./src/controller/index.ts",
+    "./vdom": "./src/vdom/index.ts",
+    "./parsers": "./src/parsers/index.ts",
+    "./types": "./src/types/index.ts",
+    "./logging": "./src/logging/index.ts"
   },
   "files": [
-    "/dist"
+    "/src"
   ],
   "keywords": [
     "cisco",
@@ -57,7 +48,7 @@
   "author": "",
   "license": "MIT",
   "oclif": {
-    "commands": "./dist/cli/commands",
+    "commands": "./src/cli/commands",
     "bin": "pt",
     "topicSeparator": "colons"
   }

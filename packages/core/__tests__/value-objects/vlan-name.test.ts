@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { VlanName, parseVlanName, parseOptionalVlanName, isValidVlanName } from '../../src/value-objects/vlan-name.js';
+import { VlanName, parseVlanName, parseOptionalVlanName, isValidVlanName } from '../../src/value-objects/vlan-name';
 
 describe('VlanName', () => {
   describe('construction', () => {

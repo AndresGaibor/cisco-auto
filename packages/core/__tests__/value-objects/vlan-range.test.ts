@@ -3,8 +3,8 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { VlanId } from '../../src/value-objects/vlan-id.js';
-import { VlanRange, parseVlanRange, isValidVlanRange } from '../../src/value-objects/vlan-range.js';
+import { VlanId } from '../../src/value-objects/vlan-id';
+import { VlanRange, parseVlanRange, isValidVlanRange } from '../../src/value-objects/vlan-range';
 
 describe('VlanRange', () => {
   describe('construction', () => {

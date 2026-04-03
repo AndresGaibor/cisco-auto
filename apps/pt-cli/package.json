@@ -4,15 +4,12 @@
   "description": "CLI de cisco-auto",
   "type": "module",
   "bin": {
-    "cisco-auto": "./src"
+    "cisco-auto": "./src/index.ts"
   },
-  "main": "./src",
+  "main": "./src/index.ts",
   "scripts": {
-    "start": "bun run src",
-    "dev": "bun run --watch src",
-    "build": "bun build ./src --outdir ./dist --target bun",
-    "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "start": "bun run src/index.ts",
+    "dev": "bun run --watch src/index.ts"
   },
   "dependencies": {
     "@cisco-auto/core": "workspace:*",
