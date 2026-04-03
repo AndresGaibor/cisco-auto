@@ -13,7 +13,9 @@
     "dev": "bun run --cwd apps/pt-cli dev",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "pt-runtime:build": "bun run --filter '@cisco-auto/pt-runtime' build"
+    "pt-runtime:build": "bun run --filter '@cisco-auto/pt-runtime' build",
+    "pt:build": "bun run --cwd packages/pt-runtime src/index.ts deploy",
+    "pt:generate": "bun run --cwd packages/pt-runtime src/index.ts generate"
   },
   "devDependencies": {
     "@types/bun": "latest",
