@@ -263,6 +263,72 @@ export class TopologyService {
   }
 
   /**
+   * Vaciar toda la topología visible en PT
+   */
+  async clearTopology(): Promise<{ removedDevices: number; removedLinks: number; remainingDevices: number; remainingLinks: number }> {
+    let removedDevices = 0;
+    let removedLinks = 0;
+
+    for (let pass = 0; pass < 5; pass++) {
+      const snapshot = await this.snapshot();
+      const devices = await this.listDevices();
+      const linkEntries = Object.values(snapshot?.links ?? {});
+      const deviceNames = Array.from(new Set(devices.map((device) => device.name).filter(Boolean)));
+
+      if (linkEntries.length === 0 && deviceNames.length === 0) {
+        return { removedDevices, removedLinks, remainingDevices: 0, remainingLinks: 0 };
+      }
+
+      for (const link of linkEntries) {
+        try {
+          await this.removeLink(link.device1, link.port1);
+          removedLinks += 1;
+        } catch {
+          try {
+            await this.removeLink(link.device2, link.port2);
+            removedLinks += 1;
+          } catch {
+            // Si un enlace ya no existe, seguimos con el resto.
+          }
+        }
+      }
+
+      for (const name of deviceNames) {
+        try {
+          await this.removeDevice(name);
+          removedDevices += 1;
+        } catch {
+          // Si un dispositivo ya no existe, seguimos con el resto.
+        }
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 250));
+
+      const afterSnapshot = await this.snapshot();
+      const afterDevices = await this.listDevices();
+      const remainingDevices = Array.from(new Set(afterDevices.map((device) => device.name).filter(Boolean))).length;
+      const remainingLinks = Object.keys(afterSnapshot?.links ?? {}).length;
+
+      if (remainingDevices === 0 && remainingLinks === 0) {
+        return { removedDevices, removedLinks, remainingDevices, remainingLinks };
+      }
+    }
+
+    const finalSnapshot = await this.snapshot();
+    const finalDevices = await this.listDevices();
+    const uniqueDeviceNames = Array.from(new Set(finalDevices.map((device) => device.name).filter(Boolean)));
+    const remainingDevices = Object.keys(finalSnapshot?.devices ?? {}).length;
+    const remainingLinks = Object.keys(finalSnapshot?.links ?? {}).length;
+
+    return {
+      removedDevices,
+      removedLinks,
+      remainingDevices: Math.max(remainingDevices, uniqueDeviceNames.length),
+      remainingLinks,
+    };
+  }
+
+  /**
    * Get cached snapshot
    */
   getCachedSnapshot(): TopologySnapshot | null {

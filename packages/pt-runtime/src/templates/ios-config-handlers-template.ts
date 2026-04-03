@@ -46,6 +46,19 @@ function handleConfigIos(payload) {
   var term = device.getCommandLine();
   if (!term) return { ok: false, error: "Device does not support CLI" };
 
+  function enterCommandResult(command) {
+    var response = term.enterCommand(command);
+    if (response && typeof response.length === "number") {
+      return [response[0] || 0, response[1] || ""];
+    }
+
+    var prompt = "";
+    try {
+      prompt = term.getPrompt ? term.getPrompt() : "";
+    } catch (e) {}
+    return [0, prompt];
+  }
+
   var session = getOrCreateSession(payload.device, term);
 
   var configResult = ensureConfigMode(term, session);

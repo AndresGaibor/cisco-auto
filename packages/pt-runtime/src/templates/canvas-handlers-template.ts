@@ -104,5 +104,32 @@ function handleDevicesInRect(payload) {
 
   return { ok: true, rectId: payload.rectId, devices: devices, clusters: clusters, count: devices.length };
 }
+
+function handleClearTopology() {
+  var lw = getLW();
+  var net = getNet();
+  var removedDevices = 0;
+  var errors = [];
+  var deviceNames = [];
+  try {
+    var count = net.getDeviceCount ? net.getDeviceCount() : 0;
+    for (var i = 0; i < count; i++) {
+      try {
+        var dev = net.getDeviceAt(i);
+        if (dev && typeof dev.getName === "function") {
+          var n = dev.getName();
+          if (n) deviceNames.push(String(n));
+        }
+      } catch (e) {}
+    }
+  } catch (e) { errors.push("getDeviceCount: " + String(e)); }
+  dprint("[clearTopology] Removing " + deviceNames.length + " devices");
+  for (var j = 0; j < deviceNames.length; j++) {
+    try { lw.removeDevice(deviceNames[j]); removedDevices++; }
+    catch (e) { errors.push("remove " + deviceNames[j] + ": " + String(e)); }
+  }
+  LINK_REGISTRY = {}; saveLinkRegistry();
+  return { ok: true, removedDevices: removedDevices, errors: errors.length ? errors : undefined };
+}
 `;
 }

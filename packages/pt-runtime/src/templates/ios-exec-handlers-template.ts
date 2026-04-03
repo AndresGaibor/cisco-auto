@@ -71,7 +71,7 @@ function handleExecIos(payload) {
     }
 
     if (payload.parse !== false) {
-      var parser = getParser(payload.command);
+      var parser = typeof getParser === "function" ? getParser(payload.command) : null;
       if (parser) {
         try {
           result.parsed = parser(output);

@@ -3,6 +3,7 @@
 // ============================================================================
 
 import { DEVICE_TYPES, MODEL_ALIASES } from "./constants.js";
+import { validatePTModel, getPTDeviceType } from "../value-objects/validated-models.js";
 import type { DeviceName } from "../value-objects/device-name.js";
 import type { InterfaceName } from "../value-objects/interface-name.js";
 import type { SessionMode } from "../value-objects/session-mode.js";
@@ -52,6 +53,51 @@ export interface PTPort {
   setDnsServerIp(dns: string): void;
   setDhcpEnabled(enabled: boolean): void;
   getLink(): unknown;
+}
+
+/** Normalize a port name for comparison across interface families. */
+function normalizePortKey(name: string): string {
+  const value = String(name || "").replace(/\s+/g, "").toLowerCase();
+  const suffix = value.match(/(\d+(?:\/\d+)*(?:\.\d+)?)$/);
+  return suffix ? suffix[1] : value;
+}
+
+/** Get the available port names for a device. */
+export function getDevicePortNames(device: PTDevice): string[] {
+  const names: string[] = [];
+  const count = device.getPortCount?.() ?? 0;
+
+  for (let i = 0; i < count; i++) {
+    const port = device.getPortAt(i);
+    if (port) {
+      const portName = port.getName?.();
+      if (portName) names.push(String(portName));
+    }
+  }
+
+  return names;
+}
+
+/** Resolve a requested port name against the device ports.
+ * Two-pass strategy:
+ * - Pass 1: exact match across ALL ports (case-insensitive, whitespace-normalized)
+ * - Pass 2: suffix match as fallback (for abbreviated names like Gi0/1 matching GigabitEthernet0/1)
+ */
+export function resolveDevicePortName(device: PTDevice, requested: string): string | null {
+  const wanted = String(requested || "").replace(/\s+/g, "").toLowerCase();
+  const names = getDevicePortNames(device);
+
+  for (const candidate of names) {
+    const candidateValue = String(candidate || "").replace(/\s+/g, "").toLowerCase();
+    if (candidateValue === wanted) return candidate;
+  }
+
+  const wantedKey = normalizePortKey(requested);
+  for (const candidate of names) {
+    if (normalizePortKey(candidate) === wantedKey) return candidate;
+  }
+
+  return null;
 }
 
 /** Command line interface */
@@ -107,30 +153,31 @@ export function makeHandlerError(
 
 /** Resolve model name from alias or return as-is */
 export function resolveModel(model: string | undefined): string {
-  if (!model) return "2911";
+  if (!model) return "1941"; // default router from validated catalog
   const key = model.toLowerCase();
-  return MODEL_ALIASES[key] || model;
+  
+  // Try alias first
+  if (key in MODEL_ALIASES) {
+    model = MODEL_ALIASES[key];
+  }
+  
+  // Validate against catalog - THROWS if invalid
+  try {
+    return validatePTModel(model);
+  } catch (error) {
+    throw new Error(
+      `Invalid device model: "${model}". Check packages/core/src/catalog/ for valid models.`
+    );
+  }
 }
 
-/** Get device type ID for a model name */
+/** Get device type ID for a model name - uses validated catalog */
 export function getDeviceTypeForModel(model: string): number {
-  const name = (model || "").toLowerCase();
-  if (name.indexOf("2960") === 0 || name.indexOf("3560") === 0 || name.indexOf("switch") >= 0) {
-    return DEVICE_TYPES.switch;
+  try {
+    return getPTDeviceType(model) ?? DEVICE_TYPES.router;
+  } catch {
+    return DEVICE_TYPES.router; // fallback
   }
-  if (name.indexOf("pc") === 0 || name.indexOf("laptop") === 0) {
-    return DEVICE_TYPES.pc;
-  }
-  if (name.indexOf("server") === 0) {
-    return DEVICE_TYPES.server;
-  }
-  if (name.indexOf("accesspoint") >= 0 || name.indexOf("wireless") >= 0) {
-    return DEVICE_TYPES.wireless;
-  }
-  if (name.indexOf("cloud") >= 0) {
-    return DEVICE_TYPES.cloud;
-  }
-  return DEVICE_TYPES.router;
 }
 
 /** Get list of device type candidates to try (fallback mechanism) */
@@ -144,7 +191,7 @@ export function getDeviceTypeCandidates(model: string): number[] {
 
   // PCs/Laptops - try multiple types as PT versions vary
   if (normalized.indexOf("pc") === 0 || normalized.indexOf("laptop") === 0) {
-    const candidates: number[] = [DEVICE_TYPES.pc, DEVICE_TYPES.end];
+    const candidates: number[] = [DEVICE_TYPES.pc];
     for (let t = 8; t <= 60; t++) {
       if (!candidates.includes(t)) candidates.push(t);
     }
@@ -153,7 +200,7 @@ export function getDeviceTypeCandidates(model: string): number[] {
 
   // Servers
   if (normalized.indexOf("server") === 0) {
-    const candidates: number[] = [DEVICE_TYPES.server, DEVICE_TYPES.end];
+    const candidates: number[] = [DEVICE_TYPES.server];
     for (let t = 8; t <= 60; t++) {
       if (!candidates.includes(t)) candidates.push(t);
     }

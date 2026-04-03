@@ -7,7 +7,6 @@
       "dependencies": {
         "@cisco-auto/core": "workspace:*",
         "@cisco-auto/file-bridge": "workspace:*",
-        "@cisco-auto/http-bridge": "workspace:*",
         "@cisco-auto/ios-domain": "workspace:*",
         "@cisco-auto/pt-control": "workspace:*",
         "@cisco-auto/types": "workspace:*",
@@ -68,16 +67,6 @@
         "typescript": "^5",
       },
     },
-    "packages/http-bridge": {
-      "name": "@cisco-auto/http-bridge",
-      "version": "3.0.0",
-      "dependencies": {
-        "@cisco-auto/pt-control": "workspace:*",
-      },
-      "devDependencies": {
-        "@types/bun": "latest",
-      },
-    },
     "packages/ios-domain": {
       "name": "@cisco-auto/ios-domain",
       "version": "0.1.0",
@@ -114,6 +103,21 @@
         "typescript": "^5.4.0",
       },
     },
+    "packages/pt-runtime": {
+      "name": "@cisco-auto/pt-runtime",
+      "version": "0.1.0",
+      "bin": {
+        "pt-runtime": "./bin/run.js",
+      },
+      "dependencies": {
+        "@cisco-auto/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@cisco-auto/pt-control": "workspace:*",
+        "@types/bun": "latest",
+        "typescript": "^5",
+      },
+    },
     "packages/types": {
       "name": "@cisco-auto/types",
       "version": "0.1.0",
@@ -131,13 +135,13 @@
 
     "@cisco-auto/file-bridge": ["@cisco-auto/file-bridge@workspace:packages/file-bridge"],
 
-    "@cisco-auto/http-bridge": ["@cisco-auto/http-bridge@workspace:packages/http-bridge"],
-
     "@cisco-auto/ios-domain": ["@cisco-auto/ios-domain@workspace:packages/ios-domain"],
 
     "@cisco-auto/pt-cli": ["@cisco-auto/pt-cli@workspace:apps/pt-cli"],
 
     "@cisco-auto/pt-control": ["@cisco-auto/pt-control@workspace:packages/pt-control"],
+
+    "@cisco-auto/pt-runtime": ["@cisco-auto/pt-runtime@workspace:packages/pt-runtime"],
 
     "@cisco-auto/types": ["@cisco-auto/types@workspace:packages/types"],
 

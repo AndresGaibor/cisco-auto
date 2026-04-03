@@ -2,7 +2,6 @@
 // PT Control V2 - Runtime Deploy Command
 // ============================================================================
 
-import { RuntimeGenerator } from '@cisco-auto/pt-runtime';
 import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import pc from 'picocolors';
@@ -30,7 +29,9 @@ export default class RuntimeDeploy extends BaseCommand {
     spinner.start();
 
     try {
-      const generator = new RuntimeGenerator({
+      const runtimePath = '../../../../../pt-runtime/src/' + 'index';
+      const runtime = await import(runtimePath);
+      const generator = new runtime.RuntimeGenerator({
         outputDir: GENERATED_DIR,
         devDir: this.devDir,
       });

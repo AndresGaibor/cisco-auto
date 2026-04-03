@@ -31,7 +31,6 @@
   "dependencies": {
     "@cisco-auto/core": "workspace:*",
     "@cisco-auto/file-bridge": "workspace:*",
-    "@cisco-auto/http-bridge": "workspace:*",
     "@cisco-auto/ios-domain": "workspace:*",
     "@cisco-auto/pt-control": "workspace:*",
     "@cisco-auto/types": "workspace:*",

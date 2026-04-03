@@ -4,6 +4,8 @@
 
 /** Cable type IDs used by Packet Tracer */
 export const CABLE_TYPES = {
+  "ethernet-straight": 8100,
+  "ethernet-cross": 8101,
   straight: 8100,
   cross: 8101,
   roll: 8102,
@@ -23,17 +25,50 @@ export const CABLE_TYPES = {
 
 export type CableType = keyof typeof CABLE_TYPES;
 
-/** Device type IDs used by Packet Tracer */
+/** Device type IDs used by Packet Tracer (mapa oficial PTBuilder) */
 export const DEVICE_TYPES = {
   router: 0,
   switch: 1,
-  hub: 2,
-  pc: 3,
-  server: 4,
-  printer: 5,
-  wireless: 6,
-  cloud: 7,
-  end: 8,
+  cloud: 2,
+  bridge: 3,
+  hub: 4,
+  repeater: 5,
+  coaxialSplitter: 6,
+  wireless: 7,
+  pc: 8,
+  server: 9,
+  printer: 10,
+  wirelessRouter: 11,
+  ipPhone: 12,
+  dslModem: 13,
+  cableModem: 14,
+  multilayerSwitch: 16,
+  laptop: 18,
+  tablet: 19,
+  smartphone: 20,
+  wirelessEndDevice: 21,
+  wiredEndDevice: 22,
+  tv: 23,
+  homeVoip: 24,
+  analogPhone: 25,
+  firewall: 27,
+  dlc: 29,
+  homeRouter: 30,
+  cellTower: 31,
+  centralOfficeServer: 32,
+  iot: 34,
+  sniffer: 35,
+  mcu: 36,
+  sbc: 37,
+  embeddedServer: 40,
+  wlc: 41,
+  aironet: 44,
+  powerDistribution: 45,
+  patchPanel: 46,
+  wallMount: 47,
+  meraki: 48,
+  merakiServer: 49,
+  networkController: 50,
 } as const;
 
 export type DeviceType = keyof typeof DEVICE_TYPES;
@@ -44,8 +79,10 @@ export const MODEL_ALIASES: Record<string, string> = {
   laptop: "Laptop-PT",
   server: "Server-PT",
   cloud: "Cloud-PT",
+  printer: "Printer-PT",
   ap: "AccessPoint-PT",
   accesspoint: "AccessPoint-PT",
+  wrt300n: "Linksys-WRT300N",
 };
 
 /** Reverse map: cable type ID to name */
@@ -57,13 +94,26 @@ export const CABLE_TYPE_NAMES: Record<number, string> = Object.fromEntries(
 export const DEVICE_TYPE_NAMES: Record<number, string> = {
   [DEVICE_TYPES.router]: 'router',
   [DEVICE_TYPES.switch]: 'switch',
-  [DEVICE_TYPES.hub]: 'generic',
+  [DEVICE_TYPES.cloud]: 'cloud',
+  [DEVICE_TYPES.bridge]: 'bridge',
+  [DEVICE_TYPES.hub]: 'hub',
+  [DEVICE_TYPES.repeater]: 'repeater',
   [DEVICE_TYPES.pc]: 'pc',
   [DEVICE_TYPES.server]: 'server',
-  [DEVICE_TYPES.printer]: 'generic',
-  [DEVICE_TYPES.wireless]: 'access_point',
-  [DEVICE_TYPES.cloud]: 'cloud',
-  [DEVICE_TYPES.end]: 'generic',
+  [DEVICE_TYPES.printer]: 'printer',
+  [DEVICE_TYPES.wireless]: 'wireless',
+  [DEVICE_TYPES.wirelessRouter]: 'wireless-router',
+  [DEVICE_TYPES.multilayerSwitch]: 'multilayer-switch',
+  [DEVICE_TYPES.laptop]: 'laptop',
+  [DEVICE_TYPES.tablet]: 'tablet',
+  [DEVICE_TYPES.smartphone]: 'smartphone',
+  [DEVICE_TYPES.wiredEndDevice]: 'wired-end-device',
+  [DEVICE_TYPES.wirelessEndDevice]: 'wireless-end-device',
+  [DEVICE_TYPES.firewall]: 'firewall',
+  [DEVICE_TYPES.homeRouter]: 'home-router',
+  [DEVICE_TYPES.iot]: 'iot',
+  [DEVICE_TYPES.wlc]: 'wlc',
+  [DEVICE_TYPES.aironet]: 'aironet',
 };
 
 /** Get cable name from ID */

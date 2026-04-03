@@ -68,9 +68,7 @@ function loadSessionsFromDisk() {
 function saveSessionsToDisk() {
   if (!SESSION_DIRTY) return;
   try {
-    var tempFile = SESSIONS_FILE + ".tmp";
-    fm.writeFile(tempFile, JSON.stringify(IOS_SESSIONS, null, 2));
-    fm.renameFile(tempFile, SESSIONS_FILE);
+    fm.writePlainTextToFile(SESSIONS_FILE, JSON.stringify(IOS_SESSIONS, null, 2));
     SESSION_DIRTY = false;
   } catch (e) {
     dprint("[Sessions] Failed to save to disk: " + e);
@@ -127,9 +125,7 @@ function cleanupStaleSessions() {
 
   if (SESSION_DIRTY) {
     try {
-      var tempFile = SESSIONS_FILE + ".tmp";
-      fm.writeFile(tempFile, JSON.stringify(IOS_SESSIONS, null, 2));
-      fm.renameFile(tempFile, SESSIONS_FILE);
+      fm.writePlainTextToFile(SESSIONS_FILE, JSON.stringify(IOS_SESSIONS, null, 2));
       SESSION_DIRTY = false;
     } catch (e) { dprint("[Sessions] Save failed: " + e); }
   }
@@ -173,10 +169,10 @@ function inferPromptMode(output) {
     }
   }
 
-  if (/--More--/i.test(lastLine) || /\x1B\?D/.test(lastLine)) {
+  if (/--More--/i.test(lastLine) || /\\x1B\\?D/.test(lastLine)) {
     return "paging";
   }
-  if (/^\[confirm\]/i.test(lastLine)) {
+  if (/^\\[confirm\\]/i.test(lastLine)) {
     return "awaiting-confirm";
   }
   if (/^Password:/i.test(lastLine)) {
@@ -184,12 +180,12 @@ function inferPromptMode(output) {
   }
 
   var promptMatchers = [
-    { pattern: /\(config-router\)#\$/, mode: "config-router" },
-    { pattern: /\(config-line\)#\$/, mode: "config-line" },
-    { pattern: /\(config-if\)#\$/, mode: "config-if" },
-    { pattern: /\(config\)#\$/, mode: "config" },
-    { pattern: /#\$/, mode: "priv-exec" },
-    { pattern: />\$/, mode: "user-exec" },
+    { pattern: /\\(config-router\\)#\\$/, mode: "config-router" },
+    { pattern: /\\(config-line\\)#\\$/, mode: "config-line" },
+    { pattern: /\\(config-if\\)#\\$/, mode: "config-if" },
+    { pattern: /\\(config\\)#\\$/, mode: "config" },
+    { pattern: /#\\$/, mode: "priv-exec" },
+    { pattern: />\\$/, mode: "user-exec" },
   ];
 
   for (var i = 0; i < promptMatchers.length; i++) {
@@ -236,9 +232,18 @@ function updateSessionFromOutput(session, output, term) {
 
 function executeIosCommand(term, cmd, session) {
   var response = term.enterCommand(cmd);
-  if (!response || !response[0]) {
+  if (!response) {
+    var fallbackPrompt = "";
+    try {
+      fallbackPrompt = term.getPrompt ? term.getPrompt() : "";
+    } catch (e) {}
+    updateSessionFromOutput(session, fallbackPrompt, term);
+    return [0, fallbackPrompt];
+  }
+
+  if (!response[0]) {
     updateSessionFromOutput(session, response[1] || "", term);
-    return response || [0, ""];
+    return response;
   }
 
   var status = response[0];
@@ -248,12 +253,22 @@ function executeIosCommand(term, cmd, session) {
 
   while (session.paging) {
     var pageResponse = term.enterCommand(" ");
+    if (!pageResponse) {
+      updateSessionFromOutput(session, "", term);
+      break;
+    }
+
     updateSessionFromOutput(session, pageResponse[1] || "", term);
     output += pageResponse[1] || "";
   }
 
   if (session.awaitingConfirm) {
     var confirmResponse = term.enterCommand("\\n");
+    if (!confirmResponse) {
+      updateSessionFromOutput(session, "", term);
+      return [status, output];
+    }
+
     updateSessionFromOutput(session, confirmResponse[1] || "", term);
     output += confirmResponse[1] || "";
   }
@@ -267,10 +282,34 @@ function ensurePrivileged(term, session) {
   }
 
   var result = executeIosCommand(term, "enable", session);
-  return [result[0] === 0, result[1]];
+
+  if (isPrivilegedMode(session.mode)) {
+    return [true, result[1]];
+  }
+
+  if ((result[1] || "").indexOf("#") >= 0 && (result[1] || "").indexOf("Would you like") < 0) {
+    session.mode = "priv-exec";
+    return [true, result[1]];
+  }
+  return [false, result[1]];
 }
 
 function ensureConfigMode(term, session) {
+  var probe = executeIosCommand(term, "", session);
+  var out = probe[1] || "";
+
+  if (out.indexOf("initial configuration dialog") >= 0 ||
+      out.indexOf("Would you like to enter") >= 0) {
+    dprint("[ensureConfigMode] Dismissing initial config dialog");
+    executeIosCommand(term, "no", session);
+
+    var probe2 = executeIosCommand(term, "", session);
+    if ((probe2[1] || "").indexOf("Would you like to") >= 0) {
+      executeIosCommand(term, "no", session);
+    }
+    session.mode = "user-exec";
+  }
+
   if (isConfigMode(session.mode)) {
     return [true, ""];
   }
@@ -283,7 +322,15 @@ function ensureConfigMode(term, session) {
   }
 
   var result = executeIosCommand(term, "configure terminal", session);
-  return [result[0] === 0, result[1]];
+
+  if (isConfigMode(session.mode)) {
+    return [true, result[1]];
+  }
+  if ((result[1] || "").indexOf("(config)#") >= 0) {
+    session.mode = "config";
+    return [true, result[1]];
+  }
+  return [false, result[1]];
 }
 `;
 }

@@ -12,7 +12,7 @@ import { $ } from "bun";
 import { resolve } from "node:path";
 import { existsSync, mkdirSync, writeFileSync, copyFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { RuntimeGenerator } from "@cisco-auto/pt-runtime";
+import { RuntimeGenerator } from "../../pt-runtime/src/index";
 
 // ============================================================================
 // Configuration
@@ -45,8 +45,6 @@ async function generateRuntime(): Promise<boolean> {
     const generator = new RuntimeGenerator({
       outputDir: GENERATED_DIR,
       devDir: DEV_DIR,
-      serverUrl: "http://127.0.0.1:54321",
-      pollInterval: 200,
     });
     
     const { main, runtime } = await generator.generate();

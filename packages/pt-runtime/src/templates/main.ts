@@ -161,10 +161,8 @@ function pollCommand() {
   var startedAt = Date.now();
   
   try {
-    if (!runtimeFn) {
-      // Try to load runtime if not loaded
-      loadRuntime();
-    }
+    // Recargar siempre para evitar que PT ejecute una versión cacheada
+    loadRuntime();
     
     result = runtimeFn
       ? runtimeFn(cmd.payload, ipc, dprint)

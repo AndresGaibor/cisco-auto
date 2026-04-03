@@ -3,7 +3,6 @@
 // ============================================================================
 
 import { Flags } from '@oclif/core';
-import { RuntimeGenerator } from '@cisco-auto/pt-runtime';
 import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { BaseCommand, createSpinner } from '../../base-command.js';
@@ -37,7 +36,7 @@ export default class RuntimeBuild extends BaseCommand {
     spinner.start();
 
     try {
-      const generator = this.createGenerator();
+      const generator = await this.createGenerator();
       await generator.generate();
       spinner.succeed('Runtime build complete');
 
@@ -61,8 +60,10 @@ export default class RuntimeBuild extends BaseCommand {
     }
   }
 
-  private createGenerator(): RuntimeGenerator {
-    return new RuntimeGenerator({
+  private async createGenerator() {
+    const runtimePath = '../../../../../pt-runtime/src/' + 'index';
+    const runtime = await import(runtimePath);
+    return new runtime.RuntimeGenerator({
       outputDir: GENERATED_DIR,
       devDir: this.devDir,
     });

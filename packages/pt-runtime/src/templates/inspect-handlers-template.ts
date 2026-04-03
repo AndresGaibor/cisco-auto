@@ -10,6 +10,18 @@ export function generateInspectHandlersTemplate(): string {
 
 function handleSnapshot() {
   var net = getNet();
+  loadLinkRegistry();
+  var netKeys = [];
+  var netProtoMethods = [];
+  try {
+    for (var nk in net) netKeys.push(nk);
+    var netProto = Object.getPrototypeOf(net);
+    if (netProto) {
+      for (var np in netProto) {
+        if (typeof netProto[np] === "function") netProtoMethods.push(np);
+      }
+    }
+  } catch(e) {}
   var count = net.getDeviceCount();
   var devices = {};
   var linksMap = {}; // Use endpoint key for O(1) deduplication
@@ -105,6 +117,15 @@ function handleSnapshot() {
     };
   }
 
+  // Mezclar enlaces registrados explícitamente por el runtime
+  try {
+    for (var linkId in LINK_REGISTRY) {
+      if (!linksMap[linkId]) {
+        linksMap[linkId] = LINK_REGISTRY[linkId];
+      }
+    }
+  } catch(e) {}
+
   // Return links as Record (consistent with TopologySnapshot schema)
   return {
     ok: true,
@@ -112,7 +133,11 @@ function handleSnapshot() {
     timestamp: Date.now(),
     devices: devices,
     links: linksMap,
-    metadata: { deviceCount: count, linkCount: Object.keys(linksMap).length }
+    metadata: { deviceCount: count, linkCount: Object.keys(linksMap).length },
+    runtimeInfo: {
+      netKeys: netKeys,
+      netProtoMethods: netProtoMethods,
+    }
   };
 }
 

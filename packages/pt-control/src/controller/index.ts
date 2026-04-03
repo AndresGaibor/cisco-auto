@@ -163,6 +163,10 @@ export class PTController {
     await this.topologyService.removeLink(device, port);
   }
 
+  async clearTopology(): Promise<{ removedDevices: number; removedLinks: number; remainingDevices: number; remainingLinks: number }> {
+    return this.topologyService.clearTopology();
+  }
+
   async configHost(
     device: string,
     options: {

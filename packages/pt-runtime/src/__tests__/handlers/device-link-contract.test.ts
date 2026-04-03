@@ -225,7 +225,7 @@ describe("handleRemoveLink contract", () => {
       dprint: () => {},
     };
 
-    const result = handleRemoveLink({ type: "removeLink", device: "R1", port: "GigabitEthernet0/0" }, deps);
+    const result = handleRemoveLink({ device: "R1", port: "GigabitEthernet0/0" }, deps);
 
     expect(result.ok).toBe(true);
   });

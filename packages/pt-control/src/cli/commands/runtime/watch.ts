@@ -2,7 +2,6 @@
 // PT Control V2 - Runtime Watch Command
 // ============================================================================
 
-import { RuntimeGenerator } from '@cisco-auto/pt-runtime';
 import { watch, existsSync } from 'fs';
 import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
@@ -38,7 +37,9 @@ export default class RuntimeWatch extends BaseCommand {
     this.print(`${pc.cyan('Watching for runtime changes...')} (Press Ctrl+C to stop)\n`);
     this.print(pc.gray(`Source directory: ${RUNTIME_WATCH_DIR}`));
 
-    const generator = new RuntimeGenerator({
+    const runtimePath = '../../../../../pt-runtime/src/' + 'index';
+    const runtime: any = await import(runtimePath);
+    const generator = new runtime.RuntimeGenerator({
       outputDir: GENERATED_DIR,
       devDir: this.devDir,
     });
@@ -47,7 +48,7 @@ export default class RuntimeWatch extends BaseCommand {
     await this.watchLoop(generator);
   }
 
-  private async buildOnce(generator: RuntimeGenerator): Promise<void> {
+  private async buildOnce(generator: any): Promise<void> {
     try {
       await generator.generate();
       this.printSuccess('Runtime generated');
@@ -57,7 +58,7 @@ export default class RuntimeWatch extends BaseCommand {
     }
   }
 
-  private async watchLoop(generator: RuntimeGenerator): Promise<void> {
+  private async watchLoop(generator: any): Promise<void> {
     let scheduled: NodeJS.Timeout | null = null;
 
     const schedule = () => {

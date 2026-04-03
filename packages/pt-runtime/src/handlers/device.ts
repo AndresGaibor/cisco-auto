@@ -47,13 +47,21 @@ export interface MoveDevicePayload {
 /**
  * Add a new device to the canvas
  * Uses fallback mechanism to try multiple device types if needed
+ * VALIDATES model against catalog - throws if invalid
  */
 export function handleAddDevice(payload: AddDevicePayload, deps: HandlerDeps): HandlerResult {
   const { getLW, getNet } = deps;
   const lw = getLW();
   const net = getNet();
 
-  const model = resolveModel(payload.model);
+  let model: string;
+  try {
+    model = resolveModel(payload.model);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: msg, code: "INVALID_INPUT" };
+  }
+  
   const name = payload.name || model;
   const x = payload.x ?? 100;
   const y = payload.y ?? 100;
@@ -93,8 +101,24 @@ export function handleAddDevice(payload: AddDevicePayload, deps: HandlerDeps): H
  * Remove a device from the canvas
  */
 export function handleRemoveDevice(payload: RemoveDevicePayload, deps: HandlerDeps): HandlerResult {
-  const { getLW } = deps;
-  getLW().removeDevice(payload.name);
+  const { getLW, getNet } = deps;
+  const lwAny = getLW() as unknown as Record<string, unknown>;
+  const netAny = getNet() as unknown as Record<string, unknown>;
+
+  const candidatos = ["removeDevice", "deleteDevice", "removeObject", "deleteObject"] as const;
+
+  for (const metodo of candidatos) {
+    const fnLw = lwAny[metodo];
+    if (typeof fnLw === "function") {
+      try { (fnLw as (name: string) => void).call(lwAny, payload.name); } catch {}
+    }
+
+    const fnNet = netAny[metodo];
+    if (typeof fnNet === "function") {
+      try { (fnNet as (name: string) => void).call(netAny, payload.name); } catch {}
+    }
+  }
+
   return { ok: true, name: payload.name };
 }
 
@@ -155,19 +179,30 @@ export function handleMoveDevice(payload: MoveDevicePayload, deps: HandlerDeps):
     return { ok: false, error: `Device not found: ${payload.name}` };
   }
 
+  const x = Math.round(payload.x);
+  const y = Math.round(payload.y);
   const deviceAny = device as unknown as Record<string, unknown>;
+  let moved = false;
+  let method = "";
 
-  if (typeof deviceAny.setX === "function") {
-    (deviceAny.setX as (x: number) => void)(payload.x);
-  } else if (typeof deviceAny.setLogicalPosition === "function") {
-    (deviceAny.setLogicalPosition as (x: number, y: number) => void)(payload.x, payload.y);
-  } else {
-    return {
-      ok: false,
-      error: "Device positioning is not supported in this PT API version",
-      code: "INTERNAL_ERROR",
-    };
+  try {
+    if (typeof deviceAny.moveToLocation === "function") {
+      moved = !!(deviceAny.moveToLocation as (x: number, y: number) => boolean)(x, y);
+      method = "moveToLocation";
+    }
+
+    if (!moved && typeof deviceAny.moveToLocationCentered === "function") {
+      moved = !!(deviceAny.moveToLocationCentered as (x: number, y: number) => boolean)(x, y);
+      method = "moveToLocationCentered";
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: `Failed to move device: ${msg}`, code: "INTERNAL_ERROR" };
   }
 
-  return { ok: true, name: payload.name, x: payload.x, y: payload.y };
+  if (!moved) {
+    return { ok: false, error: "Packet Tracer rejected move", code: "INTERNAL_ERROR", details: { name: payload.name, x, y } };
+  }
+
+  return { ok: true, name: payload.name, x, y, method };
 }

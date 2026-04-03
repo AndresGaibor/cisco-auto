@@ -33,6 +33,7 @@ return (function(payload, ipc, dprint) {
       case "getRect": return handleGetRect(payload);
       case "devicesInRect": return handleDevicesInRect(payload);
       case "moveDevice": return handleMoveDevice(payload);
+      case "clearTopology": return handleClearTopology();
       default: return { ok: false, error: "Unknown command: " + payload.type };
     }
   } catch (e) {

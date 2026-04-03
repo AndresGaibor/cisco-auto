@@ -106,6 +106,19 @@ function ensureIosTerm(device: PTDevice): PTCommandLine | null {
   return device.getCommandLine() ?? null;
 }
 
+function enterCommandResult(term: PTCommandLine, command: string): [number, string] {
+  const response = (term.enterCommand as unknown as (cmd: string) => unknown)(command);
+
+  if (Array.isArray(response)) {
+    const status = typeof response[0] === "number" ? response[0] : 0;
+    const output = typeof response[1] === "string" ? response[1] : String(response[1] ?? "");
+    return [status, output];
+  }
+
+  const prompt = typeof term.getPrompt === "function" ? term.getPrompt() : "";
+  return [0, prompt];
+}
+
 // ============================================================================
 // Handlers
 // ============================================================================
@@ -134,6 +147,8 @@ export function handleConfigIos(payload: ConfigIosPayload, deps: HandlerDeps): H
   const device = getNet().getDevice(payload.device);
   if (!device) return { ok: false, error: `Device not found: ${payload.device}`, device: payload.device };
 
+  if (device.skipBoot) device.skipBoot();
+
   const term = ensureIosTerm(device);
   if (!term) return { ok: false, error: "Device does not support CLI", device: payload.device };
 
@@ -152,7 +167,7 @@ export function handleConfigIos(payload: ConfigIosPayload, deps: HandlerDeps): H
 
   // Probe current mode
   try {
-    const [, promptOutput] = term.enterCommand("");
+    const [, promptOutput] = enterCommandResult(term, "");
     if (promptOutput) {
       const lastLine = promptOutput.trim().split('\n').filter(Boolean).at(-1) ?? "";
       session.mode = inferModeFromPrompt(lastLine);
@@ -161,7 +176,7 @@ export function handleConfigIos(payload: ConfigIosPayload, deps: HandlerDeps): H
 
   // Ensure privileged mode if requested
   if (payload.ensurePrivileged !== false && !session.mode.startsWith("config") && session.mode !== "priv-exec") {
-    const [privStatus, privOutput] = term.enterCommand("enable");
+    const [privStatus, privOutput] = enterCommandResult(term, "enable");
     if (privStatus === 0 && !privOutput.includes("Password:")) {
       session.mode = "priv-exec";
     } else if (privOutput.includes("Password:")) {
@@ -177,7 +192,7 @@ export function handleConfigIos(payload: ConfigIosPayload, deps: HandlerDeps): H
 
   // Ensure config mode
   if (!session.mode.startsWith("config")) {
-    const [configStatus, configOutput] = term.enterCommand("configure terminal");
+    const [configStatus, configOutput] = enterCommandResult(term, "configure terminal");
     if (configStatus === 0) {
       session.mode = "config";
     } else {
@@ -196,7 +211,7 @@ export function handleConfigIos(payload: ConfigIosPayload, deps: HandlerDeps): H
 
   for (let i = 0; i < payload.commands.length; i++) {
     const cmd = payload.commands[i]!;
-    const [status, output] = term.enterCommand(cmd);
+    const [status, output] = enterCommandResult(term, cmd);
     updateSessionFromOutput(session, output);
     const classification = classifyCommandOutput(output);
     results.push({ command: cmd, status, output, classification });
@@ -221,7 +236,7 @@ export function handleConfigIos(payload: ConfigIosPayload, deps: HandlerDeps): H
 
   if (payload.save !== false) {
     saveAttempted = true;
-    const [saveStatus, saveOut] = term.enterCommand("write memory");
+    const [saveStatus, saveOut] = enterCommandResult(term, "write memory");
     saveOutput = saveOut;
     const saveClassification = classifyCommandOutput(saveOut);
     saveOk = saveStatus === 0 && !isFailureClassification(saveClassification);
@@ -259,15 +274,13 @@ export function handleExecIos(payload: ExecIosPayload, deps: HandlerDeps): Handl
   if (!term) return { ok: false, error: `Device not ready: ${payload.device} is still booting or in ROMMON`, raw: "" };
 
   try {
-    const response = term.enterCommand(payload.command);
-    const status = response?.[0];
-    const output = response?.[1] || "";
+    const [status, output] = enterCommandResult(term, payload.command);
     dprint(`[execIos] term.enterCommand: status=${status}, output length=${output.length}`);
 
     const result: ExecIosSuccessResult = { ok: status === 0, raw: output, status };
 
     if (payload.parse !== false) {
-      const parser = getParser(payload.command);
+      const parser = typeof getParser === "function" ? getParser(payload.command) : null;
       if (parser) {
         try { result.parsed = parser(output); }
         catch (e) { result.parseError = String(e); }
