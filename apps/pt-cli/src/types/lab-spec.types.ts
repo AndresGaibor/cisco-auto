@@ -1,5 +1,4 @@
-import type { LabSpec, SwitchportMode, CableType } from '@cisco-auto/core';
-import { DeviceType as DT } from '@cisco-auto/core';
+import type { LabSpec, SwitchportMode, CableType, DeviceType } from '@cisco-auto/core';
 
 /**
  * Convierte string a DeviceType válido
@@ -127,7 +126,7 @@ export function toLabSpec(parsed: ParsedLabYaml): LabSpec {
       vlans: d.vlans,
       routing: d.routing,
       services: d.services,
-    })),
+    } as any)),
     connections: (parsed.lab?.topology?.connections || []).map((c) => {
       const fromDevice = typeof c.from === 'string' ? c.from : c.from?.device ?? '';
       const fromPort = typeof c.from === 'string' ? c.fromInterface ?? 'unknown' : c.from?.port ?? c.fromInterface ?? 'unknown';

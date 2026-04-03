@@ -14,10 +14,18 @@ import * as yaml from 'js-yaml';
 import { loadLab, ptValidatePlanTool, ptFixPlanTool, isToolResultSuccess, isToolResultError, createToolContext } from '@cisco-auto/core';
 import type {
   TopologyPlan,
-  ValidationIssue,
-  
   FixSuggestion
 } from '@cisco-auto/core';
+
+// Local definition - ValidationIssue should be exported from core
+interface ValidationIssue {
+  severity: 'error' | 'warning' | 'info';
+  category: 'structure' | 'physical' | 'logical' | 'topology' | 'best-practice';
+  message: string;
+  device?: string;
+  connection?: string;
+  suggestion?: string;
+}
 
 /**
  * Interfaz para preguntas interactivas usando readline nativo
@@ -170,7 +178,7 @@ type CableTypePlan = 'straight-through' | 'crossover' | 'fiber' | 'serial' | 'co
 /**
  * Muestra los errores de validación con iconos y colores
  */
-function mostrarErrores(errores: ValidationError[]) {
+function mostrarErrores(errores: ValidationIssue[]) {
   console.log('\n' + chalk.bold.red('❌ ERRORES DE VALIDACIÓN:'));
   console.log(chalk.red('─'.repeat(50)));
   
@@ -196,7 +204,7 @@ function mostrarErrores(errores: ValidationError[]) {
 /**
  * Muestra las advertencias de validación
  */
-function mostrarWarnings(warnings: ValidationWarning[]) {
+function mostrarWarnings(warnings: ValidationIssue[]) {
   if (warnings.length === 0) return;
   
   console.log('\n' + chalk.bold.yellow('⚠️  ADVERTENCIAS:'));
@@ -268,7 +276,7 @@ async function ejecutarValidacionInteractiva(filepath: string): Promise<number> 
     return 1;
   }
   
-  const datosValidacion = resultadoValidacion.data as { valid: boolean; errors: ValidationError[]; warnings: ValidationWarning[] };
+  const datosValidacion = resultadoValidacion.data as { valid: boolean; errors: ValidationIssue[]; warnings: ValidationIssue[] };
   
   // Mostrar resultados
   if (datosValidacion.valid && datosValidacion.warnings.length === 0) {
@@ -300,7 +308,7 @@ async function ejecutarValidacionInteractiva(filepath: string): Promise<number> 
   let fixesAplicados: FixSuggestion[] = [];
   
   if (resultadoFix.success) {
-    const datosFix = resultadoFix.data as { appliedFixes: FixSuggestion[]; remainingErrors: ValidationError[] };
+    const datosFix = resultadoFix.data as { appliedFixes: FixSuggestion[]; remainingErrors: ValidationIssue[] };
     sugerencias = datosFix.appliedFixes;
     fixesAplicados = datosFix.appliedFixes;
   }
@@ -342,7 +350,7 @@ async function ejecutarValidacionInteractiva(filepath: string): Promise<number> 
           const datosFixAplicados = resultadoAplicarFix.data as { 
             plan: TopologyPlan; 
             appliedFixes: FixSuggestion[]; 
-            remainingErrors: ValidationError[] 
+            remainingErrors: ValidationIssue[] 
           };
           
           console.log(chalk.green(`\n✅ Se aplicaron ${datosFixAplicados.appliedFixes.length} corrección(es)`));

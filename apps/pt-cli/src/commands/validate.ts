@@ -2,7 +2,15 @@ import { Command } from 'commander';
 import { loadLab } from '@cisco-auto/core';
 import { validateLab } from '@cisco-auto/core';
 import type { LabSpec } from '@cisco-auto/core';
-import type { ValidationIssue } from '@cisco-auto/core';
+// Local definition - ValidationIssue should be exported from core
+interface ValidationIssueLocal {
+  severity: 'error' | 'warning' | 'info';
+  category: 'structure' | 'physical' | 'logical' | 'topology' | 'best-practice';
+  message: string;
+  device?: string;
+  connection?: string;
+  suggestion?: string;
+}
 import { toLabSpec, type ParsedLabYaml } from '../types/lab-spec.types';
 
 const SEVERITY_ICONS = {
@@ -38,7 +46,7 @@ function displayResults(result: ReturnType<typeof validateLab>, verbose: boolean
   if (result.issues.length > 0) {
     console.log('\n' + '─'.repeat(60));
     
-    const byCategory = new Map<string, ValidationIssue[]>();
+    const byCategory = new Map<string, ValidationIssueLocal[]>();
     for (const issue of result.issues) {
       const cat = issue.category;
       if (!byCategory.has(cat)) {
@@ -51,7 +59,8 @@ function displayResults(result: ReturnType<typeof validateLab>, verbose: boolean
       console.log(`\n📁 ${CATEGORY_LABELS[category as keyof typeof CATEGORY_LABELS] ?? category}:`);
       
       for (const issue of issues) {
-        const icon = SEVERITY_ICONS[issue.severity];
+        const severity = issue.severity as keyof typeof SEVERITY_ICONS;
+        const icon = SEVERITY_ICONS[severity] ?? '❓';
         let line = `   ${icon} ${issue.message}`;
         
         if (issue.device) {
