@@ -814,7 +814,7 @@ class ExhaustivePTTester {
       if (result.ok) {
         throw new Error("Debería haber fallado: GigabitEthernet0/5 no existe en 2811");
       }
-      const errMsg1 = String(result.error?.message || result.error || "");
+      const errMsg1 = String((result.value as any)?.error || result.error || "");
       if (!errMsg1.includes("no existe") && !errMsg1.includes("not found") && !errMsg1.includes("Puerto")) {
         throw new Error("Error esperado sobre puerto inválido, got: " + errMsg1);
       }
@@ -833,7 +833,7 @@ class ExhaustivePTTester {
       if (result.ok) {
         throw new Error("Debería haber fallado: tipo de cable inválido");
       }
-      const errMsg2 = String(result.error?.message || result.error || "");
+      const errMsg2 = String((result.value as any)?.error || result.error || "");
       if (!errMsg2.includes("no es válido") && !errMsg2.includes("no válido")) {
         throw new Error("Error esperado sobre tipo de cable inválido, got: " + errMsg2);
       }
@@ -852,7 +852,7 @@ class ExhaustivePTTester {
       if (result.ok) {
         throw new Error("Debería haber fallado: cable fiber en puerto RJ45");
       }
-      const errMsg3 = String(result.error?.message || result.error || "");
+      const errMsg3 = String((result.value as any)?.error || result.error || "");
       if (!errMsg3.includes("no es compatible") && !errMsg3.includes("compatible")) {
         throw new Error("Error esperado sobre incompatibilidad cable-puerto, got: " + errMsg3);
       }
@@ -880,7 +880,8 @@ class ExhaustivePTTester {
       }, 15000);
       
       if (!linkResult.ok) {
-        throw new Error("PC-PT no está en PT_PORT_MAP así que debería usar auto-detect: " + linkResult.error);
+        const errMsg = String((linkResult.value as any)?.error || linkResult.error || "");
+        throw new Error("PC-PT no está en PT_PORT_MAP así que debería usar auto-detect: " + errMsg);
       }
       return { ok: true };
     });
