@@ -1,0 +1,104 @@
+{
+  "nextId": 10,
+  "tasks": [
+    {
+      "id": "1",
+      "subject": "Migrate device add command to apps/pt-cli using commander.js",
+      "description": "Extract device add logic from pt-control and create new command file at apps/pt-cli/src/commands/device/add.ts using commander.js pattern. Include:\n- Port spec argument\n- Device model argument  \n- Interactive prompts for device models\n- PTController integration\n- Output formatting support (JSON, text)\n- Error handling with CLIError classes",
+      "status": "pending",
+      "metadata": {},
+      "blocks": [],
+      "blockedBy": [],
+      "createdAt": 1775201728145,
+      "updatedAt": 1775201728145
+    },
+    {
+      "id": "2",
+      "subject": "Migrate device remove command to apps/pt-cli using commander.js",
+      "description": "Extract device remove logic from pt-control and create new command file at apps/pt-cli/src/commands/device/remove.ts using commander.js pattern. Include:\n- Device name argument\n- Force flag for skipping confirmation\n- Destructive action confirmation\n- PTController integration\n- Output formatting support\n- Error handling",
+      "status": "pending",
+      "metadata": {},
+      "blocks": [],
+      "blockedBy": [],
+      "createdAt": 1775201728146,
+      "updatedAt": 1775201728146
+    },
+    {
+      "id": "3",
+      "subject": "Migrate link add command to apps/pt-cli using commander.js",
+      "description": "Extract link add logic from pt-control and create new command file at apps/pt-cli/src/commands/link/add.ts using commander.js pattern. Include:\n- Port spec arguments (port1, port2)\n- Cable type flag with options\n- Port spec validation helper\n- Device list for interactive prompts\n- PTController integration\n- Auto-fallback to straight cable type\n- Output formatting support",
+      "status": "pending",
+      "metadata": {},
+      "blocks": [],
+      "blockedBy": [],
+      "createdAt": 1775201728146,
+      "updatedAt": 1775201728146
+    },
+    {
+      "id": "4",
+      "subject": "Migrate link remove command to apps/pt-cli using commander.js",
+      "description": "Extract link remove logic from pt-control and create new command file at apps/pt-cli/src/commands/link/remove.ts using commander.js pattern. Include:\n- Port spec argument\n- Force flag for skipping confirmation  \n- Destructive action confirmation\n- Port spec validation\n- PTController integration\n- Output formatting support\n- Error handling",
+      "status": "pending",
+      "metadata": {},
+      "blocks": [],
+      "blockedBy": [],
+      "createdAt": 1775201728147,
+      "updatedAt": 1775201728147
+    },
+    {
+      "id": "5",
+      "subject": "Migrate config ios command to apps/pt-cli using commander.js",
+      "description": "Extract config ios logic from pt-control and create new command file at apps/pt-cli/src/commands/config-ios.ts using commander.js pattern. Include:\n- Device name argument\n- Commands flag (multiple)\n- File flag for reading commands\n- Save flag (default true)\n- File reading with filtering\n- Device validation\n- PTController integration\n- Output formatting support\n- Error handling",
+      "status": "pending",
+      "metadata": {},
+      "blocks": [],
+      "blockedBy": [],
+      "createdAt": 1775201728147,
+      "updatedAt": 1775201728147
+    },
+    {
+      "id": "6",
+      "subject": "Create utility functions for command orchestration",
+      "description": "Create reusable utility functions for:\n- Port spec validation and parsing\n- Device list fetching and caching\n- Spinner and visual feedback wrappers\n- Destructive action confirmation\n- Device model selection prompts\n- Error handling and recovery patterns\nFiles: apps/pt-cli/src/utils/port-parser.ts, apps/pt-cli/src/utils/device-utils.ts, apps/pt-cli/src/utils/confirmation.ts",
+      "status": "pending",
+      "metadata": {},
+      "blocks": [],
+      "blockedBy": [],
+      "createdAt": 1775201728147,
+      "updatedAt": 1775201728147
+    },
+    {
+      "id": "7",
+      "subject": "Update device command index.ts to include add and remove",
+      "description": "Update apps/pt-cli/src/commands/device/index.ts to:\n- Import createDeviceAddCommand and createDeviceRemoveCommand\n- Add both commands to the device command group\n- Ensure proper command hierarchy",
+      "status": "pending",
+      "metadata": {},
+      "blocks": [],
+      "blockedBy": [],
+      "createdAt": 1775201728148,
+      "updatedAt": 1775201728148
+    },
+    {
+      "id": "8",
+      "subject": "Create link command index.ts with add and remove",
+      "description": "Create apps/pt-cli/src/commands/link/index.ts with:\n- Import createLinkAddCommand and createLinkRemoveCommand\n- Create link command group\n- Add both commands\n- Export createLinkCommand function",
+      "status": "pending",
+      "metadata": {},
+      "blocks": [],
+      "blockedBy": [],
+      "createdAt": 1775201728148,
+      "updatedAt": 1775201728148
+    },
+    {
+      "id": "9",
+      "subject": "Integrate all new commands into main CLI (index.ts)",
+      "description": "Update apps/pt-cli/src/index.ts to:\n- Import createLinkCommand\n- Import createConfigIosCommand\n- Add link command to program\n- Add config ios command to program or update existing config\n- Ensure proper error handling for all new commands",
+      "status": "pending",
+      "metadata": {},
+      "blocks": [],
+      "blockedBy": [],
+      "createdAt": 1775201728149,
+      "updatedAt": 1775201728149
+    }
+  ]
+}

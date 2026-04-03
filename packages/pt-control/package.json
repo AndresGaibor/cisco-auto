@@ -1,7 +1,7 @@
 {
   "name": "@cisco-auto/pt-control",
   "version": "2.0.0",
-  "description": "Professional CLI for controlling Cisco Packet Tracer",
+  "description": "Core library for controlling Cisco Packet Tracer",
   "type": "module",
   "main": "./src/index.ts",
   "scripts": {
@@ -12,11 +12,6 @@
     "@cisco-auto/file-bridge": "workspace:*",
     "@cisco-auto/ios-domain": "workspace:*",
     "@cisco-auto/types": "workspace:*",
-    "@inquirer/prompts": "^8.3.2",
-    "@oclif/core": "^3.26.4",
-    "cli-table3": "^0.6.5",
-    "ora": "^9.3.0",
-    "picocolors": "^1.1.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -41,15 +36,10 @@
   "keywords": [
     "cisco",
     "packet-tracer",
-    "cli",
+    "library",
     "network",
     "automation"
   ],
   "author": "",
-  "license": "MIT",
-  "oclif": {
-    "commands": "./src/cli/commands",
-    "bin": "pt",
-    "topicSeparator": "colons"
-  }
+  "license": "MIT"
 }

@@ -3,6 +3,7 @@
  *
  * Catálogo de routers soportados en Packet Tracer
  */
+import { CableType } from '../canonical/types';
 // =============================================================================
 // CAPABILITIES BASE
 // =============================================================================

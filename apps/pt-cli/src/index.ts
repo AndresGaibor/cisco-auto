@@ -7,6 +7,8 @@ import { createConfigCommand } from './commands/config.ts';
 import { createDeviceCommand } from './commands/device/index.ts';
 import { createTopologyCommand } from './commands/topology/index.ts';
 import { createStpCommand } from './commands/stp.ts';
+import { createLinkCommand } from './commands/link/index.ts';
+import { createConfigIOSCommand } from './commands/config-ios.ts';
 import { ExitCodes } from './errors/index.ts';
 
 const program = new Command();
@@ -27,6 +29,8 @@ program.addCommand(createDeviceCommand());
 program.addCommand(createTopologyCommand());
 program.addCommand(createConfigCommand());
 program.addCommand(createStpCommand());
+program.addCommand(createLinkCommand());
+program.addCommand(createConfigIOSCommand());
 
 try {
   program.parse(process.argv);
