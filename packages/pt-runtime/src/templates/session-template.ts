@@ -1,6 +1,7 @@
 /**
  * Runtime Session Template - Generates IOS session management section
  * Handles state persistence, cleanup, and session lifecycle
+ * NOW INCLUDES: IOS Jobs system with event-based terminal listeners
  */
 
 export function generateSessionTemplate(): string {
@@ -12,24 +13,416 @@ export function generateSessionTemplate(): string {
 // ============================================================================
 
 var IOS_SESSIONS = {};
-var SESSION_DIRTY = false; // Track if sessions need saving
+var SESSION_DIRTY = false;
 var LAST_CLEANUP_TIME = 0;
-var CLEANUP_INTERVAL_MS = 30000; // Every 30 seconds
+var CLEANUP_INTERVAL_MS = 30000;
 var SESSION_ACCESS_COUNT = 0;
-var SESSION_MAX_AGE_MS = 300000; // 5 minutes
-var MAX_SESSIONS = 200; // Increased from 50 to support larger labs
+var SESSION_MAX_AGE_MS = 300000;
+var MAX_SESSIONS = 200;
 var SESSIONS_FILE = DEV_DIR + "/sessions/ios-sessions.json";
 var HEARTBEAT_FILE = DEV_DIR + "/sessions/heartbeat.json";
+
+// ============================================================================
+// IOS JOBS SYSTEM - New event-based architecture
+// ============================================================================
+
+var IOS_JOBS = {};
+var IOS_JOB_SEQ = 0;
+
+function createIosJob(type, payload) {
+  IOS_JOB_SEQ++;
+  var ticket = "ios_job_" + IOS_JOB_SEQ;
+  
+  IOS_JOBS[ticket] = {
+    ticket: ticket,
+    device: payload.device,
+    type: type,
+    steps: [],
+    currentStep: 0,
+    state: "queued",
+    startedAt: Date.now(),
+    updatedAt: Date.now(),
+    output: "",
+    outputs: [],
+    status: null,
+    modeBefore: "",
+    modeAfter: "",
+    paged: false,
+    autoConfirmed: false,
+    waitingForCommandEnd: false,
+    finished: false,
+    result: null,
+    error: null,
+    inputCommand: "",
+    completeCommand: "",
+    processedCommand: "",
+    inputMode: ""
+  };
+  
+  dprint("[Job] Created " + ticket + " for " + payload.device + " type=" + type);
+  return ticket;
+}
+
+function buildConfigSteps(payload, session) {
+  var steps = [];
+  
+  if (session.mode !== "priv-exec" && session.mode.indexOf("config") !== 0) {
+    steps.push({ cmd: "enable", type: "transition", purpose: "privileged" });
+  }
+  
+  if (session.mode.indexOf("config") !== 0) {
+    steps.push({ cmd: "configure terminal", type: "transition", purpose: "config" });
+  }
+  
+  var commands = payload.commands || [];
+  for (var i = 0; i < commands.length; i++) {
+    steps.push({ cmd: commands[i], type: "config", purpose: "command", index: i });
+  }
+  
+  if (payload.writeMemory !== false) {
+    steps.push({ cmd: "end", type: "transition", purpose: "exit-config" });
+    steps.push({ cmd: "write memory", type: "exec", purpose: "save" });
+  }
+  
+  return steps;
+}
+
+function buildExecSteps(payload, session) {
+  var steps = [];
+  
+  if (payload.ensurePrivileged && session.mode !== "priv-exec" && session.mode.indexOf("config") !== 0) {
+    steps.push({ cmd: "enable", type: "transition", purpose: "privileged" });
+  }
+  
+  steps.push({ cmd: payload.command, type: "exec", purpose: "execute" });
+  
+  return steps;
+}
+
+function startIosJob(ticket) {
+  var job = IOS_JOBS[ticket];
+  if (!job) {
+    dprint("[Job] Cannot start: job not found " + ticket);
+    return;
+  }
+  
+  var deviceName = job.device;
+  var session = getOrCreateSession(deviceName, null);
+  
+  if (job.type === "configIos") {
+    job.steps = buildConfigSteps({ commands: job.payload && job.payload.commands }, session);
+  } else if (job.type === "execIos" || job.type === "execInteractive") {
+    job.steps = buildExecSteps({ 
+      command: job.payload && job.payload.command, 
+      ensurePrivileged: job.payload && job.payload.ensurePrivileged 
+    }, session);
+  }
+  
+  job.state = "running";
+  job.modeBefore = session.mode;
+  job.startedAt = Date.now();
+  
+  dprint("[Job] Starting " + ticket + " with " + job.steps.length + " steps");
+  
+  kickIosJob(ticket);
+}
+
+function kickIosJob(ticket) {
+  var job = IOS_JOBS[ticket];
+  if (!job) return;
+  
+  if (job.state !== "running") return;
+  if (job.waitingForCommandEnd) return;
+  
+  if (job.currentStep >= job.steps.length) {
+    job.finished = true;
+    job.state = "done";
+    job.result = finalizeJobResult(job);
+    dprint("[Job] Completed " + ticket + " with " + job.result.executedCount + " commands");
+    return;
+  }
+  
+  var step = job.steps[job.currentStep];
+  var deviceName = job.device;
+  
+  var term = getCommandLine(deviceName);
+  if (!term) {
+    job.error = "CLI_UNAVAILABLE";
+    job.finished = true;
+    job.state = "error";
+    job.result = {
+      ok: false,
+      code: "CLI_UNAVAILABLE",
+      error: "TerminalLine not available for device " + deviceName
+    };
+    dprint("[Job] Error " + ticket + ": CLI unavailable for " + deviceName);
+    return;
+  }
+  
+  try {
+    job.inputCommand = step.cmd;
+    job.waitingForCommandEnd = true;
+    job.inputMode = getOrCreateSession(deviceName, null).mode;
+    
+    term.enterCommand(step.cmd);
+    
+    dprint("[Job] Sent " + step.cmd + " to " + deviceName + " (step " + (job.currentStep + 1) + ")");
+    
+  } catch (e) {
+    job.error = "COMMAND_SEND_ERROR";
+    job.finished = true;
+    job.state = "error";
+    job.result = {
+      ok: false,
+      code: "COMMAND_SEND_ERROR",
+      error: String(e)
+    };
+    dprint("[Job] Error sending command: " + String(e));
+  }
+}
+
+function advanceIosJob(ticket, commandStatus) {
+  var job = IOS_JOBS[ticket];
+  if (!job) return;
+  
+  var step = job.steps[job.currentStep];
+  var deviceName = job.device;
+  var session = getOrCreateSession(deviceName, null);
+  
+  job.outputs.push({
+    index: job.currentStep,
+    command: step.cmd,
+    status: commandStatus,
+    output: job.output,
+    modeBefore: job.inputMode,
+    modeAfter: session.mode,
+    paged: job.paged,
+    autoConfirmed: job.autoConfirmed
+  });
+  
+  job.output = "";
+  job.paged = false;
+  job.autoConfirmed = false;
+  job.waitingForCommandEnd = false;
+  
+  if (commandStatus !== 0) {
+    job.finished = true;
+    job.state = "error";
+    job.result = {
+      ok: false,
+      code: "COMMAND_FAILED",
+      error: "Command failed with status " + commandStatus,
+      failedCommand: step.cmd,
+      executedCount: job.currentStep,
+      results: job.outputs
+    };
+    dprint("[Job] Failed " + ticket + " at step " + job.currentStep + " status=" + commandStatus);
+    return;
+  }
+  
+  job.currentStep++;
+  job.updatedAt = Date.now();
+  
+  kickIosJob(ticket);
+}
+
+function finalizeJobResult(job) {
+  var deviceName = job.device;
+  var session = getOrCreateSession(deviceName, null);
+  
+  var executedCount = 0;
+  var failedCount = 0;
+  
+  for (var i = 0; i < job.outputs.length; i++) {
+    if (job.outputs[i].status === 0) {
+      executedCount++;
+    } else {
+      failedCount++;
+    }
+  }
+  
+  return {
+    ok: failedCount === 0,
+    device: deviceName,
+    executedCount: executedCount,
+    failedCount: failedCount,
+    results: job.outputs,
+    session: {
+      mode: session.mode
+    },
+    source: "terminal"
+  };
+}
+
+function pollIosJob(ticket) {
+  var job = IOS_JOBS[ticket];
+  
+  if (!job) {
+    return { done: true, ok: false, error: "Job not found: " + ticket };
+  }
+  
+  if (!job.finished) {
+    return { done: false, state: job.state };
+  }
+  
+  if (job.state === "error") {
+    return { 
+      done: true, 
+      ok: job.result && job.result.ok !== false,
+      error: job.error,
+      code: job.result && job.result.code,
+      value: job.result
+    };
+  }
+  
+  return {
+    done: true,
+    ok: true,
+    value: job.result
+  };
+}
+
+// ============================================================================
+// Terminal Listeners - Event-based architecture
+// ============================================================================
+
+var TERMINAL_LISTENERS_ATTACHED = {};
+
+function attachTerminalListeners(deviceName, term) {
+  if (TERMINAL_LISTENERS_ATTACHED[deviceName]) {
+    return;
+  }
+  
+  try {
+    term.on("outputWritten", function(src, args) {
+      onTerminalOutputWritten(deviceName, args);
+    });
+    
+    term.on("commandStarted", function(src, args) {
+      onTerminalCommandStarted(deviceName, args);
+    });
+    
+    term.on("commandEnded", function(src, args) {
+      onTerminalCommandEnded(deviceName, args);
+    });
+    
+    term.on("modeChanged", function(src, args) {
+      onTerminalModeChanged(deviceName, args);
+    });
+    
+    term.on("promptChanged", function(src, args) {
+      onTerminalPromptChanged(deviceName, args);
+    });
+    
+    term.on("moreDisplayed", function(src, args) {
+      onTerminalMoreDisplayed(deviceName, args);
+    });
+    
+    TERMINAL_LISTENERS_ATTACHED[deviceName] = true;
+    dprint("[Listeners] Attached to " + deviceName);
+    
+  } catch (e) {
+    dprint("[Listeners] Failed to attach to " + deviceName + ": " + String(e));
+  }
+}
+
+function onTerminalOutputWritten(deviceName, args) {
+  var jobKeys = Object.keys(IOS_JOBS);
+  for (var i = 0; i < jobKeys.length; i++) {
+    var job = IOS_JOBS[jobKeys[i]];
+    if (job.device === deviceName && job.waitingForCommandEnd) {
+      job.output += args.newOutput || "";
+    }
+  }
+}
+
+function onTerminalCommandStarted(deviceName, args) {
+  var jobKeys = Object.keys(IOS_JOBS);
+  for (var i = 0; i < jobKeys.length; i++) {
+    var job = IOS_JOBS[jobKeys[i]];
+    if (job.device === deviceName && job.waitingForCommandEnd) {
+      job.inputCommand = args.inputCommand || "";
+      job.completeCommand = args.completeCommand || "";
+      job.processedCommand = args.processedCommand || "";
+      job.inputMode = args.inputMode || "";
+    }
+  }
+}
+
+function onTerminalCommandEnded(deviceName, args) {
+  var jobKeys = Object.keys(IOS_JOBS);
+  for (var i = 0; i < jobKeys.length; i++) {
+    var job = IOS_JOBS[jobKeys[i]];
+    if (job.device === deviceName && job.waitingForCommandEnd) {
+      var status = args.status;
+      if (typeof status === "undefined" || status === null) {
+        status = 0;
+      }
+      
+      job.status = status;
+      job.waitingForCommandEnd = false;
+      
+      advanceIosJob(job.ticket, status);
+    }
+  }
+}
+
+function onTerminalModeChanged(deviceName, args) {
+  var session = IOS_SESSIONS[deviceName];
+  if (session) {
+    session.mode = args.newMode || session.mode;
+    SESSION_DIRTY = true;
+  }
+}
+
+function onTerminalPromptChanged(deviceName, args) {
+  var session = IOS_SESSIONS[deviceName];
+  if (session) {
+    session.prompt = args.newPrompt || "";
+  }
+}
+
+function onTerminalMoreDisplayed(deviceName, args) {
+  var jobKeys = Object.keys(IOS_JOBS);
+  for (var i = 0; i < jobKeys.length; i++) {
+    var job = IOS_JOBS[jobKeys[i]];
+    if (job.device === deviceName && job.waitingForCommandEnd) {
+      job.paged = true;
+      
+      var term = getCommandLine(deviceName);
+      if (term) {
+        try {
+          term.enterChar(32, 0);
+        } catch (e) {}
+      }
+    }
+  }
+}
+
+function ensureDeviceSession(deviceName) {
+  var session = getOrCreateSession(deviceName, null);
+  
+  var term = getCommandLine(deviceName);
+  if (term) {
+    attachTerminalListeners(deviceName, term);
+  }
+  
+  return session;
+}
+
+// ============================================================================
+// EXISTING SESSION CODE - Preserved for compatibility
+// ============================================================================
 
 function isSessionStale() {
   try {
     if (!fm.fileExists(HEARTBEAT_FILE)) {
-      return true; // No heartbeat = definitely stale
+      return true;
     }
     var content = fm.getFileContents(HEARTBEAT_FILE);
     var heartbeat = JSON.parse(content);
     var age = Date.now() - heartbeat.ts;
-    return age > 15000; // Stale if no heartbeat for > 15 seconds
+    return age > 15000;
   } catch (e) {
     dprint("[Sessions] Heartbeat check failed, assuming stale: " + e);
     return true;
@@ -38,7 +431,6 @@ function isSessionStale() {
 
 function loadSessionsFromDisk() {
   try {
-    // Check if sessions are stale (PT reopened after crash)
     if (isSessionStale()) {
       dprint("[Sessions] Sessions are stale (PT was restarted), clearing ios-sessions.json");
       fm.writePlainTextToFile(SESSIONS_FILE, JSON.stringify({}));
@@ -89,7 +481,6 @@ function cleanupStaleSessions() {
   var keys = Object.keys(IOS_SESSIONS);
   var activeKeys = [];
 
-  // Evict by age first
   for (var i = 0; i < keys.length; i++) {
     var key = keys[i];
     var session = IOS_SESSIONS[key];
@@ -107,7 +498,6 @@ function cleanupStaleSessions() {
     }
   }
 
-  // Evict excess by LRU (keep most recently used)
   if (activeKeys.length > MAX_SESSIONS) {
     activeKeys.sort(function(a, b) {
       var aTime = IOS_SESSIONS[a] && IOS_SESSIONS[a].lastUsed || 0;
@@ -132,7 +522,6 @@ function cleanupStaleSessions() {
 }
 
 function getOrCreateSession(deviceName, term) {
-  // Load from disk on first access if not yet loaded
   if (Object.keys(IOS_SESSIONS).length === 0) {
     loadSessionsFromDisk();
   }
@@ -150,7 +539,7 @@ function getOrCreateSession(deviceName, term) {
       createdAt: Date.now()
     };
     SESSION_DIRTY = true;
-    saveSessionsToDisk(); // Only save new sessions immediately
+    saveSessionsToDisk();
   } else {
     IOS_SESSIONS[deviceName].lastUsed = Date.now();
   }
@@ -204,133 +593,6 @@ function isPrivilegedMode(mode) {
 
 function isConfigMode(mode) {
   return mode && mode.indexOf("config") === 0;
-}
-
-function updateSessionFromOutput(session, output, term) {
-  var mode = inferPromptMode(output);
-
-  if (mode === "paging") {
-    session.paging = true;
-    return;
-  }
-  session.paging = false;
-
-  if (mode === "awaiting-confirm") {
-    session.awaitingConfirm = true;
-    return;
-  }
-  session.awaitingConfirm = false;
-
-  if (mode === "awaiting-password") {
-    return;
-  }
-
-  if (mode !== "unknown") {
-    session.mode = mode;
-  }
-}
-
-function executeIosCommand(term, cmd, session) {
-  var response = term.enterCommand(cmd);
-  if (!response) {
-    var fallbackPrompt = "";
-    try {
-      fallbackPrompt = term.getPrompt ? term.getPrompt() : "";
-    } catch (e) {}
-    updateSessionFromOutput(session, fallbackPrompt, term);
-    return [0, fallbackPrompt];
-  }
-
-  if (!response[0]) {
-    updateSessionFromOutput(session, response[1] || "", term);
-    return response;
-  }
-
-  var status = response[0];
-  var output = response[1] || "";
-
-  updateSessionFromOutput(session, output, term);
-
-  while (session.paging) {
-    var pageResponse = term.enterCommand(" ");
-    if (!pageResponse) {
-      updateSessionFromOutput(session, "", term);
-      break;
-    }
-
-    updateSessionFromOutput(session, pageResponse[1] || "", term);
-    output += pageResponse[1] || "";
-  }
-
-  if (session.awaitingConfirm) {
-    var confirmResponse = term.enterCommand("\\n");
-    if (!confirmResponse) {
-      updateSessionFromOutput(session, "", term);
-      return [status, output];
-    }
-
-    updateSessionFromOutput(session, confirmResponse[1] || "", term);
-    output += confirmResponse[1] || "";
-  }
-
-  return [status, output];
-}
-
-function ensurePrivileged(term, session) {
-  if (isPrivilegedMode(session.mode)) {
-    return [true, ""];
-  }
-
-  var result = executeIosCommand(term, "enable", session);
-
-  if (isPrivilegedMode(session.mode)) {
-    return [true, result[1]];
-  }
-
-  if ((result[1] || "").indexOf("#") >= 0 && (result[1] || "").indexOf("Would you like") < 0) {
-    session.mode = "priv-exec";
-    return [true, result[1]];
-  }
-  return [false, result[1]];
-}
-
-function ensureConfigMode(term, session) {
-  var probe = executeIosCommand(term, "", session);
-  var out = probe[1] || "";
-
-  if (out.indexOf("initial configuration dialog") >= 0 ||
-      out.indexOf("Would you like to enter") >= 0) {
-    dprint("[ensureConfigMode] Dismissing initial config dialog");
-    executeIosCommand(term, "no", session);
-
-    var probe2 = executeIosCommand(term, "", session);
-    if ((probe2[1] || "").indexOf("Would you like to") >= 0) {
-      executeIosCommand(term, "no", session);
-    }
-    session.mode = "user-exec";
-  }
-
-  if (isConfigMode(session.mode)) {
-    return [true, ""];
-  }
-
-  if (!isPrivilegedMode(session.mode)) {
-    var privResult = ensurePrivileged(term, session);
-    if (!privResult[0]) {
-      return [false, privResult[1]];
-    }
-  }
-
-  var result = executeIosCommand(term, "configure terminal", session);
-
-  if (isConfigMode(session.mode)) {
-    return [true, result[1]];
-  }
-  if ((result[1] || "").indexOf("(config)#") >= 0) {
-    session.mode = "config";
-    return [true, result[1]];
-  }
-  return [false, result[1]];
 }
 `;
 }

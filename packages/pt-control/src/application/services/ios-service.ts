@@ -92,7 +92,13 @@ export class IosService {
     commands: string[],
     options?: { save?: boolean }
   ): Promise<void> {
-    const result = await this.bridge.sendCommandAndWait<{ ok: boolean; error?: string }>(
+    const result = await this.bridge.sendCommandAndWait<{
+      ok: boolean;
+      error?: string;
+      code?: string;
+      deferred?: boolean;
+      ticket?: string;
+    }>(
       "configIos",
       {
         id: this.generateId(),
@@ -104,20 +110,33 @@ export class IosService {
 
     const value = result.value;
 
-    if (value && typeof value === "object" && value.ok === false) {
-      const errorMsg = (value as { error?: string }).error || "IOS configuration failed";
-      const phase = (value as { phase?: string }).phase;
-      if (errorMsg.includes("Cannot read property")) {
+    if (value && typeof value === "object") {
+      if (value.deferred === true) {
+        return;
+      }
+
+      if (value.ok === false) {
+        const errorMsg = value.error || "IOS configuration failed";
+        const code = value.code;
+        if (errorMsg.includes("Cannot read property")) {
+          throw new Error(
+            `IOS simulator error on device '${device}'. The PT IOS simulator may not be available or the device may not support IOS commands in the current PT session.\n` +
+            `Details: ${errorMsg}\n` +
+            `Suggestion: Verify that Packet Tracer is running with the runtime scripts loaded, and that the device model supports IOS.`
+          );
+        }
+        if (code) {
+          throw new Error(`IOS configuration failed (${code}): ${errorMsg}`);
+        }
+        throw new Error(errorMsg);
+      }
+
+      const source = (value as { source?: string }).source;
+      if (source === "synthetic") {
         throw new Error(
-          `IOS simulator error on device '${device}'. The PT IOS simulator may not be available or the device may not support IOS commands in the current PT session.\n` +
-          `Details: ${errorMsg}\n` +
-          `Suggestion: Verify that Packet Tracer is running with the runtime scripts loaded, and that the device model supports IOS.`
+          `IOS configuration returned synthetic result for device '${device}'. Terminal execution is not available.`
         );
       }
-      if (phase) {
-        throw new Error(`IOS configuration failed (${phase}): ${errorMsg}`);
-      }
-      throw new Error(errorMsg);
     }
   }
 
@@ -130,7 +149,15 @@ export class IosService {
     parse = true,
     timeout = 5000
   ): Promise<{ raw: string; parsed?: T }> {
-    const result = await this.bridge.sendCommandAndWait<{ raw: string; parsed?: T }>(
+    const result = await this.bridge.sendCommandAndWait<{
+      raw: string;
+      parsed?: T;
+      ok: boolean;
+      error?: string;
+      code?: string;
+      source?: string;
+      deferred?: boolean;
+    }>(
       "execIos",
       {
         id: this.generateId(),
@@ -141,7 +168,32 @@ export class IosService {
       },
     );
 
-    return result.value ?? { raw: "", parsed: undefined };
+    const value = result.value;
+
+    if (!value) {
+      return { raw: "", parsed: undefined };
+    }
+
+    if (value.ok === false) {
+      const errorMsg = value.error || "IOS execution failed";
+      const code = value.code;
+      if (code) {
+        throw new Error(`IOS execution failed (${code}): ${errorMsg}`);
+      }
+      throw new Error(errorMsg);
+    }
+
+    const source = value.source;
+    if (source === "synthetic") {
+      throw new Error(
+        `IOS execution returned synthetic result for device '${device}'. Terminal execution is not available.`
+      );
+    }
+
+    return {
+      raw: value.raw || "",
+      parsed: value.parsed,
+    };
   }
 
   /**
@@ -168,6 +220,11 @@ export class IosService {
       raw: string;
       parsed?: ParsedOutput;
       session?: { mode: string; paging?: boolean; awaitingConfirm?: boolean };
+      ok: boolean;
+      error?: string;
+      code?: string;
+      source?: string;
+      deferred?: boolean;
     }>(
       "execInteractive",
       {
@@ -182,7 +239,29 @@ export class IosService {
       },
     );
 
-    return result.value ?? { raw: "" };
+    const value = result.value;
+
+    if (!value) {
+      return { raw: "" };
+    }
+
+    if (value.ok === false) {
+      const errorMsg = value.error || "IOS execution failed";
+      const code = value.code;
+      if (code) {
+        throw new Error(`IOS execution failed (${code}): ${errorMsg}`);
+      }
+      throw new Error(errorMsg);
+    }
+
+    const source = value.source;
+    if (source === "synthetic") {
+      throw new Error(
+        `IOS execution returned synthetic result for device '${device}'. Terminal execution is not available.`
+      );
+    }
+
+    return value;
   }
 
   /**

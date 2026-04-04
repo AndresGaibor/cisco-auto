@@ -12,6 +12,13 @@ return (function(payload, ipc, dprint) {
   try {
     dprint("[Runtime] Processing: " + payload.type);
     
+    function handlePollDeferred(payload) {
+      if (!payload || !payload.ticket) {
+        return { done: true, ok: false, error: "Missing deferred ticket" };
+      }
+      return pollIosJob(payload.ticket);
+    }
+    
     switch (payload.type) {
       case "addDevice": return handleAddDevice(payload);
       case "removeDevice": return handleRemoveDevice(payload);
@@ -34,6 +41,7 @@ return (function(payload, ipc, dprint) {
       case "devicesInRect": return handleDevicesInRect(payload);
       case "moveDevice": return handleMoveDevice(payload);
       case "clearTopology": return handleClearTopology();
+      case "__pollDeferred": return handlePollDeferred(payload);
       default: return { ok: false, error: "Unknown command: " + payload.type };
     }
   } catch (e) {

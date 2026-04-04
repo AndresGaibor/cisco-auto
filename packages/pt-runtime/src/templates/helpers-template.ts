@@ -286,6 +286,22 @@ function getNet() {
   return ipc.network();
 }
 
+function getCommandLine(deviceName) {
+  var device = getNet().getDevice(deviceName);
+  if (!device) {
+    dprint("[getCommandLine] Device not found: " + deviceName);
+    return null;
+  }
+  
+  try {
+    var term = device.getCommandLine();
+    return term;
+  } catch (e) {
+    dprint("[getCommandLine] Error getting CLI for " + deviceName + ": " + String(e));
+    return null;
+  }
+}
+
 function resolveModel(model) {
   if (!model) return "1941";  // default router del catálogo
   var key = model.toLowerCase();

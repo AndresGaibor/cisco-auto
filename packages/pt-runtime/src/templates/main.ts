@@ -31,6 +31,7 @@ var runtimeFn = null;
 var lastCommandId = "";
 var commandPollInterval = null;
 var heartbeatInterval = null;
+var pendingCommands = {};
 
 // ============================================================================
 // Main Entry Point
@@ -59,6 +60,7 @@ function main() {
     
     // Start command polling (every 500ms)
     commandPollInterval = setInterval(pollCommand, 500);
+    commandPollInterval = setInterval(pollDeferredCommands, 500);
     
     dprint("[PT] Ready - polling for commands");
     
@@ -156,7 +158,7 @@ function pollCommand() {
     return;
   }
   
-  // Execute runtime
+// Execute runtime
   var result;
   var startedAt = Date.now();
   
@@ -174,6 +176,18 @@ function pollCommand() {
       error: String(e),
       stack: String(e.stack || "")
     };
+  }
+  
+  // Check for deferred result
+  if (result && result.deferred === true) {
+    pendingCommands[cmd.id] = {
+      id: cmd.id,
+      ticket: result.ticket,
+      payloadType: cmd.payload.type,
+      startedAt: startedAt
+    };
+    dprint("[PT] Deferred: " + cmd.payload.type + " [" + cmd.id + "] ticket=" + result.ticket);
+    return;
   }
   
   // Write result envelope
@@ -194,6 +208,57 @@ function pollCommand() {
     dprint("[PT] Executed: " + cmd.payload.type + " [" + cmd.id + "]");
   } catch (e) {
     dprint("[PT] Failed to write result: " + String(e));
+  }
+}
+
+// ============================================================================
+// Deferred Commands Support
+// ============================================================================
+
+function writeFinalResult(cmdId, startedAt, result) {
+  var envelope = {
+    id: cmdId,
+    startedAt: startedAt,
+    completedAt: Date.now(),
+    status: result && result.ok !== false ? "completed" : "failed",
+    ok: result && result.ok !== false,
+    value: result
+  };
+  
+  try {
+    fm.writePlainTextToFile(
+      RESULTS_DIR + "/" + cmdId + ".json",
+      JSON.stringify(envelope)
+    );
+    dprint("[PT] Deferred completed: " + cmdId);
+  } catch (e) {
+    dprint("[PT] Failed to write deferred result: " + String(e));
+  }
+}
+
+function pollDeferredCommands() {
+  var pendingKeys = Object.keys(pendingCommands);
+  if (pendingKeys.length === 0) return;
+  
+  for (var i = 0; i < pendingKeys.length; i++) {
+    var key = pendingKeys[i];
+    var pending = pendingCommands[key];
+    
+    try {
+      loadRuntime();
+      
+      var pollResult = runtimeFn
+        ? runtimeFn({ type: "__pollDeferred", ticket: pending.ticket }, ipc, dprint)
+        : { done: true, ok: false, error: "Runtime not loaded" };
+      
+      if (pollResult && pollResult.done === true) {
+        writeFinalResult(pending.id, pending.startedAt, pollResult);
+        delete pendingCommands[key];
+      }
+      
+    } catch (e) {
+      dprint("[PT] Poll error: " + String(e));
+    }
   }
 }
 
