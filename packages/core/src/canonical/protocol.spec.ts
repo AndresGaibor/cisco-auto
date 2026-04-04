@@ -469,16 +469,19 @@ export interface DNSServerSpec {
   /** Habilitar servidor DNS */
   enabled: boolean;
   
+  /** Nombre de dominio */
+  domainName?: string;
+  
   /** Registros A */
   aRecords?: {
     hostname: string;
-    ip: string;
+    address: string;
   }[];
   
   /** Registros CNAME */
   cnameRecords?: {
     alias: string;
-    hostname: string;
+    target: string;
   }[];
   
   /** MX records */

@@ -615,8 +615,31 @@ export class ServicesGenerator {
 
     if (spec.dns?.enabled) {
       commands.push('! DNS Configuration');
-      // DNSServerSpec has aRecords and cnameRecords, not servers
-      // DNS server functionality would require different IOS commands
+      commands.push('ip dns server');
+      
+      if (spec.dns.domainName) {
+        commands.push(`ip domain-name ${spec.dns.domainName}`);
+      }
+      
+      if (spec.dns.forwarding?.enabled && spec.dns.forwarding?.servers?.length) {
+        for (const ns of spec.dns.forwarding.servers) {
+          commands.push(`ip name-server ${ns}`);
+        }
+      }
+      
+      if (spec.dns.aRecords?.length) {
+        commands.push('! DNS Static Records (A)');
+        for (const record of spec.dns.aRecords) {
+          commands.push(`ip host ${record.hostname} ${record.address}`);
+        }
+      }
+      
+      if (spec.dns.cnameRecords?.length) {
+        commands.push('! DNS Alias Records (CNAME)');
+        for (const record of spec.dns.cnameRecords) {
+          commands.push(`ip host ${record.alias} ${record.target}`);
+        }
+      }
     }
 
     if (spec.http?.enabled) {

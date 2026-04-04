@@ -4,6 +4,9 @@ import { VlanGenerator } from './vlan-generator.js';
 import { RoutingGenerator } from './routing-generator.js';
 import { SecurityGenerator } from './security-generator.js';
 import { validateGeneratedConfig } from './output-validator.js';
+import { STPGenerator } from './stp.generator.js';
+import { EtherChannelGenerator } from './etherchannel.generator.js';
+import { ServicesGenerator } from './services.generator.js';
 
 export interface GeneratedConfig {
   hostname: string;
@@ -15,13 +18,16 @@ export interface GeneratedConfig {
  * Orden predeterminado de secciones IOS (best practice Cisco)
  */
 export const DEFAULT_SECTION_ORDER: string[] = [
-  'basic',        // hostname, banner, service password-encryption
-  'vlans',        // VLAN database
-  'vtp',          // VTP configuration
-  'interfaces',   // Physical and logical interfaces
-  'routing',      // Routing protocols (OSPF, EIGRP, BGP)
-  'security',     // ACLs, NAT
-  'lines'         // Console, VTY lines
+  'basic',          // hostname, banner, service password-encryption
+  'vlans',          // VLAN database
+  'vtp',            // VTP configuration
+  'stp',            // Spanning Tree Protocol
+  'etherchannel',   // Port Channels
+  'interfaces',     // Physical and logical interfaces
+  'routing',       // Routing protocols (OSPF, EIGRP, BGP)
+  'services',       // DHCP, DNS, NTP, etc.
+  'security',       // ACLs, NAT
+  'lines'           // Console, VTY lines
 ];
 
 /**
@@ -38,12 +44,18 @@ export class SectionOrderConfig {
     device: DeviceSpec,
     sectionOrder: string[] = DEFAULT_SECTION_ORDER
   ): GeneratedConfig {
+    // Obtener layer2 para stp y etherchannel
+    const layer2 = device.layer2 as any;
+    
     const sections: Record<string, string[]> = {
       'basic': BaseGenerator.generateBasic(device),
       'interfaces': VlanGenerator.generateInterfaces(device),
       'vlans': device.vlans ? VlanGenerator.generateVLANs(device.vlans, device.vtp) : [],
       'vtp': device.vtp ? VlanGenerator.generateVTP(device.vtp) : [],
+      'stp': layer2?.stp ? STPGenerator.generate(layer2.stp) : [],
+      'etherchannel': layer2?.etherChannels ? EtherChannelGenerator.generate(layer2.etherChannels) : [],
       'routing': device.routing ? RoutingGenerator.generateRouting(device.routing) : [],
+      'services': device.services ? ServicesGenerator.generateServices(device.services as any) : [],
       // Security: canonical uses device.security.acls and device.security.nat
       'security': device.security ? SecurityGenerator.generateSecurity(device.security) : [],
       'lines': device.lines ? BaseGenerator.generateLines(device.lines) : []

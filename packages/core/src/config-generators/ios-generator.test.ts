@@ -28,8 +28,11 @@ describe('SectionOrderConfig', () => {
         'basic',
         'vlans',
         'vtp',
+        'stp',
+        'etherchannel',
         'interfaces',
         'routing',
+        'services',
         'security',
         'lines'
       ]);

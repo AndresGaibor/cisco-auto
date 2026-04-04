@@ -1,0 +1,403 @@
+# ============================================================================
+# Laboratorio Integral: VLAN + STP + EtherChannel + DHCP + DNS + WEB + EMAIL
+# ============================================================================
+# Topología: 1x 3650 (Core L3) + 4x 2960 (Access) + 1x Server-PT
+# ============================================================================
+
+metadata:
+  name: "Lab Integral CCNA"
+  description: "VLAN, STP Rapid-PVST, EtherChannel LACP, DHCP, DNS, HTTP, Email"
+  version: "1.0"
+  author: "cisco-auto"
+  difficulty: intermediate
+  estimatedTime: "120 min"
+
+topology:
+  devices:
+    # ─────────── SW-CORE: Catalyst 3650 (Layer 3, Root Bridge) ───────────
+    - name: SW-CORE
+      type: switch
+      model: "3650"
+      hostname: SW-CORE
+
+      management:
+        ip: 192.168.99.1
+        subnetMask: 255.255.255.0
+        gateway: 192.168.99.254
+        vlan: 99
+
+      vlans:
+        - id: 10
+          name: "VENTAS"
+        - id: 20
+          name: "MARKETING"
+        - id: 30
+          name: "SISTEMAS"
+        - id: 99
+          name: "MANAGEMENT"
+
+      vtp:
+        domain: "LAB-INTEGRAL"
+        mode: server
+        version: "2"
+
+      layer2:
+        stp:
+          mode: "rapid-pvst"
+          rootPrimary: [10, 20, 30, 99]
+          portfastDefault: true
+          bpduguardDefault: true
+        etherChannels:
+          - groupId: 1
+            mode: "active"
+            protocol: "lacp"
+            interfaces: ["GigabitEthernet1/0/1", "GigabitEthernet1/0/2"]
+            portChannel: "Port-channel1"
+            trunkMode: "trunk"
+            allowedVlans: [10, 20, 99]
+            description: "LACP to SW-ACCESS-1"
+          - groupId: 2
+            mode: "active"
+            protocol: "lacp"
+            interfaces: ["GigabitEthernet1/0/3", "GigabitEthernet1/0/4"]
+            portChannel: "Port-channel2"
+            trunkMode: "trunk"
+            allowedVlans: [30, 99]
+            description: "LACP to SW-ACCESS-2"
+
+      interfaces:
+        # SVI para routing inter-VLAN
+        - name: Vlan10
+          ip: 192.168.10.1
+          subnetMask: 255.255.255.0
+        - name: Vlan20
+          ip: 192.168.20.1
+          subnetMask: 255.255.255.0
+        - name: Vlan30
+          ip: 192.168.30.1
+          subnetMask: 255.255.255.0
+        - name: Vlan99
+          ip: 192.168.99.1
+          subnetMask: 255.255.255.0
+        # Trunk a SW-ACCESS-3
+        - name: GigabitEthernet1/0/5
+          mode: trunk
+          description: "Trunk to SW-ACCESS-3"
+          trunkAllowedVlans: [10, 20, 30, 99]
+        # Trunk a SW-ACCESS-4
+        - name: GigabitEthernet1/0/6
+          mode: trunk
+          description: "Trunk to SW-ACCESS-4"
+          trunkAllowedVlans: [10, 20, 30, 99]
+
+      services:
+        dhcp:
+          - poolName: "VLAN10-POOL"
+            network: "192.168.10.0"
+            subnetMask: "255.255.255.0"
+            defaultRouter: "192.168.10.1"
+            dnsServers: ["192.168.30.254"]
+            domainName: "lab.local"
+            excludedAddresses: ["192.168.10.1", "192.168.10.254"]
+            lease: 86400
+          - poolName: "VLAN20-POOL"
+            network: "192.168.20.0"
+            subnetMask: "255.255.255.0"
+            defaultRouter: "192.168.20.1"
+            dnsServers: ["192.168.30.254"]
+            domainName: "lab.local"
+            excludedAddresses: ["192.168.20.1", "192.168.20.254"]
+            lease: 86400
+          - poolName: "VLAN30-POOL"
+            network: "192.168.30.0"
+            subnetMask: "255.255.255.0"
+            defaultRouter: "192.168.30.1"
+            dnsServers: ["192.168.30.254"]
+            domainName: "lab.local"
+            excludedAddresses: ["192.168.30.1", "192.168.30.254"]
+            lease: 86400
+
+      lines:
+        vty: { start: 0, end: 15, login: true }
+
+    # ─────────── SW-ACCESS-1: 2960 (VLANs 10 y 20) ───────────
+    - name: SW-ACCESS-1
+      type: switch
+      model: "2960-24TT-L"
+      hostname: SW-ACCESS-1
+
+      management:
+        ip: 192.168.99.2
+        subnetMask: 255.255.255.0
+        gateway: 192.168.99.1
+        vlan: 99
+
+      vtp:
+        domain: "LAB-INTEGRAL"
+        mode: client
+        version: "2"
+
+      layer2:
+        stp:
+          mode: "rapid-pvst"
+          rootSecondary: [10, 20]
+          portfastDefault: true
+          bpduguardDefault: true
+        etherChannels:
+          - groupId: 1
+            mode: "active"
+            protocol: "lacp"
+            interfaces: ["GigabitEthernet0/1", "GigabitEthernet0/2"]
+            portChannel: "Port-channel1"
+            trunkMode: "trunk"
+            allowedVlans: [10, 20, 99]
+
+      interfaces:
+        - name: FastEthernet0/1
+          mode: access
+          vlan: 10
+          description: "PC-Ventas-1"
+        - name: FastEthernet0/2
+          mode: access
+          vlan: 10
+          description: "PC-Ventas-2"
+        - name: FastEthernet0/3
+          mode: access
+          vlan: 20
+          description: "PC-Marketing-1"
+        - name: FastEthernet0/4
+          mode: access
+          vlan: 20
+          description: "PC-Marketing-2"
+
+      lines:
+        vty: { start: 0, end: 15, login: true }
+
+    # ─────────── SW-ACCESS-2: 2960 (VLAN 30 + Servidor) ───────────
+    - name: SW-ACCESS-2
+      type: switch
+      model: "2960-24TT-L"
+      hostname: SW-ACCESS-2
+
+      management:
+        ip: 192.168.99.3
+        subnetMask: 255.255.255.0
+        gateway: 192.168.99.1
+        vlan: 99
+
+      vtp:
+        domain: "LAB-INTEGRAL"
+        mode: client
+        version: "2"
+
+      layer2:
+        stp:
+          mode: "rapid-pvst"
+          rootSecondary: [30]
+          portfastDefault: true
+          bpduguardDefault: true
+        etherChannels:
+          - groupId: 2
+            mode: "active"
+            protocol: "lacp"
+            interfaces: ["GigabitEthernet0/1", "GigabitEthernet0/2"]
+            portChannel: "Port-channel2"
+            trunkMode: "trunk"
+            allowedVlans: [30, 99]
+
+      interfaces:
+        - name: FastEthernet0/1
+          mode: access
+          vlan: 30
+          description: "PC-IT-1"
+        - name: FastEthernet0/2
+          mode: access
+          vlan: 30
+          description: "PC-IT-2"
+        - name: FastEthernet0/3
+          mode: access
+          vlan: 30
+          description: "SRV1"
+        - name: FastEthernet0/4
+          mode: access
+          vlan: 30
+          description: "PC-IT-3"
+
+      lines:
+        vty: { start: 0, end: 15, login: true }
+
+    # ─────────── SW-ACCESS-3: 2960 (Respaldo, solo trunk) ───────────
+    - name: SW-ACCESS-3
+      type: switch
+      model: "2960-24TT-L"
+      hostname: SW-ACCESS-3
+
+      management:
+        ip: 192.168.99.4
+        subnetMask: 255.255.255.0
+        gateway: 192.168.99.1
+        vlan: 99
+
+      vtp:
+        domain: "LAB-INTEGRAL"
+        mode: client
+        version: "2"
+
+      layer2:
+        stp:
+          mode: "rapid-pvst"
+          portfastDefault: true
+          bpduguardDefault: true
+
+      interfaces:
+        - name: GigabitEthernet0/1
+          mode: trunk
+          description: "Uplink to SW-CORE"
+          trunkAllowedVlans: [10, 20, 30, 99]
+        - name: FastEthernet0/1
+          mode: access
+          vlan: 10
+          description: "PC-Ventas-3"
+        - name: FastEthernet0/2
+          mode: access
+          vlan: 20
+          description: "PC-Marketing-3"
+
+      lines:
+        vty: { start: 0, end: 15, login: true }
+
+    # ─────────── SW-ACCESS-4: 2960 (Respaldo, solo trunk) ───────────
+    - name: SW-ACCESS-4
+      type: switch
+      model: "2960-24TT-L"
+      hostname: SW-ACCESS-4
+
+      management:
+        ip: 192.168.99.5
+        subnetMask: 255.255.255.0
+        gateway: 192.168.99.1
+        vlan: 99
+
+      vtp:
+        domain: "LAB-INTEGRAL"
+        mode: client
+        version: "2"
+
+      layer2:
+        stp:
+          mode: "rapid-pvst"
+          portfastDefault: true
+          bpduguardDefault: true
+
+      interfaces:
+        - name: GigabitEthernet0/1
+          mode: trunk
+          description: "Uplink to SW-CORE"
+          trunkAllowedVlans: [10, 20, 30, 99]
+        - name: FastEthernet0/1
+          mode: access
+          vlan: 30
+          description: "PC-IT-4"
+
+      lines:
+        vty: { start: 0, end: 15, login: true }
+
+    # ─────────── SRV1: Server-PT (WEB + DNS + EMAIL) ───────────
+    - name: SRV1
+      type: server
+      model: "server"
+      hostname: SRV1
+      management:
+        ip: 192.168.30.254
+        subnetMask: 255.255.255.0
+        gateway: 192.168.30.1
+
+      services:
+        http:
+          enabled: true
+          port: 80
+          httpsPort: 443
+        dns:
+          enabled: true
+          domainName: "lab.local"
+          aRecords:
+            - hostname: "www"
+              address: "192.168.30.254"
+            - hostname: "mail"
+              address: "192.168.30.254"
+            - hostname: "dns"
+              address: "192.168.30.254"
+          forwarding:
+            enabled: true
+            servers: ["8.8.8.8", "8.8.4.4"]
+
+  # ─────────────────── Conexiones Físicas ───────────────────
+  connections:
+    # EtherChannel 1: SW-CORE <-> SW-ACCESS-1 (2 enlaces)
+    - from: SW-CORE
+      to: SW-ACCESS-1
+      fromInterface: GigabitEthernet1/0/1
+      toInterface: GigabitEthernet0/1
+      type: ethernet
+    - from: SW-CORE
+      to: SW-ACCESS-1
+      fromInterface: GigabitEthernet1/0/2
+      toInterface: GigabitEthernet0/2
+      type: ethernet
+
+    # EtherChannel 2: SW-CORE <-> SW-ACCESS-2 (2 enlaces)
+    - from: SW-CORE
+      to: SW-ACCESS-2
+      fromInterface: GigabitEthernet1/0/3
+      toInterface: GigabitEthernet0/1
+      type: ethernet
+    - from: SW-CORE
+      to: SW-ACCESS-2
+      fromInterface: GigabitEthernet1/0/4
+      toInterface: GigabitEthernet0/2
+      type: ethernet
+
+    # Trunk simple: SW-CORE <-> SW-ACCESS-3
+    - from: SW-CORE
+      to: SW-ACCESS-3
+      fromInterface: GigabitEthernet1/0/5
+      toInterface: GigabitEthernet0/1
+      type: ethernet
+
+    # Trunk simple: SW-CORE <-> SW-ACCESS-4
+    - from: SW-CORE
+      to: SW-ACCESS-4
+      fromInterface: GigabitEthernet1/0/6
+      toInterface: GigabitEthernet0/1
+      type: ethernet
+
+# ─────────────────── Comandos de Verificación ───────────────────
+instructions: |
+  ## Comandos de Verificación
+
+  ### VLAN
+  show vlan brief
+  show vtp status
+  show interfaces trunk
+
+  ### STP
+  show spanning-tree
+  show spanning-tree vlan 10
+  show spanning-tree vlan 20
+  show spanning-tree vlan 30
+
+  ### EtherChannel
+  show etherchannel summary
+  show interfaces port-channel 1
+  show interfaces port-channel 2
+  show lacp neighbor
+
+  ### DHCP
+  show ip dhcp binding
+  show ip dhcp pool
+
+  ### DNS
+  nslookup www.lab.local
+
+  ### HTTP
+  Abrir navegador en PC → http://192.168.30.254
