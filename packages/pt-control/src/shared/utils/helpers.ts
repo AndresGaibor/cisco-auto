@@ -2,7 +2,7 @@
 // Runtime Helpers - Pure utility functions
 // ============================================================================
 
-import { PT_MODEL_MAP, PT_DEVICE_TYPE_MAP } from "@cisco-auto/pt-runtime/value-objects/validated-models";
+import { PT_MODEL_MAP, PT_DEVICE_TYPE_MAP, validatePTModel as validatePTModelFn, getPTDeviceType } from "@cisco-auto/pt-runtime/value-objects";
 
 // Device type IDs (from PT schema)
 const DEVICE_TYPES = {

@@ -4,6 +4,7 @@ import { createDeviceGetCommand } from './get.ts';
 import { createDeviceInteractiveCommand } from './interactive.ts';
 import { createDeviceAddCommand } from './add.ts';
 import { createDeviceRemoveCommand } from './remove.ts';
+import { createDeviceMoveCommand } from './move.ts';
 
 export function createDeviceCommand(): Command {
   const command = new Command('device')
@@ -14,6 +15,7 @@ export function createDeviceCommand(): Command {
   command.addCommand(createDeviceInteractiveCommand());
   command.addCommand(createDeviceAddCommand());
   command.addCommand(createDeviceRemoveCommand());
+  command.addCommand(createDeviceMoveCommand());
 
   return command;
 }

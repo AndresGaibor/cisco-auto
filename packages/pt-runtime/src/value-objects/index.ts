@@ -37,3 +37,11 @@ export {
   CABLE_RECOMMENDATIONS,
   type CableTypeName,
 } from "./cable-type.js";
+
+export {
+  PT_MODEL_MAP,
+  PT_DEVICE_TYPE_MAP,
+  getPTDeviceType,
+  validatePTModel,
+  getAllValidModels,
+} from "./validated-models.js";

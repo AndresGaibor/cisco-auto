@@ -111,41 +111,49 @@ For more information, read the Bun API docs in `node_modules/bun-types/docs/**.m
 
 ### Setup Inicial
 ```bash
-# 1. Instalar módulo de scripting en PT (requiere PT abierto)
-cd packages/pt-control && bun run scripts/setup-pt-control.sh
+# 1. Build y deploy de archivos a ~/pt-dev/ (automático)
+bun run pt:build
 
-# 2. Dentro de PT: cargar el script desde File > Open > select pt-scripts/main.ts
+# 2. Dentro de PT: cargar el script desde File > Open > selecciona ~/pt-dev/main.js
 ```
 
 ### Comandos principales
 ```bash
-# Listar dispositivos
-cd packages/pt-control && bun run scripts/topologia-apply.ts
+# Ver ayuda completa
+bun run pt --help
 
-# Aplicar VLANs
-bun run pt vlan apply <SWITCH> <VLAN_ID>...
+# Gestión de dispositivos
+bun run pt device list              # Listar dispositivos en PT
+bun run pt device add R1 2911      # Agregar dispositivo
+bun run pt device remove R1         # Remover dispositivo
+bun run pt device move R1 --xpos 300 --ypos 200  # Mover dispositivo
 
-# Configurar puertos trunk
-bun run pt trunk apply <SWITCH> <PORT>...
+# Comandos show
+bun run pt show ip-int-brief R1   # Mostrar interfaces IPs
+bun run pt show vlan Switch1       # Mostrar VLANs
+bun run pt show ip-route R1        # Mostrar rutas
+bun run pt show run-config R1      # Mostrar configuración
 
-# Setup SSH en routers
-bun run pt ssh setup <ROUTER> --domain <DOMAIN> --user <USER> --pass <PASS>
+# Configuración
+bun run pt config-host R1 --ip 192.168.1.1 --mask 255.255.255.0 --gateway 192.168.1.254
+bun run pt config-ios R1 interface GigabitEthernet0/0 ip address 192.168.1.1 255.255.255.0
 
-# Aplicar topología completa (config JSON)
-cp topology-config.example.json topology-config.json
-bun run scripts/topologia-apply.ts --config topology-config.json
+# VLANs
+bun run pt vlan apply Switch1 10 20 30
 
-# Con flags adicionales
-bun run scripts/topologia-apply.ts --vlans 10,20,30 --ssh-domain cisco.local --dry-run --verbose
+# Trunk
+bun run pt trunk apply Switch1 GigabitEthernet0/1
+
+# SSH
+bun run pt ssh setup Router1 --domain cisco.local --user admin --pass admin
 ```
+
+### Ruta de archivos
+- **macOS/Linux**: `~/pt-dev/`
+- **Windows**: `%USERPROFILE%\pt-dev\`
+- Override: `PT_DEV_DIR` environment variable
 
 ### Requisitos
 - Packet Tracer debe estar corriendo
-- Módulo de scripting cargado en PT (ver setup-pt-control.sh)
+- Módulo de scripting cargado en PT
 - Timeout default: 120s para descubrimiento de dispositivos
-
-### Archivos clave
-- `src/cli/commands/device/list.ts` - Listar dispositivos
-- `src/vdom/index.ts` - Motor de topología virtual
-- `topology-config.example.json` - Plantilla de configuración
-- `scripts/topologia-apply.ts` - Script de automatización completa

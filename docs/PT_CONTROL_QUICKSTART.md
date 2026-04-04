@@ -1,6 +1,6 @@
 # PT Control - Control en Tiempo Real de Packet Tracer
 
-Controla Cisco Packet Tracer en tiempo real desde la CLI de TypeScript/Bun. Este flujo reemplaza los métodos legacy basados en YAML y .pka para nuevos laboratorios.
+Controla Cisco Packet Tracer en tiempo real desde la CLI. Este flujo reemplaza los métodos legacy basados en YAML y .pka para nuevos laboratorios.
 
 ## 🚀 Quick Start
 
@@ -8,16 +8,31 @@ Controla Cisco Packet Tracer en tiempo real desde la CLI de TypeScript/Bun. Este
 - **Cisco Packet Tracer** (8.x+)
 - **Bun** runtime
 
-### 1. Instala el módulo de scripting en PT
-Sigue los pasos detallados en la sección original para instalar el módulo, usando los archivos de `packages/pt-control/generated/` como fuente.
-
-### 2. Configura la CLI
+### 1. Build y Deploy
 ```bash
-bun install
-mkdir -p ~/pt-dev
-cp packages/pt-control/generated/runtime.js ~/pt-dev/runtime.js
-cp packages/pt-control/generated/main.js ~/pt-dev/main.js
+bun run pt:build
+```
+Esto genera los archivos y los copia automáticamente a `~/pt-dev/`.
+
+### 2. Carga el módulo en PT
+```bash
+# Abre Packet Tracer
+# File > Open > selecciona ~/pt-dev/main.js
+```
+
+### 3. Usa la CLI
+```bash
+# Ver ayuda
+bun run pt --help
+
+# Listar dispositivos
 bun run pt device list
+
+# Agregar dispositivo
+bun run pt device add Router1 2911
+
+# Agregar dispositivo con posición
+bun run pt device add Switch1 2960-24TT-L --xpos 300 --ypos 200
 ```
 
 ---
@@ -25,15 +40,35 @@ bun run pt device list
 ## 🏁 Flujo Moderno Recomendado
 
 1. **Evita YAML/.pka para nuevos laboratorios**: esos flujos son legacy y solo deben usarse para migraciones puntuales.
-2. **Usa la CLI pt-control** para toda la configuración y automatización:
-   - `pt vlan apply` — Aplica VLANs a switches Cisco en tiempo real.
-   - `pt trunk apply` — Configura puertos trunk automáticamente.
-   - `pt ssh setup` — Configura SSHv2 en routers Cisco.
-   - `bun run scripts/topologia-apply.ts` — Descubre y configura toda la topología automáticamente (VLANs, trunks, SSH, IPs).
+2. **Usa la CLI pt** para toda la configuración y automatización:
+   - `bun run pt device add` — Agregar dispositivos
+   - `bun run pt device list` — Listar dispositivos
+   - `bun run pt vlan apply` — Aplicar VLANs a switches
+   - `bun run pt trunk apply` — Configurar puertos trunk
+   - `bun run pt ssh setup` — Configurar SSHv2 en routers
+   - `bun run pt topology apply` — Aplicar topología completa
 
 ---
 
 ## 📖 Ejemplos de Comandos
+
+### Dispositivos
+```bash
+# Agregar router
+bun run pt device add R1 2911
+
+# Agregar switch
+bun run pt device add S1 2960-24TT-L
+
+# Agregar PC
+bun run pt device add PC1 pc
+
+# Listar dispositivos
+bun run pt device list
+
+# Remover dispositivo
+bun run pt device remove R1
+```
 
 ### VLAN
 ```bash
@@ -58,16 +93,11 @@ bun run scripts/topologia-apply.ts
 
 ---
 
-## 📚 Documentación y Ayuda
-- Consulta [packages/pt-control/README.md](../packages/pt-control/README.md) para detalles y ejemplos avanzados.
-- El soporte YAML/.pka está deprecado para nuevos flujos.
-- Para troubleshooting, revisa la sección correspondiente en este archivo.
-
----
-
 ## ℹ️ Notas
-- Todos los comandos pueden ejecutarse desde cualquier terminal compatible con Bun.
-- El script de topología es el punto de entrada recomendado para automatización total.
+
+- Todos los comandos se ejecutan via `bun run pt <comando>`
+- La CLI se comunica con PT a través de:
+  - `pt-control` → `file-bridge` → runtime en `~/pt-dev/` → PT real
 - Para flujos legacy, consulta la documentación histórica.
 
 ---

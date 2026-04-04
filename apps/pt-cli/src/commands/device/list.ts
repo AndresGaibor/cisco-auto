@@ -1,41 +1,48 @@
 import { Command } from 'commander';
-import { loadLab } from '@cisco-auto/core';
+import { createDefaultPTController } from '@cisco-auto/pt-control';
 import { formatExamples, formatRelatedCommands } from '../../help/formatter';
 import { getExamples } from '../../help/examples';
 import { getRelatedCommands } from '../../help/related';
-import type { ParsedDevice } from '../../types/lab-spec.types';
+import chalk from 'chalk';
 
 export function createDeviceListCommand(): Command {
   const cmd = new Command('list')
-    .description('Listar dispositivos de un laboratorio')
-    .argument('<file>', 'Archivo YAML del lab')
+    .description('Listar dispositivos en Packet Tracer')
     .option('-t, --type <type>', 'Filtrar por tipo (router|switch|pc|server)')
-    .action(async (file, options) => {
+    .option('-j, --json', 'Salida en formato JSON')
+    .action(async (options) => {
       try {
-        const parsedLab = loadLab(file);
-        let devices = parsedLab.lab?.topology?.devices ?? [];
+        const controller = createDefaultPTController();
+        await controller.start();
 
-        if (options.type) {
-          devices = devices.filter((d: ParsedDevice) => d.type === options.type);
+        try {
+          const devices = await controller.listDevices();
+          
+          let filtered = devices;
+          if (options.type) {
+            filtered = devices.filter(d => d.type === options.type);
+          }
+
+          if (options.json) {
+            console.log(JSON.stringify(filtered, null, 2));
+          } else {
+            console.log(`\n📱 Dispositivos en Packet Tracer (${filtered.length}):`);
+            console.log('━'.repeat(60));
+
+            filtered.forEach((device, i) => {
+              console.log(`\n${i + 1}. ${chalk.cyan(device.name)}`);
+              console.log(`   Tipo: ${device.type}`);
+              console.log(`   Modelo: ${device.model}`);
+              console.log(`   Estado: ${device.power ? chalk.green('Encendido') : chalk.yellow('Apagado')}`);
+              if (device.ports?.length) {
+                console.log(`   Puertos: ${device.ports.length}`);
+              }
+            });
+            console.log('');
+          }
+        } finally {
+          await controller.stop();
         }
-
-        console.log(`\n📱 Dispositivos (${devices.length}):`);
-        console.log('━'.repeat(60));
-
-        devices.forEach((device, i) => {
-          console.log(`\n${i + 1}. ${device.name}`);
-          console.log(`   Tipo: ${device.type}`);
-          console.log(`   Hostname: ${device.hostname || 'N/A'}`);
-          console.log(`   Modelo: ${device.model || 'N/A'}`);
-
-          if (device.management) {
-            console.log(`   Management: ${device.management.ip}`);
-          }
-
-          if (device.interfaces) {
-            console.log(`   Interfaces: ${device.interfaces.length}`);
-          }
-        });
       } catch (error) {
         console.error('❌ Error:', error instanceof Error ? error.message : error);
         process.exit(1);

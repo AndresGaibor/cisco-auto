@@ -1,10 +1,31 @@
 import { writeFileSync, mkdirSync, existsSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, platform } from "node:os";
 import { resolve } from "node:path";
 import { MAIN_JS_TEMPLATE } from "./templates/main.js";
 import { RUNTIME_JS_TEMPLATE } from "./templates/runtime.js";
 
 const DEV_DIR_PLACEHOLDER = "{{DEV_DIR_LITERAL}}";
+
+// ============================================================================ 
+// Platform-aware dev directory
+// ============================================================================
+
+function getDefaultDevDir(): string {
+  const home = homedir();
+  
+  // Check for custom environment variable
+  if (process.env.PT_DEV_DIR) {
+    return process.env.PT_DEV_DIR;
+  }
+  
+  // Platform-aware default
+  if (platform() === 'win32') {
+    return resolve(process.env.USERPROFILE || home, 'pt-dev');
+  }
+  
+  // macOS/Linux
+  return resolve(home, 'pt-dev');
+}
 
 // ============================================================================ 
 // Configuration
@@ -19,7 +40,7 @@ export interface RuntimeGeneratorConfig {
 
 const DEFAULT_CONFIG: RuntimeGeneratorConfig = {
   outputDir: resolve(import.meta.dirname, "../../generated"),
-  devDir: process.env.PT_DEV_DIR || `${process.env.HOME ?? homedir()}/pt-dev`,
+  devDir: getDefaultDevDir(),
 };
 
 // ============================================================================ 

@@ -7,7 +7,8 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./templates": "./dist/templates"
+    "./templates": "./dist/templates",
+    "./value-objects": "./src/value-objects/index.ts"
   },
   "bin": {
     "pt-runtime": "./bin/run.js"

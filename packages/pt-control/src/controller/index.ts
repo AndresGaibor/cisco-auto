@@ -2,7 +2,8 @@ import { FileBridgeV2 } from "@cisco-auto/file-bridge";
 import { TopologyCache } from "../infrastructure/pt/topology-cache.js";
 import type { FileBridgePort } from "../application/ports/file-bridge.port.js";
 import { topologySnapshotToNetworkTwin } from "../vdom/twin-adapter.js";
-import { homedir } from "node:os";
+import { homedir, platform } from "node:os";
+import { resolve } from "node:path";
 import type {
   PTEvent,
   PTEventType,
@@ -321,7 +322,18 @@ export function createPTController(config: PTControllerConfig): PTController {
   return new PTController(config);
 }
 
-const DEFAULT_DEV_DIR = process.env.PT_DEV_DIR || `${process.env.HOME ?? ""}/pt-dev`;
+function getDefaultDevDir(): string {
+  if (process.env.PT_DEV_DIR) {
+    return process.env.PT_DEV_DIR;
+  }
+  const home = homedir();
+  if (platform() === 'win32') {
+    return resolve(process.env.USERPROFILE || home, 'pt-dev');
+  }
+  return resolve(home, 'pt-dev');
+}
+
+const DEFAULT_DEV_DIR = getDefaultDevDir();
 
 export function createDefaultPTController(): PTController {
   return new PTController({ devDir: DEFAULT_DEV_DIR });
