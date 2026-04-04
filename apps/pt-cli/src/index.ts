@@ -13,6 +13,7 @@ import { createRoutingCommand } from './commands/routing.ts';
 import { createACLCommand } from './commands/acl.ts';
 import { createStpCommand } from './commands/stp.ts';
 import { createLabServicesCommand } from './commands/services.ts';
+import { createResultsCommand } from './commands/results.ts';
 import { ExitCodes } from './errors/index.ts';
 
 function createBuildCommand(): Command {
@@ -63,6 +64,7 @@ program.addCommand(createRoutingCommand());
 program.addCommand(createACLCommand());
 program.addCommand(createStpCommand());
 program.addCommand(createLabServicesCommand());
+program.addCommand(createResultsCommand());
 
 try {
   program.parse(process.argv);
