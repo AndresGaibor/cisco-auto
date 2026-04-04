@@ -52,21 +52,11 @@ bun install
 echo
 echo "=== Setup Complete ==="
 echo
-echo "Next steps:"
+echo "🚀 Starting automatic PT module installation..."
 echo
-echo "1. Install PT Script Module:"
-echo "   - Open Packet Tracer"
-echo "   - Go to Extensions > Scripting > New PT Script Module"
-echo "   - Add packages/pt-control/generated/main.js as main script"
-echo "   - Save and restart PT"
-echo
-echo "2. Verify installation:"
-echo "   - Open Extensions > Scripting > Debug"
-echo "   - Look for 'PT Control Module initialized'"
-echo
-echo "3. Test the CLI:"
-echo "   bun run pt device list"
-echo
-echo "4. See quick start guide:"
-echo "   cat docs/PT_CONTROL_QUICKSTART.md"
-echo
+
+# Make install script executable
+chmod +x scripts/install-pt-module.sh
+
+# Run the automatic module installer
+bash scripts/install-pt-module.sh
