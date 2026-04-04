@@ -109,7 +109,15 @@ export function filterDevicesByType(devices: DeviceState[], type: string): Devic
  * @returns IOS-capable devices
  */
 export function getIOSCapableDevices(devices: DeviceState[]): DeviceState[] {
-  return devices.filter((d) => d.type === 'router' || d.type === 'switch');
+  return devices.filter((d) => {
+    const type = d.type;
+    // Handle both string and number types (PT returns number type IDs)
+    if (typeof type === 'number') {
+      // Device type IDs: 0=router, 1=switch, 16=multilayer-switch
+      return type === 0 || type === 1 || type === 16;
+    }
+    return type === 'router' || type === 'switch' || type === 'multilayer_switch' || type === 'switch_layer3';
+  });
 }
 
 /**

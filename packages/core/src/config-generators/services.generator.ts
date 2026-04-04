@@ -10,9 +10,11 @@ import type {
   SNMPSpec,
   SyslogSpec,
   HTTPSpec,
-  FTPSpec
+  FTPSpec,
+  EmailSpec
 } from '../canonical/protocol.spec';
 import type { ServicesSpec } from '../canonical/device.spec.js';
+import { EmailGenerator } from './email-generator.js';
 
 export class ServicesGenerator {
   // ==========================================================================
@@ -664,6 +666,10 @@ export class ServicesGenerator {
       commands.push(' transport input telnet');
       commands.push(' login local');
       commands.push(' exit');
+    }
+
+    if (spec.email?.enabled) {
+      commands.push(...EmailGenerator.generate(spec.email));
     }
 
     return commands;
