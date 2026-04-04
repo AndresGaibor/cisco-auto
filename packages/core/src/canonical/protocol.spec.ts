@@ -362,6 +362,9 @@ export interface ServicesSpec {
   /** FTP Server */
   ftp?: FTPSpec;
 
+  /** Email Server (para Server-PT) */
+  email?: EmailSpec;
+
   /** SNMP */
   snmp?: SNMPSpec;
 
@@ -602,27 +605,30 @@ export interface SNMPSpec {
  * Configuración de Syslog
  */
 export interface SyslogSpec {
-  /** Servidores syslog */
-  servers: {
-    ip: string;
-    severity?: 'emergencies' | 'alerts' | 'critical' | 'errors' | 'warnings' | 'notifications' | 'informational' | 'debugging';
-  }[];
-  
-  /** Source interface */
-  sourceInterface?: string;
-  
-  /** Timestamp en mensajes */
-  timestamp?: 'datetime' | 'uptime';
-  
-  /** Log a buffer local */
-  buffered?: {
-    enabled: boolean;
-    size?: number;  // bytes
-    severity?: string;
-  };
-  
-  /** Log a console */
-  console?: 'emergencies' | 'alerts' | 'critical' | 'errors' | 'warnings' | 'notifications' | 'informational' | 'debugging' | 'disabled';
+  servers: { ip: string; severity?: "emergencies" | "alerts" | "critical" | "errors" | "warnings" | "notifications" | "informational" | "debugging"; }[];
+  sourceInterface?: string | undefined;
+  timestamp?: "datetime" | "uptime" | undefined;
+  buffered?: { enabled: boolean; size?: number; severity?: string; } | undefined;
+  console?: "emergencies" | "alerts" | "critical" | "errors" | "warnings" | "notifications" | "informational" | "debugging" | "disabled" | undefined;
+}
+
+/**
+ * Configuración de Email Server (para Server-PT)
+ */
+export interface EmailSpec {
+  enabled: boolean;
+  emailDomain?: string;
+  smtpPort?: number;
+  pop3Port?: number;
+  imapPort?: number;
+  mailboxes?: EmailMailbox[];
+}
+
+export interface EmailMailbox {
+  username: string;
+  password?: string;
+  fullName?: string;
+  emailAddress: string;
 }
 
 // =============================================================================
