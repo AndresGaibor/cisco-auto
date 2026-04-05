@@ -16,6 +16,7 @@ export interface HistoryEntry {
   timestamp?: string;
   durationMs?: number;
   action: string;
+  contextSummary?: Record<string, unknown>;
   status?: 'success' | 'error' | 'failure';
   argv?: string[];
   flags?: Record<string, unknown>;
