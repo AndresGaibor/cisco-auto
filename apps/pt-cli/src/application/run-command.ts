@@ -17,12 +17,16 @@ import type { GlobalFlags, OutputFormat } from '../flags.js';
 import { sessionLogStore } from '../telemetry/session-log-store.js';
 import { historyStore } from '../telemetry/history-store.js';
 import { bundleWriter } from '../telemetry/bundle-writer.js';
+import type { CommandRuntimeContext } from './context-inspector.js';
+import { inspectCommandContext } from './context-inspector.js';
+import { buildContextWarnings } from './context-advice.js';
 
 export interface CommandContext {
   sessionId: string;
   correlationId: string;
   flags: GlobalFlags;
   controller: PTController;
+  runtimeContext: CommandRuntimeContext;
   logPhase: (phase: string, metadata?: Record<string, unknown>) => Promise<void>;
 }
 
@@ -60,43 +64,77 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
     });
   };
 
-  await logPhase('start', {
-    flags: options.flags,
-    payloadPreview: options.payloadPreview,
-  });
-
-  let result: CliResult<T>;
+  let result: CliResult<T> | undefined;
+  let runtimeContext: CommandRuntimeContext = {
+    bridgeReady: false,
+    topologyMaterialized: false,
+    deviceCount: 0,
+    linkCount: 0,
+    warnings: ['Controller no se pudo iniciar'],
+  };
 
   try {
+    await controller.start();
+    runtimeContext = await inspectCommandContext(controller);
+
+    await logPhase('start', {
+      flags: options.flags,
+      payloadPreview: options.payloadPreview,
+      contextSummary: {
+        bridgeReady: runtimeContext.bridgeReady,
+        topologyMaterialized: runtimeContext.topologyMaterialized,
+        deviceCount: runtimeContext.deviceCount,
+        linkCount: runtimeContext.linkCount,
+      },
+    });
+
     const ctx: CommandContext = {
       sessionId,
       correlationId,
       flags: options.flags,
       controller,
+      runtimeContext,
       logPhase,
     };
 
-    result = await options.execute(ctx);
-
-    if (result.meta) {
-      result.meta.sessionId = sessionId;
-      result.meta.correlationId = correlationId;
-    } else {
-      result.meta = {
-        sessionId,
-        correlationId,
-      };
+    try {
+      result = await options.execute(ctx);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      result = createErrorResult(options.action, {
+        message,
+        details: error instanceof Error ? { stack: error.stack } : undefined,
+      }) as CliResult<T>;
     }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+  } finally {
+    await controller.stop();
+  }
+
+  if (!result) {
     result = createErrorResult(options.action, {
-      message,
-      details: error instanceof Error ? { stack: error.stack } : undefined,
+      message: 'No result produced after execution.',
     }) as CliResult<T>;
   }
 
-  const durationMs = Date.now() - startTime;
+  // Merge context warnings with any existing result warnings
+  const contextAdvice = buildContextWarnings(runtimeContext);
+  const mergedWarnings = [...contextAdvice];
+  if (result.warnings) {
+    const existingSet = new Set(contextAdvice);
+    for (const w of result.warnings) {
+      if (!existingSet.has(w)) mergedWarnings.push(w);
+    }
+  }
+  result.warnings = mergedWarnings;
 
+  if (result.meta) {
+    result.meta.sessionId = sessionId;
+    result.meta.correlationId = correlationId;
+  } else {
+    result.meta = { sessionId, correlationId };
+  }
+
+  const durationMs = Date.now() - startTime;
   if (result.meta) {
     result.meta.durationMs = durationMs;
   }
@@ -115,6 +153,13 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
     payloadSummary: options.payloadPreview,
     resultSummary: result.data as Record<string, unknown> | undefined,
     commandIds: result.meta?.commandIds ?? [],
+    contextSummary: {
+      bridgeReady: runtimeContext.bridgeReady,
+      topologyMaterialized: runtimeContext.topologyMaterialized,
+      deviceCount: runtimeContext.deviceCount,
+      linkCount: runtimeContext.linkCount,
+      warnings: runtimeContext.warnings,
+    },
   };
 
   try {
@@ -134,6 +179,7 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
   await logPhase('end', {
     ok: result.ok,
     durationMs,
+    contextWarnings: runtimeContext.warnings,
   });
 
   return result;
