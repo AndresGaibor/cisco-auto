@@ -322,6 +322,20 @@ export class PTController {
   readState<T = unknown>(): T | null {
     return this.bridge.readState<T>();
   }
+
+  getContextSummary(): {
+    bridgeReady: boolean;
+    topologyMaterialized: boolean;
+    deviceCount: number;
+    linkCount: number;
+  } {
+    const bridgeReady = this.bridge.isReady();
+    const snapshot = this.topologyCache.getSnapshot();
+    const deviceCount = snapshot.devices ? Object.keys(snapshot.devices).length : 0;
+    const linkCount = snapshot.links ? Object.keys(snapshot.links).length : 0;
+    const topologyMaterialized = this.topologyCache.isMaterialized();
+    return { bridgeReady, topologyMaterialized, deviceCount, linkCount };
+  }
 }
 
 export function createPTController(config: PTControllerConfig): PTController {
