@@ -248,3 +248,23 @@ export {
   type IosErrorCode,
   type IosError,
 } from './ios-results.js';
+
+// Command Catalog - Single Source of Truth
+export {
+  PUBLIC_COMMAND_CATALOG,
+  INTERNAL_COMMAND_CATALOG,
+  COMMAND_CATALOG,
+  PUBLIC_COMMAND_TYPES,
+  INTERNAL_COMMAND_TYPES,
+  ALL_COMMAND_TYPES,
+  getCommandEntry,
+  isPublicCommand,
+  isInternalCommand,
+  getHandlerForCommand,
+  getServiceForCommand,
+  getExecutionModel,
+  getCommandsByService,
+  type CommandCatalogEntry,
+  type CommandVisibility,
+  type ExecutionModel,
+} from '../command-catalog.js';

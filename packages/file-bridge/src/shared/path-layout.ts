@@ -1,15 +1,40 @@
 /**
  * Path layout for Bridge V2 directory structure.
  *
- * NOTE: FileBridge V2 uses a single-file command protocol (command.json at root)
- * for the primary sendCommand/sendCommandAndWait API.
- * The commands/, in-flight/, and results/ directories exist to support:
- *   - Crash recovery (recovering in-flight commands after restart)
- *   - Consumer integrations that use CommandProcessor directly
+ * NOTE: FileBridge V2 uses a durable queue-based command protocol.
+ * The primary path is:
+ *   - commands/*.json: pending commands queue (FIFO by seq)
+ *   - in-flight/*.json: commands claimed by PT for processing
+ *   - results/<id>.json: authoritative result for each command
+ *   - dead-letter/*.json: corrupted commands that couldn't be processed
+ *   - logs/events.current.ndjson: event journal
+ *
+ * Legacy compatibility:
+ *   - command.json at root is DEPRECATED - only used for transition period
+ *   - It will be converted to commands/ on first use
  *
  * All paths are derived from a single root (pt-dev directory).
  */
 import { join } from "node:path";
+
+/**
+ * Parse a command filename to extract seq and type.
+ * Format: "<seq>-<type>.json" (e.g., "000000000042-configIos.json")
+ * Returns null if filename doesn't match expected format.
+ */
+export function parseCommandFileName(name: string): { seq: number; type: string } | null {
+  if (!name.endsWith(".json")) return null;
+  const base = name.slice(0, -5);
+  const match = base.match(/^(\d+)-(.*)$/);
+  if (!match) return null;
+  const seqStr = match[1];
+  const type = match[2];
+  if (seqStr === undefined || type === undefined) return null;
+  return {
+    seq: parseInt(seqStr, 10),
+    type: type,
+  };
+}
 
 /**
  * Sanitize a string for use in a filename.

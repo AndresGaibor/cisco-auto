@@ -3,8 +3,30 @@ import { homedir, platform } from "node:os";
 import { resolve } from "node:path";
 import { MAIN_JS_TEMPLATE } from "./templates/main.js";
 import { RUNTIME_JS_TEMPLATE } from "./templates/runtime.js";
+import { validateMainJs, validateRuntimeJs, validateGeneratedArtifacts, formatValidationErrors } from "./runtime-validator.js";
 
 const DEV_DIR_PLACEHOLDER = "{{DEV_DIR_LITERAL}}";
+
+// ============================================================================ 
+// Normalize generated code
+// ============================================================================
+
+function normalizeCode(code: string): string {
+  let normalized = code;
+  
+  normalized = normalized.replace(/\r\n/g, "\n");
+  normalized = normalized.replace(/\r/g, "\n");
+  
+  normalized = normalized.replace(/[\t ]+$/gm, "");
+  
+  normalized = normalized.replace(/\n{3,}/g, "\n\n");
+  
+  if (!normalized.endsWith("\n")) {
+    normalized += "\n";
+  }
+  
+  return normalized;
+}
 
 // ============================================================================ 
 // Platform-aware dev directory
@@ -48,11 +70,21 @@ const DEFAULT_CONFIG: RuntimeGeneratorConfig = {
 // ============================================================================
 
 export function renderMainSource(devDir: string): string {
-  return MAIN_JS_TEMPLATE.replace(DEV_DIR_PLACEHOLDER, JSON.stringify(devDir));
+  const mainCode = normalizeCode(MAIN_JS_TEMPLATE.replace(DEV_DIR_PLACEHOLDER, JSON.stringify(devDir)));
+  const result = validateMainJs(mainCode);
+  if (!result.ok) {
+    throw new Error(formatValidationErrors(result));
+  }
+  return mainCode;
 }
 
 export function renderRuntimeSource(): string {
-  return RUNTIME_JS_TEMPLATE;
+  const runtimeCode = normalizeCode(RUNTIME_JS_TEMPLATE);
+  const result = validateRuntimeJs(runtimeCode);
+  if (!result.ok) {
+    throw new Error(formatValidationErrors(result));
+  }
+  return runtimeCode;
 }
 
 // ============================================================================ 
@@ -83,6 +115,11 @@ export class RuntimeGenerator {
 
     const main = this.generateMain();
     const runtime = this.generateRuntime();
+
+    const validation = validateGeneratedArtifacts(main, runtime);
+    if (!validation.ok) {
+      throw new Error(formatValidationErrors(validation));
+    }
 
     writeFileSync(resolve(outputDir, "main.js"), main, "utf-8");
     writeFileSync(resolve(outputDir, "runtime.js"), runtime, "utf-8");

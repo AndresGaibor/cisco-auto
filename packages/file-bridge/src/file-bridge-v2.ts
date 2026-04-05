@@ -75,7 +75,7 @@ export class FileBridgeV2 extends EventEmitter {
       this.paths.leaseFile(),
       options.leaseTtlMs ?? 5000,
     );
-    this.commandProcessor = new CommandProcessor(this.paths, this.eventWriter);
+    this.commandProcessor = new CommandProcessor(this.paths, this.eventWriter, this.seq);
     this.crashRecovery = new CrashRecovery(this.paths, this.seq, this.eventWriter);
     this._diagnostics = new BridgeDiagnostics(
       this.paths,
@@ -190,10 +190,11 @@ export class FileBridgeV2 extends EventEmitter {
       checksum: this.checksumOf({ type, payload: payloadWithType }),
     };
 
-    const { atomicWriteFile } = require("./shared/fs-atomic.js");
-    const { join } = require("node:path");
-    const commandFile = join(this.paths.root, "command.json");
+    // NUEVO: escribir a commands/ en lugar de command.json (Fase 5)
+    const { atomicWriteFile, ensureDir } = require("./shared/fs-atomic.js");
+    const commandFile = this.paths.commandFilePath(seq, type);
 
+    ensureDir(this.paths.commandsDir());
     atomicWriteFile(commandFile, JSON.stringify(envelope, null, 2));
 
     this.eventWriter.append({
@@ -216,20 +217,7 @@ export class FileBridgeV2 extends EventEmitter {
       await this.backpressure.waitForCapacity();
     }
 
-    const { readFileSync } = await import("node:fs");
-    const { join } = await import("node:path");
-    const commandFile = join(this.paths.root, "command.json");
-    try {
-      for (let attempt = 0; attempt < 20; attempt++) {
-        const existing = readFileSync(commandFile, "utf8").trim();
-        if (!existing) break;
-        await new Promise((r) => setTimeout(r, 250));
-      }
-    } catch (e) {
-      const err = e as NodeJS.ErrnoException;
-      if (err.code !== "ENOENT") throw e;
-    }
-
+    // NUEVO: escribir a commands/ (Fase 5) - ya no hay slot único
     const envelope = this.sendCommand(
       type,
       payload,

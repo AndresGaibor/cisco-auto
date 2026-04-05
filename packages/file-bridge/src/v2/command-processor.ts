@@ -8,29 +8,59 @@ import { readdirSync, readFileSync, renameSync, unlinkSync, existsSync } from "n
 import { createHash } from "node:crypto";
 import type { BridgeCommandEnvelope, BridgeResultEnvelope } from "../shared/protocol.js";
 import { BridgePathLayout } from "../shared/path-layout.js";
+import { parseCommandFileName } from "../shared/path-layout.js";
 import { EventLogWriter } from "../event-log-writer.js";
-import { atomicWriteFile, ensureDir } from "../shared/fs-atomic.js";
+import { atomicWriteFile, ensureDir, listJsonFiles } from "../shared/fs-atomic.js";
 
 export class CommandProcessor {
   constructor(
     private readonly paths: BridgePathLayout,
     private readonly eventWriter: EventLogWriter,
+    private readonly seq: { next: () => number },
   ) {}
 
   pickNextCommand<T = unknown>(): BridgeCommandEnvelope<T> | null {
-    const files = readdirSync(this.paths.commandsDir())
-      .filter((f) => f.endsWith(".json"))
-      .sort();
+    const files = listJsonFiles(this.paths.commandsDir());
 
     for (const file of files) {
       const srcPath = join(this.paths.commandsDir(), file);
-      const dstPath = join(this.paths.inFlightDir(), file);
 
+      // Parsear seq y type del filename
+      const parsed = parseCommandFileName(file);
+      if (!parsed) {
+        // Archivo no reconocido - mover a dead-letter
+        this.moveToDeadLetter(srcPath, new Error("Invalid command filename format"));
+        continue;
+      }
+
+      const cmdId = `cmd_${String(parsed.seq).padStart(12, "0")}`;
+      const resultPath = this.paths.resultFilePath(cmdId);
+
+      // Deduplicación: si ya existe resultado, purgar el comando duplicado
+      if (existsSync(resultPath)) {
+        try {
+          unlinkSync(srcPath);
+          this.eventWriter.append({
+            seq: this.seq.next(),
+            ts: Date.now(),
+            type: "command-purged-duplicate",
+            id: cmdId,
+            commandType: parsed.type,
+          });
+          continue;
+        } catch {
+          // Ignore - continue to next
+          continue;
+        }
+      }
+
+      // Intentar claim: mover de commands/ a in-flight/
+      const dstPath = join(this.paths.inFlightDir(), file);
       try {
         renameSync(srcPath, dstPath);
       } catch (err) {
         const error = err as NodeJS.ErrnoException;
-        if (error.code === "ENOENT") continue;
+        if (error.code === "ENOENT") continue; // Ya fue tomado por otro proceso
         throw err;
       }
 

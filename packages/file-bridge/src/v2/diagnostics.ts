@@ -20,6 +20,7 @@ export interface BridgeHealth {
     pendingCommands: number;
     inFlight: number;
     results: number;
+    deadLetters: number;
   };
   journal: {
     currentFileSize: number;
@@ -58,6 +59,7 @@ export class BridgeDiagnostics {
     const pendingCommands = this.countFilesInDir(this.paths.commandsDir());
     const inFlight = this.countFilesInDir(this.paths.inFlightDir());
     const results = this.countFilesInDir(this.paths.resultsDir());
+    const deadLetters = this.countFilesInDir(this.paths.deadLetterDir());
     const rotatedLogs = this.countRotatedLogs();
 
     const consumers = this.getConsumerLag();
@@ -83,7 +85,7 @@ export class BridgeDiagnostics {
         ownerId: this.lease?.ownerId ?? null,
         ageMs: this.lease ? now - this.lease.startedAt : 0,
       },
-      queues: { pendingCommands, inFlight, results },
+      queues: { pendingCommands, inFlight, results, deadLetters },
       journal: {
         currentFileSize,
         rotatedFiles: rotatedLogs,

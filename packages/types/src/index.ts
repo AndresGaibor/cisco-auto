@@ -10,3 +10,6 @@ export * from './schemas/index.js';
 
 // Export types only (for lighter imports)
 export * from './types/index.js';
+
+// Export command catalog
+export * from './command-catalog.js';
