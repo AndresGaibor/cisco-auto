@@ -417,6 +417,7 @@ const POWERSHELL_INSTALL = `
 /**
  * Lista de comandos disponibles en la CLI
  */
+const AVAILABLE_COMMANDS = [
   'device',
   'config-host',
   'config-ios',
@@ -446,6 +447,7 @@ export function createCompletionCommand(): Command {
   return new Command('completion')
     .description('Generar scripts de completion para shell [Estado: experimental]')
     .argument('<shell>', 'Shell objetivo: bash, zsh, fish, powershell')
+    .action(async (shell: string) => {
       // ⚠️ ADVERTENCIA: Scripts de completion desactualizados
       console.warn('\n⚠️  ADVERTENCIA: Scripts de completion pueden estar desactualizados.');
       console.warn('Algunos comandos antiguos (parse, config, validate, deploy, init, etc.)');

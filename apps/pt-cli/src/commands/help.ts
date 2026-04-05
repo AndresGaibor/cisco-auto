@@ -17,15 +17,6 @@ interface CommandInfo {
 }
 
 const COMMANDS: Record<string, CommandInfo> = {
-  '': {
-    id: 'pt',
-    summary: 'CLI para controlar Cisco Packet Tracer en tiempo real',
-    longDescription: `PT Control es la interfaz de línea de comandos profesional para controlar 
-Cisco Packet Tracer en tiempo real. Permite ejecutar comandos IOS, gestionar 
-dispositivos, VLANs, enlaces, y más.`,
-    examples: ['pt help', 'pt help device', 'pt help device list'],
-    related: ['device', 'config-ios', 'logs', 'history', 'doctor'],
-  },
   'device': {
     id: 'device',
     summary: 'Gestión de dispositivos en Packet Tracer',
@@ -40,7 +31,7 @@ Cada dispositivo se identifica por un nombre único y tipo (router, switch, etc)
     longDescription: `Muestra una lista de todos los dispositivos actualmente cargados 
 en Packet Tracer con su tipo, modelo y posición.`,
     examples: ['pt device list', 'pt device list --json', 'pt device list --filter switch'],
-    related: ['device add', 'device info'],
+    related: ['device add', 'device get'],
   },
   'device add': {
     id: 'device add',
@@ -91,14 +82,14 @@ Soporta configuración de interfaces, VLANs, routing, ACLs, etc.
 ⚠️ Estado: PARTIAL — No confiar ciegamente en 'ok' sin verificación posterior.`,
     examples: ['pt config-ios R1 interface GigabitEthernet0/0 ip address 192.168.1.1 255.255.255.0', 'pt config-ios R1 vlan 10 name ADMIN'],
     related: ['config-host', 'show'],
-  }
+  },
   'show': {
     id: 'show',
     summary: 'Ejecuta comandos show en dispositivos',
     longDescription: `Ejecuta comandos show en dispositivos para obtener información
 sobre la configuración y estado.`,
     examples: ['pt show ip-int-brief R1', 'pt show vlan Switch1', 'pt show ip-route R1'],
-    related: ['config-ios', 'device info'],
+    related: ['config-ios', 'device get'],
   },
   'show ip-int-brief': {
     id: 'show ip-int-brief',
@@ -171,7 +162,7 @@ Automáticamente configura el tipo de enlace (access/trunk).`,
 Estado: PARTIAL — análisis básico disponible.`,
     examples: ['pt topology analyze', 'pt topology visualize', 'pt topology export'],
     related: ['link', 'device list'],
-  }
+  },
   'topology analyze': {
     id: 'topology analyze',
     summary: 'Analiza la topología de red',
@@ -301,7 +292,7 @@ La re-ejecución completa todavía requiere implementación adicional.
 NO usar en modo autónomo sin supervisión.`,
     examples: ['pt history rerun ses_abc123'],
     related: ['history show', 'history explain'],
-  }
+  },
   'history explain': {
     id: 'history explain',
     summary: 'Explica un error de ejecución',
@@ -317,7 +308,7 @@ Verifica directorios, archivos de runtime, heartbeat, y estado de PT.
 Estado: PARTIAL — útil para troubleshooting.`,
     examples: ['pt doctor', 'pt doctor --verbose'],
     related: ['logs', 'history', 'completion'],
-  }
+  },
   'completion': {
     id: 'completion',
     summary: 'Scripts de completion para shell [Estado: experimental]',
@@ -326,7 +317,7 @@ Estado: PARTIAL — útil para troubleshooting.`,
 No usar como fuente de verdad de comandos disponibles.`,
     examples: ['pt completion bash', 'pt completion zsh', 'pt completion fish'],
     related: ['doctor', 'help'],
-  }
+  },
   'results': {
     id: 'results',
     summary: 'Visor de resultados de comandos',
@@ -386,7 +377,7 @@ function formatSchemaSection(schema?: string): string {
 function getCommandSchema(commandId: string): string | undefined {
   const schemas: Record<string, string> = {
     'device list': 'DeviceListResult',
-    'device info': 'DeviceInfoResult',
+    'device get': 'DeviceInfoResult',
     'show ip-int-brief': 'IpInterfaceBriefResult',
     'show vlan': 'VlanResult',
     'show ip-route': 'IpRouteResult',
@@ -436,8 +427,6 @@ export function createHelpCommand(): Command {
           console.log('  build          Build y deploy');
           console.log('\n⚠️  Algunas capacidades están en estado PARTIAL o EXPERIMENTAL.');
           console.log('Consulta docs/CLI_AGENT_SKILL.md para políticas de autonomía y troubleshooting.\n');
-          console.log('  services       Servicios de red');
-          console.log('  build          Build y deploy');
           console.log('\nUsa "pt help <comando>" para ver más detalles.');
           console.log('Usa "pt help <comando> <subcomando>" para subcomandos.');
         }
