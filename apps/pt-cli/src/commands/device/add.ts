@@ -177,6 +177,9 @@ export function createDeviceAddCommand(): Command {
               throw new Error('El modelo del dispositivo es requerido');
             }
 
+            // Validar que el nombre no exista
+            await validateDeviceNameNotExists(controller, deviceName);
+
             await logPhase('apply', {
               name: deviceName,
               model: deviceModel,

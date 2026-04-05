@@ -1,6 +1,7 @@
 /**
- * Lease Manager - Manages FileBridge V2 leases
+ * Lease Manager - Manages FileBridge V2 leases (Fase 8)
  * Handles lease acquisition, renewal, and staleness detection
+ * CRITICAL: Recovery and consumer operations MUST NOT proceed without valid lease
  */
 
 import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
@@ -8,15 +9,18 @@ import { hostname } from "node:os";
 import { randomUUID } from "node:crypto";
 import type { BridgeLease } from "../shared/protocol.js";
 import { atomicWriteFile } from "../shared/fs-atomic.js";
+import { debug } from "node:util";
 
 export class LeaseManager {
   private readonly ownerId = randomUUID();
   private leaseFilePath: string;
   private leaseTtlMs: number;
+  private logger: (msg: string) => void;
 
   constructor(leaseFilePath: string, leaseTtlMs: number = 5000) {
     this.leaseFilePath = leaseFilePath;
     this.leaseTtlMs = leaseTtlMs;
+    this.logger = debug('bridge:lease');
   }
 
   getOwnerId(): string {
@@ -25,6 +29,7 @@ export class LeaseManager {
 
   /**
    * Check if this instance holds a valid (non-stale) lease
+   * FASE 8: Explicit predicate for lease validation gates
    */
   hasValidLease(): boolean {
     const existing = this.readLease();
@@ -33,13 +38,22 @@ export class LeaseManager {
     return !this.isLeaseStale(existing);
   }
 
+  /**
+   * Alias for hasValidLease() - semantic clarity for Fase 8
+   */
+  isLeaseValid(): boolean {
+    return this.hasValidLease();
+  }
+
   acquireLease(): boolean {
     const existing = this.readLease();
     if (existing && !this.isLeaseStale(existing)) {
       if (existing.ownerId === this.ownerId) {
         this.renewLease();
+        this.logger(`Renewed lease (ownerId=${this.ownerId.substring(0, 8)}...)`);
         return true;
       }
+      this.logger(`Lease held by another instance: ${existing.ownerId.substring(0, 8)}...`);
       return false;
     }
 
@@ -60,6 +74,7 @@ export class LeaseManager {
     };
 
     atomicWriteFile(this.leaseFilePath, JSON.stringify(lease, null, 2));
+    this.logger(`Lease renewed (ownerId=${this.ownerId.substring(0, 8)}..., expires_in=${this.leaseTtlMs}ms)`);
   }
 
   releaseLease(): void {
@@ -67,9 +82,10 @@ export class LeaseManager {
       const current = this.readLease();
       if (current?.ownerId === this.ownerId) {
         unlinkSync(this.leaseFilePath);
+        this.logger(`Lease released (ownerId=${this.ownerId.substring(0, 8)}...)`);
       }
     } catch {
-      // ignore
+      // ignore - best effort
     }
   }
 
@@ -98,7 +114,11 @@ export class LeaseManager {
     atomicWriteFile(this.leaseFilePath, JSON.stringify(lease, null, 2));
 
     const written = this.readLease();
-    return written?.ownerId === this.ownerId;
+    const acquired = written?.ownerId === this.ownerId;
+    if (acquired) {
+      this.logger(`Lease acquired (ownerId=${this.ownerId.substring(0, 8)}..., ttl=${this.leaseTtlMs}ms)`);
+    }
+    return acquired;
   }
 
   private isLeaseStale(lease: BridgeLease): boolean {

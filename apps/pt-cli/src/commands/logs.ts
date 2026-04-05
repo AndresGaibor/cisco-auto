@@ -292,6 +292,23 @@ export function createLogsCommand(): Command {
         foundAny = true;
         console.log('--- Resultado ---');
         const result = JSON.parse(readFileSync(resultPath, 'utf-8'));
+        // Show verification summary if present
+        if (result && result.verification) {
+          const v = result.verification;
+          console.log('Verification:');
+          if (typeof v.executed !== 'undefined') console.log(`  executed: ${v.executed}`);
+          if (typeof v.verified !== 'undefined') console.log(`  verified: ${v.verified}`);
+          if (v.partiallyVerified) console.log('  partiallyVerified: true');
+          if (v.verificationSource && v.verificationSource.length) console.log(`  source: ${v.verificationSource.join(', ')}`);
+          if (v.warnings && v.warnings.length) console.log(`  warnings: ${v.warnings.join('; ')}`);
+          if (v.checks && v.checks.length) {
+            console.log('  checks:');
+            for (const c of v.checks) {
+              console.log(`    - ${c.name}: ${c.ok} ${c.details ? JSON.stringify(c.details) : ''}`);
+            }
+          }
+          console.log();
+        }
         console.log(JSON.stringify(result, null, 2));
         console.log();
       }

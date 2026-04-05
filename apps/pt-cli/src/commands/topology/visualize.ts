@@ -9,10 +9,17 @@ import { toLabSpec, type ParsedLabYaml } from '../../types/lab-spec.types';
 
 export function createTopologyVisualizeCommand(): Command {
   const cmd = new Command('visualize')
-    .description('Visualizar topología de red')
-    .argument('<file>', 'Archivo YAML del lab')
+    .description('Visualizar topología de red (del canvas o archivo YAML)')
+    .argument('[file]', 'Archivo YAML del lab (opcional - usa topología del canvas si no se especifica)')
     .option('-m, --mermaid', 'Generar diagrama Mermaid', false)
     .action(async (file, options) => {
+      if (!file) {
+        console.log('Visualización del canvas aún no implementada.');
+        console.log('Usa: pt topology visualize <archivo.yaml>');
+        console.log('O genera un archivo YAML con "pt topology export" primero.');
+        return;
+      }
+
       try {
         const parsedLab = loadLab(file);
         const labSpec = toLabSpec(parsedLab);

@@ -76,7 +76,7 @@ export class FileBridgeV2 extends EventEmitter {
       options.leaseTtlMs ?? 5000,
     );
     this.commandProcessor = new CommandProcessor(this.paths, this.eventWriter, this.seq);
-    this.crashRecovery = new CrashRecovery(this.paths, this.seq, this.eventWriter);
+    this.crashRecovery = new CrashRecovery(this.paths, this.seq, this.eventWriter, this.leaseManager);
     this._diagnostics = new BridgeDiagnostics(
       this.paths,
       this.seq,
@@ -102,6 +102,7 @@ export class FileBridgeV2 extends EventEmitter {
     if (this.running) return;
     this.running = true;
 
+    // FASE 8: Ensure directories first
     ensureDir(this.paths.commandsDir());
     ensureDir(this.paths.inFlightDir());
     ensureDir(this.paths.resultsDir());
@@ -110,16 +111,27 @@ export class FileBridgeV2 extends EventEmitter {
     ensureDir(this.paths.deadLetterDir());
     ensureFile(this.paths.currentEventsFile(), "");
 
-    this.crashRecovery.recover();
-
+    // FASE 8: Lease-aware gate - CRITICAL
+    // Recovery and consumer must NOT proceed without valid lease
     if (!this.leaseManager.acquireLease()) {
+      this.running = false; // Mark as stopped since we can't get lease
       this.emit("lease-denied");
+      this.appendEvent({
+        type: "bridge-startup-failed",
+        note: "Unable to acquire lease",
+      });
+      return;
     }
 
+    // FASE 8: Only run recovery if we have valid lease
+    this.crashRecovery.recover();
+
+    // FASE 8: Only start lease renewal if lease is valid
     this.leaseTimer = setInterval(() => {
       this.leaseManager.renewLease();
     }, this.options.leaseIntervalMs ?? 1_000);
 
+    // FASE 8: Only start consumer if we have valid lease
     this.consumer.start();
   }
 

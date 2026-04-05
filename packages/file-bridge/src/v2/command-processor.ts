@@ -1,11 +1,17 @@
 /**
- * Command Processor - Processes commands from PT
- * Handles command dequeuing, expiration checks, and result publishing
+ * Command Processor - Processes commands from PT (Fase 8)
+ * Handles command dequeuing, expiration checks, deduplication, and result publishing
+ * CRITICAL: Race condition safe - claim-by-rename atomically prevents double-processing
  */
 
 import { join, basename } from "node:path";
 import { readdirSync, readFileSync, renameSync, unlinkSync, existsSync } from "node:fs";
 import { createHash } from "node:crypto";
+import type { BridgeCommandEnvelope, BridgeResultEnvelope } from "../shared/protocol.js";
+import { BridgePathLayout } from "../shared/path-layout.js";
+import { parseCommandFileName } from "../shared/path-layout.js";
+import { EventLogWriter } from "../event-log-writer.js";
+import { atomicWriteFile, ensureDir, listJsonFiles } from "../shared/fs-atomic.js";
 import type { BridgeCommandEnvelope, BridgeResultEnvelope } from "../shared/protocol.js";
 import { BridgePathLayout } from "../shared/path-layout.js";
 import { parseCommandFileName } from "../shared/path-layout.js";
@@ -19,6 +25,11 @@ export class CommandProcessor {
     private readonly seq: { next: () => number },
   ) {}
 
+  /**
+   * Pick next command from queue (Fase 8 - Race condition safe)
+   * ATOMIC: Moves file from commands/ to in-flight/ as single operation
+   * Returns null if queue empty or all commands are expired/duplicate
+   */
   pickNextCommand<T = unknown>(): BridgeCommandEnvelope<T> | null {
     const files = listJsonFiles(this.paths.commandsDir());
 
@@ -119,6 +130,11 @@ export class CommandProcessor {
     return null;
   }
 
+  /**
+   * Publish result for a command (Fase 8 - Race condition safe)
+   * ATOMIC: Writes result file, logs event, cleans in-flight
+   * Safe to call multiple times for same command - later writes override
+   */
   publishResult<TResult = unknown>(
     cmd: BridgeCommandEnvelope,
     result: {

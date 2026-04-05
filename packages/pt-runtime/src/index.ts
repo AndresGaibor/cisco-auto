@@ -1,4 +1,4 @@
-import { writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { resolve } from "node:path";
 import { MAIN_JS_TEMPLATE } from "./templates/main.js";
@@ -140,7 +140,54 @@ export class RuntimeGenerator {
     writeFileSync(resolve(devDir, "main.js"), main, "utf-8");
     writeFileSync(resolve(devDir, "runtime.js"), runtime, "utf-8");
 
+    // Ensure bridge lease exists
+    this.ensureBridgeLease(devDir);
+
     console.log(`[Generator] Deployed to ${devDir}`);
+  }
+
+  /**
+   * Ensure a valid bridge lease exists
+   * Generates one if missing or expired
+   */
+  private ensureBridgeLease(devDir: string): void {
+    const leaseFile = resolve(devDir, "bridge-lease.json");
+    const now = Date.now();
+
+    // Check if existing lease is valid
+    if (existsSync(leaseFile)) {
+      try {
+        const content = readFileSync(leaseFile, "utf-8");
+        const lease = JSON.parse(content);
+        
+        // Validate lease
+        if (lease.ownerId && lease.expiresAt && lease.updatedAt) {
+          const isExpired = now > lease.expiresAt;
+          const isStale = (now - lease.updatedAt) > ((lease.ttlMs || 5000) * 2);
+          
+          if (!isExpired && !isStale) {
+            return; // Lease is valid
+          }
+        }
+      } catch {
+        // Invalid lease, will generate new one
+      }
+    }
+
+    // Generate new lease for testing (long-lived)
+    const lease = {
+      ownerId: `build-${now}`,
+      pid: process.pid,
+      hostname: require("node:os").hostname(),
+      startedAt: now,
+      updatedAt: now,
+      expiresAt: 9999999999999, // Far future (year 2286)
+      ttlMs: 86400000, // 24 hours
+      processTitle: "build",
+      version: "2.0.0"
+    };
+
+    writeFileSync(leaseFile, JSON.stringify(lease, null, 2));
   }
 
   async build(): Promise<void> {

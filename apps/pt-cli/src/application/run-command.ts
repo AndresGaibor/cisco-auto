@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { getContextualSuggestions } from './contextual-suggestions.js';
 /**
  * Runner unificado para todos los comandos de la CLI.
  * Encapsula lógica de ejecución, logging, historial y rendering.
@@ -139,6 +140,11 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
   }
   result.warnings = mergedWarnings;
 
+  // Phase 7: add contextual suggestions based on verification and context
+  const suggestions = getContextualSuggestions(result, { saveRequested: options.flags.verify });
+  if (suggestions.length > 0) {
+    result.advice = [...(result.advice ?? []), ...suggestions];
+  }
   if (result.meta) {
     result.meta.sessionId = sessionId;
     result.meta.correlationId = correlationId;
@@ -172,6 +178,18 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
       linkCount: runtimeContext.linkCount,
       warnings: runtimeContext.warnings,
     },
+    // Phase 7 additions: verification and interaction metadata
+    verificationSummary: (function(){
+      const v = (result as any).verification;
+      if (!v) return undefined;
+      if (v.verified === true) return `verified via ${ (v.verificationSource && v.verificationSource.length) ? v.verificationSource.join(', ') : 'checks' }`;
+      if (v.partiallyVerified === true) return `partially verified via ${ (v.verificationSource && v.verificationSource.length) ? v.verificationSource.join(', ') : 'partial checks' }`;
+      if (v.executed === true && v.verified === false) return 'executed only (not verified)';
+      return undefined;
+    })(),
+    interactionSummary: (result as any).interactionSummary ?? result.meta?.interactionSummary,
+    completionReason: (result.meta as any)?.completionReason ?? (result as any).completionReason,
+    warnings: result.warnings ?? [],
   };
 
   try {

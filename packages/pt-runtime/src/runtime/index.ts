@@ -36,5 +36,6 @@ function runtime(
   }
 }
 
-// Make it global for PT to call
-(globalThis as any).runtime = runtime;
+// Make it global for PT to call (PT doesn't support globalThis)
+// (globalThis as any).runtime = runtime;
+// (globalThis as any).runtime = runtime;

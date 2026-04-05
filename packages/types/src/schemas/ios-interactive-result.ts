@@ -112,7 +112,7 @@ export const TranscriptEntrySchema = z.object({
     'command-ended',
     'event',
   ]),
-  payload: z.record(z.unknown()).describe('Event-specific data'),
+  payload: z.record(z.string(), z.unknown()).describe('Event-specific data'),
 });
 
 export type TranscriptEntry = z.infer<typeof TranscriptEntrySchema>;
@@ -127,7 +127,7 @@ export const IosInteractiveResultSchema = z.object({
   raw: z.string().describe('Full raw output from device'),
   
   // Parsed output (if applicable)
-  parsed: z.record(z.unknown()).optional().describe('Parsed structured data from output'),
+  parsed: z.record(z.string(), z.unknown()).optional().describe('Parsed structured data from output'),
   parseError: z.string().optional().describe('Error message if parsing failed'),
   
   // Session state after execution
@@ -185,6 +185,8 @@ export function createSuccessResult(opts: {
     diagnostics: {
       source: 'terminal',
       completionReason: 'command-ended',
+      errors: [],
+      warnings: [],
     },
     executionTimeMs: opts.executionTimeMs,
     parsed: opts.parsed,
@@ -254,6 +256,7 @@ export function createSyntheticResult(opts: {
     diagnostics: {
       source: 'synthetic',
       completionReason: 'unknown',
+      errors: [],
       warnings: opts.warnings,
       reliabilityScore: 30, // Low confidence for synthetic
     },

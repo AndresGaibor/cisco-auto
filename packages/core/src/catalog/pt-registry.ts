@@ -18,6 +18,7 @@ export const PT_NON_CREATABLE_MODELS = [
 ] as const;
 
 export const PT_MODEL_ALIASES: Record<string, string> = {
+  // Generic aliases
   router: '1941',
   switch: '2960-24TT',
   pc: 'PC-PT',
@@ -27,12 +28,43 @@ export const PT_MODEL_ALIASES: Record<string, string> = {
   printer: 'Printer-PT',
   ap: 'AccessPoint-PT',
   accesspoint: 'AccessPoint-PT',
+  
+  // Wireless
   wrt300n: 'WRT300N',
   'linksys-wrt300n': 'WRT300N',
   'homerouter-pt-ac': 'HomeRouter-PT-AC',
+  '3702i': '3702i',
+  'aironet-3702i': '3702i',
+  'wirelessenddevice-pt': 'WirelessEndDevice-PT',
+  'wiredenddevice-pt': 'WiredDevice-PT',
+  
+  // Switches - 2950 series
+  '2950': '2950-24',
+  '2950t': '2950T-24',
+  
+  // Switches - 2960 series
   '2960': '2960-24TT',
+  '2960-24': '2960-24TT',
+  '2960-24tt': '2960-24TT',
   '2960-24tt-l': '2960-24TT',
+  '2960-24tc': '2960-24TT',  // TC no existe, mapear a TT
+  
+  // Switches - 3560/3650 series (L3 switches)
+  '3560': '3560-24PS',
+  '3560-24ps': '3560-24PS',
   '3560-24ps-l': '3560-24PS',
+  '3650': '3650-24PS',
+  '3650-24ps': '3650-24PS',
+  
+  // Industrial switches
+  'ie-2000': 'IE-2000',
+  'ie2000': 'IE-2000',
+  'ie-3400': 'IE-3400',
+  'ie3400': 'IE-3400',
+  'ie-9320': 'IE-9320',
+  'ie9320': 'IE-9320',
+  
+  // Routers - compact aliases
   '819hg-4g-iox': '819',
   '819hgw': '819',
   'router-pt-empty': 'Router-PT',
@@ -40,18 +72,17 @@ export const PT_MODEL_ALIASES: Record<string, string> = {
   'switch-pt': 'Switch-PT',
   'switch-pt-empty': 'Switch-PT',
   'hub-pt': 'Hub-PT',
-  'wiredenddevice-pt': 'WiredDevice-PT',
-  '3702i': '3702i',
-  'aironet-3702i': '3702i',
+  
+  // Security devices
   '5506-x': '5506-X',
   'asa-5505': '5505',
   'asa-5506': '5506-X',
-  'ie-2000': 'IE-2000',
-  'ie2000': 'IE-2000',
-  'ir8340': 'IR-8340',
   '5505': '5505',
   '5506': '5506-X',
   'isa-3000': 'ISA-3000',
+  
+  // Industrial routers
+  'ir8340': 'IR-8340',
 };
 
 export interface PTDeviceSummary {

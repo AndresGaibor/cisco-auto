@@ -494,5 +494,3 @@ function handleExecInteractive(payload) {
   }
 }`;
 }
-
-export { generateIosExecHandlersTemplate };

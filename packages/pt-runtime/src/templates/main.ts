@@ -112,6 +112,13 @@ function main() {
     // Migrar command.json legacy si existe
     migrateLegacyCommand();
     
+    // FASE 8: Validate bridge lease before loading runtime
+    // PT-safe lease validation
+    if (!validateBridgeLease()) {
+      dprint("[FATAL] Bridge has no valid lease - aborting runtime load");
+      isRunning = false;
+      return;
+    }
     loadRuntime();
     recoverInFlightOnStartup();
     loadPendingCommands();
@@ -181,10 +188,54 @@ function ensureDir(path) {
 }
 
 // ============================================================================
+// FASE 8: Lease Validation (PT-Side)
+// ============================================================================
+
+function validateBridgeLease() {
+  try {
+    var leaseFile = DEV_DIR + "/bridge-lease.json";
+    if (!fm.fileExists(leaseFile)) {
+      dprint("[LEASE] No lease file found");
+      return false;
+    }
+    
+    var content = fm.getFileContents(leaseFile);
+    if (!content || content.trim().length === 0) {
+      dprint("[LEASE] Lease file empty");
+      return false;
+    }
+    
+    var lease = JSON.parse(content);
+    if (!lease.ownerId || !lease.expiresAt) {
+      dprint("[LEASE] Lease invalid: missing ownerId or expiresAt");
+      return false;
+    }
+    
+    var now = Date.now();
+    if (now > lease.expiresAt) {
+      dprint("[LEASE] Lease expired at " + new Date(lease.expiresAt).toISOString());
+      return false;
+    }
+    
+    var ageMs = now - lease.updatedAt;
+    if (ageMs > (lease.ttlMs * 2)) {
+      dprint("[LEASE] Lease stale (age=" + ageMs + "ms, ttl=" + lease.ttlMs + "ms)");
+      return false;
+    }
+    
+    dprint("[LEASE] Lease valid (ownerId=" + lease.ownerId.substring(0, 8) + "..., expires_in=" + (lease.expiresAt - now) + "ms)");
+    return true;
+  } catch (e) {
+    dprint("[LEASE] Validation error: " + String(e));
+    return false;
+  }
+}
+
+// ============================================================================
 // PT-Side Command Trace (Fase 8)
 // ============================================================================
 
-function writeCommandTracePatchPatch(cmdId, patch) {
+function writeCommandTracePatch(cmdId, patch) {
   try {
     var tracePath = COMMANDS_TRACE_DIR + "/" + cmdId + ".json";
     var existing = {};
@@ -194,7 +245,13 @@ function writeCommandTracePatchPatch(cmdId, patch) {
         existing = JSON.parse(content) || {};
       }
     } catch (e) {}
-    var updated = Object.assign({}, existing, patch);
+    var updated = {};
+    for (var k in existing) {
+      if (existing.hasOwnProperty(k)) updated[k] = existing[k];
+    }
+    for (var k in patch) {
+      if (patch.hasOwnProperty(k)) updated[k] = patch[k];
+    }
     fm.writePlainTextToFile(tracePath, JSON.stringify(updated, null, 2));
   } catch (e) {
     dprint("[trace] write error: " + String(e));

@@ -55,6 +55,15 @@ export function renderCliResultText<T>(result: CliResult<T>): string {
       lines.push(`  ! ${warning}`);
     }
   }
+  if (result.advice && result.advice.length > 0) {
+    lines.push('');
+    lines.push('Advice');
+    for (const advice of result.advice) {
+      lines.push(`  → ${advice}`);
+    }
+  }
+
+
 
   if (result.error) {
     lines.push('');

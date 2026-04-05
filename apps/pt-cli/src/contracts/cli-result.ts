@@ -33,8 +33,12 @@ export interface CliResult<T = unknown> {
   entityType?: string;
   data?: T;
   verification?: {
-    verified: boolean;
-    checks: VerificationCheck[];
+    executed?: boolean;
+    verified?: boolean;
+    partiallyVerified?: boolean;
+    verificationSource?: string[];
+    warnings?: string[];
+    checks?: VerificationCheck[];
   };
   warnings?: string[];
   advice?: string[];
@@ -104,14 +108,7 @@ export function createErrorResult(
  * @param verification - Resultado de verificación
  * @returns Resultado de CLI con verificación
  */
-export function createVerifiedResult<T>(
-  action: string,
-  data: T,
-  verification: {
-    verified: boolean;
-    checks: VerificationCheck[];
-  }
-): CliResult<T> {
+export function createVerifiedResult<T>(action: string, data: T, verification: CliResult['verification']): CliResult<T> {
   return {
     schemaVersion: '1.0',
     ok: true,

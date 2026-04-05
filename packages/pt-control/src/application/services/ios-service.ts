@@ -28,6 +28,10 @@ import { CliSession, type CommandHistoryEntry } from "@cisco-auto/ios-domain";
 import type { IosInteractiveResult } from "../../contracts/ios-interactive-result.js";
 import { classifyIosError, isHardFailure } from "../../domain/ios/ios-error-classifier.js";
 
+// Verification service
+import { IosVerificationService } from "./ios-verification-service.js";
+import type { VerificationResult } from "../contracts/verification-result.js";
+
 export class IosService {
   constructor(
     private bridge: FileBridgePort,
@@ -37,6 +41,13 @@ export class IosService {
 
   // CLI sessions — one per device, created on demand
   private readonly sessions = new Map<string, CliSession>();
+
+  // Lazy verifier instance
+  private _verifier?: IosVerificationService;
+  private get verifier(): IosVerificationService {
+    if (!this._verifier) this._verifier = new IosVerificationService(this.execIos.bind(this));
+    return this._verifier;
+  }
 
   /**
    * Get or create a CliSession for a device.
@@ -61,21 +72,6 @@ export class IosService {
   clearSession(device: string): void {
     this.sessions.delete(device);
   }
-  /**
-   * Classify an IOS command result using the new error classifier
-   * Returns structured error information for intelligent retry/abort decisions
-   */
-  classifyIosCommandError(result: IosInteractiveResult) {
-    return classifyIosError(result);
-  }
-
-  /**
-   * Check if an IOS command error is a hard failure (non-retryable)
-   */
-  isHardIosFailure(result: IosInteractiveResult): boolean {
-    return isHardFailure(result);
-  }
-
 
   private _createBridgeHandler(device: string) {
     return {
@@ -89,46 +85,19 @@ export class IosService {
 
         const raw = result.value?.raw ?? "";
 
-        // Fase 6: Use diagnostics instead of heuristics
-        // Check if result has diagnostics (new contract) or fall back to old heuristics
+        // Fase 6+: prefer diagnostics when available
         const diagnostics = result.value?.diagnostics;
-        
         let status = 0;
         if (diagnostics) {
-          // New contract: use source and completionReason
           if (diagnostics.source !== 'terminal') {
-            status = 1; // Synthetic or unreliable result
+            status = 1; // synthetic or unreliable
           } else if (diagnostics.completionReason !== 'command-ended') {
-            status = 1; // Command didn't complete normally
+            status = 1; // didn't complete normally
           }
-          // If source === 'terminal' and completionReason === 'command-ended', status = 0 (success)
         } else {
-          // Fallback to old heuristics for backwards compatibility
           status = raw.includes("%") || raw.includes("Invalid") ? 1 : 0;
         }
 
-        return [status, raw];
-      },
-    };
-  }
-    return {
-      enterCommand: async (cmd: string): Promise<[number, string]> => {
-        const result = await this.bridge.sendCommandAndWait<{
-          raw: string;
-          session?: { mode: string; paging?: boolean; awaitingConfirm?: boolean };
-        }>(
-          "execInteractive",
-          {
-            id: this.generateId(),
-            device,
-            command: cmd,
-            options: { timeout: 30000, parse: false, ensurePrivileged: false },
-          },
-        );
-        const raw = result.value?.raw ?? "";
-        // execInteractive returns ok=1 for success in its value structure
-        // Infer status from raw presence
-        const status = raw.includes("%") || raw.includes("Invalid") ? 1 : 0;
         return [status, raw];
       },
     };
@@ -161,9 +130,7 @@ export class IosService {
     const value = result.value;
 
     if (value && typeof value === "object") {
-      if (value.deferred === true) {
-        return;
-      }
+      if (value.deferred === true) return;
 
       if (value.ok === false) {
         const errorMsg = value.error || "IOS configuration failed";
@@ -220,30 +187,19 @@ export class IosService {
 
     const value = result.value;
 
-    if (!value) {
-      return { raw: "", parsed: undefined };
-    }
+    if (!value) return { raw: "", parsed: undefined };
 
     if (value.ok === false) {
       const errorMsg = value.error || "IOS execution failed";
       const code = value.code;
-      if (code) {
-        throw new Error(`IOS execution failed (${code}): ${errorMsg}`);
-      }
+      if (code) throw new Error(`IOS execution failed (${code}): ${errorMsg}`);
       throw new Error(errorMsg);
     }
 
     const source = value.source;
-    if (source === "synthetic") {
-      throw new Error(
-        `IOS execution returned synthetic result for device '${device}'. Terminal execution is not available.`
-      );
-    }
+    if (source === "synthetic") throw new Error(`IOS execution returned synthetic result for device '${device}'. Terminal execution is not available.`);
 
-    return {
-      raw: value.raw || "",
-      parsed: value.parsed,
-    };
+    return { raw: value.raw || "", parsed: value.parsed };
   }
 
   /**
@@ -290,33 +246,18 @@ export class IosService {
     );
 
     const value = result.value;
-
-    if (!value) {
-      return { raw: "" };
-    }
-
+    if (!value) return { raw: "" };
     if (value.ok === false) {
       const errorMsg = value.error || "IOS execution failed";
       const code = value.code;
-      if (code) {
-        throw new Error(`IOS execution failed (${code}): ${errorMsg}`);
-      }
+      if (code) throw new Error(`IOS execution failed (${code}): ${errorMsg}`);
       throw new Error(errorMsg);
     }
-
     const source = value.source;
-    if (source === "synthetic") {
-      throw new Error(
-        `IOS execution returned synthetic result for device '${device}'. Terminal execution is not available.`
-      );
-    }
-
+    if (source === "synthetic") throw new Error(`IOS execution returned synthetic result for device '${device}'. Terminal execution is not available.`);
     return value;
   }
 
-  /**
-   * Get IOS device capabilities based on model
-   */
   async resolveCapabilities(device: string): Promise<DeviceCapabilities> {
     const deviceState = await this.inspectDevice(device);
     const model = deviceState.model || "unknown";
@@ -364,6 +305,12 @@ export class IosService {
     });
     if (!plan) throw new Error(`${device} does not support SVIs`);
     await this._executePlan(device, plan, options?.save);
+
+    // Best-effort verification and attach event for traceability
+    try {
+      const v = await this.verifier.verifyInterfaceIp(device, `Vlan${vlan}`, ip);
+      try { (this.bridge as any).appendEvent && (this.bridge as any).appendEvent({ type: 'verification', id: this.generateId(), device, verification: v }); } catch (e) {}
+    } catch {}
   }
 
   /**
@@ -385,6 +332,11 @@ export class IosService {
     });
     if (!plan) throw new Error(`${device} does not support access port configuration`);
     await this._executePlan(device, plan, options?.save);
+
+    try {
+      const v = await this.verifier.verifyAccessPort(device, portName, vlan);
+      try { (this.bridge as any).appendEvent && (this.bridge as any).appendEvent({ type: 'verification', id: this.generateId(), device, verification: v }); } catch (e) {}
+    } catch {}
   }
 
   /**
@@ -405,6 +357,11 @@ export class IosService {
     });
     if (!plan) throw new Error(`${device} does not support trunk configuration`);
     await this._executePlan(device, plan, options?.save);
+
+    try {
+      const v = await this.verifier.verifyTrunkPort(device, portName, vlans);
+      try { (this.bridge as any).appendEvent && (this.bridge as any).appendEvent({ type: 'verification', id: this.generateId(), device, verification: v }); } catch (e) {}
+    } catch {}
   }
 
   /**
@@ -428,6 +385,11 @@ export class IosService {
     });
     if (!plan) throw new Error(`${device} does not support subinterfaces`);
     await this._executePlan(device, plan, options?.save);
+
+    try {
+      const v = await this.verifier.verifySubinterface(device, subinterfaceName, ip);
+      try { (this.bridge as any).appendEvent && (this.bridge as any).appendEvent({ type: 'verification', id: this.generateId(), device, verification: v }); } catch (e) {}
+    } catch {}
   }
 
   /**
@@ -449,6 +411,11 @@ export class IosService {
     });
     if (!plan) throw new Error(`${device} does not support static routes`);
     await this._executePlan(device, plan, options?.save);
+
+    try {
+      const v = await this.verifier.verifyStaticRoute(device, network, mask, nextHop);
+      try { (this.bridge as any).appendEvent && (this.bridge as any).appendEvent({ type: 'verification', id: this.generateId(), device, verification: v }); } catch (e) {}
+    } catch {}
   }
 
   /**
@@ -467,6 +434,11 @@ export class IosService {
     });
     if (!plan) throw new Error(`${device} does not support DHCP relay`);
     await this._executePlan(device, plan, options?.save);
+
+    try {
+      const v = await this.verifier.verifyDhcpRelay(device, interfaceName, helperAddress);
+      try { (this.bridge as any).appendEvent && (this.bridge as any).appendEvent({ type: 'verification', id: this.generateId(), device, verification: v }); } catch (e) {}
+    } catch {}
   }
 
   // ==========================================================================

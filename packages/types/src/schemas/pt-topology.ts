@@ -187,10 +187,10 @@ export function calculateDelta(from: TopologySnapshot, to: TopologySnapshot): To
   const linkDeltas: LinkDelta[] = [];
 
   // Device changes
-  const allDeviceNames = new Set([
+  const allDeviceNames = Array.from(new Set([
     ...Object.keys(from.devices),
     ...Object.keys(to.devices),
-  ]);
+  ]));
 
   for (const name of allDeviceNames) {
     const fromDevice = from.devices[name];
@@ -202,10 +202,10 @@ export function calculateDelta(from: TopologySnapshot, to: TopologySnapshot): To
       deviceDeltas.push({ op: 'remove', name });
     } else if (fromDevice && toDevice) {
       const changes: Record<string, unknown> = {};
-      const allKeys = new Set([
+      const allKeys = Array.from(new Set([
         ...Object.keys(fromDevice),
         ...Object.keys(toDevice),
-      ]);
+      ]));
       for (const key of allKeys) {
         if (JSON.stringify(fromDevice[key as keyof DeviceState]) !==
             JSON.stringify(toDevice[key as keyof DeviceState])) {
@@ -219,10 +219,10 @@ export function calculateDelta(from: TopologySnapshot, to: TopologySnapshot): To
   }
 
   // Link changes
-  const allLinkIds = new Set([
+  const allLinkIds = Array.from(new Set([
     ...Object.keys(from.links),
     ...Object.keys(to.links),
-  ]);
+  ]));
 
   for (const id of allLinkIds) {
     const fromLink = from.links[id];

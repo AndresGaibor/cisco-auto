@@ -5,13 +5,12 @@
  */
 
 import { Command } from 'commander';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { getDefaultDevDir, getLogsDir, getHistoryDir, getResultsDir } from '../system/paths.ts';
-import type { VerificationCheck } from '../contracts/cli-result.ts';
 import type { CliResult } from '../contracts/cli-result.ts';
-import { createPTController } from '@cisco-auto/pt-control';
+import { createSuccessResult } from '../contracts/cli-result.ts';
+import { runCommand } from '../application/run-command.ts';
+import { COMMAND_CATALOG } from './command-catalog.ts';
 
 interface DoctorCheckResult {
   name: string;
@@ -20,157 +19,109 @@ interface DoctorCheckResult {
   details?: string;
 }
 
-interface DoctorOptions {
-  verbose: boolean;
-  json: boolean;
-}
-
 export function createDoctorCommand(): Command {
   return new Command('doctor')
     .description('Diagnóstico del sistema - verifica el entorno de PT')
     .option('-v, --verbose', 'Salida detallada', false)
-    .option('--json', 'Salida en JSON', false)
-    .action(async (options: DoctorOptions) => {
-      await runDiagnostics(options.verbose, options.json);
+    .action(async (options: any) => {
+      await runCommand({
+        action: 'doctor',
+        meta: COMMAND_CATALOG['doctor'],
+        flags: options,
+        execute: async (ctx) => {
+          const checks = await performDoctorChecks(ctx.controller, options.verbose);
+          const ok = checks.every(c => c.ok);
+          
+          const result = createSuccessResult('doctor', {
+            checks: checks.map(c => ({
+              name: c.name,
+              ok: c.ok,
+              message: c.message,
+              details: c.details,
+            })),
+          });
+
+          result.verification = {
+            executed: true,
+            verified: ok,
+            verificationSource: checks.map(c => c.name),
+            checks: checks.map(c => ({ 
+              name: c.name, 
+              ok: c.ok, 
+              details: { message: c.message, details: c.details } 
+            })),
+          };
+
+          if (!ok) {
+            result.warnings = ['Algunas verificaciones de diagnóstico fallaron.'];
+            result.advice = [
+              'Ejecuta "pt build" para desplegar archivos a ~/pt-dev/',
+              'Asegúrate de que Packet Tracer esté ejecutándose',
+              'Carga ~/pt-dev/main.js en Packet Tracer',
+              'Revisa "pt logs errors" para errores recientes'
+            ];
+          }
+
+          return result;
+        }
+      });
     });
 }
 
-async function runDiagnostics(verbose: boolean, jsonOutput: boolean): Promise<void> {
+async function performDoctorChecks(controller: any, verbose: boolean): Promise<DoctorCheckResult[]> {
   const checks: DoctorCheckResult[] = [];
   const ptDevDir = process.env.PT_DEV_DIR ?? getDefaultDevDir();
 
-  console.log('\n🩺 Ejecutando diagnóstico del sistema...\n');
-
   checks.push(checkPtDevDirectory(ptDevDir, verbose));
-  
-  const logsDir = getLogsDir();
-  checks.push(checkLogDirectory(logsDir, verbose));
-  
-  const historyDir = getHistoryDir();
-  checks.push(checkHistoryDirectory(historyDir, verbose));
-  
-  const resultsDir = getResultsDir();
-  checks.push(checkResultsDirectory(resultsDir, verbose));
-  
+  checks.push(checkLogDirectory(getLogsDir(), verbose));
+  checks.push(checkHistoryDirectory(getHistoryDir(), verbose));
+  checks.push(checkResultsDirectory(getResultsDir(), verbose));
   checks.push(checkRuntimeFiles(ptDevDir, verbose));
-  
-  // Prefer bridge/controller for heartbeat and live status (Phase 5)
-  {
-    const controller = createPTController({ devDir: ptDevDir });
-    try {
-      await controller.start();
-      const hb = controller.getHeartbeat();
-      const hbHealth = controller.getHeartbeatHealth();
-      const systemCtx = controller.getSystemContext();
 
-      checks.push({
-        name: 'heartbeat-present',
-        ok: hb !== null,
-        message: hb ? `Heartbeat encontrado` : 'Archivo heartbeat.json no encontrado',
-        details: verbose ? JSON.stringify(hb, null, 2) : undefined,
-      });
+  try {
+    const hb = controller.getHeartbeat();
+    const hbHealth = controller.getHeartbeatHealth();
+    const systemCtx = controller.getSystemContext();
 
-      checks.push({
-        name: 'heartbeat-health',
-        ok: hbHealth.state === 'ok',
-        message: `Heartbeat estado: ${hbHealth.state}${hbHealth.ageMs ? ` (${hbHealth.ageMs}ms)` : ''}`,
-        details: verbose ? JSON.stringify(hbHealth, null, 2) : undefined,
-      });
+    checks.push({
+      name: 'heartbeat-present',
+      ok: hb !== null,
+      message: hb ? `Heartbeat encontrado` : 'Archivo heartbeat.json no encontrado',
+      details: verbose ? JSON.stringify(hb, null, 2) : undefined,
+    });
 
-      checks.push({
-        name: 'bridge-status',
-        ok: systemCtx.bridgeReady,
-        message: `Bridge ready: ${systemCtx.bridgeReady ? 'yes' : 'no'}`,
-        details: verbose ? JSON.stringify(systemCtx, null, 2) : undefined,
-      });
+    checks.push({
+      name: 'heartbeat-health',
+      ok: hbHealth.state === 'ok',
+      message: `Heartbeat estado: ${hbHealth.state}${hbHealth.ageMs ? ` (${hbHealth.ageMs}ms)` : ''}`,
+      details: verbose ? JSON.stringify(hbHealth, null, 2) : undefined,
+    });
 
-      checks.push({
-        name: 'topology-materialized',
-        ok: systemCtx.topologyMaterialized,
-        message: systemCtx.topologyMaterialized ? 'Topología materializada' : 'Topología no materializada',
-        details: verbose ? `devices: ${systemCtx.deviceCount}, links: ${systemCtx.linkCount}` : undefined,
-      });
-    } catch (err) {
-      checks.push({
-        name: 'bridge-connect',
-        ok: false,
-        message: 'No se pudo inicializar el controller/bridge',
-        details: String(err),
-      });
-    } finally {
-      try { await controller.stop(); } catch {}
-    }
+    checks.push({
+      name: 'bridge-status',
+      ok: systemCtx.bridgeReady,
+      message: `Bridge ready: ${systemCtx.bridgeReady ? 'yes' : 'no'}`,
+      details: verbose ? JSON.stringify(systemCtx, null, 2) : undefined,
+    });
+
+    checks.push({
+      name: 'topology-materialized',
+      ok: systemCtx.topologyMaterialized,
+      message: systemCtx.topologyMaterialized ? 'Topología materializada' : 'Topología no materializada',
+      details: verbose ? `devices: ${systemCtx.deviceCount}, links: ${systemCtx.linkCount}` : undefined,
+    });
+  } catch (err) {
+    checks.push({
+      name: 'bridge-connect',
+      ok: false,
+      message: 'No se pudo obtener información del controller/bridge',
+      details: String(err),
+    });
   }
 
-  if (jsonOutput) {
-    const result: CliResult = {
-      schemaVersion: '1.0',
-      ok: checks.every(c => c.ok),
-      action: 'doctor',
-      data: {
-        checks: checks.map(c => ({
-          name: c.name,
-          ok: c.ok,
-          message: c.message,
-          details: c.details,
-        })),
-      },
-      verification: {
-        verified: checks.every(c => c.ok),
-        checks: checks.map(c => ({
-          name: c.name,
-          ok: c.ok,
-          details: { message: c.message, details: c.details },
-        })),
-      },
-    };
-    console.log(JSON.stringify(result, null, 2));
-    return;
-  }
-
-  console.log('═'.repeat(60));
-  console.log('RESULTADOS DEL DIAGNÓSTICO');
-  console.log('═'.repeat(60));
-  console.log('');
-
-  let passedCount = 0;
-  let failedCount = 0;
-
-  for (const check of checks) {
-    const icon = check.ok ? '✅' : '❌';
-    const status = check.ok ? 'PASS' : 'FAIL';
-    
-    console.log(`${icon} [${status}] ${check.name}`);
-    console.log(`   ${check.message}`);
-    
-    if (verbose && check.details) {
-      console.log(`   Details: ${check.details}`);
-    }
-    console.log('');
-
-    if (check.ok) {
-      passedCount++;
-    } else {
-      failedCount++;
-    }
-  }
-
-  console.log('═'.repeat(60));
-  console.log(`Resumen: ${passedCount} passed, ${failedCount} failed`);
-  console.log('═'.repeat(60));
-  console.log('');
-
-  if (failedCount > 0) {
-    console.log('💡 Recomendaciones:');
-    console.log('   - Ejecuta "pt build" para desplegar archivos a ~/pt-dev/');
-    console.log('   - Asegúrate de que Packet Tracer esté ejecutándose');
-    console.log('   - Carga ~/pt-dev/main.js en Packet Tracer');
-    console.log('   - Revisa "pt logs errors" para errores recientes');
-  } else {
-    console.log('✅ El sistema está listo para usar.');
-  }
-  console.log('');
+  return checks;
 }
+
 
 function checkPtDevDirectory(ptDevDir: string, verbose: boolean): DoctorCheckResult {
   const name = 'pt-dev-accessible';

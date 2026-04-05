@@ -103,14 +103,15 @@ export function createConfigIOSCommand(): Command {
     .argument('[device]', 'Nombre del dispositivo')
     .argument('[command...]', 'Comando(s) IOS a ejecutar')
     .option('-i, --interactive', 'Modo interactivo (ejecutar comandos uno por uno)')
-    .option('--examples', 'Mostrar ejemplos de comandos IOS disponibles')
-    .option('--schema', 'Mostrar el esquema de resultado JSON')
-    .option('--explain', 'Explicar que hace el comando')
-    .option('--plan', 'Mostrar el plan de ejecucion sin ejecutar')
     .option('--verify', 'Ejecutar verificacion automatica despues del comando', true)
     .option('--no-verify', 'Deshabilitar verificacion automatica')
     .action(async (device, commands, options) => {
-      if (options.examples) {
+      const globalExamples = process.argv.includes('--examples');
+      const globalSchema = process.argv.includes('--schema');
+      const globalExplain = process.argv.includes('--explain');
+      const globalPlan = process.argv.includes('--plan');
+
+      if (globalExamples) {
         console.log('\n=== Ejemplos de comandos IOS ===\n');
         CONFIG_IOS_META.examples.forEach((ex, i) => {
           console.log('  ' + (i + 1) + '. ' + ex.command);
@@ -119,6 +120,42 @@ export function createConfigIOSCommand(): Command {
         return;
       }
 
+      if (globalSchema) {
+        console.log(JSON.stringify({
+          type: 'object',
+          properties: {
+            device: { type: 'string' },
+            commands: { type: 'array', items: { type: 'string' } },
+            executed: { type: 'number' },
+            errors: { type: 'array', items: { type: 'string' } },
+          },
+        }, null, 2));
+        return;
+      }
+
+      if (globalExplain) {
+        const cmdTypes = detectCommandType(commands);
+        console.log('\n=== Analisis del comando ===\n');
+        console.log('  Comandos a ejecutar: ' + commands.length);
+        console.log('  Tipos detectados: ' + (cmdTypes.length > 0 ? cmdTypes.join(', ') : 'general'));
+        console.log('  Verificacion: ' + (options.verify ? 'habilitada' : 'deshabilitada') + '\n');
+        console.log('  Comandos IOS modifican la configuracion del dispositivo.');
+        console.log('  Use --plan para ver que se ejecutaria sin aplicar cambios.\n');
+        return;
+      }
+
+      if (globalPlan) {
+        console.log('\n=== Plan de ejecucion ===\n');
+        console.log('  Dispositivo: ' + (device || 'no seleccionado'));
+        console.log('  Comandos: ' + commands.length + '\n');
+        commands.forEach((c: string, i: number) => {
+          console.log('  ' + (i + 1) + '. ' + c);
+        });
+        console.log('\n  Verificacion: ' + (options.verify ? 'si' : 'no') + '\n');
+        return;
+      }
+
+      // Mostrar schema no requiere dispositivo
       if (options.schema) {
         console.log(JSON.stringify({
           type: 'object',

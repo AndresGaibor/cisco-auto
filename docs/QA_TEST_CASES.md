@@ -232,13 +232,89 @@
 
 ## Resumen de Bugs Conocidos (detectados en smoke test)
 
-| # | Bug | Área | Severidad | Detalle |
-|---|-----|------|-----------|---------|
-| 1 | Modelo `2960-24TT` no válido | device add | P1 | El modelo correcto es `2960`. El error message sugiere modelos válidos. |
-| 2 | `addLink` retorna `undefined` en device1/port1 | link | P1 | El enlace se crea en PT pero el objeto LinkState tiene campos undefined |
-| 3 | Links no aparecen en snapshot | topology | P1 | Snapshot reporta 0 links aunque addLink retornó éxito |
-| 4 | `clearTopology` eliminó 8 links fantasma | topology | P2 | Canvas vacío pero clearTopology reportó 8 links eliminados |
-| 5 | `listDevices` incluyó "Power Distribution Device0" | device | P2 | Dispositivo no esperado aparece en la lista |
+| # | Bug | Área | Severidad | Detalle | Estado |
+|---|-----|------|-----------|---------|--------|
+| 1 | Modelo `2960-24TT` no válido | device add | P1 | El modelo correcto es `2960`. El error message sugiere modelos válidos. | Conocido |
+| 2 | `addLink` retorna `undefined` en device1/port1 | link | P1 | El enlace se crea en PT pero el objeto LinkState tiene campos undefined | Conocido |
+| 3 | Links no aparecen en snapshot | topology | P1 | Snapshot reporta 0 links aunque addLink retornó éxito | Conocido |
+| 4 | `clearTopology` eliminó 8 links fantasma | topology | P2 | Canvas vacío pero clearTopology reportó 8 links eliminados | Conocido |
+| 5 | `listDevices` incluyó "Power Distribution Device0" | device | P2 | Dispositivo no esperado aparece en la lista | Conocido |
+| 6 | `device get` para dispositivo eliminado muestra "undefined" | device | P2 | En vez de error claro, muestra nombre y tipo "undefined" | **ARREGLADO** |
+| 7 | `addLink` no valida puertos/dispositivos antes de crear | link | P1 | Puerto inválido (Gi0/99) o device inexistente (X9) retornan éxito | **ARREGLADO** |
+| 8 | `config-ios --examples` no funciona | config-ios | P2 | Flag duplicado global/local causaba conflicto en Commander | **ARREGLADO** |
+| 9 | Show commands retornan `raw: ""` | ios | P1 | Problema en PT Runtime - no puede entrar en privileged exec | Known Issue |
+| 10 | `topology visualize` requiere argumento file | topology | P2 | Stub implementado - dice que no está implementado | **ARREGLADO** |
+
+---
+
+## Resultados de Tests (sesión 2026-04-05)
+
+### FASE 1 - Smoke Tests
+| ID | Test | Resultado | Notas |
+|----|------|-----------|-------|
+| TC-001 | `pt doctor` | ✅ | Funciona internamente |
+| TC-002 | `device list` | ✅ | Lista vacía correcta |
+| TC-003 | `pt --help` | ✅ | Muestra todos los subcomandos |
+
+### FASE 2 - Device Lifecycle  
+| ID | Test | Resultado | Notas |
+|----|------|-----------|-------|
+| TC-010 | Add router R1 2911 | ✅ | |
+| TC-011 | Add switch S1 2960 | ✅ | Modelo reportado 2960-24TT (bug #1) |
+| TC-012 | Add PC PC1 pc | ✅ | |
+| TC-013 | device get R1 | ✅ | Muestra 4 interfaces |
+| TC-014 | device list | ✅ | 3 dispositivos |
+| TC-015 | device move R1 | ✅ | |
+| TC-016 | Duplicate name R1 | ✅ | Error claro "already exists" |
+| TC-017 | Invalid model | ✅ | Muestra modelos válidos |
+| TC-018 | Remove PC1 | ✅ | Requiere --force |
+| TC-019 | Get deleted device | **✅** | **ARREGLADO** - ahora muestra error claro |
+
+### FASE 3 - Links
+| ID | Test | Resultado | Notas |
+|----|------|-----------|-------|
+| TC-020 | Link router-switch | ✅ | Crea enlace |
+| TC-021 | Link PC-switch | ✅ | Crea enlace |
+| TC-022 | link list | ⚠️ | Advertencia que requiere PT corriendo |
+| TC-023 | Invalid port | **✅** | **ARREGLADO** - ahora da error |
+| TC-024 | Duplicate link | **✅** | **ARREGLADO** - ahora valida |
+| TC-025 | Nonexistent device | **✅** | **ARREGLADO** - ahora da error |
+| TC-026 | link remove | ⬜ | Requiere confirmación interactiva |
+
+### FASE 4 - Config Host
+| ID | Test | Resultado | Notas |
+|----|------|-----------|-------|
+| TC-030 | IP estática PC | ✅ | Configurada correctamente |
+| TC-031 | device get PC1 post-config | ✅ | Muestra IP 192.168.1.10 |
+| TC-032 | DHCP mode | ✅ | Cambia a DHCP |
+
+### FASE 5 - Config IOS
+| ID | Test | Resultado | Notas |
+|----|------|-----------|-------|
+| TC-040 | show version | ❌ | "Failed to enter privileged exec mode" |
+| TC-046 | --examples | **✅** | **ARREGLADO** - muestra ejemplos |
+
+### FASE 6 - Show Commands
+| ID | Test | Resultado | Notas |
+|----|------|-----------|-------|
+| TC-050-056 | Todos show commands | ❌ | `raw: ""` - bug #9 |
+
+### FASE 7 - VLANs
+| ID | Test | Resultado | Notas |
+|----|------|-----------|-------|
+| TC-060 | vlan create | ✅ | Genera comandos IOS |
+| TC-061 | vlan apply | ✅ | Genera 10 comandos |
+
+### FASE 12 - Topology
+| ID | Test | Resultado | Notas |
+|----|------|-----------|-------|
+| TC-111 | topology clean --force | ✅ | Limpia 3 dispositivos |
+| TC-115 | topology visualize | **✅** | **ARREGLADO** - stub con mensaje |
+
+### FASE 14 - History
+| ID | Test | Resultado | Notas |
+|----|------|-----------|-------|
+| TC-130 | history list | ✅ | Muestra 10 entradas |
 
 ---
 

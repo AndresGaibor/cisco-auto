@@ -1,6 +1,7 @@
 /**
- * Crash Recovery - Recovers inconsistent state from crashes
+ * Crash Recovery - Recovers inconsistent state from crashes (Fase 8)
  * Handles re-queuing, deduplication, and dead-letter management
+ * CRITICAL: Must not execute recovery without valid lease
  */
 
 import { join } from "node:path";
@@ -11,15 +12,34 @@ import { SequenceStore } from "../shared/sequence-store.js";
 import { EventLogWriter } from "../event-log-writer.js";
 import { atomicWriteFile, ensureDir, listJsonFiles, readJsonFile } from "../shared/fs-atomic.js";
 import { parseCommandFileName } from "../shared/path-layout.js";
+import { LeaseManager } from "./lease-manager.js";
 
 export class CrashRecovery {
+  private readonly maxAttempts: number;
+
   constructor(
     private readonly paths: BridgePathLayout,
     private readonly seq: SequenceStore,
     private readonly eventWriter: EventLogWriter,
-  ) {}
+    private readonly leaseManager?: LeaseManager,
+    maxAttempts: number = 3,
+  ) {
+    this.maxAttempts = maxAttempts;
+  }
+
 
   recover(): void {
+    // FASE 8: Lease-aware recovery gate
+    if (this.leaseManager && !this.leaseManager.hasValidLease()) {
+      this.eventWriter.append({
+        seq: this.seq.next(),
+        ts: Date.now(),
+        type: "recovery-skipped-no-lease",
+        note: "No valid lease - recovery blocked",
+      });
+      return;
+    }
+
     try {
       // Fase 1: Purgar comandos duplicados en commands/
       const commandFiles = listJsonFiles(this.paths.commandsDir());
@@ -77,7 +97,7 @@ export class CrashRecovery {
             const content = readFileSync(filePath, "utf8");
             const cmd = JSON.parse(content);
 
-            if ((cmd.attempt ?? 1) < 3) {
+            if ((cmd.attempt ?? 1) < this.maxAttempts) {
               cmd.attempt = (cmd.attempt ?? 1) + 1;
               const newFile = this.paths.commandFilePath(cmd.seq, cmd.type);
               atomicWriteFile(newFile, JSON.stringify(cmd));

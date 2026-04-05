@@ -83,21 +83,25 @@ cat docs/PT_CONTROL_QUICKSTART.md
 ### Analizar Laboratorios
 
 ```bash
-# Parsear la definición YAML de un laboratorio
-bun run cisco-auto lab parse labs/vlan-basico.yaml
+# Ver estado actual del contexto y Packet Tracer
+bun run pt status
 
-# Generar archivos de configuración IOS basados en YAML
-bun run cisco-auto config labs/vlan-basico.yaml --output ./configs
+# Gestión de dispositivos
+bun run pt device list
+bun run pt device add R1 2911
+bun run pt device remove R1
 
-# Desplegar las configuraciones a los dispositivos reales/virtuales en paralelo
-bun run cisco-auto topology deploy labs/vlan-basico.yaml --save-config
+# Configuración de red
+bun run pt config-host R1 --ip 192.168.1.1 --mask 255.255.255.0
+bun run pt vlan apply Switch1 10 20 30
+bun run pt link add R1 Gi0/0 S1 Fa0/1
 
-# Validar un archivo de laboratorio
-bun run cisco-auto lab validate labs/vlan-basico.yaml
-
-# Listar dispositivos de un laboratorio
-bun run cisco-auto device list labs/vlan-basico.yaml
+# Diagnóstico y logs
+bun run pt doctor
+bun run pt logs tail
+bun run pt history list
 ```
+
 
 ---
 

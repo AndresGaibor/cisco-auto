@@ -36,6 +36,11 @@ export interface HistoryEntry {
   payload_summary?: Record<string, unknown>;
   resultSummary?: Record<string, unknown>;
   result_summary?: Record<string, unknown>;
+  // New fields for Phase 7: verification and interaction metadata
+  verificationSummary?: string;
+  interactionSummary?: Record<string, unknown>;
+  completionReason?: string;
+  warnings?: string[];
 }
 
 /**

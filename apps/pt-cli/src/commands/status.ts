@@ -1,4 +1,6 @@
 #!/usr/bin/env bun
+import { historyStore } from '../telemetry/history-store.js';
+
 import { Command } from 'commander';
 import { createDefaultPTController } from '@cisco-auto/pt-control';
 import { loadContextStatus, collectContextStatus } from '../application/context-supervisor.js';
@@ -73,6 +75,18 @@ export function createStatusCommand(): Command {
         for (const w of status.warnings) {
           console.log(' -', w);
         }
+        // Phase 7: show recent verification-related warnings from history
+        try {
+          (async () => {
+            const recent = await historyStore.list({ limit: 20 });
+            const recentVer = recent.find(e => e.verificationSummary || (e.warnings && e.warnings.length));
+            if (recentVer) {
+              console.log('\nÚltima verificación / advertencia en historial:');
+              if (recentVer.verificationSummary) console.log('  -', recentVer.verificationSummary);
+              if (recentVer.warnings && recentVer.warnings.length) console.log('  - warnings:', recentVer.warnings.join('; '));
+            }
+          })();
+        } catch (e) {}
       } else {
         console.log('\nWarnings: none');
       }

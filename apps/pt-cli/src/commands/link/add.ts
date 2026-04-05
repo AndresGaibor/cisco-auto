@@ -187,6 +187,32 @@ export function createLinkAddCommand(): Command {
               throw new Error(`Especificación de puerto inválida: ${error instanceof Error ? error.message : 'error desconocido'}`);
             }
 
+            // Validar que los dispositivos existan
+            const dev1Info = await controller.inspectDevice(dev1);
+            if (!dev1Info || !dev1Info.name) {
+              throw new Error(`Dispositivo '${dev1}' no encontrado. Usa 'pt device list' para ver dispositivos disponibles.`);
+            }
+
+            const dev2Info = await controller.inspectDevice(dev2);
+            if (!dev2Info || !dev2Info.name) {
+              throw new Error(`Dispositivo '${dev2}' no encontrado. Usa 'pt device list' para ver dispositivos disponibles.`);
+            }
+
+            // Validar que los puertos existan en los dispositivos
+            const port1Exists = dev1Info.ports?.some(
+              (p) => p.name.toLowerCase() === p1.toLowerCase()
+            );
+            if (!port1Exists) {
+              throw new Error(`Puerto '${p1}' no existe en '${dev1}'. Usa 'pt device get ${dev1}' para ver puertos disponibles.`);
+            }
+
+            const port2Exists = dev2Info.ports?.some(
+              (p) => p.name.toLowerCase() === p2.toLowerCase()
+            );
+            if (!port2Exists) {
+              throw new Error(`Puerto '${p2}' no existe en '${dev2}'. Usa 'pt device get ${dev2}' para ver puertos disponibles.`);
+            }
+
             await logPhase('apply', {
               device1: dev1,
               port1: p1,

@@ -14,11 +14,12 @@
 
 | Fuente | Confiabilidad | Notas |
 |--------|---|---|
+| `apps/pt-cli/src/commands/command-catalog.ts` | ⭐⭐⭐⭐⭐ | **Fuente de verdad canónica** para metadata, madurez y capacidades |
 | `apps/pt-cli/src/index.ts` | ⭐⭐⭐⭐⭐ | Árbol real de comandos registrados |
-| `apps/pt-cli/src/commands/command-catalog.ts` | ⭐⭐⭐⭐⭐ | Metadata de madurez por comando |
-| `apps/pt-cli/src/commands/help.ts` | ⭐⭐⭐ | Ayuda visible pero manual, sujeta a drift |
-| `apps/pt-cli/src/commands/completion.ts` | ⭐⭐ | Scripts desactualizados, NO usar como fuente de comandos |
+| `apps/pt-cli/src/commands/help.ts` | ⭐⭐⭐⭐ | Derivado del catálogo (Fase 9) |
+| `apps/pt-cli/src/commands/completion.ts` | ⭐⭐⭐⭐ | Derivado del catálogo (Fase 9) |
 | `~/pt-dev/` | ⭐ | Solo para deployment, no para operación |
+
 
 **Si hay conflicto**: siempre privilegia `index.ts` sobre `help.ts` o `completion.ts`.
 
@@ -48,10 +49,10 @@ Las siguientes áreas aún tienen lecturas o comportamientos legacy y están pla
    - `help.ts` es manual y puede tener drift
    - Si hay duda entre help y index.ts, confía en index.ts
 
-3. **Completion NO es fuente de verdad**
-   - `completion.ts` lista comandos viejos como `parse`, `config`, `deploy`, `init`, etc.
-   - Esos comandos **no existen** en la CLI real
-   - NO uses completion para descubrir qué comandos están disponibles
+3. **Help y Completion son ahora confiables (Fase 9)**
+   - Ambos derivan de `command-catalog.ts`.
+   - `pt help` muestra el estado de madurez (STABLE, PARTIAL, EXPERIMENTAL).
+   - `pt completion` genera sugerencias basadas en el catálogo real.
 
 4. **Después de cambios topológicos, verifica**
    - Después de `device add/remove/move` o `link add/remove`, ejecuta:
@@ -164,13 +165,13 @@ pt config-ios <device> ...    # Sin validación triple
 ## Fuentes de Verdad y Auxiliares
 
 ### Fuente principal
-- **`apps/pt-cli/src/index.ts`**: registra exactamente 19 comandos raíz (build, device, show, config-host, vlan, etherchannel, link, config-ios, routing, acl, stp, services, results, logs, help, history, doctor, completion, topology)
+- **`apps/pt-cli/src/commands/command-catalog.ts`**: Fuente canónica de metadata.
+- **`apps/pt-cli/src/index.ts`**: Registro real de los 20 comandos raíz (incluyendo `status`).
 
 ### Fuentes auxiliares
-- **`command-catalog.ts`**: metadata de madurez (stable/partial/experimental)
-- **`help.ts`**: ayuda visible, pero manual
-- **`completion.ts`**: completion scripts, pero desactualizados
-- **`history.ts`**: implementación de `history rerun` con nota "requiere implementación adicional"
+- **`help.ts`**: Ayuda enriquecida generada desde el catálogo.
+- **`completion.ts`**: Scripts de autocompletado generados desde el catálogo.
+
 
 ### Qué NO es fuente de verdad
 - `completion.ts` — lista comandos viejos que no existen (`parse`, `config`, `deploy`, `init`, etc.)
@@ -327,27 +328,29 @@ pt topology analyze
 
 ## Comandos Reales Registrados en index.ts
 
-Estos son **exactamente** los 19 comandos que existen:
+Estos son **exactamente** los 20 comandos que existen:
 
-1. **build** — Build y deploy a ~/pt-dev/
-2. **device** — Gestión de dispositivos (list, add, remove, move, get, interactive)
-3. **show** — Ejecuta comandos show
-4. **config-host** — Configura IP de dispositivo
-5. **vlan** — Gestión de VLANs
-6. **etherchannel** — EtherChannel
-7. **link** — Gestión de enlaces
-8. **config-ios** — Comandos IOS
-9. **routing** — Protocolos de routing
-10. **acl** — Access Control Lists
-11. **stp** — Spanning Tree Protocol
-12. **services** — Servicios (DHCP, NTP, Syslog)
-13. **results** — Visor de resultados
-14. **logs** — Visor de logs
-15. **help** — Ayuda enriquecida
-16. **history** — Historial de ejecuciones
-17. **doctor** — Diagnóstico del sistema
-18. **completion** — Scripts de completion
-19. **topology** — Análisis y visualización de topología
+1. **status** — Muestra el estado actual del contexto y PT (RECOMENDADO)
+2. **build** — Build y deploy a ~/pt-dev/
+3. **device** — Gestión de dispositivos (list, add, remove, move, get)
+4. **show** — Ejecuta comandos show
+5. **config-host** — Configura IP de dispositivo
+6. **vlan** — Gestión de VLANs
+7. **etherchannel** — EtherChannel
+8. **link** — Gestión de enlaces
+9. **config-ios** — Comandos IOS
+10. **routing** — Protocolos de routing
+11. **acl** — Access Control Lists
+12. **stp** — Spanning Tree Protocol
+13. **services** — Servicios (DHCP, NTP, Syslog)
+14. **results** — Visor de resultados
+15. **logs** — Visor de logs
+16. **help** — Ayuda enriquecida (desde catálogo)
+17. **history** — Historial de ejecuciones
+18. **doctor** — Diagnóstico del sistema
+19. **completion** — Scripts de completion (desde catálogo)
+20. **topology** — Análisis y visualización de topología
+
 
 **NOTA:** `lab` no está registrado como comando raíz en la CLI actual. Los subcomandos de `lab` (parse, validate, create, list, interactive, pipeline) no son accesibles desde la CLI.
 
@@ -363,3 +366,24 @@ Estos son **exactamente** los 19 comandos que existen:
 | **Nunca usar autónomamente** | `history rerun`, `completion` |
 | **After config changes** | Validar con `show`, `device list`, `link list` |
 | **PT no responde** | Ejecutar `pt doctor` primero |
+
+## Niveles de confianza del resultado (Fase 7)
+
+Para que los agentes interpreten correctamente los resultados de la CLI se introducen niveles explícitos de confianza en los resultados:
+
+- Verified: el cambio fue comprobado con uno o más shows/parsers confiables. El campo de resultado incluye verification.executed=true y verification.verified=true y, preferiblemente, verification.verificationSource con los shows usados.
+- Partially verified: hay evidencia parcial de aplicación (por ejemplo interfaz creada pero sin VLAN asignada). verification.partiallyVerified=true y verification.checks indica qué pasó.
+- Executed only: el comando terminó (no hubo error de ejecución) pero no se pudo confirmar el cambio. verification.executed=true y verification.verified=false. El agente debe asumir incertidumbre y no basar acciones críticas en esto.
+- Synthetic / unreliable: el resultado vino de una fuente no-terminal (runtime synth) o los parsers devolvieron advertencias importantes. No confiar en él para decisiones automáticas.
+
+
+Reglas para agentes:
+
+- Preferir operar sólo sobre cambios con verification.verified===true.
+- Si verification.verified!==true, el agente debe:
+  - Indicar explícitamente que la acción no está verificada.
+  - Proponer o ejecutar shows de verificación (si está soportado).
+  - Evitar acciones dependientes hasta confirmar estado o pedir confirmación humana.
+- Si hay warnings de parser, el agente debe ser conservador en sus inferencias y elevar la sugerencia de revisión manual.
+- Si config-ios retorna ejecución sin verificación, siempre sugerir ejecutar el show adecuado o dejar una tarea automática de verificación (si está soportado).
+

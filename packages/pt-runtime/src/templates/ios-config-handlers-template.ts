@@ -295,7 +295,7 @@ function handleConfigIos(payload) {
       }
     };
   }
-}`;\n}\n`;
+  }
+`;
 }
 
-export { generateIosConfigHandlersTemplate };
