@@ -20,6 +20,8 @@ import { bundleWriter } from '../telemetry/bundle-writer.js';
 import type { CommandRuntimeContext } from './context-inspector.js';
 import { inspectCommandContext } from './context-inspector.js';
 import { buildContextWarnings } from './context-advice.js';
+import { collectContextStatus, writeContextStatus } from './context-supervisor.js';
+import { ensureSupervisorRunning } from '../system/context-supervisor.js';
 
 export interface CommandContext {
   sessionId: string;
@@ -51,6 +53,16 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
   const sessionId = options.flags.sessionId ?? generateSessionId();
   const correlationId = generateCorrelationId();
 
+
+  // Asegurar que el supervisor de contexto esté corriendo
+  if (options.meta.requiresPT === true || options.meta.requiresContext === true) {
+    try {
+      await ensureSupervisorRunning();
+    } catch (e) {
+      console.debug('[runCommand] Error arrancando supervisor:', e);
+      // Continuar sin supervisor
+    }
+  }
   const controller = createDefaultPTController();
 
   const logPhase = async (phase: string, metadata?: Record<string, unknown>) => {
@@ -181,6 +193,30 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
     durationMs,
     contextWarnings: runtimeContext.warnings,
   });
+
+  // Persistir estado de contexto tras la ejecución (Fase 3)
+  try {
+    const ctxStatus = await collectContextStatus(controller);
+    // Propagar warnings del resultado al estado persistente
+    if (result.warnings && result.warnings.length > 0) {
+      for (const w of result.warnings) {
+        if (!ctxStatus.warnings.includes(w)) ctxStatus.warnings.push(w);
+      }
+    }
+    // Si hubo verificación y falló, marcar posible desincronización
+    // (Fase 3: heurística simple)
+    // @ts-ignore - verification es opcional en CliResult
+    if (result.verification && result.verification.verified === false) {
+      ctxStatus.topology.health = 'desynced';
+      if (!ctxStatus.warnings.includes('Post-validation reportó fallos; la topología puede estar desincronizada.')) {
+        ctxStatus.warnings.push('Post-validation reportó fallos; la topología puede estar desincronizada.');
+      }
+    }
+    await writeContextStatus(ctxStatus);
+  } catch (err) {
+    console.warn('No se pudo actualizar context-status:', err);
+  }
+
 
   return result;
 }

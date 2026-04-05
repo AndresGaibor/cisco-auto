@@ -34,11 +34,7 @@ export interface FileBridgePort {
   /**
    * Send a command to PT and wait for its result
    */
-  sendCommandAndWait<T = unknown>(
-    type: string,
-    payload: unknown,
-    timeoutMs?: number
-  ): Promise<BridgeResultEnvelope<T>>;
+  sendCommandAndWait<T = unknown>(type: string, payload: unknown, timeoutMs?: number): Promise<BridgeResultEnvelope<T>>;
 
   /**
    * Read current state from PT
@@ -46,12 +42,52 @@ export interface FileBridgePort {
   readState<T = unknown>(): T | null;
 
   /**
+   * Semantic alias for readState - clearer name for consumers
+   */
+  getStateSnapshot<T = unknown>(): T | null;
+
+  /**
+   * Read the raw heartbeat object written by the runtime/bridge
+   * Returns parsed JSON or null if missing / unparsable
+   */
+  getHeartbeat<T = unknown>(): T | null;
+
+  /**
+   * Lightweight health summary for the heartbeat file
+   */
+  getHeartbeatHealth(): {
+    state: "ok" | "stale" | "missing" | "unknown";
+    ageMs?: number;
+    lastSeenTs?: number;
+  };
+
+  /**
+   * Expose a small set of runtime/bridge status flags and queue stats
+   */
+  getBridgeStatus(): {
+    ready: boolean;
+    leaseValid?: boolean;
+    queuedCount?: number;
+    inFlightCount?: number;
+    warnings?: string[];
+  };
+
+  /**
+   * Minimal aggregated context for CLI/system consumers
+   */
+  getContext(): {
+    bridgeReady: boolean;
+    heartbeat: {
+      state: "ok" | "stale" | "missing" | "unknown";
+      ageMs?: number;
+      lastSeenTs?: number;
+    };
+  };
+
+  /**
    * Subscribe to events of a specific type
    */
-  on<E extends PTEventType>(
-    eventType: E,
-    handler: EventHandler<E>
-  ): this;
+  on<E extends PTEventType>(eventType: E, handler: EventHandler<E>): this;
 
   /**
    * Subscribe to all events

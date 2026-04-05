@@ -151,3 +151,24 @@ export function getCommandsDir(): string {
 export function getEventsPath(): string {
   return join(getLogsDir(), 'events.current.ndjson');
 }
+
+/**
+ * Directorio de estado persistente del CLI (no dentro de pt-dev)
+ * Usamos ~/.pt-cli para almacenar metadatos del supervisor de contexto
+ */
+export function getContextDir(): string {
+  const home = homedir();
+  const isWindows = process.platform === 'win32';
+  if (isWindows) {
+    return process.env.PT_CLI_HOME ?? join(process.env.USERPROFILE ?? home, '.pt-cli');
+  }
+  return process.env.PT_CLI_HOME ?? join(home, '.pt-cli');
+}
+
+/**
+ * Ruta al archivo de estado de contexto persistido
+ */
+export function getContextStatusPath(): string {
+  return join(getContextDir(), 'context-status.json');
+}
+

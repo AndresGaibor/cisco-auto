@@ -20,6 +20,7 @@ import { createHistoryCommand } from './commands/history';
 import { createDoctorCommand } from './commands/doctor';
 import { createCompletionCommand } from './commands/completion';
 import { createTopologyCommand } from './commands/topology/index';
+import { createStatusCommand } from './commands/status';
 import { ExitCodes } from './errors/index';
 
 function createBuildCommand(): Command {
@@ -77,6 +78,7 @@ program.addCommand(createHistoryCommand());
 program.addCommand(createDoctorCommand());
 program.addCommand(createCompletionCommand());
 program.addCommand(createTopologyCommand());
+program.addCommand(createStatusCommand());
 
 try {
   program.parse(process.argv);

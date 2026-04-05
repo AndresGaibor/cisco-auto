@@ -11,6 +11,7 @@ export * from "./snapshots.js";
 export * from "./parsed-output.js";
 export * from "./commands.js";
 export * from "./events.js";
+export * from "./ios-interactive-result.js";
 export * from "./canvas.js";
 
 // Modular Twin Types (refactored from twin-types.ts)

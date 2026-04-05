@@ -11,6 +11,7 @@ import { homedir } from 'node:os';
 import { getDefaultDevDir, getLogsDir, getHistoryDir, getResultsDir } from '../system/paths.ts';
 import type { VerificationCheck } from '../contracts/cli-result.ts';
 import type { CliResult } from '../contracts/cli-result.ts';
+import { createPTController } from '@cisco-auto/pt-control';
 
 interface DoctorCheckResult {
   name: string;
@@ -53,9 +54,53 @@ async function runDiagnostics(verbose: boolean, jsonOutput: boolean): Promise<vo
   
   checks.push(checkRuntimeFiles(ptDevDir, verbose));
   
-  checks.push(checkHeartbeat(ptDevDir, verbose));
-  
-  checks.push(checkPacketTracerStatus(ptDevDir, verbose));
+  // Prefer bridge/controller for heartbeat and live status (Phase 5)
+  {
+    const controller = createPTController({ devDir: ptDevDir });
+    try {
+      await controller.start();
+      const hb = controller.getHeartbeat();
+      const hbHealth = controller.getHeartbeatHealth();
+      const systemCtx = controller.getSystemContext();
+
+      checks.push({
+        name: 'heartbeat-present',
+        ok: hb !== null,
+        message: hb ? `Heartbeat encontrado` : 'Archivo heartbeat.json no encontrado',
+        details: verbose ? JSON.stringify(hb, null, 2) : undefined,
+      });
+
+      checks.push({
+        name: 'heartbeat-health',
+        ok: hbHealth.state === 'ok',
+        message: `Heartbeat estado: ${hbHealth.state}${hbHealth.ageMs ? ` (${hbHealth.ageMs}ms)` : ''}`,
+        details: verbose ? JSON.stringify(hbHealth, null, 2) : undefined,
+      });
+
+      checks.push({
+        name: 'bridge-status',
+        ok: systemCtx.bridgeReady,
+        message: `Bridge ready: ${systemCtx.bridgeReady ? 'yes' : 'no'}`,
+        details: verbose ? JSON.stringify(systemCtx, null, 2) : undefined,
+      });
+
+      checks.push({
+        name: 'topology-materialized',
+        ok: systemCtx.topologyMaterialized,
+        message: systemCtx.topologyMaterialized ? 'Topología materializada' : 'Topología no materializada',
+        details: verbose ? `devices: ${systemCtx.deviceCount}, links: ${systemCtx.linkCount}` : undefined,
+      });
+    } catch (err) {
+      checks.push({
+        name: 'bridge-connect',
+        ok: false,
+        message: 'No se pudo inicializar el controller/bridge',
+        details: String(err),
+      });
+    } finally {
+      try { await controller.stop(); } catch {}
+    }
+  }
 
   if (jsonOutput) {
     const result: CliResult = {

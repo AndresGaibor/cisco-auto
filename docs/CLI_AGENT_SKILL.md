@@ -30,6 +30,20 @@
    - Los archivos en `pt-dev/` están generados y no reflejan siempre el estado actual
    - Usa siempre la CLI (`pt <comando>`) como interfaz
 
+### Regla de acceso al sistema
+- La CLI y los agentes deben acceder al estado operativo de Packet Tracer mediante PTController (paquete `@cisco-auto/pt-control`) y `file-bridge`.
+- No deben leer `pt-dev/` directamente salvo casos legacy explícitos que estén marcados para migración.
+- Heartbeat y snapshots deben consultarse a través del bridge/control (ej.: `controller.getHeartbeatHealth()`, `controller.getSystemContext()`); no parsear `heartbeat.json` o `state.json` manualmente desde la CLI o agentes.
+- El `file-bridge` es la autoridad de contexto operativo: la CLI pide contexto al controller/bridge, nunca asume lectura directa de `pt-dev`.
+
+### Legacy todavía presente (migración progresiva)
+Las siguientes áreas aún tienen lecturas o comportamientos legacy y están planificadas para migración en fases posteriores:
+- Parte de `logs`
+- Parte de `results`
+- Algunas comprobaciones históricas del comando `doctor`
+- Herramientas internas que aún usan `readState()` de forma directa
+(Estos casos deben documentarse y marcarse con TODOs en el código hasta su migración completa.)
+
 2. **No asumas que help refleja todo perfectamente**
    - `help.ts` es manual y puede tener drift
    - Si hay duda entre help y index.ts, confía en index.ts
@@ -233,6 +247,16 @@ device: {
 - build, results, logs, help, history, doctor, completion
 
 ---
+
+
+---
+## Estado operativo y contexto persistente (Fase 3)
+
+- La CLI ahora mantiene un archivo de estado persistido (pt status) que resume: heartbeat, bridge, topología y warnings.
+- Antes de tomar decisiones críticas, el agente debe ejecutar `pt status` para conocer la salud del sistema.
+- El contexto se actualiza automáticamente al ejecutar comandos vía `runCommand()`; no confíes en ausencia de advertencias.
+- Si `topology.health` es `desynced` o `stale`, el agente debe avisar incertidumbre y sugerir verificación manual.
+- Si `heartbeat` es `missing`, `stale` u `unknown`, no asumir control confiable de Packet Tracer; ejecutar `pt doctor`.
 
 ## Playbook de Troubleshooting
 

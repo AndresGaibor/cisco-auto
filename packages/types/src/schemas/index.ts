@@ -249,6 +249,25 @@ export {
   type IosError,
 } from './ios-results.js';
 
+// IOS Interactive Result (Fase 6 - Real Interactive Terminal)
+export {
+  CompletionReasonSchema,
+  InteractionMetricsSchema,
+  SessionInfoSchema,
+  DiagnosticsSchema,
+  TranscriptEntrySchema,
+  IosInteractiveResultSchema,
+  createSuccessResult,
+  createFailedResult,
+  createSyntheticResult,
+  type CompletionReason,
+  type InteractionMetrics,
+  type SessionInfo,
+  type Diagnostics,
+  type TranscriptEntry,
+  type IosInteractiveResult,
+} from './ios-interactive-result.js';
+
 // Command Catalog - Single Source of Truth
 export {
   PUBLIC_COMMAND_CATALOG,

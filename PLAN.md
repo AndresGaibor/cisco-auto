@@ -1,50 +1,168 @@
-# Architecture Refactoring Plan: Migrating CLI from `pt-control` to `apps/`
+# Fase 2: Contexto automático y uso correcto de bridge + virtual topology en la CLI
 
-## Goal
-Ensure a strict architectural boundary where `packages/pt-control/` only contains core logic and programmatic APIs, and all CLI entry points and command logic reside in the `apps/` directory (specifically `apps/pt-cli/` and/or `apps/cli/`). Remove all legacy CLI code from `pt-control`.
+## Contexto
 
-## Current State Analysis
-- `packages/pt-control/src/cli/` uses `@oclif/core` and wraps `PTController` calls.
-- `apps/pt-cli/` uses `commander` and sometimes directly imports `@cisco-auto/file-bridge` or `PtController`.
-- There's a disconnect: `pt-control` has many granular canvas/device/link operations that are missing in `apps/pt-cli`.
+Hoy `runCommand()` (`apps/pt-cli/src/application/run-command.ts`) crea `createDefaultPTController()` pero **nunca llama a `controller.start()`**.
 
-## Implementation Steps
+**Consecuencias:**
+- bridge no iniciado → `isReady()` sería `false`
+- topology cache no hace refresh inicial ni suscripción a eventos
+- virtual topology no materializada
+- comandos operan "a ciegas" sin contexto del sistema
 
-### 1. Audit and Map Commands (Detailed Mapping)
-**Commands in `pt-control` to migrate/port to `apps/pt-cli`:**
-- `canvas` (clear, get, inspect, list) -> *Create new `canvas` command in `apps/pt-cli`*
-- `config` (host, ios, show) -> *Create new `config` command or merge with existing*
-- `device` (add, inspect, list-bridge, list, move, remove, rename) -> *Merge with `apps/pt-cli/src/commands/device/`*
-- `link` (add, list, remove) -> *Create new `link` command in `apps/pt-cli`*
-- `logs` (unified) -> *Create new `logs` command in `apps/pt-cli`*
-- `record` (start, stop) -> *Create new `record` command in `apps/pt-cli`*
-- `runtime` (build, deploy, doctor, events, status, watch) -> *Create new `runtime` command in `apps/pt-cli`*
-- `snapshot` (diff, load, save) -> *Create new `snapshot` command in `apps/pt-cli`*
-- `ssh` (setup) -> *Create new `ssh` command in `apps/pt-cli`*
-- `topology` (apply, read, validate) -> *Merge with `apps/pt-cli/src/commands/topology/`*
-- `trunk` (apply) -> *Create new `trunk` command or merge with `vlan`/`stp`*
-- `vlan` (apply) -> *Merge with `apps/pt-cli/src/commands/vlan.ts`*
+**Además:**
+- `device list` hace start/stop manualmente (inconsistente con `runCommand()`)
+- no existe helper de inspección de contexto
+- no hay warnings contextuales en resultados
 
-### 2. Extract Core Logic from `pt-control/src/cli`
-- Review all commands in `packages/pt-control/src/cli/commands/`.
-- Most logic in `pt-control/src/cli` currently orchestrates `PTController`. If any command contains raw business logic (like manual validation or state parsing), extract it to `PTController` or utilities in `pt-control/src/`.
+## Approach
 
-### 3. Migrate CLI Code to `apps/pt-cli`
-- Recreate the mapped command structure using `commander` in `apps/pt-cli/src/commands/`.
-- Translate `@oclif/core` arguments/flags into `commander` options.
-- Wire the commands to instantiate and use `createDefaultPTController()` from `pt-control`.
-- Use the standard output formatters defined in `apps/pt-cli/src/output/formatters/`.
+### Paso 1: Añadir `getContextSummary()` al PTController
 
-### 4. Remove CLI from `pt-control`
-- Delete `packages/pt-control/src/cli/`.
-- Delete `packages/pt-control/bin/` (including `dev.js`).
-- Remove `commander`, `@oclif/core` and CLI-specific dependencies from `packages/pt-control/package.json`.
-- Clean up exports in `packages/pt-control/src/index.ts`.
+**Archivo:** `packages/pt-control/src/controller/index.ts`
+**Después de línea:** `324#QY` (`readState()`) y **antes de:** `326#MV`
 
-### 5. Consolidate `apps/`
-- Review if `apps/cli` is still needed. Ensure `apps/pt-cli` is the single source of truth for CLI.
+**Método nuevo:**
+```ts
+getContextSummary(): {
+  bridgeReady: boolean;
+  topologyMaterialized: boolean;
+  deviceCount: number;
+  linkCount: number;
+} {
+  const bridgeReady = this.bridge.isReady();
+  const snapshot = this.topologyCache.getSnapshot();
+  const deviceCount = snapshot.devices ? Object.keys(snapshot.devices).length : 0;
+  const linkCount = snapshot.links ? Object.keys(snapshot.links).length : 0;
+  const topologyMaterialized = this.topologyCache.isMaterialized();
+  return { bridgeReady, topologyMaterialized, deviceCount, linkCount };
+}
+```
 
-### 6. Testing & Validation
-- Ensure all ported commands compile.
-- Run `apps/pt-cli/__tests__`.
-- Run manual validation of key ported commands (e.g. `device list`, `vlan apply`).
+**Por qué funciona:**
+- `this.bridge.isReady()` → ya existe en `FileBridgePort` port
+- `this.topologyCache.getSnapshot()` → ya existe, retorna `TopologySnapshot`
+- `this.topologyCache.isMaterialized()` → ya existe, delega a `VirtualTopology.isMaterialized()`
+
+### Paso 2: Crear `CommandRuntimeContext` y `context-inspector.ts`
+
+**Archivo nuevo:** `apps/pt-cli/src/application/context-inspector.ts`
+
+**Interfaces:**
+```ts
+export interface CommandRuntimeContext {
+  bridgeReady: boolean;
+  topologyMaterialized: boolean;
+  deviceCount: number;
+  linkCount: number;
+  warnings: string[];
+}
+
+export async function inspectCommandContext(controller: PTController): Promise<CommandRuntimeContext>
+```
+
+**Implementación:**
+- Llama a `controller.getContextSummary()`
+- Genera warnings basados en el resumen
+- Si `bridgeReady === false` → "Bridge no está listo"
+- Si `topologyMaterialized === false` → "Topología virtual aún no materializada"
+
+### Paso 3: Crear `context-advice.ts`
+
+**Archivo nuevo:** `apps/pt-cli/src/application/context-advice.ts`
+
+**Función:**
+```ts
+export function buildContextWarnings(ctx: CommandRuntimeContext): string[]
+```
+
+- Traduce `CommandRuntimeContext` a avisos entendibles
+- Reglas claras y simples, sin lógica heartbeat aún
+
+### Paso 4: Corregir `runCommand()` lifecycle + contexto
+
+**Archivo:** `apps/pt-cli/src/application/run-command.ts`
+
+**Cambios exactos:**
+1. Extender `CommandContext` con campo `runtimeContext: CommandRuntimeContext`
+2. Envolver ejecución en `try/finally`:
+   ```ts
+   const controller = createDefaultPTController();
+   try {
+     await controller.start();
+     const runtimeContext = await inspectCommandContext(controller);
+     const ctx: CommandContext = { ... , runtimeContext };
+     result = await options.execute(ctx);
+   } finally {
+     await controller.stop();
+   }
+   ```
+3. Incluir `runtimeContext` en `logPhase('start', ...)` metadata
+4. Incluir warnings en `result.warnings` (merge si ya tiene)
+5. Registrar `contextSummary` en `historyEntry` (nuevo campo `contextSummary` como objeto)
+
+### Paso 5: Extender `HistoryEntry` con contexto opcional
+
+**Archivo:** `apps/pt-cli/src/contracts/history-entry.ts`
+**Agregar campo opcional:** `contextSummary?: Record<string, unknown>;`
+
+### Paso 6: Añadir `requiresContext` al command-catalog
+
+**Archivo:** `apps/pt-cli/src/commands/command-catalog.ts`
+**Agregar:** `requiresContext: boolean;` a `CommandCatalogEntry`
+
+**Valores:**
+- `true` para: device, link, show, config-ios, config-host, routing, acl, stp, services, topology, vlan, etherchannel
+- `false` para: build, results, logs, help, history, doctor, completion
+
+### Paso 7: Actualizar CLI Agent Skill
+
+**Archivo:** `docs/CLI_AGENT_SKILL.md` (si no existe, crear en `skills/CLI_AGENT_SKILL.md`)
+**Sección nueva:** "Contexto operativo en Fase 2"
+
+### Paso 8: `device list` — dejar anotado para migración Fase 3
+
+**Archivo:** `apps/pt-cli/src/commands/device/list.ts`
+**Acción:** Agregar comentario técnico indicando que debe migrarse a `runCommand()` en Fase 3
+
+## Files to modify
+
+1. `packages/pt-control/src/controller/index.ts` — añadir `getContextSummary()`
+2. `apps/pt-cli/src/application/context-inspector.ts` — nuevo
+3. `apps/pt-cli/src/application/context-advice.ts` — nuevo
+4. `apps/pt-cli/src/application/run-command.ts` — lifecycle + contexto
+5. `apps/pt-cli/src/contracts/history-entry.ts` — campo `contextSummary`
+6. `apps/pt-cli/src/commands/command-catalog.ts` — campo `requiresContext`
+7. `apps/pt-cli/src/commands/device/list.ts` — comentario de migración
+8. `docs/CLI_AGENT_SKILL.md` o `skills/CLI_AGENT_SKILL.md` — actualizar
+
+## Reuse
+
+- `PTController.start()` / `.stop()` — ya existen
+- `PTController.getCachedSnapshot()` — ya existe (pero `topologyCache.getSnapshot()` es más directo)
+- `TopologyCache.isMaterialized()` → `VirtualTopology.isMaterialized()` → `TopologyCacheManager.isMaterialized()`
+- `FileBridgePort.isReady()` — ya existe en el port
+- `CliResult.warnings` — ya existe (`string[]`)
+- `COMMAND_CATALOG` ya tiene `requiresPT` — reutilizar patrón
+
+## Criterios de aceptación
+
+- [ ] `runCommand()` hace `await controller.start()` antes de ejecutar
+- [ ] `runCommand()` hace `await controller.stop()` en `finally`
+- [ ] existe `context-inspector.ts` con `inspectCommandContext()`
+- [ ] `PTController.getContextSummary()` funciona con bridge/cache/topology
+- [ ] `CommandContext` incluye `runtimeContext` con info operativa
+- [ ] resultados CLI pueden incluir warnings de contexto
+- [ ] logs e historial guardan contexto básico
+- [ ] `requiresContext` añadido al catalog
+- [ ] skill actualizado
+
+## Qué NO hacer en esta fase
+
+- No TopologySupervisor en background
+- No `pt status` completo
+- No auto-start de daemon persistente
+- No migrar todos los comandos a `runCommand()`
+- No reescritura IOS interactiva
+- No convertir warnings en errores duros
+- No rehacer `doctor`

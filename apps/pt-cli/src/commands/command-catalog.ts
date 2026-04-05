@@ -16,6 +16,10 @@ export interface CommandCatalogEntry {
   requiresPT: boolean;
   requiresContext: boolean;
   requiresVerification: boolean;
+  // Fase 3: metadata adicional para cambios topológicos y validación
+  writesTopology?: boolean;
+  requiresPostValidation?: boolean;
+  postValidationKind?: 'device-add' | 'device-remove' | 'device-move' | 'link-add' | 'link-remove' | 'none';
   notes?: string[];
 }
 
@@ -38,6 +42,8 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     requiresPT: true,
     requiresContext: true,
     requiresVerification: true,
+    writesTopology: true,
+    requiresPostValidation: true,
     notes: [
       'device list es stable',
       'device add/remove/move son parciales',
@@ -94,6 +100,8 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     requiresPT: true,
     requiresContext: true,
     requiresVerification: true,
+    writesTopology: true,
+    requiresPostValidation: true,
   },
 
   'config-ios': {

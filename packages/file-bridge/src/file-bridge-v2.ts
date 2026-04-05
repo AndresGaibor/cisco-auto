@@ -515,6 +515,101 @@ export class FileBridgeV2 extends EventEmitter {
     };
   }
 
+  /**
+   * Obtiene información de heartbeat si existe
+   */
+  /**
+   * Obtiene información de heartbeat si existe
+   * Devuelve el JSON parseado o null si no existe / no se puede parsear
+   */
+  getHeartbeat<T = unknown>(): T | null {
+    try {
+      const { join } = require('node:path');
+      const { readFileSync } = require('node:fs');
+      const heartbeatFile = join(this.paths.root, 'heartbeat.json');
+      const content = readFileSync(heartbeatFile, 'utf8');
+      return JSON.parse(content) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Obtiene el estado de salud del heartbeat
+   */
+  /**
+   * Obtiene el estado de salud del heartbeat
+   */
+  getHeartbeatHealth(): {
+    state: 'ok' | 'stale' | 'missing' | 'unknown';
+    ageMs?: number;
+    lastSeenTs?: number;
+  } {
+    try {
+      const { join } = require('node:path');
+      const { statSync } = require('node:fs');
+      const heartbeatFile = join(this.paths.root, 'heartbeat.json');
+
+      const stats = statSync(heartbeatFile);
+      const ageMs = Date.now() - stats.mtime.getTime();
+      const isStale = ageMs > 10_000; // 10 segundos como umbral por defecto
+
+
+      return {
+        state: isStale ? 'stale' : 'ok',
+        ageMs,
+        lastSeenTs: stats.mtime.getTime(),
+      };
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException;
+      if (e && e.code === 'ENOENT') return { state: 'missing' };
+      return { state: 'unknown' };
+    }
+  }
+
+  /**
+   * Obtiene el snapshot de topología más reciente
+   */
+  /**
+   * Obtiene el snapshot de topología más reciente
+   */
+  getStateSnapshot(): Snapshot | null {
+    return this.lastSnapshot;
+  }
+
+  /**
+   * Obtiene estado general del bridge
+   */
+  /**
+   * Obtiene estado general del bridge
+   */
+  getBridgeStatus(): {
+    ready: boolean;
+    leaseValid?: boolean;
+    queuedCount?: number;
+    inFlightCount?: number;
+    warnings?: string[];
+  } {
+    const warnings: string[] = [];
+    const ready = this.running;
+    let leaseValid: boolean | undefined = undefined;
+    try {
+      leaseValid = this.leaseManager.hasValidLease();
+    } catch {}
+
+    let queuedCount: number | undefined = undefined;
+    try {
+      queuedCount = this.backpressure.getPendingCount();
+    } catch {}
+
+    return {
+      ready,
+      leaseValid,
+      queuedCount,
+      warnings,
+    };
+  }
+
   private handleEvent(event: BridgeEvent): void {
     this.emit(event.type, event);
     this.emit("*", event);
