@@ -6,6 +6,24 @@ import { getRelatedCommands } from '../../help/related';
 import chalk from 'chalk';
 
 export function createDeviceListCommand(): Command {
+  /**
+   * TODO-Fase-3: Migrar `device list` a `runCommand()`
+   * 
+   * Contexto: device list actualmente hace start/stop manual.
+   * En Fase 3, esto debe delegarse a `runCommand()` para que el ciclo de vida
+   * del controller sea consistente con otros comandos que ya usan runCommand().
+   * 
+   * Beneficios:
+   * - Contexto automático (CommandRuntimeContext) sin boilerplate
+   * - Historial enriquecido con contextSummary
+   * - Warnings contextuales automáticos
+   * - Consistencia con la arquitectura de Fase 2+
+   * 
+   * Refactor:
+   * - Cambiar de Command.action() a RunCommandOptions
+   * - Usar `ctx.controller.listDevices()` en lugar de crear controller local
+   * - Dejar que runCommand() maneje start/stop
+   */
   const cmd = new Command('list')
     .description('Listar dispositivos en Packet Tracer')
     .option('-t, --type <type>', 'Filtrar por tipo (router|switch|pc|server)')
