@@ -66,14 +66,15 @@ de Packet Tracer usando coordenadas X/Y.`,
     examples: ['pt device move R1 --xpos 300 --ypos 200', 'pt device move SW1 -x 400 -y 150'],
     related: ['device list', 'device add'],
   },
-  'device info': {
-    id: 'device info',
+  'device get': {
+    id: 'device get',
     summary: 'Muestra información detallada de un dispositivo',
     longDescription: `Muestra información completa del dispositivo incluyendo 
 interfaces, configuración IP, VLANs, etc.`,
-    examples: ['pt device info R1', 'pt device info R1 --json'],
+    examples: ['pt device get R1', 'pt device get R1 --json'],
     related: ['device list', 'show'],
   },
+  // NOTA: No existe 'device info' — usar 'device get' en su lugar
   'config-host': {
     id: 'config-host',
     summary: 'Configura la dirección IP de un dispositivo',
@@ -84,12 +85,13 @@ interfaz primaria de un dispositivo.`,
   },
   'config-ios': {
     id: 'config-ios',
-    summary: 'Ejecuta comandos de configuración IOS',
+    summary: 'Ejecuta comandos de configuración IOS [Estado: partial]',
     longDescription: `Envía comandos de configuración IOS a un dispositivo.
-Soporta configuración de interfaces, VLANs, routing, ACLs, etc.`,
+Soporta configuración de interfaces, VLANs, routing, ACLs, etc.
+⚠️ Estado: PARTIAL — No confiar ciegamente en 'ok' sin verificación posterior.`,
     examples: ['pt config-ios R1 interface GigabitEthernet0/0 ip address 192.168.1.1 255.255.255.0', 'pt config-ios R1 vlan 10 name ADMIN'],
     related: ['config-host', 'show'],
-  },
+  }
   'show': {
     id: 'show',
     summary: 'Ejecuta comandos show en dispositivos',
@@ -164,11 +166,12 @@ Automáticamente configura el tipo de enlace (access/trunk).`,
   },
   'topology': {
     id: 'topology',
-    summary: 'Análisis y visualización de topología',
-    longDescription: `Herramientas para analizar y visualizar la topología de red.`,
+    summary: 'Análisis y visualización de topología [Estado: partial]',
+    longDescription: `Herramientas para analizar y visualizar la topología de red.
+Estado: PARTIAL — análisis básico disponible.`,
     examples: ['pt topology analyze', 'pt topology visualize', 'pt topology export'],
     related: ['link', 'device list'],
-  },
+  }
   'topology analyze': {
     id: 'topology analyze',
     summary: 'Analiza la topología de red',
@@ -292,11 +295,13 @@ seguimiento en tiempo real con --follow.`,
   },
   'history rerun': {
     id: 'history rerun',
-    summary: 'Re-ejecuta una sesión anterior',
-    longDescription: `Re-ejecuta una sesión que fue marcada como rerunnable.`,
+    summary: 're-ejecuta una sesión anterior [Estado: experimental]',
+    longDescription: `⚠️ ESTADO: EXPERIMENTAL\n\nRe-ejecuta una sesión que fue marcada como rerunnable.
+La re-ejecución completa todavía requiere implementación adicional.
+NO usar en modo autónomo sin supervisión.`,
     examples: ['pt history rerun ses_abc123'],
     related: ['history show', 'history explain'],
-  },
+  }
   'history explain': {
     id: 'history explain',
     summary: 'Explica un error de ejecución',
@@ -306,19 +311,22 @@ seguimiento en tiempo real con --follow.`,
   },
   'doctor': {
     id: 'doctor',
-    summary: 'Diagnóstico del sistema PT',
+    summary: 'Diagnóstico del sistema PT [Estado: partial]',
     longDescription: `Ejecuta verificaciones del sistema para diagnosticar problemas.
-Verifica directorios, archivos de runtime, heartbeat, y estado de PT.`,
+Verifica directorios, archivos de runtime, heartbeat, y estado de PT.
+Estado: PARTIAL — útil para troubleshooting.`,
     examples: ['pt doctor', 'pt doctor --verbose'],
     related: ['logs', 'history', 'completion'],
-  },
+  }
   'completion': {
     id: 'completion',
-    summary: 'Genera scripts de completion para shell',
-    longDescription: `Genera scripts de autocompletado para bash, zsh, y fish.`,
+    summary: 'Scripts de completion para shell [Estado: experimental]',
+    longDescription: `Genera scripts de autocompletado para bash, zsh, y fish.
+⚠️ Estado: EXPERIMENTAL — Scripts desactualizados, no reflejan todos los comandos actuales.
+No usar como fuente de verdad de comandos disponibles.`,
     examples: ['pt completion bash', 'pt completion zsh', 'pt completion fish'],
     related: ['doctor', 'help'],
-  },
+  }
   'results': {
     id: 'results',
     summary: 'Visor de resultados de comandos',
@@ -326,34 +334,9 @@ Verifica directorios, archivos de runtime, heartbeat, y estado de PT.`,
     examples: ['pt results list', 'pt results show <id>', 'pt results last'],
     related: ['logs', 'history'],
   },
-  'lab': {
-    id: 'lab',
-    summary: 'Gestión de laboratorios',
-    longDescription: `Crea, valida, y parsea archivos de laboratorio en formato YAML.`,
-    examples: ['pt lab create', 'pt lab parse', 'pt lab validate'],
-    related: ['validate', 'template'],
-  },
-  'lab create': {
-    id: 'lab create',
-    summary: 'Crea un nuevo laboratorio',
-    longDescription: `Crea un laboratorio desde cero usando templates.`,
-    examples: ['pt lab create --template vlan labs/mi-lab', 'pt lab create --template routing labs/ospf'],
-    related: ['lab parse', 'lab validate'],
-  },
-  'lab parse': {
-    id: 'lab parse',
-    summary: 'Parsea archivo YAML de laboratorio',
-    longDescription: `Parsea y valida un archivo YAML de laboratorio.`,
-    examples: ['pt lab parse labs/vlan.yaml', 'pt lab parse labs/vlan.yaml --json'],
-    related: ['lab validate', 'lab create'],
-  },
-  'lab validate': {
-    id: 'lab validate',
-    summary: 'Valida archivo de laboratorio',
-    longDescription: `Valida la sintaxis y estructura de un archivo YAML.`,
-    examples: ['pt lab validate labs/vlan.yaml', 'pt lab validate labs/vlan.yaml --strict'],
-    related: ['lab parse', 'lab create'],
-  },
+  // NOTA: 'lab' NO está registrado como comando raíz en index.ts
+  // Las entradas lab/lab-create/lab-parse/lab-validate fueron removidas
+  // No están disponibles en la CLI actual
   'services': {
     id: 'services',
     summary: 'Servicios de red en Packet Tracer',
@@ -449,7 +432,10 @@ export function createHelpCommand(): Command {
           console.log('  doctor         Diagnóstico del sistema');
           console.log('  completion     Scripts de completion');
           console.log('  results        Visor de resultados');
-          console.log('  lab            Gestión de laboratorios');
+          console.log('  services       Servicios de red');
+          console.log('  build          Build y deploy');
+          console.log('\n⚠️  Algunas capacidades están en estado PARTIAL o EXPERIMENTAL.');
+          console.log('Consulta docs/CLI_AGENT_SKILL.md para políticas de autonomía y troubleshooting.\n');
           console.log('  services       Servicios de red');
           console.log('  build          Build y deploy');
           console.log('\nUsa "pt help <comando>" para ver más detalles.');

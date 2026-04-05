@@ -417,7 +417,6 @@ const POWERSHELL_INSTALL = `
 /**
  * Lista de comandos disponibles en la CLI
  */
-const AVAILABLE_COMMANDS = [
   'device',
   'config-host',
   'config-ios',
@@ -434,19 +433,24 @@ const AVAILABLE_COMMANDS = [
   'doctor',
   'completion',
   'results',
-  'lab',
   'services',
   'build',
 ];
+
+// NOTA: 'lab' fue removido porque no está registrado en index.ts
 
 /**
  * Crea el comando de completion
  */
 export function createCompletionCommand(): Command {
   return new Command('completion')
-    .description('Generar scripts de completion para shell')
+    .description('Generar scripts de completion para shell [Estado: experimental]')
     .argument('<shell>', 'Shell objetivo: bash, zsh, fish, powershell')
-    .action(async (shell: string) => {
+      // ⚠️ ADVERTENCIA: Scripts de completion desactualizados
+      console.warn('\n⚠️  ADVERTENCIA: Scripts de completion pueden estar desactualizados.');
+      console.warn('Algunos comandos antiguos (parse, config, validate, deploy, init, etc.)');
+      console.warn('no existen en la CLI actual. Usa "pt help" para ver comandos reales.\n');
+      
       const shellType = shell.toLowerCase() as ShellType;
       
       // Validar shell
