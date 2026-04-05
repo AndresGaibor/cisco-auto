@@ -37,6 +37,7 @@ function createIosJob(type, payload) {
     ticket: ticket,
     device: payload.device,
     type: type,
+    payload: payload,
     steps: [],
     currentStep: 0,
     state: "queued",
@@ -287,6 +288,7 @@ function pollIosJob(ticket) {
 // ============================================================================
 
 var TERMINAL_LISTENERS_ATTACHED = {};
+var TERMINAL_LISTENER_REFS = {};
 
 function attachTerminalListeners(deviceName, term) {
   if (TERMINAL_LISTENERS_ATTACHED[deviceName]) {
@@ -294,36 +296,104 @@ function attachTerminalListeners(deviceName, term) {
   }
   
   try {
-    term.on("outputWritten", function(src, args) {
+    // Crear funciones con closure para poder detach después
+    var outputWrittenHandler = function(src, args) {
       onTerminalOutputWritten(deviceName, args);
-    });
+    };
     
-    term.on("commandStarted", function(src, args) {
+    var commandStartedHandler = function(src, args) {
       onTerminalCommandStarted(deviceName, args);
-    });
+    };
     
-    term.on("commandEnded", function(src, args) {
+    var commandEndedHandler = function(src, args) {
       onTerminalCommandEnded(deviceName, args);
-    });
+    };
     
-    term.on("modeChanged", function(src, args) {
+    var modeChangedHandler = function(src, args) {
       onTerminalModeChanged(deviceName, args);
-    });
+    };
     
-    term.on("promptChanged", function(src, args) {
+    var promptChangedHandler = function(src, args) {
       onTerminalPromptChanged(deviceName, args);
-    });
+    };
     
-    term.on("moreDisplayed", function(src, args) {
+    var moreDisplayedHandler = function(src, args) {
       onTerminalMoreDisplayed(deviceName, args);
-    });
+    };
     
-    TERMINAL_LISTENERS_ATTACHED[deviceName] = true;
-    dprint("[Listeners] Attached to " + deviceName);
+    // Usar registerEvent en lugar de .on() para compatibilidad con PT lifecycle
+    if (typeof term.registerEvent === "function") {
+      term.registerEvent("outputWritten", null, outputWrittenHandler);
+      term.registerEvent("commandStarted", null, commandStartedHandler);
+      term.registerEvent("commandEnded", null, commandEndedHandler);
+      term.registerEvent("modeChanged", null, modeChangedHandler);
+      term.registerEvent("promptChanged", null, promptChangedHandler);
+      term.registerEvent("moreDisplayed", null, moreDisplayedHandler);
+      
+      // Guardar referencias para poder detach
+      TERMINAL_LISTENER_REFS[deviceName] = {
+        term: term,
+        handlers: {
+          outputWritten: outputWrittenHandler,
+          commandStarted: commandStartedHandler,
+          commandEnded: commandEndedHandler,
+          modeChanged: modeChangedHandler,
+          promptChanged: promptChangedHandler,
+          moreDisplayed: moreDisplayedHandler
+        }
+      };
+      
+      TERMINAL_LISTENERS_ATTACHED[deviceName] = true;
+      dprint("[Listeners] Attached to " + deviceName + " via registerEvent");
+    } else {
+      dprint("[Listeners] registerEvent not available for " + deviceName);
+    }
     
   } catch (e) {
     dprint("[Listeners] Failed to attach to " + deviceName + ": " + String(e));
   }
+}
+
+function detachTerminalListeners(deviceName) {
+  if (!TERMINAL_LISTENERS_ATTACHED[deviceName]) {
+    return;
+  }
+  
+  var ref = TERMINAL_LISTENER_REFS[deviceName];
+  if (!ref || !ref.term) {
+    delete TERMINAL_LISTENERS_ATTACHED[deviceName];
+    delete TERMINAL_LISTENER_REFS[deviceName];
+    return;
+  }
+  
+  try {
+    var term = ref.term;
+    var handlers = ref.handlers;
+    
+    if (typeof term.unregisterEvent === "function") {
+      try { term.unregisterEvent("outputWritten", null, handlers.outputWritten); } catch (e1) {}
+      try { term.unregisterEvent("commandStarted", null, handlers.commandStarted); } catch (e2) {}
+      try { term.unregisterEvent("commandEnded", null, handlers.commandEnded); } catch (e3) {}
+      try { term.unregisterEvent("modeChanged", null, handlers.modeChanged); } catch (e4) {}
+      try { term.unregisterEvent("promptChanged", null, handlers.promptChanged); } catch (e5) {}
+      try { term.unregisterEvent("moreDisplayed", null, handlers.moreDisplayed); } catch (e6) {}
+      
+      dprint("[Listeners] Detached from " + deviceName);
+    }
+  } catch (e) {
+    dprint("[Listeners] Failed to detach from " + deviceName + ": " + String(e));
+  }
+  
+  delete TERMINAL_LISTENERS_ATTACHED[deviceName];
+  delete TERMINAL_LISTENER_REFS[deviceName];
+}
+
+function detachAllTerminalListeners() {
+  var devices = Object.keys(TERMINAL_LISTENERS_ATTACHED);
+  for (var i = 0; i < devices.length; i++) {
+    detachTerminalListeners(devices[i]);
+  }
+  dprint("[Listeners] Detached all terminal listeners");
 }
 
 function onTerminalOutputWritten(deviceName, args) {

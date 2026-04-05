@@ -66,6 +66,8 @@ var ENABLE_FILE_WATCHER = false;
 var WATCH_RUNTIME_FILE = false;
 var WATCH_COMMANDS_DIR = false;
 
+var cleanupStage = "idle";
+
 // ============================================================================
 // Main Entry Point
 // ============================================================================
@@ -732,31 +734,37 @@ function cleanUp() {
   dprint("[PT] Stopping...");
   
   try {
+    cleanupStage = "clear-command-poll";
     if (commandPollInterval) {
       clearInterval(commandPollInterval);
       commandPollInterval = null;
     }
     
+    cleanupStage = "clear-deferred-poll";
     if (deferredPollInterval) {
       clearInterval(deferredPollInterval);
       deferredPollInterval = null;
     }
     
+    cleanupStage = "clear-heartbeat";
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
       heartbeatInterval = null;
     }
     
+    cleanupStage = "teardown-watcher";
     // IMPORTANTE: desregistrar watcher ANTES de soltar referencia
     teardownFileWatcher();
     
+    cleanupStage = "save-pending";
+    savePendingCommands();
+    
+    cleanupStage = "runtime-cleanup-hook";
     // Preparar futuro detach de listeners del runtime
     invokeRuntimeCleanupHook();
     
-    savePendingCommands();
-    
   } catch (e) {
-    dprint("[cleanUp] " + String(e));
+    dprint("[cleanUp:" + cleanupStage + "] " + String(e));
   }
   
   runtimeFn = null;

@@ -38,7 +38,20 @@ return (function(payload, ipc, dprint) {
       return pollIosJob(payload.ticket);
     }
     
+    function handleCleanup() {
+      try {
+        // Detach terminal listeners para evitar crash al detener PT
+        detachAllTerminalListeners();
+        dprint("[Runtime] Cleanup completed");
+        return { ok: true };
+      } catch (e) {
+        dprint("[Runtime] Cleanup error: " + String(e));
+        return { ok: false, error: String(e) };
+      }
+    }
+    
     switch (payload.type) {
+      case "__cleanup__": return handleCleanup();
 ${publicCases}
 ${internalCases}
       default: return { ok: false, error: "Unknown command: " + payload.type };
