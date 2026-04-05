@@ -25,6 +25,8 @@ import { resolveCapabilitySet } from "@cisco-auto/ios-domain";
 import type { CapabilitySet } from "@cisco-auto/ios-domain";
 import { VlanId, Ipv4Address, SubnetMask, InterfaceName } from "@cisco-auto/ios-domain";
 import { CliSession, type CommandHistoryEntry } from "@cisco-auto/ios-domain";
+import type { IosInteractiveResult } from "../../contracts/ios-interactive-result.js";
+import { classifyIosError, isHardFailure } from "../../domain/ios/ios-error-classifier.js";
 
 export class IosService {
   constructor(
@@ -59,8 +61,56 @@ export class IosService {
   clearSession(device: string): void {
     this.sessions.delete(device);
   }
+  /**
+   * Classify an IOS command result using the new error classifier
+   * Returns structured error information for intelligent retry/abort decisions
+   */
+  classifyIosCommandError(result: IosInteractiveResult) {
+    return classifyIosError(result);
+  }
+
+  /**
+   * Check if an IOS command error is a hard failure (non-retryable)
+   */
+  isHardIosFailure(result: IosInteractiveResult): boolean {
+    return isHardFailure(result);
+  }
+
 
   private _createBridgeHandler(device: string) {
+    return {
+      enterCommand: async (cmd: string): Promise<[number, string]> => {
+        const result = await this.bridge.sendCommandAndWait<any>("execInteractive", {
+          id: this.generateId(),
+          device,
+          command: cmd,
+          options: { timeout: 30000, parse: false, ensurePrivileged: false },
+        });
+
+        const raw = result.value?.raw ?? "";
+
+        // Fase 6: Use diagnostics instead of heuristics
+        // Check if result has diagnostics (new contract) or fall back to old heuristics
+        const diagnostics = result.value?.diagnostics;
+        
+        let status = 0;
+        if (diagnostics) {
+          // New contract: use source and completionReason
+          if (diagnostics.source !== 'terminal') {
+            status = 1; // Synthetic or unreliable result
+          } else if (diagnostics.completionReason !== 'command-ended') {
+            status = 1; // Command didn't complete normally
+          }
+          // If source === 'terminal' and completionReason === 'command-ended', status = 0 (success)
+        } else {
+          // Fallback to old heuristics for backwards compatibility
+          status = raw.includes("%") || raw.includes("Invalid") ? 1 : 0;
+        }
+
+        return [status, raw];
+      },
+    };
+  }
     return {
       enterCommand: async (cmd: string): Promise<[number, string]> => {
         const result = await this.bridge.sendCommandAndWait<{
