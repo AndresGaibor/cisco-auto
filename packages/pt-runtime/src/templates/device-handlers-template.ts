@@ -47,7 +47,14 @@ function handleAddDevice(payload) {
   device.setName(name);
   if (device.skipBoot) device.skipBoot();
   
-  return { ok: true, name: name, autoName: autoName, model: model, deviceType: created.typeId };
+  var typeStr = 'generic';
+  if (created.typeId === 0) typeStr = 'router';
+  else if (created.typeId === 1) typeStr = 'switch';
+  else if (created.typeId === 8) typeStr = 'pc';
+  else if (created.typeId === 9) typeStr = 'server';
+  else if (created.typeId === 16) typeStr = 'switch';
+  
+  return { ok: true, name: name, autoName: autoName, model: model, type: typeStr, typeId: created.typeId };
 }
 
 function handleRemoveDevice(payload) {

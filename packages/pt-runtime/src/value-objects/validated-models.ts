@@ -13,7 +13,6 @@ export const PT_MODEL_MAP: Record<string, string> = {
   "2950": "2950-24",
   "2960": "2960-24TT-L",
   "3560": "3560-24PS",
-  "3650": "3650-24PS",
   "7960": "7960",
   "isr4321": "ISR4321",
   "isr4331": "ISR4331",
