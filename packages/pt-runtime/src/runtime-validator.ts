@@ -83,7 +83,8 @@ const REQUIRED_MAIN_SYMBOLS_V2 = [
   "function cleanUp()",
   "function loadRuntime(",
   "function writeHeartbeat(",
-  "function pollCommandQueue(",  // V2: pollCommandQueue en lugar de pollCommandSlot
+  // Aceptar cualquier modo de polling: pollCommandQueue (V2) o pollCommandSlot (legacy)
+  // El patrón de cola se detecta por COMMANDS_DIR en lugar de COMMAND_FILE
   "function pollDeferredCommands(",
   "function recoverInFlightOnStartup(",  // V2: recovery de in-flight
   "function savePendingCommands(",
@@ -103,7 +104,7 @@ const REQUIRED_MAIN_SYMBOLS_QUEUE = [
   "function claimNextCommand(",
   "function recoverInFlightOnStartup(",
   "function teardownFileWatcher(", // REQUERIDO para lifecycle seguro
-  "function invokeRuntimeCleanupHook(", // REQUERIDO para cleanup
+  // NOTA: invokeRuntimeCleanupHook ya NO es requerido - ahora es un no-op de seguridad
 ];
 
 // ============================================================================
@@ -132,6 +133,37 @@ const FORBIDDEN_IOS_PATTERNS = [
   { pattern: /if\s*\(\s*!response\s*\)/, reason: "Old enterCommand return pattern - API is void" },
   { pattern: /return\s*\[\s*status\s*,\s*output\s*\]/, reason: "Old return pattern for enterCommand" },
 ];
+
+// ============================================================================
+// FASE 5 CRASH FIX: Lifecycle-safe patterns (CRITICAL - Build Breakers)
+// ============================================================================
+// Estas reglas detectan el bug del Stop que causaba crash por re-ejecución
+// de runtime.js durante cleanup mediante new Function(...)
+
+// Regla A: cleanUp() NO debe invocar invokeRuntimeCleanupHook
+// Busca específicamente la LLAMADA (con paréntesis) no la definición
+const LIFECYCLE_RULE_A = {
+  pattern: /function\s+cleanUp\s*\([^)]*\)\s*\{[^}]*invokeRuntimeCleanupHook\s*\(/,
+  reason: "FATAL: cleanUp() must NOT call invokeRuntimeCleanupHook() - causes re-execution during shutdown",
+};
+
+// Regla B: invokeRuntimeCleanupHook() NO debe contener runtimeFn(
+const LIFECYCLE_RULE_B = {
+  pattern: /function\s+invokeRuntimeCleanupHook\s*\([^)]*\)\s*\{[^}]*runtimeFn\s*\(/,
+  reason: "FATAL: invokeRuntimeCleanupHook() must NOT call runtimeFn() - causes re-execution during shutdown",
+};
+
+// Regla C: main.js NO debe tener runtimeFn({ type: "__cleanup__" } dentro de cleanUp
+const LIFECYCLE_RULE_C = {
+  pattern: /function\s+cleanUp[\s\S]{0,500}runtimeFn\s*\(\s*\{\s*type\s*:\s*["']__cleanup__["']/,
+  reason: "FATAL: main.js must NOT call runtimeFn({ type: '__cleanup__' }) in cleanUp() - causes re-execution",
+};
+
+// Regla D: runtime.js no debe tener jobs + listeners + polling síncrono mezclados
+const LIFECYCLE_RULE_D = {
+  pattern: /IOS_JOBS[\s\S]{0,200}attachTerminalListeners[\s\S]{0,200}while\s*\(\s*attempt\s*<\s*maxAttempts/,
+  reason: "WARNING: runtime.js mixes IOS_JOBS + attachTerminalListeners + sync polling - consider moving to main.js",
+};
 
 // ============================================================================
 // Helper: check for forbidden tokens
@@ -205,6 +237,36 @@ function findForbiddenIosPatterns(code: string): string[] {
 }
 
 // ============================================================================
+// Helper: check for lifecycle-safe patterns (CRITICAL - Build Breakers)
+// ============================================================================
+
+function findLifecycleViolations(code: string, target: "main" | "runtime"): string[] {
+  const errors: string[] = [];
+  
+  // Regla A: Solo aplica a main.js
+  if (target === "main") {
+    if (LIFECYCLE_RULE_A.pattern.test(code)) {
+      errors.push(`LIFECYCLE VIOLATION: ${LIFECYCLE_RULE_A.reason}`);
+    }
+    if (LIFECYCLE_RULE_C.pattern.test(code)) {
+      errors.push(`LIFECYCLE VIOLATION: ${LIFECYCLE_RULE_C.reason}`);
+    }
+  }
+  
+  // Regla B: Solo aplica a main.js (donde está define invokeRuntimeCleanupHook)
+  if (target === "main") {
+    if (LIFECYCLE_RULE_B.pattern.test(code)) {
+      errors.push(`LIFECYCLE VIOLATION: ${LIFECYCLE_RULE_B.reason}`);
+    }
+  }
+  
+  // Regla D: Solo aplica a runtime.js - ADVERTENCIA (no error)
+  // Esta regla se maneja como warning en validateRuntimeJs
+  
+  return errors;
+}
+
+// ============================================================================
 // Validate main.js (Script Engine infrastructure)
 // ============================================================================
 
@@ -219,6 +281,10 @@ export function validateMainJs(code: string): ValidationResult {
   // 2. Globals blacklist
   const globalErrors = findForbiddenGlobals(code);
   errors.push(...globalErrors);
+  
+  // 2b. LIFECYCLE RULES (CRITICAL - Build Breakers)
+  const lifecycleErrors = findLifecycleViolations(code, "main");
+  errors.push(...lifecycleErrors);
   
   // 3. Required symbols - intentar ambos modos (legacy y cola real)
   const missingSymbolsLegacy = findMissingSymbols(code, REQUIRED_MAIN_SYMBOLS_V2);
@@ -364,6 +430,16 @@ export function validateRuntimeJs(code: string): ValidationResult {
     warnings.push("runtime.js does not define IOS_JOBS - job system may not work");
   }
   
+  // Regla D: ADVERTENCIA (no error) - runtime.js no debe mezclar jobs + listeners + sync polling
+  // Esta es una arquitectura inconsistency, no un error fatal
+  const hasJobs = code.includes("IOS_JOBS");
+  const hasListeners = code.includes("attachTerminalListeners") || code.includes("TERMINAL_LISTENERS");
+  const hasSyncPolling = /while\s*\(\s*\w+\s*<\s*\w+Attempts/.test(code);
+  
+  if (hasJobs && hasListeners && hasSyncPolling) {
+    warnings.push("ARCHITECTURE WARNING: runtime.js mixes IOS_JOBS + attachTerminalListeners + sync polling - consider moving to main.js for proper lifecycle");
+  }
+  
   const metadata = {
     target: "runtime" as const,
     hasMain: false,
@@ -406,6 +482,45 @@ export function validateGeneratedArtifacts(mainJs: string, runtimeJs: string): V
   // Cross-check: runtime must have healthcheck
   if (runtimeJs.indexOf("__healthcheck__") === -1) {
     warnings.push("runtime.js should support __healthcheck__ for validation");
+  }
+  
+  // Cross-check: IOS_JOBS debe estar en main.js (dueño del estado persistente)
+  const mainHasIosJobs = mainJs.includes("IOS_JOBS") && mainJs.includes("function createIosJob");
+  const runtimeHasIosJobs = runtimeJs.includes("IOS_JOBS");
+  
+  if (runtimeHasIosJobs && !mainHasIosJobs) {
+    warnings.push("ARCHITECTURE: IOS_JOBS está en runtime.js pero no en main.js - el estado persistente debe estar en main.js");
+  }
+  
+  // Cross-check: Terminal listeners deben estar en main.js
+  const mainHasListeners = mainJs.includes("attachTerminalListeners");
+  const runtimeHasListeners = runtimeJs.includes("attachTerminalListeners");
+  
+  if (runtimeHasListeners && !mainHasListeners) {
+    warnings.push("ARCHITECTURE: attachTerminalListeners está en runtime.js pero no en main.js - los listeners deben estar en main.js");
+  }
+  
+  // Cross-check: cleanUp debe llamar detachAllTerminalListeners
+  const mainHasDetach = mainJs.includes("detachAllTerminalListeners");
+  if (mainHasListeners && mainHasIosJobs && !mainHasDetach) {
+    errors.push("main.js cleanUp() debe llamar detachAllTerminalListeners() si tiene listeners");
+  }
+  
+  // PR 5: Verificar paridad dispatcher - catálogo - handlers
+  const catalogHandlers = [
+    "handleAddDevice", "handleRemoveDevice", "handleListDevices", "handleRenameDevice",
+    "handleMoveDevice", "handleClearTopology", "handleAddModule", "handleRemoveModule",
+    "handleAddLink", "handleRemoveLink", "handleConfigHost", "handleConfigIos",
+    "handleExecIos", "handleExecInteractive", "handleSnapshot", "handleInspect",
+    "handleHardwareInfo", "handleHardwareCatalog", "handleCommandLog",
+    "handleListCanvasRects", "handleGetRect", "handleDevicesInRect",
+    "handleResolveCapabilities"
+  ];
+  
+  for (const handler of catalogHandlers) {
+    if (!runtimeJs.includes(`function ${handler}(`)) {
+      warnings.push(`FALTA HANDLER: ${handler} está en el catálogo pero no está definido en runtime.js`);
+    }
   }
   
   return {

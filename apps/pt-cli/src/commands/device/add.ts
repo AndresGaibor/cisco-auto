@@ -1,13 +1,79 @@
+#!/usr/bin/env bun
+/**
+ * Comando device add - Migrado a runCommand
+ * Agrega un nuevo dispositivo a la topología de Packet Tracer
+ */
+
 import { Command } from 'commander';
-import { createDefaultPTController } from '@cisco-auto/pt-control';
-import { input, select } from '@inquirer/prompts';
 import chalk from 'chalk';
+import { input, select } from '@inquirer/prompts';
+
+import type { PTController } from '@cisco-auto/pt-control';
+import type { CliResult } from '../../contracts/cli-result.js';
+import { createSuccessResult, createVerifiedResult } from '../../contracts/cli-result.js';
+import type { CommandMeta } from '../../contracts/command-meta.js';
+import type { GlobalFlags } from '../../flags.js';
+
+import { runCommand } from '../../application/run-command.js';
+import { renderCliResult } from '../../ux/renderers.js';
+import { printExamples } from '../../ux/examples.js';
+import { formatNextSteps } from '../../ux/next-steps.js';
 import {
   DEVICE_MODELS,
   validateDeviceNameNotExists,
   formatDevice,
   formatDeviceType,
-} from '../../utils/device-utils.ts';
+} from '../../utils/device-utils.js';
+
+interface DeviceAddResult {
+  name: string;
+  model: string;
+  type: string;
+  x: number;
+  y: number;
+}
+
+export const DEVICE_ADD_META: CommandMeta = {
+  id: 'device.add',
+  summary: 'Agregar un nuevo dispositivo a la topología',
+  longDescription: 'Agrega un nuevo dispositivo de red (router, switch, PC, servidor) a la topología de Packet Tracer en las coordenadas especificadas.',
+  examples: [
+    {
+      command: 'bun run pt device add R1 2911',
+      description: 'Agregar router Cisco 2911'
+    },
+    {
+      command: 'bun run pt device add S1 2960-24TT',
+      description: 'Agregar switch Cisco 2960'
+    },
+    {
+      command: 'bun run pt device add PC1 PC',
+      description: 'Agregar PC genérico'
+    },
+    {
+      command: 'bun run pt device add SRV1 Server',
+      description: 'Agregar servidor'
+    },
+    {
+      command: 'bun run pt device add R1 2911 -x 200 -y 300',
+      description: 'Agregar router en posición específica'
+    }
+  ],
+  related: [
+    'bun run pt device list',
+    'bun run pt device get',
+    'bun run pt device remove'
+  ],
+  nextSteps: [
+    'bun run pt device list',
+    'bun run pt device get <device>'
+  ],
+  tags: ['device', 'add', 'create', 'network'],
+  supportsVerify: true,
+  supportsJson: true,
+  supportsPlan: true,
+  supportsExplain: true
+};
 
 export function createDeviceAddCommand(): Command {
   const cmd = new Command('add')
@@ -16,58 +82,198 @@ export function createDeviceAddCommand(): Command {
     .argument('[model]', 'Modelo del dispositivo (ej: 2911, 2960, PC)')
     .option('-x, --xpos <x>', 'Posición X en el workspace', '100')
     .option('-y, --ypos <y>', 'Posición Y en el workspace', '100')
+    .option('--examples', 'Mostrar ejemplos de uso y salir', false)
+    .option('--schema', 'Mostrar schema JSON del resultado y salir', false)
+    .option('--explain', 'Explicar qué hace el comando y salir', false)
+    .option('--plan', 'Mostrar plan de ejecución sin ejecutar', false)
+    .option('--verify', 'Verificar cambios post-ejecución', true)
+    .option('--no-verify', 'Omitir verificación post-ejecución', false)
+    .option('--trace', 'Activar traza estructurada de la ejecución', false)
+    .option('--trace-bundle', 'Generar archivo bundle único para debugging', false)
     .action(async (name, model, options) => {
+      const globalExamples = process.argv.includes('--examples');
+      const globalSchema = process.argv.includes('--schema');
+      const globalExplain = process.argv.includes('--explain');
+      const globalPlan = process.argv.includes('--plan');
+      const globalTrace = process.argv.includes('--trace');
+      const globalTraceBundle = process.argv.includes('--trace-bundle');
+
+      const verifyEnabled = options.verify ?? true;
+
+      if (globalExamples) {
+        console.log(printExamples(DEVICE_ADD_META));
+        return;
+      }
+
+      if (globalSchema) {
+        console.log(JSON.stringify(DEVICE_ADD_META, null, 2));
+        return;
+      }
+
+      if (globalExplain) {
+        console.log(DEVICE_ADD_META.longDescription ?? DEVICE_ADD_META.summary);
+        return;
+      }
+
+      if (globalPlan) {
+        console.log('Plan de ejecución:');
+        console.log(`  1. Agregar dispositivo ${name ?? '<name>'}:${model ?? '<model>'}`);
+        console.log(`  2. Posición: (${options.xpos ?? '100'}, ${options.ypos ?? '100'})`);
+        console.log('  3. Verificar que el dispositivo se creó correctamente');
+        return;
+      }
+
       let deviceName = name;
       let deviceModel = model;
-      const x = parseInt(options.xpos, 10);
-      const y = parseInt(options.ypos, 10);
+      const x = parseInt(options.xpos ?? '100', 10);
+      const y = parseInt(options.ypos ?? '100', 10);
 
-      try {
-        // Interactive mode if args not provided
-        if (!deviceName || !deviceModel) {
-          const interactive = await promptForDevice(deviceName, deviceModel);
-          deviceName = interactive.name;
-          deviceModel = interactive.model;
-        }
+      const flags: GlobalFlags = {
+        json: false,
+        jq: null,
+        output: 'text',
+        verbose: false,
+        quiet: false,
+        trace: globalTrace,
+        tracePayload: false,
+        traceResult: false,
+        traceDir: null,
+        traceBundle: globalTraceBundle,
+        traceBundlePath: null,
+        sessionId: null,
+        examples: globalExamples,
+        schema: globalSchema,
+        explain: globalExplain,
+        plan: globalPlan,
+        verify: verifyEnabled,
+      };
 
-        if (!deviceName?.trim()) {
-          throw new Error('El nombre del dispositivo es requerido');
-        }
-        if (!deviceModel?.trim()) {
-          throw new Error('El modelo del dispositivo es requerido');
-        }
+      const result = await runCommand<DeviceAddResult>({
+        action: 'device.add',
+        meta: DEVICE_ADD_META,
+        flags,
+        payloadPreview: {
+          name: deviceName,
+          model: deviceModel,
+          x,
+          y,
+        },
+        execute: async (ctx): Promise<CliResult<DeviceAddResult>> => {
+          const { controller, logPhase } = ctx;
 
-        const controller = createDefaultPTController();
-        process.stdout.write(`${chalk.cyan('⏳')} Agregando dispositivo ${chalk.cyan(deviceName)}...\n`);
+          await controller.start();
 
-        await controller.start();
+          try {
+            if (!deviceName || !deviceModel) {
+              const interactive = await promptForDevice(deviceName, deviceModel);
+              deviceName = interactive.name;
+              deviceModel = interactive.model;
+            }
 
-        try {
-          // Validate device name doesn't exist
-          await validateDeviceNameNotExists(controller, deviceName);
+            if (!deviceName?.trim()) {
+              throw new Error('El nombre del dispositivo es requerido');
+            }
+            if (!deviceModel?.trim()) {
+              throw new Error('El modelo del dispositivo es requerido');
+            }
 
-          // Add the device
-          await controller.addDevice(deviceName, deviceModel, { x, y });
+            await logPhase('apply', {
+              name: deviceName,
+              model: deviceModel,
+              x,
+              y,
+            });
 
-          // Inspect the device to get full details
-          const device = await controller.inspectDevice(deviceName);
+            await controller.addDevice(deviceName, deviceModel, { x, y });
 
-          console.log(`${chalk.green('✓')} Dispositivo ${chalk.cyan(deviceName)} agregado exitosamente\n`);
-          console.log(chalk.gray('Detalles:'));
-          console.log(`  Nombre: ${device.name}`);
-          console.log(`  Tipo: ${formatDeviceType(device.type)}`);
-          console.log(`  Modelo: ${device.model}`);
-          console.log(`  Estado: ${device.power ? chalk.green('Encendido') : chalk.yellow('Apagado')}`);
-          if (device.ports?.length) {
-            console.log(`  Puertos: ${device.ports.length}`);
+            if (verifyEnabled) {
+              await logPhase('verify', { name: deviceName });
+
+              const device = await controller.inspectDevice(deviceName);
+
+              if (!device) {
+                return createVerifiedResult('device.add', {
+                  name: deviceName,
+                  model: deviceModel,
+                  type: 'unknown',
+                  x,
+                  y,
+                }, {
+                  verified: false,
+                  checks: [{
+                    name: 'device.exists',
+                    ok: false,
+                    details: { message: 'El dispositivo no fue encontrado después de crearlo' },
+                  }],
+                });
+              }
+
+              const checks = [
+                {
+                  name: 'device.exists',
+                  ok: true,
+                  details: { name: device.name, type: device.type },
+                },
+                {
+                  name: 'device.model',
+                  ok: device.model === deviceModel,
+                  details: { expected: deviceModel, actual: device.model },
+                },
+                {
+                  name: 'device.position',
+                  ok: device.x === x && device.y === y,
+                  details: { expectedX: x, expectedY: y, actualX: device.x, actualY: device.y },
+                },
+              ];
+
+              const allPassed = checks.every((c) => c.ok);
+
+              return createVerifiedResult('device.add', {
+                name: device.name,
+                model: device.model,
+                type: device.type,
+                x: device.x ?? x,
+                y: device.y ?? y,
+              }, {
+                verified: allPassed,
+                checks,
+              });
+            }
+
+            return createSuccessResult('device.add', {
+              name: deviceName,
+              model: deviceModel,
+              type: 'unknown',
+              x,
+              y,
+            }, {
+              advice: [
+                'Ejecuta bun run pt device list para verificar',
+              ],
+            });
+          } finally {
+            await controller.stop();
           }
-        } finally {
-          await controller.stop();
+        },
+      });
+
+      const output = renderCliResult(result, flags.output);
+
+      if (!flags.quiet || !result.ok) {
+        console.log(output);
+      }
+
+      if (result.ok && result.data) {
+        const nextSteps = [
+          'bun run pt device list',
+          `bun run pt device get ${name ?? '<device>'}`,
+        ];
+        if (!flags.quiet) {
+          console.log(formatNextSteps(nextSteps));
         }
-      } catch (error) {
-        console.error(
-          `${chalk.red('✗')} Error: ${error instanceof Error ? error.message : 'Error desconocido'}`
-        );
+      }
+
+      if (!result.ok) {
         process.exit(1);
       }
     });
@@ -86,7 +292,6 @@ async function promptForDevice(
       validate: (value) => value.trim() !== '' || 'El nombre es requerido',
     }));
 
-  // Select device type first
   const deviceType = await select({
     message: 'Tipo de dispositivo',
     choices: [
@@ -97,7 +302,6 @@ async function promptForDevice(
     ],
   });
 
-  // Then select model based on type
   const models = DEVICE_MODELS[deviceType] || [];
   let deviceModel: string;
 

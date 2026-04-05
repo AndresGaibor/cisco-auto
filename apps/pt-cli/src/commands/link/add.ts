@@ -1,9 +1,34 @@
+#!/usr/bin/env bun
+/**
+ * Comando link add - Migrado a runCommand
+ * Crea un enlace entre dos dispositivos en Packet Tracer
+ */
+
 import { Command } from 'commander';
-import { createDefaultPTController } from '@cisco-auto/pt-control';
+import type { PTController } from '@cisco-auto/pt-control';
 import { select, input } from '@inquirer/prompts';
 import chalk from 'chalk';
-import { fetchDeviceList, formatDevice } from '../../utils/device-utils.ts';
-import { parsePortSpec } from '../../utils/port-parser.ts';
+
+import type { CliResult } from '../../contracts/cli-result.js';
+import { createSuccessResult, createVerifiedResult } from '../../contracts/cli-result.js';
+import type { GlobalFlags } from '../../flags.js';
+
+import { runCommand } from '../../application/run-command.js';
+import { verifyLink, buildLinkVerificationChecks } from '../../application/verify-link.js';
+import { renderCliResult } from '../../ux/renderers.js';
+import { printExamples } from '../../ux/examples.js';
+import { formatNextSteps } from '../../ux/next-steps.js';
+import { fetchDeviceList, formatDevice } from '../../utils/device-utils.js';
+import { parsePortSpec } from '../../utils/port-parser.js';
+import { LINK_ADD_META } from './meta.js';
+
+interface LinkAddResult {
+  endpointA: string;
+  portA: string;
+  endpointB: string;
+  portB: string;
+  linkType: string;
+}
 
 export function createLinkAddCommand(): Command {
   const cmd = new Command('add')
@@ -13,98 +38,223 @@ export function createLinkAddCommand(): Command {
     .argument('[device2]', 'Segundo dispositivo (ej: S1)')
     .argument('[port2]', 'Puerto del segundo dispositivo (ej: Fa0/1)')
     .option('-t, --type <type>', 'Tipo de conexión (auto, copper_straight, copper_crossover)', 'auto')
+    .option('--examples', 'Mostrar ejemplos de uso y salir', false)
+    .option('--schema', 'Mostrar schema JSON del resultado y salir', false)
+    .option('--explain', 'Explicar qué hace el comando y salir', false)
+    .option('--plan', 'Mostrar plan de ejecución sin ejecutar', false)
+    .option('--verify', 'Verificar cambios post-ejecución', true)
+    .option('--no-verify', 'Omitir verificación post-ejecución', false)
+    .option('--trace', 'Activar traza estructurada de la ejecución', false)
+    .option('--trace-bundle', 'Generar archivo bundle único para debugging', false)
     .action(async (device1, port1, device2, port2, options) => {
+      const globalExamples = process.argv.includes('--examples');
+      const globalSchema = process.argv.includes('--schema');
+      const globalExplain = process.argv.includes('--explain');
+      const globalPlan = process.argv.includes('--plan');
+      const globalTrace = process.argv.includes('--trace');
+      const globalTraceBundle = process.argv.includes('--trace-bundle');
+
+      const verifyEnabled = options.verify ?? true;
+
+      if (globalExamples) {
+        console.log(printExamples(LINK_ADD_META));
+        return;
+      }
+
+      if (globalSchema) {
+        console.log(JSON.stringify(LINK_ADD_META, null, 2));
+        return;
+      }
+
+      if (globalExplain) {
+        console.log(LINK_ADD_META.longDescription ?? LINK_ADD_META.summary);
+        return;
+      }
+
+      if (globalPlan) {
+        console.log('Plan de ejecución:');
+        console.log(`  1. Conectar ${device1 ?? '<device1>'}:${port1 ?? '<port1>'} con ${device2 ?? '<device2>'}:${port2 ?? '<port2>'}`);
+        console.log(`  2. Tipo de cable: ${options.type ?? 'auto'}`);
+        console.log('  3. Verificar que la conexión se estableció correctamente');
+        return;
+      }
+
       let dev1 = device1;
       let p1 = port1;
       let dev2 = device2;
       let p2 = port2;
-      const linkType = options.type;
+      const linkType = options.type ?? 'auto';
 
-      try {
-        const controller = createDefaultPTController();
-        process.stdout.write(`${chalk.cyan('⏳')} Cargando dispositivos...\n`);
+      const flags: GlobalFlags = {
+        json: false,
+        jq: null,
+        output: 'text',
+        verbose: false,
+        quiet: false,
+        trace: globalTrace,
+        tracePayload: false,
+        traceResult: false,
+        traceDir: null,
+        traceBundle: globalTraceBundle,
+        traceBundlePath: null,
+        sessionId: null,
+        examples: globalExamples,
+        schema: globalSchema,
+        explain: globalExplain,
+        plan: globalPlan,
+        verify: verifyEnabled,
+      };
 
-        await controller.start();
+      const result = await runCommand<LinkAddResult>({
+        action: 'link.add',
+        meta: LINK_ADD_META,
+        flags,
+        payloadPreview: {
+          device1: dev1,
+          port1: p1,
+          device2: dev2,
+          port2: p2,
+          linkType,
+        },
+        execute: async (ctx): Promise<CliResult<LinkAddResult>> => {
+          const { controller, logPhase } = ctx;
 
-        try {
-          const devices = await fetchDeviceList(controller);
+          await controller.start();
 
-          // Prompt for devices and ports if not provided
-          if (!dev1 || !p1 || !dev2 || !p2) {
-            const deviceChoices = devices.map((d) => ({
-              name: formatDevice(d),
-              value: d.name,
-            }));
-
-            if (!dev1) {
-              dev1 = await select({
-                message: 'Selecciona el primer dispositivo',
-                choices: deviceChoices,
-              });
-            }
-
-            if (!p1) {
-              p1 = await input({
-                message: `Puerto de ${chalk.cyan(dev1)} (ej: Gi0/0, Fa0/1)`,
-                validate: (value) => {
-                  try {
-                    parsePortSpec(value);
-                    return true;
-                  } catch {
-                    return 'Puerto inválido';
-                  }
-                },
-              });
-            }
-
-            if (!dev2) {
-              dev2 = await select({
-                message: 'Selecciona el segundo dispositivo',
-                choices: deviceChoices.filter((d) => d.value !== dev1),
-              });
-            }
-
-            if (!p2) {
-              p2 = await input({
-                message: `Puerto de ${chalk.cyan(dev2)} (ej: Gi0/0, Fa0/1)`,
-                validate: (value) => {
-                  try {
-                    parsePortSpec(value);
-                    return true;
-                  } catch {
-                    return 'Puerto inválido';
-                  }
-                },
-              });
-            }
-          }
-
-          // Validate port specs
           try {
-            parsePortSpec(p1);
-            parsePortSpec(p2);
-          } catch (error) {
-            throw new Error(`Especificación de puerto inválida: ${error instanceof Error ? error.message : 'error desconocido'}`);
+            if (!dev1 || !p1 || !dev2 || !p2) {
+              const devices = await fetchDeviceList(controller);
+              const deviceChoices = devices.map((d) => ({
+                name: formatDevice(d),
+                value: d.name,
+              }));
+
+              if (!dev1) {
+                dev1 = await select({
+                  message: 'Selecciona el primer dispositivo',
+                  choices: deviceChoices,
+                });
+              }
+
+              if (!p1) {
+                p1 = await input({
+                  message: `Puerto de ${chalk.cyan(dev1)} (ej: Gi0/0, Fa0/1)`,
+                  validate: (value) => {
+                    try {
+                      parsePortSpec(value);
+                      return true;
+                    } catch {
+                      return 'Puerto inválido';
+                    }
+                  },
+                });
+              }
+
+              if (!dev2) {
+                dev2 = await select({
+                  message: 'Selecciona el segundo dispositivo',
+                  choices: deviceChoices.filter((d) => d.value !== dev1),
+                });
+              }
+
+              if (!p2) {
+                p2 = await input({
+                  message: `Puerto de ${chalk.cyan(dev2)} (ej: Gi0/0, Fa0/1)`,
+                  validate: (value) => {
+                    try {
+                      parsePortSpec(value);
+                      return true;
+                    } catch {
+                      return 'Puerto inválido';
+                    }
+                  },
+                });
+              }
+            }
+
+            try {
+              // Aceptar tanto "device:port" como solo "port"
+              const portPattern = /^([A-Za-z][A-Za-z0-9_-]*):(.+)$/;
+              if (!portPattern.test(p1) && !portPattern.test(p2)) {
+                // Ambos son puertos simples, está bien
+              } else if (portPattern.test(p1) || portPattern.test(p2)) {
+                // Si uno tiene formato device:port, el otro también debe tener
+                if (!portPattern.test(p1) || !portPattern.test(p2)) {
+                  throw new Error('Si especificas dispositivo:puerto, hazlo en ambos');
+                }
+              }
+            } catch (error) {
+              throw new Error(`Especificación de puerto inválida: ${error instanceof Error ? error.message : 'error desconocido'}`);
+            }
+
+            await logPhase('apply', {
+              device1: dev1,
+              port1: p1,
+              device2: dev2,
+              port2: p2,
+              linkType,
+            });
+
+            await controller.addLink(dev1, p1, dev2, p2, linkType);
+
+            if (verifyEnabled) {
+              await logPhase('verify', { device1: dev1, port1: p1, device2: dev2, port2: p2 });
+
+              const verificationData = await verifyLink(controller, dev1, p1, dev2, p2);
+              const checks = buildLinkVerificationChecks(verificationData);
+              const allPassed = checks.every((check) => check.ok);
+
+              const resultData: LinkAddResult = {
+                endpointA: `${dev1}:${p1}`,
+                portA: p1,
+                endpointB: `${dev2}:${p2}`,
+                portB: p2,
+                linkType,
+              };
+
+              return createVerifiedResult('link.add', resultData, {
+                verified: allPassed,
+                checks: checks.map((c) => ({ name: c.name, ok: c.ok, details: c.details })),
+              });
+            }
+
+            const resultData: LinkAddResult = {
+              endpointA: `${dev1}:${p1}`,
+              portA: p1,
+              endpointB: `${dev2}:${p2}`,
+              portB: p2,
+              linkType,
+            };
+
+            return createSuccessResult('link.add', resultData, {
+              advice: [
+                'Ejecuta bun run pt link list para verificar la conexión',
+              ],
+            });
+          } finally {
+            await controller.stop();
           }
+        },
+      });
 
-          process.stdout.write(
-            `${chalk.cyan('⏳')} Agregando conexión ${chalk.cyan(dev1)}:${p1} -> ${chalk.cyan(dev2)}:${p2}...\n`
-          );
+      const output = renderCliResult(result, flags.output);
 
-          // Add the link (linkType defaults to 'auto')
-          await controller.addLink(dev1, p1, dev2, p2, linkType);
+      if (!flags.quiet || !result.ok) {
+        console.log(output);
+      }
 
-          console.log(`${chalk.green('✓')} Conexión agregada exitosamente\n`);
-          console.log(chalk.gray('Detalles:'));
-          console.log(`  ${chalk.cyan(dev1)}:${p1} <--> ${chalk.cyan(dev2)}:${p2}`);
-          console.log(`  Tipo: ${linkType}`);
-        } finally {
-          await controller.stop();
+      if (result.ok && result.data) {
+        const nextSteps = [
+          'bun run pt link list',
+          `bun run pt device get ${dev1}`,
+          `bun run pt device get ${dev2}`,
+        ];
+        if (!flags.quiet) {
+          console.log(formatNextSteps(nextSteps));
         }
-      } catch (error) {
-        console.error(
-          `${chalk.red('✗')} Error: ${error instanceof Error ? error.message : 'Error desconocido'}`
-        );
+      }
+
+      if (!result.ok) {
         process.exit(1);
       }
     });

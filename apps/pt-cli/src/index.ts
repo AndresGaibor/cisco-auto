@@ -1,20 +1,26 @@
 #!/usr/bin/env bun
 
 import { Command } from 'commander';
-import { addGlobalFlags, type GlobalFlags } from './flags.ts';
-import { createDeviceCommand } from './commands/device/index.ts';
-import { createShowCommand } from './commands/show.ts';
-import { createConfigHostCommand } from './commands/config-host.ts';
-import { createLabVlanCommand } from './commands/vlan.ts';
-import { createEtherchannelCommand } from './commands/etherchannel.ts';
-import { createLinkCommand } from './commands/link/index.ts';
-import { createConfigIOSCommand } from './commands/config-ios.ts';
-import { createRoutingCommand } from './commands/routing.ts';
-import { createACLCommand } from './commands/acl.ts';
-import { createStpCommand } from './commands/stp.ts';
-import { createLabServicesCommand } from './commands/services.ts';
-import { createResultsCommand } from './commands/results.ts';
-import { ExitCodes } from './errors/index.ts';
+import { addGlobalFlags, type GlobalFlags, getGlobalFlags } from './flags';
+import { createDeviceCommand } from './commands/device/index';
+import { createShowCommand } from './commands/show';
+import { createConfigHostCommand } from './commands/config-host';
+import { createLabVlanCommand } from './commands/vlan';
+import { createEtherchannelCommand } from './commands/etherchannel';
+import { createLinkCommand } from './commands/link/index';
+import { createConfigIOSCommand } from './commands/config-ios';
+import { createRoutingCommand } from './commands/routing';
+import { createACLCommand } from './commands/acl';
+import { createStpCommand } from './commands/stp';
+import { createLabServicesCommand } from './commands/services';
+import { createResultsCommand } from './commands/results';
+import { createLogsCommand } from './commands/logs';
+import { createHelpCommand } from './commands/help';
+import { createHistoryCommand } from './commands/history';
+import { createDoctorCommand } from './commands/doctor';
+import { createCompletionCommand } from './commands/completion';
+import { createTopologyCommand } from './commands/topology/index';
+import { ExitCodes } from './errors/index';
 
 function createBuildCommand(): Command {
   const cmd = new Command('build')
@@ -65,6 +71,12 @@ program.addCommand(createACLCommand());
 program.addCommand(createStpCommand());
 program.addCommand(createLabServicesCommand());
 program.addCommand(createResultsCommand());
+program.addCommand(createLogsCommand());
+program.addCommand(createHelpCommand());
+program.addCommand(createHistoryCommand());
+program.addCommand(createDoctorCommand());
+program.addCommand(createCompletionCommand());
+program.addCommand(createTopologyCommand());
 
 try {
   program.parse(process.argv);

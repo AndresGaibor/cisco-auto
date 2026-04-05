@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { createTopologyVisualizeCommand } from './visualize.ts';
 import { createTopologyAnalyzeCommand } from './analyze.ts';
 import { createTopologyExportCommand } from './export.ts';
+import { createTopologyCleanCommand } from './clean.ts';
 
 /**
  * Comando principal 'topology' - Gestión de topologías de red
@@ -14,6 +15,7 @@ export function createTopologyCommand(): Command {
   command.addCommand(createTopologyVisualizeCommand());
   command.addCommand(createTopologyAnalyzeCommand());
   command.addCommand(createTopologyExportCommand());
+  command.addCommand(createTopologyCleanCommand());
 
   return command;
 }

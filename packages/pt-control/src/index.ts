@@ -35,6 +35,8 @@ export {
 // Logging - NDJSON logging with session tracking
 export { LogManager, getLogManager, resetLogManager } from "./logging/index.js";
 export type { LogEntry, LogSession, LogConfig, LogQueryOptions, LogStats } from "./logging/index.js";
+export { redactSensitive } from "./logging/index.js";
+export type { CommandTraceEntry } from "./controller/index.js";
 
 // IOS Command Utilities - Re-export from core
 export {

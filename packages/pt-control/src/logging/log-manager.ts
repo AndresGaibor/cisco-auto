@@ -1,8 +1,18 @@
-import { unlink } from 'node:fs/promises';
+import { appendFile, mkdir, unlink } from 'node:fs/promises';
 import { basename, join } from 'node:path';
+import { homedir } from 'node:os';
 import type { LogConfig, LogEntry, LogQueryOptions, LogSession, LogStats } from './types.js';
 
 type SessionLog = LogSession & LogEntry[];
+
+function getDefaultLogDir(): string {
+  const home = homedir();
+  const isWindows = process.platform === 'win32';
+  if (isWindows) {
+    return join(process.env.USERPROFILE ?? home, 'pt-dev', 'logs', 'sessions');
+  }
+  return join(home, 'pt-dev', 'logs', 'sessions');
+}
 
 export class LogManager {
   private config: Required<LogConfig>;
@@ -10,7 +20,7 @@ export class LogManager {
 
   constructor(config?: Partial<LogConfig>) {
     this.config = {
-      logDir: config?.logDir ?? '.sisyphus/logs',
+      logDir: config?.logDir ?? getDefaultLogDir(),
       retentionDays: config?.retentionDays ?? 7,
       prefix: config?.prefix ?? 'pt-control',
     };
@@ -30,10 +40,18 @@ export class LogManager {
 
   async log(entry: LogEntry): Promise<void> {
     const filePath = this.getLogFilePath(entry.timestamp);
-    const previous = await this.readText(filePath);
     const line = `${JSON.stringify(entry)}\n`;
 
-    await Bun.write(filePath, previous + line, { createPath: true });
+    try {
+      const file = Bun.file(filePath);
+      if (!(await file.exists())) {
+        await mkdir(this.config.logDir, { recursive: true });
+      }
+    } catch {
+      await mkdir(this.config.logDir, { recursive: true });
+    }
+
+    await appendFile(filePath, line);
 
     if (this.currentSession && this.currentSession.id === entry.session_id) {
       this.currentSession.entries.push(entry);

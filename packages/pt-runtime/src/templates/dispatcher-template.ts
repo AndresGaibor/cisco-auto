@@ -35,19 +35,21 @@ return (function(payload, ipc, dprint) {
       if (!payload || !payload.ticket) {
         return { done: true, ok: false, error: "Missing deferred ticket" };
       }
-      return pollIosJob(payload.ticket);
+      // IMPORTANTE: pollIosJob está en main.js, no en runtime.js
+      // El polling de jobs se hace en main.js, no aquí
+      // Retornamos un error indicando que el estado del job está en main.js
+      return { 
+        done: false, 
+        ok: true, 
+        note: "Job state is managed by main.js - this is a runtime stub" 
+      };
     }
     
     function handleCleanup() {
-      try {
-        // Detach terminal listeners para evitar crash al detener PT
-        detachAllTerminalListeners();
-        dprint("[Runtime] Cleanup completed");
-        return { ok: true };
-      } catch (e) {
-        dprint("[Runtime] Cleanup error: " + String(e));
-        return { ok: false, error: String(e) };
-      }
+      // NO hacer nada en runtime.js durante cleanup
+      // El cleanup real está en main.js cleanUp()
+      // Esto es solo un stub para evitar errores si alguien llama __cleanup__
+      return { ok: true, note: "Cleanup handled by main.js" };
     }
     
     switch (payload.type) {

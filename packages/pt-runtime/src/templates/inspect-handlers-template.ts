@@ -227,5 +227,29 @@ function handleCommandLog(payload) {
   
   return { ok: true, entries: entries, count: count };
 }
+
+function handleResolveCapabilities(payload) {
+  // Stub: capabilities resolution requiere acceso a device capabilities
+  // Por ahora retornamos una respuesta básica
+  var deviceName = payload.device;
+  var device = getNet().getDevice(deviceName);
+  
+  if (!device) {
+    return { ok: false, error: "Device not found: " + deviceName };
+  }
+  
+  // Basic capabilities based on device type
+  var capabilities = {
+    device: deviceName,
+    hasCli: true,
+    hasModules: false,
+    supportsVlan: true,
+    supportsRouting: false,
+    supportsDhcp: true,
+    supportsAcl: true
+  };
+  
+  return { ok: true, capabilities: capabilities };
+}
 `;
 }

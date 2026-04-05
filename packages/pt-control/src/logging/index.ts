@@ -11,3 +11,4 @@ export type {
 } from './types.js';
 
 export { LogManager, getLogManager, resetLogManager } from './log-manager.js';
+export { redactSensitive } from './types.js';

@@ -20,6 +20,18 @@ export interface GlobalFlags {
   output: OutputFormat;
   verbose: boolean;
   quiet: boolean;
+  trace: boolean;
+  tracePayload: boolean;
+  traceResult: boolean;
+  traceDir: string | null;
+  traceBundle: boolean;
+  traceBundlePath: string | null;
+  sessionId: string | null;
+  examples: boolean;
+  schema: boolean;
+  explain: boolean;
+  plan: boolean;
+  verify: boolean;
 }
 
 /**
@@ -34,6 +46,18 @@ export function getGlobalFlags(program: Command): GlobalFlags {
     output: (program.opts().output as OutputFormat) ?? 'text',
     verbose: program.opts().verbose ?? false,
     quiet: program.opts().quiet ?? false,
+    trace: program.opts().trace ?? false,
+    tracePayload: program.opts().tracePayload ?? false,
+    traceResult: program.opts().traceResult ?? false,
+    traceDir: program.opts().traceDir ?? null,
+    traceBundle: program.opts().traceBundle ?? false,
+    traceBundlePath: program.opts().traceBundlePath ?? null,
+    sessionId: program.opts().sessionId ?? null,
+    examples: program.opts().examples ?? false,
+    schema: program.opts().schema ?? false,
+    explain: program.opts().explain ?? false,
+    plan: program.opts().plan ?? false,
+    verify: program.opts().verify ?? true,
   };
 }
 
@@ -52,7 +76,20 @@ export function addGlobalFlags(program: Command): Command {
       'text'
     )
     .option('-v, --verbose', 'Salida detallada con logs de debug', false)
-    .option('-q, --quiet', 'Suprime salida no esencial (solo errores)', false);
+    .option('-q, --quiet', 'Suprime salida no esencial (solo errores)', false)
+    .option('--trace', 'Activar traza estructurada de la ejecución', false)
+    .option('--trace-payload', 'Incluir payload redactado en la traza', false)
+    .option('--trace-result', 'Incluir preview del resultado en la traza', false)
+    .option('--trace-dir <dir>', 'Sobrescribir directorio de logs', undefined)
+    .option('--trace-bundle', 'Generar archivo bundle único para debugging', false)
+    .option('--trace-bundle-path <path>', 'Ruta personalizada para el archivo bundle', undefined)
+    .option('--session-id <id>', 'ID de sesión manual para agrupar acciones', undefined)
+    .option('--examples', 'Mostrar ejemplos de uso del comando y salir', false)
+    .option('--schema', 'Mostrar schema JSON del resultado y salir', false)
+    .option('--explain', 'Explicar qué hace el comando y salir', false)
+    .option('--plan', 'Mostrar plan de ejecución sin ejecutar', false)
+    .option('--verify', 'Verificar cambios post-ejecución', true)
+    .option('--no-verify', 'Omitir verificación post-ejecución', false);
 }
 
 /**

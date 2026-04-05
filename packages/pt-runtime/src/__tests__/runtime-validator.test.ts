@@ -40,12 +40,13 @@ function writeHeartbeat() {
   fm.writePlainTextToFile(HEARTBEAT_FILE, JSON.stringify({}));
 }
 
-function pollCommandSlot() {
-  if (fm.fileExists(COMMAND_FILE)) {
-    var content = fm.getFileContents(COMMAND_FILE);
-    journalCommand(cmd);
-    fm.writePlainTextToFile(COMMAND_FILE, "");
-  }
+function pollCommandQueue() {
+  if (!isRunning || isShuttingDown) return;
+  if (activeCommand !== null) return;
+  var claimed = claimNextCommand();
+  if (!claimed) return;
+  activeCommand = claimed.command;
+  executeActiveCommand();
 }
 
 function pollDeferredCommands() {
@@ -60,10 +61,9 @@ function hasPendingDeferredCommands() {
   return false;
 }
 
-function recoverCommandJournal() {
-  if (fm.fileExists(CURRENT_COMMAND_FILE)) {
-    var content = fm.getFileContents(CURRENT_COMMAND_FILE);
-  }
+function recoverInFlightOnStartup() {
+  if (!fm.directoryExists(IN_FLIGHT_DIR)) return;
+  var files = fm.getFilesInDirectory(IN_FLIGHT_DIR);
 }
 
 function savePendingCommands() {
@@ -85,24 +85,26 @@ var commandPollInterval = null;
 var deferredPollInterval = null;
 var heartbeatInterval = null;
 
-function journalCommand(cmd) {
-  fm.writePlainTextToFile(CURRENT_COMMAND_FILE, JSON.stringify(cmd));
+function listQueuedCommandFiles() {
+  var files = fm.getFilesInDirectory(COMMANDS_DIR);
 }
 
-function clearCommandJournal() {
-  fm.writePlainTextToFile(CURRENT_COMMAND_FILE, "");
+function claimNextCommand() {
+  return null;
 }
 
-function writeResultEnvelope(id, envelope) {
-  fm.writePlainTextToFile(RESULTS_DIR + "/" + id + ".json", JSON.stringify(envelope));
-}
+function teardownFileWatcher() {}
 
+var COMMANDS_DIR = "";
+var IN_FLIGHT_DIR = "";
+var RESULTS_DIR = "";
+var DEAD_LETTER_DIR = "";
+var LOGS_DIR = "";
 var RUNTIME_FILE = "";
 var COMMAND_FILE = "";
 var CURRENT_COMMAND_FILE = "";
 var PENDING_COMMANDS_FILE = "";
 var HEARTBEAT_FILE = "";
-var RESULTS_DIR = "";
 `;
       const result = validateMainJs(code);
       if (!result.ok) {
@@ -519,22 +521,20 @@ function cleanUp() {
 }
 function loadRuntime() {}
 function writeHeartbeat() {}
-function pollCommandSlot() {
-  if (fm.fileExists(COMMAND_FILE)) {
-    var content = fm.getFileContents(COMMAND_FILE);
-    journalCommand(cmd);
-    fm.writePlainTextToFile(COMMAND_FILE, "");
-  }
+function pollCommandQueue() {
+  if (!isRunning || isShuttingDown) return;
+  if (activeCommand !== null) return;
+  var claimed = claimNextCommand();
+  if (!claimed) return;
+  activeCommand = claimed.command;
+  executeActiveCommand();
 }
 function pollDeferredCommands() {}
-function recoverCommandJournal() {}
+function recoverInFlightOnStartup() {}
 function savePendingCommands() {}
 var pendingCommands = {};
-function journalCommand(cmd) {
-  fm.writePlainTextToFile(CURRENT_COMMAND_FILE, JSON.stringify(cmd));
-}
-function clearCommandJournal() {}
-function writeResultEnvelope(id, envelope) {}
+function listQueuedCommandFiles() {}
+function claimNextCommand() {}
 function hasPendingDeferredCommands() {
   var key;
   for (key in pendingCommands) {
@@ -547,15 +547,18 @@ function executeActiveCommand() {
     loadRuntime();
   }
 }
+function teardownFileWatcher() {}
 var isShuttingDown = false;
 var isRunning = false;
 var runtimeDirty = false;
 var commandPollInterval = null;
 var deferredPollInterval = null;
 var heartbeatInterval = null;
-var fm = null;
-var CURRENT_COMMAND_FILE = "";
-var COMMAND_FILE = "";
+var COMMANDS_DIR = "";
+var IN_FLIGHT_DIR = "";
+var RESULTS_DIR = "";
+var DEAD_LETTER_DIR = "";
+var LOGS_DIR = "";
 `;
       const runtime = `
 var IOS_JOBS = {};
@@ -639,10 +642,13 @@ function main() {}
 function cleanUp() {}
 function loadRuntime() {}
 function writeHeartbeat() {}
-function pollCommandSlot() {}
+function pollCommandQueue() {}
 function pollDeferredCommands() {}
-function recoverCommandJournal() {}
+function recoverInFlightOnStartup() {}
 function savePendingCommands() {}
+var COMMANDS_DIR = "";
+var IN_FLIGHT_DIR = "";
+var RESULTS_DIR = "";
 `;
       const runtime = `fetch("http://example.com");`;
       const result = validateGeneratedArtifacts(main, runtime);
@@ -655,10 +661,13 @@ function main() {}
 function cleanUp() {}
 function loadRuntime() {}
 function writeHeartbeat() {}
-function pollCommandSlot() {}
+function pollCommandQueue() {}
 function pollDeferredCommands() {}
-function recoverCommandJournal() {}
+function recoverInFlightOnStartup() {}
 function savePendingCommands() {}
+var COMMANDS_DIR = "";
+var IN_FLIGHT_DIR = "";
+var RESULTS_DIR = "";
 `;
       const runtime = `
 var IOS_JOBS = {};
@@ -734,5 +743,587 @@ function runCommand(cmd) {
     const result = validateRuntimeJs(code);
     expect(result.ok).toBe(false);
     expect(result.errors.some((e) => e.includes("Old return pattern"))).toBe(true);
+  });
+});
+
+describe("Fase 5 - Lifecycle Safety (Crash Fix)", () => {
+  describe("Regla A: cleanUp() no debe invocar invokeRuntimeCleanupHook", () => {
+    test("falla si cleanUp() llama invokeRuntimeCleanupHook()", () => {
+      const code = `
+function main() {}
+function cleanUp() {
+  isShuttingDown = true;
+  invokeRuntimeCleanupHook();
+  clearInterval(interval);
+}
+function invokeRuntimeCleanupHook() {
+  if (runtimeFn) {
+    runtimeFn({ type: "__cleanup__" });
+  }
+}
+var COMMAND_FILE = "";
+function pollCommandSlot() {}
+function writeHeartbeat() {}
+function savePendingCommands() {}
+var commandPollInterval = null;
+`;
+      const result = validateMainJs(code);
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.includes("cleanUp() must NOT call invokeRuntimeCleanupHook"))).toBe(true);
+    });
+
+    test("pasa si cleanUp() NO llama invokeRuntimeCleanupHook", () => {
+      // Código completo en modo cola (queue)
+      const code = `
+function main() {
+  var fm = ipc.systemFileManager();
+  ensureDir(COMMANDS_DIR);
+}
+function cleanUp() {
+  isShuttingDown = true;
+  if (commandPollInterval) {
+    clearInterval(commandPollInterval);
+    commandPollInterval = null;
+  }
+  if (deferredPollInterval) {
+    clearInterval(deferredPollInterval);
+    deferredPollInterval = null;
+  }
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+  savePendingCommands();
+}
+function loadRuntime() {}
+function writeHeartbeat() {}
+function pollCommandQueue() {
+  if (!isRunning || isShuttingDown) return;
+  if (activeCommand !== null) return;
+  var claimed = claimNextCommand();
+  if (!claimed) return;
+  activeCommand = claimed.command;
+  executeActiveCommand();
+}
+function pollDeferredCommands() {}
+function hasPendingDeferredCommands() {
+  var key;
+  for (key in pendingCommands) {
+    if (pendingCommands.hasOwnProperty(key)) return true;
+  }
+  return false;
+}
+function recoverInFlightOnStartup() {}
+function savePendingCommands() {}
+function executeActiveCommand() {}
+function listQueuedCommandFiles() {}
+function claimNextCommand() {}
+function teardownFileWatcher() {}
+function ensureDir(path) {}
+var pendingCommands = {};
+var activeCommand = null;
+var isShuttingDown = false;
+var isRunning = false;
+var runtimeDirty = false;
+var commandPollInterval = null;
+var deferredPollInterval = null;
+var heartbeatInterval = null;
+var COMMANDS_DIR = "";
+var IN_FLIGHT_DIR = "";
+var RESULTS_DIR = "";
+var DEAD_LETTER_DIR = "";
+var LOGS_DIR = "";
+var RUNTIME_FILE = "";
+var DEV_DIR = "";
+`;
+      const result = validateMainJs(code);
+      if (!result.ok) {
+        console.log("ERRORS:", result.errors);
+      }
+      expect(result.ok).toBe(true);
+    });
+  });
+
+  describe("Regla B: invokeRuntimeCleanupHook() no debe contener runtimeFn()", () => {
+    test("falla si invokeRuntimeCleanupHook() llama runtimeFn()", () => {
+      const code = `
+function main() {}
+function cleanUp() {}
+function invokeRuntimeCleanupHook() {
+  if (runtimeFn) {
+    runtimeFn({ type: "__cleanup__" });
+  }
+}
+var COMMAND_FILE = "";
+function pollCommandSlot() {}
+function writeHeartbeat() {}
+function savePendingCommands() {}
+`;
+      const result = validateMainJs(code);
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.includes("invokeRuntimeCleanupHook() must NOT call runtimeFn"))).toBe(true);
+    });
+  });
+
+  describe("Regla C: main.js no debe tener runtimeFn({ type: '__cleanup__' }) en cleanUp", () => {
+    test("falla con runtimeFn(__cleanup__) en cleanUp", () => {
+      const code = `
+function main() {}
+function cleanUp() {
+  isShuttingDown = true;
+  runtimeFn({ type: "__cleanup__" });
+  clearInterval(interval);
+}
+var COMMAND_FILE = "";
+function pollCommandSlot() {}
+function writeHeartbeat() {}
+function savePendingCommands() {}
+`;
+      const result = validateMainJs(code);
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.includes("runtimeFn({ type: '__cleanup__' })"))).toBe(true);
+    });
+  });
+
+  describe("Regla D: Arquitectura - runtime.js no debe mezclar jobs + listeners + sync polling", () => {
+    test("advierte si runtime.js tiene IOS_JOBS + attachTerminalListeners + while polling", () => {
+      const code = `
+var IOS_JOBS = {};
+var TERMINAL_LISTENERS_ATTACHED = {};
+
+function attachTerminalListeners(deviceName, term) {
+  term.registerEvent("commandEnded", null, handler);
+}
+
+function handleConfigIos(payload) {
+  var attempt = 0;
+  var maxAttempts = 10;
+  while (attempt < maxAttempts) {
+    attempt++;
+  }
+  return { ok: true };
+}
+
+function handleExecIos(payload) {}
+function handlePollDeferred(payload) {}
+
+var commandEnded = true;
+var outputWritten = true;
+var modeChanged = true;
+var moreDisplayed = true;
+var deferred = true;
+var x = 1; var y = 2; var z = 3; var a = 4; var b = 5;
+var c = 6; var d = 7; var e = 8; var f = 9; var g = 10;
+var h = 11; var i = 12; var j = 13; var k = 14; var l = 15;
+var m = 16; var n = 17; var o = 18; var p = 19; var q = 20;
+`;
+      const result = validateRuntimeJs(code);
+      expect(result.ok).toBe(true);
+      expect(result.warnings.some((w) => w.includes("ARCHITECTURE WARNING"))).toBe(true);
+    });
+  });
+
+  describe("Contrato de cleanup - main.js generado debe contener", () => {
+    test("debe contener clearInterval(commandPollInterval)", () => {
+      const code = `
+function main() {}
+function cleanUp() {
+  if (commandPollInterval) {
+    clearInterval(commandPollInterval);
+    commandPollInterval = null;
+  }
+  if (deferredPollInterval) {
+    clearInterval(deferredPollInterval);
+    deferredPollInterval = null;
+  }
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+}
+var COMMANDS_DIR = "";
+var IN_FLIGHT_DIR = "";
+var RESULTS_DIR = "";
+var DEAD_LETTER_DIR = "";
+var LOGS_DIR = "";
+var commandPollInterval = null;
+var deferredPollInterval = null;
+var heartbeatInterval = null;
+function loadRuntime() {}
+function writeHeartbeat() {}
+function pollCommandQueue() {}
+function pollDeferredCommands() {}
+function recoverInFlightOnStartup() {}
+function savePendingCommands() {}
+function listQueuedCommandFiles() {}
+function claimNextCommand() {}
+function hasPendingDeferredCommands() {}
+function teardownFileWatcher() {}
+`;
+      const result = validateMainJs(code);
+      expect(result.ok).toBe(true);
+    });
+
+    test("debe contener clearInterval(deferredPollInterval)", () => {
+      const code = `
+function main() {}
+function cleanUp() {
+  if (commandPollInterval) {
+    clearInterval(commandPollInterval);
+    commandPollInterval = null;
+  }
+  if (deferredPollInterval) {
+    clearInterval(deferredPollInterval);
+    deferredPollInterval = null;
+  }
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+}
+var COMMANDS_DIR = "";
+var IN_FLIGHT_DIR = "";
+var RESULTS_DIR = "";
+var DEAD_LETTER_DIR = "";
+var LOGS_DIR = "";
+var commandPollInterval = null;
+var deferredPollInterval = null;
+var heartbeatInterval = null;
+function loadRuntime() {}
+function writeHeartbeat() {}
+function pollCommandQueue() {}
+function pollDeferredCommands() {}
+function recoverInFlightOnStartup() {}
+function savePendingCommands() {}
+function listQueuedCommandFiles() {}
+function claimNextCommand() {}
+function hasPendingDeferredCommands() {}
+function teardownFileWatcher() {}
+`;
+      const result = validateMainJs(code);
+      console.log("RESULT:", result);
+      expect(result.ok).toBe(true);
+    });
+
+    test("debe contener clearInterval(heartbeatInterval)", () => {
+      const code = `
+function main() {}
+function cleanUp() {
+  if (commandPollInterval) {
+    clearInterval(commandPollInterval);
+    commandPollInterval = null;
+  }
+  if (deferredPollInterval) {
+    clearInterval(deferredPollInterval);
+    deferredPollInterval = null;
+  }
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+}
+var COMMANDS_DIR = "";
+var IN_FLIGHT_DIR = "";
+var RESULTS_DIR = "";
+var DEAD_LETTER_DIR = "";
+var LOGS_DIR = "";
+var commandPollInterval = null;
+var deferredPollInterval = null;
+var heartbeatInterval = null;
+function loadRuntime() {}
+function writeHeartbeat() {}
+function pollCommandQueue() {}
+function pollDeferredCommands() {}
+function recoverInFlightOnStartup() {}
+function savePendingCommands() {}
+function listQueuedCommandFiles() {}
+function claimNextCommand() {}
+function hasPendingDeferredCommands() {}
+function teardownFileWatcher() {}
+`;
+      const result = validateMainJs(code);
+      expect(result.ok).toBe(true);
+    });
+
+    test("debe contener teardownFileWatcher()", () => {
+      const code = `
+function main() {}
+function cleanUp() {
+  if (commandPollInterval) {
+    clearInterval(commandPollInterval);
+    commandPollInterval = null;
+  }
+  if (deferredPollInterval) {
+    clearInterval(deferredPollInterval);
+    deferredPollInterval = null;
+  }
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+  teardownFileWatcher();
+}
+var COMMANDS_DIR = "";
+var IN_FLIGHT_DIR = "";
+var RESULTS_DIR = "";
+var DEAD_LETTER_DIR = "";
+var LOGS_DIR = "";
+var commandPollInterval = null;
+var deferredPollInterval = null;
+var heartbeatInterval = null;
+function loadRuntime() {}
+function writeHeartbeat() {}
+function pollCommandQueue() {}
+function pollDeferredCommands() {}
+function recoverInFlightOnStartup() {}
+function savePendingCommands() {}
+function listQueuedCommandFiles() {}
+function claimNextCommand() {}
+function hasPendingDeferredCommands() {}
+function teardownFileWatcher() {}
+`;
+      const result = validateMainJs(code);
+      expect(result.ok).toBe(true);
+    });
+
+    test("debe contener clearInterval(deferredPollInterval)", () => {
+      const code = `
+function main() {}
+function cleanUp() {
+  if (commandPollInterval) {
+    clearInterval(commandPollInterval);
+    commandPollInterval = null;
+  }
+  if (deferredPollInterval) {
+    clearInterval(deferredPollInterval);
+    deferredPollInterval = null;
+  }
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+}
+var COMMANDS_DIR = "";
+var IN_FLIGHT_DIR = "";
+var RESULTS_DIR = "";
+var DEAD_LETTER_DIR = "";
+var LOGS_DIR = "";
+var commandPollInterval = null;
+var deferredPollInterval = null;
+var heartbeatInterval = null;
+function loadRuntime() {}
+function writeHeartbeat() {}
+function pollCommandQueue() {}
+function pollDeferredCommands() {}
+function recoverInFlightOnStartup() {}
+function savePendingCommands() {}
+function listQueuedCommandFiles() {}
+function claimNextCommand() {}
+function hasPendingDeferredCommands() {}
+function teardownFileWatcher() {}
+`;
+      const result = validateMainJs(code);
+      console.log("RESULT:", JSON.stringify(result));
+      expect(result.ok).toBe(true);
+    });
+
+    test("debe contener clearInterval(heartbeatInterval)", () => {
+      const code = `
+function main() {}
+function cleanUp() {
+  if (commandPollInterval) {
+    clearInterval(commandPollInterval);
+    commandPollInterval = null;
+  }
+  if (deferredPollInterval) {
+    clearInterval(deferredPollInterval);
+    deferredPollInterval = null;
+  }
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+}
+var COMMANDS_DIR = "";
+var IN_FLIGHT_DIR = "";
+var RESULTS_DIR = "";
+var DEAD_LETTER_DIR = "";
+var LOGS_DIR = "";
+var commandPollInterval = null;
+var deferredPollInterval = null;
+var heartbeatInterval = null;
+function loadRuntime() {}
+function writeHeartbeat() {}
+function pollCommandQueue() {}
+function pollDeferredCommands() {}
+function recoverInFlightOnStartup() {}
+function savePendingCommands() {}
+function listQueuedCommandFiles() {}
+function claimNextCommand() {}
+function hasPendingDeferredCommands() {}
+function teardownFileWatcher() {}
+`;
+      const result = validateMainJs(code);
+      console.log("RESULT:", JSON.stringify(result));
+      expect(result.ok).toBe(true);
+    });
+
+    test("debe contener teardownFileWatcher()", () => {
+      const code = `
+function main() {}
+function cleanUp() {
+  if (commandPollInterval) {
+    clearInterval(commandPollInterval);
+    commandPollInterval = null;
+  }
+  if (deferredPollInterval) {
+    clearInterval(deferredPollInterval);
+    deferredPollInterval = null;
+  }
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+  teardownFileWatcher();
+}
+var COMMANDS_DIR = "";
+var IN_FLIGHT_DIR = "";
+var RESULTS_DIR = "";
+var DEAD_LETTER_DIR = "";
+var LOGS_DIR = "";
+var commandPollInterval = null;
+var deferredPollInterval = null;
+var heartbeatInterval = null;
+function loadRuntime() {}
+function writeHeartbeat() {}
+function pollCommandQueue() {}
+function pollDeferredCommands() {}
+function recoverInFlightOnStartup() {}
+function savePendingCommands() {}
+function listQueuedCommandFiles() {}
+function claimNextCommand() {}
+function hasPendingDeferredCommands() {}
+function teardownFileWatcher() {}
+`;
+      const result = validateMainJs(code);
+      console.log("RESULT:", JSON.stringify(result));
+      expect(result.ok).toBe(true);
+    });
+
+    test("debe contener clearInterval(heartbeatInterval)", () => {
+      const code = `
+function main() {}
+function cleanUp() {
+  if (commandPollInterval) {
+    clearInterval(commandPollInterval);
+    commandPollInterval = null;
+  }
+  if (deferredPollInterval) {
+    clearInterval(deferredPollInterval);
+    deferredPollInterval = null;
+  }
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+}
+var COMMANDS_DIR = "";
+var IN_FLIGHT_DIR = "";
+var RESULTS_DIR = "";
+var DEAD_LETTER_DIR = "";
+var LOGS_DIR = "";
+var commandPollInterval = null;
+var deferredPollInterval = null;
+var heartbeatInterval = null;
+function loadRuntime() {}
+function writeHeartbeat() {}
+function pollCommandQueue() {}
+function pollDeferredCommands() {}
+function recoverInFlightOnStartup() {}
+function savePendingCommands() {}
+function listQueuedCommandFiles() {}
+function claimNextCommand() {}
+function hasPendingDeferredCommands() {}
+function teardownFileWatcher() {}
+`;
+      const result = validateMainJs(code);
+      if (!result.ok) {
+        console.log("ERRORS:", result.errors);
+      }
+      expect(result.ok).toBe(true);
+    });
+
+    test("debe contener teardownFileWatcher()", () => {
+      const code = `
+function main() {}
+function cleanUp() {
+  if (commandPollInterval) {
+    clearInterval(commandPollInterval);
+    commandPollInterval = null;
+  }
+  if (deferredPollInterval) {
+    clearInterval(deferredPollInterval);
+    deferredPollInterval = null;
+  }
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+  teardownFileWatcher();
+}
+var COMMANDS_DIR = "";
+var IN_FLIGHT_DIR = "";
+var RESULTS_DIR = "";
+var DEAD_LETTER_DIR = "";
+var LOGS_DIR = "";
+var commandPollInterval = null;
+var deferredPollInterval = null;
+var heartbeatInterval = null;
+function loadRuntime() {}
+function writeHeartbeat() {}
+function pollCommandQueue() {}
+function pollDeferredCommands() {}
+function recoverInFlightOnStartup() {}
+function savePendingCommands() {}
+function listQueuedCommandFiles() {}
+function claimNextCommand() {}
+function hasPendingDeferredCommands() {}
+function teardownFileWatcher() {}
+`;
+      const result = validateMainJs(code);
+      if (!result.ok) {
+        console.log("ERRORS:", result.errors);
+      }
+      expect(result.ok).toBe(true);
+    });
+
+    test("NO debe contener runtimeFn( dentro de cleanUp", () => {
+      const code = `
+function main() {}
+function cleanUp() {
+  runtimeFn({ type: "__cleanup__" });
+}
+var COMMANDS_DIR = "";
+var IN_FLIGHT_DIR = "";
+var RESULTS_DIR = "";
+var DEAD_LETTER_DIR = "";
+var LOGS_DIR = "";
+var commandPollInterval = null;
+var deferredPollInterval = null;
+var heartbeatInterval = null;
+function loadRuntime() {}
+function writeHeartbeat() {}
+function pollCommandQueue() {}
+function pollDeferredCommands() {}
+function recoverInFlightOnStartup() {}
+function savePendingCommands() {}
+function listQueuedCommandFiles() {}
+function claimNextCommand() {}
+function hasPendingDeferredCommands() {}
+function teardownFileWatcher() {}
+`;
+      const result = validateMainJs(code);
+      expect(result.ok).toBe(false);
+    });
   });
 });

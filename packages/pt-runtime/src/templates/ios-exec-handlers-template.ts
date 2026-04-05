@@ -184,5 +184,11 @@ function handleExecIos(payload) {
   
   return result;
 }
+
+function handleExecInteractive(payload) {
+  // Stub: execInteractive usa el mismo mecanismo que execIos pero con streaming
+  // Por ahora, delegamos a handleExecIos
+  return handleExecIos(payload);
+}
 `;
 }

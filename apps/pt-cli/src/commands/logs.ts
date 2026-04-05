@@ -1,0 +1,487 @@
+#!/usr/bin/env bun
+/**
+ * Comando logs - Visor de trazas para debugging
+ * Proporciona inspección de logs de CLI, bridge y PT-side
+ * Migrado al patrón runCommand con CliResult
+ */
+
+import { Command } from 'commander';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+
+import type { CliResult } from '../contracts/cli-result.js';
+import { createSuccessResult, createErrorResult } from '../contracts/cli-result.js';
+import type { CommandMeta } from '../contracts/command-meta.js';
+import type { GlobalFlags } from '../flags.js';
+
+import { runCommand } from '../application/run-command.js';
+import { renderCliResult } from '../ux/renderers.js';
+import { printExamples } from '../ux/examples.js';
+import { getLogsDir, getCommandLogsDir, getResultsDir, getSessionLogsDir, getEventsPath, getBundlesDir } from '../system/paths.js';
+import { sessionLogStore } from '../telemetry/session-log-store.js';
+import { bundleWriter } from '../telemetry/bundle-writer.js';
+import type { SessionLogEvent } from '../telemetry/session-log-store.js';
+
+const LOGS_EXAMPLES = [
+  { command: 'pt logs tail', description: 'Mostrar últimos eventos' },
+  { command: 'pt logs tail -f', description: 'Seguir eventos en tiempo real' },
+  { command: 'pt logs errors', description: 'Buscar errores recientes' },
+  { command: 'pt logs session abc123', description: 'Ver timeline de sesión' },
+  { command: 'pt logs bundle abc123', description: 'Generar bundle de debugging' },
+];
+
+const LOGS_META: CommandMeta = {
+  id: 'logs',
+  summary: 'Inspeccionar trazas de ejecución',
+  longDescription: 'Proporciona inspección de logs de CLI, bridge y PT-side para debugging.',
+  examples: LOGS_EXAMPLES,
+  related: ['history', 'results', 'doctor'],
+  supportsVerify: false,
+  supportsJson: true,
+  supportsPlan: false,
+  supportsExplain: false,
+};
+
+interface LogTailResult {
+  entries: unknown[];
+  count: number;
+}
+
+interface LogSessionResult {
+  sessionId: string;
+  events: SessionLogEvent[];
+  count: number;
+}
+
+interface LogErrorsResult {
+  errors: { timestamp: string; sessionId: string; action: string; error: string }[];
+  count: number;
+}
+
+interface LogBundleResult {
+  bundlePath: string;
+  sessionId: string;
+}
+
+export function createLogsCommand(): Command {
+  const cmd = new Command('logs');
+  
+  cmd
+    .description('Inspeccionar trazas de ejecución')
+    .hook('preAction', async () => {
+      const logsDir = getLogsDir();
+      if (!existsSync(logsDir)) {
+        console.log('Directorio de logs no existe. Ejecuta algunos comandos primero.');
+      }
+    });
+
+  const tailCmd = cmd
+    .command('tail')
+    .description('Mostrar los últimos N eventos del log actual')
+    .argument('[lines]', 'Número de líneas (default: 20)', '20')
+    .option('-f, --follow', 'Seguir nuevos eventos en tiempo real', false)
+    .option('--errors-only', 'Mostrar solo errores', false)
+    .option('--bridge', 'Incluir eventos del bridge', false)
+    .option('--examples', 'Mostrar ejemplos', false)
+    .option('--explain', 'Explicar', false)
+    .option('--plan', 'Mostrar plan', false)
+    .action(async (linesArg: string, options) => {
+      const globalExamples = process.argv.includes('--examples');
+      const globalExplain = process.argv.includes('--explain');
+      const globalPlan = process.argv.includes('--plan');
+
+      if (globalExamples) {
+        console.log(printExamples(LOGS_META));
+        return;
+      }
+
+      if (globalExplain) {
+        console.log(LOGS_META.longDescription ?? LOGS_META.summary);
+        return;
+      }
+
+      if (globalPlan) {
+        console.log('Plan de ejecución:');
+        console.log(`  1. Leer últimos ${linesArg} eventos de logs`);
+        if (options.follow) console.log('  2. Seguir nuevos eventos en tiempo real');
+        if (options.errorsOnly) console.log('  3. Filtrar solo errores');
+        return;
+      }
+
+      const lines = parseInt(linesArg, 10) || 20;
+      const logsDir = getLogsDir();
+      
+      const entries: unknown[] = [];
+
+      try {
+        const files = readdirSync(logsDir)
+          .filter(f => f.endsWith('.ndjson'))
+          .sort()
+          .slice(-3);
+
+        for (const file of files) {
+          const filePath = join(logsDir, file);
+          const content = readFileSync(filePath, 'utf-8');
+          const allLines = content.split('\n').filter(Boolean);
+          const tailLines = allLines.slice(-lines);
+
+          for (const line of tailLines) {
+            try {
+              const entry = JSON.parse(line);
+              
+              if (options.errorsOnly) {
+                const outcome = entry.outcome ?? entry.phase;
+                if (outcome !== 'error' && outcome !== 'failure' && outcome !== 'error') {
+                  continue;
+                }
+              }
+              
+              entries.push(entry);
+            } catch {
+              // Skip invalid lines
+            }
+          }
+        }
+      } catch {
+        // No logs found
+      }
+
+      console.log(`\n=== Últimos ${lines} eventos ===${options.follow ? ' (seguimiento)' : ''}\n`);
+
+      for (const rawEntry of entries.slice(-lines)) {
+        const entry = rawEntry as Record<string, unknown>;
+        const timestamp = (entry.timestamp as string)?.split('T')[1]?.split('.')[0] ?? '';
+        const action = entry.action ?? entry.phase ?? 'unknown';
+        const outcome = entry.outcome ?? '';
+        const sessId = entry.session_id ?? entry.sessionId ?? '';
+        
+        if (outcome === 'error' || outcome === 'failure') {
+          console.log(`[${timestamp}] 🔴 ${action} -> ${outcome}`);
+          console.log(`        Sesión: ${sessId}`);
+          if (entry.error) {
+            console.log(`        Error: ${entry.error}`);
+          }
+        } else {
+          const icon = outcome === 'success' ? '✅' : '⚪';
+          console.log(`[${timestamp}] ${icon} ${action} -> ${outcome || 'ok'}`);
+        }
+      }
+
+      if (options.follow) {
+        console.log('\n⏳ Esperando nuevos eventos... (Ctrl+C para salir)');
+        
+        let lastSize = 0;
+        const eventsPath = getEventsPath();
+        
+        const checkInterval = setInterval(() => {
+          try {
+            if (existsSync(eventsPath)) {
+              const stats = require('node:fs').statSync(eventsPath);
+              if (stats.size > lastSize) {
+                lastSize = stats.size;
+                console.log('\n📝 Nuevo evento detectado');
+              }
+            }
+          } catch {
+            clearInterval(checkInterval);
+          }
+        }, 2000);
+
+        setTimeout(() => clearInterval(checkInterval), 60000);
+      }
+    });
+
+  cmd
+    .command('session')
+    .description('Mostrar timeline de una sesión')
+    .argument('<sessionId>', 'ID de la sesión')
+    .option('--json', 'Salida en JSON', false)
+    .option('--examples', 'Mostrar ejemplos', false)
+    .option('--explain', 'Explicar', false)
+    .option('--plan', 'Mostrar plan', false)
+    .action(async (sessionId: string, options) => {
+      const globalExamples = process.argv.includes('--examples');
+      const globalExplain = process.argv.includes('--explain');
+      const globalPlan = process.argv.includes('--plan');
+
+      if (globalExamples) {
+        console.log(printExamples(LOGS_META));
+        return;
+      }
+
+      if (globalPlan) {
+        console.log('Plan de ejecución:');
+        console.log(`  1. Buscar sesión: ${sessionId}`);
+        console.log('  2. Mostrar eventos en timeline');
+        return;
+      }
+
+      const flags: GlobalFlags = {
+        json: false, jq: null, output: 'text', verbose: false, quiet: false,
+        trace: false, tracePayload: false, traceResult: false, traceDir: null,
+        traceBundle: false, traceBundlePath: null, sessionId: null,
+        examples: globalExamples, schema: false, explain: globalExplain, plan: globalPlan, verify: false,
+      };
+
+      const result = await runCommand<LogSessionResult>({
+        action: 'logs.session',
+        meta: LOGS_META,
+        flags,
+        payloadPreview: { sessionId },
+        execute: async (): Promise<CliResult<LogSessionResult>> => {
+          try {
+            const events = await sessionLogStore.read(sessionId);
+            
+            return createSuccessResult('logs.session', {
+              sessionId,
+              events,
+              count: events.length,
+            });
+          } catch (error) {
+            return createErrorResult('logs.session', {
+              message: error instanceof Error ? error.message : String(error),
+            }) as CliResult<LogSessionResult>;
+          }
+        },
+      });
+
+      const output = renderCliResult(result, flags.output);
+      if (!flags.quiet || !result.ok) console.log(output);
+
+      if (!result.ok) process.exit(1);
+    });
+
+  cmd
+    .command('command')
+    .description('Fusionar bridge events + PT trace + resultado de un comando')
+    .argument('<commandId>', 'ID del comando')
+    .option('--examples', 'Mostrar ejemplos', false)
+    .option('--explain', 'Explicar', false)
+    .option('--plan', 'Mostrar plan', false)
+    .action(async (commandId: string, options) => {
+      const globalExamples = process.argv.includes('--examples');
+      const globalExplain = process.argv.includes('--explain');
+      const globalPlan = process.argv.includes('--plan');
+
+      if (globalExamples || globalExplain || globalPlan) {
+        console.log('Plan de ejecución:');
+        console.log(`  1. Buscar trace de comando: ${commandId}`);
+        console.log('  2. Buscar resultado');
+        console.log('  3. Buscar eventos del bridge');
+        return;
+      }
+
+      console.log(`\n=== Comando: ${commandId} ===\n`);
+
+      const commandsTraceDir = getCommandLogsDir();
+      const resultsDir = getResultsDir();
+
+      let foundAny = false;
+
+      const tracePath = join(commandsTraceDir, `${commandId}.json`);
+      if (existsSync(tracePath)) {
+        foundAny = true;
+        console.log('--- PT-Side Trace ---');
+        const trace = JSON.parse(readFileSync(tracePath, 'utf-8'));
+        console.log(JSON.stringify(trace, null, 2));
+        console.log();
+      }
+
+      const resultPath = join(resultsDir, `${commandId}.json`);
+      if (existsSync(resultPath)) {
+        foundAny = true;
+        console.log('--- Resultado ---');
+        const result = JSON.parse(readFileSync(resultPath, 'utf-8'));
+        console.log(JSON.stringify(result, null, 2));
+        console.log();
+      }
+
+      const eventsPath = getEventsPath();
+      if (existsSync(eventsPath)) {
+        console.log('--- Bridge Events (recientes) ---');
+        const content = readFileSync(eventsPath, 'utf-8');
+        const lines = content.split('\n').filter(Boolean);
+        
+        const cmdEvents = lines
+          .map(line => {
+            try {
+              return JSON.parse(line);
+            } catch {
+              return null;
+            }
+          })
+          .filter((e): e is Record<string, unknown> => e !== null && e.command_id === commandId);
+        
+        if (cmdEvents.length > 0) {
+          console.log(JSON.stringify(cmdEvents, null, 2));
+        } else {
+          console.log('No se encontraron eventos del bridge para este comando.');
+        }
+        console.log();
+      }
+
+      if (!foundAny) {
+        console.log('No se encontró información para este comando.');
+        console.log('Los archivos de trace se crean cuando --trace está habilitado.');
+      }
+    });
+
+  cmd
+    .command('errors')
+    .description('Buscar sesiones fallidas recientes')
+    .option('-n, --limit <num>', 'Número de errores a mostrar', '10')
+    .option('--examples', 'Mostrar ejemplos', false)
+    .option('--explain', 'Explicar', false)
+    .option('--plan', 'Mostrar plan', false)
+    .action(async (options) => {
+      const globalExamples = process.argv.includes('--examples');
+      const globalPlan = process.argv.includes('--plan');
+
+      if (globalExamples) {
+        console.log(printExamples(LOGS_META));
+        return;
+      }
+
+      if (globalPlan) {
+        console.log('Plan de ejecución:');
+        console.log(`  1. Buscar últimos ${options.limit} errores`);
+        console.log('  2. Mostrar timestamp, sesión y mensaje');
+        return;
+      }
+
+      const flags: GlobalFlags = {
+        json: false, jq: null, output: 'text', verbose: false, quiet: false,
+        trace: false, tracePayload: false, traceResult: false, traceDir: null,
+        traceBundle: false, traceBundlePath: null, sessionId: null,
+        examples: globalExamples, schema: false, explain: false, plan: globalPlan, verify: false,
+      };
+
+      const limit = parseInt(options.limit) || 10;
+      const result = await runCommand<LogErrorsResult>({
+        action: 'logs.errors',
+        meta: LOGS_META,
+        flags,
+        payloadPreview: { limit },
+        execute: async (): Promise<CliResult<LogErrorsResult>> => {
+          try {
+            const logsDir = getLogsDir();
+            const errors: { timestamp: string; sessionId: string; action: string; error: string }[] = [];
+
+            const files = readdirSync(logsDir)
+              .filter(f => f.endsWith('.ndjson'))
+              .sort()
+              .slice(-5);
+
+            for (const file of files) {
+              if (errors.length >= limit) break;
+              
+              const filePath = join(logsDir, file);
+              const content = readFileSync(filePath, 'utf-8');
+              const lines = content.split('\n').filter(Boolean);
+
+              for (const line of lines) {
+                if (errors.length >= limit) break;
+                
+                try {
+                  const entry = JSON.parse(line);
+                  const outcome = entry.outcome ?? entry.phase;
+                  
+                  if (outcome === 'error' || outcome === 'failure') {
+                    errors.push({
+                      timestamp: (entry.timestamp as string)?.split('T')[0] ?? '',
+                      sessionId: (entry.session_id ?? entry.sessionId ?? '') as string,
+                      action: (entry.action ?? '') as string,
+                      error: (entry.error ?? entry.error_message ?? '') as string,
+                    });
+                  }
+                } catch {
+                  // Skip invalid lines
+                }
+              }
+            }
+
+            return createSuccessResult('logs.errors', {
+              errors,
+              count: errors.length,
+            });
+          } catch (error) {
+            return createErrorResult('logs.errors', {
+              message: error instanceof Error ? error.message : String(error),
+            }) as CliResult<LogErrorsResult>;
+          }
+        },
+      });
+
+      const output = renderCliResult(result, flags.output);
+      if (!flags.quiet || !result.ok) console.log(output);
+
+      if (!result.ok) process.exit(1);
+    });
+
+  cmd
+    .command('bundle')
+    .description('Generar bundle de depuración para una sesión')
+    .argument('<sessionId>', 'ID de la sesión')
+    .option('-o, --output <path>', 'Ruta de salida del bundle')
+    .option('--examples', 'Mostrar ejemplos', false)
+    .option('--explain', 'Explicar', false)
+    .option('--plan', 'Mostrar plan', false)
+    .action(async (sessionId: string, options) => {
+      const globalExamples = process.argv.includes('--examples');
+      const globalExplain = process.argv.includes('--explain');
+      const globalPlan = process.argv.includes('--plan');
+
+      if (globalExamples) {
+        console.log(printExamples(LOGS_META));
+        return;
+      }
+
+      if (globalPlan) {
+        console.log('Plan de ejecución:');
+        console.log(`  1. Generar bundle para sesión: ${sessionId}`);
+        console.log('  2. Guardar en bundle-writer');
+        return;
+      }
+
+      const flags: GlobalFlags = {
+        json: false, jq: null, output: 'text', verbose: false, quiet: false,
+        trace: false, tracePayload: false, traceResult: false, traceDir: null,
+        traceBundle: false, traceBundlePath: null, sessionId: null,
+        examples: globalExamples, schema: false, explain: globalExplain, plan: globalPlan, verify: false,
+      };
+
+      const result = await runCommand<LogBundleResult>({
+        action: 'logs.bundle',
+        meta: LOGS_META,
+        flags,
+        payloadPreview: { sessionId, outputPath: options.output },
+        execute: async (): Promise<CliResult<LogBundleResult>> => {
+          try {
+            const bundlePath = await bundleWriter.writeBundle(sessionId);
+            
+            if (existsSync(bundlePath)) {
+              return createSuccessResult('logs.bundle', {
+                bundlePath,
+                sessionId,
+              });
+            } else {
+              return createErrorResult('logs.bundle', {
+                message: 'Error al generar el bundle',
+              }) as CliResult<LogBundleResult>;
+            }
+          } catch (error) {
+            return createErrorResult('logs.bundle', {
+              message: error instanceof Error ? error.message : String(error),
+            }) as CliResult<LogBundleResult>;
+          }
+        },
+      });
+
+      const output = renderCliResult(result, flags.output);
+      if (!flags.quiet || !result.ok) console.log(output);
+
+      if (!result.ok) process.exit(1);
+    });
+
+  return cmd;
+}

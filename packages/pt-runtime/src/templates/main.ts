@@ -31,6 +31,7 @@ var IN_FLIGHT_DIR = DEV_DIR + "/in-flight";
 var RESULTS_DIR = DEV_DIR + "/results";
 var DEAD_LETTER_DIR = DEV_DIR + "/dead-letter";
 var LOGS_DIR = DEV_DIR + "/logs";
+var COMMANDS_TRACE_DIR = LOGS_DIR + "/commands";
 var HEARTBEAT_FILE = DEV_DIR + "/heartbeat.json";
 var SESSIONS_DIR = DEV_DIR + "/sessions";
 var JOURNAL_DIR = DEV_DIR + "/journal";
@@ -70,6 +71,22 @@ var WATCH_COMMANDS_DIR = false;
 var cleanupStage = "idle";
 
 // ============================================================================
+// IOS JOBS SYSTEM (Migrated from runtime.js - Phase 5)
+// ============================================================================
+// El sistema de jobs debe vivir en main.js (Script Engine persistente),
+// no en runtime.js (re-cargado con new Function(...))
+
+var IOS_JOBS = {};
+var IOS_JOB_SEQ = 0;
+
+// ============================================================================
+// Terminal Listeners - Event-based architecture (Migrated from runtime.js)
+// ============================================================================
+
+var TERMINAL_LISTENERS_ATTACHED = {};
+var TERMINAL_LISTENER_REFS = {};
+
+// ============================================================================
 // Main Entry Point
 // ============================================================================
 
@@ -88,6 +105,7 @@ function main() {
     ensureDir(RESULTS_DIR);
     ensureDir(DEAD_LETTER_DIR);
     ensureDir(LOGS_DIR);
+    ensureDir(COMMANDS_TRACE_DIR);
     ensureDir(SESSIONS_DIR);
     ensureDir(JOURNAL_DIR);
     
@@ -160,6 +178,38 @@ function ensureDir(path) {
   } catch (e) {
     dprint("[ensureDir] " + String(e));
   }
+}
+
+// ============================================================================
+// PT-Side Command Trace (Fase 8)
+// ============================================================================
+
+function writeCommandTracePatchPatch(cmdId, patch) {
+  try {
+    var tracePath = COMMANDS_TRACE_DIR + "/" + cmdId + ".json";
+    var existing = {};
+    try {
+      if (fm.fileExists(tracePath)) {
+        var content = fm.getFileContents(tracePath);
+        existing = JSON.parse(content) || {};
+      }
+    } catch (e) {}
+    var updated = Object.assign({}, existing, patch);
+    fm.writePlainTextToFile(tracePath, JSON.stringify(updated, null, 2));
+  } catch (e) {
+    dprint("[trace] write error: " + String(e));
+  }
+}
+
+function readCommandTrace(cmdId) {
+  try {
+    var tracePath = COMMANDS_TRACE_DIR + "/" + cmdId + ".json";
+    if (fm.fileExists(tracePath)) {
+      var content = fm.getFileContents(tracePath);
+      return JSON.parse(content);
+    }
+  } catch (e) {}
+  return null;
 }
 
 // ============================================================================
@@ -400,6 +450,17 @@ function claimNextCommand() {
       try {
         var content = fm.getFileContents(dstPath);
         var cmd = JSON.parse(content);
+        
+        // PT-side trace: claimed
+        if (cmd && cmd.id) {
+          writeCommandTracePatch(cmd.id, {
+            id: cmd.id,
+            seq: cmd.seq,
+            type: cmd.payload.type,
+            claimedAt: Date.now()
+          });
+        }
+        
         return { filename: filename, command: cmd };
       } catch (e) {
         dprint("[PT] Claimed file invalid: " + filename);
@@ -427,6 +488,16 @@ function moveToDeadLetter(filePath, error) {
       error: String(error),
       movedAt: Date.now()
     }));
+    
+    // PT-side trace: dead-letter
+    var cmdIdMatch = basename.match(/cmd_(\d+)/);
+    if (cmdIdMatch) {
+      writeCommandTracePatch("cmd_" + cmdIdMatch[1], {
+        deadLetterAt: Date.now(),
+        deadLetterReason: String(error)
+      });
+    }
+    
     dprint("[PT] Moved to dead-letter: " + basename);
   } catch (e) {
     dprint("[PT] Dead-letter error: " + String(e));
@@ -563,6 +634,14 @@ function executeActiveCommand() {
   var startedAt = Date.now();
   var cmd = activeCommand;
   
+  // PT-side trace: runtime started
+  if (cmd && cmd.id) {
+    writeCommandTracePatch(cmd.id, {
+      runtimeStartedAt: startedAt,
+      payloadType: cmd.payload && cmd.payload.type
+    });
+  }
+  
   // Hot reload: only if no pending jobs
   if (runtimeDirty && !hasPendingDeferredCommands()) {
     loadRuntime();
@@ -575,6 +654,17 @@ function executeActiveCommand() {
       : { ok: false, error: "Runtime not loaded" };
   } catch (e) {
     result = { ok: false, error: String(e), stack: String(e.stack || "") };
+  }
+  
+  // PT-side trace: runtime completed
+  if (cmd && cmd.id) {
+    writeCommandTracePatch(cmd.id, {
+      runtimeCompletedAt: Date.now(),
+      ok: result && result.ok !== false,
+      deferred: result && result.deferred === true,
+      ticket: result ? result.ticket : undefined,
+      error: result && result.ok === false ? result.error : undefined
+    });
   }
   
   // Check for deferred result
@@ -639,6 +729,14 @@ function writeResultEnvelope(id, envelope) {
     fm.writePlainTextToFile(tmpPath, JSON.stringify(envelope));
     fm.writePlainTextToFile(finalPath, JSON.stringify(envelope));
     fm.writePlainTextToFile(tmpPath, "");
+    
+    // PT-side trace: result written
+    writeCommandTracePatch(id, {
+      resultWrittenAt: Date.now(),
+      resultPath: finalPath,
+      status: envelope.status,
+      ok: envelope.ok
+    });
   } catch (e) {
     dprint("[PT] Write result error: " + String(e));
   }
@@ -695,6 +793,13 @@ function pollDeferredCommands() {
     
     writeResultEnvelope(pending.id, envelope);
     
+    // PT-side trace: deferred command completed
+    writeCommandTracePatch(pending.id, {
+      deferredCompletedAt: Date.now(),
+      finalStatus: envelope.status,
+      ok: envelope.ok
+    });
+    
     delete pendingCommands[key];
     savePendingCommands();
     
@@ -710,6 +815,183 @@ function pollDeferredCommands() {
     
     dprint("[PT] Deferred completed: " + pending.id + " status=" + envelope.status);
   }
+}
+
+// ============================================================================
+// IOS Jobs System Functions (Migrated from runtime.js)
+// ============================================================================
+
+function createIosJob(type, payload) {
+  IOS_JOB_SEQ++;
+  var ticket = "ios_job_" + IOS_JOB_SEQ;
+  
+  IOS_JOBS[ticket] = {
+    ticket: ticket,
+    device: payload.device,
+    type: type,
+    payload: payload,
+    steps: [],
+    currentStep: 0,
+    state: "queued",
+    startedAt: Date.now(),
+    updatedAt: Date.now(),
+    output: "",
+    outputs: [],
+    status: null,
+    modeBefore: "",
+    modeAfter: "",
+    paged: false,
+    autoConfirmed: false,
+    waitingForCommandEnd: false,
+    finished: false,
+    result: null,
+    error: null
+  };
+  
+  dprint("[Job] Created " + ticket + " for " + payload.device + " type=" + type);
+  return ticket;
+}
+
+function pollIosJob(ticket) {
+  var job = IOS_JOBS[ticket];
+  
+  if (!job) {
+    return { done: true, ok: false, error: "Job not found: " + ticket };
+  }
+  
+  if (!job.finished) {
+    return { done: false, state: job.state };
+  }
+  
+  if (job.state === "error") {
+    return { 
+      done: true, 
+      ok: job.result && job.result.ok !== false,
+      error: job.error,
+      code: job.result && job.result.code,
+      value: job.result
+    };
+  }
+  
+  return {
+    done: true,
+    ok: true,
+    value: job.result
+  };
+}
+
+// ============================================================================
+// Terminal Listeners Functions (Migrated from runtime.js)
+// ============================================================================
+
+function attachTerminalListeners(deviceName, term) {
+  if (TERMINAL_LISTENERS_ATTACHED[deviceName]) {
+    return;
+  }
+  
+  try {
+    var outputWrittenHandler = function(src, args) {
+      onTerminalOutputWritten(deviceName, args);
+    };
+    
+    var commandEndedHandler = function(src, args) {
+      onTerminalCommandEnded(deviceName, args);
+    };
+    
+    var modeChangedHandler = function(src, args) {
+      onTerminalModeChanged(deviceName, args);
+    };
+    
+    if (typeof term.registerEvent === "function") {
+      term.registerEvent("outputWritten", null, outputWrittenHandler);
+      term.registerEvent("commandEnded", null, commandEndedHandler);
+      term.registerEvent("modeChanged", null, modeChangedHandler);
+      
+      TERMINAL_LISTENER_REFS[deviceName] = {
+        term: term,
+        handlers: {
+          outputWritten: outputWrittenHandler,
+          commandEnded: commandEndedHandler,
+          modeChanged: modeChangedHandler
+        }
+      };
+      
+      TERMINAL_LISTENERS_ATTACHED[deviceName] = true;
+      dprint("[Listeners] Attached to " + deviceName);
+    }
+  } catch (e) {
+    dprint("[Listeners] Failed to attach to " + deviceName + ": " + String(e));
+  }
+}
+
+function detachTerminalListeners(deviceName) {
+  if (!TERMINAL_LISTENERS_ATTACHED[deviceName]) {
+    return;
+  }
+  
+  var ref = TERMINAL_LISTENER_REFS[deviceName];
+  if (!ref || !ref.term) {
+    delete TERMINAL_LISTENERS_ATTACHED[deviceName];
+    delete TERMINAL_LISTENER_REFS[deviceName];
+    return;
+  }
+  
+  try {
+    var term = ref.term;
+    var handlers = ref.handlers;
+    
+    if (typeof term.unregisterEvent === "function") {
+      try { term.unregisterEvent("outputWritten", null, handlers.outputWritten); } catch (e1) {}
+      try { term.unregisterEvent("commandEnded", null, handlers.commandEnded); } catch (e2) {}
+      try { term.unregisterEvent("modeChanged", null, handlers.modeChanged); } catch (e3) {}
+    }
+  } catch (e) {
+    dprint("[Listeners] Failed to detach from " + deviceName + ": " + String(e));
+  }
+  
+  delete TERMINAL_LISTENERS_ATTACHED[deviceName];
+  delete TERMINAL_LISTENER_REFS[deviceName];
+}
+
+function detachAllTerminalListeners() {
+  var devices = Object.keys(TERMINAL_LISTENERS_ATTACHED);
+  for (var i = 0; i < devices.length; i++) {
+    detachTerminalListeners(devices[i]);
+  }
+  dprint("[Listeners] Detached all terminal listeners");
+}
+
+function onTerminalOutputWritten(deviceName, args) {
+  var jobKeys = Object.keys(IOS_JOBS);
+  for (var i = 0; i < jobKeys.length; i++) {
+    var job = IOS_JOBS[jobKeys[i]];
+    if (job.device === deviceName && job.waitingForCommandEnd) {
+      job.output += args.newOutput || "";
+    }
+  }
+}
+
+function onTerminalCommandEnded(deviceName, args) {
+  var jobKeys = Object.keys(IOS_JOBS);
+  for (var i = 0; i < jobKeys.length; i++) {
+    var job = IOS_JOBS[jobKeys[i]];
+    if (job.device === deviceName && job.waitingForCommandEnd) {
+      var status = args.status;
+      if (typeof status === "undefined" || status === null) {
+        status = 0;
+      }
+      job.status = status;
+      job.waitingForCommandEnd = false;
+      job.finished = true;
+      job.state = "done";
+      job.result = { ok: status === 0, device: deviceName };
+      dprint("[Job] Completed " + job.ticket + " status=" + status);
+    }
+  }
+}
+
+function onTerminalModeChanged(deviceName, args) {
+  dprint("[Sessions] Mode changed to " + (args.newMode || "unknown") + " for " + deviceName);
 }
 
 // ============================================================================
@@ -773,6 +1055,14 @@ function cleanUp() {
     markCleanup("save-pending");
     savePendingCommands();
     
+    // Limpiar listeners de terminal (MIGRADO desde runtime.js)
+    markCleanup("detach-listeners");
+    detachAllTerminalListeners();
+    
+    // Limpiar jobs
+    markCleanup("cleanup-jobs");
+    IOS_JOBS = {};
+    
     // CRÍTICO:
     // NO re-ejecutar runtime.js en cleanUp().
     // invokeRuntimeCleanupHook() causaba re-ejecución completa de runtime
@@ -780,6 +1070,15 @@ function cleanUp() {
     
     markCleanup("null-runtime");
     runtimeFn = null;
+    
+    // PT-side trace: interrupted by cleanup
+    if (activeCommand && activeCommand.id) {
+      writeCommandTracePatch(activeCommand.id, {
+        interruptedByCleanup: true,
+        cleanupStage: cleanupStage
+      });
+    }
+    
     activeCommand = null;
     pendingCommands = {};
     

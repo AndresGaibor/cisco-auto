@@ -1,7 +1,40 @@
+#!/usr/bin/env bun
+/**
+ * Comando etherchannel - EtherChannel (Port-Channel) management
+ * Migrado al patrón runCommand con CliResult
+ */
+
 import { Command } from 'commander';
-import { createDefaultPTController } from '@cisco-auto/pt-control';
 import { select } from '@inquirer/prompts';
 import chalk from 'chalk';
+
+import type { CliResult } from '../contracts/cli-result.js';
+import { createSuccessResult, createErrorResult } from '../contracts/cli-result.js';
+import type { CommandMeta } from '../contracts/command-meta.js';
+import type { GlobalFlags } from '../flags.js';
+
+import { runCommand } from '../application/run-command.js';
+import { renderCliResult } from '../ux/renderers.js';
+import { printExamples } from '../ux/examples.js';
+
+const ETHERCHANNEL_EXAMPLES = [
+  { command: 'pt etherchannel create --device Switch1 --group-id 1 --interfaces Gi0/1,Gi0/2', description: 'Crear EtherChannel con LACP' },
+  { command: 'pt etherchannel create --device Switch1 --group-id 1 --interfaces Gi0/1,Gi0/2 --trunk', description: 'Crear EtherChannel como trunk' },
+  { command: 'pt etherchannel list Switch1', description: 'Ver EtherChannels configurados' },
+  { command: 'pt etherchannel remove Switch1 --group-id 1', description: 'Remover EtherChannel' },
+];
+
+const ETHERCHANNEL_META: CommandMeta = {
+  id: 'etherchannel',
+  summary: 'Gestionar EtherChannel (Port-Channel) en switches',
+  longDescription: 'Comandos para crear, remover y listar bundles EtherChannel en switches Cisco.',
+  examples: ETHERCHANNEL_EXAMPLES,
+  related: ['vlan', 'config-ios', 'show'],
+  supportsVerify: true,
+  supportsJson: true,
+  supportsPlan: true,
+  supportsExplain: true,
+};
 
 interface EtherchannelCreateOptions {
   groupId: number;
@@ -13,6 +46,15 @@ interface EtherchannelCreateOptions {
   nativeVlan?: number;
   description?: string;
   dryRun: boolean;
+}
+
+interface EtherchannelResult {
+  device: string;
+  groupId: number;
+  interfaces: string[];
+  commands?: string[];
+  dryRun?: boolean;
+  commandsGenerated?: number;
 }
 
 function buildEtherchannelCommands(
@@ -53,92 +95,156 @@ function buildEtherchannelCommands(
 
 export function createEtherchannelCommand(): Command {
   const cmd = new Command('etherchannel')
-    .description('EtherChannel (Port-Channel) management');
+    .description('EtherChannel (Port-Channel) management')
+    .option('--examples', 'Mostrar ejemplos de uso', false)
+    .option('--explain', 'Explicar qué hace el comando', false)
+    .option('--plan', 'Mostrar plan de ejecución sin ejecutar', false);
 
   cmd
     .command('create')
     .description('Create an EtherChannel bundle')
     .argument('[device]', 'Nombre del dispositivo')
     .option('--group-id <id>', 'Channel group ID (1-64)', '1')
-    .option('--interfaces <interfaces>', 'Member interfaces, comma-separated (e.g., Gi0/1,Gi0/2)', '')
+    .option('--interfaces <interfaces>', 'Member interfaces, comma-separated')
     .option('--mode <mode>', 'Negotiation mode', 'active')
     .option('--protocol <protocol>', 'Protocol (lacp|pagp|static)', 'lacp')
     .option('--trunk', 'Set as trunk port', true)
-    .option('--allowed-vlans <vlans>', 'Allowed VLANs (e.g., 10,20,30)')
+    .option('--allowed-vlans <vlans>', 'Allowed VLANs')
     .option('--native-vlan <id>', 'Native VLAN ID')
     .option('--description <text>', 'Port-channel description')
     .option('--dry-run', 'Show commands without applying', false)
     .action(async (deviceName, options) => {
-      try {
-        let targetDevice = deviceName;
+      const globalExamples = process.argv.includes('--examples');
+      const globalExplain = process.argv.includes('--explain');
+      const globalPlan = process.argv.includes('--plan');
 
-        if (!targetDevice) {
-          const controller = createDefaultPTController();
-          await controller.start();
+      if (globalExamples) {
+        console.log(printExamples(ETHERCHANNEL_META));
+        return;
+      }
+
+      if (globalExplain) {
+        console.log(ETHERCHANNEL_META.longDescription ?? ETHERCHANNEL_META.summary);
+        return;
+      }
+
+      if (globalPlan) {
+        console.log('Plan de ejecución:');
+        console.log(`  1. Seleccionar dispositivo: ${deviceName ?? '<interactive>'}`);
+        console.log(`  2. Crear EtherChannel Group ${options.groupId}`);
+        console.log(`  3. Interfaces: ${options.interfaces ?? '<interactive>'}`);
+        console.log(`  4. Modo: ${options.mode}`);
+        return;
+      }
+
+      const flags: GlobalFlags = {
+        json: false,
+        jq: null,
+        output: 'text',
+        verbose: false,
+        quiet: false,
+        trace: false,
+        tracePayload: false,
+        traceResult: false,
+        traceDir: null,
+        traceBundle: false,
+        traceBundlePath: null,
+        sessionId: null,
+        examples: globalExamples,
+        schema: false,
+        explain: globalExplain,
+        plan: globalPlan,
+        verify: true,
+      };
+
+      const result = await runCommand({
+        action: 'etherchannel.create',
+        meta: ETHERCHANNEL_META,
+        flags,
+        payloadPreview: { device: deviceName, groupId: options.groupId, interfaces: options.interfaces },
+        execute: async (ctx): Promise<CliResult<EtherchannelResult>> => {
           try {
-            const devices = await controller.listDevices();
-            const switches = devices.filter((d: any) => 
-              d.type === 'switch' || d.type === 'multilayer_switch' || d.model?.includes('2960') || d.model?.includes('3650')
-            );
-            
-            if (switches.length === 0) {
-              console.log(chalk.yellow('No hay switches disponibles'));
-              return;
+            let targetDevice = deviceName;
+
+            if (!targetDevice) {
+              const devices = await ctx.controller.listDevices();
+              const switches = devices.filter((d: any) => 
+                d.type === 'switch' || d.type === 'multilayer_switch' || d.model?.includes('2960') || d.model?.includes('3650')
+              );
+              
+              if (switches.length === 0) {
+                return createErrorResult('etherchannel.create', { message: 'No hay switches disponibles' }) as CliResult<EtherchannelResult>;
+              }
+
+              targetDevice = await select({
+                message: 'Selecciona el switch',
+                choices: switches.map((d: any) => ({ name: d.name, value: d.name })),
+              });
             }
 
-            targetDevice = await select({
-              message: 'Selecciona el switch',
-              choices: switches.map((d: any) => ({ name: d.name, value: d.name })),
+            if (!options.interfaces) {
+              return createErrorResult('etherchannel.create', { message: 'Se requiere --interfaces' }) as CliResult<EtherchannelResult>;
+            }
+
+            const interfaces = options.interfaces.split(',').map((s: string) => s.trim());
+            const groupId = parseInt(options.groupId, 10);
+            
+            const opts: EtherchannelCreateOptions = {
+              groupId,
+              interfaces,
+              mode: options.mode as any,
+              protocol: options.protocol as any,
+              trunk: options.trunk,
+              allowedVlans: options.allowedVlans,
+              nativeVlan: options.nativeVlan ? parseInt(options.nativeVlan, 10) : undefined,
+              description: options.description,
+              dryRun: options.dryRun
+            };
+
+            const commands = buildEtherchannelCommands(groupId, interfaces, opts);
+
+            if (options.dryRun) {
+              return createSuccessResult('etherchannel.create', {
+                device: targetDevice,
+                groupId,
+                interfaces,
+                commands,
+                dryRun: true,
+              });
+            }
+
+            await ctx.controller.configIos(targetDevice, commands);
+
+            return createSuccessResult('etherchannel.create', {
+              device: targetDevice,
+              groupId,
+              interfaces,
+              commandsGenerated: commands.length,
+            }, {
+              advice: [`Usa pt etherchannel list ${targetDevice} para verificar`],
             });
-          } finally {
-            await controller.stop();
+          } catch (error) {
+            return createErrorResult('etherchannel.create', {
+              message: error instanceof Error ? error.message : String(error),
+            }) as CliResult<EtherchannelResult>;
           }
-        }
+        },
+      });
 
-        if (!options.interfaces) {
-          console.error(chalk.red('✗) Se requiere --interfaces'));
-          process.exit(1);
-        }
-
-        const interfaces = options.interfaces.split(',').map((s: string) => s.trim());
-        const groupId = parseInt(options.groupId, 10);
-        
-        const opts: EtherchannelCreateOptions = {
-          groupId,
-          interfaces,
-          mode: options.mode as any,
-          protocol: options.protocol as any,
-          trunk: options.trunk,
-          allowedVlans: options.allowedVlans,
-          nativeVlan: options.nativeVlan ? parseInt(options.nativeVlan, 10) : undefined,
-          description: options.description,
-          dryRun: options.dryRun
-        };
-
-        const commands = buildEtherchannelCommands(groupId, interfaces, opts);
-
-        console.log(`\n⚙️  EtherChannel Group ${groupId} (${options.protocol}) en ${targetDevice}`);
-        console.log(`   Interfaces: ${interfaces.join(', ')}`);
-        console.log(`   Mode: ${options.mode}\n`);
-
-        if (options.dryRun) {
-          console.log('--- Commands (dry-run) ---');
-          commands.forEach(c => console.log(c));
-        } else {
-          const controller = createDefaultPTController();
-          await controller.start();
-          try {
-            await controller.configIos(targetDevice, commands);
-            console.log(chalk.green('✅ EtherChannel configurado'));
-            commands.forEach(c => console.log(chalk.gray('  ' + c)));
-          } finally {
-            await controller.stop();
-          }
-        }
-      } catch (error) {
-        console.error(`${chalk.red('✗')} Error: ${error instanceof Error ? error.message : error}`);
-        process.exit(1);
+      const output = renderCliResult(result, flags.output);
+      if (!flags.quiet || !result.ok) {
+        console.log(output);
       }
+
+      if (result.ok && !options.dryRun) {
+        console.log(chalk.green('✅ EtherChannel configurado'));
+      } else if (result.ok && options.dryRun) {
+        console.log('--- Commands (dry-run) ---');
+        const cmds = result.data?.commands as string[] | undefined;
+        cmds?.forEach(c => console.log(c));
+      }
+
+      if (!result.ok) process.exit(1);
     });
 
   cmd
@@ -146,50 +252,92 @@ export function createEtherchannelCommand(): Command {
     .description('Remove an EtherChannel bundle')
     .argument('[device]', 'Nombre del dispositivo')
     .option('--group-id <id>', 'Channel group ID (1-64)', '1')
-    .option('--interfaces <interfaces>', 'Member interfaces to release')
     .option('--dry-run', 'Show commands without applying', false)
     .action(async (deviceName, options) => {
-      try {
-        let targetDevice = deviceName;
+      const globalExamples = process.argv.includes('--examples');
+      const globalPlan = process.argv.includes('--plan');
 
-        if (!targetDevice) {
-          const controller = createDefaultPTController();
-          await controller.start();
-          try {
-            const devices = await controller.listDevices();
-            targetDevice = await select({
-              message: 'Selecciona el switch',
-              choices: devices.map((d: any) => ({ name: d.name, value: d.name })),
-            });
-          } finally {
-            await controller.stop();
-          }
-        }
-
-        const groupId = parseInt(options.groupId, 10);
-        const commands = [
-          `no interface Port-channel${groupId}`
-        ];
-
-        console.log(`\n🗑️  Removiendo EtherChannel Group ${groupId} de ${targetDevice}`);
-
-        if (options.dryRun) {
-          console.log('--- Commands (dry-run) ---');
-          commands.forEach(c => console.log(c));
-        } else {
-          const controller = createDefaultPTController();
-          await controller.start();
-          try {
-            await controller.configIos(targetDevice, commands);
-            console.log(chalk.green('✅ EtherChannel removido'));
-          } finally {
-            await controller.stop();
-          }
-        }
-      } catch (error) {
-        console.error(`${chalk.red('✗')} Error: ${error instanceof Error ? error.message : error}`);
-        process.exit(1);
+      if (globalExamples) {
+        console.log(printExamples(ETHERCHANNEL_META));
+        return;
       }
+
+      if (globalPlan) {
+        console.log('Plan de ejecución:');
+        console.log(`  1. Seleccionar dispositivo: ${deviceName ?? '<interactive>'}`);
+        console.log(`  2. Remover EtherChannel Group ${options.groupId}`);
+        return;
+      }
+
+      const flags: GlobalFlags = {
+        json: false,
+        jq: null,
+        output: 'text',
+        verbose: false,
+        quiet: false,
+        trace: false,
+        tracePayload: false,
+        traceResult: false,
+        traceDir: null,
+        traceBundle: false,
+        traceBundlePath: null,
+        sessionId: null,
+        examples: globalExamples,
+        schema: false,
+        explain: false,
+        plan: globalPlan,
+        verify: false,
+      };
+
+      const result = await runCommand({
+        action: 'etherchannel.remove',
+        meta: ETHERCHANNEL_META,
+        flags,
+        payloadPreview: { device: deviceName, groupId: options.groupId },
+        execute: async (ctx): Promise<CliResult> => {
+          try {
+            let targetDevice = deviceName;
+
+            if (!targetDevice) {
+              const devices = await ctx.controller.listDevices();
+              targetDevice = await select({
+                message: 'Selecciona el switch',
+                choices: devices.map((d: any) => ({ name: d.name, value: d.name })),
+              });
+            }
+
+            const groupId = parseInt(options.groupId, 10);
+            const commands = [`no interface Port-channel${groupId}`];
+
+            if (options.dryRun) {
+              return createSuccessResult('etherchannel.remove', {
+                device: targetDevice,
+                groupId,
+                commands,
+                dryRun: true,
+              });
+            }
+
+            await ctx.controller.configIos(targetDevice, commands);
+
+            return createSuccessResult('etherchannel.remove', {
+              device: targetDevice,
+              groupId,
+            });
+          } catch (error) {
+            return createErrorResult('etherchannel.remove', {
+              message: error instanceof Error ? error.message : String(error),
+            });
+          }
+        },
+      });
+
+      const output = renderCliResult(result, flags.output);
+      if (!flags.quiet || !result.ok) {
+        console.log(output);
+      }
+
+      if (!result.ok) process.exit(1);
     });
 
   cmd
@@ -197,35 +345,70 @@ export function createEtherchannelCommand(): Command {
     .description('List EtherChannel bundles')
     .argument('[device]', 'Nombre del dispositivo')
     .action(async (deviceName) => {
-      try {
-        let targetDevice = deviceName;
+      const globalExamples = process.argv.includes('--examples');
 
-        if (!targetDevice) {
-          const controller = createDefaultPTController();
-          await controller.start();
-          try {
-            const devices = await controller.listDevices();
-            targetDevice = await select({
-              message: 'Selecciona el switch',
-              choices: devices.map((d: any) => ({ name: d.name, value: d.name })),
-            });
-          } finally {
-            await controller.stop();
-          }
-        }
-
-        const controller = createDefaultPTController();
-        await controller.start();
-        try {
-          const result = await controller.execIos(targetDevice, 'show etherchannel summary', true);
-          console.log(result.raw);
-        } finally {
-          await controller.stop();
-        }
-      } catch (error) {
-        console.error(`${chalk.red('✗')} Error: ${error instanceof Error ? error.message : error}`);
-        process.exit(1);
+      if (globalExamples) {
+        console.log(printExamples(ETHERCHANNEL_META));
+        return;
       }
+
+      const flags: GlobalFlags = {
+        json: false,
+        jq: null,
+        output: 'text',
+        verbose: false,
+        quiet: false,
+        trace: false,
+        tracePayload: false,
+        traceResult: false,
+        traceDir: null,
+        traceBundle: false,
+        traceBundlePath: null,
+        sessionId: null,
+        examples: globalExamples,
+        schema: false,
+        explain: false,
+        plan: false,
+        verify: false,
+      };
+
+      const result = await runCommand({
+        action: 'etherchannel.list',
+        meta: ETHERCHANNEL_META,
+        flags,
+        payloadPreview: { device: deviceName },
+        execute: async (ctx): Promise<CliResult> => {
+          try {
+            let targetDevice = deviceName;
+
+            if (!targetDevice) {
+              const devices = await ctx.controller.listDevices();
+              targetDevice = await select({
+                message: 'Selecciona el switch',
+                choices: devices.map((d: any) => ({ name: d.name, value: d.name })),
+              });
+            }
+
+            const output = await ctx.controller.execIos(targetDevice, 'show etherchannel summary', true);
+
+            return createSuccessResult('etherchannel.list', {
+              device: targetDevice,
+              output: output.raw,
+            });
+          } catch (error) {
+            return createErrorResult('etherchannel.list', {
+              message: error instanceof Error ? error.message : String(error),
+            });
+          }
+        },
+      });
+
+      const output = renderCliResult(result, flags.output);
+      if (!flags.quiet || !result.ok) {
+        console.log(output);
+      }
+
+      if (!result.ok) process.exit(1);
     });
 
   return cmd;

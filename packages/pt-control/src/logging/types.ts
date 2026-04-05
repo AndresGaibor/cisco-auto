@@ -40,6 +40,16 @@ export interface LogEntry {
 
   confirmation_status?: 'cancelled' | 'confirmed' | 'timeout' | 'not_required';
   command_ids?: string[];
+
+  // Campos para tracing extremo a extremo
+  phase?: string;
+  parent_correlation_id?: string;
+  argv?: string[];
+  flags?: Record<string, unknown>;
+  payload_preview?: Record<string, unknown>;
+  result_preview?: Record<string, unknown>;
+  bridge_events?: unknown[];
+  pt_runtime_trace_path?: string;
 }
 
 /**
@@ -95,4 +105,46 @@ export interface LogStats {
   oldestFile?: number | string;
   newestFile?: number | string;
   totalEntries: number;
+}
+
+/**
+ * Claves sensibles que deben ser redactadas en los logs
+ */
+const SENSITIVE_KEYS = ['password', 'secret', 'community', 'key', 'token', 'credential', 'auth'];
+
+/**
+ * Redacta valores sensibles de un objeto para evitar que aparezcan en logs
+ * @param obj - Objeto a redactar
+ * @returns Objeto con valores sensibles reemplazados por '***'
+ */
+export function redactSensitive(obj: unknown): unknown {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+
+  if (typeof obj !== 'object') {
+    return obj;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => redactSensitive(item));
+  }
+
+  const result: Record<string, unknown> = {};
+  const record = obj as Record<string, unknown>;
+
+  for (const [key, value] of Object.entries(record)) {
+    const lowerKey = key.toLowerCase();
+    const isSensitive = SENSITIVE_KEYS.some(sk => lowerKey.includes(sk));
+
+    if (isSensitive && typeof value === 'string' && value.length > 0) {
+      result[key] = '***';
+    } else if (typeof value === 'object' && value !== null) {
+      result[key] = redactSensitive(value);
+    } else {
+      result[key] = value;
+    }
+  }
+
+  return result;
 }

@@ -389,61 +389,54 @@ Register-ArgumentCompleter -CommandName ${programName} -ScriptBlock ${programNam
  */
 const BASH_INSTALL = `
 # Instalación (agregar a ~/.bashrc o ~/.bash_profile):
-# source <(cisco-auto completion bash)
+# source <(pt completion bash)
 
 # Para instalación permanente:
-# cisco-auto completion bash >> ~/.bashrc
-
-# O usar completado dinámico (requiere Bash 4+):
-# curl -o ~/.cisco-auto-complete https://raw.githubusercontent.com/AndresGaibor/cisco-auto/main/completions/cisco-auto.bash
+# pt completion bash >> ~/.bashrc
 `;
 
-/**
- * Mensaje de instalación para Zsh
- */
 const ZSH_INSTALL = `
 # Instalación (agregar a ~/.zshrc):
-# source <(cisco-auto completion zsh)
+# source <(pt completion zsh)
 
 # Para instalación permanente:
-# cisco-auto completion zsh >> ~/.zshrc
+# pt completion zsh >> ~/.zshrc
 `;
 
-/**
- * Mensaje de instalación para Fish
- */
 const FISH_INSTALL = `
 # Instalación:
 # mkdir -p ~/.config/fish/completions
-# cisco-auto completion fish > ~/.config/fish/completions/cisco-auto.fish
+# pt completion fish > ~/.config/fish/completions/pt.fish
 `;
 
-/**
- * Mensaje de instalación para PowerShell
- */
 const POWERSHELL_INSTALL = `
 # Instalación (agregar a $PROFILE):
-# cisco-auto completion powershell >> $PROFILE
-
-# O usar import-module:
-# cisco-auto completion powershell | Invoke-Expression
+# pt completion powershell >> $PROFILE
 `;
 
 /**
  * Lista de comandos disponibles en la CLI
  */
 const AVAILABLE_COMMANDS = [
-  'parse',
-  'config',
-  'validate',
-  'devices',
-  'deploy',
-  'init',
-  'parse-pka',
-  'mod-test',
-  'template',
-  'serve',
-  'completion'
+  'device',
+  'config-host',
+  'config-ios',
+  'show',
+  'vlan',
+  'link',
+  'topology',
+  'stp',
+  'etherchannel',
+  'routing',
+  'acl',
+  'logs',
+  'history',
+  'doctor',
+  'completion',
+  'results',
+  'lab',
+  'services',
+  'build',
 ];
 
 /**
@@ -464,7 +457,7 @@ export function createCompletionCommand(): Command {
         process.exit(1);
       }
       
-      const programName = 'cisco-auto';
+      const programName = 'pt';
       let script = '';
       let installMsg = '';
       

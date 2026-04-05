@@ -197,12 +197,16 @@ export class FileBridgeV2 extends EventEmitter {
     ensureDir(this.paths.commandsDir());
     atomicWriteFile(commandFile, JSON.stringify(envelope, null, 2));
 
+    // NUEVO: escribir a commands/ en lugar de command.json (Fase 5)
+    // Nota: timeoutMs se usa para logging pero el timeout real está en expiresAtMs
     this.eventWriter.append({
       seq,
       ts: Date.now(),
       type: "command-enqueued",
       id,
       commandType: type,
+      payloadSizeBytes: JSON.stringify(payload).length,
+      expiresAt: expiresAtMs,
     });
 
     return envelope;
