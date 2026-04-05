@@ -14,6 +14,7 @@ export interface CommandCatalogEntry {
   status: 'stable' | 'partial' | 'experimental';
   supportsAutonomousUse: boolean;
   requiresPT: boolean;
+  requiresContext: boolean;
   requiresVerification: boolean;
   notes?: string[];
 }
@@ -25,6 +26,7 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     status: 'stable',
     supportsAutonomousUse: true,
     requiresPT: false,
+    requiresContext: false,
     requiresVerification: false,
   },
 
@@ -34,11 +36,13 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     status: 'partial',
     supportsAutonomousUse: false,
     requiresPT: true,
+    requiresContext: true,
     requiresVerification: true,
     notes: [
       'device list es stable',
       'device add/remove/move son parciales',
       'device get para obtener info de dispositivo',
+      // TODO-Fase-3: Migrar a runCommand() para contexto automático
     ],
   },
 
@@ -48,6 +52,7 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     status: 'partial',
     supportsAutonomousUse: false,
     requiresPT: true,
+    requiresContext: true,
     requiresVerification: false,
   },
 
@@ -57,6 +62,7 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     status: 'partial',
     supportsAutonomousUse: false,
     requiresPT: true,
+    requiresContext: true,
     requiresVerification: true,
   },
 
@@ -66,6 +72,7 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     status: 'partial',
     supportsAutonomousUse: false,
     requiresPT: true,
+    requiresContext: true,
     requiresVerification: true,
   },
 
@@ -75,6 +82,7 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     status: 'partial',
     supportsAutonomousUse: false,
     requiresPT: true,
+    requiresContext: true,
     requiresVerification: true,
   },
 
@@ -84,6 +92,7 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     status: 'partial',
     supportsAutonomousUse: false,
     requiresPT: true,
+    requiresContext: true,
     requiresVerification: true,
   },
 
@@ -93,6 +102,7 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     status: 'partial',
     supportsAutonomousUse: false,
     requiresPT: true,
+    requiresContext: true,
     requiresVerification: true,
     notes: ['No confiar ciegamente en "ok" sin verificación adicional'],
   },
@@ -103,6 +113,7 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     status: 'partial',
     supportsAutonomousUse: false,
     requiresPT: true,
+    requiresContext: true,
     requiresVerification: true,
   },
 
@@ -112,6 +123,7 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     status: 'partial',
     supportsAutonomousUse: false,
     requiresPT: true,
+    requiresContext: true,
     requiresVerification: true,
   },
 
@@ -121,6 +133,7 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     status: 'partial',
     supportsAutonomousUse: false,
     requiresPT: true,
+    requiresContext: true,
     requiresVerification: true,
   },
 
@@ -130,6 +143,7 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     status: 'partial',
     supportsAutonomousUse: false,
     requiresPT: true,
+    requiresContext: true,
     requiresVerification: true,
   },
 
@@ -139,6 +153,7 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     status: 'partial',
     supportsAutonomousUse: true,
     requiresPT: false,
+    requiresContext: false,
     requiresVerification: false,
   },
 
@@ -148,6 +163,7 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     status: 'partial',
     supportsAutonomousUse: true,
     requiresPT: false,
+    requiresContext: false,
     requiresVerification: false,
   },
 
@@ -157,6 +173,7 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     status: 'stable',
     supportsAutonomousUse: true,
     requiresPT: false,
+    requiresContext: false,
     requiresVerification: false,
     notes: ['Ayuda manual puede tener drift con respecto a index.ts'],
   },
@@ -167,6 +184,7 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     status: 'partial',
     supportsAutonomousUse: true,
     requiresPT: false,
+    requiresContext: false,
     requiresVerification: false,
     notes: [
       'history list/show/last son stable',
@@ -180,6 +198,7 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     status: 'partial',
     supportsAutonomousUse: true,
     requiresPT: false,
+    requiresContext: false,
     requiresVerification: false,
   },
 
@@ -189,6 +208,7 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     status: 'experimental',
     supportsAutonomousUse: false,
     requiresPT: false,
+    requiresContext: false,
     requiresVerification: false,
     notes: ['Desactualizado — no refleja todos los comandos actuales'],
   },
@@ -199,6 +219,7 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     status: 'partial',
     supportsAutonomousUse: false,
     requiresPT: true,
+    requiresContext: true,
     requiresVerification: false,
   },
 };
