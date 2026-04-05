@@ -163,6 +163,75 @@ pt config-ios <device> ...    # Sin validación triple
 - `help.ts` — puede listar comandos que no están registrados
 - `~/pt-dev/` — solo para deployment, no para lógica
 
+
+---
+
+## Contexto Operativo en Fase 2
+
+### Ciclo de vida automático del Controller
+
+A partir de **Fase 2**, `runCommand()` gestiona automáticamente el ciclo de vida del `PTController`:
+
+```ts
+// Fase 2: ciclo de vida automático
+try {
+  await controller.start();      // Inicia bridge y topologyCache
+  runtimeContext = await inspectCommandContext(controller);
+  result = await execute(ctx);
+} finally {
+  await controller.stop();        // Limpia recursos
+}
+```
+
+**Impacto para agentes:**
+- No necesitas llamar manualmente a `controller.start()`/`stop()`
+- El bridge se inicia automáticamente
+- La topología virtual se materializa automáticamente
+- Warnings contextuales se inyectan en resultados
+
+### CommandRuntimeContext
+
+Cada resultado incluye contexto operativo:
+
+```ts
+interface CommandRuntimeContext {
+  bridgeReady: boolean;              // ¿Bridge conectado a PT?
+  topologyMaterialized: boolean;     // ¿Topología cargada en memoria?
+  deviceCount: number;               // Cantidad de dispositivos
+  linkCount: number;                 // Cantidad de enlaces
+  warnings: string[];                // Avisos contextuales
+}
+```
+
+### Historial con Contexto
+
+Los logs ahora incluyen `contextSummary`:
+
+```bash
+pt device list
+# → historial guarda: { bridgeReady, topologyMaterialized, deviceCount, linkCount, warnings }
+```
+
+### requiresContext en Catálogo
+
+El `command-catalog.ts` ahora marca qué comandos requieren contexto operativo:
+
+```ts
+device: {
+  id: 'device',
+  requiresContext: true,   // Requiere bridge + topología
+  requiresPT: true,
+  requiresVerification: true,
+}
+```
+
+**Comandos que requieren contexto** (requiresContext: true):
+- device, link, show, config-ios, config-host
+- routing, acl, stp, services, topology, vlan, etherchannel
+
+**Comandos que NO requieren contexto** (requiresContext: false):
+- build, results, logs, help, history, doctor, completion
+
 ---
 
 ## Playbook de Troubleshooting
