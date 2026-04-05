@@ -35,6 +35,7 @@ var HEARTBEAT_FILE = DEV_DIR + "/heartbeat.json";
 var SESSIONS_DIR = DEV_DIR + "/sessions";
 var JOURNAL_DIR = DEV_DIR + "/journal";
 var PENDING_COMMANDS_FILE = JOURNAL_DIR + "/pending-commands.json";
+var CLEANUP_TRACE_FILE = JOURNAL_DIR + "/cleanup-last-stage.txt";
 
 // Legacy compatibility
 var COMMAND_FILE = DEV_DIR + "/command.json";
@@ -715,15 +716,28 @@ function pollDeferredCommands() {
 // Cleanup (Idempotent)
 // ============================================================================
 
-function invokeRuntimeCleanupHook() {
-  if (!runtimeFn) return;
-  
+function markCleanup(stage) {
+  cleanupStage = stage;
   try {
-    runtimeFn({ type: "__cleanup__" }, ipc, dprint);
-  } catch (e) {
-    // Hook best-effort: no interrumpir stop
-    dprint("[PT] Runtime cleanup hook ignored: " + String(e));
-  }
+    if (fm) {
+      fm.writePlainTextToFile(CLEANUP_TRACE_FILE, stage + " @" + Date.now());
+    }
+  } catch (e) {}
+}
+
+function invokeRuntimeCleanupHook() {
+  // DESACTIVADO:
+  // runtimeFn fue creado con new Function(...), así que invocarlo aquí
+  // re-ejecuta runtime.js completo durante el Stop.
+  // Eso NO limpia estado previo del runtime; crea una nueva ejecución.
+  // 
+  // Problema: Packet Tracer usa un único Qt Script Engine por Script Module.
+  // cleanUp() debe liberar recursos del engine existente, no montar otra ejecución.
+  // 
+  // Referencias:
+  // - https://tutorials.ptnetacad.net/help/default/scriptModules_scriptEngine.htm
+  // - https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/Function
+  return;
 }
 
 function cleanUp() {
@@ -734,42 +748,46 @@ function cleanUp() {
   dprint("[PT] Stopping...");
   
   try {
-    cleanupStage = "clear-command-poll";
+    markCleanup("clear-command-poll");
     if (commandPollInterval) {
       clearInterval(commandPollInterval);
       commandPollInterval = null;
     }
     
-    cleanupStage = "clear-deferred-poll";
+    markCleanup("clear-deferred-poll");
     if (deferredPollInterval) {
       clearInterval(deferredPollInterval);
       deferredPollInterval = null;
     }
     
-    cleanupStage = "clear-heartbeat";
+    markCleanup("clear-heartbeat");
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
       heartbeatInterval = null;
     }
     
-    cleanupStage = "teardown-watcher";
+    markCleanup("teardown-watcher");
     // IMPORTANTE: desregistrar watcher ANTES de soltar referencia
     teardownFileWatcher();
     
-    cleanupStage = "save-pending";
+    markCleanup("save-pending");
     savePendingCommands();
     
-    cleanupStage = "runtime-cleanup-hook";
-    // Preparar futuro detach de listeners del runtime
-    invokeRuntimeCleanupHook();
+    // CRÍTICO:
+    // NO re-ejecutar runtime.js en cleanUp().
+    // invokeRuntimeCleanupHook() causaba re-ejecución completa de runtime
+    // durante shutdown, contradiciendo el lifecycle del Script Engine.
+    
+    markCleanup("null-runtime");
+    runtimeFn = null;
+    activeCommand = null;
+    pendingCommands = {};
+    
+    markCleanup("done");
     
   } catch (e) {
     dprint("[cleanUp:" + cleanupStage + "] " + String(e));
   }
-  
-  runtimeFn = null;
-  activeCommand = null;
-  pendingCommands = {};
   
   dprint("[PT] Stopped");
 }
