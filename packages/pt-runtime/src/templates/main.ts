@@ -56,6 +56,15 @@ var activeCommand = null;
 
 var runtimeDirty = false;
 var fw = null;
+var watcherArmed = false;
+
+// ---------------------------------------------------------------------------
+// SAFETY GUARDS (crash hotfix)
+// ---------------------------------------------------------------------------
+// Packet Tracer watcher queda DESACTIVADO por defecto hasta validar estabilidad.
+var ENABLE_FILE_WATCHER = false;
+var WATCH_RUNTIME_FILE = false;
+var WATCH_COMMANDS_DIR = false;
 
 // ============================================================================
 // Main Entry Point
@@ -155,31 +164,114 @@ function ensureDir(path) {
 // ============================================================================
 
 function setupFileWatcher() {
+  if (!ENABLE_FILE_WATCHER) {
+    dprint("[watcher] disabled by safety guard");
+    return;
+  }
+  
+  if (watcherArmed) {
+    return;
+  }
+  
   try {
+    if (!fm || typeof fm.getFileWatcher !== "function") {
+      dprint("[watcher] SystemFileWatcher unavailable");
+      return;
+    }
+    
     fw = fm.getFileWatcher();
-    if (fw) {
-      fw.addPath(RUNTIME_FILE);
-      // También vigilar commands/ para nudge
-      fw.addPath(COMMANDS_DIR);
+    if (!fw) {
+      dprint("[watcher] getFileWatcher returned null");
+      return;
+    }
+    
+    if (WATCH_RUNTIME_FILE) {
+      try {
+        if (!fw.addPath(RUNTIME_FILE)) {
+          dprint("[watcher] addPath(runtime.js) returned false");
+        }
+      } catch (e1) {
+        dprint("[watcher] addPath(runtime.js): " + String(e1));
+      }
+    }
+    
+    if (WATCH_COMMANDS_DIR) {
+      try {
+        if (!fw.addPath(COMMANDS_DIR)) {
+          dprint("[watcher] addPath(commands/) returned false");
+        }
+      } catch (e2) {
+        dprint("[watcher] addPath(commands/): " + String(e2));
+      }
+    }
+    
+    if (typeof fw.registerEvent === "function") {
       fw.registerEvent("fileChanged", null, onWatchedFileChanged);
       fw.registerEvent("directoryChanged", null, onWatchedDirChanged);
+      watcherArmed = true;
+      dprint("[watcher] armed");
+    } else {
+      dprint("[watcher] registerEvent unavailable");
     }
+    
   } catch (e) {
     dprint("[watcher] " + String(e));
   }
 }
 
-function onWatchedFileChanged(src, path) {
+function getWatchedPath(args) {
+  if (!args) return "";
+  if (typeof args === "string") return args;
+  if (args.path) return args.path;
+  return "";
+}
+
+function onWatchedFileChanged(src, args) {
+  if (isShuttingDown || !isRunning) return;
+  
+  var path = getWatchedPath(args);
   if (path === RUNTIME_FILE) {
     runtimeDirty = true;
     dprint("[watcher] runtime.js changed");
   }
 }
 
-function onWatchedDirChanged(src, path) {
+function onWatchedDirChanged(src, args) {
+  if (isShuttingDown || !isRunning) return;
+  if (!WATCH_COMMANDS_DIR) return;
+  
+  var path = getWatchedPath(args);
   if (path === COMMANDS_DIR) {
     dprint("[watcher] commands/ changed - nudge");
   }
+}
+
+function teardownFileWatcher() {
+  if (!fw) {
+    watcherArmed = false;
+    return;
+  }
+  
+  try {
+    if (typeof fw.unregisterEvent === "function") {
+      try { fw.unregisterEvent("fileChanged", null, onWatchedFileChanged); } catch (e1) {}
+      try { fw.unregisterEvent("directoryChanged", null, onWatchedDirChanged); } catch (e2) {}
+    }
+    
+    if (typeof fw.removePath === "function") {
+      if (WATCH_RUNTIME_FILE) {
+        try { fw.removePath(RUNTIME_FILE); } catch (e3) {}
+      }
+      if (WATCH_COMMANDS_DIR) {
+        try { fw.removePath(COMMANDS_DIR); } catch (e4) {}
+      }
+    }
+  } catch (e) {
+    dprint("[watcher-teardown] " + String(e));
+  }
+  
+  fw = null;
+  watcherArmed = false;
 }
 
 function hasPendingDeferredCommands() {
@@ -621,6 +713,17 @@ function pollDeferredCommands() {
 // Cleanup (Idempotent)
 // ============================================================================
 
+function invokeRuntimeCleanupHook() {
+  if (!runtimeFn) return;
+  
+  try {
+    runtimeFn({ type: "__cleanup__" }, ipc, dprint);
+  } catch (e) {
+    // Hook best-effort: no interrumpir stop
+    dprint("[PT] Runtime cleanup hook ignored: " + String(e));
+  }
+}
+
 function cleanUp() {
   if (isShuttingDown) return;
   isShuttingDown = true;
@@ -644,9 +747,11 @@ function cleanUp() {
       heartbeatInterval = null;
     }
     
-    if (fw) {
-      try { fw = null; } catch (e) {}
-    }
+    // IMPORTANTE: desregistrar watcher ANTES de soltar referencia
+    teardownFileWatcher();
+    
+    // Preparar futuro detach de listeners del runtime
+    invokeRuntimeCleanupHook();
     
     savePendingCommands();
     

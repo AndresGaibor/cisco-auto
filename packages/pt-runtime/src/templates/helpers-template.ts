@@ -186,45 +186,45 @@ function validateCablePortCompatibility(cableType, connectorType) {
 
 function validateModuleExists(moduleCode) {
   var moduleKey = (moduleCode || "").toUpperCase();
-  var module = PT_MODULE_CATALOG[moduleKey];
+  var moduleInfo = PT_MODULE_CATALOG[moduleKey];
   
-  if (!module) {
+  if (!moduleInfo) {
     return { valid: false, error: "Módulo '" + moduleCode + "' no encontrado en catálogo. Módulos disponibles: " + Object.keys(PT_MODULE_CATALOG).join(", ") };
   }
   
-  return { valid: true, module: module };
+  return { valid: true, module: moduleInfo };
 }
 
 function validateModuleSlotCompatible(deviceModel, slot, moduleCode) {
   var modelKey = (deviceModel || "").toLowerCase();
   var deviceSlots = PT_DEVICE_MODULE_SLOTS[modelKey];
-  
+
   if (!deviceSlots) {
     return { valid: false, error: "Modelo '" + deviceModel + "' no tiene información de slots de módulos" };
   }
-  
+
   var moduleKey = (moduleCode || "").toUpperCase();
-  var module = PT_MODULE_CATALOG[moduleKey];
-  
-  if (!module) {
+  var moduleInfo = PT_MODULE_CATALOG[moduleKey];
+
+  if (!moduleInfo) {
     return { valid: false, error: "Módulo '" + moduleCode + "' no encontrado en catálogo" };
   }
-  
+
   var slotIndex = parseInt(String(slot).replace(/[^0-9]/g, ''), 10) || 0;
   var slotType = deviceSlots.length > slotIndex ? deviceSlots[slotIndex].type : null;
-  
+
   if (!slotType) {
     return { valid: false, error: "Slot '" + slot + "' no existe en " + deviceModel + ". Slots disponibles: " + deviceSlots.length };
   }
-  
-  if (module.slotType !== slotType) {
+
+  if (moduleInfo.slotType !== slotType) {
     var supportedForSlot = deviceSlots[slotIndex].supportedModules || [];
     return { 
       valid: false, 
-      error: "Módulo '" + moduleCode + "' (tipo " + module.slotType + ") no es compatible con slot " + slot + " (tipo " + slotType + ") en " + deviceModel + ". Módulos compatibles con este slot: " + supportedForSlot.join(", ") || "ninguno"
+      error: "Módulo '" + moduleCode + "' (tipo " + moduleInfo.slotType + ") no es compatible con slot " + slot + " (tipo " + slotType + ") en " + deviceModel + ". Módulos compatibles con este slot: " + supportedForSlot.join(", ") || "ninguno"
     };
   }
-  
+
   return { valid: true };
 }
 

@@ -1,9 +1,28 @@
 /**
  * Runtime Dispatcher Template - Command dispatcher and factory
  * Routes payloads to appropriate handlers
+ * GENERATED from command-catalog.ts - DO NOT EDIT MANUALLY
  */
 
+import { PUBLIC_COMMAND_CATALOG, INTERNAL_COMMAND_CATALOG } from "@cisco-auto/types";
+import type { CommandCatalogEntry } from "@cisco-auto/types";
+
+function generateDispatcherCases(commands: CommandCatalogEntry[]): string {
+  return commands.map((cmd) => {
+    if (cmd.type === "__pollDeferred") {
+      return `      case "${cmd.type}": return handlePollDeferred(payload);`;
+    }
+    if (cmd.type === "__healthcheck__") {
+      return `      case "${cmd.type}": return { ok: true, runtime: "pt-runtime", version: "0.1.0" };`;
+    }
+    return `      case "${cmd.type}": return ${cmd.handler}(payload);`;
+  }).join("\n");
+}
+
 export function generateDispatcherTemplate(): string {
+  const publicCases = generateDispatcherCases(PUBLIC_COMMAND_CATALOG);
+  const internalCases = generateDispatcherCases(INTERNAL_COMMAND_CATALOG);
+
   return `// ============================================================================
 // Command Dispatcher
 // ============================================================================
@@ -20,28 +39,8 @@ return (function(payload, ipc, dprint) {
     }
     
     switch (payload.type) {
-      case "addDevice": return handleAddDevice(payload);
-      case "removeDevice": return handleRemoveDevice(payload);
-      case "listDevices": return handleListDevices(payload);
-      case "renameDevice": return handleRenameDevice(payload);
-      case "addModule": return handleAddModule(payload);
-      case "removeModule": return handleRemoveModule(payload);
-      case "addLink": return handleAddLink(payload);
-      case "removeLink": return handleRemoveLink(payload);
-      case "configHost": return handleConfigHost(payload);
-      case "configIos": return handleConfigIos(payload);
-      case "execIos": return handleExecIos(payload);
-      case "snapshot": return handleSnapshot();
-      case "inspect": return handleInspect(payload);
-      case "hardwareInfo": return handleHardwareInfo();
-      case "hardwareCatalog": return handleHardwareCatalog(payload);
-      case "commandLog": return handleCommandLog(payload);
-      case "listCanvasRects": return handleListCanvasRects(payload);
-      case "getRect": return handleGetRect(payload);
-      case "devicesInRect": return handleDevicesInRect(payload);
-      case "moveDevice": return handleMoveDevice(payload);
-      case "clearTopology": return handleClearTopology();
-      case "__pollDeferred": return handlePollDeferred(payload);
+${publicCases}
+${internalCases}
       default: return { ok: false, error: "Unknown command: " + payload.type };
     }
   } catch (e) {

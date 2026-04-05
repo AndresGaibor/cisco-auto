@@ -3,7 +3,6 @@
 // ============================================================================
 
 import { generateRuntimeCode } from "./runtime-generator";
-import { validateRuntimeCode } from "./runtime-validator";
 import {
   type HandlerDeps,
   type HandlerResult,
@@ -37,14 +36,10 @@ interface HandlerMap {
 /**
  * Generate the complete runtime.js code
  * This function creates a self-contained JavaScript string that runs in PT
+ * Note: Validation is done in index.ts after generation, not here
  */
 export function composeRuntime(): string {
-  const code = generateRuntimeCode();
-
-  // Validate before returning - fail fast if generation produced bad code
-  validateRuntimeCode(code);
-
-  return code;
+  return generateRuntimeCode();
 }
 
 // ============================================================================

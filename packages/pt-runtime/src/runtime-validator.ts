@@ -49,6 +49,9 @@ const FORBIDDEN_PATTERNS = [
   { pattern: /Symbol\(/, reason: "Symbol may not be supported" },
   { pattern: /Proxy\(/, reason: "Proxy may not be supported" },
   { pattern: /Reflect\./, reason: "Reflect may not be supported" },
+  // Patterns de lifecycle inseguro (Fase 5 crash fix)
+  { pattern: /function\s+onWatchedFileChanged\s*\(\s*src\s*,\s*path\s*\)/, reason: "Use function(src, args) not function(src, path)" },
+  { pattern: /function\s+onWatchedDirChanged\s*\(\s*src\s*,\s*path\s*\)/, reason: "Use function(src, args) not function(src, path)" },
 ];
 
 // ============================================================================
@@ -87,7 +90,7 @@ const REQUIRED_MAIN_SYMBOLS_V2 = [
 ];
 
 // ============================================================================
-// Required symbols para main.js V2 - cola real (Fase 5)
+// Required symbols para main.js V2 - cola real (Fase 5) + lifecycle safe
 // ============================================================================
 
 const REQUIRED_MAIN_SYMBOLS_QUEUE = [
@@ -98,9 +101,9 @@ const REQUIRED_MAIN_SYMBOLS_QUEUE = [
   "LOGS_DIR",
   "function listQueuedCommandFiles(",
   "function claimNextCommand(",
-  "function processNextQueuedCommand(", // alias para executeActiveCommand
   "function recoverInFlightOnStartup(",
-  "function finalizeDeferredCommand(", // alias para parte de pollDeferredCommands
+  "function teardownFileWatcher(", // REQUERIDO para lifecycle seguro
+  "function invokeRuntimeCleanupHook(", // REQUERIDO para cleanup
 ];
 
 // ============================================================================
