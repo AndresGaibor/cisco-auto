@@ -113,7 +113,7 @@ export const wirelessCatalog: DeviceCatalogEntry[] = [
   },
   {
     id: 'aironet-3702i',
-    model: 'Aironet-3702i',
+    model: '3702i',
     series: 'Aironet',
     family: 'AP',
     vendor: 'cisco',
@@ -232,6 +232,26 @@ export const wirelessCatalog: DeviceCatalogEntry[] = [
     description: 'Home WiFi Router',
     ptCategory: 'Wireless Devices',
     tags: ['router', 'wireless', 'home', 'soho'],
+    isGeneric: true
+  },
+  {
+    id: 'home-router-pt-ac',
+    model: 'HomeRouter-PT-AC',
+    series: 'Home Router',
+    family: 'Router',
+    vendor: 'generic',
+    type: 'wireless-router',
+    deviceFamily: 'wireless',
+    fixedPorts: [faPorts5, wirelessPort],
+    moduleSlots: [],
+    capabilities: {
+      ...wirelessRouterCapabilities,
+      wirelessStandards: ['802.11a', '802.11n', '802.11ac']
+    },
+    displayName: 'Home Router PT-AC',
+    description: 'Home WiFi Router with 802.11ac',
+    ptCategory: 'Wireless Devices',
+    tags: ['router', 'wireless', 'home', 'soho', 'ac'],
     isGeneric: true
   },
   {

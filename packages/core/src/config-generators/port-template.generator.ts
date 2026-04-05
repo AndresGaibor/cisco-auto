@@ -7,7 +7,7 @@
 
 import type { InterfaceSpec } from '../canonical/device.spec';
 import type { SwitchportMode } from '../canonical/types';
-import { switchCatalog } from '../catalog/switches';
+import { deviceCatalog, DeviceHardwareProfile } from '../catalog';
 
 /**
  * Tipo de puerto para template
@@ -239,14 +239,13 @@ export class PortTemplateGenerator {
     sfp: string[];
     all: string[];
   } {
-    const switchEntry = switchCatalog.find(s =>
-      s.model.toLowerCase() === model.toLowerCase() ||
-      s.id.toLowerCase() === model.toLowerCase()
-    );
+    const switchEntry = deviceCatalog.getByModel(model);
 
     if (!switchEntry) {
       return { fastEthernet: [], gigabitEthernet: [], sfp: [], all: [] };
     }
+
+    const hardware = DeviceHardwareProfile.fromCatalogEntry(switchEntry);
 
     const result = {
       fastEthernet: [] as string[],
@@ -255,20 +254,16 @@ export class PortTemplateGenerator {
       all: [] as string[]
     };
 
-    for (const port of switchEntry.fixedPorts) {
-      if (port.type === 'Console') continue;
+    for (const port of hardware.ports) {
+      if (port.value.type === 'Console') continue;
 
-      const portNames: string[] = [];
-      const [start, end] = port.range;
-      for (let i = start; i <= end; i++) {
-        const portName = `${port.prefix}${port.module}/${i}`;
-        portNames.push(portName);
+      for (const portName of port.names) {
         result.all.push(portName);
 
-        if (port.type === 'FastEthernet') {
+        if (port.value.type === 'FastEthernet') {
           result.fastEthernet.push(portName);
-        } else if (port.type === 'GigabitEthernet') {
-          if (port.connector === 'sfp') {
+        } else if (port.value.type === 'GigabitEthernet') {
+          if (port.value.connector === 'sfp') {
             result.sfp.push(portName);
           } else {
             result.gigabitEthernet.push(portName);

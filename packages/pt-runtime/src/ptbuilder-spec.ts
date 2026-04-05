@@ -28,6 +28,7 @@ export const allDeviceTypes = {
   "2950-24": 1,
   "2950T-24": 1,
   "2960-24TT": 1,
+  "PT8200": 0,
   "Switch-PT": 1,
   "Switch-PT-Empty": 1,
   "Cloud-PT": 2,

@@ -29,6 +29,12 @@ export type {
 } from '@cisco-auto/ios-domain/value-objects';
 export { validateLab, LabValidator } from './validation/index';
 
+export {
+  PortDefinitionVO,
+  ModuleDefinitionVO,
+  DeviceModelVO,
+  DeviceHardwareProfile,
+} from './catalog/value-objects';
 export * from './topology/index';
 export * from './canonical/index.ts';
 export * from './executor/index.ts';

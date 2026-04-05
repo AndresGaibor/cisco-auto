@@ -95,6 +95,18 @@ const giPorts3 = (module: number = 0): PortDefinition[] => [
   }
 ];
 
+const giPorts4 = (module: number = 0): PortDefinition[] => [
+  {
+    type: 'GigabitEthernet',
+    prefix: 'Gi',
+    module,
+    range: [0, 3],
+    speed: 1000,
+    connector: 'rj45',
+    supportsCopper: true
+  }
+];
+
 const faPorts2 = (module: number = 0): PortDefinition[] => [
   {
     type: 'FastEthernet',
@@ -620,6 +632,40 @@ export const routerCatalog: DeviceCatalogEntry[] = [
     ptCategory: 'Routers',
     tags: ['router', 'catalyst', '8000', 'sd-wan'],
     releaseYear: 2020
+  },
+  {
+    id: 'router-pt8200',
+    model: 'PT8200',
+    series: 'Packet Tracer 8200',
+    family: 'PT 8200',
+    vendor: 'cisco',
+    type: 'router',
+    deviceFamily: 'infrastructure',
+
+    fixedPorts: [
+      ...giPorts4(0),
+      consolePort
+    ],
+
+    moduleSlots: [
+      { type: 'hwic', count: 2, supportedModules: ['HWIC-2T', 'HWIC-4ESW', 'HWIC-1GE-SFP', 'HWIC-AP'] },
+      { type: 'pvdm', count: 1, supportedModules: ['PVDM3-16', 'PVDM3-32'] }
+    ],
+
+    capabilities: {
+      ...baseRouterCapabilities,
+      routingProtocols: ['static', 'rip', 'ospf', 'eigrp', 'bgp'],
+      supportsVpn: true,
+      moduleSlots: 3,
+      supportedModules: ['HWIC-2T', 'HWIC-4ESW', 'HWIC-1GE-SFP', 'HWIC-AP', 'PVDM3-16', 'PVDM3-32'],
+      ptSupportedVersion: '8.0'
+    },
+
+    displayName: 'Cisco PT8200',
+    description: 'Packet Tracer 8200 router with modular slots',
+    ptCategory: 'Routers',
+    tags: ['router', 'packet-tracer', 'modular', 'pt8200'],
+    releaseYear: 2024
   }
 ];
 

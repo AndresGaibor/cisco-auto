@@ -2,7 +2,7 @@
 // Runtime Helpers - Pure utility functions
 // ============================================================================
 
-import { PT_MODEL_MAP, PT_DEVICE_TYPE_MAP, validatePTModel as validatePTModelFn, getPTDeviceType } from "@cisco-auto/pt-runtime/value-objects";
+import { PT_MODEL_MAP, PT_DEVICE_TYPE_MAP, PT_NON_CREATABLE_MODELS, validatePTModel as validatePTModelFn, getPTDeviceType } from "@cisco-auto/pt-runtime/value-objects";
 
 // Device type IDs (from PT schema)
 const DEVICE_TYPES = {
@@ -95,7 +95,12 @@ export function validatePTModel(model: string): string {
       `Available aliases: pc, server, cloud, ap, router, switch, 1941, 2960, ...`
     );
   }
-  return PT_MODEL_MAP[key];
+  if (PT_NON_CREATABLE_MODELS.some((item: string) => item.toLowerCase() === key)) {
+    throw new Error(
+      `Invalid device model: "${model}". This model is auto-created by Packet Tracer and cannot be added manually.`
+    );
+  }
+  return validatePTModelFn(model);
 }
 
 /** Resolve model name from alias - VALIDATES against catalog */

@@ -5,6 +5,7 @@
 import type { FileBridgePort } from "../ports/file-bridge.port.js";
 import type { TopologyCachePort } from "../ports/topology-cache.port.js";
 import type { DeviceState } from "../../contracts/index.js";
+import { validateModuleExists, validateModuleSlotCompatible } from "@cisco-auto/pt-runtime/value-objects";
 
 export class DeviceService {
   constructor(
@@ -46,6 +47,17 @@ export class DeviceService {
    * Add a module to a device
    */
   async addModule(device: string, slot: number, module: string): Promise<void> {
+    const currentDevice = await this.inspect(device, false);
+    const moduleValidation = validateModuleExists(module);
+    if (!moduleValidation.valid) {
+      throw new Error(moduleValidation.error ?? `Módulo inválido: ${module}`);
+    }
+
+    const slotValidation = validateModuleSlotCompatible(currentDevice.model, slot, module);
+    if (!slotValidation.valid) {
+      throw new Error(slotValidation.error ?? `El módulo ${module} no es válido para ${currentDevice.model}`);
+    }
+
     await this.bridge.sendCommandAndWait("addModule", {
       id: this.generateId(),
       device,

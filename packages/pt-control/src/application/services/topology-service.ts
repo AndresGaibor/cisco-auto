@@ -6,6 +6,8 @@ import type { FileBridgePort } from "../ports/file-bridge.port.js";
 import type { TopologyCachePort } from "../ports/topology-cache.port.js";
 import type { TopologySnapshot, DeviceState, LinkState, AddLinkPayload } from "../../contracts/index.js";
 import { validatePTModel } from "../../shared/utils/helpers.js";
+import { PT_NON_CREATABLE_MODELS } from "@cisco-auto/pt-runtime/value-objects";
+import { validatePortExists } from "@cisco-auto/pt-runtime/value-objects";
 
 function ptDeviceTypeToString(typeId: number): DeviceState["type"] {
   const map: Record<number, DeviceState["type"]> = {
@@ -71,7 +73,16 @@ export class TopologyService {
    * or string[] (match any).
    */
   async listDevices(filter?: string | number | string[]): Promise<DeviceState[]> {
-    const cachedDevices = this.cache.getDevices();
+    const cachedDevices = this.cache.getDevices().filter((device) => {
+      const model = String(device.model || '').toLowerCase();
+      return !PT_NON_CREATABLE_MODELS.some((item: string) => item.toLowerCase() === model);
+    });
+
+    const filterAutoCreated = (devices: DeviceState[]) =>
+      devices.filter((device) => {
+        const model = String(device.model || '').toLowerCase();
+        return !PT_NON_CREATABLE_MODELS.some((item: string) => item.toLowerCase() === model);
+      });
 
     if (cachedDevices.length > 0) {
       if (typeof filter === "undefined") {
@@ -80,7 +91,7 @@ export class TopologyService {
 
       if (typeof filter === "number") {
         const targetType = ptDeviceTypeToString(filter);
-        return cachedDevices.filter((device) => device.type === targetType);
+      return cachedDevices.filter((device) => device.type === targetType);
       }
 
       const normalizedFilter = String(filter).toLowerCase();
@@ -102,11 +113,11 @@ export class TopologyService {
     const value = result.value;
 
     if (Array.isArray(value)) {
-      return value;
+      return filterAutoCreated(value);
     }
 
     if (value && typeof value === "object" && Array.isArray(value.devices)) {
-      return value.devices;
+      return filterAutoCreated(value.devices);
     }
 
     return [];
@@ -216,6 +227,23 @@ export class TopologyService {
     port2: string,
     linkType: AddLinkPayload["linkType"] = "auto"
   ): Promise<LinkState> {
+    const device1State = this.getDeviceState(device1);
+    const device2State = this.getDeviceState(device2);
+
+    if (device1State?.model) {
+      const validation = validatePortExists(device1State.model, port1);
+      if (!validation.valid) {
+        throw new Error(validation.error ?? `Puerto inválido: ${device1State.model}:${port1}`);
+      }
+    }
+
+    if (device2State?.model) {
+      const validation = validatePortExists(device2State.model, port2);
+      if (!validation.valid) {
+        throw new Error(validation.error ?? `Puerto inválido: ${device2State.model}:${port2}`);
+      }
+    }
+
     const result = await this.bridge.sendCommandAndWait<{
       ok: boolean;
       id: string;
@@ -333,5 +361,10 @@ export class TopologyService {
    */
   getCachedSnapshot(): TopologySnapshot | null {
     return this.cache.getSnapshot();
+  }
+
+  private getDeviceState(deviceName: string): DeviceState | undefined {
+    const snapshot = this.cache.getSnapshot();
+    return snapshot?.devices?.[deviceName] ?? this.cache.getDevice(deviceName);
   }
 }

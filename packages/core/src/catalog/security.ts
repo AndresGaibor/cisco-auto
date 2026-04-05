@@ -5,7 +5,7 @@ export const securityCatalog: DeviceCatalogEntry[] = [
   // === ASA Firewalls ===
   {
     id: 'asa-5505',
-    model: 'ASA-5505',
+    model: '5505',
     series: 'ASA',
     family: 'Firewall',
     vendor: 'cisco',
@@ -36,7 +36,7 @@ export const securityCatalog: DeviceCatalogEntry[] = [
   },
   {
     id: 'asa-5506',
-    model: 'ASA-5506',
+    model: '5506-X',
     series: 'ASA',
     family: 'Firewall',
     vendor: 'cisco',

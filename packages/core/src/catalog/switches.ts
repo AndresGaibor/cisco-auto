@@ -140,6 +140,18 @@ const giPorts48 = (): PortDefinition[] => [
   }
 ];
 
+const faPorts6 = (): PortDefinition[] => [
+  {
+    type: 'FastEthernet',
+    prefix: 'Fa',
+    module: 0,
+    range: [1, 6],
+    speed: 100,
+    connector: 'rj45',
+    supportsCopper: true
+  }
+];
+
 const sfpPorts = (count: number, start: number = 25): PortDefinition[] => [
   {
     type: 'GigabitEthernet',
@@ -166,10 +178,44 @@ const consolePort: PortDefinition = {
 // =============================================================================
 
 export const switchCatalog: DeviceCatalogEntry[] = [
+  // === Packet Tracer Modular Switch ===
+  {
+    id: 'switch-pt',
+    model: 'Switch-PT',
+    series: 'Packet Tracer',
+    family: 'PT Switch',
+    vendor: 'cisco',
+    type: 'switch',
+    deviceFamily: 'infrastructure',
+
+    fixedPorts: [
+      ...faPorts6(),
+      consolePort
+    ],
+
+    moduleSlots: [
+      { type: 'pt-switch-module', count: 8, supportedModules: ['PT-SWITCH-NM-1CE', 'PT-SWITCH-NM-1CFE', 'PT-SWITCH-NM-1CGE', 'PT-SWITCH-NM-1FFE', 'PT-SWITCH-NM-1FGE', 'PT-SWITCH-NM-COVER', 'AC-POWER-SUPPLY', 'POWER-COVER-PLATE'] }
+    ],
+
+    capabilities: {
+      ...baseSwitchCapabilities,
+      supportsModules: true,
+      moduleSlots: 8,
+      supportedModules: ['PT-SWITCH-NM-1CE', 'PT-SWITCH-NM-1CFE', 'PT-SWITCH-NM-1CGE', 'PT-SWITCH-NM-1FFE', 'PT-SWITCH-NM-1FGE', 'PT-SWITCH-NM-COVER', 'AC-POWER-SUPPLY', 'POWER-COVER-PLATE'],
+      ptSupportedVersion: '7.0'
+    },
+
+    displayName: 'Packet Tracer Switch',
+    description: 'Modular Packet Tracer switch chassis with removable network modules',
+    ptCategory: 'Switches',
+    tags: ['switch', 'packet-tracer', 'modular'],
+    isGeneric: true
+  },
+
   // === Catalyst 2960 Series ===
   {
     id: 'switch-2960-24tt',
-    model: '2960-24TT-L',
+    model: '2960-24TT',
     series: 'Catalyst 2960',
     family: 'Catalyst',
     vendor: 'cisco',
@@ -190,39 +236,10 @@ export const switchCatalog: DeviceCatalogEntry[] = [
       ptSupportedVersion: '6.0'
     },
     
-    displayName: 'Cisco 2960-24TT-L',
+    displayName: 'Cisco 2960-24TT',
     description: '24 FastEthernet + 2 Gigabit SFP',
     ptCategory: 'Switches',
     tags: ['switch', '2960', 'layer2', 'fastethernet'],
-    releaseYear: 2005
-  },
-  
-  {
-    id: 'switch-2960-24tc',
-    model: '2960-24TC-L',
-    series: 'Catalyst 2960',
-    family: 'Catalyst',
-    vendor: 'cisco',
-    type: 'switch',
-    deviceFamily: 'infrastructure',
-    
-    fixedPorts: [
-      ...faPorts24(),
-      ...sfpPorts(2),
-      consolePort
-    ],
-    
-    moduleSlots: [],
-    
-    capabilities: {
-      ...baseSwitchCapabilities,
-      ptSupportedVersion: '6.0'
-    },
-    
-    displayName: 'Cisco 2960-24TC-L',
-    description: '24 FastEthernet + 2 dual-purpose uplinks',
-    ptCategory: 'Switches',
-    tags: ['switch', '2960', 'layer2'],
     releaseYear: 2005
   },
   
@@ -375,7 +392,7 @@ export const switchCatalog: DeviceCatalogEntry[] = [
   // === Industrial Switches ===
   {
     id: 'switch-ie2000',
-    model: 'IE2000',
+    model: 'IE-2000',
     series: 'IE 2000',
     family: 'Industrial',
     vendor: 'cisco',

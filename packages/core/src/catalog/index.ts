@@ -7,6 +7,9 @@
 // Schema
 export * from './schema';
 
+// Value Objects
+export * from './value-objects';
+
 // Catálogos individuales
 export { routerCatalog } from './routers';
 export { switchCatalog } from './switches';

@@ -1,6 +1,45 @@
 import type { DeviceCatalogEntry } from './schema';
 import { firewallCapabilities, giPort, giPorts4 } from './device-capabilities';
 
+const hubCapabilities = {
+  ...firewallCapabilities,
+  supportsVlans: false,
+  maxVlans: 0,
+  supportsVtp: false,
+  supportsStp: false,
+  stpModes: [],
+  supportsEtherchannel: false,
+  maxEtherchannels: 0,
+  supportsPortSecurity: false,
+  supportsRouting: false,
+  supportsIpv6: false,
+  routingProtocols: [],
+  supportsAcl: false,
+  maxAcls: 0,
+  supportsNat: false,
+  supportsVpn: false,
+  supportsFirewall: false,
+  supportsDhcp: false,
+  supportsDns: false,
+  supportsNtp: false,
+  supportsSnmp: false,
+  supportsSsh: false,
+  supportsTelnet: false,
+  supportsHttp: false,
+  supportsWireless: false,
+  wirelessStandards: [],
+  supportsVoice: false,
+  supportsPoe: false,
+  supportsQos: false,
+  supportsModules: false,
+  moduleSlots: 0,
+  supportedModules: [],
+  supportsConsole: false,
+  supportsUsb: false,
+  supportsSdCard: false,
+  ptSupportedVersion: '5.0'
+};
+
 export const otherDeviceCatalog: DeviceCatalogEntry[] = [
   // === Cloud ===
   {
@@ -27,6 +66,24 @@ export const otherDeviceCatalog: DeviceCatalogEntry[] = [
     description: 'Internet/Cloud simulation',
     ptCategory: 'WAN Emulation',
     tags: ['cloud', 'wan', 'internet'],
+    isGeneric: true
+  },
+  // === Hubs ===
+  {
+    id: 'hub-pt',
+    model: 'Hub-PT',
+    series: 'Hub',
+    family: 'Hub',
+    vendor: 'generic',
+    type: 'hub',
+    deviceFamily: 'infrastructure',
+    fixedPorts: [giPorts4],
+    moduleSlots: [],
+    capabilities: hubCapabilities,
+    displayName: 'Hub-PT',
+    description: 'Generic Ethernet hub',
+    ptCategory: 'Network Devices',
+    tags: ['hub', 'ethernet', 'legacy'],
     isGeneric: true
   },
   // === Modems ===

@@ -41,7 +41,17 @@ export {
 export {
   PT_MODEL_MAP,
   PT_DEVICE_TYPE_MAP,
+  PT_NON_CREATABLE_MODELS,
   getPTDeviceType,
   validatePTModel,
   getAllValidModels,
 } from "./validated-models.js";
+
+export {
+  PT_PORT_MAP,
+  PT_MODULE_CATALOG,
+  PT_DEVICE_MODULE_SLOTS,
+  validatePortExists,
+  validateModuleExists,
+  validateModuleSlotCompatible,
+} from "./hardware-maps.js";

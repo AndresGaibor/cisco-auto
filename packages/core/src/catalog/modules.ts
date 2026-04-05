@@ -326,6 +326,100 @@ export const moduleCatalog: ModuleDefinition[] = [
     slotType: 'pvdm',
     description: '64 channels of voice DSP',
     ports: []
+  },
+
+  // === PT Switch Modules ===
+  {
+    code: 'PT-SWITCH-NM-1CE',
+    name: '1-Port Copper Ethernet Switch Module',
+    slotType: 'pt-switch-module',
+    description: '1 copper Ethernet port for Packet Tracer switch chassis',
+    ports: [
+      {
+        type: 'Ethernet',
+        prefix: 'Eth',
+        module: 1,
+        range: [0, 0],
+        speed: 10,
+        connector: 'rj45',
+        supportsCopper: true
+      }
+    ]
+  },
+  {
+    code: 'PT-SWITCH-NM-1CFE',
+    name: '1-Port Copper FastEthernet Switch Module',
+    slotType: 'pt-switch-module',
+    description: '1 copper FastEthernet port for Packet Tracer switch chassis',
+    ports: [
+      {
+        type: 'FastEthernet',
+        prefix: 'Fa',
+        module: 1,
+        range: [0, 0],
+        speed: 100,
+        connector: 'rj45',
+        supportsCopper: true
+      }
+    ]
+  },
+  {
+    code: 'PT-SWITCH-NM-1CGE',
+    name: '1-Port Copper GigabitEthernet Switch Module',
+    slotType: 'pt-switch-module',
+    description: '1 copper GigabitEthernet port for Packet Tracer switch chassis',
+    ports: [
+      {
+        type: 'GigabitEthernet',
+        prefix: 'Gi',
+        module: 1,
+        range: [0, 0],
+        speed: 1000,
+        connector: 'rj45',
+        supportsCopper: true
+      }
+    ]
+  },
+  {
+    code: 'PT-SWITCH-NM-1FFE',
+    name: '1-Port Fiber FastEthernet Switch Module',
+    slotType: 'pt-switch-module',
+    description: '1 fiber FastEthernet port for Packet Tracer switch chassis',
+    ports: [
+      {
+        type: 'FastEthernet',
+        prefix: 'Fa',
+        module: 1,
+        range: [0, 0],
+        speed: 100,
+        connector: 'sfp',
+        supportsFiber: true
+      }
+    ]
+  },
+  {
+    code: 'PT-SWITCH-NM-1FGE',
+    name: '1-Port Fiber GigabitEthernet Switch Module',
+    slotType: 'pt-switch-module',
+    description: '1 fiber GigabitEthernet port for Packet Tracer switch chassis',
+    ports: [
+      {
+        type: 'GigabitEthernet',
+        prefix: 'Gi',
+        module: 1,
+        range: [0, 0],
+        speed: 1000,
+        connector: 'sfp',
+        supportsFiber: true
+      }
+    ]
+  },
+  {
+    code: 'PT-SWITCH-NM-COVER',
+    name: 'Switch Module Cover',
+    slotType: 'pt-switch-module',
+    description: 'Cover plate for unused Packet Tracer switch slots',
+    ports: []
   }
 ];
 

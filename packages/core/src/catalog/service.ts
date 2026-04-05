@@ -11,6 +11,7 @@ import type {
   PortDefinition
 } from './schema';
 import { getTotalPorts } from './schema';
+import { DeviceModelVO, DeviceHardwareProfile } from './value-objects';
 
 import routerCatalog from './routers';
 import switchCatalog from './switches';
@@ -107,6 +108,22 @@ export class DeviceCatalog {
     return allDevices.find(d => 
       d.model.toLowerCase() === model.toLowerCase()
     );
+  }
+
+  /**
+   * Obtiene el modelo como value object de dominio.
+   */
+  getModelVO(model: string): DeviceModelVO | undefined {
+    const device = this.getByModel(model);
+    return device ? DeviceModelVO.from(device) : undefined;
+  }
+
+  /**
+   * Obtiene un perfil de hardware para un modelo dado.
+   */
+  getHardwareProfile(model: string, installedModules: { slotIndex: number; code: string; enabled?: boolean }[] = []): DeviceHardwareProfile | undefined {
+    const device = this.getByModel(model);
+    return device ? DeviceHardwareProfile.fromCatalogEntry(device, installedModules) : undefined;
   }
   
   /**
@@ -326,17 +343,12 @@ export class DeviceCatalog {
   /**
    * Obtiene el total de puertos de un dispositivo
    */
-  getDevicePortCount(deviceId: string): number {
+  getDevicePortCount(deviceId: string, installedModules: { slotIndex: number; code: string; enabled?: boolean }[] = []): number {
     const device = this.getById(deviceId);
     if (!device) return 0;
-    
-    const fixedPorts = getTotalPorts(device.fixedPorts);
-    const modulePorts = device.moduleSlots.reduce((sum, slot) => {
-      // No podemos saber qué módulo está instalado, retornar 0
-      return sum;
-    }, 0);
-    
-    return fixedPorts + modulePorts;
+
+    const profile = DeviceHardwareProfile.fromCatalogEntry(device, installedModules);
+    return profile.portCount;
   }
   
   /**

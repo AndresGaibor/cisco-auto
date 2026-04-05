@@ -52,7 +52,7 @@ export interface ModuleDefinition {
   name: string;
   
   /** Tipo de slot */
-  slotType: 'hwic' | 'wic' | 'nme' | 'sm' | 'nm' | 'pvdm';
+  slotType: 'hwic' | 'wic' | 'nme' | 'sm' | 'nm' | 'pvdm' | 'pt-switch-module';
   
   /** Puertos que añade */
   ports: PortDefinition[];

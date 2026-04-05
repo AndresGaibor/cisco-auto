@@ -4,16 +4,16 @@
  * Genera configuración de Email para Server-PT en Packet Tracer
  */
 
-export interface EmailSpec {
+export interface EmailGeneratorSpec {
   enabled: boolean;
   emailDomain?: string;
   smtpPort?: number;
   pop3Port?: number;
   imapPort?: number;
-  mailboxes?: EmailMailbox[];
+  mailboxes?: EmailGeneratorMailbox[];
 }
 
-export interface EmailMailbox {
+export interface EmailGeneratorMailbox {
   username: string;
   password?: string;
   fullName?: string;
@@ -24,7 +24,7 @@ export class EmailGenerator {
   /**
    * Genera configuración de email para un dispositivo
    */
-  static generate(spec: EmailSpec): string[] {
+  static generate(spec: EmailGeneratorSpec): string[] {
     const commands: string[] = [];
 
     if (!spec.enabled) return commands;
@@ -65,7 +65,7 @@ export class EmailGenerator {
   /**
    * Valida la configuración de email
    */
-  static validate(spec: EmailSpec): { valid: boolean; errors: string[]; warnings: string[] } {
+  static validate(spec: EmailGeneratorSpec): { valid: boolean; errors: string[]; warnings: string[] } {
     const errors: string[] = [];
     const warnings: string[] = [];
 
