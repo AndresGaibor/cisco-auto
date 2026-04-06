@@ -26,6 +26,9 @@ export interface ConfigIosPayload {
   save?: boolean;
   stopOnError?: boolean;
   ensurePrivileged?: boolean;
+  dismissInitialDialog?: boolean;
+  commandTimeoutMs?: number;
+  stallTimeoutMs?: number;
 }
 
 export interface ExecIosPayload {
@@ -33,6 +36,10 @@ export interface ExecIosPayload {
   device: string;
   command: string;
   parse?: boolean;
+  ensurePrivileged?: boolean;
+  dismissInitialDialog?: boolean;
+  commandTimeoutMs?: number;
+  stallTimeoutMs?: number;
 }
 
 // ============================================================================

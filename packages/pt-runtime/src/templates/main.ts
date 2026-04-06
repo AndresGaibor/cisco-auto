@@ -79,6 +79,9 @@ var cleanupStage = "idle";
 var IOS_JOBS = {};
 var IOS_JOB_SEQ = 0;
 
+var IOS_DEFAULT_COMMAND_TIMEOUT_MS = 8000;
+var IOS_DEFAULT_STALL_TIMEOUT_MS = 15000;
+
 // ============================================================================
 // Terminal Listeners - Event-based architecture (Migrated from runtime.js)
 // ============================================================================
@@ -892,7 +895,9 @@ function writeResultEnvelope(id, envelope) {
 
 function pollDeferredCommands() {
   if (!isRunning || isShuttingDown) return;
-  
+
+  checkIosJobTimeouts();
+
   var pendingKeys = Object.keys(pendingCommands);
   if (pendingKeys.length === 0) return;
   
@@ -968,7 +973,7 @@ function pollDeferredCommands() {
 function createIosJob(type, payload) {
   IOS_JOB_SEQ++;
   var ticket = "ios_job_" + IOS_JOB_SEQ;
-  
+
   IOS_JOBS[ticket] = {
     ticket: ticket,
     device: payload.device,
@@ -976,22 +981,52 @@ function createIosJob(type, payload) {
     payload: payload,
     steps: [],
     currentStep: 0,
+
+    phase: "queued",
+    resumePhase: "",
+    resumeStep: 0,
+
     state: "queued",
     startedAt: Date.now(),
     updatedAt: Date.now(),
+    lastActivityAt: Date.now(),
+
     output: "",
     outputs: [],
+    stepResults: [],
+
+    currentCommand: "",
+    currentCommandOutput: "",
+    currentCommandStartedAt: 0,
+
     status: null,
     modeBefore: "",
     modeAfter: "",
+    lastMode: "",
+    lastPrompt: "",
+
     paged: false,
     autoConfirmed: false,
+    dialogDismissAttempts: 0,
+
     waitingForCommandEnd: false,
     finished: false,
     result: null,
-    error: null
+    error: null,
+    errorCode: null,
+
+    inFlightPath: "",
+    commandId: "",
+    seq: 0,
+
+    ensurePrivileged: payload.ensurePrivileged !== false,
+    dismissInitialDialog: payload.dismissInitialDialog !== false,
+    commandTimeoutMs: payload.commandTimeoutMs || IOS_DEFAULT_COMMAND_TIMEOUT_MS,
+    stallTimeoutMs: payload.stallTimeoutMs || IOS_DEFAULT_STALL_TIMEOUT_MS,
+
+    abortSent: false
   };
-  
+
   dprint("[Job] Created " + ticket + " for " + payload.device + " type=" + type);
   return ticket;
 }
@@ -1025,134 +1060,302 @@ function pollIosJob(ticket) {
 }
 
 // ============================================================================
+// IOS Job Helper Functions
+// ============================================================================
+
+function getIosJobTerm(job) {
+  var device;
+  if (!job) return null;
+  device = getNet().getDevice(job.device);
+  if (!device || typeof device.getCommandLine !== "function") return null;
+  return device.getCommandLine();
+}
+
+function containsInitialDialog(output) {
+  if (!output) return false;
+  return /initial configuration dialog/i.test(output) ||
+    /please answer 'yes' or 'no'/i.test(output) ||
+    /\[yes\/no\]\s*:\s*$/i.test(output);
+}
+
+function containsEnablePasswordPrompt(output) {
+  if (!output) return false;
+  return /password\s*:/i.test(output);
+}
+
+function isConfigPrompt(prompt, mode) {
+  var p = String(prompt || "");
+  var m = String(mode || "");
+  return /\(config[^\)]*\)#\s*$/.test(p) || /config/i.test(m);
+}
+
+function isPrivExecPrompt(prompt, mode) {
+  var p = String(prompt || "");
+  var m = String(mode || "");
+  if (isConfigPrompt(prompt, mode)) return false;
+  return /#\s*$/.test(p) || /priv/i.test(m);
+}
+
+function mapCommandStatus(status) {
+  if (status === 0) return null;
+  if (status === 1) return "AMBIGUOUS";
+  if (status === 2) return "INVALID";
+  if (status === 3) return "INCOMPLETE";
+  if (status === 4) return "NOT_IMPLEMENTED";
+  return "UNKNOWN";
+}
+
+function joinStepOutputs(stepResults) {
+  var parts = [];
+  var i;
+  for (i = 0; i < stepResults.length; i++) {
+    if (stepResults[i] && stepResults[i].raw) {
+      parts.push(stepResults[i].raw);
+    }
+  }
+  return parts.join("\\n");
+}
+
+// ============================================================================
 // IOS Job Execution - Starts deferred jobs
 // ============================================================================
 
+// ============================================================================
+// IOS Job State Machine
+// ============================================================================
+
+function failIosJob(ticket, message, code) {
+  var job = IOS_JOBS[ticket];
+  if (!job) return;
+
+  job.finished = true;
+  job.waitingForCommandEnd = false;
+  job.state = "error";
+  job.error = message || "IOS job failed";
+  job.errorCode = code || "IOS_JOB_FAILED";
+  job.updatedAt = Date.now();
+
+  job.result = {
+    ok: false,
+    error: job.error,
+    code: job.errorCode,
+    raw: job.currentCommandOutput || job.output || "",
+    device: job.device,
+    session: {
+      mode: job.lastMode || "",
+      prompt: job.lastPrompt || "",
+      autoDismissedInitialDialog: !!job.autoConfirmed
+    }
+  };
+
+  dprint("[Job] Failed " + ticket + " code=" + job.errorCode + " message=" + job.error);
+}
+
+function completeIosJob(ticket) {
+  var job = IOS_JOBS[ticket];
+  if (!job) return;
+
+  job.finished = true;
+  job.waitingForCommandEnd = false;
+  job.state = "done";
+  job.updatedAt = Date.now();
+
+  if (!job.result) {
+    job.result = {
+      ok: true,
+      device: job.device,
+      raw: job.output || "",
+      outputs: job.stepResults || [],
+      session: {
+        mode: job.lastMode || "",
+        prompt: job.lastPrompt || "",
+        autoDismissedInitialDialog: !!job.autoConfirmed,
+        paging: !!job.paged
+      }
+    };
+  }
+
+  dprint("[Job] Completed " + ticket);
+}
+
+function sendIosJobCommand(ticket, command, phase) {
+  var job = IOS_JOBS[ticket];
+  var term = getIosJobTerm(job);
+
+  if (!job) return;
+  if (!term) {
+    failIosJob(ticket, "Terminal not available", "NO_TERMINAL");
+    return;
+  }
+
+  job.phase = phase;
+  job.state = phase;
+  job.currentCommand = command;
+  job.currentCommandOutput = "";
+  job.waitingForCommandEnd = true;
+  job.abortSent = false;
+  job.currentCommandStartedAt = Date.now();
+  job.lastActivityAt = Date.now();
+  job.updatedAt = Date.now();
+
+  dprint("[Job] " + ticket + " phase=" + phase + " cmd=" + command);
+
+  try {
+    term.enterCommand(command);
+  } catch (e) {
+    failIosJob(ticket, "Command execution error: " + String(e), "COMMAND_EXECUTION_ERROR");
+  }
+}
+
+function issueIosJobPhase(ticket) {
+  var job = IOS_JOBS[ticket];
+  var nextCommand;
+
+  if (!job || job.finished) return;
+
+  if (job.phase === "ensure-privileged") {
+    if (isPrivExecPrompt(job.lastPrompt, job.lastMode) || isConfigPrompt(job.lastPrompt, job.lastMode)) {
+      job.phase = (job.type === "configIos") ? "ensure-config" : "run-exec";
+      issueIosJobPhase(ticket);
+      return;
+    }
+    sendIosJobCommand(ticket, "enable", "ensure-privileged");
+    return;
+  }
+
+  if (job.phase === "ensure-config") {
+    if (isConfigPrompt(job.lastPrompt, job.lastMode)) {
+      job.phase = "run-config";
+      issueIosJobPhase(ticket);
+      return;
+    }
+    sendIosJobCommand(ticket, "configure terminal", "ensure-config");
+    return;
+  }
+
+  if (job.phase === "run-exec") {
+    nextCommand = job.steps[0];
+    if (!nextCommand) {
+      failIosJob(ticket, "Missing exec command", "NO_EXEC_COMMAND");
+      return;
+    }
+    sendIosJobCommand(ticket, nextCommand, "run-exec");
+    return;
+  }
+
+  if (job.phase === "run-config") {
+    if (job.currentStep >= job.steps.length) {
+      job.phase = "exit-config";
+      issueIosJobPhase(ticket);
+      return;
+    }
+    nextCommand = job.steps[job.currentStep];
+    sendIosJobCommand(ticket, nextCommand, "run-config");
+    return;
+  }
+
+  if (job.phase === "exit-config") {
+    if (isPrivExecPrompt(job.lastPrompt, job.lastMode)) {
+      if (job.payload && job.payload.save !== false) {
+        job.phase = "save-config";
+        issueIosJobPhase(ticket);
+      } else {
+        job.output = joinStepOutputs(job.stepResults);
+        job.result = {
+          ok: true,
+          device: job.device,
+          executed: job.stepResults.length,
+          results: job.stepResults,
+          raw: job.output,
+          source: "terminal",
+          session: {
+            mode: job.lastMode || "",
+            prompt: job.lastPrompt || "",
+            autoDismissedInitialDialog: !!job.autoConfirmed,
+            paging: !!job.paged
+          }
+        };
+        completeIosJob(ticket);
+      }
+      return;
+    }
+    sendIosJobCommand(ticket, "end", "exit-config");
+    return;
+  }
+
+  if (job.phase === "save-config") {
+    sendIosJobCommand(ticket, "write memory", "save-config");
+    return;
+  }
+}
+
 function startIosJob(ticket) {
   var job = IOS_JOBS[ticket];
-  
+  var term;
+
   if (!job) {
     dprint("[Job] Cannot start: job not found " + ticket);
     return;
   }
-  
-  if (job.state !== "queued") {
-    dprint("[Job] Cannot start: job not in queued state " + ticket + " state=" + job.state);
-    return;
-  }
-  
-  var device = getNet().getDevice(job.device);
-  if (!device) {
-    job.state = "error";
-    job.finished = true;
-    job.error = "Device not found: " + job.device;
-    dprint("[Job] Error: device not found " + job.device);
-    return;
-  }
-  
-  var term = device.getCommandLine ? device.getCommandLine() : null;
+
+  term = getIosJobTerm(job);
   if (!term) {
-    job.state = "error";
-    job.finished = true;
-    job.error = "Device has no terminal: " + job.device;
-    dprint("[Job] Error: no terminal for " + job.device);
+    failIosJob(ticket, "Device has no terminal", "NO_TERMINAL");
     return;
   }
-  
-  // Attach terminal listeners if not already attached
+
   attachTerminalListeners(job.device, term);
-  
-  // Build command sequence based on job type
-  var commands = [];
-  
+
+  job.steps = [];
   if (job.type === "configIos") {
-    var payload = job.payload;
-    // Enter enable mode if needed
-    commands.push("enable");
-    // Enter config mode
-    commands.push("configure terminal");
-    // Add all config commands
-    if (payload.commands) {
-      commands = commands.concat(payload.commands);
-    }
-    // Exit config mode
-    commands.push("end");
-    // Save if requested
-    if (payload.save !== false) {
-      commands.push("write memory");
-    }
+    job.steps = job.payload && job.payload.commands ? job.payload.commands.slice(0) : [];
   } else if (job.type === "execIos") {
-    // Single exec command
-    var payload = job.payload;
-    if (payload.command) {
-      commands.push(payload.command);
+    if (job.payload && job.payload.command) {
+      job.steps = [job.payload.command];
     }
   }
-  
-  job.steps = commands;
-  job.currentStep = 0;
+
+  try { job.lastPrompt = term.getPrompt ? (term.getPrompt() || "") : ""; } catch (e1) {}
+  try { job.lastMode = term.getMode ? (term.getMode() || "") : ""; } catch (e2) {}
+
+  job.phase = (job.ensurePrivileged === false && job.type === "execIos")
+    ? "run-exec"
+    : "ensure-privileged";
+
   job.state = "starting";
   job.updatedAt = Date.now();
-  
-  dprint("[Job] Starting " + ticket + " with " + commands.length + " steps");
-  
-  // Execute first command
-  executeNextStep(ticket);
+  job.lastActivityAt = Date.now();
+
+  dprint("[Job] Starting " + ticket + " with " + job.steps.length + " steps");
+  issueIosJobPhase(ticket);
 }
 
-function executeNextStep(ticket) {
-  var job = IOS_JOBS[ticket];
-  
-  if (!job) {
-    dprint("[Job] Cannot execute: job not found " + ticket);
-    return;
-  }
-  
-  if (job.currentStep >= job.steps.length) {
-    // All commands executed
-    job.finished = true;
-    job.state = "done";
-    job.result = { ok: true, device: job.device, output: job.output };
-    job.updatedAt = Date.now();
-    dprint("[Job] Completed all steps " + ticket);
-    return;
-  }
-  
-  var cmd = job.steps[job.currentStep];
-  var device = getNet().getDevice(job.device);
-  
-  if (!device) {
-    job.state = "error";
-    job.finished = true;
-    job.error = "Device not found: " + job.device;
-    job.updatedAt = Date.now();
-    return;
-  }
-  
-  var term = device.getCommandLine ? device.getCommandLine() : null;
-  if (!term) {
-    job.state = "error";
-    job.finished = true;
-    job.error = "Terminal not available";
-    job.updatedAt = Date.now();
-    return;
-  }
-  
-  job.state = "awaiting-output";
-  job.waitingForCommandEnd = true;
-  job.updatedAt = Date.now();
-  
-  dprint("[Job] Executing step " + (job.currentStep + 1) + "/" + job.steps.length + ": " + cmd);
-  
-  try {
-    term.enterCommand(cmd);
-  } catch (e) {
-    dprint("[Job] Command execution error: " + String(e));
-    job.state = "error";
-    job.finished = true;
-    job.error = String(e);
-    job.status = 1;
-    job.updatedAt = Date.now();
+function checkIosJobTimeouts() {
+  var jobKeys = Object.keys(IOS_JOBS);
+  var now = Date.now();
+  var i;
+  var job;
+  var term;
+
+  for (i = 0; i < jobKeys.length; i++) {
+    job = IOS_JOBS[jobKeys[i]];
+    if (!job || job.finished || !job.waitingForCommandEnd) continue;
+
+    if ((now - job.lastActivityAt) < job.commandTimeoutMs) continue;
+
+    term = getIosJobTerm(job);
+
+    if (!job.abortSent && term && typeof term.enterChar === "function") {
+      try {
+        term.enterChar(3, 0);
+        job.abortSent = true;
+        job.lastActivityAt = Date.now();
+        dprint("[Job] Timeout detected, sent Ctrl+C for " + job.ticket);
+        continue;
+      } catch (e) {}
+    }
+
+    failIosJob(job.ticket, "IOS command timeout: " + job.currentCommand, "COMMAND_TIMEOUT");
   }
 }
 
@@ -1164,34 +1367,46 @@ function attachTerminalListeners(deviceName, term) {
   if (TERMINAL_LISTENERS_ATTACHED[deviceName]) {
     return;
   }
-  
+
   try {
     var outputWrittenHandler = function(src, args) {
       onTerminalOutputWritten(deviceName, args);
     };
-    
+
     var commandEndedHandler = function(src, args) {
       onTerminalCommandEnded(deviceName, args);
     };
-    
+
     var modeChangedHandler = function(src, args) {
       onTerminalModeChanged(deviceName, args);
     };
-    
+
+    var promptChangedHandler = function(src, args) {
+      onTerminalPromptChanged(deviceName, args);
+    };
+
+    var moreDisplayedHandler = function(src, args) {
+      onTerminalMoreDisplayed(deviceName, args);
+    };
+
     if (typeof term.registerEvent === "function") {
       term.registerEvent("outputWritten", null, outputWrittenHandler);
       term.registerEvent("commandEnded", null, commandEndedHandler);
       term.registerEvent("modeChanged", null, modeChangedHandler);
-      
+      term.registerEvent("promptChanged", null, promptChangedHandler);
+      term.registerEvent("moreDisplayed", null, moreDisplayedHandler);
+
       TERMINAL_LISTENER_REFS[deviceName] = {
         term: term,
         handlers: {
           outputWritten: outputWrittenHandler,
           commandEnded: commandEndedHandler,
-          modeChanged: modeChangedHandler
+          modeChanged: modeChangedHandler,
+          promptChanged: promptChangedHandler,
+          moreDisplayed: moreDisplayedHandler
         }
       };
-      
+
       TERMINAL_LISTENERS_ATTACHED[deviceName] = true;
       dprint("[Listeners] Attached to " + deviceName);
     }
@@ -1204,27 +1419,29 @@ function detachTerminalListeners(deviceName) {
   if (!TERMINAL_LISTENERS_ATTACHED[deviceName]) {
     return;
   }
-  
+
   var ref = TERMINAL_LISTENER_REFS[deviceName];
   if (!ref || !ref.term) {
     delete TERMINAL_LISTENERS_ATTACHED[deviceName];
     delete TERMINAL_LISTENER_REFS[deviceName];
     return;
   }
-  
+
   try {
     var term = ref.term;
     var handlers = ref.handlers;
-    
+
     if (typeof term.unregisterEvent === "function") {
       try { term.unregisterEvent("outputWritten", null, handlers.outputWritten); } catch (e1) {}
       try { term.unregisterEvent("commandEnded", null, handlers.commandEnded); } catch (e2) {}
       try { term.unregisterEvent("modeChanged", null, handlers.modeChanged); } catch (e3) {}
+      try { term.unregisterEvent("promptChanged", null, handlers.promptChanged); } catch (e4) {}
+      try { term.unregisterEvent("moreDisplayed", null, handlers.moreDisplayed); } catch (e5) {}
     }
   } catch (e) {
     dprint("[Listeners] Failed to detach from " + deviceName + ": " + String(e));
   }
-  
+
   delete TERMINAL_LISTENERS_ATTACHED[deviceName];
   delete TERMINAL_LISTENER_REFS[deviceName];
 }
@@ -1249,37 +1466,223 @@ function onTerminalOutputWritten(deviceName, args) {
 
 function onTerminalCommandEnded(deviceName, args) {
   var jobKeys = Object.keys(IOS_JOBS);
-  for (var i = 0; i < jobKeys.length; i++) {
-    var job = IOS_JOBS[jobKeys[i]];
-    if (job.device === deviceName && job.waitingForCommandEnd) {
-      var status = args.status;
-      if (typeof status === "undefined" || status === null) {
-        status = 0;
+  var i;
+  var job;
+  var status;
+  var term;
+  var statusCode;
+  var phaseBefore;
+  var raw;
+
+  for (i = 0; i < jobKeys.length; i++) {
+    job = IOS_JOBS[jobKeys[i]];
+    if (!(job.device === deviceName && job.waitingForCommandEnd)) continue;
+
+    status = args && typeof args.status !== "undefined" && args.status !== null ? args.status : 0;
+    statusCode = mapCommandStatus(status);
+    phaseBefore = job.phase;
+    raw = job.currentCommandOutput || "";
+
+    job.status = status;
+    job.waitingForCommandEnd = false;
+    job.lastActivityAt = Date.now();
+    job.updatedAt = Date.now();
+
+    term = getIosJobTerm(job);
+    try { if (term && term.getPrompt) job.lastPrompt = term.getPrompt() || job.lastPrompt; } catch (e1) {}
+    try { if (term && term.getMode) job.lastMode = term.getMode() || job.lastMode; } catch (e2) {}
+
+    if (containsInitialDialog(raw)) {
+      if (job.dismissInitialDialog === false) {
+        failIosJob(job.ticket, "Initial configuration dialog is blocking CLI", "INITIAL_DIALOG_BLOCKING");
+        continue;
       }
-      job.status = status;
-      job.waitingForCommandEnd = false;
-      job.outputs.push(job.output);
-      
-      // Check if this was an error or if there are more commands
-      if (status !== 0 || job.currentStep >= job.steps.length - 1) {
-        // Command failed or was the last command - job is done
-        job.finished = true;
-        job.state = status === 0 ? "done" : "error";
-        job.error = status !== 0 ? "Command failed with status " + status : null;
-        job.result = { ok: status === 0, device: deviceName, outputs: job.outputs };
-        dprint("[Job] Completed " + job.ticket + " status=" + status + " steps=" + (job.currentStep + 1));
+
+      if (job.dialogDismissAttempts >= 1) {
+        failIosJob(job.ticket, "Initial configuration dialog could not be dismissed", "INITIAL_DIALOG_STUCK");
+        continue;
+      }
+
+      job.dialogDismissAttempts++;
+      job.autoConfirmed = true;
+      job.resumePhase = phaseBefore;
+      job.resumeStep = job.currentStep;
+
+      sendIosJobCommand(job.ticket, "no", "dismiss-initial-dialog");
+      continue;
+    }
+
+    if (phaseBefore === "dismiss-initial-dialog") {
+      job.phase = job.resumePhase || "ensure-privileged";
+      job.currentStep = job.resumeStep || 0;
+      issueIosJobPhase(job.ticket);
+      continue;
+    }
+
+    if (containsEnablePasswordPrompt(raw) && phaseBefore === "ensure-privileged") {
+      failIosJob(job.ticket, "Enable password is required", "ENABLE_PASSWORD_REQUIRED");
+      continue;
+    }
+
+    if (status !== 0) {
+      failIosJob(
+        job.ticket,
+        "Command failed with status " + status + " during phase " + phaseBefore,
+        statusCode || "COMMAND_FAILED"
+      );
+      continue;
+    }
+
+    if (phaseBefore === "ensure-privileged") {
+      if (!isPrivExecPrompt(job.lastPrompt, job.lastMode) && !isConfigPrompt(job.lastPrompt, job.lastMode)) {
+        failIosJob(job.ticket, "Failed to enter privileged exec mode", "FAILED_TO_ENTER_ENABLE");
+        continue;
+      }
+
+      job.phase = (job.type === "configIos") ? "ensure-config" : "run-exec";
+      issueIosJobPhase(job.ticket);
+      continue;
+    }
+
+    if (phaseBefore === "ensure-config") {
+      if (!isConfigPrompt(job.lastPrompt, job.lastMode)) {
+        failIosJob(job.ticket, "Failed to enter configuration mode", "FAILED_TO_ENTER_CONFIG");
+        continue;
+      }
+
+      job.phase = "run-config";
+      issueIosJobPhase(job.ticket);
+      continue;
+    }
+
+    if (phaseBefore === "run-exec") {
+      job.output = raw;
+      job.result = {
+        ok: true,
+        raw: raw,
+        status: status,
+        source: "terminal",
+        session: {
+          mode: job.lastMode || "",
+          prompt: job.lastPrompt || "",
+          paging: !!job.paged,
+          autoDismissedInitialDialog: !!job.autoConfirmed
+        }
+      };
+      completeIosJob(job.ticket);
+      continue;
+    }
+
+    if (phaseBefore === "run-config") {
+      job.stepResults.push({
+        command: job.currentCommand,
+        raw: raw,
+        status: status
+      });
+
+      job.currentStep++;
+
+      if (job.currentStep >= job.steps.length) {
+        job.phase = "exit-config";
+      }
+
+      issueIosJobPhase(job.ticket);
+      continue;
+    }
+
+    if (phaseBefore === "exit-config") {
+      if (job.payload && job.payload.save !== false) {
+        job.phase = "save-config";
+        issueIosJobPhase(job.ticket);
       } else {
-        // More commands to execute - move to next step
-        job.currentStep++;
-        job.output = "";
-        executeNextStep(job.ticket);
+        job.output = joinStepOutputs(job.stepResults);
+        job.result = {
+          ok: true,
+          device: job.device,
+          executed: job.stepResults.length,
+          results: job.stepResults,
+          raw: job.output,
+          source: "terminal",
+          session: {
+            mode: job.lastMode || "",
+            prompt: job.lastPrompt || "",
+            paging: !!job.paged,
+            autoDismissedInitialDialog: !!job.autoConfirmed
+          }
+        };
+        completeIosJob(job.ticket);
       }
+      continue;
+    }
+
+    if (phaseBefore === "save-config") {
+      job.output = joinStepOutputs(job.stepResults);
+      job.result = {
+        ok: true,
+        device: job.device,
+        executed: job.stepResults.length,
+        results: job.stepResults,
+        raw: job.output,
+        source: "terminal",
+        session: {
+          mode: job.lastMode || "",
+          prompt: job.lastPrompt || "",
+          paging: !!job.paged,
+          autoDismissedInitialDialog: !!job.autoConfirmed
+        }
+      };
+      completeIosJob(job.ticket);
     }
   }
 }
 
 function onTerminalModeChanged(deviceName, args) {
   dprint("[Sessions] Mode changed to " + (args.newMode || "unknown") + " for " + deviceName);
+}
+
+function onTerminalPromptChanged(deviceName, args) {
+  var jobKeys = Object.keys(IOS_JOBS);
+  var i;
+  var job;
+  var newPrompt = "";
+
+  if (typeof args === "string") {
+    newPrompt = args;
+  } else if (args && typeof args.newPrompt !== "undefined") {
+    newPrompt = String(args.newPrompt || "");
+  }
+
+  for (i = 0; i < jobKeys.length; i++) {
+    job = IOS_JOBS[jobKeys[i]];
+    if (job.device === deviceName && !job.finished) {
+      if (newPrompt) job.lastPrompt = newPrompt;
+      job.updatedAt = Date.now();
+    }
+  }
+}
+
+function onTerminalMoreDisplayed(deviceName, args) {
+  var jobKeys = Object.keys(IOS_JOBS);
+  var i;
+  var job;
+  var term = null;
+
+  for (i = 0; i < jobKeys.length; i++) {
+    job = IOS_JOBS[jobKeys[i]];
+    if (job.device === deviceName && job.waitingForCommandEnd) {
+      if (!term) term = getIosJobTerm(job);
+      if (term && typeof term.enterChar === "function") {
+        try {
+          term.enterChar(32, 0);
+          job.paged = true;
+          job.lastActivityAt = Date.now();
+          job.updatedAt = Date.now();
+        } catch (e) {
+          failIosJob(job.ticket, "Failed to advance pager: " + String(e), "PAGER_ERROR");
+        }
+      }
+    }
+  }
 }
 
 // ============================================================================

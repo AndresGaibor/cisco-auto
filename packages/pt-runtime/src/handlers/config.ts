@@ -45,17 +45,37 @@ interface IOSJob {
   state: string;
   startedAt: number;
   updatedAt: number;
+  lastActivityAt: number;
   output: string;
   outputs: string[];
+  stepResults: Array<{ command: string; raw: string; status: number }>;
   status: number | null;
   modeBefore: string;
   modeAfter: string;
+  lastMode: string;
+  lastPrompt: string;
   paged: boolean;
   autoConfirmed: boolean;
+  dialogDismissAttempts: number;
   waitingForCommandEnd: boolean;
   finished: boolean;
   result: object | null;
   error: string | null;
+  errorCode: string | null;
+  inFlightPath: string;
+  commandId: string;
+  seq: number;
+  ensurePrivileged: boolean;
+  dismissInitialDialog: boolean;
+  commandTimeoutMs: number;
+  stallTimeoutMs: number;
+  abortSent: boolean;
+  phase: string;
+  resumePhase: string;
+  resumeStep: number;
+  currentCommand: string;
+  currentCommandOutput: string;
+  currentCommandStartedAt: number;
 }
 
 interface DeferredResult {
@@ -204,6 +224,9 @@ export function handleConfigIos(payload: ConfigIosPayload, deps: HandlerDeps): H
     save: payload.save ?? true,
     stopOnError: payload.stopOnError ?? true,
     ensurePrivileged: payload.ensurePrivileged ?? true,
+    dismissInitialDialog: payload.dismissInitialDialog ?? true,
+    commandTimeoutMs: payload.commandTimeoutMs ?? 8000,
+    stallTimeoutMs: payload.stallTimeoutMs ?? 15000,
   });
 
   dprint(`[configIos] Created job ${ticket} for device ${payload.device}`);
@@ -231,11 +254,39 @@ export function handleExecIos(payload: ExecIosPayload, deps: HandlerDeps): (Hand
     device: payload.device,
     command: payload.command,
     parse: payload.parse ?? true,
+    ensurePrivileged: payload.ensurePrivileged ?? true,
+    dismissInitialDialog: payload.dismissInitialDialog ?? true,
+    commandTimeoutMs: payload.commandTimeoutMs ?? 8000,
+    stallTimeoutMs: payload.stallTimeoutMs ?? 15000,
   });
 
   dprint(`[execIos] Created job ${ticket} for device ${payload.device} command="${payload.command}"`);
 
   return { deferred: true, ticket, kind: "ios" };
+}
+
+// ============================================================================
+// Output Sanitization
+// ============================================================================
+
+function sanitizeTerminalOutput(command: string | undefined, output: string): string {
+  const lines = output.split(/\r?\n/);
+  const cleaned: string[] = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    if (command && line === command.trim()) continue;
+    if (/^--More--$/i.test(line)) continue;
+    if (/Would you like to enter the initial configuration dialog/i.test(line)) continue;
+    if (/% Please answer 'yes' or 'no'\./i.test(line)) continue;
+    if (/^[A-Za-z0-9._()-]+(?:\(config[^\)]*\))?[>#]\s*$/.test(line)) continue;
+
+    cleaned.push(rawLine);
+  }
+
+  return cleaned.join("\n").trim();
 }
 
 // ============================================================================
@@ -256,7 +307,7 @@ function handlePollDeferred(pollPayload: PollDeferredPayload, deps: HandlerDeps)
 
   if (!job.finished) {
     dprint(`[pollDeferred] Job ${ticket} still in progress: state=${job.state}`);
-    return { ok: false, error: "Job not complete" };
+    return { done: false, state: job.state } as unknown as HandlerResult;
   }
 
   // Job is complete
@@ -270,21 +321,30 @@ function handlePollDeferred(pollPayload: PollDeferredPayload, deps: HandlerDeps)
     };
   }
 
+  // Sanitize output before parsing
+  const command = (job.payload as { command?: string }).command;
+  const rawOutput = job.output || "";
+  const sanitizedOutput = sanitizeTerminalOutput(command, rawOutput);
+
   // Build success result with parsed output if available
   const result: ExecIosSuccessResult = {
     ok: true,
-    raw: job.output || "",
+    raw: sanitizedOutput || rawOutput,
     status: job.status ?? 0,
     source: "terminal",
+    session: {
+      mode: (job as unknown as { lastMode?: string }).lastMode || "",
+      paging: !!(job as unknown as { paged?: boolean }).paged,
+      awaitingConfirm: false,
+    },
   };
 
   // Parse output if it's a show command
-  const command = (job.payload as { command?: string }).command;
-  if (command && job.output) {
+  if (command && sanitizedOutput) {
     const parser = getParser(command);
     if (parser) {
       try {
-        result.parsed = parser(job.output);
+        result.parsed = parser(sanitizedOutput);
       } catch (e) {
         result.parseError = String(e);
       }

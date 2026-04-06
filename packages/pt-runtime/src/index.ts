@@ -14,13 +14,15 @@ const DEV_DIR_PLACEHOLDER = "{{DEV_DIR_LITERAL}}";
 function normalizeCode(code: string): string {
   let normalized = code;
   
+  // Only normalize line endings - do NOT collapse newlines
+  // because \n may be part of regex patterns in the source
   normalized = normalized.replace(/\r\n/g, "\n");
   normalized = normalized.replace(/\r/g, "\n");
   
+  // Remove trailing whitespace on lines
   normalized = normalized.replace(/[\t ]+$/gm, "");
   
-  normalized = normalized.replace(/\n{3,}/g, "\n\n");
-  
+  // Only add final newline if missing
   if (!normalized.endsWith("\n")) {
     normalized += "\n";
   }
