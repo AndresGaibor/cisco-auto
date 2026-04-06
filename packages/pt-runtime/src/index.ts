@@ -174,15 +174,17 @@ export class RuntimeGenerator {
       }
     }
 
-    // Generate new lease for testing (long-lived)
+    // Generate new lease - long-lived bootstrap lease
+    // Phase 3 fix: TTL and expiresAt must be consistent for PT validation
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
     const lease = {
       ownerId: `build-${now}`,
       pid: process.pid,
       hostname: require("node:os").hostname(),
       startedAt: now,
       updatedAt: now,
-      expiresAt: 9999999999999, // Far future (year 2286)
-      ttlMs: 86400000, // 24 hours
+      expiresAt: now + THIRTY_DAYS_MS,
+      ttlMs: THIRTY_DAYS_MS,
       processTitle: "build",
       version: "2.0.0"
     };

@@ -24,7 +24,13 @@ export class SharedResultWatcher extends EventEmitter {
   watch(commandId: string, callback: () => void): void {
     if (!this.callbacks.has(commandId)) {
       this.callbacks.set(commandId, new Set());
+    } else {
+      const existing = this.callbacks.get(commandId)!;
+      if (existing.has(callback)) {
+        return;
+      }
     }
+
     this.callbacks.get(commandId)!.add(callback);
     this.refCount++;
 

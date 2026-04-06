@@ -112,29 +112,113 @@ function main() {
     // Migrar command.json legacy si existe
     migrateLegacyCommand();
     
-    // FASE 8: Validate bridge lease before loading runtime
-    // PT-safe lease validation
-    if (!validateBridgeLease()) {
-      dprint("[FATAL] Bridge has no valid lease - aborting runtime load");
-      isRunning = false;
-      return;
+    // Phase 1: Lease-aware startup - wait for valid lease instead of aborting
+    if (validateBridgeLease()) {
+      // Lease is valid - activate runtime immediately
+      activateRuntimeAfterLease();
+    } else {
+      // Lease invalid/missing - enter waiting mode
+      startLeaseWaitLoop();
     }
-    loadRuntime();
-    recoverInFlightOnStartup();
-    loadPendingCommands();
-    
-    heartbeatInterval = setInterval(writeHeartbeat, 5000);
-    commandPollInterval = setInterval(pollCommandQueue, 250);
-    deferredPollInterval = setInterval(pollDeferredCommands, 100);
-    
-    setupFileWatcher();
-    writeHeartbeat();
-    
-    dprint("[PT] Ready");
     
   } catch (e) {
     dprint("[FATAL] " + String(e));
   }
+}
+
+// ============================================================================
+// Lease-Aware Runtime Activation (Phase 1)
+// ============================================================================
+
+function startLeaseWaitLoop() {
+  dprint("[LEASE] No valid lease found - waiting for bridge...");
+  
+  var leaseWaitInterval = null;
+  
+  function checkLeaseAndActivate() {
+    if (!isRunning || isShuttingDown) {
+      if (leaseWaitInterval) clearInterval(leaseWaitInterval);
+      return;
+    }
+    
+    if (validateBridgeLease()) {
+      dprint("[LEASE] Valid lease detected - activating runtime");
+      if (leaseWaitInterval) {
+        clearInterval(leaseWaitInterval);
+        leaseWaitInterval = null;
+      }
+      activateRuntimeAfterLease();
+    }
+  }
+  
+  // Check immediately and then every 1000ms
+  checkLeaseAndActivate();
+  leaseWaitInterval = setInterval(checkLeaseAndActivate, 1000);
+}
+
+function activateRuntimeAfterLease() {
+  dprint("[PT] Activating runtime after lease acquired...");
+  
+  loadRuntime();
+  recoverInFlightOnStartup();
+  loadPendingCommands();
+  
+  heartbeatInterval = setInterval(writeHeartbeat, 5000);
+  commandPollInterval = setInterval(pollCommandQueue, 250);
+  deferredPollInterval = setInterval(pollDeferredCommands, 100);
+  
+  setupFileWatcher();
+  startLeaseHealthMonitor(); // Phase 2: monitor lease health
+  writeHeartbeat();
+  
+  dprint("[PT] Ready");
+}
+
+// ============================================================================
+// Phase 2: Lease Health Monitoring
+// ============================================================================
+
+var leaseHealthInterval = null;
+var isWaitingForLease = false;
+
+function startLeaseHealthMonitor() {
+  if (leaseHealthInterval) return; // Already running
+  
+  leaseHealthInterval = setInterval(function() {
+    if (!isRunning || isShuttingDown) {
+      if (leaseHealthInterval) {
+        clearInterval(leaseHealthInterval);
+        leaseHealthInterval = null;
+      }
+      return;
+    }
+    
+    var hasLease = validateBridgeLease();
+    
+    if (isWaitingForLease && hasLease) {
+      // Lease recovered - reactivate
+      dprint("[LEASE] Lease recovered - reactivating runtime");
+      isWaitingForLease = false;
+      activateRuntimeAfterLease();
+    } else if (!isWaitingForLease && !hasLease) {
+      // Lease lost - pause polling but don't abort
+      dprint("[LEASE] Lease lost - pausing polling");
+      isWaitingForLease = true;
+      
+      // Pause polling intervals
+      if (commandPollInterval) {
+        clearInterval(commandPollInterval);
+        commandPollInterval = null;
+      }
+      if (deferredPollInterval) {
+        clearInterval(deferredPollInterval);
+        deferredPollInterval = null;
+      }
+      
+      // Start waiting for lease recovery
+      startLeaseWaitLoop();
+    }
+  }, 2000);
 }
 
 // ============================================================================
@@ -738,6 +822,9 @@ function executeActiveCommand() {
     savePendingCommands();
     dprint("[PT] Deferred: " + cmd.payload.type + " [" + cmd.id + "] ticket=" + result.ticket);
     
+    // Start the IOS job immediately
+    startIosJob(result.ticket);
+    
     // Limpiar in-flight (el job está en progreso)
     try {
       var inFlightPath = IN_FLIGHT_DIR + "/" + (cmd.seq + "-" + cmd.payload.type + ".json");
@@ -938,6 +1025,138 @@ function pollIosJob(ticket) {
 }
 
 // ============================================================================
+// IOS Job Execution - Starts deferred jobs
+// ============================================================================
+
+function startIosJob(ticket) {
+  var job = IOS_JOBS[ticket];
+  
+  if (!job) {
+    dprint("[Job] Cannot start: job not found " + ticket);
+    return;
+  }
+  
+  if (job.state !== "queued") {
+    dprint("[Job] Cannot start: job not in queued state " + ticket + " state=" + job.state);
+    return;
+  }
+  
+  var device = getNet().getDevice(job.device);
+  if (!device) {
+    job.state = "error";
+    job.finished = true;
+    job.error = "Device not found: " + job.device;
+    dprint("[Job] Error: device not found " + job.device);
+    return;
+  }
+  
+  var term = device.getCommandLine ? device.getCommandLine() : null;
+  if (!term) {
+    job.state = "error";
+    job.finished = true;
+    job.error = "Device has no terminal: " + job.device;
+    dprint("[Job] Error: no terminal for " + job.device);
+    return;
+  }
+  
+  // Attach terminal listeners if not already attached
+  attachTerminalListeners(job.device, term);
+  
+  // Build command sequence based on job type
+  var commands = [];
+  
+  if (job.type === "configIos") {
+    var payload = job.payload;
+    // Enter enable mode if needed
+    commands.push("enable");
+    // Enter config mode
+    commands.push("configure terminal");
+    // Add all config commands
+    if (payload.commands) {
+      commands = commands.concat(payload.commands);
+    }
+    // Exit config mode
+    commands.push("end");
+    // Save if requested
+    if (payload.save !== false) {
+      commands.push("write memory");
+    }
+  } else if (job.type === "execIos") {
+    // Single exec command
+    var payload = job.payload;
+    if (payload.command) {
+      commands.push(payload.command);
+    }
+  }
+  
+  job.steps = commands;
+  job.currentStep = 0;
+  job.state = "starting";
+  job.updatedAt = Date.now();
+  
+  dprint("[Job] Starting " + ticket + " with " + commands.length + " steps");
+  
+  // Execute first command
+  executeNextStep(ticket);
+}
+
+function executeNextStep(ticket) {
+  var job = IOS_JOBS[ticket];
+  
+  if (!job) {
+    dprint("[Job] Cannot execute: job not found " + ticket);
+    return;
+  }
+  
+  if (job.currentStep >= job.steps.length) {
+    // All commands executed
+    job.finished = true;
+    job.state = "done";
+    job.result = { ok: true, device: job.device, output: job.output };
+    job.updatedAt = Date.now();
+    dprint("[Job] Completed all steps " + ticket);
+    return;
+  }
+  
+  var cmd = job.steps[job.currentStep];
+  var device = getNet().getDevice(job.device);
+  
+  if (!device) {
+    job.state = "error";
+    job.finished = true;
+    job.error = "Device not found: " + job.device;
+    job.updatedAt = Date.now();
+    return;
+  }
+  
+  var term = device.getCommandLine ? device.getCommandLine() : null;
+  if (!term) {
+    job.state = "error";
+    job.finished = true;
+    job.error = "Terminal not available";
+    job.updatedAt = Date.now();
+    return;
+  }
+  
+  job.state = "awaiting-output";
+  job.waitingForCommandEnd = true;
+  job.updatedAt = Date.now();
+  
+  dprint("[Job] Executing step " + (job.currentStep + 1) + "/" + job.steps.length + ": " + cmd);
+  
+  try {
+    term.enterCommand(cmd);
+  } catch (e) {
+    dprint("[Job] Command execution error: " + String(e));
+    job.state = "error";
+    job.finished = true;
+    job.error = String(e);
+    job.status = 1;
+    job.updatedAt = Date.now();
+  }
+}
+
+// ============================================================================
 // Terminal Listeners Functions (Migrated from runtime.js)
 // ============================================================================
 
@@ -1039,10 +1258,22 @@ function onTerminalCommandEnded(deviceName, args) {
       }
       job.status = status;
       job.waitingForCommandEnd = false;
-      job.finished = true;
-      job.state = "done";
-      job.result = { ok: status === 0, device: deviceName };
-      dprint("[Job] Completed " + job.ticket + " status=" + status);
+      job.outputs.push(job.output);
+      
+      // Check if this was an error or if there are more commands
+      if (status !== 0 || job.currentStep >= job.steps.length - 1) {
+        // Command failed or was the last command - job is done
+        job.finished = true;
+        job.state = status === 0 ? "done" : "error";
+        job.error = status !== 0 ? "Command failed with status " + status : null;
+        job.result = { ok: status === 0, device: deviceName, outputs: job.outputs };
+        dprint("[Job] Completed " + job.ticket + " status=" + status + " steps=" + (job.currentStep + 1));
+      } else {
+        // More commands to execute - move to next step
+        job.currentStep++;
+        job.output = "";
+        executeNextStep(job.ticket);
+      }
     }
   }
 }

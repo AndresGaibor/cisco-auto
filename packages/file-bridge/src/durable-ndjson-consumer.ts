@@ -99,9 +99,13 @@ export class DurableNdjsonConsumer extends EventEmitter {
 
     this.reopenFromCheckpoint();
 
-    this.watcher = watch(this.paths.logsDir(), () => {
-      this.poll();
-    });
+    try {
+      this.watcher = watch(this.paths.logsDir(), () => {
+        this.poll();
+      });
+    } catch (err) {
+      this.emit("error", err);
+    }
 
     this.timer = setInterval(() => {
       this.poll();
@@ -294,10 +298,8 @@ export class DurableNdjsonConsumer extends EventEmitter {
     }
 
     // Flush any remaining incomplete multibyte characters from the decoder
-    const remaining = this.decoder.end();
-    if (remaining) {
-      this.leftover = remaining;
-    }
+    // Only when closing or switching files - NOT at end of every poll
+    // The leftover handling above already captures complete lines
 
     // Final checkpoint write — ALWAYS write at end of poll
     checkpoint.byteOffset = offset;

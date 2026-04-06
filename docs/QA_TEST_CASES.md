@@ -297,7 +297,7 @@
 ### FASE 6 - Show Commands
 | ID | Test | Resultado | Notas |
 |----|------|-----------|-------|
-| TC-050-056 | Todos show commands | ❌ | `raw: ""` - bug #9 |
+| TC-050-056 | show commands | ⚠️ | `raw` retorna output real pero router pide initial config dialog. Sistema IOS deferred funciona. |
 
 ### FASE 7 - VLANs
 | ID | Test | Resultado | Notas |
@@ -305,16 +305,32 @@
 | TC-060 | vlan create | ✅ | Genera comandos IOS |
 | TC-061 | vlan apply | ✅ | Genera 10 comandos |
 
-### FASE 12 - Topology
+### FASE 8 - EtherChannel
 | ID | Test | Resultado | Notas |
 |----|------|-----------|-------|
-| TC-111 | topology clean --force | ✅ | Limpia 3 dispositivos |
-| TC-115 | topology visualize | **✅** | **ARREGLADO** - stub con mensaje |
+| TC-070 | etherchannel create | ⚠️ | Syntax `--device` incorrecto; usa `[device]` posición. Device no existe (topología limpia). |
 
-### FASE 14 - History
+### FASE 9 - STP
 | ID | Test | Resultado | Notas |
 |----|------|-----------|-------|
-| TC-130 | history list | ✅ | Muestra 10 entradas |
+| TC-080 | stp configure | ⬜ | No probado |
+
+### FASE 10 - Routing
+| ID | Test | Resultado | Notas |
+|----|------|-----------|-------|
+| TC-090 | routing static add | ❌ | "Failed to enter privileged exec mode" - mismo problema que config-ios |
+
+### FASE 11 - ACLs
+| ID | Test | Resultado | Notas |
+|----|------|-----------|-------|
+| TC-100 | acl create | ❌ | Flag `--number` no existe, syntax diferente |
+
+### FASE 13 - Logs
+| ID | Test | Resultado | Notas |
+|----|------|-----------|-------|
+| TC-120 | logs tail | ⚠️ | Muestra eventos pero con type "unknown" |
+| TC-121 | logs errors | ✅ | Sin errores, output correcto |
+| TC-130 | history list | ✅ | Muestra entradas con detalle completo |
 
 ---
 

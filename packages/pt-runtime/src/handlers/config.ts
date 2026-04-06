@@ -1,5 +1,20 @@
 // ============================================================================
-// Config Handlers - Pure functions for device configuration
+// Config Handlers - Device configuration
+// ============================================================================
+//
+// PHASE 1 FIX: These handlers now create IOS jobs and return deferred results.
+// The actual execution happens in the IOS_JOBS system in main.js (persistent).
+// Synthetic show command responses have been removed.
+//
+// Architecture:
+// - handleConfigIos() and handleExecIos() create jobs in IOS_JOBS (global in main.js)
+// - They return { deferred: true, ticket, kind: "ios" }
+// - pollDeferredCommands() in main.js polls the runtime with __pollDeferred
+// - The __pollDeferred handler checks IOS_JOBS[ticket] for completion
+//
+// In PT's Qt Script Engine, main.js and runtime.js share the same global scope.
+// IOS_JOBS is a global variable defined in main.js and is accessible here.
+//
 // ============================================================================
 
 import type { HandlerDeps, HandlerResult, PTCommandLine, PTDevice } from "../utils/helpers";
@@ -10,23 +25,52 @@ import type {
   ExecIosSuccessResult,
   ExecIosErrorResult,
 } from "./config-types";
-import {
-  inferModeFromPrompt,
-  updateSessionFromOutput,
-  isInConfigMode,
-  isInPrivilegedMode,
-  type RuntimeSessionState,
-} from "./ios-session";
-import {
-  classifyCommandOutput,
-  isFailureClassification,
-  isSuccessClassification,
-  requiresUserInput,
-} from "./ios-output-classifier";
 
 // ============================================================================
-// Local getParser - Inline implementation for PT runtime
-// This avoids the workspace dependency issue for the test
+// Global Scope Access (shared with main.js in PT's Qt Script Engine)
+// ============================================================================
+
+declare const IOS_JOBS: Record<string, IOSJob>;
+declare const IOS_JOB_SEQ: number;
+declare const createIosJob: (type: string, payload: object) => string;
+declare const pollIosJob: (ticket: string) => { done: boolean; ok?: boolean; error?: string; state?: string; value?: unknown };
+
+interface IOSJob {
+  ticket: string;
+  device: string;
+  type: string;
+  payload: object;
+  steps: string[];
+  currentStep: number;
+  state: string;
+  startedAt: number;
+  updatedAt: number;
+  output: string;
+  outputs: string[];
+  status: number | null;
+  modeBefore: string;
+  modeAfter: string;
+  paged: boolean;
+  autoConfirmed: boolean;
+  waitingForCommandEnd: boolean;
+  finished: boolean;
+  result: object | null;
+  error: string | null;
+}
+
+interface DeferredResult {
+  deferred: true;
+  ticket: string;
+  kind: "ios";
+}
+
+interface PollDeferredPayload {
+  type: "__pollDeferred";
+  ticket: string;
+}
+
+// ============================================================================
+// Parsers (only for real output, not synthetic)
 // ============================================================================
 
 type ParserFn = (output: string) => Record<string, unknown>;
@@ -106,21 +150,8 @@ function ensureIosTerm(device: PTDevice): PTCommandLine | null {
   return device.getCommandLine() ?? null;
 }
 
-function enterCommandResult(term: PTCommandLine, command: string): [number, string] {
-  const response = (term.enterCommand as unknown as (cmd: string) => unknown)(command);
-
-  if (Array.isArray(response)) {
-    const status = typeof response[0] === "number" ? response[0] : 0;
-    const output = typeof response[1] === "string" ? response[1] : String(response[1] ?? "");
-    return [status, output];
-  }
-
-  const prompt = typeof term.getPrompt === "function" ? term.getPrompt() : "";
-  return [0, prompt];
-}
-
 // ============================================================================
-// Handlers
+// Main Handler Dispatcher
 // ============================================================================
 
 export function handleConfigHost(payload: ConfigHostPayload, deps: HandlerDeps): HandlerResult {
@@ -142,12 +173,21 @@ export function handleConfigHost(payload: ConfigHostPayload, deps: HandlerDeps):
   return { ok: true, device: payload.device, ip: payload.ip, mask: payload.mask, gateway: payload.gateway };
 }
 
-export function handleConfigIos(payload: ConfigIosPayload, deps: HandlerDeps): HandlerResult {
+// ============================================================================
+// IOS Handlers - Create deferred jobs
+// ============================================================================
+
+export function handleConfigIos(payload: ConfigIosPayload, deps: HandlerDeps): HandlerResult | DeferredResult {
   const { getNet, dprint } = deps;
+  
+  // Handle __pollDeferred - called from main.js pollDeferredCommands
+  if ((payload as unknown as PollDeferredPayload).type === "__pollDeferred") {
+    const pollPayload = payload as unknown as PollDeferredPayload;
+    return handlePollDeferred(pollPayload, deps);
+  }
+
   const device = getNet().getDevice(payload.device);
   if (!device) return { ok: false, error: `Device not found: ${payload.device}`, device: payload.device };
-
-  if (device.skipBoot) device.skipBoot();
 
   const term = ensureIosTerm(device);
   if (!term) return { ok: false, error: "Device does not support CLI", device: payload.device };
@@ -156,277 +196,102 @@ export function handleConfigIos(payload: ConfigIosPayload, deps: HandlerDeps): H
     return { ok: true, device: payload.device, executed: 0, results: [], skipped: true };
   }
 
-  // Runtime session state tracking
-  const session: RuntimeSessionState = {
-    mode: "unknown",
-    paging: false,
-    awaitingConfirm: false,
-    awaitingPassword: false,
-    awaitingDnsLookup: false,
-  };
+  // Create IOS job for deferred execution
+  // The job will be executed by main.js's IOS_JOBS state machine
+  const ticket = createIosJob("configIos", {
+    device: payload.device,
+    commands: payload.commands,
+    save: payload.save ?? true,
+    stopOnError: payload.stopOnError ?? true,
+    ensurePrivileged: payload.ensurePrivileged ?? true,
+  });
 
-  // Probe current mode
-  try {
-    const [, promptOutput] = enterCommandResult(term, "");
-    if (promptOutput) {
-      const lastLine = promptOutput.trim().split('\n').filter(Boolean).at(-1) ?? "";
-      session.mode = inferModeFromPrompt(lastLine);
-    }
-  } catch {}
+  dprint(`[configIos] Created job ${ticket} for device ${payload.device}`);
 
-  // Ensure privileged mode if requested
-  if (payload.ensurePrivileged !== false && !session.mode.startsWith("config") && session.mode !== "priv-exec") {
-    const [privStatus, privOutput] = enterCommandResult(term, "enable");
-    if (privStatus === 0 && !privOutput.includes("Password:")) {
-      session.mode = "priv-exec";
-    } else if (privOutput.includes("Password:")) {
-      return {
-        ok: false, device: payload.device, executed: 0,
-        error: "Enable password required but not provided",
-        failedAtIndex: 0, failedCommand: "enable",
-        failedClassification: "permission-denied",
-        session: { mode: session.mode },
-      };
-    }
-  }
-
-  // Ensure config mode
-  if (!session.mode.startsWith("config")) {
-    const [configStatus, configOutput] = enterCommandResult(term, "configure terminal");
-    if (configStatus === 0) {
-      session.mode = "config";
-    } else {
-      return {
-        ok: false, device: payload.device, executed: 0,
-        error: `Failed to enter config mode: ${configOutput}`,
-        failedAtIndex: 0, failedCommand: "configure terminal",
-        failedClassification: "error",
-        session: { mode: session.mode },
-      };
-    }
-  }
-
-  const results: Array<{ command: string; status: number; output: string; classification: string }> = [];
-  const stopOnError = payload.stopOnError !== false;
-
-  for (let i = 0; i < payload.commands.length; i++) {
-    const cmd = payload.commands[i]!;
-    const [status, output] = enterCommandResult(term, cmd);
-    updateSessionFromOutput(session, output);
-    const classification = classifyCommandOutput(output);
-    results.push({ command: cmd, status, output, classification });
-    dprint(`[configIos] cmd[${i}]: "${cmd}" -> status=${status}, classification=${classification}, mode=${session.mode}`);
-
-    if (stopOnError && isFailureClassification(classification)) {
-      return {
-        ok: false, device: payload.device, executed: i, modeFinal: session.mode, results,
-        failedAtIndex: i, failedCommand: cmd,
-        failedOutput: output.length > 500 ? output.slice(0, 500) + "\n... [TRUNCATED]" : output,
-        failedClassification: classification,
-        error: output || `Command failed: ${cmd}`,
-        saveAttempted: false, saveOk: false,
-        session: { mode: session.mode },
-      };
-    }
-  }
-
-  let saveAttempted = false;
-  let saveOk = false;
-  let saveOutput: string | undefined;
-
-  if (payload.save !== false) {
-    saveAttempted = true;
-    const [saveStatus, saveOut] = enterCommandResult(term, "write memory");
-    saveOutput = saveOut;
-    const saveClassification = classifyCommandOutput(saveOut);
-    saveOk = saveStatus === 0 && !isFailureClassification(saveClassification);
-    dprint(`[configIos] save: status=${saveStatus}, ok=${saveOk}`);
-
-    if (!saveOk) {
-      return {
-        ok: false, device: payload.device, executed: results.length, modeFinal: session.mode, results,
-        error: "Configuration succeeded but save failed",
-        saveAttempted, saveOk: false, saveOutput,
-        session: { mode: session.mode },
-      };
-    }
-  }
-
-  return {
-    ok: true, device: payload.device, executed: results.length, modeFinal: session.mode, results,
-    saveAttempted, saveOk,
-    session: { mode: session.mode },
-  };
+  return { deferred: true, ticket, kind: "ios" };
 }
 
-export function handleExecIos(payload: ExecIosPayload, deps: HandlerDeps): HandlerResult & { raw: string; status?: number } {
+export function handleExecIos(payload: ExecIosPayload, deps: HandlerDeps): (HandlerResult & { raw: string; status?: number }) | DeferredResult {
   const { getNet, dprint } = deps;
+  
+  // Handle __pollDeferred - called from main.js pollDeferredCommands
+  if ((payload as unknown as PollDeferredPayload).type === "__pollDeferred") {
+    const pollPayload = payload as unknown as PollDeferredPayload;
+    return handlePollDeferred(pollPayload, deps) as (HandlerResult & { raw: string; status?: number }) | DeferredResult;
+  }
+
   const device = getNet().getDevice(payload.device);
   if (!device) return { ok: false, error: `Device not found: ${payload.device}`, raw: "" };
 
-  const cmd = payload.command.toLowerCase().trim();
-
-  if (cmd === "show running-config" || cmd === "show startup-config") return handleShowConfig(device, payload, deps);
-  if (cmd === "show version") return handleShowVersion(device, payload, deps);
-  if (cmd.startsWith("show ip ")) return handleShowIpCommand(device, payload, deps);
-
-  const term = device.getCommandLine();
+  const term = ensureIosTerm(device);
   if (!term) return { ok: false, error: `Device not ready: ${payload.device} is still booting or in ROMMON`, raw: "" };
 
-  try {
-    const [status, output] = enterCommandResult(term, payload.command);
-    dprint(`[execIos] term.enterCommand: status=${status}, output length=${output.length}`);
+  // Create IOS job for deferred execution
+  const ticket = createIosJob("execIos", {
+    device: payload.device,
+    command: payload.command,
+    parse: payload.parse ?? true,
+  });
 
-    const result: ExecIosSuccessResult = { ok: status === 0, raw: output, status };
+  dprint(`[execIos] Created job ${ticket} for device ${payload.device} command="${payload.command}"`);
 
-    if (payload.parse !== false) {
-      const parser = typeof getParser === "function" ? getParser(payload.command) : null;
-      if (parser) {
-        try { result.parsed = parser(output); }
-        catch (e) { result.parseError = String(e); }
-      }
-    }
-
-    return result;
-  } catch (e) {
-    dprint(`[execIos] term.enterCommand error: ${String(e)}`);
-    return { ok: false, error: `Failed to execute command: ${String(e)}`, raw: "" };
-  }
+  return { deferred: true, ticket, kind: "ios" };
 }
 
-function handleShowConfig(device: PTDevice, payload: ExecIosPayload, deps: HandlerDeps): HandlerResult & { raw: string; status?: number } {
-  const { dprint } = deps;
-  try {
-    const name = device.getName?.() ?? "Unknown";
-    const model = device.getModel?.() ?? "Unknown";
-    const power = device.getPower?.() ?? false;
+// ============================================================================
+// __pollDeferred Handler
+// ============================================================================
 
-    const portCount = device.getPortCount?.() ?? 0;
-    const ports: string[] = [];
-    for (let i = 0; i < portCount; i++) {
+function handlePollDeferred(pollPayload: PollDeferredPayload, deps: HandlerDeps): HandlerResult {
+  const { dprint } = deps;
+  const { ticket } = pollPayload;
+
+  // Access the global IOS_JOBS from main.js
+  const job = IOS_JOBS[ticket];
+  
+  if (!job) {
+    dprint(`[pollDeferred] Job not found: ${ticket}`);
+    return { ok: false, error: `Job not found: ${ticket}` };
+  }
+
+  if (!job.finished) {
+    dprint(`[pollDeferred] Job ${ticket} still in progress: state=${job.state}`);
+    return { ok: false, error: "Job not complete" };
+  }
+
+  // Job is complete
+  if (job.state === "error") {
+    dprint(`[pollDeferred] Job ${ticket} completed with error`);
+    return {
+      ok: false,
+      error: job.error || "Job failed",
+      raw: job.output || "",
+      status: job.status ?? 1,
+    };
+  }
+
+  // Build success result with parsed output if available
+  const result: ExecIosSuccessResult = {
+    ok: true,
+    raw: job.output || "",
+    status: job.status ?? 0,
+    source: "terminal",
+  };
+
+  // Parse output if it's a show command
+  const command = (job.payload as { command?: string }).command;
+  if (command && job.output) {
+    const parser = getParser(command);
+    if (parser) {
       try {
-        const port = device.getPortAt(i);
-        if (port) {
-          const ip = port.getIpAddress?.() ?? "0.0.0.0";
-          const mask = port.getSubnetMask?.() ?? "0.0.0.0";
-          if (ip && ip !== "0.0.0.0") {
-            ports.push(`interface ${port.getName?.() ?? `Port${i}`}\n ip address ${ip} ${mask}`);
-          }
-        }
-      } catch {}
-    }
-
-    let config = `!\nversion 15.2\nhostname ${name}\n!\n`;
-    if (ports.length > 0) config += ports.join("\n!\n") + "\n";
-    if (!power) config += `!\n% Device is powered off\n`;
-
-    dprint(`[execIos] Generated config for ${name}: ${config.length} chars`);
-    return {
-      ok: true, raw: config, status: 0, source: "synthetic",
-      parsed: { raw: config, hostname: name, version: "15.2", sections: [], interfaces: {} },
-    };
-  } catch (e) {
-    dprint(`[execIos] handleShowConfig error: ${String(e)}`);
-    return { ok: false, error: `Failed to get config: ${String(e)}`, raw: "" };
-  }
-}
-
-function handleShowVersion(device: PTDevice, payload: ExecIosPayload, deps: HandlerDeps): HandlerResult & { raw: string; status?: number } {
-  const { dprint } = deps;
-  try {
-    const name = device.getName?.() ?? "Unknown";
-    const model = device.getModel?.() ?? "Unknown";
-    const power = device.getPower?.() ?? false;
-    const type = device.getType?.() ?? 0;
-    const typeMap: Record<number, string> = { 0: "ISR Router", 1: "Switch", 16: "Multilayer Switch" };
-    const typeStr = typeMap[type] || "Unknown";
-
-    const versionOutput = `Cisco IOS Software, ${model} Software (${model}-LANBASE-M), Version 15.2(4)E, RELEASE SOFTWARE (fc1)
-Technical Support: http://www.cisco.com/techsupport
-Copyright (c) 1986-2016 by Cisco Systems, Inc.
-Compiled Mon 03-Oct-16 14:49 by prod_rel_team
-
-ROM: Bootstrap program is OK
-${name} uptime is 1 day, 3 hours, 22 minutes
-Uptime for this control processor is 1 day, 3 hours, 22 minutes
-System returned to ROM by power-on
-System image file is "flash:${model}-LANBASE-M"
-
-${typeStr} ${model} (PPC processor) with 190464K/18432K bytes of memory.
-Processor board ID ${Math.random().toString(16).toUpperCase().slice(2, 10)}
-1 Gigabit Ethernet interface
-4 Fast Ethernet interfaces
-64K bytes of flash-simulated non-volatile configuration memory.
-Configuration register is 0x2102
-
-${power ? "Device is operational" : "Device is powered off"}`;
-
-    dprint(`[execIos] Generated version for ${name}: ${versionOutput.length} chars`);
-    return {
-      ok: true, raw: versionOutput, status: 0, source: "synthetic",
-      parsed: { raw: versionOutput, hostname: name, version: "15.2(4)E", uptime: "1 day, 3 hours, 22 minutes", image: `${model}-LANBASE-M`, processor: typeStr },
-    };
-  } catch (e) {
-    dprint(`[execIos] handleShowVersion error: ${String(e)}`);
-    return { ok: false, error: `Failed to get version: ${String(e)}`, raw: "" };
-  }
-}
-
-function handleShowIpCommand(device: PTDevice, payload: ExecIosPayload, deps: HandlerDeps): HandlerResult & { raw: string; status?: number } {
-  const { dprint } = deps;
-  try {
-    const cmd = payload.command.toLowerCase();
-
-    if (cmd === "show ip interface brief" || cmd === "show ip int brief") {
-      const portCount = device.getPortCount?.() ?? 0;
-      const interfaces: Array<{interface: string; ipAddress: string; ok: string; method: string; status: string; protocol: string}> = [];
-      interfaces.push({ interface: "Vlan1", ipAddress: "unassigned", ok: "NVRAM", method: "manual", status: "down", protocol: "down" });
-
-      for (let i = 0; i < portCount; i++) {
-        try {
-          const port = device.getPortAt(i);
-          if (port) {
-            const ip = port.getIpAddress?.() ?? "unassigned";
-            const status = ip && ip !== "0.0.0.0" && ip !== "unassigned" ? "up" : "down";
-            interfaces.push({
-              interface: port.getName?.() ?? `Port${i}`,
-              ipAddress: ip === "0.0.0.0" ? "unassigned" : ip,
-              ok: "NVRAM", method: "manual", status, protocol: status === "up" ? "up" : "down"
-            });
-          }
-        } catch {}
+        result.parsed = parser(job.output);
+      } catch (e) {
+        result.parseError = String(e);
       }
-
-      const header = "Interface              IP-Address      OK? Method Status                Protocol";
-      const lines = interfaces.map(iface =>
-        `${iface.interface.padEnd(20)}${iface.ipAddress.padEnd(16)}YES   ${iface.method.padEnd(8)}${iface.status.padEnd(20)}${iface.protocol}`
-      );
-      const output = [header, ...lines].join("\n");
-
-      dprint(`[execIos] Generated IP interface brief: ${output.length} chars`);
-      return {
-        ok: true, raw: output, status: 0, source: "synthetic",
-        parsed: {
-          raw: output,
-          interfaces: interfaces.map(iface => ({
-            interface: iface.interface,
-            ipAddress: iface.ipAddress === "unassigned" ? "" : iface.ipAddress,
-            ok: iface.ok, method: iface.method,
-            status: iface.status as "up" | "down",
-            protocol: iface.protocol as "up" | "down"
-          }))
-        }
-      };
     }
-
-    if (cmd === "show ip route") {
-      const output = "Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP\n     D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area\n     N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2\n     E1 - OSPF external type 1, E2 - OSPF external type 2, E - EGP\n     i - IS-IS, L1 - IS-IS level-1, L2 - IS-IS level-2, ia - IS-IS inter area\n     * - candidate default, U - per-user static route, o - ODR\n     P - periodic downloaded static route\n\nGateway of last resort is not set";
-      return { ok: true, raw: output, status: 0, source: "synthetic", parsed: { raw: output, routes: [], gatewayOfLastResort: "not set" } };
-    }
-
-    return { ok: false, error: `Unsupported show ip command: ${payload.command}`, raw: "" };
-  } catch (e) {
-    dprint(`[execIos] handleShowIpCommand error: ${String(e)}`);
-    return { ok: false, error: `Failed to execute: ${String(e)}`, raw: "" };
   }
+
+  dprint(`[pollDeferred] Job ${ticket} completed successfully, output length=${job.output?.length || 0}`);
+
+  return result;
 }

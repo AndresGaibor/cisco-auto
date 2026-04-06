@@ -4,9 +4,11 @@
  * Orchestrates: Lease management, command processing, crash recovery,
  * diagnostics, and garbage collection into a unified durable bridge.
  */
-import { existsSync, watch } from "node:fs";
+import { existsSync, watch, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { ensureDir, ensureFile } from "./shared/fs-atomic.js";
+import { ensureDir, ensureFile, atomicWriteFile } from "./shared/fs-atomic.js";
 import type {
   BridgeCommandEnvelope,
   BridgeResultEnvelope,
@@ -202,8 +204,6 @@ export class FileBridgeV2 extends EventEmitter {
       checksum: this.checksumOf({ type, payload: payloadWithType }),
     };
 
-    // NUEVO: escribir a commands/ en lugar de command.json (Fase 5)
-    const { atomicWriteFile, ensureDir } = require("./shared/fs-atomic.js");
     const commandFile = this.paths.commandFilePath(seq, type);
 
     ensureDir(this.paths.commandsDir());
@@ -337,7 +337,6 @@ export class FileBridgeV2 extends EventEmitter {
 
   readState<T = unknown>(): T | null {
     try {
-      const { readFileSync } = require("node:fs");
       const content = readFileSync(this.paths.stateFile(), "utf8");
       return JSON.parse(content) as T;
     } catch {
@@ -415,12 +414,10 @@ export class FileBridgeV2 extends EventEmitter {
     if (this.heartbeatTimer) return;
 
     const intervalMs = this.options.heartbeatIntervalMs ?? 2_000;
-    const { join } = require("node:path");
     const heartbeatFile = join(this.paths.root, "heartbeat.json");
 
     this.heartbeatTimer = setInterval(() => {
       try {
-        const { readFileSync, statSync } = require("node:fs");
         const stats = statSync(heartbeatFile);
         const age = Date.now() - stats.mtime.getTime();
         
@@ -536,8 +533,6 @@ export class FileBridgeV2 extends EventEmitter {
    */
   getHeartbeat<T = unknown>(): T | null {
     try {
-      const { join } = require('node:path');
-      const { readFileSync } = require('node:fs');
       const heartbeatFile = join(this.paths.root, 'heartbeat.json');
       const content = readFileSync(heartbeatFile, 'utf8');
       return JSON.parse(content) as T;
@@ -558,8 +553,6 @@ export class FileBridgeV2 extends EventEmitter {
     lastSeenTs?: number;
   } {
     try {
-      const { join } = require('node:path');
-      const { statSync } = require('node:fs');
       const heartbeatFile = join(this.paths.root, 'heartbeat.json');
 
       const stats = statSync(heartbeatFile);
@@ -628,7 +621,6 @@ export class FileBridgeV2 extends EventEmitter {
   }
 
   private checksumOf(input: unknown): string {
-    const { createHash } = require("node:crypto");
     return `sha256:${createHash("sha256")
       .update(JSON.stringify(input))
       .digest("hex")}`;
