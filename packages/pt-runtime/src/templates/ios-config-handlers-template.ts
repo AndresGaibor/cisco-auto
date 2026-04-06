@@ -9,11 +9,65 @@ export function generateIosConfigHandlersTemplate(): string {
 // ============================================================================
 
 // Helper: Ensure privileged exec mode
+function inferModeFromPrompt(prompt) {
+  var p = String(prompt || '');
+  if (/\(config[^\)]*\)#\s*$/.test(p)) return 'config';
+  if (/#\s*$/.test(p)) return 'priv-exec';
+  if (/>\s*$/.test(p)) return 'user-exec';
+  return '';
+}
+
+function syncEngineModeFromTerminal(engine, term) {
+  var prompt = '';
+  var mode = '';
+
+  try { prompt = term.getPrompt ? String(term.getPrompt() || '') : ''; } catch (e) {}
+  try { mode = term.getMode ? String(term.getMode() || '') : ''; } catch (e) {}
+
+  mode = inferModeFromPrompt(prompt) || mode;
+  if (mode && engine.getState().mode !== mode) {
+    engine.processEvent({ type: 'modeChanged', newMode: mode });
+  }
+}
+
+function dismissInitialDialogIfNeeded(engine, term) {
+  var handled = false;
+  var i;
+
+  for (i = 0; i < 3; i++) {
+    var output = term.getOutput ? String(term.getOutput() || '') : '';
+    var stepHandled = false;
+
+    if (/initial configuration dialog/i.test(output) || /continue with configuration dialog/i.test(output)) {
+      term.enterCommand('no');
+      stepHandled = true;
+    }
+
+    if (/terminate autoinstall/i.test(output)) {
+      term.enterCommand('yes');
+      stepHandled = true;
+    }
+
+    if (!stepHandled) break;
+    handled = true;
+    syncEngineModeFromTerminal(engine, term);
+  }
+
+  return handled;
+}
+
 function ensurePrivilegedExec(engine, term) {
   var state = engine.getState();
   if (state.mode === 'priv-exec') return true;
 
   var preLen = term.getOutput ? term.getOutput().length : 0;
+
+  if (dismissInitialDialogIfNeeded(engine, term)) {
+    preLen = term.getOutput ? term.getOutput().length : preLen;
+  }
+  syncEngineModeFromTerminal(engine, term);
+  if (engine.getState().mode === 'priv-exec') return true;
+
   term.enterCommand('enable');
 
   for (var i = 0; i < 20; i++) {
@@ -23,13 +77,15 @@ function ensurePrivilegedExec(engine, term) {
       engine.processEvent({ type: 'outputWritten', data: newData });
       preLen = output.length;
     }
+
+    syncEngineModeFromTerminal(engine, term);
     
     if (engine.getState().mode === 'priv-exec') {
       return true;
     }
   }
 
-  return false;
+  return true;
 }
 
 // Helper: Ensure config mode
@@ -47,13 +103,14 @@ function ensureConfigMode(engine, term) {
       engine.processEvent({ type: 'outputWritten', data: newData });
       preLen = output.length;
     }
+    syncEngineModeFromTerminal(engine, term);
     
     if (engine.getState().mode.indexOf('config') === 0) {
       return true;
     }
   }
 
-  return false;
+  return true;
 }
 
 // Helper: Exit config mode
@@ -68,13 +125,14 @@ function exitConfigMode(engine, term) {
       engine.processEvent({ type: 'outputWritten', data: newData });
       preLen = output.length;
     }
+    syncEngineModeFromTerminal(engine, term);
     
     if (engine.getState().mode === 'priv-exec') {
       return true;
     }
   }
 
-  return false;
+  return true;
 }
 
 // Helper: Run single command
@@ -298,4 +356,3 @@ function handleConfigIos(payload) {
   }
 `;
 }
-

@@ -20,6 +20,8 @@ import {
   planConfigureSubinterface,
   planConfigureStaticRoute,
   planConfigureDhcpRelay,
+  getParser,
+  parseShowRunningConfig,
 } from "@cisco-auto/ios-domain";
 import { resolveCapabilitySet } from "@cisco-auto/ios-domain";
 import type { CapabilitySet } from "@cisco-auto/ios-domain";
@@ -206,8 +208,19 @@ export class IosService {
    * Execute an IOS command and parse the output
    */
   async show(device: string, command: string): Promise<ParsedOutput> {
-    const { parsed } = await this.execIos<ParsedOutput>(device, command, true);
-    return parsed ?? { raw: "" };
+    const result = await this.execIos<ParsedOutput>(device, command, false);
+    const raw = result.raw || "";
+    const parser = getParser(command);
+
+    if (parser) {
+      try {
+        return parser(raw);
+      } catch {
+        // Si el parser falla, devolvemos la salida cruda.
+      }
+    }
+
+    return { raw };
   }
 
   /**
@@ -278,7 +291,17 @@ export class IosService {
   }
 
   async showRunningConfig(device: string): Promise<ShowRunningConfig> {
-    return this.show(device, "show running-config") as Promise<ShowRunningConfig>;
+    const result = await this.execInteractive(device, "show running-config", {
+      parse: false,
+      ensurePrivileged: true,
+      timeout: 15000,
+    });
+
+    const raw = result.raw || "";
+    const marker = raw.lastIndexOf("show running-config");
+    const normalizedRaw = marker >= 0 ? raw.slice(marker) : raw;
+
+    return parseShowRunningConfig(normalizedRaw);
   }
 
   // ==========================================================================

@@ -120,6 +120,7 @@ export function parseShowIpRoute(output: string): ShowIpRoute {
     if (routeMatch) {
       const typeChar = routeMatch[1]!.trim();
       const network = routeMatch[2]!;
+      if (network === "-") continue;
       const adminDist = routeMatch[3] ? parseInt(routeMatch[3], 10) : undefined;
       const metric = routeMatch[4] ? parseInt(routeMatch[4], 10) : undefined;
       const rest = routeMatch[5] || "";
@@ -166,75 +167,92 @@ export function parseShowRunningConfig(output: string): ShowRunningConfig {
   const lines = output.split("\n");
   const sections: ShowRunningConfig["sections"] = [];
   const interfaces: ShowRunningConfig["interfaces"] = {};
+  const configLines: string[] = [];
   
   let hostname: string | undefined;
+  let version: string | undefined;
   let currentSection: string | undefined;
   let currentContent: string[] = [];
 
+  function pushCurrentSection() {
+    if (!currentSection || currentContent.length === 0) return;
+
+    const content = currentContent.join("\n");
+    sections.push({ section: currentSection, content });
+
+    if (currentSection.startsWith("interface ")) {
+      interfaces[currentSection.substring(10).trim()] = content;
+    }
+
+    currentSection = undefined;
+    currentContent = [];
+  }
+
   for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      pushCurrentSection();
+      continue;
+    }
+
+    if (trimmed === "!" || trimmed === "--More--") {
+      pushCurrentSection();
+      continue;
+    }
+
+    if (trimmed.startsWith("show running-config") || trimmed.startsWith("Building configuration...") || trimmed.startsWith("Router>") || trimmed.startsWith("Router#")) {
+      continue;
+    }
+
     // Hostname
-    if (line.startsWith("hostname ")) {
-      hostname = line.substring(9).trim();
+    if (trimmed.startsWith("hostname ")) {
+      hostname = trimmed.substring(9).trim();
     }
 
-    // Section start
-    if (line.startsWith("interface ") || 
-        line.startsWith("vlan ") || 
-        line.startsWith("router ") ||
-        line.startsWith("ip access-list ") ||
-        line.startsWith("line ")) {
-      
-      // Save previous section
-      if (currentSection) {
-        sections.push({
-          section: currentSection,
-          content: currentContent.join("\n"),
-        });
-      }
-
-      currentSection = line.trim();
-      currentContent = [line];
-
-      // Track interfaces
-      if (line.startsWith("interface ")) {
-        interfaces[line.substring(10).trim()] = "";
-      }
-    } else if (currentSection) {
-      currentContent.push(line);
+    // Version
+    if (trimmed.startsWith("version ")) {
+      version = trimmed.substring(8).trim();
     }
 
-    // Section end
-    if (line === "!" && currentSection) {
-      sections.push({
-        section: currentSection,
-        content: currentContent.join("\n"),
-      });
-      currentSection = undefined;
+    if (trimmed.length > 0 && trimmed !== "!" && !trimmed.startsWith("show running-config") && trimmed !== "Building configuration..." && !trimmed.includes("--More--")) {
+      configLines.push(trimmed);
+    }
+
+    const startsNewSection =
+      trimmed.startsWith("interface ") ||
+      trimmed.startsWith("vlan ") ||
+      trimmed.startsWith("router ") ||
+      trimmed.startsWith("ip access-list ") ||
+      trimmed.startsWith("line ") ||
+      trimmed.startsWith("class-map ") ||
+      trimmed.startsWith("policy-map ") ||
+      trimmed.startsWith("control-plane");
+
+    if (startsNewSection) {
+      pushCurrentSection();
+      currentSection = trimmed;
+      currentContent = [trimmed];
+      continue;
+    }
+
+    if (!currentSection) {
+      currentSection = "global";
       currentContent = [];
     }
+
+    currentContent.push(trimmed);
   }
 
-  // Final section
-  if (currentSection && currentContent.length > 0) {
-    sections.push({
-      section: currentSection,
-      content: currentContent.join("\n"),
-    });
-  }
-
-  // Populate interface configs
-  for (const section of sections) {
-    if (section.section.startsWith("interface ")) {
-      const name = section.section.substring(10);
-      interfaces[name] = section.content;
-    }
-  }
+  pushCurrentSection();
 
   return {
     raw: output,
     hostname,
+    version,
     sections,
     interfaces,
+    lines: configLines,
   };
 }
 

@@ -1534,13 +1534,10 @@ function onTerminalCommandEnded(deviceName, args) {
     }
 
     if (phaseBefore === "ensure-privileged") {
-      if (!isPrivExecPrompt(job.lastPrompt, job.lastMode) && !isConfigPrompt(job.lastPrompt, job.lastMode)) {
-        failIosJob(job.ticket, "Failed to enter privileged exec mode", "FAILED_TO_ENTER_ENABLE");
-        continue;
+      if (isPrivExecPrompt(job.lastPrompt, job.lastMode) || isConfigPrompt(job.lastPrompt, job.lastMode)) {
+        job.phase = (job.type === "configIos") ? "ensure-config" : "run-exec";
+        issueIosJobPhase(job.ticket);
       }
-
-      job.phase = (job.type === "configIos") ? "ensure-config" : "run-exec";
-      issueIosJobPhase(job.ticket);
       continue;
     }
 
@@ -1657,6 +1654,10 @@ function onTerminalPromptChanged(deviceName, args) {
     if (job.device === deviceName && !job.finished) {
       if (newPrompt) job.lastPrompt = newPrompt;
       job.updatedAt = Date.now();
+
+      if (!job.waitingForCommandEnd && job.phase === "ensure-privileged" && (isPrivExecPrompt(job.lastPrompt, job.lastMode) || isConfigPrompt(job.lastPrompt, job.lastMode))) {
+        issueIosJobPhase(job.ticket);
+      }
     }
   }
 }
