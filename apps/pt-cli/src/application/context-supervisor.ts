@@ -13,8 +13,18 @@ import { dirname } from 'node:path';
 import { promises as fs } from 'node:fs';
 
 export async function collectContextStatus(controller: PTController): Promise<ContextStatus> {
+  // Refrescar el estado vivo antes de consolidar el contexto persistido
+  let liveSnapshot: Awaited<ReturnType<PTController['snapshot']>> | null = null;
+  try {
+    liveSnapshot = await controller.snapshot();
+  } catch {
+    // Si la snapshot viva falla, seguimos con el contexto disponible
+  }
+
   // Prefer the consolidated system context exposed by PTController (Phase 5)
   const sys = controller.getSystemContext();
+  const deviceCount = liveSnapshot?.devices ? Object.keys(liveSnapshot.devices).length : sys.deviceCount;
+  const linkCount = liveSnapshot?.links ? Object.keys(liveSnapshot.links).length : sys.linkCount;
 
   const warnings: string[] = Array.isArray(sys.warnings) ? [...sys.warnings] : [];
 
@@ -37,9 +47,9 @@ export async function collectContextStatus(controller: PTController): Promise<Co
       ready: sys.bridgeReady,
     },
     topology: {
-      materialized: sys.topologyMaterialized,
-      deviceCount: sys.deviceCount,
-      linkCount: sys.linkCount,
+      materialized: sys.topologyMaterialized || Boolean(liveSnapshot),
+      deviceCount,
+      linkCount,
       health: topologyHealth,
     },
     warnings,

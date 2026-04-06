@@ -4,44 +4,46 @@ import { historyStore } from '../telemetry/history-store.js';
 import { Command } from 'commander';
 import { createDefaultPTController } from '@cisco-auto/pt-control';
 import { loadContextStatus, collectContextStatus } from '../application/context-supervisor.js';
-import { getSupervisorStatus } from '../system/context-supervisor.js';
+import { ensureSupervisorRunning, getSupervisorStatus } from '../system/context-supervisor.js';
 import { getGlobalFlags } from '../flags.js';
 import type { ContextStatus } from '../contracts/context-status.js';
+
+async function waitForSupervisorReady(maxAttempts = 5, delayMs = 200): Promise<void> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (getSupervisorStatus().running) return;
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+}
 
 export function createStatusCommand(): Command {
   return new Command('status')
     .description('Muestra el estado operativo y salud del contexto CLI (pt status)')
     .option('--json', 'Salida en JSON', false)
     .action(async function (this: Command, opts: { json?: boolean }) {
-      const supervisorStatus = getSupervisorStatus();
-      
-      // Cargar estado persistido o hacer inspección viva
-      let status: ContextStatus | null = supervisorStatus.contextStatus ?? await loadContextStatus();
+      try {
+        await ensureSupervisorRunning();
+        await waitForSupervisorReady();
+      } catch (e) {
+        console.debug('[status] Error arrancando supervisor:', e);
+      }
 
-      if (!status) {
-        // Short live inspection como último recurso
-        const controller = createDefaultPTController();
-        try {
-          await controller.start();
-          const sys = controller.getSystemContext();
-          status = {
-            schemaVersion: '1.0',
-            updatedAt: new Date().toISOString(),
-            heartbeat: { state: sys.heartbeat.state },
-            bridge: { ready: sys.bridgeReady },
-            topology: {
-              materialized: sys.topologyMaterialized,
-              deviceCount: sys.deviceCount,
-              linkCount: sys.linkCount,
-              health: 'unknown',
-            },
-            warnings: sys.warnings ?? [],
-          };
-        } catch (err) {
-          console.error('No se pudo inspeccionar el estado en vivo:', err);
-        } finally {
-          try { await controller.stop(); } catch (e) { }
-        }
+      const supervisorStatus = getSupervisorStatus();
+
+      // Preferir una lectura viva cuando el bridge responda
+      let status: ContextStatus | null = null;
+      const controller = createDefaultPTController();
+      try {
+        await controller.start();
+        status = await collectContextStatus(controller);
+      } catch (err) {
+        console.debug('[status] No se pudo obtener estado vivo:', err);
+        status = supervisorStatus.contextStatus ?? await loadContextStatus();
+      } finally {
+        try { await controller.stop(); } catch (e) { }
+      }
+
+      if (status && !status.bridge.ready && supervisorStatus.contextStatus?.bridge.ready) {
+        status.bridge.ready = true;
       }
 
       if (!status) {

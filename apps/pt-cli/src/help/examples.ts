@@ -18,6 +18,10 @@ export const commandExamples: Record<string, CommandExample[]> = {
       description: 'Validar topología sin ejecutar',
       command: 'cisco-auto lab validate labs/vlan-basico.yaml --dry-run',
     },
+    {
+      description: 'Levantar el laboratorio completo solicitado',
+      command: 'cisco-auto lab lift',
+    },
   ],
   'lab create': [
     {
@@ -55,6 +59,12 @@ export const commandExamples: Record<string, CommandExample[]> = {
     {
       description: 'Validar en modo dry-run',
       command: 'cisco-auto lab validate labs/vlan-basico.yaml --dry-run',
+    },
+  ],
+  'lab lift': [
+    {
+      description: 'Levantar el laboratorio solicitado',
+      command: 'cisco-auto lab lift',
     },
   ],
   'device': [

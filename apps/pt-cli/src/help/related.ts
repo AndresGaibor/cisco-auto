@@ -12,6 +12,7 @@ export const relatedCommands: Record<string, RelatedCommand[]> = {
     { name: 'cisco-auto device', description: 'Gestionar dispositivos' },
     { name: 'cisco-auto topology', description: 'Analizar topología' },
     { name: 'cisco-auto config', description: 'Configuración global' },
+    { name: 'cisco-auto lab lift', description: 'Levantar el laboratorio completo' },
   ],
   'lab create': [
     { name: 'cisco-auto lab parse', description: 'Parsear laboratorio' },
@@ -27,6 +28,11 @@ export const relatedCommands: Record<string, RelatedCommand[]> = {
     { name: 'cisco-auto lab parse', description: 'Parsear laboratorio' },
     { name: 'cisco-auto lab create', description: 'Crear laboratorio' },
     { name: 'cisco-auto topology analyze', description: 'Analizar topología' },
+  ],
+  'lab lift': [
+    { name: 'cisco-auto status', description: 'Verificar estado del entorno' },
+    { name: 'cisco-auto lab validate', description: 'Validar laboratorio' },
+    { name: 'cisco-auto device list', description: 'Listar dispositivos' },
   ],
   'device': [
     { name: 'cisco-auto lab', description: 'Gestionar laboratorios' },

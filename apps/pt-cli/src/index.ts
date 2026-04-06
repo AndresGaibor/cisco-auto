@@ -13,6 +13,7 @@ import { createRoutingCommand } from './commands/routing';
 import { createACLCommand } from './commands/acl';
 import { createStpCommand } from './commands/stp';
 import { createLabServicesCommand } from './commands/services';
+import { createLabCommand } from './commands/lab/index';
 import { createResultsCommand } from './commands/results';
 import { createLogsCommand } from './commands/logs';
 import { createHelpCommand } from './commands/help';
@@ -70,6 +71,7 @@ program.addCommand(createConfigIOSCommand());
 program.addCommand(createRoutingCommand());
 program.addCommand(createACLCommand());
 program.addCommand(createStpCommand());
+program.addCommand(createLabCommand());
 program.addCommand(createLabServicesCommand());
 program.addCommand(createResultsCommand());
 program.addCommand(createLogsCommand());
@@ -84,17 +86,23 @@ try {
   program.parse(process.argv);
 } catch (error) {
   if (error instanceof Error) {
-    const errorCode = (error as { code?: string }).code;
+    const commanderError = error as { code?: string; exitCode?: number };
+    const errorCode = commanderError.code;
     switch (errorCode) {
       case 'commander.unknownCommand':
       case 'commander.unknownOption':
         process.exit(ExitCodes.INVALID_USAGE);
         break;
+      case 'commander.helpDisplayed':
       case 'commander.help':
       case 'commander.version':
         process.exit(ExitCodes.SUCCESS);
         break;
       default:
+        if (commanderError.exitCode === 0) {
+          process.exit(ExitCodes.SUCCESS);
+          break;
+        }
         process.exit(ExitCodes.ERROR);
     }
   }
