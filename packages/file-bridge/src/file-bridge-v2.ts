@@ -578,8 +578,8 @@ export class FileBridgeV2 extends EventEmitter {
   /**
    * Obtiene el snapshot de topología más reciente
    */
-  getStateSnapshot(): Snapshot | null {
-    return this.lastSnapshot;
+  getStateSnapshot<T = unknown>(): T | null {
+    return this.lastSnapshot as T | null;
   }
 
   /**
@@ -612,6 +612,23 @@ export class FileBridgeV2 extends EventEmitter {
       leaseValid,
       queuedCount,
       warnings,
+    };
+  }
+
+  /**
+   * Minimal aggregated context for CLI/system consumers
+   */
+  getContext(): {
+    bridgeReady: boolean;
+    heartbeat: {
+      state: "ok" | "stale" | "missing" | "unknown";
+      ageMs?: number;
+      lastSeenTs?: number;
+    };
+  } {
+    return {
+      bridgeReady: this.isReady(),
+      heartbeat: this.getHeartbeatHealth(),
     };
   }
 

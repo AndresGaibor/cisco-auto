@@ -11,11 +11,11 @@ test('buildDhcpCommands generates DHCP pool and network lines', () => {
 test('buildNtpCommands generates ntp server line', () => {
   const cmds = buildNtpCommands('1.2.3.4');
   expect(cmds).toContain('! NTP Configuration');
-  expect(cmds.some(c => c.startsWith('ntp server 1.2.3.4'))).toBe(true);
+  expect(cmds.some((c: string) => c.startsWith('ntp server 1.2.3.4'))).toBe(true);
 });
 
 test('buildSyslogCommands generates logging host line', () => {
   const cmds = buildSyslogCommands('10.0.0.5');
   expect(cmds).toContain('! Syslog Configuration');
-  expect(cmds.some(c => c.includes('logging host 10.0.0.5'))).toBe(true);
+  expect(cmds.some((c: string) => c.includes('logging host 10.0.0.5'))).toBe(true);
 });

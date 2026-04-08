@@ -4,11 +4,11 @@
  * CRITICAL: Recovery and consumer operations MUST NOT proceed without valid lease
  */
 
-import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import { readFileSync, writeFileSync, unlinkSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { hostname } from "node:os";
 import { randomUUID } from "node:crypto";
 import type { BridgeLease } from "../shared/protocol.js";
-import { atomicWriteFile } from "../shared/fs-atomic.js";
 import { debug } from "node:util";
 
 export class LeaseManager {
@@ -73,7 +73,8 @@ export class LeaseManager {
       version: "2.0.0",
     };
 
-    atomicWriteFile(this.leaseFilePath, JSON.stringify(lease, null, 2));
+    mkdirSync(dirname(this.leaseFilePath), { recursive: true });
+    writeFileSync(this.leaseFilePath, JSON.stringify(lease, null, 2), "utf8");
     this.logger(`Lease renewed (ownerId=${this.ownerId.substring(0, 8)}..., expires_in=${this.leaseTtlMs}ms)`);
   }
 
@@ -111,7 +112,8 @@ export class LeaseManager {
       version: "2.0.0",
     };
 
-    atomicWriteFile(this.leaseFilePath, JSON.stringify(lease, null, 2));
+    mkdirSync(dirname(this.leaseFilePath), { recursive: true });
+    writeFileSync(this.leaseFilePath, JSON.stringify(lease, null, 2), "utf8");
 
     const written = this.readLease();
     const acquired = written?.ownerId === this.ownerId;

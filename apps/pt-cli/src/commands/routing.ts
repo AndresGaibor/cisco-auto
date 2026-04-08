@@ -60,7 +60,7 @@ function parseEnteroObligatorio(valor: string, etiqueta: string): number {
   return numero;
 }
 
-function buildStaticRouteCommands(network: string, nextHop: string): string[] {
+export function buildStaticRouteCommands(network: string, nextHop: string): string[] {
   return RoutingGenerator.generateRouting({
     static: [
       {
@@ -72,12 +72,12 @@ function buildStaticRouteCommands(network: string, nextHop: string): string[] {
   });
 }
 
-function buildOspfEnableCommands(processId: number): string[] {
+export function buildOspfEnableCommands(processId: number): string[] {
   const spec: OSPFSpec = { processId, areas: [] };
   return RoutingGenerator.generateRouting({ ospf: spec });
 }
 
-function buildOspfAddNetworkCommands(processId: number, network: string, area: number | string): string[] {
+export function buildOspfAddNetworkCommands(processId: number, network: string, area: number | string): string[] {
   const spec: OSPFSpec = {
     processId,
     areas: [{ areaId: String(area), networks: [network] }],
@@ -85,12 +85,12 @@ function buildOspfAddNetworkCommands(processId: number, network: string, area: n
   return RoutingGenerator.generateRouting({ ospf: spec });
 }
 
-function buildEigrpEnableCommands(asn: number): string[] {
+export function buildEigrpEnableCommands(asn: number): string[] {
   const spec: EIGRPSpec = { asNumber: asn, networks: [], noAutoSummary: true };
   return RoutingGenerator.generateRouting({ eigrp: spec });
 }
 
-function buildBgpEnableCommands(asn: number): string[] {
+export function buildBgpEnableCommands(asn: number): string[] {
   return AdvancedRoutingGenerator.generateBGP({ asn, neighbors: [] });
 }
 

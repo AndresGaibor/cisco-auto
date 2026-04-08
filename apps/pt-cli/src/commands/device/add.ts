@@ -86,6 +86,7 @@ export function createDeviceAddCommand(): Command {
     .option('--schema', 'Mostrar schema JSON del resultado y salir', false)
     .option('--explain', 'Explicar qué hace el comando y salir', false)
     .option('--plan', 'Mostrar plan de ejecución sin ejecutar', false)
+    .option('-i, --interactive', 'Completar datos faltantes de forma interactiva', false)
     .option('--verify', 'Verificar cambios post-ejecución', true)
     .option('--no-verify', 'Omitir verificación post-ejecución', false)
     .option('--trace', 'Activar traza estructurada de la ejecución', false)
@@ -164,6 +165,10 @@ export function createDeviceAddCommand(): Command {
           await controller.start();
 
           try {
+            if ((!deviceName || !deviceModel) && !options.interactive) {
+              throw new Error('Debes pasar nombre y modelo, o usar --interactive');
+            }
+
             if (!deviceName || !deviceModel) {
               const interactive = await promptForDevice(deviceName, deviceModel);
               deviceName = interactive.name;

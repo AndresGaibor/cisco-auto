@@ -256,19 +256,18 @@ export class PTController {
   }
 
   async snapshot(): Promise<TopologySnapshot> {
-    const cachedSnapshot = this.topologyCache.getSnapshot();
-
-    if (cachedSnapshot) {
-      this._snapshot = cachedSnapshot;
-      this._twin = topologySnapshotToNetworkTwin(cachedSnapshot);
-      return cachedSnapshot;
-    }
-
     const snapshot = await this.topologyService.snapshot();
     if (snapshot) {
       this._snapshot = snapshot;
       this._twin = topologySnapshotToNetworkTwin(snapshot);
       return snapshot;
+    }
+
+    if (this.topologyCache.isMaterialized()) {
+      const cachedSnapshot = this.topologyCache.getSnapshot();
+      this._snapshot = cachedSnapshot;
+      this._twin = topologySnapshotToNetworkTwin(cachedSnapshot);
+      return cachedSnapshot;
     }
 
     return this._snapshot ?? { timestamp: Date.now(), version: "1.0", devices: {}, links: {} };
@@ -309,7 +308,11 @@ export class PTController {
   }
 
   getCachedSnapshot(): TopologySnapshot | null {
-    return this.topologyCache.getSnapshot() ?? this._snapshot;
+    if (this.topologyCache.isMaterialized()) {
+      return this.topologyCache.getSnapshot();
+    }
+
+    return this._snapshot;
   }
 
   getTwin(): NetworkTwin | null {

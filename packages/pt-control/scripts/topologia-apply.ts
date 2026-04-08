@@ -19,10 +19,10 @@
  *   bun run scripts/topologia-apply.ts
  */
 
-import pc from "picocolors";
+import * as pc from "picocolors";
 import { readFileSync, existsSync } from "fs";
 import { createDefaultPTController } from "../src/controller/index.js";
-import { buildVlanCommands, buildTrunkCommands, buildSshCommands } from '@cisco-auto/core';
+import { VlanGenerator, buildTrunkCommands, buildSshCommands } from '@cisco-auto/core';
 import type { DeviceState } from "../src/types/index.js";
 
 // ============================================================================
@@ -209,7 +209,7 @@ async function applyVlanConfig(controller: ReturnType<typeof createDefaultPTCont
   log(`  ${pc.cyan("Aplicando VLANs...")}`);
 
   const vlanIds = CONFIG.vlans.map(v => v.id);
-  const commands = buildVlanCommands(vlanIds);
+  const commands = VlanGenerator.generateVLANsFromIds(vlanIds);
   
   logDebug(`Generados ${commands.length} comandos IOS para VLANs`);
 

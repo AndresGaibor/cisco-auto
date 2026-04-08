@@ -56,13 +56,11 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
 
 
   // Asegurar que el supervisor de contexto esté corriendo
-  if (options.meta.requiresPT === true || options.meta.requiresContext === true) {
-    try {
-      await ensureSupervisorRunning();
-    } catch (e) {
-      console.debug('[runCommand] Error arrancando supervisor:', e);
-      // Continuar sin supervisor
-    }
+  try {
+    await ensureSupervisorRunning();
+  } catch (e) {
+    console.debug('[runCommand] Error arrancando supervisor:', e);
+    // Continuar sin supervisor
   }
   const controller = createDefaultPTController();
 
@@ -85,6 +83,7 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
     linkCount: 0,
     warnings: ['Controller no se pudo iniciar'],
   };
+  let contextStatusToPersist: Awaited<ReturnType<typeof collectContextStatus>> | null = null;
 
   try {
     await controller.start();
@@ -120,6 +119,12 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
       }) as CliResult<T>;
     }
   } finally {
+    try {
+      contextStatusToPersist = await collectContextStatus(controller);
+    } catch (err) {
+      console.warn('No se pudo actualizar context-status:', err);
+    }
+
     await controller.stop();
   }
 
@@ -214,7 +219,10 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
 
   // Persistir estado de contexto tras la ejecución (Fase 3)
   try {
-    const ctxStatus = await collectContextStatus(controller);
+    const ctxStatus = contextStatusToPersist ?? await collectContextStatus(controller);
+    if (result.ok) {
+      ctxStatus.bridge.ready = true;
+    }
     // Propagar warnings del resultado al estado persistente
     if (result.warnings && result.warnings.length > 0) {
       for (const w of result.warnings) {

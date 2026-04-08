@@ -51,7 +51,7 @@ function parseNetwork(input: string): { network: string; subnetMask: string } {
   return { network: input, subnetMask: '255.255.255.0' };
 }
 
-function buildDhcpCommands(poolName: string, networkCidr: string): string[] {
+export function buildDhcpCommands(poolName: string, networkCidr: string): string[] {
   const { network, subnetMask } = parseNetwork(networkCidr);
   const spec = { poolName, network, subnetMask } as any;
   const validation = (ServicesGenerator as any).validateDHCP(spec);
@@ -61,7 +61,7 @@ function buildDhcpCommands(poolName: string, networkCidr: string): string[] {
   return ServicesGenerator.generateDHCP([spec]);
 }
 
-function buildNtpCommands(server: string): string[] {
+export function buildNtpCommands(server: string): string[] {
   const spec = { servers: [{ ip: server }] } as any;
   const validation = (ServicesGenerator as any).validateNTP(spec);
   if (!validation.valid) {
@@ -70,7 +70,7 @@ function buildNtpCommands(server: string): string[] {
   return ServicesGenerator.generateNTP(spec);
 }
 
-function buildSyslogCommands(server: string): string[] {
+export function buildSyslogCommands(server: string): string[] {
   const spec = { servers: [{ ip: server }] } as any;
   return ServicesGenerator.generateSyslog(spec);
 }

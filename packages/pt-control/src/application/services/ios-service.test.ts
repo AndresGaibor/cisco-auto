@@ -73,7 +73,7 @@ describe("IosService show", () => {
     expect(result.hostname).toBe("Router");
     expect(result.version).toBe("15.1");
     expect(result.sections?.length).toBeGreaterThan(0);
-    expect(result.interfaces?.["GigabitEthernet0/0"]).toContain("shutdown");
+    expect(result.interfaces?.["GigabitEthernet0/0"]).toContain("ip address");
     expect(result.lines?.length).toBeGreaterThan(0);
   });
 });

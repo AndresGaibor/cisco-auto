@@ -39,6 +39,7 @@ export function createConfigHostCommand(): Command {
     .argument('[gateway]', 'Puerta de enlace (opcional)')
     .argument('[dns]', 'Servidor DNS (opcional)')
     .option('--dhcp', 'Habilitar DHCP', false)
+    .option('-i, --interactive', 'Completar datos faltantes de forma interactiva', false)
     .option('--examples', 'Mostrar ejemplos de uso y salir', false)
     .option('--schema', 'Mostrar schema JSON del resultado y salir', false)
     .option('--explain', 'Explicar qué hace el comando y salir', false)
@@ -129,6 +130,10 @@ export function createConfigHostCommand(): Command {
           await controller.start();
 
           try {
+            if (!deviceName && !options.interactive) {
+              throw new Error('Debes pasar el dispositivo o usar --interactive');
+            }
+
             if (!deviceName) {
               const devices = await fetchDeviceList(controller);
               if (devices.length === 0) {
@@ -147,6 +152,10 @@ export function createConfigHostCommand(): Command {
             }
 
             if (!dhcpEnabled) {
+              if (!ipAddress && !options.interactive) {
+                throw new Error('Debes pasar IP y máscara, o usar --interactive');
+              }
+
               if (!ipAddress) {
                 ipAddress = await input({
                   message: 'Dirección IP:',
@@ -155,6 +164,10 @@ export function createConfigHostCommand(): Command {
                     return ipRegex.test(value) || 'IP inválida (formato: x.x.x.x)';
                   },
                 });
+              }
+
+              if (!subnetMask && !options.interactive) {
+                throw new Error('Debes pasar IP y máscara, o usar --interactive');
               }
 
               if (!subnetMask) {
@@ -168,7 +181,7 @@ export function createConfigHostCommand(): Command {
                 });
               }
 
-              if (!gatewayAddr) {
+              if (!gatewayAddr && options.interactive) {
                 gatewayAddr = await input({
                   message: 'Gateway (opcional):',
                   validate: (value) => {

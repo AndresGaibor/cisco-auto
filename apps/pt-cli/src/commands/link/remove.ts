@@ -9,6 +9,7 @@ export function createLinkRemoveCommand(): Command {
     .argument('[device]', 'Dispositivo (ej: R1)')
     .argument('[port]', 'Puerto (ej: Gi0/0)')
     .option('-f, --force', 'Remover sin confirmación')
+    .option('-i, --interactive', 'Completar datos faltantes de forma interactiva', false)
     .action(async (device, port, options) => {
       let dev = device;
       let prt = port;
@@ -17,6 +18,10 @@ export function createLinkRemoveCommand(): Command {
         const controller = createDefaultPTController();
 
         // Prompt for device and port if not provided
+        if ((!dev || !prt) && !options.interactive) {
+          throw new Error('Debes pasar dispositivo y puerto, o usar --interactive');
+        }
+
         if (!dev || !prt) {
           if (!dev) {
             dev = await input({
@@ -40,7 +45,7 @@ export function createLinkRemoveCommand(): Command {
         }
 
         // Confirm removal unless --force flag
-        if (!options.force) {
+        if (options.interactive && !options.force) {
           const confirmed = await confirm({
             message: `¿Remover conexión en ${chalk.cyan(dev)}:${prt}?`,
             default: false,

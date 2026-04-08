@@ -886,7 +886,7 @@ function savePendingCommands() {}
   });
 
   describe("Regla D: Arquitectura - runtime.js no debe mezclar jobs + listeners + sync polling", () => {
-    test("advierte si runtime.js tiene IOS_JOBS + attachTerminalListeners + while polling", () => {
+    test("bloquea si runtime.js tiene IOS_JOBS + attachTerminalListeners + while polling", () => {
       const code = `
 var IOS_JOBS = {};
 var TERMINAL_LISTENERS_ATTACHED = {};
@@ -918,8 +918,8 @@ var h = 11; var i = 12; var j = 13; var k = 14; var l = 15;
 var m = 16; var n = 17; var o = 18; var p = 19; var q = 20;
 `;
       const result = validateRuntimeJs(code);
-      expect(result.ok).toBe(true);
-      expect(result.warnings.some((w) => w.includes("ARCHITECTURE WARNING"))).toBe(true);
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.includes("ARCHITECTURE VIOLATION"))).toBe(true);
     });
   });
 

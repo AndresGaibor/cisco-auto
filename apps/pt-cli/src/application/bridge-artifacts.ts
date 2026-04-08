@@ -40,7 +40,7 @@ export function readRecentResultArtifacts(limit = 10): Array<{ file: string; mti
       }
     });
     filesWithMtime.sort((a, b) => b.mtime - a.mtime);
-    return filesWithMtime.slice(0, limit).map((f) => ({ file: f, mtime: f.mtime, content: readResultArtifact(f.file) }));
+    return filesWithMtime.slice(0, limit).map((f) => ({ file: f.file, mtime: f.mtime, content: readResultArtifact(f.file) }));
   } catch (e) {
     return [];
   }

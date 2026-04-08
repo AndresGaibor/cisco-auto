@@ -38,6 +38,7 @@ export function createLinkAddCommand(): Command {
     .argument('[device2]', 'Segundo dispositivo (ej: S1)')
     .argument('[port2]', 'Puerto del segundo dispositivo (ej: Fa0/1)')
     .option('-t, --type <type>', 'Tipo de conexión (auto, copper_straight, copper_crossover)', 'auto')
+    .option('-i, --interactive', 'Completar los extremos faltantes de forma interactiva', false)
     .option('--examples', 'Mostrar ejemplos de uso y salir', false)
     .option('--schema', 'Mostrar schema JSON del resultado y salir', false)
     .option('--explain', 'Explicar qué hace el comando y salir', false)
@@ -122,6 +123,10 @@ export function createLinkAddCommand(): Command {
           await controller.start();
 
           try {
+            if ((!dev1 || !p1 || !dev2 || !p2) && !options.interactive) {
+              throw new Error('Debes pasar dispositivo y puerto en ambos extremos, o usar --interactive');
+            }
+
             if (!dev1 || !p1 || !dev2 || !p2) {
               const devices = await fetchDeviceList(controller);
               const deviceChoices = devices.map((d) => ({

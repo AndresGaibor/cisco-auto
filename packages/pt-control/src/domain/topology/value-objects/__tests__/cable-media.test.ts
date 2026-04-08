@@ -19,7 +19,7 @@ describe('CableMedia', () => {
 
     it('should reject invalid media types', () => {
       expect(() => new CableMedia('invalid' as any)).toThrow();
-      expect(() => new CableMedia('')).toThrow();
+      expect(() => new CableMedia('' as any)).toThrow();
     });
   });
 

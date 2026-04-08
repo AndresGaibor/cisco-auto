@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES5",
+    "lib": ["ES5"],
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "outDir": "./dist-qtscript",
+    "rootDir": "./src-qtscript",
+    "strict": false,
+    "skipLibCheck": true,
+    "noImplicitAny": false,
+    "noImplicitReturns": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "removeComments": true,
+    "declaration": false,
+    "sourceMap": false,
+    "noEmitHelpers": true,
+    "noEmitOnError": false,
+    "esModuleInterop": false,
+    "allowSyntheticDefaultImports": false
+  },
+  "include": ["src-qtscript/**/*"],
+  "exclude": ["node_modules"]
+}

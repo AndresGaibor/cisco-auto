@@ -32,7 +32,7 @@ import { classifyIosError, isHardFailure } from "../../domain/ios/ios-error-clas
 
 // Verification service
 import { IosVerificationService } from "./ios-verification-service.js";
-import type { VerificationResult } from "../contracts/verification-result.js";
+import type { VerificationResult } from "../../contracts/verification-result.js";
 
 export class IosService {
   constructor(

@@ -48,6 +48,7 @@ export interface CliResult<T = unknown> {
     sessionId?: string;
     correlationId?: string;
     commandIds?: string[];
+    interactionSummary?: string;
   };
   error?: CliError;
 }

@@ -5,9 +5,11 @@
  */
 
 import { Command } from 'commander';
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { getDefaultDevDir, getLogsDir, getHistoryDir, getResultsDir } from '../system/paths.ts';
 import type { CliResult } from '../contracts/cli-result.ts';
+import type { CommandMeta } from '../contracts/command-meta.ts';
 import { createSuccessResult } from '../contracts/cli-result.ts';
 import { runCommand } from '../application/run-command.ts';
 import { COMMAND_CATALOG } from './command-catalog.ts';
@@ -26,7 +28,7 @@ export function createDoctorCommand(): Command {
     .action(async (options: any) => {
       await runCommand({
         action: 'doctor',
-        meta: COMMAND_CATALOG['doctor'],
+        meta: COMMAND_CATALOG['doctor'] as unknown as CommandMeta,
         flags: options,
         execute: async (ctx) => {
           const checks = await performDoctorChecks(ctx.controller, options.verbose);

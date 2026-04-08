@@ -9,6 +9,7 @@ import { CommandProcessor } from "../src/v2/command-processor";
 import { BridgePathLayout } from "../src/shared/path-layout";
 import { SequenceStore } from "../src/shared/sequence-store";
 import { EventLogWriter } from "../src/event-log-writer";
+import { BRIDGE_PROTOCOL_VERSION } from "@cisco-auto/types";
 
 const TEMP_DIR = "/tmp/cisco-auto-cmdproc-tests";
 const TEST_DEV_DIR = join(TEMP_DIR, "dev");
@@ -44,6 +45,8 @@ describe("CommandProcessor - Fase 8 Deduplication", () => {
       attempt: 1,
       payload: { test: true },
       checksum: "sha256:abc123",
+      protocolVersion: BRIDGE_PROTOCOL_VERSION,
+      createdAt: Date.now(),
     };
 
     const cmdFile = join(paths.commandsDir(), "000000000001-test-command.json");
@@ -72,6 +75,8 @@ describe("CommandProcessor - Fase 8 Deduplication", () => {
       attempt: 1,
       payload: { test: true },
       checksum: "sha256:xyz789",
+      protocolVersion: BRIDGE_PROTOCOL_VERSION,
+      createdAt: Date.now(),
     };
 
     const cmdFile = join(paths.commandsDir(), "000000000002-test-command.json");
@@ -101,6 +106,8 @@ describe("CommandProcessor - Fase 8 Deduplication", () => {
       attempt: 1,
       payload: { test: true },
       checksum: "sha256:def456",
+      protocolVersion: BRIDGE_PROTOCOL_VERSION,
+      createdAt: Date.now(),
     };
 
     const cmdFile = join(paths.commandsDir(), "000000000003-test-command.json");
@@ -138,6 +145,8 @@ describe("CommandProcessor - Fase 8 Deduplication", () => {
       payload: { test: true },
       checksum: "sha256:ghi789",
       expiresAt: now - 1000, // Expired 1 second ago
+      protocolVersion: BRIDGE_PROTOCOL_VERSION,
+      createdAt: Date.now(),
     };
 
     const cmdFile = join(paths.commandsDir(), "000000000004-test-command.json");
@@ -169,6 +178,8 @@ describe("CommandProcessor - Fase 8 Deduplication", () => {
       attempt: 1,
       payload: { test: true },
       checksum: "sha256:wrongchecksum",
+      protocolVersion: BRIDGE_PROTOCOL_VERSION,
+      createdAt: Date.now(),
     };
 
     const cmdFile = join(paths.commandsDir(), "000000000005-test-command.json");
@@ -198,6 +209,8 @@ describe("CommandProcessor - Fase 8 Deduplication", () => {
       type: "test-command",
       attempt: 1,
       payload: { test: true },
+      protocolVersion: BRIDGE_PROTOCOL_VERSION,
+      createdAt: Date.now(),
     };
 
     processor.publishResult(cmd, {

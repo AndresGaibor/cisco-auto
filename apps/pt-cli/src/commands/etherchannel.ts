@@ -104,6 +104,7 @@ export function createEtherchannelCommand(): Command {
     .command('create')
     .description('Create an EtherChannel bundle')
     .argument('[device]', 'Nombre del dispositivo')
+    .option('-i, --interactive', 'Seleccionar el switch de forma interactiva', false)
     .option('--group-id <id>', 'Channel group ID (1-64)', '1')
     .option('--interfaces <interfaces>', 'Member interfaces, comma-separated')
     .option('--mode <mode>', 'Negotiation mode', 'active')
@@ -165,6 +166,10 @@ export function createEtherchannelCommand(): Command {
         execute: async (ctx): Promise<CliResult<EtherchannelResult>> => {
           try {
             let targetDevice = deviceName;
+
+            if (!targetDevice && !options.interactive) {
+              return createErrorResult('etherchannel.create', { message: 'Debes pasar --device o usar --interactive' }) as CliResult<EtherchannelResult>;
+            }
 
             if (!targetDevice) {
               const devices = await ctx.controller.listDevices();
@@ -251,6 +256,7 @@ export function createEtherchannelCommand(): Command {
     .command('remove')
     .description('Remove an EtherChannel bundle')
     .argument('[device]', 'Nombre del dispositivo')
+    .option('-i, --interactive', 'Seleccionar el switch de forma interactiva', false)
     .option('--group-id <id>', 'Channel group ID (1-64)', '1')
     .option('--dry-run', 'Show commands without applying', false)
     .action(async (deviceName, options) => {
@@ -298,6 +304,10 @@ export function createEtherchannelCommand(): Command {
           try {
             let targetDevice = deviceName;
 
+            if (!targetDevice && !options.interactive) {
+              return createErrorResult('etherchannel.remove', { message: 'Debes pasar --device o usar --interactive' }) as CliResult;
+            }
+
             if (!targetDevice) {
               const devices = await ctx.controller.listDevices();
               targetDevice = await select({
@@ -344,7 +354,8 @@ export function createEtherchannelCommand(): Command {
     .command('list')
     .description('List EtherChannel bundles')
     .argument('[device]', 'Nombre del dispositivo')
-    .action(async (deviceName) => {
+    .option('-i, --interactive', 'Seleccionar el switch de forma interactiva', false)
+    .action(async (deviceName, options) => {
       const globalExamples = process.argv.includes('--examples');
 
       if (globalExamples) {
@@ -380,6 +391,10 @@ export function createEtherchannelCommand(): Command {
         execute: async (ctx): Promise<CliResult> => {
           try {
             let targetDevice = deviceName;
+
+            if (!targetDevice && !options.interactive) {
+              throw new Error('Debes pasar el dispositivo o usar --interactive');
+            }
 
             if (!targetDevice) {
               const devices = await ctx.controller.listDevices();

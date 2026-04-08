@@ -27,5 +27,9 @@ export * from "./link-types.js";
 export * from "./network-types.js";
 export * from "./agent-context-types.js";
 
+// Lab specification contracts
+export * from "./lab-spec.js";
+export * from "./lab-resource.js";
+
 // Keep legacy export for backward compatibility
 export * from "./twin-types.js";

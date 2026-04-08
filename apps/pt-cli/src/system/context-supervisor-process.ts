@@ -13,7 +13,7 @@
 
 import { FileBridgeV2 } from "@cisco-auto/file-bridge";
 import { PTController } from "@cisco-auto/pt-control";
-import { writeFileSync, ensureDirSync } from "node:fs";
+import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { ContextStatus } from "../contracts/context-status.js";
 import { getDefaultDevDir, getContextStatusPath, getContextDir } from "./paths.js";
@@ -163,7 +163,7 @@ async function collectBridgeHealth(): Promise<ContextStatus["bridge"]> {
 function writeContextStatus(status: ContextStatus) {
   try {
     const dir = getContextDir();
-    ensureDirSync(dir);
+    mkdirSync(dir, { recursive: true });
 
     const path = getContextStatusPath();
     writeFileSync(path, JSON.stringify(status, null, 2), "utf-8");
@@ -239,7 +239,7 @@ async function cycle() {
 
       // Escribir estado final = unavailable
       status.heartbeat.state = "missing";
-      status.topology.health = "unavailable";
+      status.topology.health = "unknown";
       status.warnings.push("Supervisor apagándose por demasiadas fallas");
       writeContextStatus(status);
     }

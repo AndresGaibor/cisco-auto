@@ -9,7 +9,7 @@ import {
 } from '../../src/commands/routing.ts';
 
 test('routing static add genera una ruta IOS válida', () => {
-  const comandos = buildStaticRouteCommands('R1', '10.10.10.0/24', '192.168.1.1');
+  const comandos = buildStaticRouteCommands('10.10.10.0/24', '192.168.1.1');
 
   expect(comandos).toEqual([
     '! Rutas estáticas',

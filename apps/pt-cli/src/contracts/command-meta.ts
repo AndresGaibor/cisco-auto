@@ -28,6 +28,8 @@ export interface CommandMeta {
   supportsJson?: boolean;
   supportsPlan?: boolean;
   supportsExplain?: boolean;
+  requiresPT?: boolean;
+  requiresContext?: boolean;
 }
 
 /**

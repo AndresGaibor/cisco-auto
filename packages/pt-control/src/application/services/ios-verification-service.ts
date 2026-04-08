@@ -1,4 +1,4 @@
-import type { VerificationResult, VerificationCheck } from "../contracts/verification-result.js";
+import type { VerificationResult, VerificationCheck } from "../../contracts/verification-result.js";
 
 export type ExecFn = (device: string, command: string, parse?: boolean, timeout?: number) => Promise<{ raw: string; parsed?: any }>;
 

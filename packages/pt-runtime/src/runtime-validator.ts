@@ -16,6 +16,14 @@ export interface ValidationResult {
   };
 }
 
+export interface QtScriptValidationResult extends ValidationResult {
+  metadata?: ValidationResult["metadata"] & {
+    hasHostTick?: boolean;
+    hasWatcher?: boolean;
+    hasCleanupHook?: boolean;
+  };
+}
+
 // ============================================================================
 // Blacklist de sintaxis PT-unsafe
 // ============================================================================
@@ -260,9 +268,41 @@ function findLifecycleViolations(code: string, target: "main" | "runtime"): stri
     }
   }
   
-  // Regla D: Solo aplica a runtime.js - ADVERTENCIA (no error)
-  // Esta regla se maneja como warning en validateRuntimeJs
+  // Regla D: Solo aplica a runtime.js - ADVERTENCIA (no error en validateMainJs)
   
+  return errors;
+}
+
+function findQtScriptMainViolations(code: string): string[] {
+  const errors: string[] = [];
+  const required = [
+    "function main()",
+    "function cleanup()",
+    "function loadRuntime()",
+    "function hostTick()",
+    "function setupFileWatcher()",
+    "function teardownFileWatcher()",
+  ];
+
+  const missing = findMissingSymbols(code, required);
+  errors.push(...missing);
+
+  if (!code.includes("hostTickInterval")) {
+    errors.push("Missing hostTickInterval state");
+  }
+
+  if (!code.includes("runtimeDirty")) {
+    errors.push("Missing runtimeDirty state");
+  }
+
+  if (!code.includes("watcherArmed")) {
+    errors.push("Missing watcherArmed state");
+  }
+
+  if (code.includes("runtimeFn(")) {
+    errors.push("QtScript main must not re-enter runtimeFn during cleanup");
+  }
+
   return errors;
 }
 
@@ -430,14 +470,13 @@ export function validateRuntimeJs(code: string): ValidationResult {
     warnings.push("runtime.js does not define IOS_JOBS - job system may not work");
   }
   
-  // Regla D: ADVERTENCIA (no error) - runtime.js no debe mezclar jobs + listeners + sync polling
-  // Esta es una arquitectura inconsistency, no un error fatal
+  // Regla D: runtime.js no debe mezclar jobs + listeners + sync polling
   const hasJobs = code.includes("IOS_JOBS");
   const hasListeners = code.includes("attachTerminalListeners") || code.includes("TERMINAL_LISTENERS");
   const hasSyncPolling = /while\s*\(\s*\w+\s*<\s*\w+Attempts/.test(code);
-  
+
   if (hasJobs && hasListeners && hasSyncPolling) {
-    warnings.push("ARCHITECTURE WARNING: runtime.js mixes IOS_JOBS + attachTerminalListeners + sync polling - consider moving to main.js for proper lifecycle");
+    errors.push("ARCHITECTURE VIOLATION: runtime.js mixes IOS_JOBS + attachTerminalListeners + sync polling - this can crash PT on stop");
   }
   
   const metadata = {
@@ -533,6 +572,50 @@ export function validateGeneratedArtifacts(mainJs: string, runtimeJs: string): V
       hasCleanUp: mainResult.metadata?.hasCleanUp ?? false,
       hasDeferredPolling: mainResult.metadata?.hasDeferredPolling ?? false,
       hasIosJobs: runtimeResult.metadata?.hasIosJobs ?? false,
+    },
+  };
+}
+
+export function validateQtScriptArtifacts(mainJs: string, runtimeJs: string): QtScriptValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  errors.push(...findForbiddenTokens(mainJs));
+  errors.push(...findForbiddenGlobals(mainJs));
+  errors.push(...findQtScriptMainViolations(mainJs));
+  errors.push(...findForbiddenTokens(runtimeJs));
+  errors.push(...findForbiddenGlobals(runtimeJs));
+  errors.push(...findForbiddenIosPatterns(runtimeJs));
+
+  if (runtimeJs.length < 500) {
+    errors.push(`runtime.js is too small (${runtimeJs.length} bytes)`);
+  }
+
+  if (runtimeJs.includes("IOS_JOBS") && runtimeJs.includes("attachTerminalListeners") && /while\s*\(\s*\w+\s*<\s*\w+Attempts/.test(runtimeJs)) {
+    errors.push("ARCHITECTURE VIOLATION: runtime.js mixes IOS_JOBS + attachTerminalListeners + sync polling - this can crash PT on stop");
+  }
+
+  if (!runtimeJs.includes("handlePollDeferred")) {
+    warnings.push("runtime.js should have handlePollDeferred");
+  }
+
+  if (!runtimeJs.includes("IOS_JOBS")) {
+    warnings.push("runtime.js does not define IOS_JOBS - job system may not work");
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+    metadata: {
+      target: "both",
+      hasMain: mainJs.includes("function main()"),
+      hasCleanUp: mainJs.includes("function cleanup()"),
+      hasDeferredPolling: runtimeJs.includes("handlePollDeferred"),
+      hasIosJobs: runtimeJs.includes("IOS_JOBS"),
+      hasHostTick: mainJs.includes("function hostTick()"),
+      hasWatcher: mainJs.includes("function setupFileWatcher()") && mainJs.includes("function teardownFileWatcher()"),
+      hasCleanupHook: mainJs.includes("function cleanup()"),
     },
   };
 }

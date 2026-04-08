@@ -17,6 +17,8 @@
     "build:lib": "tsc",
     "build:runtime": "tsc -p tsconfig.runtime.json",
     "build:runtime:watch": "tsc -p tsconfig.runtime.json --watch",
+    "build:qtscript": "tsc -p tsconfig.qtscript.json && bun scripts/validate-qtscript.ts",
+    "deploy:qtscript": "bun run build:qtscript && DEV_DIR=~/pt-dev bun scripts/deploy-qtscript.ts",
     "build": "npm run build:lib && npm run build:runtime",
     "dev:runtime": "tsc -p tsconfig.runtime.json --watch",
     "dev": "tsc --watch",

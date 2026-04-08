@@ -58,6 +58,7 @@ export function createDeviceRemoveCommand(): Command {
     .description('Eliminar un dispositivo de la topología')
     .argument('[name]', 'Nombre del dispositivo a eliminar')
     .option('-f, --force', 'Eliminar sin confirmación', false)
+    .option('-i, --interactive', 'Seleccionar el dispositivo de forma interactiva', false)
     .option('--examples', 'Mostrar ejemplos de uso y salir', false)
     .option('--schema', 'Mostrar schema JSON del resultado y salir', false)
     .option('--explain', 'Explicar qué hace el comando y salir', false)
@@ -122,6 +123,10 @@ export function createDeviceRemoveCommand(): Command {
           await controller.start();
 
           try {
+            if (!deviceName && !options.interactive) {
+              throw new Error('Debes pasar el nombre del dispositivo o usar --interactive');
+            }
+
             if (!deviceName) {
               await logPhase('discover', {});
               const devices = await fetchDeviceList(controller);
@@ -158,7 +163,7 @@ export function createDeviceRemoveCommand(): Command {
               });
             }
 
-            if (!options.force) {
+            if (options.interactive && !options.force) {
               const confirmed = await confirm({
                 message: `¿Eliminar dispositivo "${chalk.red(deviceName)}"?`,
                 default: false,

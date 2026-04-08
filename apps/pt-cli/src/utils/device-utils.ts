@@ -116,7 +116,7 @@ export function getIOSCapableDevices(devices: DeviceState[]): DeviceState[] {
       // Device type IDs: 0=router, 1=switch, 16=multilayer-switch
       return type === 0 || type === 1 || type === 16;
     }
-    return type === 'router' || type === 'switch' || type === 'multilayer_switch' || type === 'switch_layer3';
+    return type === 'router' || type === 'switch' || type === 'switch_layer3';
   });
 }
 

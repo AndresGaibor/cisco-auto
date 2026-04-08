@@ -1,9 +1,10 @@
 import { Command } from 'commander';
-import { createDefaultPTController } from '@cisco-auto/pt-control';
+import { createSuccessResult } from '../../contracts/cli-result.js';
 import { formatExamples, formatRelatedCommands } from '../../help/formatter';
 import { getExamples } from '../../help/examples';
 import { getRelatedCommands } from '../../help/related';
 import chalk from 'chalk';
+import { runCommand } from '../../application/run-command.js';
 
 export function createDeviceListCommand(): Command {
   /**
@@ -29,42 +30,70 @@ export function createDeviceListCommand(): Command {
     .option('-t, --type <type>', 'Filtrar por tipo (router|switch|pc|server)')
     .option('-j, --json', 'Salida en formato JSON')
     .action(async (options) => {
-      try {
-        const controller = createDefaultPTController();
-        await controller.start();
-
-        try {
+      const result = await runCommand<{ devices: Array<{ name: string; model: string; type: string; power: boolean; ports?: Array<unknown> }> }>({
+        action: 'device.list',
+        meta: {
+          id: 'device.list',
+          summary: 'Listar dispositivos en Packet Tracer',
+          examples: [],
+          related: [],
+        },
+        flags: {
+          json: options.json ?? false,
+          jq: null,
+          output: 'text',
+          verbose: false,
+          quiet: false,
+          trace: false,
+          tracePayload: false,
+          traceResult: false,
+          traceDir: null,
+          traceBundle: false,
+          traceBundlePath: null,
+          sessionId: null,
+          examples: false,
+          schema: false,
+          explain: false,
+          plan: false,
+          verify: false,
+        },
+        execute: async ({ controller }) => {
           const devices = await controller.listDevices();
-          
+
           let filtered = devices;
           if (options.type) {
-            filtered = devices.filter(d => d.type === options.type);
+            filtered = devices.filter((d) => d.type === options.type);
           }
 
-          if (options.json) {
-            console.log(JSON.stringify(filtered, null, 2));
-          } else {
-            console.log(`\n📱 Dispositivos en Packet Tracer (${filtered.length}):`);
-            console.log('━'.repeat(60));
+          return createSuccessResult('device.list', { devices: filtered, count: filtered.length });
+        },
+      });
 
-            filtered.forEach((device, i) => {
-              console.log(`\n${i + 1}. ${chalk.cyan(device.name)}`);
-              console.log(`   Tipo: ${device.type}`);
-              console.log(`   Modelo: ${device.model}`);
-              console.log(`   Estado: ${device.power ? chalk.green('Encendido') : chalk.yellow('Apagado')}`);
-              if (device.ports?.length) {
-                console.log(`   Puertos: ${device.ports.length}`);
-              }
-            });
-            console.log('');
-          }
-        } finally {
-          await controller.stop();
-        }
-      } catch (error) {
-        console.error('❌ Error:', error instanceof Error ? error.message : error);
+      if (!result.ok) {
+        console.error('❌ Error:', result.error?.message ?? 'No se pudo listar dispositivos');
         process.exit(1);
       }
+
+      const devices = result.data?.devices ?? [];
+
+      if (options.json) {
+        console.log(JSON.stringify(devices, null, 2));
+        return;
+      }
+
+      console.log(`\n📱 Dispositivos en Packet Tracer (${devices.length}):`);
+      console.log('━'.repeat(60));
+
+      devices.forEach((device, i) => {
+        console.log(`\n${i + 1}. ${chalk.cyan(device.name)}`);
+        console.log(`   Tipo: ${device.type}`);
+        console.log(`   Modelo: ${device.model}`);
+        console.log(`   Estado: ${device.power ? chalk.green('Encendido') : chalk.yellow('Apagado')}`);
+        if (device.ports?.length) {
+          console.log(`   Puertos: ${device.ports.length}`);
+        }
+      });
+      console.log('');
     });
 
   const examples = getExamples('device list');

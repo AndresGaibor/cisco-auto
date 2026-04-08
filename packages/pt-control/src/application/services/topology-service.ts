@@ -360,7 +360,11 @@ export class TopologyService {
    * Get cached snapshot
    */
   getCachedSnapshot(): TopologySnapshot | null {
-    return this.cache.getSnapshot();
+    if (this.cache.isMaterialized()) {
+      return this.cache.getSnapshot();
+    }
+
+    return null;
   }
 
   private getDeviceState(deviceName: string): DeviceState | undefined {
