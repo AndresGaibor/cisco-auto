@@ -82,8 +82,8 @@ export class FileBridgeV2 extends EventEmitter {
     this._diagnostics = new BridgeDiagnostics(
       this.paths,
       this.seq,
-      this.leaseManager.getOwnerId(),
-      this.leaseManager.readLease(),
+      () => this.leaseManager.getOwnerId(),
+      () => this.leaseManager.readLease(),
     );
     this.garbageCollector = new GarbageCollector(
       this.paths,
@@ -162,14 +162,11 @@ export class FileBridgeV2 extends EventEmitter {
   }
 
   async loadRuntime(code: string): Promise<void> {
-    const { atomicWriteFile } = await import("./shared/fs-atomic.js");
-    const { join } = await import("node:path");
     ensureDir(this.paths.root);
     atomicWriteFile(join(this.paths.root, "runtime.js"), code);
   }
 
   async loadRuntimeFromFile(filePath: string): Promise<void> {
-    const { readFileSync } = await import("node:fs");
     const code = readFileSync(filePath, "utf8");
     await this.loadRuntime(code);
   }
@@ -274,7 +271,6 @@ export class FileBridgeV2 extends EventEmitter {
         }
 
         try {
-          const { readFileSync } = await import("node:fs");
           const content = readFileSync(resultPath, "utf8");
           const result = JSON.parse(content) as BridgeResultEnvelope<TResult>;
           resolveOnce(result);
@@ -600,17 +596,29 @@ export class FileBridgeV2 extends EventEmitter {
     let leaseValid: boolean | undefined = undefined;
     try {
       leaseValid = this.leaseManager.hasValidLease();
-    } catch {}
+    } catch {
+      warnings.push("No se pudo validar el lease actual");
+    }
 
-    let queuedCount: number | undefined = undefined;
+    let queuedCount = 0;
+    let inFlightCount = 0;
     try {
-      queuedCount = this.backpressure.getPendingCount();
-    } catch {}
+      const stats = (this.backpressure as any).getDetailedStats?.();
+      if (stats) {
+        queuedCount = stats.queuedCount;
+        inFlightCount = stats.inFlightCount;
+      } else {
+        queuedCount = this.backpressure.getPendingCount();
+      }
+    } catch {
+      warnings.push("No se pudo leer el estado de la cola");
+    }
 
     return {
       ready,
       leaseValid,
       queuedCount,
+      inFlightCount,
       warnings,
     };
   }

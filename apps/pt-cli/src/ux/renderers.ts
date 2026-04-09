@@ -36,15 +36,24 @@ export function renderCliResultText<T>(result: CliResult<T>): string {
     lines.push(...formatDataAsText(result.data, 2));
   }
 
+  if (result.meta?.context) {
+    lines.push('');
+    lines.push('Contexto');
+    lines.push(...formatDataAsText(result.meta.context, 2));
+  }
+
   if (result.verification) {
     lines.push('');
     lines.push('Verificación');
-    for (const check of result.verification.checks) {
+    for (const check of result.verification.checks ?? []) {
       const status = check.ok ? '✓' : '✗';
       lines.push(`  ${status} ${check.name}`);
       if (check.details && typeof check.details === 'object') {
         lines.push(...formatDataAsText(check.details, 4));
       }
+    }
+    if (result.meta?.confidence) {
+      lines.push(`  Confianza: ${result.meta.confidence}`);
     }
   }
 

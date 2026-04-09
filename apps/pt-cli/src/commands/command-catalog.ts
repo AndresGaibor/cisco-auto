@@ -43,6 +43,32 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     requiresContext: false,
   },
 
+  setup: {
+    id: 'setup',
+    summary: 'Preparación del entorno local de Packet Tracer',
+    longDescription: 'Ejecuta el flujo mínimo de instalación local para generar y desplegar los artefactos del runtime.',
+    examples: ['pt setup'],
+    related: ['build', 'status'],
+    status: 'experimental',
+    supportsAutonomousUse: false,
+    requiresPT: false,
+    requiresContext: false,
+    notes: ['Alias operativo para el bootstrap local de pt-dev'],
+  },
+
+  runtime: {
+    id: 'runtime',
+    summary: 'Operaciones del runtime de Packet Tracer',
+    longDescription: 'Lista snapshots locales del runtime y permite rollback a una release anterior.',
+    examples: ['pt runtime releases', 'pt runtime rollback --last'],
+    related: ['build', 'setup', 'status'],
+    status: 'experimental',
+    supportsAutonomousUse: false,
+    requiresPT: false,
+    requiresContext: false,
+    notes: ['Solo gestiona snapshots locales y artefactos de despliegue'],
+  },
+
   device: {
     id: 'device',
     summary: 'Gestión de dispositivos en Packet Tracer',
@@ -304,3 +330,6 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
   },
 };
 
+export function getRegisteredCommandIds(): string[] {
+  return ['build', 'device', 'show', 'config-host', 'vlan', 'etherchannel', 'link', 'config-ios', 'routing', 'acl', 'stp', 'services', 'results', 'logs', 'help', 'history', 'doctor', 'completion', 'topology', 'status', 'setup', 'runtime'];
+}

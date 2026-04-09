@@ -1,6 +1,16 @@
 /**
  * Runtime Generator - Orchestrates code generation for runtime.js
  * Assembles multiple template modules into a complete runtime
+ *
+ * PT Control Runtime
+ *
+ * This runtime is evaluated by main.js.
+ * It is intentionally stateless with respect to:
+ * - durable queue ownership
+ * - recovery
+ * - PT module lifecycle
+ *
+ * All durable / lifecycle concerns belong to main.js or the file bridge.
  */
 
 import { generateConstantsTemplate } from "./templates/constants-template";

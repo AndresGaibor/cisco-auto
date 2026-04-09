@@ -81,6 +81,13 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
     topologyMaterialized: false,
     deviceCount: 0,
     linkCount: 0,
+    heartbeat: {
+      state: 'unknown',
+    },
+    bridge: {
+      ready: false,
+      warnings: [],
+    },
     warnings: ['Controller no se pudo iniciar'],
   };
   let contextStatusToPersist: Awaited<ReturnType<typeof collectContextStatus>> | null = null;
@@ -134,16 +141,23 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
     }) as CliResult<T>;
   }
 
-  // Merge context warnings with any existing result warnings
-  const contextAdvice = buildContextWarnings(runtimeContext);
-  const mergedWarnings = [...contextAdvice];
-  if (result.warnings) {
-    const existingSet = new Set(contextAdvice);
-    for (const w of result.warnings) {
-      if (!existingSet.has(w)) mergedWarnings.push(w);
-    }
+  const verificationWarnings = result.verification?.warnings ?? [];
+  const contextWarnings = buildContextWarnings(runtimeContext);
+  const mergedWarnings: string[] = [];
+  const seenWarnings = new Set<string>();
+  for (const warning of [...contextWarnings, ...(result.warnings ?? []), ...verificationWarnings]) {
+    if (seenWarnings.has(warning)) continue;
+    seenWarnings.add(warning);
+    mergedWarnings.push(warning);
   }
   result.warnings = mergedWarnings;
+
+  // Fase 6: Drenar command trace del controller para trazabilidad end-to-end
+  const commandTrace = controller.drainCommandTrace();
+  const commandIds = commandTrace.map(t => t.id);
+  const interactionSummary = commandTrace.length > 0
+    ? commandTrace.map(t => `${t.type}:${t.commandType ?? 'unknown'}:${t.status ?? 'n/a'}`).join(', ')
+    : undefined;
 
   // Phase 7: add contextual suggestions based on verification and context
   const suggestions = getContextualSuggestions(result, { saveRequested: options.flags.verify });
@@ -153,8 +167,31 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
   if (result.meta) {
     result.meta.sessionId = sessionId;
     result.meta.correlationId = correlationId;
+    result.meta.commandIds = commandIds.length > 0 ? commandIds : (result.meta.commandIds ?? []);
+    if (interactionSummary) result.meta.interactionSummary = interactionSummary;
+    result.meta.context = {
+      bridgeReady: runtimeContext.bridgeReady,
+      topologyMaterialized: runtimeContext.topologyMaterialized,
+      deviceCount: runtimeContext.deviceCount,
+      linkCount: runtimeContext.linkCount,
+      heartbeat: runtimeContext.heartbeat,
+      bridge: runtimeContext.bridge,
+    };
   } else {
-    result.meta = { sessionId, correlationId };
+    result.meta = {
+      sessionId,
+      correlationId,
+      commandIds: commandIds.length > 0 ? commandIds : undefined,
+      interactionSummary,
+      context: {
+        bridgeReady: runtimeContext.bridgeReady,
+        topologyMaterialized: runtimeContext.topologyMaterialized,
+        deviceCount: runtimeContext.deviceCount,
+        linkCount: runtimeContext.linkCount,
+        heartbeat: runtimeContext.heartbeat,
+        bridge: runtimeContext.bridge,
+      },
+    };
   }
 
   const durationMs = Date.now() - startTime;
@@ -175,7 +212,9 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
     flags: options.flags as unknown as Record<string, unknown>,
     payloadSummary: options.payloadPreview,
     resultSummary: result.data as Record<string, unknown> | undefined,
-    commandIds: result.meta?.commandIds ?? [],
+    commandIds: commandIds.length > 0 ? commandIds : (result.meta?.commandIds ?? []),
+    interactionSummary: interactionSummary ? { summary: interactionSummary } : (result.meta?.interactionSummary ? { summary: result.meta.interactionSummary } : undefined),
+    completionReason: result.ok ? 'completed' : (result.error?.message ? `error: ${result.error.message}` : 'failed'),
     contextSummary: {
       bridgeReady: runtimeContext.bridgeReady,
       topologyMaterialized: runtimeContext.topologyMaterialized,
@@ -183,17 +222,13 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
       linkCount: runtimeContext.linkCount,
       warnings: runtimeContext.warnings,
     },
-    // Phase 7 additions: verification and interaction metadata
-    verificationSummary: (function(){
-      const v = (result as any).verification;
-      if (!v) return undefined;
-      if (v.verified === true) return `verified via ${ (v.verificationSource && v.verificationSource.length) ? v.verificationSource.join(', ') : 'checks' }`;
-      if (v.partiallyVerified === true) return `partially verified via ${ (v.verificationSource && v.verificationSource.length) ? v.verificationSource.join(', ') : 'partial checks' }`;
-      if (v.executed === true && v.verified === false) return 'executed only (not verified)';
-      return undefined;
-    })(),
-    interactionSummary: (result as any).interactionSummary ?? result.meta?.interactionSummary,
-    completionReason: (result.meta as any)?.completionReason ?? (result as any).completionReason,
+    verificationSummary: result.verification?.verified === true
+      ? `verified via ${(result.verification.verificationSource && result.verification.verificationSource.length) ? result.verification.verificationSource.join(', ') : 'checks'}`
+      : result.verification?.partiallyVerified === true
+        ? `partially verified via ${(result.verification.verificationSource && result.verification.verificationSource.length) ? result.verification.verificationSource.join(', ') : 'partial checks'}`
+        : result.verification?.executed === true && result.verification?.verified === false
+          ? 'executed only (not verified)'
+          : undefined,
     warnings: result.warnings ?? [],
   };
 
@@ -229,14 +264,17 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
         if (!ctxStatus.warnings.includes(w)) ctxStatus.warnings.push(w);
       }
     }
-    // Si hubo verificación y falló, marcar posible desincronización
-    // (Fase 3: heurística simple)
-    // @ts-ignore - verification es opcional en CliResult
+    // Si hubo verificación y falló, marcar posible desincronización con razón
     if (result.verification && result.verification.verified === false) {
       ctxStatus.topology.health = 'desynced';
-      if (!ctxStatus.warnings.includes('Post-validation reportó fallos; la topología puede estar desincronizada.')) {
-        ctxStatus.warnings.push('Post-validation reportó fallos; la topología puede estar desincronizada.');
+      const desyncReason = `Post-validation failed after ${options.action}`;
+      if (!ctxStatus.warnings.includes(desyncReason)) {
+        ctxStatus.warnings.push(desyncReason);
       }
+      // Persistir razón en notes para que status/doctor/history explain la reutilicen
+      if (!ctxStatus.notes) ctxStatus.notes = [];
+      const reasonEntry = `[${new Date().toISOString()}] desynced: ${desyncReason}`;
+      if (!ctxStatus.notes.includes(reasonEntry)) ctxStatus.notes.push(reasonEntry);
     }
     await writeContextStatus(ctxStatus);
   } catch (err) {

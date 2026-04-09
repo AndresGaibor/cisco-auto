@@ -11,6 +11,18 @@ export interface CommandRuntimeContext {
   topologyMaterialized: boolean;
   deviceCount: number;
   linkCount: number;
+  heartbeat: {
+    state: 'ok' | 'stale' | 'missing' | 'unknown';
+    ageMs?: number;
+    lastSeenTs?: number;
+  };
+  bridge: {
+    ready: boolean;
+    leaseValid?: boolean;
+    queuedCount?: number;
+    inFlightCount?: number;
+    warnings?: string[];
+  };
   warnings: string[];
 }
 
@@ -22,6 +34,8 @@ export async function inspectCommandContext(
   controller: PTController,
 ): Promise<CommandRuntimeContext> {
   const summary = controller.getContextSummary();
+  const heartbeat = controller.getHeartbeatHealth();
+  const bridge = controller.getBridgeStatus();
   const warnings: string[] = [];
 
   if (!summary.bridgeReady) {
@@ -32,11 +46,29 @@ export async function inspectCommandContext(
     warnings.push('Topología virtual aún no materializada; la verificación de estado puede ser incompleta.');
   }
 
+  if (heartbeat.state === 'stale') {
+    warnings.push('Heartbeat stale; Packet Tracer puede no estar respondiendo.');
+  } else if (heartbeat.state === 'missing') {
+    warnings.push('Heartbeat missing; Packet Tracer probablemente no está disponible.');
+  }
+
+  if (bridge.warnings && bridge.warnings.length > 0) {
+    warnings.push(...bridge.warnings);
+  }
+
   return {
     bridgeReady: summary.bridgeReady,
     topologyMaterialized: summary.topologyMaterialized,
     deviceCount: summary.deviceCount,
     linkCount: summary.linkCount,
+    heartbeat,
+    bridge: {
+      ready: bridge.ready,
+      leaseValid: bridge.leaseValid,
+      queuedCount: bridge.queuedCount,
+      inFlightCount: bridge.inFlightCount,
+      warnings: bridge.warnings ?? [],
+    },
     warnings,
   };
 }

@@ -5,7 +5,7 @@
  */
 
 import { Command } from 'commander';
-import { COMMAND_CATALOG } from './command-catalog';
+import { COMMAND_CATALOG, getRegisteredCommandIds } from './command-catalog';
 
 interface CommandInfo {
   id: string;
@@ -84,7 +84,10 @@ export function createHelpCommand(): Command {
         console.log('\nCLI para controlar Cisco Packet Tracer en tiempo real.\n');
         console.log('Comandos disponibles:');
         
-        const rootCommands = Object.values(COMMAND_CATALOG).sort((a, b) => a.id.localeCompare(b.id));
+        const rootCommands = getRegisteredCommandIds()
+          .map((id) => COMMAND_CATALOG[id])
+          .filter((entry): entry is (typeof COMMAND_CATALOG)[string] => Boolean(entry))
+          .sort((a, b) => a.id.localeCompare(b.id));
         for (const c of rootCommands) {
           const padding = ' '.repeat(Math.max(2, 15 - c.id.length));
           console.log(`  ${c.id}${padding}${c.summary}${c.status !== 'stable' ? ` [${c.status}]` : ''}`);

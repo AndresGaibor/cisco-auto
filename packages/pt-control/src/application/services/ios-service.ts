@@ -1,5 +1,5 @@
 // ============================================================================
-// IosService - IOS device configuration and execution
+// IosService — Fase 4: capa de orquestación semántica de IOS
 // ============================================================================
 
 import type { FileBridgePort } from "../ports/file-bridge.port.js";
@@ -10,8 +10,16 @@ import type {
   ShowIpRoute,
   ShowRunningConfig,
   DeviceState,
-  NetworkTwin,
 } from "../../contracts/index.js";
+import type {
+  IosExecutionEvidence,
+  IosExecutionSuccess,
+  IosExecutionFailure,
+  IosExecutionResult,
+  IosConfigApplyResult,
+  IosConfidence,
+} from "../../contracts/ios-execution-evidence.js";
+import { deriveIosConfidence } from "../../contracts/ios-execution-evidence.js";
 import { resolveCapabilities, type DeviceCapabilities } from "../../domain/ios/capabilities/pt-capability-resolver.js";
 import {
   planConfigureSvi,
@@ -27,10 +35,7 @@ import { resolveCapabilitySet } from "@cisco-auto/ios-domain";
 import type { CapabilitySet } from "@cisco-auto/ios-domain";
 import { VlanId, Ipv4Address, SubnetMask, InterfaceName } from "@cisco-auto/ios-domain";
 import { CliSession, type CommandHistoryEntry } from "@cisco-auto/ios-domain";
-import type { IosInteractiveResult } from "../../contracts/ios-interactive-result.js";
 import { classifyIosError, isHardFailure } from "../../domain/ios/ios-error-classifier.js";
-
-// Verification service
 import { IosVerificationService } from "./ios-verification-service.js";
 import type { VerificationResult } from "../../contracts/verification-result.js";
 
@@ -41,20 +46,13 @@ export class IosService {
     private inspectDevice: (device: string) => Promise<DeviceState>,
   ) {}
 
-  // CLI sessions — one per device, created on demand
   private readonly sessions = new Map<string, CliSession>();
-
-  // Lazy verifier instance
   private _verifier?: IosVerificationService;
   private get verifier(): IosVerificationService {
-    if (!this._verifier) this._verifier = new IosVerificationService(this.execIos.bind(this));
+    if (!this._verifier) this._verifier = new IosVerificationService(this.execIosRaw.bind(this));
     return this._verifier;
   }
 
-  /**
-   * Get or create a CliSession for a device.
-   * The session maintains IOS mode state across commands.
-   */
   getSession(device: string): CliSession {
     if (!this.sessions.has(device)) {
       this.sessions.set(
@@ -68,9 +66,6 @@ export class IosService {
     return this.sessions.get(device)!;
   }
 
-  /**
-   * Clear the session for a device (useful after a config error)
-   */
   clearSession(device: string): void {
     this.sessions.delete(device);
   }
@@ -84,148 +79,129 @@ export class IosService {
           command: cmd,
           options: { timeout: 30000, parse: false, ensurePrivileged: false },
         });
-
         const raw = result.value?.raw ?? "";
-
-        // Fase 6+: prefer diagnostics when available
         const diagnostics = result.value?.diagnostics;
         let status = 0;
         if (diagnostics) {
           if (diagnostics.source !== 'terminal') {
-            status = 1; // synthetic or unreliable
+            status = 1;
           } else if (diagnostics.completionReason !== 'command-ended') {
-            status = 1; // didn't complete normally
+            status = 1;
           }
         } else {
           status = raw.includes("%") || raw.includes("Invalid") ? 1 : 0;
         }
-
         return [status, raw];
       },
     };
   }
 
-  /**
-   * Configure IOS device with multiple commands
-   */
-  async configIos(
-    device: string,
-    commands: string[],
-    options?: { save?: boolean }
-  ): Promise<void> {
-    const result = await this.bridge.sendCommandAndWait<{
-      ok: boolean;
-      error?: string;
-      code?: string;
-      deferred?: boolean;
-      ticket?: string;
-    }>(
-      "configIos",
-      {
-        id: this.generateId(),
-        device,
-        commands,
-        save: options?.save ?? true,
-      },
-    );
+  // ==========================================================================
+  // Fase 4: normalización de evidencia
+  // ==========================================================================
 
-    const value = result.value;
-
-    if (value && typeof value === "object") {
-      if (value.deferred === true) return;
-
-      if (value.ok === false) {
-        const errorMsg = value.error || "IOS configuration failed";
-        const code = value.code;
-        if (errorMsg.includes("Cannot read property")) {
-          throw new Error(
-            `IOS simulator error on device '${device}'. The PT IOS simulator may not be available or the device may not support IOS commands in the current PT session.\n` +
-            `Details: ${errorMsg}\n` +
-            `Suggestion: Verify that Packet Tracer is running with the runtime scripts loaded, and that the device model supports IOS.`
-          );
-        }
-        if (code) {
-          throw new Error(`IOS configuration failed (${code}): ${errorMsg}`);
-        }
-        throw new Error(errorMsg);
-      }
-
-      const source = (value as { source?: string }).source;
-      if (source === "synthetic") {
-        throw new Error(
-          `IOS configuration returned synthetic result for device '${device}'. Terminal execution is not available.`
-        );
-      }
-    }
+  private _normalizeEvidence(value: any): IosExecutionEvidence {
+    return {
+      source: value?.diagnostics?.source ?? value?.source ?? "unknown",
+      status: typeof value?.diagnostics?.commandStatus === "number"
+        ? value.diagnostics.commandStatus
+        : typeof value?.status === "number"
+          ? value.status
+          : undefined,
+      mode: value?.session?.mode,
+      prompt: value?.session?.prompt,
+      paging: value?.session?.paging,
+      awaitingConfirm: value?.session?.awaitingConfirm,
+      autoDismissedInitialDialog: value?.session?.autoDismissedInitialDialog,
+      completionReason: value?.diagnostics?.completionReason,
+    };
   }
 
-  /**
-   * Execute an IOS command and get the raw output
-   */
+  private _throwNormalizedIosError(
+    action: "execIos" | "execInteractive" | "configIos",
+    device: string,
+    value: any
+  ): never {
+    const evidence = this._normalizeEvidence(value);
+
+    if (evidence.source === "synthetic") {
+      throw new Error(
+        `${action} returned synthetic result for device '${device}'. Real terminal execution is not available.`
+      );
+    }
+
+    const code = value?.code ? ` (${value.code})` : "";
+    const message = value?.error || `${action} failed`;
+    throw new Error(`${action} failed${code}: ${message}`);
+  }
+
+  // ==========================================================================
+  // execIosRaw — versión interna sin lanzar errores (para verificación)
+  // ==========================================================================
+
+  private async execIosRaw(
+    device: string,
+    command: string,
+    parse = true,
+    timeout = 5000
+  ): Promise<{ raw: string; parsed?: any }> {
+    const result = await this.bridge.sendCommandAndWait<any>("execIos", {
+      id: this.generateId(),
+      device,
+      command,
+      parse,
+      timeout,
+    });
+    const value = result.value;
+    if (!value) return { raw: "", parsed: undefined };
+    return { raw: value.raw || "", parsed: value.parsed };
+  }
+
+  // ==========================================================================
+  // execIos — ejecución con evidencia y chequeo de fuente
+  // ==========================================================================
+
   async execIos<T = ParsedOutput>(
     device: string,
     command: string,
     parse = true,
     timeout = 5000
-  ): Promise<{ raw: string; parsed?: T }> {
-    const result = await this.bridge.sendCommandAndWait<{
-      raw: string;
-      parsed?: T;
-      ok: boolean;
-      error?: string;
-      code?: string;
-      source?: string;
-      deferred?: boolean;
-    }>(
-      "execIos",
-      {
-        id: this.generateId(),
-        device,
-        command,
-        parse,
-        timeout,
-      },
-    );
+  ): Promise<IosExecutionSuccess<T>> {
+    const result = await this.bridge.sendCommandAndWait<any>("execIos", {
+      id: this.generateId(),
+      device,
+      command,
+      parse,
+      timeout,
+    });
 
     const value = result.value;
+    const evidence = this._normalizeEvidence(value);
 
-    if (!value) return { raw: "", parsed: undefined };
-
-    if (value.ok === false) {
-      const errorMsg = value.error || "IOS execution failed";
-      const code = value.code;
-      if (code) throw new Error(`IOS execution failed (${code}): ${errorMsg}`);
-      throw new Error(errorMsg);
+    if (!value || value.ok === false) {
+      this._throwNormalizedIosError("execIos", device, value);
     }
 
-    const source = value.source;
-    if (source === "synthetic") throw new Error(`IOS execution returned synthetic result for device '${device}'. Terminal execution is not available.`);
-
-    return { raw: value.raw || "", parsed: value.parsed };
-  }
-
-  /**
-   * Execute an IOS command and parse the output
-   */
-  async show(device: string, command: string): Promise<ParsedOutput> {
-    const result = await this.execIos<ParsedOutput>(device, command, false);
-    const raw = result.raw || "";
-    const parser = getParser(command);
-
-    if (parser) {
-      try {
-        return parser(raw);
-      } catch {
-        // Si el parser falla, devolvemos la salida cruda.
-      }
+    if (evidence.source !== "terminal") {
+      this._throwNormalizedIosError("execIos", device, {
+        ...value,
+        error: `Execution did not come from a real terminal (source=${evidence.source})`,
+        code: "NON_TERMINAL_SOURCE",
+      });
     }
 
-    return { raw };
+    return {
+      ok: true,
+      raw: value.raw || "",
+      parsed: value.parsed as T | undefined,
+      evidence,
+    };
   }
 
-  /**
-   * Execute an IOS command with full session state management
-   */
+  // ==========================================================================
+  // execInteractive — sesión interactiva con evidencia
+  // ==========================================================================
+
   async execInteractive(
     device: string,
     command: string,
@@ -234,60 +210,162 @@ export class IosService {
       parse?: boolean;
       ensurePrivileged?: boolean;
     }
-  ): Promise<{ raw: string; parsed?: ParsedOutput; session?: { mode: string } }> {
-    const result = await this.bridge.sendCommandAndWait<{
-      raw: string;
-      parsed?: ParsedOutput;
-      session?: { mode: string; paging?: boolean; awaitingConfirm?: boolean };
-      ok: boolean;
-      error?: string;
-      code?: string;
-      source?: string;
-      deferred?: boolean;
-    }>(
-      "execInteractive",
-      {
-        id: this.generateId(),
-        device,
-        command,
-        options: {
-          timeout: options?.timeout ?? 30000,
-          parse: options?.parse ?? true,
-          ensurePrivileged: options?.ensurePrivileged ?? false,
-        },
+  ): Promise<IosExecutionSuccess<ParsedOutput>> {
+    const result = await this.bridge.sendCommandAndWait<any>("execInteractive", {
+      id: this.generateId(),
+      device,
+      command,
+      options: {
+        timeout: options?.timeout ?? 30000,
+        parse: options?.parse ?? true,
+        ensurePrivileged: options?.ensurePrivileged ?? false,
       },
-    );
+    });
 
     const value = result.value;
-    if (!value) return { raw: "" };
-    if (value.ok === false) {
-      const errorMsg = value.error || "IOS execution failed";
-      const code = value.code;
-      if (code) throw new Error(`IOS execution failed (${code}): ${errorMsg}`);
-      throw new Error(errorMsg);
+    const evidence = this._normalizeEvidence(value);
+
+    if (!value || value.ok === false) {
+      this._throwNormalizedIosError("execInteractive", device, value);
     }
-    const source = value.source;
-    if (source === "synthetic") throw new Error(`IOS execution returned synthetic result for device '${device}'. Terminal execution is not available.`);
-    return value;
+
+    if (evidence.source !== "terminal") {
+      this._throwNormalizedIosError("execInteractive", device, {
+        ...value,
+        error: `Interactive execution did not come from a real terminal`,
+        code: "NON_TERMINAL_SOURCE",
+      });
+    }
+
+    return {
+      ok: true,
+      raw: value.raw || "",
+      parsed: value.parsed,
+      evidence,
+    };
   }
 
-  async resolveCapabilities(device: string): Promise<DeviceCapabilities> {
-    const deviceState = await this.inspectDevice(device);
-    const model = deviceState.model || "unknown";
-    return resolveCapabilities(model);
+  // ==========================================================================
+  // configIos — devuelve IosConfigApplyResult (aplicar ≠ verificar)
+  // ==========================================================================
+
+  async configIos(
+    device: string,
+    commands: string[],
+    options?: { save?: boolean }
+  ): Promise<IosConfigApplyResult> {
+    const result = await this.bridge.sendCommandAndWait<any>("configIos", {
+      id: this.generateId(),
+      device,
+      commands,
+      save: options?.save ?? true,
+    });
+
+    const value = result.value;
+
+    if (value && typeof value === "object") {
+      if (value.deferred === true) {
+        return {
+          executed: true,
+          device,
+          commands,
+          evidence: { source: "unknown" as const },
+        };
+      }
+
+      const evidence = this._normalizeEvidence(value);
+
+      if (value.ok === false) {
+        const errorMsg = value.error || "IOS configuration failed";
+        if (errorMsg.includes("Cannot read property")) {
+          throw new Error(
+            `IOS simulator error on device '${device}'. The PT IOS simulator may not be available or the device may not support IOS commands in the current PT session.\n` +
+            `Details: ${errorMsg}\n` +
+            `Suggestion: Verify that Packet Tracer is running with the runtime scripts loaded, and that the device model supports IOS.`
+          );
+        }
+        const code = value.code;
+        if (code) {
+          throw new Error(`IOS configuration failed (${code}): ${errorMsg}`);
+        }
+        throw new Error(errorMsg);
+      }
+
+      if (evidence.source === "synthetic") {
+        throw new Error(
+          `IOS configuration returned synthetic result for device '${device}'. Terminal execution is not available.`
+        );
+      }
+    }
+
+    const evidence = value ? this._normalizeEvidence(value) : { source: "unknown" as const };
+    return {
+      executed: true,
+      device,
+      commands,
+      evidence,
+    };
   }
 
-  // Convenience show command methods
+  // ==========================================================================
+  // show / showParsed — pipeline coherente de parse
+  // ==========================================================================
+
+  async showParsed<T = ParsedOutput>(
+    device: string,
+    command: string,
+    options?: {
+      ensurePrivileged?: boolean;
+      timeout?: number;
+    }
+  ): Promise<IosExecutionSuccess<T>> {
+    const result = await this.execInteractive(device, command, {
+      parse: false,
+      ensurePrivileged: options?.ensurePrivileged ?? true,
+      timeout: options?.timeout ?? 10000,
+    });
+
+    const parser = getParser(command);
+    let parsed: T | undefined;
+
+    if (parser) {
+      try {
+        parsed = parser(result.raw) as T;
+      } catch {
+        // Parser falló — devolvemos raw sin parsed
+      }
+    }
+
+    return {
+      ok: true,
+      raw: result.raw,
+      parsed,
+      evidence: result.evidence,
+    };
+  }
+
+  async show(device: string, command: string): Promise<ParsedOutput> {
+    const result = await this.showParsed<ParsedOutput>(device, command);
+    return result.parsed ?? { raw: result.raw };
+  }
+
+  // ==========================================================================
+  // Convenience show methods — sobre showParsed
+  // ==========================================================================
+
   async showIpInterfaceBrief(device: string): Promise<ShowIpInterfaceBrief> {
-    return this.show(device, "show ip interface brief") as Promise<ShowIpInterfaceBrief>;
+    const result = await this.showParsed<ShowIpInterfaceBrief>(device, "show ip interface brief");
+    return result.parsed as ShowIpInterfaceBrief;
   }
 
   async showVlan(device: string): Promise<ShowVlan> {
-    return this.show(device, "show vlan brief") as Promise<ShowVlan>;
+    const result = await this.showParsed<ShowVlan>(device, "show vlan brief");
+    return result.parsed as ShowVlan;
   }
 
   async showIpRoute(device: string): Promise<ShowIpRoute> {
-    return this.show(device, "show ip route") as Promise<ShowIpRoute>;
+    const result = await this.showParsed<ShowIpRoute>(device, "show ip route");
+    return result.parsed as ShowIpRoute;
   }
 
   async showRunningConfig(device: string): Promise<ShowRunningConfig> {
@@ -305,12 +383,9 @@ export class IosService {
   }
 
   // ==========================================================================
-  // Semantic Configuration Methods (use CommandPlan builders)
+  // Operaciones semánticas IOS de primer nivel
   // ==========================================================================
 
-  /**
-   * Configure an SVI (Layer 3 interface) on a multilayer switch
-   */
   async configureSvi(
     device: string,
     vlan: number,
@@ -329,16 +404,12 @@ export class IosService {
     if (!plan) throw new Error(`${device} does not support SVIs`);
     await this._executePlan(device, plan, options?.save);
 
-    // Best-effort verification and attach event for traceability
     try {
       const v = await this.verifier.verifyInterfaceIp(device, `Vlan${vlan}`, ip);
       try { (this.bridge as any).appendEvent && (this.bridge as any).appendEvent({ type: 'verification', id: this.generateId(), device, verification: v }); } catch (e) {}
     } catch {}
   }
 
-  /**
-   * Configure an access port on a switch
-   */
   async configureAccessPort(
     device: string,
     portName: string,
@@ -362,9 +433,6 @@ export class IosService {
     } catch {}
   }
 
-  /**
-   * Configure a trunk port on a switch
-   */
   async configureTrunkPort(
     device: string,
     portName: string,
@@ -387,9 +455,6 @@ export class IosService {
     } catch {}
   }
 
-  /**
-   * Configure a subinterface (router-on-a-stick)
-   */
   async configureSubinterface(
     device: string,
     subinterfaceName: string,
@@ -415,9 +480,6 @@ export class IosService {
     } catch {}
   }
 
-  /**
-   * Configure a static route
-   */
   async configureStaticRoute(
     device: string,
     network: string,
@@ -441,9 +503,6 @@ export class IosService {
     } catch {}
   }
 
-  /**
-   * Configure DHCP relay (ip helper-address) on an interface
-   */
   async configureDhcpRelay(
     device: string,
     interfaceName: string,
@@ -464,8 +523,186 @@ export class IosService {
     } catch {}
   }
 
+  // --- Nuevos métodos semánticos (Fase 4) ---
+
+  async configureDhcpPool(
+    device: string,
+    poolName: string,
+    network: string,
+    mask: string,
+    defaultRouter: string,
+    dnsServer?: string,
+    options?: { save?: boolean }
+  ): Promise<void> {
+    const commands = [
+      `ip dhcp pool ${poolName}`,
+      `network ${network} ${mask}`,
+      `default-router ${defaultRouter}`,
+    ];
+
+    if (dnsServer) {
+      commands.push(`dns-server ${dnsServer}`);
+    }
+
+    await this.configIos(device, commands, { save: options?.save ?? true });
+
+    const verification = await this.execInteractive(device, "show running-config", {
+      parse: false,
+      ensurePrivileged: true,
+      timeout: 15000,
+    });
+
+    if (!verification.raw.includes(`ip dhcp pool ${poolName}`)) {
+      throw new Error(`DHCP pool '${poolName}' was not found after configuration.`);
+    }
+  }
+
+  async configureOspfNetwork(
+    device: string,
+    processId: number,
+    network: string,
+    wildcard: string,
+    area: number,
+    options?: { save?: boolean }
+  ): Promise<void> {
+    await this.configIos(device, [
+      `router ospf ${processId}`,
+      `network ${network} ${wildcard} area ${area}`,
+    ], { save: options?.save ?? true });
+
+    const verification = await this.execInteractive(device, "show ip protocols", {
+      parse: false,
+      ensurePrivileged: true,
+      timeout: 10000,
+    });
+
+    if (!verification.raw.toLowerCase().includes("ospf")) {
+      throw new Error(`OSPF process ${processId} was not visible after configuration.`);
+    }
+  }
+
+  async configureSshAccess(
+    device: string,
+    domainName: string,
+    username: string,
+    password: string,
+    options?: { save?: boolean }
+  ): Promise<void> {
+    await this.configIos(device, [
+      `ip domain-name ${domainName}`,
+      `username ${username} secret ${password}`,
+      `crypto key generate rsa`,
+      `line vty 0 4`,
+      `transport input ssh`,
+      `login local`,
+    ], { save: options?.save ?? true });
+
+    const verification = await this.execInteractive(device, "show running-config", {
+      parse: false,
+      ensurePrivileged: true,
+      timeout: 15000,
+    });
+
+    const raw = verification.raw.toLowerCase();
+    if (!raw.includes("transport input ssh") || !raw.includes("login local")) {
+      throw new Error(`SSH access configuration was not fully visible after apply.`);
+    }
+  }
+
+  async configureAccessListStandard(
+    device: string,
+    aclNumber: number,
+    entries: string[],
+    options?: { save?: boolean }
+  ): Promise<void> {
+    const commands = entries.map(e => `access-list ${aclNumber} ${e}`);
+    await this.configIos(device, commands, { save: options?.save ?? true });
+
+    const verification = await this.execInteractive(device, "show access-lists", {
+      parse: false,
+      ensurePrivileged: true,
+      timeout: 10000,
+    });
+
+    if (!verification.raw.includes(String(aclNumber))) {
+      throw new Error(`ACL ${aclNumber} was not found after configuration.`);
+    }
+  }
+
   // ==========================================================================
-  // Private helpers
+  // Helpers de confianza y capacidades
+  // ==========================================================================
+
+  async getConfidence(
+    device: string,
+    evidence: IosExecutionEvidence,
+    verificationCheck?: string
+  ): Promise<IosConfidence> {
+    if (evidence.source !== "terminal") return "non_terminal";
+
+    if (!verificationCheck) return "executed";
+
+    try {
+      const [checkName, ...rest] = verificationCheck.split(":");
+      let verification: VerificationResult | undefined;
+      const first = rest[0] ?? "";
+      const second = rest[1] ?? "";
+      const third = rest[2] ?? "";
+
+      switch (checkName) {
+        case "interface-ip":
+          if (!first || !second) return "unverified";
+          verification = await this.verifier.verifyInterfaceIp(device, first, second);
+          break;
+        case "access-port":
+          if (!first) return "unverified";
+          verification = await this.verifier.verifyAccessPort(device, first, second ? parseInt(second) : undefined);
+          break;
+        case "trunk-port":
+          if (!first) return "unverified";
+          verification = await this.verifier.verifyTrunkPort(device, first, rest.slice(1).filter(Boolean).map(Number));
+          break;
+        case "static-route":
+          if (!first || !second || !third) return "unverified";
+          verification = await this.verifier.verifyStaticRoute(device, first, second, third);
+          break;
+        case "subinterface":
+          if (!first || !second) return "unverified";
+          verification = await this.verifier.verifySubinterface(device, first, second);
+          break;
+        case "dhcp-relay":
+          if (!first || !second) return "unverified";
+          verification = await this.verifier.verifyDhcpRelay(device, first, second);
+          break;
+        case "dhcp-pool":
+          if (!first) return "unverified";
+          verification = await this.verifier.verifyDhcpPool(device, first);
+          break;
+        case "ospf":
+          verification = await this.verifier.verifyOspf(device, first ? parseInt(first) : undefined);
+          break;
+        case "acl":
+          if (!first) return "unverified";
+          verification = await this.verifier.verifyAcl(device, parseInt(first));
+          break;
+        default:
+          return "unverified";
+      }
+
+      return deriveIosConfidence(evidence, verification);
+    } catch {
+      return "unverified";
+    }
+  }
+
+  async resolveCapabilities(device: string): Promise<DeviceCapabilities> {
+    const deviceState = await this.inspectDevice(device);
+    const model = deviceState.model || "unknown";
+    return resolveCapabilities(model);
+  }
+
+  // ==========================================================================
+  // Privados
   // ==========================================================================
 
   private async _getCapabilitySet(device: string): Promise<CapabilitySet> {

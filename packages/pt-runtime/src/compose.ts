@@ -1,6 +1,26 @@
 // ============================================================================
 // Runtime Composer - Assembles handlers into executable runtime.js
 // ============================================================================
+//
+// composeRuntime()
+//
+// Generates a pure runtime layer to be executed inside Packet Tracer by main.js.
+//
+// runtime.js responsibilities:
+// - decode payload.type and dispatch to pure handlers
+// - create deferred IOS jobs when needed (configIos, execIos)
+// - poll deferred IOS jobs when asked (__pollDeferred)
+// - run pure PT operations (device, link, inspect, canvas, module)
+//
+// runtime.js does NOT:
+// - manage command queue files
+// - manage lease ownership
+// - perform crash recovery
+// - own PT module lifecycle
+// - own terminal listener lifecycle
+//
+// All durable / lifecycle concerns belong to main.js or the file bridge.
+// ============================================================================
 
 import { generateRuntimeCode } from "./runtime-generator";
 import {
@@ -14,7 +34,7 @@ import {
   handleRenameDevice,
 } from "./handlers/device";
 import { handleAddLink, handleRemoveLink } from "./handlers/link";
-import { handleConfigHost, handleConfigIos, handleExecIos } from "./handlers/config";
+import { handleConfigHost, handleConfigIos, handleExecIos, handleDeferredPoll } from "./handlers/config";
 import { handleInspect, handleSnapshot } from "./handlers/inspect";
 import { handleAddModule, handleRemoveModule } from "./handlers/module";
 import { handleListCanvasRects, handleGetRect, handleDevicesInRect } from "./handlers/canvas";
@@ -47,6 +67,7 @@ export function composeRuntime(): string {
 // ============================================================================
 
 export const HANDLERS: HandlerMap = {
+  __pollDeferred: (p, d) => handleDeferredPoll(p as unknown as Parameters<typeof handleDeferredPoll>[0], d) as unknown as HandlerResult,
   addDevice: (p, d) => handleAddDevice(p as unknown as Parameters<typeof handleAddDevice>[0], d),
   removeDevice: (p, d) => handleRemoveDevice(p as unknown as Parameters<typeof handleRemoveDevice>[0], d),
   listDevices: (p, d) => handleListDevices(p as unknown as Parameters<typeof handleListDevices>[0], d),

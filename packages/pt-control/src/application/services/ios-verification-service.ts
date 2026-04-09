@@ -53,6 +53,15 @@ export class IosVerificationService {
         }
       }
 
+      const interfaceBlock = raw.match(new RegExp('interface\\s+' + interfaceName.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") + '[\\s\\S]*?(?=^interface\\s+|^!)', 'im'))?.[0] ?? '';
+      if (interfaceBlock) {
+        const ipMatch = interfaceBlock.match(/ip address\s+(\S+)/i);
+        const foundIp = ipMatch ? ipMatch[1] : '';
+        const ok = foundIp === expectedIp;
+        checks.push({ name: 'interface-ip-match', ok, details: { interface: interfaceName, expected: expectedIp, found: foundIp } });
+        return this.makeResult(true, ok, checks, warnings, sources);
+      }
+
       // Fallback: regex parse raw output
       const re = new RegExp("^" + interfaceName.replace(/[-/\\\\^$*+?.()|[\]{}]/g, "\\$&") + "\\s+(\\S+)", "mi");
       const m = raw.match(re);
@@ -121,10 +130,10 @@ export class IosVerificationService {
       // parsed.running-config may present interface blocks
       if (parsed && parsed.entries && parsed.entries.interfaces) {
         const ifaces = parsed.entries.interfaces;
-        const found = ifaces[portName] || Object.keys(ifaces).find(k => k.toLowerCase().endsWith(portName.toLowerCase()));
+        const found = ifaces[portName] || Object.keys(ifaces).find((k) => k.toLowerCase().endsWith(portName.toLowerCase()));
         if (found) {
           const body = ifaces[found];
-          const cfg = typeof body === 'string' ? body : (body.commands || body);
+          const cfg = typeof body === 'string' ? body : JSON.stringify(body ?? '');
           const hasAccess = JSON.stringify(cfg).toLowerCase().indexOf('switchport access vlan') >= 0 || JSON.stringify(cfg).toLowerCase().indexOf('switchport mode access') >= 0;
           checks.push({ name: 'access-port-mode', ok: !!hasAccess, details: { interface: found } });
           if (expectedVlan) {
@@ -184,7 +193,7 @@ export class IosVerificationService {
       if (expectedVlans && expectedVlans.length > 0) {
         var m = block.match(/switchport trunk allowed vlan\s+(.+)/i);
         var allowed = m ? m[1].trim() : '';
-        var allowedSet = new Set();
+        var allowedSet = new Set<number>();
         if (allowed) {
           allowed.split(/[,\s]+/).forEach(function(p){ if(p) { if(p.indexOf('-')>=0) { var r = p.split('-'); var a = parseInt(r[0]); var b = parseInt(r[1]); for(var x=a;x<=b;x++) allowedSet.add(x); } else allowedSet.add(parseInt(p)); } });
         }
@@ -217,6 +226,12 @@ export class IosVerificationService {
         });
         checks.push({ name: 'static-route-present', ok: !!found, details: { network, mask, nextHop, found } });
         return this.makeResult(true, !!found, checks, warnings, sources);
+      }
+
+      const poolMatch = raw.match(new RegExp(`ip dhcp pool\\s+${poolName.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}`, 'i'));
+      if (poolMatch) {
+        checks.push({ name: 'dhcp-pool-present', ok: true, details: { poolName } });
+        return this.makeResult(true, true, checks, warnings, sources);
       }
 
       // fallback raw
@@ -276,7 +291,7 @@ export class IosVerificationService {
   }
 
   async verifyDhcpRelay(device: string, interfaceName: string, helperAddress: string): Promise<VerificationResult> {
-    const sources = ["show running-config"]; 
+    const sources = ["show running-config"];
     const checks: VerificationCheck[] = [];
     const warnings: string[] = [];
 
@@ -294,6 +309,73 @@ export class IosVerificationService {
       var ok = !!m;
       checks.push({ name: 'dhcprelay-helper', ok: ok, details: { interface: interfaceName, helper: helperAddress } });
       return this.makeResult(true, ok, checks, warnings, sources);
+    } catch (err) {
+      return this.makeResult(false, false, checks, [String(err)], sources);
+    }
+  }
+
+  async verifyDhcpPool(device: string, poolName: string): Promise<VerificationResult> {
+    const sources = ["show running-config"];
+    const checks: VerificationCheck[] = [];
+    const warnings: string[] = [];
+
+    try {
+      const rc = await this.exec(device, "show running-config", true, 5000);
+      const raw = rc.raw || "";
+      const hasPool = raw.includes(`ip dhcp pool ${poolName}`);
+      checks.push({ name: 'dhcp-pool-present', ok: hasPool, details: { poolName } });
+      if (!hasPool) warnings.push(`DHCP pool '${poolName}' not found in running-config`);
+      return this.makeResult(true, hasPool, checks, warnings, sources);
+    } catch (err) {
+      return this.makeResult(false, false, checks, [String(err)], sources);
+    }
+  }
+
+  async verifyOspf(device: string, processId?: number): Promise<VerificationResult> {
+    const sources = ["show ip protocols"];
+    const checks: VerificationCheck[] = [];
+    const warnings: string[] = [];
+
+    try {
+      const out = await this.exec(device, "show ip protocols", true, 5000);
+      const raw = out.raw || "";
+      const hasOspf = raw.toLowerCase().includes("ospf");
+      checks.push({ name: 'ospf-visible', ok: hasOspf, details: { processId } });
+
+      if (!hasOspf) {
+        warnings.push('OSPF not visible in show ip protocols');
+        return this.makeResult(true, false, checks, warnings, sources);
+      }
+
+      if (processId !== undefined) {
+        const hasProcess = raw.includes(`Routing Protocol is "ospf ${processId}"`) || raw.includes(`Routing Protocol is "ospf"`);
+        checks.push({ name: 'ospf-process-id', ok: hasProcess, details: { processId } });
+        if (!hasProcess) warnings.push(`OSPF process ${processId} not found`);
+        return this.makeResult(true, hasProcess, checks, warnings, sources);
+      }
+
+      if (raw.toLowerCase().includes('ospf')) {
+        return this.makeResult(true, true, checks, warnings, sources);
+      }
+
+      return this.makeResult(true, true, checks, warnings, sources);
+    } catch (err) {
+      return this.makeResult(false, false, checks, [String(err)], sources);
+    }
+  }
+
+  async verifyAcl(device: string, aclNumber: number): Promise<VerificationResult> {
+    const sources = ["show access-lists"];
+    const checks: VerificationCheck[] = [];
+    const warnings: string[] = [];
+
+    try {
+      const out = await this.exec(device, "show access-lists", true, 5000);
+      const raw = out.raw || "";
+      const hasAcl = raw.includes(`${aclNumber} `) || raw.includes(`access-list ${aclNumber}`);
+      checks.push({ name: 'acl-present', ok: hasAcl, details: { aclNumber } });
+      if (!hasAcl) warnings.push(`ACL ${aclNumber} not found in show access-lists`);
+      return this.makeResult(true, hasAcl, checks, warnings, sources);
     } catch (err) {
       return this.makeResult(false, false, checks, [String(err)], sources);
     }

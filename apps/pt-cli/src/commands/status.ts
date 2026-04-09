@@ -1,12 +1,14 @@
 #!/usr/bin/env bun
-import { historyStore } from '../telemetry/history-store.js';
-
 import { Command } from 'commander';
 import { createDefaultPTController } from '@cisco-auto/pt-control';
 import { loadContextStatus, collectContextStatus } from '../application/context-supervisor.js';
 import { ensureSupervisorRunning, getSupervisorStatus } from '../system/context-supervisor.js';
 import { getGlobalFlags } from '../flags.js';
 import type { ContextStatus } from '../contracts/context-status.js';
+import { historyStore } from '../telemetry/history-store.js';
+import { existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { getDefaultDevDir } from '../system/paths.js';
 
 async function waitForSupervisorReady(maxAttempts = 5, delayMs = 200): Promise<void> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -59,38 +61,50 @@ export function createStatusCommand(): Command {
         return;
       }
 
-      // Human readable
       const supervStatus = getSupervisorStatus();
-      const running = supervStatus.running ? '✓ Running' : '✗ Not running';
-      
+      const lastEntry = (await historyStore.list({ limit: 20 })).find((entry) => entry.verificationSummary || (entry.warnings && entry.warnings.length > 0));
+      const lastFailed = (await historyStore.list({ limit: 20, failedOnly: true }))[0];
+
+      const ptDevDir = process.env.PT_DEV_DIR ?? getDefaultDevDir();
+      const deadLetterDir = join(ptDevDir, 'dead-letter');
+      const deadCount = existsSync(deadLetterDir) ? readdirSync(deadLetterDir).filter(f => f.endsWith('.json')).length : 0;
+
       console.log('');
-      console.log('Supervisor:', running, supervStatus.pid ? `(PID: ${supervStatus.pid})` : '');
-      console.log('Packet Tracer Heartbeat :', status.heartbeat.state);
-      console.log('Bridge ready           :', status.bridge.ready ? 'yes' : 'no');
-      console.log('Topology materialized  :', status.topology.materialized ? 'yes' : 'no');
-      console.log('Topology health        :', status.topology.health);
-      console.log('Devices                :', status.topology.deviceCount);
-      console.log('Links                  :', status.topology.linkCount);
+      console.log(`Supervisor            : ${supervStatus.running ? '✓ running' : '✗ not running'}${supervStatus.pid ? ` (PID ${supervStatus.pid})` : ''}`);
+      console.log(`Heartbeat             : ${status.heartbeat.state}${status.heartbeat.ageMs ? ` (age ${status.heartbeat.ageMs}ms)` : ''}`);
+      console.log(`Bridge                : ${status.bridge.ready ? 'ready' : 'not ready'}${status.bridge.leaseValid === false ? ' (lease invalid)' : ''}`);
+      console.log(`Lease                 : ${status.bridge.leaseValid === false ? 'invalid' : 'valid'}`);
+      console.log(`Queue                 : ${(status.bridge.queuedCount ?? 0)} queued / ${(status.bridge.inFlightCount ?? 0)} in-flight / ${deadCount} dead-letter`);
+      console.log(`Topology              : ${status.topology.materialized ? 'materialized' : 'warming'}`);
+      console.log(`Topology health       : ${status.topology.health}`);
+      console.log(`Devices               : ${status.topology.deviceCount}`);
+      console.log(`Links                 : ${status.topology.linkCount}`);
+
+      if (lastFailed) {
+        console.log(`\nÚltimo fallo          : ${lastFailed.action} (${lastFailed.startedAt?.slice(0, 19)})`);
+        if (lastFailed.errorMessage) console.log(`  Error: ${lastFailed.errorMessage.slice(0, 80)}`);
+      }
 
       if (status.warnings && status.warnings.length > 0) {
         console.log('\nWarnings:');
         for (const w of status.warnings) {
           console.log(' -', w);
         }
-        // Phase 7: show recent verification-related warnings from history
-        try {
-          (async () => {
-            const recent = await historyStore.list({ limit: 20 });
-            const recentVer = recent.find(e => e.verificationSummary || (e.warnings && e.warnings.length));
-            if (recentVer) {
-              console.log('\nÚltima verificación / advertencia en historial:');
-              if (recentVer.verificationSummary) console.log('  -', recentVer.verificationSummary);
-              if (recentVer.warnings && recentVer.warnings.length) console.log('  - warnings:', recentVer.warnings.join('; '));
-            }
-          })();
-        } catch (e) {}
       } else {
         console.log('\nWarnings: none');
+      }
+
+      if (status.notes && status.notes.length > 0) {
+        console.log('\nNotas de contexto:');
+        for (const n of status.notes.slice(-5)) {
+          console.log(' -', n);
+        }
+      }
+
+      if (lastEntry) {
+        console.log('\nÚltima verificación / advertencia en historial:');
+        if (lastEntry.verificationSummary) console.log(`  - ${lastEntry.verificationSummary}`);
+        if (lastEntry.warnings && lastEntry.warnings.length) console.log(`  - warnings: ${lastEntry.warnings.join('; ')}`);
       }
     });
 }

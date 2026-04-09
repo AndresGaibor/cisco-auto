@@ -1,6 +1,6 @@
 /**
  * Backpressure manager for command queue.
- * 
+ *
  * Prevents the queue from growing unbounded by tracking
  * pending commands and blocking when capacity is reached.
  */
@@ -41,10 +41,6 @@ export class BackpressureManager {
     };
   }
 
-  /**
-   * Check if there's capacity to send a new command.
-   * Throws BackpressureError if queue is full.
-   */
   checkCapacity(): void {
     const pending = this.getPendingCount();
     if (pending >= this.config.maxPending) {
@@ -57,22 +53,16 @@ export class BackpressureManager {
     }
   }
 
-  /**
-   * Wait until there's capacity to send a command.
-   * Returns immediately if there's capacity.
-   * Throws error if timeout is reached.
-   */
   async waitForCapacity(timeoutMs?: number): Promise<void> {
     const deadline = Date.now() + (timeoutMs ?? this.config.maxWaitMs);
 
     while (Date.now() < deadline) {
       const pending = this.getPendingCount();
-      
+
       if (pending < this.config.maxPending) {
-        return; // Capacity available
+        return;
       }
 
-      // Wait before checking again
       await new Promise((resolve) =>
         setTimeout(resolve, this.config.checkIntervalMs)
       );
@@ -87,9 +77,6 @@ export class BackpressureManager {
     );
   }
 
-  /**
-   * Get current number of pending commands.
-   */
   getPendingCount(): number {
     try {
       const commandsDir = this.paths.commandsDir();
@@ -102,21 +89,15 @@ export class BackpressureManager {
 
       return commands + inFlight;
     } catch {
-      return 0; // If we can't read, assume empty
+      return 0;
     }
   }
 
-  /**
-   * Get available capacity.
-   */
   getAvailableCapacity(): number {
     const pending = this.getPendingCount();
     return Math.max(0, this.config.maxPending - pending);
   }
 
-  /**
-   * Get configuration and current stats.
-   */
   getStats(): {
     maxPending: number;
     currentPending: number;
@@ -130,5 +111,40 @@ export class BackpressureManager {
       availableCapacity: this.config.maxPending - pending,
       utilizationPercent: Math.round((pending / this.config.maxPending) * 100),
     };
+  }
+
+  getDetailedStats(): {
+    maxPending: number;
+    queuedCount: number;
+    inFlightCount: number;
+    totalPending: number;
+    availableCapacity: number;
+    utilizationPercent: number;
+  } {
+    try {
+      const queuedCount = readdirSync(this.paths.commandsDir())
+        .filter((f) => f.endsWith(".json")).length;
+      const inFlightCount = readdirSync(this.paths.inFlightDir())
+        .filter((f) => f.endsWith(".json")).length;
+      const totalPending = queuedCount + inFlightCount;
+
+      return {
+        maxPending: this.config.maxPending,
+        queuedCount,
+        inFlightCount,
+        totalPending,
+        availableCapacity: Math.max(0, this.config.maxPending - totalPending),
+        utilizationPercent: Math.round((totalPending / this.config.maxPending) * 100),
+      };
+    } catch {
+      return {
+        maxPending: this.config.maxPending,
+        queuedCount: 0,
+        inFlightCount: 0,
+        totalPending: 0,
+        availableCapacity: this.config.maxPending,
+        utilizationPercent: 0,
+      };
+    }
   }
 }

@@ -8,7 +8,7 @@ import { Command } from 'commander';
 import { resolve } from 'path';
 import { homedir } from 'os';
 import chalk from 'chalk';
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
 import type { CliResult } from '../contracts/cli-result.js';
@@ -392,6 +392,165 @@ export function createResultsCommand(): Command {
       if (!flags.quiet || !result.ok) console.log(output);
 
       if (!result.ok) process.exit(1);
+    });
+
+  cmd
+    .command('show <commandId>')
+    .description('Ver envelope autoritativo de un resultado')
+    .option('--json', 'Salida JSON', false)
+    .action(async (commandId: string, options) => {
+      const devDir = getDefaultDevDir();
+      const resultsDir = resolve(devDir, 'results');
+      const resultPath = resolve(resultsDir, `cmd_${commandId.replace('cmd_', '')}.json`);
+      const directPath = resolve(resultsDir, `${commandId}.json`);
+      const filePath = existsSync(directPath) ? directPath : resultPath;
+
+      if (!existsSync(filePath)) {
+        console.log(`Resultado no encontrado para: ${commandId}`);
+        return;
+      }
+
+      const content = readFileSync(filePath, 'utf-8');
+      const envelope = JSON.parse(content);
+
+      if (options.json) {
+        console.log(JSON.stringify(envelope, null, 2));
+        return;
+      }
+
+      console.log('');
+      console.log(`═══ Resultado: ${commandId} ═══`);
+      console.log(`Status    : ${envelope.status ?? 'unknown'}`);
+      console.log(`OK        : ${envelope.ok}`);
+      if (envelope.startedAt) console.log(`Inicio    : ${new Date(envelope.startedAt).toISOString()}`);
+      if (envelope.completedAt) console.log(`Fin       : ${new Date(envelope.completedAt).toISOString()}`);
+      if (envelope.startedAt && envelope.completedAt) {
+        const dur = envelope.completedAt - envelope.startedAt;
+        console.log(`Duración  : ${dur}ms`);
+      }
+      if (envelope.protocolVersion) console.log(`Protocolo: v${envelope.protocolVersion}`);
+
+      if (envelope.value) {
+        const v = envelope.value;
+        if (v.error) console.log(`Error     : ${v.error}`);
+        if (v.code) console.log(`Código    : ${v.code}`);
+        if (v.device) console.log(`Dispositivo: ${v.device}`);
+        if (v.source) console.log(`Fuente    : ${v.source}`);
+        if (v.session) {
+          const s = v.session;
+          if (s.mode) console.log(`Modo IOS  : ${s.mode}`);
+          if (s.prompt) console.log(`Prompt    : ${s.prompt}`);
+        }
+      }
+
+      const commandsTraceDir = join(devDir, 'logs', 'commands');
+      const tracePath = join(commandsTraceDir, `${commandId.replace('cmd_', '')}.json`);
+      const directTracePath = join(commandsTraceDir, `${commandId}.json`);
+      const traceFilePath = existsSync(directTracePath) ? directTracePath : tracePath;
+      if (existsSync(traceFilePath)) {
+        const trace = JSON.parse(readFileSync(traceFilePath, 'utf-8'));
+        console.log('\nPT-Side Trace:');
+        for (const [key, value] of Object.entries(trace)) {
+          console.log(`  ${key}: ${JSON.stringify(value)}`);
+        }
+      }
+      console.log('');
+    });
+
+  cmd
+    .command('failed')
+    .description('Listar resultados fallidos')
+    .option('-n, --limit <num>', 'Máximo a mostrar', '20')
+    .action(async (options) => {
+      const devDir = getDefaultDevDir();
+      const resultsDir = resolve(devDir, 'results');
+      const limit = parseInt(options.limit) || 20;
+
+      if (!existsSync(resultsDir)) {
+        console.log('Directorio de resultados no encontrado.');
+        return;
+      }
+
+      const files = readdirSync(resultsDir)
+        .filter(f => f.startsWith('cmd_') && f.endsWith('.json'))
+        .sort()
+        .reverse()
+        .slice(0, limit * 3);
+
+      const failed: { name: string; status: string; error?: string; completedAt?: number }[] = [];
+
+      for (const f of files) {
+        if (failed.length >= limit) break;
+        try {
+          const content = readFileSync(resolve(resultsDir, f), 'utf-8');
+          const envelope = JSON.parse(content);
+          if (!envelope.ok || envelope.status === 'failed') {
+            failed.push({
+              name: f,
+              status: envelope.status,
+              error: envelope.value?.error,
+              completedAt: envelope.completedAt,
+            });
+          }
+        } catch { /* skip */ }
+      }
+
+      console.log('');
+      console.log(`═══ Resultados fallidos (${failed.length}) ═══`);
+      console.log('');
+      for (const f of failed) {
+        const date = f.completedAt ? new Date(f.completedAt).toISOString().slice(0, 19) : 'unknown';
+        console.log(`  ✗ ${f.name}  [${date}]`);
+        if (f.error) console.log(`    → ${f.error.slice(0, 100)}`);
+      }
+      console.log('');
+    });
+
+  cmd
+    .command('pending')
+    .description('Ver estado de cola y comandos en proceso')
+    .action(async () => {
+      const devDir = getDefaultDevDir();
+      const commandsDir = resolve(devDir, 'commands');
+      const inFlightDir = resolve(devDir, 'in-flight');
+      const deadLetterDir = resolve(devDir, 'dead-letter');
+      const pendingFile = resolve(devDir, 'journal', 'pending-commands.json');
+
+      const countDir = (dir: string) => {
+        if (!existsSync(dir)) return 0;
+        return readdirSync(dir).filter(f => f.endsWith('.json')).length;
+      };
+
+      const queueCount = countDir(commandsDir);
+      const inFlightCount = countDir(inFlightDir);
+      const deadCount = countDir(deadLetterDir);
+
+      let pendingDeferred = 0;
+      if (existsSync(pendingFile)) {
+        try {
+          const pending = JSON.parse(readFileSync(pendingFile, 'utf-8'));
+          pendingDeferred = Object.keys(pending).length;
+        } catch { /* skip */ }
+      }
+
+      console.log('');
+      console.log('═══ Estado de cola ═══');
+      console.log('');
+      console.log(`  En cola (commands/)     : ${queueCount}`);
+      console.log(`  En vuelo (in-flight/)   : ${inFlightCount}`);
+      console.log(`  Deferred (journal)      : ${pendingDeferred}`);
+      console.log(`  Dead-letter             : ${deadCount}`);
+
+      if (deadCount > 0) {
+        console.log('');
+        console.log('  ⚠️  Hay comandos en dead-letter. Revisa con:');
+        console.log(`     ls ${deadLetterDir}`);
+      }
+      if (inFlightCount > 5) {
+        console.log('');
+        console.log('  ⚠️  Alta cantidad en in-flight. PT podría estar atascado.');
+      }
+      console.log('');
     });
 
   return cmd;

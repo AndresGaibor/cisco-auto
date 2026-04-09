@@ -2,15 +2,12 @@
 // Config Handlers - Device configuration
 // ============================================================================
 //
-// PHASE 1 FIX: These handlers now create IOS jobs and return deferred results.
-// The actual execution happens in the IOS_JOBS system in main.js (persistent).
-// Synthetic show command responses have been removed.
+// PURE runtime handlers — execution context: Packet Tracer Qt Script Engine.
 //
 // Architecture:
-// - handleConfigIos() and handleExecIos() create jobs in IOS_JOBS (global in main.js)
-// - They return { deferred: true, ticket, kind: "ios" }
-// - pollDeferredCommands() in main.js polls the runtime with __pollDeferred
-// - The __pollDeferred handler checks IOS_JOBS[ticket] for completion
+// - handleConfigIos() / handleExecIos() only validate and create deferred jobs
+// - handleDeferredPoll() queries job state and returns structured results
+// - Non-IOS handlers (configHost) execute synchronously
 //
 // In PT's Qt Script Engine, main.js and runtime.js share the same global scope.
 // IOS_JOBS is a global variable defined in main.js and is accessible here.
@@ -22,8 +19,6 @@ import type {
   ConfigHostPayload,
   ConfigIosPayload,
   ExecIosPayload,
-  ExecIosSuccessResult,
-  ExecIosErrorResult,
 } from "./config-types";
 
 // ============================================================================
@@ -31,9 +26,7 @@ import type {
 // ============================================================================
 
 declare const IOS_JOBS: Record<string, IOSJob>;
-declare const IOS_JOB_SEQ: number;
 declare const createIosJob: (type: string, payload: object) => string;
-declare const pollIosJob: (ticket: string) => { done: boolean; ok?: boolean; error?: string; state?: string; value?: unknown };
 
 interface IOSJob {
   ticket: string;
@@ -50,32 +43,16 @@ interface IOSJob {
   outputs: string[];
   stepResults: Array<{ command: string; raw: string; status: number }>;
   status: number | null;
-  modeBefore: string;
-  modeAfter: string;
   lastMode: string;
   lastPrompt: string;
   paged: boolean;
   autoConfirmed: boolean;
-  dialogDismissAttempts: number;
   waitingForCommandEnd: boolean;
   finished: boolean;
   result: object | null;
   error: string | null;
   errorCode: string | null;
-  inFlightPath: string;
-  commandId: string;
-  seq: number;
-  ensurePrivileged: boolean;
-  dismissInitialDialog: boolean;
-  commandTimeoutMs: number;
-  stallTimeoutMs: number;
-  abortSent: boolean;
   phase: string;
-  resumePhase: string;
-  resumeStep: number;
-  currentCommand: string;
-  currentCommandOutput: string;
-  currentCommandStartedAt: number;
 }
 
 interface DeferredResult {
@@ -90,7 +67,94 @@ interface PollDeferredPayload {
 }
 
 // ============================================================================
-// Parsers (only for real output, not synthetic)
+// Runtime Result Types
+// ============================================================================
+
+interface RuntimeErrorResult {
+  ok: false;
+  error: string;
+  code?: string;
+  raw?: string;
+  source?: "terminal" | "synthetic" | "unknown";
+  session?: {
+    mode?: string;
+    prompt?: string;
+    paging?: boolean;
+    autoDismissedInitialDialog?: boolean;
+  };
+}
+
+interface RuntimeSuccessResult {
+  ok: true;
+  raw: string;
+  status?: number;
+  source: "terminal";
+  parsed?: Record<string, unknown>;
+  parseError?: string;
+  session?: {
+    mode?: string;
+    prompt?: string;
+    paging?: boolean;
+    awaitingConfirm?: boolean;
+    autoDismissedInitialDialog?: boolean;
+  };
+}
+
+interface DeferredPollInProgress {
+  done: false;
+  state: string;
+}
+
+interface DeferredPollDoneSuccess extends RuntimeSuccessResult {
+  done: true;
+}
+
+interface DeferredPollDoneError extends RuntimeErrorResult {
+  done: true;
+}
+
+type DeferredPollResult =
+  | DeferredPollInProgress
+  | DeferredPollDoneSuccess
+  | DeferredPollDoneError;
+
+// ============================================================================
+// Result Factories
+// ============================================================================
+
+function createRuntimeError(
+  error: string,
+  code?: string,
+  extra: Partial<RuntimeErrorResult> = {},
+): RuntimeErrorResult {
+  return {
+    ok: false,
+    error,
+    code,
+    source: extra.source ?? "unknown",
+    raw: extra.raw ?? "",
+    session: extra.session,
+  };
+}
+
+function createTerminalSuccess(
+  raw: string,
+  status?: number,
+  extra: Partial<RuntimeSuccessResult> = {},
+): RuntimeSuccessResult {
+  return {
+    ok: true,
+    raw,
+    status,
+    source: "terminal",
+    parsed: extra.parsed,
+    parseError: extra.parseError,
+    session: extra.session,
+  };
+}
+
+// ============================================================================
+// Parsers (lightweight, only for well-structured show commands)
 // ============================================================================
 
 type ParserFn = (output: string) => Record<string, unknown>;
@@ -133,24 +197,6 @@ const PARSERS: Record<string, ParserFn> = {
     }
     return { entries: vlans };
   },
-  "show running-config": (output: string) => {
-    const sections: Record<string, string> = {};
-    const interfaces: Record<string, string> = {};
-    let currentSection: string | null = null;
-    const lines = output.split("\n");
-    for (const line of lines) {
-      if (line === "!") {
-        if (currentSection) sections[currentSection] = "";
-        currentSection = null;
-      } else if (line.startsWith("interface ")) {
-        currentSection = line.trim();
-        interfaces[line.substring(10).trim()] = "";
-      } else if (currentSection) {
-        interfaces[currentSection] = (interfaces[currentSection] || "") + line + "\n";
-      }
-    }
-    return { entries: { sections, interfaces } };
-  },
 };
 
 function getParser(command: string): ParserFn | null {
@@ -160,109 +206,6 @@ function getParser(command: string): ParserFn | null {
     if (cmd.startsWith(key)) return PARSERS[key];
   }
   return null;
-}
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-function ensureIosTerm(device: PTDevice): PTCommandLine | null {
-  return device.getCommandLine() ?? null;
-}
-
-// ============================================================================
-// Main Handler Dispatcher
-// ============================================================================
-
-export function handleConfigHost(payload: ConfigHostPayload, deps: HandlerDeps): HandlerResult {
-  const { getNet } = deps;
-  const device = getNet().getDevice(payload.device);
-  if (!device) return { ok: false, error: `Device not found: ${payload.device}` };
-
-  const port = device.getPortAt(0);
-  if (!port) return { ok: false, error: "No ports on device" };
-
-  if (payload.dhcp === true) {
-    try { port.setDhcpEnabled(true); } catch {}
-  } else {
-    if (payload.ip && payload.mask) port.setIpSubnetMask(payload.ip, payload.mask);
-    if (payload.gateway) port.setDefaultGateway(payload.gateway);
-    if (payload.dns) port.setDnsServerIp(payload.dns);
-  }
-
-  return { ok: true, device: payload.device, ip: payload.ip, mask: payload.mask, gateway: payload.gateway };
-}
-
-// ============================================================================
-// IOS Handlers - Create deferred jobs
-// ============================================================================
-
-export function handleConfigIos(payload: ConfigIosPayload, deps: HandlerDeps): HandlerResult | DeferredResult {
-  const { getNet, dprint } = deps;
-  
-  // Handle __pollDeferred - called from main.js pollDeferredCommands
-  if ((payload as unknown as PollDeferredPayload).type === "__pollDeferred") {
-    const pollPayload = payload as unknown as PollDeferredPayload;
-    return handlePollDeferred(pollPayload, deps);
-  }
-
-  const device = getNet().getDevice(payload.device);
-  if (!device) return { ok: false, error: `Device not found: ${payload.device}`, device: payload.device };
-
-  const term = ensureIosTerm(device);
-  if (!term) return { ok: false, error: "Device does not support CLI", device: payload.device };
-
-  if (!payload.commands?.length) {
-    return { ok: true, device: payload.device, executed: 0, results: [], skipped: true };
-  }
-
-  // Create IOS job for deferred execution
-  // The job will be executed by main.js's IOS_JOBS state machine
-  const ticket = createIosJob("configIos", {
-    device: payload.device,
-    commands: payload.commands,
-    save: payload.save ?? true,
-    stopOnError: payload.stopOnError ?? true,
-    ensurePrivileged: payload.ensurePrivileged ?? true,
-    dismissInitialDialog: payload.dismissInitialDialog ?? true,
-    commandTimeoutMs: payload.commandTimeoutMs ?? 8000,
-    stallTimeoutMs: payload.stallTimeoutMs ?? 15000,
-  });
-
-  dprint(`[configIos] Created job ${ticket} for device ${payload.device}`);
-
-  return { deferred: true, ticket, kind: "ios" };
-}
-
-export function handleExecIos(payload: ExecIosPayload, deps: HandlerDeps): (HandlerResult & { raw: string; status?: number }) | DeferredResult {
-  const { getNet, dprint } = deps;
-  
-  // Handle __pollDeferred - called from main.js pollDeferredCommands
-  if ((payload as unknown as PollDeferredPayload).type === "__pollDeferred") {
-    const pollPayload = payload as unknown as PollDeferredPayload;
-    return handlePollDeferred(pollPayload, deps) as (HandlerResult & { raw: string; status?: number }) | DeferredResult;
-  }
-
-  const device = getNet().getDevice(payload.device);
-  if (!device) return { ok: false, error: `Device not found: ${payload.device}`, raw: "" };
-
-  const term = ensureIosTerm(device);
-  if (!term) return { ok: false, error: `Device not ready: ${payload.device} is still booting or in ROMMON`, raw: "" };
-
-  // Create IOS job for deferred execution
-  const ticket = createIosJob("execIos", {
-    device: payload.device,
-    command: payload.command,
-    parse: payload.parse ?? true,
-    ensurePrivileged: payload.ensurePrivileged ?? true,
-    dismissInitialDialog: payload.dismissInitialDialog ?? true,
-    commandTimeoutMs: payload.commandTimeoutMs ?? 8000,
-    stallTimeoutMs: payload.stallTimeoutMs ?? 15000,
-  });
-
-  dprint(`[execIos] Created job ${ticket} for device ${payload.device} command="${payload.command}"`);
-
-  return { deferred: true, ticket, kind: "ios" };
 }
 
 // ============================================================================
@@ -290,56 +233,167 @@ function sanitizeTerminalOutput(command: string | undefined, output: string): st
 }
 
 // ============================================================================
-// __pollDeferred Handler
+// Helper Functions
 // ============================================================================
 
-function handlePollDeferred(pollPayload: PollDeferredPayload, deps: HandlerDeps): HandlerResult {
+function ensureIosTerm(device: PTDevice): PTCommandLine | null {
+  return device.getCommandLine() ?? null;
+}
+
+// ============================================================================
+// Non-IOS Handlers (synchronous, pure)
+// ============================================================================
+
+export function handleConfigHost(payload: ConfigHostPayload, deps: HandlerDeps): HandlerResult {
+  const { getNet } = deps;
+  const device = getNet().getDevice(payload.device);
+  if (!device) return { ok: false, error: `Device not found: ${payload.device}` };
+
+  const port = device.getPortAt(0);
+  if (!port) return { ok: false, error: "No ports on device" };
+
+  if (payload.dhcp === true) {
+    try { port.setDhcpEnabled(true); } catch {}
+  } else {
+    if (payload.ip && payload.mask) port.setIpSubnetMask(payload.ip, payload.mask);
+    if (payload.gateway) port.setDefaultGateway(payload.gateway);
+    if (payload.dns) port.setDnsServerIp(payload.dns);
+  }
+
+  return { ok: true, device: payload.device, ip: payload.ip, mask: payload.mask, gateway: payload.gateway };
+}
+
+// ============================================================================
+// IOS Handlers — create deferred jobs only
+// ============================================================================
+
+export function handleConfigIos(payload: ConfigIosPayload, deps: HandlerDeps): HandlerResult | DeferredResult {
+  const { getNet, dprint } = deps;
+
+  const device = getNet().getDevice(payload.device);
+  if (!device) {
+    return createRuntimeError(`Device not found: ${payload.device}`, "DEVICE_NOT_FOUND");
+  }
+
+  const term = ensureIosTerm(device);
+  if (!term) {
+    return createRuntimeError(`Device does not support CLI: ${payload.device}`, "NO_TERMINAL");
+  }
+
+  if (!payload.commands?.length) {
+    return { ok: true, device: payload.device, executed: 0, results: [], skipped: true };
+  }
+
+  const ticket = createIosJob("configIos", {
+    device: payload.device,
+    commands: payload.commands,
+    save: payload.save ?? true,
+    stopOnError: payload.stopOnError ?? true,
+    ensurePrivileged: payload.ensurePrivileged ?? true,
+    dismissInitialDialog: payload.dismissInitialDialog ?? true,
+    commandTimeoutMs: payload.commandTimeoutMs ?? 8000,
+    stallTimeoutMs: payload.stallTimeoutMs ?? 15000,
+  });
+
+  dprint(`[configIos] Created job ${ticket} for device ${payload.device}`);
+
+  return { deferred: true, ticket, kind: "ios" };
+}
+
+export function handleExecIos(payload: ExecIosPayload, deps: HandlerDeps): HandlerResult | DeferredResult {
+  const { getNet, dprint } = deps;
+
+  const device = getNet().getDevice(payload.device);
+  if (!device) {
+    return createRuntimeError(`Device not found: ${payload.device}`, "DEVICE_NOT_FOUND");
+  }
+
+  const term = ensureIosTerm(device);
+  if (!term) {
+    return createRuntimeError(
+      `Device not ready: ${payload.device} is still booting or in ROMMON`,
+      "NO_TERMINAL"
+    );
+  }
+
+  const ticket = createIosJob("execIos", {
+    device: payload.device,
+    command: payload.command,
+    parse: payload.parse ?? true,
+    ensurePrivileged: payload.ensurePrivileged ?? true,
+    dismissInitialDialog: payload.dismissInitialDialog ?? true,
+    commandTimeoutMs: payload.commandTimeoutMs ?? 8000,
+    stallTimeoutMs: payload.stallTimeoutMs ?? 15000,
+  });
+
+  dprint(`[execIos] Created job ${ticket} for device ${payload.device} command="${payload.command}"`);
+
+  return { deferred: true, ticket, kind: "ios" };
+}
+
+// ============================================================================
+// Deferred Poll Handler — queries job state from main.js
+// ============================================================================
+
+export function handleDeferredPoll(
+  pollPayload: PollDeferredPayload,
+  deps: HandlerDeps
+): DeferredPollResult {
   const { dprint } = deps;
   const { ticket } = pollPayload;
-
-  // Access the global IOS_JOBS from main.js
   const job = IOS_JOBS[ticket];
-  
+
   if (!job) {
     dprint(`[pollDeferred] Job not found: ${ticket}`);
-    return { ok: false, error: `Job not found: ${ticket}` };
+    return {
+      done: true,
+      ...createRuntimeError(`Job not found: ${ticket}`, "JOB_NOT_FOUND"),
+    };
   }
 
   if (!job.finished) {
     dprint(`[pollDeferred] Job ${ticket} still in progress: state=${job.state}`);
-    return { done: false, state: job.state } as unknown as HandlerResult;
-  }
-
-  // Job is complete
-  if (job.state === "error") {
-    dprint(`[pollDeferred] Job ${ticket} completed with error`);
     return {
-      ok: false,
-      error: job.error || "Job failed",
-      raw: job.output || "",
-      status: job.status ?? 1,
+      done: false,
+      state: job.state || "unknown",
     };
   }
 
-  // Sanitize output before parsing
+  const session = {
+    mode: job.lastMode || "",
+    prompt: job.lastPrompt || "",
+    paging: !!job.paged,
+    awaitingConfirm: false,
+    autoDismissedInitialDialog: !!job.autoConfirmed,
+  };
+
+  if (job.state === "error") {
+    dprint(`[pollDeferred] Job ${ticket} completed with error`);
+    return {
+      done: true,
+      ...createRuntimeError(
+        job.error || "Job failed",
+        job.errorCode || "IOS_JOB_FAILED",
+        {
+          raw: job.output || "",
+          source: "terminal",
+          session,
+        }
+      ),
+    };
+  }
+
   const command = (job.payload as { command?: string }).command;
   const rawOutput = job.output || "";
   const sanitizedOutput = sanitizeTerminalOutput(command, rawOutput);
 
-  // Build success result with parsed output if available
-  const result: ExecIosSuccessResult = {
-    ok: true,
-    raw: sanitizedOutput || rawOutput,
-    status: job.status ?? 0,
-    source: "terminal",
-    session: {
-      mode: (job as unknown as { lastMode?: string }).lastMode || "",
-      paging: !!(job as unknown as { paged?: boolean }).paged,
-      awaitingConfirm: false,
-    },
+  const result: DeferredPollDoneSuccess = {
+    done: true,
+    ...createTerminalSuccess(sanitizedOutput || rawOutput, job.status ?? undefined, {
+      session,
+    }),
   };
 
-  // Parse output if it's a show command
   if (command && sanitizedOutput) {
     const parser = getParser(command);
     if (parser) {
@@ -351,7 +405,6 @@ function handlePollDeferred(pollPayload: PollDeferredPayload, deps: HandlerDeps)
     }
   }
 
-  dprint(`[pollDeferred] Job ${ticket} completed successfully, output length=${job.output?.length || 0}`);
-
+  dprint(`[pollDeferred] Job ${ticket} completed successfully, output length=${rawOutput.length}`);
   return result;
 }

@@ -15,7 +15,9 @@
     "typecheck": "tsc --noEmit",
     "pt": "bun run --cwd apps/pt-cli start",
     "pt:build": "bun run --cwd packages/pt-runtime src/index.ts deploy",
-    "pt:generate": "bun run --cwd packages/pt-runtime src/index.ts generate"
+    "pt:generate": "bun run --cwd packages/pt-runtime src/index.ts generate",
+    "pt:validate": "bun run --cwd packages/pt-runtime src/index.ts validate",
+    "pt:deploy": "bun run --cwd packages/pt-runtime src/index.ts deploy"
   },
   "devDependencies": {
     "@types/bun": "latest",

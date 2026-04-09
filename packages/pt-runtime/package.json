@@ -19,13 +19,14 @@
     "build:runtime:watch": "tsc -p tsconfig.runtime.json --watch",
     "build:qtscript": "tsc -p tsconfig.qtscript.json && bun scripts/validate-qtscript.ts",
     "deploy:qtscript": "bun run build:qtscript && DEV_DIR=~/pt-dev bun scripts/deploy-qtscript.ts",
-    "build": "npm run build:lib && npm run build:runtime",
+    "build": "bun run build:lib && bun run build:runtime",
     "dev:runtime": "tsc -p tsconfig.runtime.json --watch",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.runtime.json --noEmit",
     "generate-models": "bun run src/scripts/generate-model-map.ts",
-    "generate": "npm run build:runtime && bun run src/index.ts generate",
-    "deploy": "npm run build:runtime && bun run src/index.ts deploy",
+    "generate": "bun run build:runtime && bun run src/index.ts generate",
+    "validate": "bun run build:runtime && bun run src/index.ts validate",
+    "deploy": "bun run build:runtime && bun run src/index.ts deploy",
     "test": "bun test"
   },
   "dependencies": {

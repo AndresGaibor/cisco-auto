@@ -33,3 +33,6 @@ export * from "./lab-resource.js";
 
 // Keep legacy export for backward compatibility
 export * from "./twin-types.js";
+
+// Fase 4: IOS execution evidence, results, and confidence
+export * from "./ios-execution-evidence.js";

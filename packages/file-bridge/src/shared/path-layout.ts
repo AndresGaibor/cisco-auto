@@ -141,4 +141,14 @@ export class BridgePathLayout {
   resultFilePath(id: string): string {
     return join(this.resultsDir(), `${id}.json`);
   }
+
+  /** Generate a command ID from a sequence number */
+  commandIdFromSeq(seq: number): string {
+    return `cmd_${String(seq).padStart(12, "0")}`;
+  }
+
+  /** Full path to a dead-letter error metadata file */
+  deadLetterErrorFile(basename: string): string {
+    return join(this.deadLetterDir(), `${basename}.error.json`);
+  }
 }

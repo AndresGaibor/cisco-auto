@@ -5,11 +5,16 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { join } from "node:path";
 import { mkdirSync, writeFileSync, existsSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { CommandProcessor } from "../src/v2/command-processor";
 import { BridgePathLayout } from "../src/shared/path-layout";
 import { SequenceStore } from "../src/shared/sequence-store";
 import { EventLogWriter } from "../src/event-log-writer";
 import { BRIDGE_PROTOCOL_VERSION } from "@cisco-auto/types";
+
+function checksumOf(input: unknown): string {
+  return `sha256:${createHash("sha256").update(JSON.stringify(input)).digest("hex")}`;
+}
 
 const TEMP_DIR = "/tmp/cisco-auto-cmdproc-tests";
 const TEST_DEV_DIR = join(TEMP_DIR, "dev");
@@ -38,13 +43,14 @@ describe("CommandProcessor - Fase 8 Deduplication", () => {
     mkdirSync(paths.logsDir(), { recursive: true });
 
     // Create a command file
+    const payload = { test: true };
     const cmd = {
       id: "cmd_000000000001",
       seq: 1,
       type: "test-command",
       attempt: 1,
-      payload: { test: true },
-      checksum: "sha256:abc123",
+      payload,
+      checksum: checksumOf({ type: "test-command", payload }),
       protocolVersion: BRIDGE_PROTOCOL_VERSION,
       createdAt: Date.now(),
     };
@@ -68,13 +74,14 @@ describe("CommandProcessor - Fase 8 Deduplication", () => {
     mkdirSync(paths.inFlightDir(), { recursive: true });
     mkdirSync(paths.logsDir(), { recursive: true });
 
+    const payload = { test: true };
     const cmd = {
       id: "cmd_000000000002",
       seq: 2,
       type: "test-command",
       attempt: 1,
-      payload: { test: true },
-      checksum: "sha256:xyz789",
+      payload,
+      checksum: checksumOf({ type: "test-command", payload }),
       protocolVersion: BRIDGE_PROTOCOL_VERSION,
       createdAt: Date.now(),
     };

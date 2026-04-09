@@ -46,7 +46,7 @@ export function handleInspect(payload: InspectPayload, deps: HandlerDeps): Handl
 
   const device = net.getDevice(payload.device);
   if (!device) {
-    return { ok: false, error: `Device not found: ${payload.device}` };
+    return { ok: false, error: `Device not found: ${payload.device}`, code: "DEVICE_NOT_FOUND" };
   }
 
   const portCount = device.getPortCount();

@@ -67,8 +67,8 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
   const device1 = net.getDevice(payload.device1);
   const device2 = net.getDevice(payload.device2);
 
-  if (!device1) return { ok: false, error: `Device not found: ${payload.device1}` };
-  if (!device2) return { ok: false, error: `Device not found: ${payload.device2}` };
+  if (!device1) return { ok: false, error: `Device not found: ${payload.device1}`, code: "DEVICE_NOT_FOUND" };
+  if (!device2) return { ok: false, error: `Device not found: ${payload.device2}`, code: "DEVICE_NOT_FOUND" };
 
   if (device1?.skipBoot) device1.skipBoot();
   if (device2?.skipBoot) device2.skipBoot();
@@ -80,6 +80,7 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
     return {
       ok: false,
       error: "Port not found",
+      code: "INVALID_PORT",
       details: {
         device1: payload.device1,
         requestedPort1: payload.port1,

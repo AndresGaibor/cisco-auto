@@ -8,16 +8,15 @@ export const MAIN_JS_TEMPLATE = `
 /**
  * PT Control V2 - Main Script Module (Fase 5)
  *
- * RESPONSABILIDADES (Pipeline Durable):
- * 1. Poll commands/*.json (en lugar de command.json)
+ * RESPONSABILIDADES:
+ * 1. Poll commands/*.json (cola durable — NO command.json)
  * 2. Claim por move (mover de commands/ a in-flight/)
  * 3. Mantener journal de comandos para recovery
  * 4. Soportar resultados inmediatos Y diferidos (IOS)
  * 5. Polling de jobs IOS hasta completar
  * 6. Hot reload seguro de runtime.js (solo sin jobs activos)
  * 7. Cleanup idempotente en stop
- * 8. Recovery de in-flight/ al iniciar
- * 9. Compatibilidad legacy con command.json
+ * 8. Limpieza de stale in-flight en startup (la autoridad de recovery es el bridge)
  */
 
 // ============================================================================
@@ -37,10 +36,6 @@ var SESSIONS_DIR = DEV_DIR + "/sessions";
 var JOURNAL_DIR = DEV_DIR + "/journal";
 var PENDING_COMMANDS_FILE = JOURNAL_DIR + "/pending-commands.json";
 var CLEANUP_TRACE_FILE = JOURNAL_DIR + "/cleanup-last-stage.txt";
-
-// Legacy compatibility
-var COMMAND_FILE = DEV_DIR + "/command.json";
-var CURRENT_COMMAND_FILE = JOURNAL_DIR + "/current-command.json";
 
 var fm = null;
 var runtimeFn = null;
@@ -111,11 +106,8 @@ function main() {
     ensureDir(COMMANDS_TRACE_DIR);
     ensureDir(SESSIONS_DIR);
     ensureDir(JOURNAL_DIR);
-    
-    // Migrar command.json legacy si existe
-    migrateLegacyCommand();
-    
-    // Phase 1: Lease-aware startup - wait for valid lease instead of aborting
+
+    // Phase 1: Lease-aware startup
     if (validateBridgeLease()) {
       // Lease is valid - activate runtime immediately
       activateRuntimeAfterLease();
@@ -160,20 +152,25 @@ function startLeaseWaitLoop() {
 }
 
 function activateRuntimeAfterLease() {
+  if (commandPollInterval || deferredPollInterval || heartbeatInterval) {
+    dprint("[PT] Runtime already active");
+    return;
+  }
+
   dprint("[PT] Activating runtime after lease acquired...");
-  
+
   loadRuntime();
-  recoverInFlightOnStartup();
+  cleanupStaleInFlightOnStartup();
   loadPendingCommands();
-  
+
   heartbeatInterval = setInterval(writeHeartbeat, 5000);
   commandPollInterval = setInterval(pollCommandQueue, 250);
   deferredPollInterval = setInterval(pollDeferredCommands, 100);
-  
+
   setupFileWatcher();
-  startLeaseHealthMonitor(); // Phase 2: monitor lease health
+  startLeaseHealthMonitor();
   writeHeartbeat();
-  
+
   dprint("[PT] Ready");
 }
 
@@ -222,42 +219,6 @@ function startLeaseHealthMonitor() {
       startLeaseWaitLoop();
     }
   }, 2000);
-}
-
-// ============================================================================
-// Legacy Migration (Fase 5 - Transición)
-// ============================================================================
-
-function migrateLegacyCommand() {
-  try {
-    if (fm.fileExists(COMMAND_FILE)) {
-      var content = fm.getFileContents(COMMAND_FILE);
-      if (content && content.trim().length > 0) {
-        try {
-          var cmd = JSON.parse(content);
-          if (cmd && cmd.id && cmd.seq) {
-            // Convertir a formato de cola
-            var filename = padSeq(cmd.seq) + "-" + (cmd.payload && cmd.payload.type ? cmd.payload.type : "unknown") + ".json";
-            var targetPath = COMMANDS_DIR + "/" + filename;
-            fm.writePlainTextToFile(targetPath, JSON.stringify(cmd));
-            dprint("[PT] Migrated legacy command.json to " + filename);
-          }
-        } catch (e) {
-          dprint("[PT] Invalid legacy command.json - ignoring");
-        }
-      }
-      // Limpiar archivo legacy
-      try { fm.writePlainTextToFile(COMMAND_FILE, ""); } catch (e) {}
-    }
-  } catch (e) {
-    dprint("[PT] Legacy migration error: " + String(e));
-  }
-}
-
-function padSeq(n) {
-  var s = String(n);
-  while (s.length < 12) s = "0" + s;
-  return s;
 }
 
 // ============================================================================
@@ -357,8 +318,11 @@ function readCommandTrace(cmdId) {
 }
 
 // ============================================================================
-// File Watcher (for runtime hot reload nudge)
+// File Watcher (for runtime.js hot reload)
 // ============================================================================
+// runtime.js can be reloaded dynamically because it is evaluated by main.js via new Function().
+// main.js itself follows the Script Engine lifecycle and must be reloaded by restarting the PT module.
+// Reference: https://tutorials.ptnetacad.net/help/default/scriptModules_scriptEngine.htm
 
 function setupFileWatcher() {
   if (!ENABLE_FILE_WATCHER) {
@@ -648,84 +612,45 @@ function moveToDeadLetter(filePath, error) {
   }
 }
 
-// ============================================================================
-// Recovery on Startup (Fase 5)
-// ============================================================================
-
-function recoverInFlightOnStartup() {
+function cleanupStaleInFlightOnStartup() {
   try {
     if (!fm.directoryExists(IN_FLIGHT_DIR)) return;
-    
+
     var files = fm.getFilesInDirectory(IN_FLIGHT_DIR);
     if (!files || files.length === 0) {
-      dprint("[PT] No in-flight to recover");
+      dprint("[PT] No stale in-flight files");
       return;
     }
-    
-    var recovered = 0;
-    var cleaned = 0;
-    
+
     for (var i = 0; i < files.length; i++) {
       var filename = files[i];
       if (filename.indexOf(".json") === -1) continue;
-      
+
       var inFlightPath = IN_FLIGHT_DIR + "/" + filename;
-      
-      // Extraer cmdId del filename
       var seq = filename.split("-")[0];
       var cmdId = "cmd_" + padSeq(parseInt(seq, 10));
       var resultPath = RESULTS_DIR + "/" + cmdId + ".json";
-      
-      // Si ya existe resultado, limpiar in-flight
+
       if (fm.fileExists(resultPath)) {
         try {
           fm.removeFile(inFlightPath);
-          cleaned++;
-        } catch (e) {}
-        dprint("[PT] Cleaned in-flight (result exists): " + filename);
-      } else {
-        // Re-queue: mover de vuelta a commands/
-        var cmdPath = COMMANDS_DIR + "/" + filename;
-        try {
-          var content = fm.getFileContents(inFlightPath);
-          var cmd = JSON.parse(content);
-          cmd.attempt = (cmd.attempt || 1) + 1;
-          if (cmd.attempt <= 3) {
-            fm.writePlainTextToFile(cmdPath, JSON.stringify(cmd));
-            fm.removeFile(inFlightPath);
-            recovered++;
-            dprint("[PT] Requeued: " + filename + " attempt=" + cmd.attempt);
-          } else {
-            // Max retries - escribir resultado fallido
-            var failResult = {
-              protocolVersion: 2,
-              id: cmdId,
-              seq: cmd.seq,
-              completedAt: Date.now(),
-              status: "failed",
-              ok: false,
-              error: {
-                code: "MAX_RETRIES",
-                message: "Command failed after " + cmd.attempt + " attempts",
-                phase: "execute"
-              }
-            };
-            fm.writePlainTextToFile(resultPath, JSON.stringify(failResult));
-            fm.removeFile(inFlightPath);
-            dprint("[PT] Max retries: " + filename);
-          }
-        } catch (e) {
-          // Archivo corrupto - mover a dead-letter
-          moveToDeadLetter(inFlightPath, e);
+          dprint("[PT] Removed stale in-flight (result exists): " + filename);
+        } catch (e1) {
+          dprint("[PT] Failed removing stale in-flight: " + String(e1));
         }
+      } else {
+        dprint("[PT] Stale in-flight detected (bridge should recover it): " + filename);
       }
     }
-    
-    dprint("[PT] Recovery done: " + recovered + " requeued, " + cleaned + " cleaned");
-    
   } catch (e) {
-    dprint("[PT] Recovery error: " + String(e));
+    dprint("[PT] cleanupStaleInFlightOnStartup error: " + String(e));
   }
+}
+
+function padSeq(n) {
+  var s = String(n);
+  while (s.length < 12) s = "0" + s;
+  return s;
 }
 
 // ============================================================================
@@ -772,47 +697,80 @@ function pollCommandQueue() {
   executeActiveCommand();
 }
 
+function cleanupActiveInFlight(cmd) {
+  try {
+    var inFlightPath = IN_FLIGHT_DIR + "/" + (cmd.seq + "-" + cmd.payload.type + ".json");
+    if (fm.fileExists(inFlightPath)) {
+      fm.removeFile(inFlightPath);
+    }
+  } catch (e) {}
+}
+
 function executeActiveCommand() {
   if (!activeCommand) return;
-  
+
   var startedAt = Date.now();
   var cmd = activeCommand;
-  
-  // PT-side trace: runtime started
+  var result = null;
+
   if (cmd && cmd.id) {
     writeCommandTracePatch(cmd.id, {
       runtimeStartedAt: startedAt,
-      payloadType: cmd.payload && cmd.payload.type
+      payloadType: cmd.payload && cmd.payload.type,
+      queueStateAtStart: { pending: countQueueFiles() }
     });
   }
-  
-  // Hot reload: only if no pending jobs
+
   if (runtimeDirty && !hasPendingDeferredCommands()) {
     loadRuntime();
   }
-  
-  var result;
+
   try {
-    result = runtimeFn
-      ? runtimeFn(cmd.payload, ipc, dprint)
-      : { ok: false, error: "Runtime not loaded" };
+    if (!runtimeFn) {
+      result = { ok: false, error: "Runtime not loaded" };
+    } else {
+      result = runtimeFn(cmd.payload, ipc, dprint);
+    }
   } catch (e) {
-    result = { ok: false, error: String(e), stack: String(e.stack || "") };
+    result = {
+      ok: false,
+      error: String(e),
+      stack: String(e && e.stack ? e.stack : "")
+    };
   }
-  
-  // PT-side trace: runtime completed
+
   if (cmd && cmd.id) {
     writeCommandTracePatch(cmd.id, {
       runtimeCompletedAt: Date.now(),
       ok: result && result.ok !== false,
       deferred: result && result.deferred === true,
       ticket: result ? result.ticket : undefined,
-      error: result && result.ok === false ? result.error : undefined
+      error: result && result.ok === false ? result.error : undefined,
+      queueStateAtEnd: { pending: countQueueFiles() }
     });
   }
-  
-  // Check for deferred result
+
   if (result && result.deferred === true) {
+    if (!result.ticket) {
+      writeResultEnvelope(cmd.id, {
+        protocolVersion: 2,
+        id: cmd.id,
+        seq: cmd.seq,
+        startedAt: startedAt,
+        completedAt: Date.now(),
+        status: "failed",
+        ok: false,
+        value: {
+          ok: false,
+          error: "Deferred command missing ticket",
+          code: "INVALID_DEFERRED_RESULT"
+        }
+      });
+      cleanupActiveInFlight(cmd);
+      activeCommand = null;
+      return;
+    }
+
     pendingCommands[cmd.id] = {
       id: cmd.id,
       ticket: result.ticket,
@@ -822,25 +780,14 @@ function executeActiveCommand() {
       command: cmd,
       filename: cmd.seq + "-" + cmd.payload.type + ".json"
     };
+
     savePendingCommands();
-    dprint("[PT] Deferred: " + cmd.payload.type + " [" + cmd.id + "] ticket=" + result.ticket);
-    
-    // Start the IOS job immediately
     startIosJob(result.ticket);
-    
-    // Limpiar in-flight (el job está en progreso)
-    try {
-      var inFlightPath = IN_FLIGHT_DIR + "/" + (cmd.seq + "-" + cmd.payload.type + ".json");
-      if (fm.fileExists(inFlightPath)) {
-        fm.removeFile(inFlightPath);
-      }
-    } catch (e) {}
-    
+    cleanupActiveInFlight(cmd);
     activeCommand = null;
     return;
   }
-  
-  // Immediate result - escribir resultado final
+
   writeResultEnvelope(cmd.id, {
     protocolVersion: 2,
     id: cmd.id,
@@ -851,15 +798,8 @@ function executeActiveCommand() {
     ok: result && result.ok !== false,
     value: result
   });
-  
-  // Limpiar in-flight
-  try {
-    var inFlightPath = IN_FLIGHT_DIR + "/" + (cmd.seq + "-" + cmd.payload.type + ".json");
-    if (fm.fileExists(inFlightPath)) {
-      fm.removeFile(inFlightPath);
-    }
-  } catch (e) {}
-  
+
+  cleanupActiveInFlight(cmd);
   activeCommand = null;
   dprint("[PT] Executed: " + cmd.payload.type + " [" + cmd.id + "]");
 }
@@ -900,68 +840,66 @@ function pollDeferredCommands() {
 
   var pendingKeys = Object.keys(pendingCommands);
   if (pendingKeys.length === 0) return;
-  
-  // Hot reload check
+
   if (runtimeDirty && !hasPendingDeferredCommands()) {
     loadRuntime();
   }
-  
+
   for (var i = 0; i < pendingKeys.length; i++) {
     var key = pendingKeys[i];
     var pending = pendingCommands[key];
-    
-    var pollResult;
+    var pollResult = null;
+
     try {
       pollResult = runtimeFn
         ? runtimeFn({ type: "__pollDeferred", ticket: pending.ticket }, ipc, dprint)
-        : { done: true, ok: false, error: "Runtime not loaded" };
+        : { done: true, ok: false, error: "Runtime not loaded", code: "RUNTIME_NOT_LOADED" };
     } catch (e) {
       dprint("[PT] Poll error: " + String(e));
       continue;
     }
-    
-    if (!pollResult || pollResult.done !== true) {
-      continue;
-    }
-    
-    // Job completado
+
+    if (!pollResult || pollResult.done !== true) continue;
+
+    var ok = !!pollResult.ok;
     var envelope = {
       protocolVersion: 2,
       id: pending.id,
       seq: pending.command ? pending.command.seq : 0,
       startedAt: pending.startedAt,
       completedAt: Date.now(),
-      status: pollResult.ok ? "completed" : "failed",
-      ok: !!pollResult.ok,
-      value: pollResult.ok ? pollResult.value : {
-        ok: false,
-        error: pollResult.error || "Deferred command failed",
-        code: pollResult.code || "UNKNOWN"
-      }
+      status: ok ? "completed" : "failed",
+      ok: ok,
+      value: ok
+        ? pollResult
+        : {
+            ok: false,
+            error: pollResult.error || "Deferred command failed",
+            code: pollResult.code || "UNKNOWN"
+          }
     };
-    
+
     writeResultEnvelope(pending.id, envelope);
-    
-    // PT-side trace: deferred command completed
+
     writeCommandTracePatch(pending.id, {
       deferredCompletedAt: Date.now(),
       finalStatus: envelope.status,
-      ok: envelope.ok
+      ok: envelope.ok,
+      jobPhase: pollResult.session ? pollResult.session.mode : undefined
     });
-    
+
     delete pendingCommands[key];
     savePendingCommands();
-    
-    // Limpiar in-flight si existe
+
     if (pending.filename) {
       try {
         var inFlightPath = IN_FLIGHT_DIR + "/" + pending.filename;
         if (fm.fileExists(inFlightPath)) {
           fm.removeFile(inFlightPath);
         }
-      } catch (e) {}
+      } catch (e2) {}
     }
-    
+
     dprint("[PT] Deferred completed: " + pending.id + " status=" + envelope.status);
   }
 }
@@ -1123,6 +1061,53 @@ function joinStepOutputs(stepResults) {
 // ============================================================================
 // IOS Job State Machine
 // ============================================================================
+// IOS job phases:
+//   queued -> ensure-privileged -> ensure-config -> run-config -> exit-config -> save-config -> done
+//   queued -> ensure-privileged -> run-exec -> done
+//   special phases: dismiss-initial-dialog, error
+//
+// Convention: phase = internal step of state machine, state = external summary.
+// Use setIosJobPhase() to keep them in sync.
+// ============================================================================
+
+function setIosJobPhase(job, phase) {
+  job.phase = phase;
+  job.state = phase;
+  job.updatedAt = Date.now();
+}
+
+function buildIosSuccessResult(job, raw) {
+  return {
+    ok: true,
+    device: job.device,
+    raw: raw || "",
+    source: "terminal",
+    session: {
+      mode: job.lastMode || "",
+      prompt: job.lastPrompt || "",
+      paging: !!job.paged,
+      autoDismissedInitialDialog: !!job.autoConfirmed
+    }
+  };
+}
+
+function buildIosConfigSuccessResult(job) {
+  var joined = joinStepOutputs(job.stepResults);
+  return {
+    ok: true,
+    device: job.device,
+    executed: job.stepResults.length,
+    results: job.stepResults,
+    raw: joined,
+    source: "terminal",
+    session: {
+      mode: job.lastMode || "",
+      prompt: job.lastPrompt || "",
+      paging: !!job.paged,
+      autoDismissedInitialDialog: !!job.autoConfirmed
+    }
+  };
+}
 
 function failIosJob(ticket, message, code) {
   var job = IOS_JOBS[ticket];
@@ -1161,18 +1146,7 @@ function completeIosJob(ticket) {
   job.updatedAt = Date.now();
 
   if (!job.result) {
-    job.result = {
-      ok: true,
-      device: job.device,
-      raw: job.output || "",
-      outputs: job.stepResults || [],
-      session: {
-        mode: job.lastMode || "",
-        prompt: job.lastPrompt || "",
-        autoDismissedInitialDialog: !!job.autoConfirmed,
-        paging: !!job.paged
-      }
-    };
+    job.result = buildIosSuccessResult(job, job.output || "");
   }
 
   dprint("[Job] Completed " + ticket);
@@ -1188,8 +1162,7 @@ function sendIosJobCommand(ticket, command, phase) {
     return;
   }
 
-  job.phase = phase;
-  job.state = phase;
+  setIosJobPhase(job, phase);
   job.currentCommand = command;
   job.currentCommandOutput = "";
   job.waitingForCommandEnd = true;
@@ -1261,20 +1234,7 @@ function issueIosJobPhase(ticket) {
         issueIosJobPhase(ticket);
       } else {
         job.output = joinStepOutputs(job.stepResults);
-        job.result = {
-          ok: true,
-          device: job.device,
-          executed: job.stepResults.length,
-          results: job.stepResults,
-          raw: job.output,
-          source: "terminal",
-          session: {
-            mode: job.lastMode || "",
-            prompt: job.lastPrompt || "",
-            autoDismissedInitialDialog: !!job.autoConfirmed,
-            paging: !!job.paged
-          }
-        };
+        job.result = buildIosConfigSuccessResult(job);
         completeIosJob(ticket);
       }
       return;
@@ -1554,18 +1514,7 @@ function onTerminalCommandEnded(deviceName, args) {
 
     if (phaseBefore === "run-exec") {
       job.output = raw;
-      job.result = {
-        ok: true,
-        raw: raw,
-        status: status,
-        source: "terminal",
-        session: {
-          mode: job.lastMode || "",
-          prompt: job.lastPrompt || "",
-          paging: !!job.paged,
-          autoDismissedInitialDialog: !!job.autoConfirmed
-        }
-      };
+      job.result = buildIosSuccessResult(job, raw);
       completeIosJob(job.ticket);
       continue;
     }
@@ -1593,20 +1542,7 @@ function onTerminalCommandEnded(deviceName, args) {
         issueIosJobPhase(job.ticket);
       } else {
         job.output = joinStepOutputs(job.stepResults);
-        job.result = {
-          ok: true,
-          device: job.device,
-          executed: job.stepResults.length,
-          results: job.stepResults,
-          raw: job.output,
-          source: "terminal",
-          session: {
-            mode: job.lastMode || "",
-            prompt: job.lastPrompt || "",
-            paging: !!job.paged,
-            autoDismissedInitialDialog: !!job.autoConfirmed
-          }
-        };
+        job.result = buildIosConfigSuccessResult(job);
         completeIosJob(job.ticket);
       }
       continue;
@@ -1614,20 +1550,7 @@ function onTerminalCommandEnded(deviceName, args) {
 
     if (phaseBefore === "save-config") {
       job.output = joinStepOutputs(job.stepResults);
-      job.result = {
-        ok: true,
-        device: job.device,
-        executed: job.stepResults.length,
-        results: job.stepResults,
-        raw: job.output,
-        source: "terminal",
-        session: {
-          mode: job.lastMode || "",
-          prompt: job.lastPrompt || "",
-          paging: !!job.paged,
-          autoDismissedInitialDialog: !!job.autoConfirmed
-        }
-      };
+      job.result = buildIosConfigSuccessResult(job);
       completeIosJob(job.ticket);
     }
   }
@@ -1699,87 +1622,73 @@ function markCleanup(stage) {
   } catch (e) {}
 }
 
-function invokeRuntimeCleanupHook() {
-  // DESACTIVADO:
-  // runtimeFn fue creado con new Function(...), así que invocarlo aquí
-  // re-ejecuta runtime.js completo durante el Stop.
-  // Eso NO limpia estado previo del runtime; crea una nueva ejecución.
-  // 
-  // Problema: Packet Tracer usa un único Qt Script Engine por Script Module.
-  // cleanUp() debe liberar recursos del engine existente, no montar otra ejecución.
-  // 
-  // Referencias:
-  // - https://tutorials.ptnetacad.net/help/default/scriptModules_scriptEngine.htm
-  // - https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/Function
-  return;
-}
-
 function cleanUp() {
   if (isShuttingDown) return;
   isShuttingDown = true;
   isRunning = false;
-  
+
   dprint("[PT] Stopping...");
-  
+
   try {
     markCleanup("clear-command-poll");
     if (commandPollInterval) {
       clearInterval(commandPollInterval);
       commandPollInterval = null;
     }
-    
+
     markCleanup("clear-deferred-poll");
     if (deferredPollInterval) {
       clearInterval(deferredPollInterval);
       deferredPollInterval = null;
     }
-    
+
     markCleanup("clear-heartbeat");
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
       heartbeatInterval = null;
     }
-    
+
+    markCleanup("clear-lease-health");
+    if (leaseHealthInterval) {
+      clearInterval(leaseHealthInterval);
+      leaseHealthInterval = null;
+    }
+
     markCleanup("teardown-watcher");
-    // IMPORTANTE: desregistrar watcher ANTES de soltar referencia
     teardownFileWatcher();
-    
+
     markCleanup("save-pending");
     savePendingCommands();
-    
-    // Limpiar listeners de terminal (MIGRADO desde runtime.js)
+
     markCleanup("detach-listeners");
     detachAllTerminalListeners();
-    
-    // Limpiar jobs
+
     markCleanup("cleanup-jobs");
     IOS_JOBS = {};
-    
-    // CRÍTICO:
-    // NO re-ejecutar runtime.js en cleanUp().
-    // invokeRuntimeCleanupHook() causaba re-ejecución completa de runtime
-    // durante shutdown, contradiciendo el lifecycle del Script Engine.
-    
+
+    // CRÍTICO: NO re-ejecutar runtime.js en cleanUp().
+    // runtimeFn fue creado con new Function(), invocarlo aquí re-ejecuta
+    // el código completo durante shutdown, contradiciendo el lifecycle del Script Engine.
+
     markCleanup("null-runtime");
     runtimeFn = null;
-    
-    // PT-side trace: interrupted by cleanup
+
     if (activeCommand && activeCommand.id) {
       writeCommandTracePatch(activeCommand.id, {
         interruptedByCleanup: true,
         cleanupStage: cleanupStage
       });
     }
-    
+
     activeCommand = null;
     pendingCommands = {};
-    
+
     markCleanup("done");
-    
+
   } catch (e) {
     dprint("[cleanUp:" + cleanupStage + "] " + String(e));
   }
-  
+
   dprint("[PT] Stopped");
 }
 `;

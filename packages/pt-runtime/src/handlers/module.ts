@@ -35,12 +35,12 @@ export function handleAddModule(payload: AddModulePayload, deps: HandlerDeps): H
 
   const device = net.getDevice(payload.device);
   if (!device) {
-    return { ok: false, error: `Device not found: ${payload.device}` };
+    return { ok: false, error: `Device not found: ${payload.device}`, code: "DEVICE_NOT_FOUND" };
   }
 
   // Check if device supports modules
   if (!device.addModule) {
-    return { ok: false, error: "Device does not support modular expansion" };
+    return { ok: false, error: "Device does not support modular expansion", code: "UNSUPPORTED_OPERATION" };
   }
 
   // Modules require device to be powered off
@@ -87,12 +87,12 @@ export function handleRemoveModule(payload: RemoveModulePayload, deps: HandlerDe
 
   const device = net.getDevice(payload.device);
   if (!device) {
-    return { ok: false, error: `Device not found: ${payload.device}` };
+    return { ok: false, error: `Device not found: ${payload.device}`, code: "DEVICE_NOT_FOUND" };
   }
 
   // Check if device supports modules
   if (!device.removeModule) {
-    return { ok: false, error: "Device does not support modular expansion" };
+    return { ok: false, error: "Device does not support modular expansion", code: "UNSUPPORTED_OPERATION" };
   }
 
   // Modules require device to be powered off

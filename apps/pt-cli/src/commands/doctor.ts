@@ -5,7 +5,7 @@
  */
 
 import { Command } from 'commander';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { getDefaultDevDir, getLogsDir, getHistoryDir, getResultsDir } from '../system/paths.ts';
 import type { CliResult } from '../contracts/cli-result.ts';
@@ -17,6 +17,7 @@ import { COMMAND_CATALOG } from './command-catalog.ts';
 interface DoctorCheckResult {
   name: string;
   ok: boolean;
+  severity: 'info' | 'warning' | 'critical';
   message: string;
   details?: string;
 }
@@ -25,6 +26,7 @@ export function createDoctorCommand(): Command {
   return new Command('doctor')
     .description('Diagnóstico del sistema - verifica el entorno de PT')
     .option('-v, --verbose', 'Salida detallada', false)
+    .option('-j, --json', 'Salida JSON', false)
     .action(async (options: any) => {
       await runCommand({
         action: 'doctor',
@@ -38,6 +40,7 @@ export function createDoctorCommand(): Command {
             checks: checks.map(c => ({
               name: c.name,
               ok: c.ok,
+              severity: c.severity,
               message: c.message,
               details: c.details,
             })),
@@ -49,7 +52,8 @@ export function createDoctorCommand(): Command {
             verificationSource: checks.map(c => c.name),
             checks: checks.map(c => ({ 
               name: c.name, 
-              ok: c.ok, 
+              ok: c.ok,
+              severity: c.severity,
               details: { message: c.message, details: c.details } 
             })),
           };
@@ -67,6 +71,40 @@ export function createDoctorCommand(): Command {
           return result;
         }
       });
+
+      const criticals = 0;
+      const warnings = 0;
+      console.log('');
+      console.log('═══ Diagnóstico del sistema ═══');
+      console.log('');
+
+      const ptDevDir = process.env.PT_DEV_DIR ?? getDefaultDevDir();
+      const checks = await performDoctorChecks({ getHeartbeat: () => null, getHeartbeatHealth: () => ({ state: 'unknown' }), getSystemContext: () => ({ bridgeReady: false, topologyMaterialized: false, deviceCount: 0, linkCount: 0, heartbeat: { state: 'unknown' }, warnings: [] }) }, options.verbose);
+
+      const sevIcons: Record<string, string> = { info: 'ℹ', warning: '⚠', critical: '🔴' };
+      for (const c of checks) {
+        const icon = c.ok ? '✓' : '✗';
+        const sev = sevIcons[c.severity] ?? '·';
+        console.log(`  ${icon} [${sev}] ${c.message}`);
+        if (c.details && options.verbose) {
+          console.log(`     ${c.details}`);
+        }
+      }
+
+      const criticalsCount = checks.filter(c => !c.ok && c.severity === 'critical').length;
+      const warningsCount = checks.filter(c => !c.ok && c.severity === 'warning').length;
+      const okCount = checks.filter(c => c.ok).length;
+
+      console.log('');
+      console.log(`Resumen: ${okCount} OK, ${warningsCount} warning, ${criticalsCount} critical`);
+      if (criticalsCount > 0) {
+        console.log('→ Acción requerida: hay problemas críticos.');
+      } else if (warningsCount > 0) {
+        console.log('→ Revisar warnings para mejorar la operación.');
+      } else {
+        console.log('→ Sistema operativo.');
+      }
+      console.log('');
     });
 }
 
@@ -79,6 +117,8 @@ async function performDoctorChecks(controller: any, verbose: boolean): Promise<D
   checks.push(checkHistoryDirectory(getHistoryDir(), verbose));
   checks.push(checkResultsDirectory(getResultsDir(), verbose));
   checks.push(checkRuntimeFiles(ptDevDir, verbose));
+  checks.push(checkBridgeQueues(ptDevDir, verbose));
+  checks.push(checkLease(ptDevDir, verbose));
 
   try {
     const hb = controller.getHeartbeat();
@@ -132,6 +172,7 @@ function checkPtDevDirectory(ptDevDir: string, verbose: boolean): DoctorCheckRes
     return {
       name,
       ok: false,
+      severity: 'critical',
       message: `El directorio ${ptDevDir} no existe`,
       details: 'Ejecuta "pt build" para crear el directorio y desplegar archivos',
     };
@@ -142,6 +183,7 @@ function checkPtDevDirectory(ptDevDir: string, verbose: boolean): DoctorCheckRes
     return {
       name,
       ok: true,
+      severity: 'info',
       message: `Directorio pt-dev accesible: ${ptDevDir}`,
       details: verbose ? `Modo: ${statSync(ptDevDir).mode.toString(8)}` : undefined,
     };
@@ -149,6 +191,7 @@ function checkPtDevDirectory(ptDevDir: string, verbose: boolean): DoctorCheckRes
     return {
       name,
       ok: false,
+      severity: 'critical',
       message: `No se puede acceder a ${ptDevDir}`,
       details: String(e),
     };
@@ -160,28 +203,14 @@ function checkLogDirectory(logsDir: string, verbose: boolean): DoctorCheckResult
   
   if (!existsSync(logsDir)) {
     try {
-      require('node:fs').mkdirSync(logsDir, { recursive: true });
-      return {
-        name,
-        ok: true,
-        message: `Directorio de logs creado: ${logsDir}`,
-      };
+      mkdirSync(logsDir, { recursive: true });
+      return { name, ok: true, severity: 'warning', message: `Directorio de logs creado: ${logsDir}` };
     } catch (e) {
-      return {
-        name,
-        ok: false,
-        message: `No se pudo crear el directorio de logs`,
-        details: String(e),
-      };
+      return { name, ok: false, severity: 'warning', message: 'No se pudo crear el directorio de logs', details: String(e) };
     }
   }
 
-  return {
-    name,
-    ok: true,
-    message: `Directorio de logs accesible: ${logsDir}`,
-    details: verbose ? `${readdirSync(logsDir).length} archivos` : undefined,
-  };
+  return { name, ok: true, severity: 'info', message: `Directorio de logs accesible: ${logsDir}`, details: verbose ? `${readdirSync(logsDir).length} archivos` : undefined };
 }
 
 function checkHistoryDirectory(historyDir: string, verbose: boolean): DoctorCheckResult {
@@ -189,28 +218,14 @@ function checkHistoryDirectory(historyDir: string, verbose: boolean): DoctorChec
   
   if (!existsSync(historyDir)) {
     try {
-      require('node:fs').mkdirSync(historyDir, { recursive: true });
-      return {
-        name,
-        ok: true,
-        message: `Directorio de historial creado: ${historyDir}`,
-      };
+      mkdirSync(historyDir, { recursive: true });
+      return { name, ok: true, severity: 'warning', message: `Directorio de historial creado: ${historyDir}` };
     } catch (e) {
-      return {
-        name,
-        ok: false,
-        message: `No se pudo crear el directorio de historial`,
-        details: String(e),
-      };
+      return { name, ok: false, severity: 'warning', message: 'No se pudo crear el directorio de historial', details: String(e) };
     }
   }
 
-  return {
-    name,
-    ok: true,
-    message: `Directorio de historial accesible: ${historyDir}`,
-    details: verbose ? `${readdirSync(historyDir).length} archivos` : undefined,
-  };
+  return { name, ok: true, severity: 'info', message: `Directorio de historial accesible: ${historyDir}`, details: verbose ? `${readdirSync(historyDir).length} archivos` : undefined };
 }
 
 function checkResultsDirectory(resultsDir: string, verbose: boolean): DoctorCheckResult {
@@ -218,154 +233,76 @@ function checkResultsDirectory(resultsDir: string, verbose: boolean): DoctorChec
   
   if (!existsSync(resultsDir)) {
     try {
-      require('node:fs').mkdirSync(resultsDir, { recursive: true });
-      return {
-        name,
-        ok: true,
-        message: `Directorio de resultados creado: ${resultsDir}`,
-      };
+      mkdirSync(resultsDir, { recursive: true });
+      return { name, ok: true, severity: 'warning', message: `Directorio de resultados creado: ${resultsDir}` };
     } catch (e) {
-      return {
-        name,
-        ok: false,
-        message: `No se pudo crear el directorio de resultados`,
-        details: String(e),
-      };
+      return { name, ok: false, severity: 'warning', message: 'No se pudo crear el directorio de resultados', details: String(e) };
     }
   }
 
-  return {
-    name,
-    ok: true,
-    message: `Directorio de resultados accesible: ${resultsDir}`,
-    details: verbose ? `${readdirSync(resultsDir).length} archivos` : undefined,
-  };
+  return { name, ok: true, severity: 'info', message: `Directorio de resultados accesible: ${resultsDir}`, details: verbose ? `${readdirSync(resultsDir).length} archivos` : undefined };
 }
 
 function checkRuntimeFiles(ptDevDir: string, verbose: boolean): DoctorCheckResult {
   const name = 'runtime-present';
   
-  const mainJs = join(ptDevDir, 'main');
-  const runtimeJs = join(ptDevDir, 'runtime');
+  const mainJs = join(ptDevDir, 'main.js');
+  const runtimeJs = join(ptDevDir, 'runtime.js');
   
   const files: string[] = [];
-  if (existsSync(mainJs)) files.push('main');
-  if (existsSync(runtimeJs)) files.push('runtime');
+  if (existsSync(mainJs)) files.push('main.js');
+  if (existsSync(runtimeJs)) files.push('runtime.js');
   
   if (files.length === 0) {
-    return {
-      name,
-      ok: false,
-      message: 'Archivos de runtime no encontrados',
-      details: 'Ejecuta "pt build" para generar los archivos',
-    };
+    return { name, ok: false, severity: 'critical', message: 'Archivos de runtime no encontrados', details: 'Ejecuta "pt build" para generar los archivos' };
+  }
+  if (files.length < 2) {
+    return { name, ok: false, severity: 'warning', message: `Runtime parcial: ${files.join(', ')}`, details: 'Ejecuta "pt build" para completar' };
   }
 
+  return { name, ok: true, severity: 'info', message: `Archivos de runtime presentes: ${files.join(', ')}`, details: verbose ? `Ruta: ${ptDevDir}` : undefined };
+}
+
+function checkBridgeQueues(ptDevDir: string, verbose: boolean): DoctorCheckResult {
+  const commandsDir = join(ptDevDir, 'commands');
+  const inFlightDir = join(ptDevDir, 'in-flight');
+  const deadLetterDir = join(ptDevDir, 'dead-letter');
+
+  const queued = existsSync(commandsDir) ? readdirSync(commandsDir).filter((f) => f.endsWith('.json')).length : 0;
+  const inFlight = existsSync(inFlightDir) ? readdirSync(inFlightDir).filter((f) => f.endsWith('.json')).length : 0;
+  const dead = existsSync(deadLetterDir) ? readdirSync(deadLetterDir).filter((f) => f.endsWith('.json')).length : 0;
+
+  const ok = dead === 0 && inFlight < 10;
+  const severity: DoctorCheckResult['severity'] = dead > 0 ? 'critical' : inFlight > 5 ? 'warning' : 'info';
+
   return {
-    name,
-    ok: true,
-    message: `Archivos de runtime presentes: ${files.join(', ')}`,
-    details: verbose ? `Ruta: ${ptDevDir}` : undefined,
+    name: 'bridge-queues',
+    ok,
+    severity,
+    message: `Queue: ${queued} queued / ${inFlight} in-flight / ${dead} dead-letter`,
+    details: verbose ? JSON.stringify({ queued, inFlight, dead }, null, 2) : undefined,
   };
 }
 
-function checkHeartbeat(ptDevDir: string, verbose: boolean): DoctorCheckResult {
-  const name = 'heartbeat-present';
-  
-  const heartbeatPath = join(ptDevDir, 'heartbeat.json');
-  
-  if (!existsSync(heartbeatPath)) {
-    return {
-      name,
-      ok: false,
-      message: 'Archivo heartbeat.json no encontrado',
-      details: 'El runtime de PT debe crear este archivo',
-    };
+function checkLease(ptDevDir: string, verbose: boolean): DoctorCheckResult {
+  const leasePath = join(ptDevDir, 'bridge-lease.json');
+  if (!existsSync(leasePath)) {
+    return { name: 'bridge-lease', ok: true, severity: 'info', message: 'Lease no presente (no es obligatorio)' };
   }
 
   try {
-    const content = readFileSync(heartbeatPath, 'utf-8');
-    const heartbeat = JSON.parse(content);
-    const timestamp = heartbeat.timestamp ?? heartbeat.lastSeen;
-    
-    if (!timestamp) {
-      return {
-        name,
-        ok: false,
-        message: 'Heartbeat sin timestamp',
-        details: 'El archivo existe pero no tiene información de tiempo',
-      };
-    }
-
+    const content = readFileSync(leasePath, 'utf-8');
+    const lease = JSON.parse(content) as { expiresAt?: string | number; pid?: number };
+    const expiresAt = lease.expiresAt ? new Date(lease.expiresAt).getTime() : 0;
+    const valid = expiresAt > Date.now();
     return {
-      name,
-      ok: true,
-      message: `Heartbeat encontrado: ${timestamp}`,
-      details: verbose ? JSON.stringify(heartbeat, null, 2) : undefined,
+      name: 'bridge-lease',
+      ok: valid,
+      severity: valid ? 'info' : 'warning',
+      message: valid ? 'Lease válido' : 'Lease expirado',
+      details: verbose ? JSON.stringify(lease, null, 2) : undefined,
     };
-  } catch (e) {
-    return {
-      name,
-      ok: false,
-      message: 'No se pudo leer el heartbeat',
-      details: String(e),
-    };
-  }
-}
-
-function checkPacketTracerStatus(ptDevDir: string, verbose: boolean): DoctorCheckResult {
-  const name = 'heartbeat-fresh';
-  
-  const heartbeatPath = join(ptDevDir, 'heartbeat.json');
-  
-  if (!existsSync(heartbeatPath)) {
-    return {
-      name,
-      ok: false,
-      message: 'No se puede verificar estado de PT',
-      details: 'Heartbeat no existe - Packet Tracer puede no estar ejecutándose',
-    };
-  }
-
-  try {
-    const content = readFileSync(heartbeatPath, 'utf-8');
-    const heartbeat = JSON.parse(content);
-    const timestamp = heartbeat.timestamp ?? heartbeat.lastSeen;
-    
-    if (!timestamp) {
-      return {
-        name,
-        ok: false,
-        message: 'Heartbeat sin timestamp válido',
-        details: 'No se puede determinar la frescura',
-      };
-    }
-
-    const heartbeatTime = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - heartbeatTime.getTime();
-    const diffSec = Math.floor(diffMs / 1000);
-
-    if (diffSec > 60) {
-      return {
-        name,
-        ok: false,
-        message: `Heartbeat stale: hace ${diffSec}s`,
-        details: 'Packet Tracer puede no estar activo',
-      };
-    }
-
-    return {
-      name,
-      ok: true,
-      message: `Packet Tracer activo (heartbeat hace ${diffSec}s)`,
-    };
-  } catch (e) {
-    return {
-      name,
-      ok: false,
-      message: 'Error al verificar estado de Packet Tracer',
-      details: String(e),
-    };
+  } catch (err) {
+    return { name: 'bridge-lease', ok: false, severity: 'warning', message: 'No se pudo leer el lease', details: String(err) };
   }
 }

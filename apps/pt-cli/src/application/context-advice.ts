@@ -23,5 +23,15 @@ export function buildContextWarnings(ctx: CommandRuntimeContext): string[] {
     );
   }
 
+  if (ctx.heartbeat.state === 'stale') {
+    warnings.push('Heartbeat stale; Packet Tracer puede no estar respondiendo.');
+  } else if (ctx.heartbeat.state === 'missing') {
+    warnings.push('Heartbeat missing; Packet Tracer probablemente no está disponible.');
+  }
+
+  if (ctx.bridge.warnings && ctx.bridge.warnings.length > 0) {
+    warnings.push(...ctx.bridge.warnings);
+  }
+
   return warnings;
 }

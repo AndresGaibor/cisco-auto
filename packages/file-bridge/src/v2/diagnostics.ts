@@ -40,18 +40,21 @@ export class BridgeDiagnostics {
   constructor(
     private readonly paths: BridgePathLayout,
     private readonly seq: SequenceStore,
-    private readonly ownerId: string,
-    private readonly lease: BridgeLease | null,
+    private readonly getOwnerId: () => string,
+    private readonly readLease: () => BridgeLease | null,
   ) {}
 
   collectHealth(): BridgeHealth {
     const issues: string[] = [];
     const now = Date.now();
 
+    const ownerId = this.getOwnerId();
+    const lease = this.readLease();
+
     let leaseActive = false;
-    if (this.lease) {
-      const isStale = !this.lease.expiresAt || now > this.lease.expiresAt;
-      if (!isStale && this.lease.ownerId === this.ownerId) {
+    if (lease) {
+      const isStale = !lease.expiresAt || now > lease.expiresAt;
+      if (!isStale && lease.ownerId === ownerId) {
         leaseActive = true;
       }
     }
@@ -64,7 +67,6 @@ export class BridgeDiagnostics {
 
     const consumers = this.getConsumerLag();
 
-    // Detect issues
     if (inFlight > 10) issues.push(`${inFlight} commands stuck in-flight`);
     if (pendingCommands > 100) issues.push(`Command queue backing up: ${pendingCommands} pending`);
     for (const c of consumers) {
@@ -82,8 +84,8 @@ export class BridgeDiagnostics {
       status: issues.length === 0 ? "healthy" : issues.length < 3 ? "degraded" : "unhealthy",
       lease: {
         active: leaseActive,
-        ownerId: this.lease?.ownerId ?? null,
-        ageMs: this.lease ? now - this.lease.startedAt : 0,
+        ownerId: lease?.ownerId ?? null,
+        ageMs: lease ? now - lease.startedAt : 0,
       },
       queues: { pendingCommands, inFlight, results, deadLetters },
       journal: {

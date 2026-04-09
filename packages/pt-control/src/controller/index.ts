@@ -20,6 +20,11 @@ import type {
   DevicesInRectResult,
   NetworkTwin,
 } from "../contracts/index.js";
+import type {
+  IosExecutionSuccess,
+  IosConfigApplyResult,
+  IosConfidence,
+} from "../contracts/ios-execution-evidence.js";
 import type { DeviceCapabilities } from "../domain/ios/capabilities/pt-capability-resolver.js";
 import { TopologyService } from "../application/services/topology-service.js";
 import { DeviceService } from "../application/services/device-service.js";
@@ -234,6 +239,89 @@ export class PTController {
     }
   ): Promise<{ raw: string; parsed?: ParsedOutput; session?: { mode: string } }> {
     return this.iosService.execInteractive(device, command, options);
+  }
+
+  async execIosWithEvidence<T = ParsedOutput>(
+    device: string,
+    command: string,
+    parse = true,
+    timeout = 5000
+  ): Promise<IosExecutionSuccess<T>> {
+    return this.iosService.execIos<T>(device, command, parse, timeout);
+  }
+
+  async configIosWithResult(
+    device: string,
+    commands: string[],
+    options?: { save?: boolean }
+  ): Promise<IosConfigApplyResult> {
+    return this.iosService.configIos(device, commands, options);
+  }
+
+  async showParsed<T = ParsedOutput>(
+    device: string,
+    command: string,
+    options?: { ensurePrivileged?: boolean; timeout?: number }
+  ): Promise<IosExecutionSuccess<T>> {
+    return this.iosService.showParsed<T>(device, command, options);
+  }
+
+  async getIosConfidence(
+    device: string,
+    evidence: { source: string; status?: number; mode?: string },
+    verificationCheck?: string
+  ): Promise<IosConfidence> {
+    return this.iosService.getConfidence(device, evidence as any, verificationCheck);
+  }
+
+  async configureDhcpPool(
+    device: string,
+    poolName: string,
+    network: string,
+    mask: string,
+    defaultRouter: string,
+    dnsServer?: string,
+    options?: { save?: boolean }
+  ): Promise<void> {
+    await this.iosService.configureDhcpPool(
+      device, poolName, network, mask, defaultRouter, dnsServer, options
+    );
+  }
+
+  async configureOspfNetwork(
+    device: string,
+    processId: number,
+    network: string,
+    wildcard: string,
+    area: number,
+    options?: { save?: boolean }
+  ): Promise<void> {
+    await this.iosService.configureOspfNetwork(
+      device, processId, network, wildcard, area, options
+    );
+  }
+
+  async configureSshAccess(
+    device: string,
+    domainName: string,
+    username: string,
+    password: string,
+    options?: { save?: boolean }
+  ): Promise<void> {
+    await this.iosService.configureSshAccess(
+      device, domainName, username, password, options
+    );
+  }
+
+  async configureAccessListStandard(
+    device: string,
+    aclNumber: number,
+    entries: string[],
+    options?: { save?: boolean }
+  ): Promise<void> {
+    await this.iosService.configureAccessListStandard(
+      device, aclNumber, entries, options
+    );
   }
 
   async resolveCapabilities(device: string): Promise<DeviceCapabilities> {

@@ -23,6 +23,7 @@ export async function collectContextStatus(controller: PTController): Promise<Co
 
   // Prefer the consolidated system context exposed by PTController (Phase 5)
   const sys = controller.getSystemContext();
+  const bridge = controller.getBridgeStatus();
   const deviceCount = liveSnapshot?.devices ? Object.keys(liveSnapshot.devices).length : sys.deviceCount;
   const linkCount = liveSnapshot?.links ? Object.keys(liveSnapshot.links).length : sys.linkCount;
 
@@ -44,7 +45,11 @@ export async function collectContextStatus(controller: PTController): Promise<Co
       lastSeenTs: sys.heartbeat.lastSeenTs,
     },
     bridge: {
-      ready: sys.bridgeReady,
+      ready: bridge.ready && sys.bridgeReady,
+      leaseValid: bridge.leaseValid,
+      queuedCount: bridge.queuedCount,
+      inFlightCount: bridge.inFlightCount,
+      warnings: bridge.warnings ?? [],
     },
     topology: {
       materialized: sys.topologyMaterialized || Boolean(liveSnapshot),

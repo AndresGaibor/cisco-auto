@@ -248,6 +248,43 @@ export function createLogsCommand(): Command {
       const output = renderCliResult(result, flags.output);
       if (!flags.quiet || !result.ok) console.log(output);
 
+      if (result.ok && result.data) {
+        console.log('');
+        console.log(`═══ Timeline: Sesión ${result.data.sessionId} ═══`);
+        console.log(`Eventos: ${result.data.count}`);
+        console.log('');
+
+        if (result.data.events.length === 0) {
+          console.log('  No se encontraron eventos para esta sesión.');
+        } else {
+          for (const evt of result.data.events) {
+            const ts = evt.timestamp ? evt.timestamp.split('T')[1]?.split('.')[0] ?? '' : '';
+            const phase = evt.phase ?? 'unknown';
+            const action = evt.action ?? '';
+            const meta = evt.metadata as Record<string, unknown> | undefined;
+            const ok = meta?.ok;
+
+            let icon = '⚪';
+            if (phase === 'end' && ok === false) icon = '🔴';
+            else if (phase === 'end' && ok === true) icon = '🟢';
+            else if (phase === 'start') icon = '🔵';
+
+            console.log(`  ${icon} [${ts}] ${phase.padEnd(10)} ${action}`);
+
+            if (meta?.contextSummary) {
+              const ctx = meta.contextSummary as Record<string, unknown>;
+              if (ctx.bridgeReady !== undefined) {
+                console.log(`           bridge: ${ctx.bridgeReady ? 'ready' : 'not ready'}, devices: ${ctx.deviceCount ?? 0}, links: ${ctx.linkCount ?? 0}`);
+              }
+            }
+            if (meta?.error) {
+              console.log(`           error: ${meta.error}`);
+            }
+          }
+        }
+        console.log('');
+      }
+
       if (!result.ok) process.exit(1);
     });
 
@@ -432,6 +469,37 @@ export function createLogsCommand(): Command {
       const output = renderCliResult(result, flags.output);
       if (!flags.quiet || !result.ok) console.log(output);
 
+      if (result.ok && result.data) {
+        console.log('');
+        console.log(`═══ Errores recientes (${result.data.count}) ═══`);
+        console.log('');
+
+        if (result.data.errors.length === 0) {
+          console.log('  No se encontraron errores recientes.');
+        } else {
+          const byLayer: Record<string, typeof result.data.errors> = { bridge: [], pt: [], ios: [], verification: [], other: [] };
+          for (const err of result.data.errors) {
+            const action = err.action.toLowerCase();
+            const msg = err.error.toLowerCase();
+            if (action.includes('bridge') || msg.includes('lease') || msg.includes('queue')) byLayer.bridge.push(err);
+            else if (action.includes('pt') || msg.includes('runtime') || msg.includes('terminal')) byLayer.pt.push(err);
+            else if (action.includes('ios') || action.includes('config') || msg.includes('command')) byLayer.ios.push(err);
+            else if (msg.includes('verif')) byLayer.verification.push(err);
+            else byLayer.other.push(err);
+          }
+
+          for (const [layer, errs] of Object.entries(byLayer)) {
+            if (errs.length === 0) continue;
+            console.log(`  ── ${layer.toUpperCase()} (${errs.length}) ──`);
+            for (const e of errs) {
+              console.log(`  [${e.timestamp}] ${e.action}`);
+              if (e.error) console.log(`    → ${e.error.slice(0, 100)}`);
+            }
+            console.log('');
+          }
+        }
+      }
+
       if (!result.ok) process.exit(1);
     });
 
@@ -498,6 +566,74 @@ export function createLogsCommand(): Command {
       if (!flags.quiet || !result.ok) console.log(output);
 
       if (!result.ok) process.exit(1);
+    });
+
+  cmd
+    .command('ios [device]')
+    .description('Buscar logs de operaciones IOS (config, exec, show) por dispositivo')
+    .option('--device <name>', 'Filtrar por nombre de dispositivo')
+    .option('-n, --limit <num>', 'Máximo de entradas', '20')
+    .option('--examples', 'Mostrar ejemplos', false)
+    .option('--explain', 'Explicar', false)
+    .option('--plan', 'Mostrar plan', false)
+    .action(async (deviceArg: string | undefined, options) => {
+      const globalExamples = process.argv.includes('--examples');
+      if (globalExamples) {
+        console.log(printExamples(LOGS_META));
+        return;
+      }
+
+      const device = options.device ?? deviceArg;
+      const limit = parseInt(options.limit) || 20;
+
+      const logsDir = getLogsDir();
+      const entries: { sessionId: string; action: string; timestamp: string; device?: string }[] = [];
+
+      try {
+        const files = readdirSync(logsDir)
+          .filter(f => f.endsWith('.ndjson'))
+          .sort()
+          .slice(-10);
+
+        for (const file of files) {
+          if (entries.length >= limit) break;
+          const filePath = join(logsDir, file);
+          const content = readFileSync(filePath, 'utf-8');
+          const lines = content.split('\n').filter(Boolean);
+
+          for (const line of lines) {
+            if (entries.length >= limit) break;
+            try {
+              const evt = JSON.parse(line) as Record<string, unknown>;
+              const action = (evt.action ?? '') as string;
+              if (!action.includes('ios') && !action.includes('config') && !action.includes('show') && !action.includes('exec')) continue;
+
+              const meta = evt.metadata as Record<string, unknown> | undefined;
+              const evtDevice = meta?.payloadPreview?.device as string | undefined;
+
+              if (device && evtDevice && !evtDevice.toLowerCase().includes(device.toLowerCase())) continue;
+
+              entries.push({
+                sessionId: (evt.session_id ?? evt.sessionId ?? '') as string,
+                action,
+                timestamp: (evt.timestamp ?? '') as string,
+                device: evtDevice,
+              });
+            } catch { /* skip */ }
+          }
+        }
+      } catch { /* no logs */ }
+
+      console.log('');
+      console.log(`═══ Operaciones IOS${device ? ` (dispositivo: ${device})` : ''} ═══`);
+      console.log(`Entradas: ${entries.length}`);
+      console.log('');
+
+      for (const e of entries) {
+        const ts = e.timestamp ? e.timestamp.split('T')[1]?.split('.')[0] ?? '' : '';
+        console.log(`  [${ts}] ${e.action.padEnd(25)} device: ${e.device ?? 'n/a'}  session: ${e.sessionId.slice(0, 12)}`);
+      }
+      console.log('');
     });
 
   return cmd;

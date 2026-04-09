@@ -140,3 +140,23 @@ export function listJsonFiles(dir: string): string[] {
     return [];
   }
 }
+
+/**
+ * Alias semántico para safeRename — el lenguaje correcto en el bridge es
+ * "mover atómicamente" no "renombrar".
+ */
+export function atomicMoveFile(src: string, dst: string): boolean {
+  return safeRename(src, dst);
+}
+
+/**
+ * Leer y parsear JSON, lanzando error si el archivo falta o es inválido.
+ * Útil cuando la ausencia de un archivo es un error de lógica, no un caso esperado.
+ */
+export function readJsonFileOrThrow<T = unknown>(path: string): T {
+  const value = readJsonFile<T>(path);
+  if (value === null) {
+    throw new Error(`Invalid or missing JSON file: ${path}`);
+  }
+  return value;
+}

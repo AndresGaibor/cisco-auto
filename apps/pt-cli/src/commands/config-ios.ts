@@ -7,6 +7,7 @@ import { createSuccessResult, createVerifiedResult, createErrorResult } from '..
 import type { CommandMeta } from '../contracts/command-meta';
 import type { GlobalFlags } from '../flags';
 import { fetchDeviceList, getIOSCapableDevices } from '../utils/device-utils';
+import { inspectCommandContext } from '../application/context-inspector';
 
 export const CONFIG_IOS_META: CommandMeta = {
   id: 'config-ios',
@@ -51,32 +52,73 @@ interface ConfigIOSResult {
   errors: string[];
 }
 
-function getVerificationCommand(command: string): string | null {
-  const cmd = command.toLowerCase();
+export function buildVerificationPlan(commands: string[]): Array<{
+  kind: string;
+  verifyCommand: string;
+  assert: (raw: string, parsed: unknown, originalCommands: string[]) => boolean;
+}> {
+  const plans: Array<{
+    kind: string;
+    verifyCommand: string;
+    assert: (raw: string, parsed: unknown, originalCommands: string[]) => boolean;
+  }> = [];
 
-  if (cmd.includes('interface') && !cmd.startsWith('no ')) {
-    return 'show ip interface brief';
-  }
-  if (cmd.includes('vlan') && !cmd.startsWith('no ')) {
-    return 'show vlan brief';
-  }
-  if (cmd.includes('ip route') || cmd.includes('router')) {
-    return 'show ip route';
-  }
-  if (cmd.includes('ospf') || cmd.includes('eigrp') || cmd.includes('rip')) {
-    return 'show ip protocols';
-  }
-  if (cmd.includes('access-list')) {
-    return 'show access-lists';
-  }
-  if (cmd.includes('spanning-tree') || cmd.includes('stp')) {
-    return 'show spanning-tree';
-  }
-  if (cmd.includes('etherchannel') || cmd.includes('port-channel')) {
-    return 'show etherchannel summary';
+  const unique = Array.from(new Set(commands.map((command) => command.trim()).filter(Boolean)));
+
+  if (unique.some((c) => /^vlan\s+\d+/i.test(c))) {
+    plans.push({
+      kind: 'vlan',
+      verifyCommand: 'show vlan brief',
+      assert: (raw, _parsed, original) => original
+        .filter((c) => /^vlan\s+\d+/i.test(c))
+        .every((c) => {
+          const match = c.match(/^vlan\s+(\d+)/i);
+          return Boolean(match && raw.includes(match[1]!));
+        }),
+    });
   }
 
-  return null;
+  if (unique.some((c) => /^interface\s+/i.test(c) || /^ip address\s+/i.test(c))) {
+    plans.push({
+      kind: 'interface',
+      verifyCommand: 'show ip interface brief',
+      assert: (raw) => raw.length > 0,
+    });
+  }
+
+  if (unique.some((c) => /^ip route\s+/i.test(c) || /^router\s+/i.test(c) || /\bospf\b/i.test(c) || /\beigrp\b/i.test(c) || /\brip\b/i.test(c))) {
+    plans.push({
+      kind: 'routing',
+      verifyCommand: 'show ip route',
+      assert: (raw) => raw.length > 0,
+    });
+  }
+
+  if (unique.some((c) => /access-list/i.test(c))) {
+    plans.push({
+      kind: 'acl',
+      verifyCommand: 'show access-lists',
+      assert: (raw) => raw.length > 0,
+    });
+  }
+
+  if (unique.some((c) => /spanning-tree|\bstp\b/i.test(c))) {
+    plans.push({
+      kind: 'stp',
+      verifyCommand: 'show spanning-tree',
+      assert: (raw) => raw.length > 0,
+    });
+  }
+
+  if (unique.some((c) => /etherchannel|port-channel/i.test(c))) {
+    plans.push({
+      kind: 'etherchannel',
+      verifyCommand: 'show etherchannel summary',
+      assert: (raw) => raw.length > 0,
+    });
+  }
+
+  return plans;
 }
 
 function detectCommandType(commands: string[]): string[] {
@@ -270,32 +312,39 @@ export function createConfigIOSCommand(): Command {
 
             const errors: string[] = [];
 
-            await ctx.controller.configIos(targetDevice, payload.commands);
+            const applyResult = await ctx.controller.configIosWithResult(targetDevice, payload.commands, { save: true });
 
-            let verification: { verified: boolean; checks: VerificationCheck[] } = { verified: false, checks: [] };
+            const verificationPlan = buildVerificationPlan(payload.commands);
+            const verificationChecks: VerificationCheck[] = [];
 
-            if (options.verify) {
-              for (const command of payload.commands) {
-                const verifyCmd = getVerificationCommand(command);
-                if (verifyCmd) {
-                  try {
-                    await ctx.controller.configIos(targetDevice, [verifyCmd]);
-                    verification.checks.push({
-                      name: verifyCmd,
-                      ok: true,
-                      details: { command },
-                    });
-                  } catch (e) {
-                    verification.checks.push({
-                      name: verifyCmd,
-                      ok: false,
-                      details: { command, error: e instanceof Error ? e.message : String(e) },
-                    });
-                  }
+            if (options.verify && verificationPlan.length > 0) {
+              for (const step of verificationPlan) {
+                try {
+                  const showResult = await ctx.controller.execIosWithEvidence(targetDevice, step.verifyCommand, false, 10000);
+                  const ok = step.assert(showResult.raw || '', showResult.parsed, payload.commands);
+                  verificationChecks.push({
+                    name: `${step.kind}:${step.verifyCommand}`,
+                    ok,
+                    details: {
+                      verifyCommand: step.verifyCommand,
+                      rawPreview: (showResult.raw || '').slice(0, 400),
+                      evidence: showResult.evidence,
+                    },
+                  });
+                } catch (e) {
+                  verificationChecks.push({
+                    name: `${step.kind}:${step.verifyCommand}`,
+                    ok: false,
+                    details: {
+                      error: e instanceof Error ? e.message : String(e),
+                    },
+                  });
                 }
               }
-              verification.verified = verification.checks.length > 0 && verification.checks.every(c => c.ok);
             }
+
+            const verified = verificationChecks.length > 0 && verificationChecks.every((check) => check.ok);
+            const partiallyVerified = verificationChecks.some((check) => check.ok) && !verified;
 
             const resultData: ConfigIOSResult = {
               device: targetDevice,
@@ -304,11 +353,19 @@ export function createConfigIOSCommand(): Command {
               errors,
             };
 
-            if (verification.verified) {
-              return createVerifiedResult('config-ios', resultData, verification) as CliResult<ConfigIOSResult>;
+            if (verificationChecks.length > 0) {
+              return createVerifiedResult('config-ios', resultData, {
+                executed: true,
+                verified,
+                partiallyVerified,
+                verificationSource: verificationPlan.map((step) => step.verifyCommand),
+                checks: verificationChecks,
+              }) as CliResult<ConfigIOSResult>;
             }
 
-            return createSuccessResult('config-ios', resultData) as CliResult<ConfigIOSResult>;
+            return createSuccessResult('config-ios', resultData, {
+              advice: ['La configuración se aplicó, pero no hubo un plan de verificación específico.'],
+            }) as CliResult<ConfigIOSResult>;
           } finally {
             await ctx.controller.stop();
           }
@@ -317,6 +374,10 @@ export function createConfigIOSCommand(): Command {
 
       if (result.ok) {
         console.log('\n' + chalk.green('*') + ' ' + result.data?.executed + ' comando(s) ejecutado(s) en ' + chalk.cyan(result.data?.device) + '\n');
+        if (result.verification) {
+          const status = result.verification.verified ? 'verificado' : result.verification.partiallyVerified ? 'parcialmente verificado' : 'no verificado';
+          console.log(chalk.bold(`Verificación: ${status}`));
+        }
       } else {
         console.error('\n' + chalk.red('X') + ' Error: ' + result.error?.message + '\n');
         process.exit(1);

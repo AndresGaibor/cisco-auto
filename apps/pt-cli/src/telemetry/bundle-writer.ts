@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { getSessionLogsDir, getCommandLogsDir, getResultsDir, getBundlesDir, getEventsPath } from '../system/paths.js';
+import { getSessionLogsDir, getCommandLogsDir, getResultsDir, getBundlesDir, getEventsPath, getContextStatusPath, getHistoryDir } from '../system/paths.js';
 import { redactObject } from './trace-redaction.js';
 import type { LogBundle } from '../contracts/log-bundle.js';
 
@@ -85,6 +85,22 @@ export class BundleWriter {
     }
   }
 
+  private async loadHistoryEntry(sessionId: string): Promise<Record<string, unknown> | null> {
+    const sessionPath = `${getHistoryDir()}/sessions/${sessionId}.json`;
+    if (!existsSync(sessionPath)) return null;
+    try {
+      return JSON.parse(readFileSync(sessionPath, 'utf-8'));
+    } catch { return null; }
+  }
+
+  private async loadContextStatus(): Promise<Record<string, unknown> | null> {
+    const path = getContextStatusPath();
+    if (!existsSync(path)) return null;
+    try {
+      return JSON.parse(readFileSync(path, 'utf-8'));
+    } catch { return null; }
+  }
+
   private extractCommandIds(sessionLogs: Record<string, unknown>[]): string[] {
     const commandIds: string[] = [];
 
@@ -108,6 +124,8 @@ export class BundleWriter {
     const sessionLogs = await this.loadSessionLogs(sessionId);
     const bridgeEvents = await this.loadBridgeEvents();
     const commandIds = this.extractCommandIds(sessionLogs);
+    const historyEntry = await this.loadHistoryEntry(sessionId);
+    const contextStatus = await this.loadContextStatus();
 
     const ptRuntimeCommands = await Promise.all(
       commandIds.map((cmdId) => this.loadCommandTrace(cmdId))
@@ -150,10 +168,20 @@ export class BundleWriter {
       },
     };
 
+    const bundleWithMeta = {
+      ...redactObject(bundle) as Record<string, unknown>,
+      _metadata: {
+        generatedAt: new Date().toISOString(),
+        version: 'phase-6',
+        historyEntry: historyEntry ? redactObject(historyEntry) : null,
+        contextStatus: contextStatus ? redactObject(contextStatus) : null,
+      },
+    };
+
     const bundlesDir = getBundlesDir();
     const bundlePath = `${bundlesDir}/${sessionId}.bundle.json`;
 
-    writeFileSync(bundlePath, JSON.stringify(bundle, null, 2), 'utf-8');
+    writeFileSync(bundlePath, JSON.stringify(bundleWithMeta, null, 2), 'utf-8');
 
     return bundlePath;
   }

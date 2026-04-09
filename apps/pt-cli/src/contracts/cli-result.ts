@@ -49,6 +49,25 @@ export interface CliResult<T = unknown> {
     correlationId?: string;
     commandIds?: string[];
     interactionSummary?: string;
+    confidence?: 'executed' | 'verified' | 'partially_verified' | 'unverified' | 'non_terminal';
+    context?: {
+      bridgeReady: boolean;
+      topologyMaterialized: boolean;
+      deviceCount: number;
+      linkCount: number;
+      heartbeat?: {
+        state: 'ok' | 'stale' | 'missing' | 'unknown';
+        ageMs?: number;
+        lastSeenTs?: number;
+      };
+      bridge?: {
+        ready: boolean;
+        leaseValid?: boolean;
+        queuedCount?: number;
+        inFlightCount?: number;
+        warnings?: string[];
+      };
+    };
   };
   error?: CliError;
 }

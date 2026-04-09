@@ -4,14 +4,19 @@
  * CRITICAL: Must not execute recovery without valid lease
  */
 
-import { join } from "node:path";
-import { readdirSync, readFileSync, unlinkSync, renameSync, existsSync } from "node:fs";
+import { join, basename } from "node:path";
+import { existsSync, renameSync } from "node:fs";
 import type { BridgeResultEnvelope } from "../shared/protocol.js";
-import { BridgePathLayout } from "../shared/path-layout.js";
+import { BridgePathLayout, parseCommandFileName } from "../shared/path-layout.js";
 import { SequenceStore } from "../shared/sequence-store.js";
 import { EventLogWriter } from "../event-log-writer.js";
-import { atomicWriteFile, ensureDir, listJsonFiles, readJsonFile } from "../shared/fs-atomic.js";
-import { parseCommandFileName } from "../shared/path-layout.js";
+import {
+  atomicWriteFile,
+  ensureDir,
+  listJsonFiles,
+  readJsonFile,
+  safeUnlink,
+} from "../shared/fs-atomic.js";
 import { LeaseManager } from "./lease-manager.js";
 
 export class CrashRecovery {
@@ -27,9 +32,7 @@ export class CrashRecovery {
     this.maxAttempts = maxAttempts;
   }
 
-
   recover(): void {
-    // FASE 8: Lease-aware recovery gate
     if (this.leaseManager && !this.leaseManager.hasValidLease()) {
       this.eventWriter.append({
         seq: this.seq.next(),
@@ -41,106 +44,8 @@ export class CrashRecovery {
     }
 
     try {
-      // Fase 1: Purgar comandos duplicados en commands/
-      const commandFiles = listJsonFiles(this.paths.commandsDir());
-      for (const file of commandFiles) {
-        const filePath = join(this.paths.commandsDir(), file);
-        const parsed = parseCommandFileName(file);
-        if (!parsed) {
-          // Archivo malformado - mover a dead-letter
-          this.moveToDeadLetter(filePath, new Error("Invalid command filename"));
-          continue;
-        }
-        const cmdId = `cmd_${String(parsed.seq).padStart(12, "0")}`;
-        const resultPath = this.paths.resultFilePath(cmdId);
-        // Si ya existe resultado, purgar el comando
-        if (existsSync(resultPath)) {
-          try {
-            unlinkSync(filePath);
-            this.eventWriter.append({
-              seq: this.seq.next(),
-              ts: Date.now(),
-              type: "command-purged-duplicate",
-              id: cmdId,
-              note: "duplicate in commands/ queue",
-            });
-          } catch {
-            // Ignore
-          }
-        }
-      }
-
-      // Fase 2: Recuperar in-flight/
-      const inFlightFiles = listJsonFiles(this.paths.inFlightDir());
-
-      for (const file of inFlightFiles) {
-        const filePath = join(this.paths.inFlightDir(), file);
-        const cmdId = this.extractCmdId(file);
-        const resultPath = this.paths.resultFilePath(cmdId);
-
-        if (existsSync(resultPath)) {
-          try {
-            unlinkSync(filePath);
-          } catch {
-            // ignore
-          }
-
-          this.eventWriter.append({
-            seq: this.seq.next(),
-            ts: Date.now(),
-            type: "command-recovered",
-            id: cmdId,
-            note: "result existed but in-flight was not cleaned",
-          });
-        } else {
-          try {
-            const content = readFileSync(filePath, "utf8");
-            const cmd = JSON.parse(content);
-
-            if ((cmd.attempt ?? 1) < this.maxAttempts) {
-              cmd.attempt = (cmd.attempt ?? 1) + 1;
-              const newFile = this.paths.commandFilePath(cmd.seq, cmd.type);
-              atomicWriteFile(newFile, JSON.stringify(cmd));
-              unlinkSync(filePath);
-
-              this.eventWriter.append({
-                seq: this.seq.next(),
-                ts: Date.now(),
-                type: "command-requeued",
-                id: cmdId,
-                attempt: cmd.attempt,
-              });
-            } else {
-              const failResult: BridgeResultEnvelope = {
-                protocolVersion: 2,
-                id: cmdId,
-                seq: cmd.seq,
-                completedAt: Date.now(),
-                status: "failed",
-                ok: false,
-                error: {
-                  code: "MAX_RETRIES",
-                  message: `Command failed after ${cmd.attempt} attempts`,
-                  phase: "execute",
-                },
-              };
-              atomicWriteFile(resultPath, JSON.stringify(failResult));
-              unlinkSync(filePath);
-
-              this.eventWriter.append({
-                seq: this.seq.next(),
-                ts: Date.now(),
-                type: "command-failed",
-                id: cmdId,
-                note: "max retries exceeded",
-              });
-            }
-          } catch (err) {
-            // corrupted file — move to dead-letter
-            this.moveToDeadLetter(filePath, err);
-          }
-        }
-      }
+      this.recoverQueuedCommands();
+      this.recoverInFlightCommands();
     } catch (err) {
       this.eventWriter.append({
         seq: this.seq.next(),
@@ -151,34 +56,135 @@ export class CrashRecovery {
     }
   }
 
-  private extractCmdId(filename: string): string {
-    const seq = filename.replace(".json", "").split("-")[0] ?? "0";
-    return `cmd_${seq.padStart(12, "0")}`;
+  private recoverQueuedCommands(): void {
+    const commandFiles = listJsonFiles(this.paths.commandsDir());
+
+    for (const file of commandFiles) {
+      const filePath = join(this.paths.commandsDir(), file);
+      const parsed = parseCommandFileName(file);
+
+      if (!parsed) {
+        this.moveToDeadLetter(filePath, new Error("Invalid command filename"));
+        continue;
+      }
+
+      const cmd = readJsonFile(filePath);
+      if (!cmd) {
+        this.moveToDeadLetter(filePath, new Error("Corrupted command JSON"));
+        continue;
+      }
+
+      const cmdId = this.paths.commandIdFromSeq(parsed.seq);
+      const resultPath = this.paths.resultFilePath(cmdId);
+
+      if (existsSync(resultPath)) {
+        safeUnlink(filePath);
+        this.eventWriter.append({
+          seq: this.seq.next(),
+          ts: Date.now(),
+          type: "command-purged-duplicate",
+          id: cmdId,
+          note: "duplicate in commands/ queue",
+        });
+      }
+    }
+  }
+
+  private recoverInFlightCommands(): void {
+    const inFlightFiles = listJsonFiles(this.paths.inFlightDir());
+
+    for (const file of inFlightFiles) {
+      const filePath = join(this.paths.inFlightDir(), file);
+      const parsed = parseCommandFileName(file);
+
+      if (!parsed) {
+        this.moveToDeadLetter(filePath, new Error("Invalid in-flight filename"));
+        continue;
+      }
+
+      const cmdId = this.paths.commandIdFromSeq(parsed.seq);
+      const resultPath = this.paths.resultFilePath(cmdId);
+
+      if (existsSync(resultPath)) {
+        safeUnlink(filePath);
+        this.eventWriter.append({
+          seq: this.seq.next(),
+          ts: Date.now(),
+          type: "command-recovered",
+          id: cmdId,
+          note: "result existed but in-flight was not cleaned",
+        });
+        continue;
+      }
+
+      const cmd = readJsonFile(filePath);
+      if (!cmd) {
+        this.moveToDeadLetter(filePath, new Error("Corrupted in-flight JSON"));
+        continue;
+      }
+
+      const currentAttempt = cmd.attempt ?? 1;
+
+      if (currentAttempt < this.maxAttempts) {
+        cmd.attempt = currentAttempt + 1;
+        const requeuePath = this.paths.commandFilePath(cmd.seq, cmd.type);
+        atomicWriteFile(requeuePath, JSON.stringify(cmd, null, 2));
+        safeUnlink(filePath);
+
+        this.eventWriter.append({
+          seq: this.seq.next(),
+          ts: Date.now(),
+          type: "command-requeued",
+          id: cmdId,
+          attempt: cmd.attempt,
+        });
+        continue;
+      }
+
+      const failResult: BridgeResultEnvelope = {
+        protocolVersion: 2,
+        id: cmdId,
+        seq: cmd.seq,
+        completedAt: Date.now(),
+        status: "failed",
+        ok: false,
+        error: {
+          code: "MAX_RETRIES",
+          message: `Command failed after ${currentAttempt} attempts`,
+          phase: "execute",
+        },
+      };
+
+      atomicWriteFile(resultPath, JSON.stringify(failResult, null, 2));
+      safeUnlink(filePath);
+
+      this.eventWriter.append({
+        seq: this.seq.next(),
+        ts: Date.now(),
+        type: "command-failed",
+        id: cmdId,
+        note: "max retries exceeded",
+      });
+    }
   }
 
   private moveToDeadLetter(filePath: string, error: unknown): void {
-    const basename = filePath.split("/").pop() ?? "unknown";
-    const deadLetterPath = this.paths.deadLetterFile(`${Date.now()}-${basename}`);
+    const deadLetterBase = `${Date.now()}-${basename(filePath)}`;
+    const deadLetterPath = this.paths.deadLetterFile(deadLetterBase);
+
     try {
       ensureDir(this.paths.deadLetterDir());
       renameSync(filePath, deadLetterPath);
       atomicWriteFile(
-        `${deadLetterPath}.error.json`,
+        this.paths.deadLetterErrorFile(deadLetterBase),
         JSON.stringify({
-          originalFile: basename,
+          originalFile: basename(filePath),
           error: String(error),
           movedAt: Date.now(),
-        }),
+        }, null, 2),
       );
-      this.eventWriter.append({
-        seq: this.seq.next(),
-        ts: Date.now(),
-        type: "command-corrupted",
-        note: basename,
-        error: String(error),
-      });
     } catch {
-      // Ignore - logging at best
+      // ignore
     }
   }
 }

@@ -1,5 +1,6 @@
 import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
-import { homedir, platform } from "node:os";
+import { createHash } from "node:crypto";
+import { homedir, hostname, platform } from "node:os";
 import { resolve } from "node:path";
 import { MAIN_JS_TEMPLATE } from "./templates/main.js";
 import { RUNTIME_JS_TEMPLATE } from "./templates/runtime.js";
@@ -62,10 +63,24 @@ export interface RuntimeGeneratorConfig {
   devDir: string;
 }
 
+export interface RuntimeArtifactManifest {
+  cliVersion: string;
+  runtimeArtifactVersion: string;
+  protocolVersion: number;
+  generatedAt: string;
+  target: string;
+  generator: string;
+  mainChecksum: string;
+  runtimeChecksum: string;
+}
+
 const DEFAULT_CONFIG: RuntimeGeneratorConfig = {
   outputDir: resolve(import.meta.dirname, "../../generated"),
   devDir: getDefaultDevDir(),
 };
+
+const RUNTIME_ARTIFACT_VERSION = "0.1.0";
+const PROTOCOL_VERSION = 2;
 
 // ============================================================================ 
 // Template helpers
@@ -89,6 +104,10 @@ export function renderRuntimeSource(): string {
   return runtimeCode;
 }
 
+function checksumSource(value: string): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, 16);
+}
+
 // ============================================================================ 
 // Generator
 // ============================================================================
@@ -108,27 +127,59 @@ export class RuntimeGenerator {
     return renderRuntimeSource();
   }
 
+  validate(main: string, runtime: string): void {
+    const validation = validateGeneratedArtifacts(main, runtime);
+    if (!validation.ok) {
+      throw new Error(formatValidationErrors(validation));
+    }
+  }
+
+  private writeArtifacts(outputDir: string, main: string, runtime: string): void {
+    if (!existsSync(outputDir)) {
+      mkdirSync(outputDir, { recursive: true });
+    }
+
+    writeFileSync(resolve(outputDir, "main.js"), main, "utf-8");
+    writeFileSync(resolve(outputDir, "runtime.js"), runtime, "utf-8");
+  }
+
   async generate(): Promise<{ main: string; runtime: string }> {
     const outputDir = this.config.outputDir;
+    const main = this.generateMain();
+    const runtime = this.generateRuntime();
+
+    this.writeArtifacts(outputDir, main, runtime);
+
+    console.log(`[Generator] Generated to ${outputDir}`);
+
+    return { main, runtime };
+  }
+
+  async validateGenerated(): Promise<{ main: string; runtime: string }> {
+    const main = this.generateMain();
+    const runtime = this.generateRuntime();
+    this.validate(main, runtime);
+    return { main, runtime };
+  }
+
+  async writeManifest(main: string, runtime: string, outputDir: string): Promise<RuntimeArtifactManifest> {
+    const manifest: RuntimeArtifactManifest = {
+      cliVersion: "0.2.0",
+      runtimeArtifactVersion: RUNTIME_ARTIFACT_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
+      generatedAt: new Date().toISOString(),
+      target: "packet-tracer",
+      generator: "cisco-auto",
+      mainChecksum: checksumSource(main),
+      runtimeChecksum: checksumSource(runtime),
+    };
 
     if (!existsSync(outputDir)) {
       mkdirSync(outputDir, { recursive: true });
     }
 
-    const main = this.generateMain();
-    const runtime = this.generateRuntime();
-
-    const validation = validateGeneratedArtifacts(main, runtime);
-    if (!validation.ok) {
-      throw new Error(formatValidationErrors(validation));
-    }
-
-    writeFileSync(resolve(outputDir, "main.js"), main, "utf-8");
-    writeFileSync(resolve(outputDir, "runtime.js"), runtime, "utf-8");
-
-    console.log(`[Generator] Generated to ${outputDir}`);
-
-    return { main, runtime };
+    writeFileSync(resolve(outputDir, "manifest.json"), JSON.stringify(manifest, null, 2), "utf-8");
+    return manifest;
   }
 
   async deploy(): Promise<void> {
@@ -138,9 +189,9 @@ export class RuntimeGenerator {
       mkdirSync(devDir, { recursive: true });
     }
 
-    const { main, runtime } = await this.generate();
-    writeFileSync(resolve(devDir, "main.js"), main, "utf-8");
-    writeFileSync(resolve(devDir, "runtime.js"), runtime, "utf-8");
+    const { main, runtime } = await this.validateGenerated();
+    this.writeArtifacts(devDir, main, runtime);
+    await this.writeManifest(main, runtime, devDir);
 
     // Ensure bridge lease exists
     this.ensureBridgeLease(devDir);
@@ -182,7 +233,7 @@ export class RuntimeGenerator {
     const lease = {
       ownerId: `build-${now}`,
       pid: process.pid,
-      hostname: require("node:os").hostname(),
+      hostname: hostname(),
       startedAt: now,
       updatedAt: now,
       expiresAt: now + THIRTY_DAYS_MS,
@@ -195,7 +246,9 @@ export class RuntimeGenerator {
   }
 
   async build(): Promise<void> {
-    await this.deploy();
+    const { main, runtime } = await this.validateGenerated();
+    this.writeArtifacts(this.config.outputDir, main, runtime);
+    await this.writeManifest(main, runtime, this.config.outputDir);
     console.log("[Generator] Build complete");
   }
 }
@@ -211,12 +264,16 @@ export async function runGenerator(args: string[]): Promise<void> {
   try {
     switch (command) {
       case "generate":
-      case "build":
         await generator.generate();
+        break;
+      case "validate":
+        await generator.validateGenerated();
+        console.log("[Generator] Validation OK");
         break;
       case "deploy":
         await generator.deploy();
         break;
+      case "build":
       case "all":
       default:
         await generator.build();
@@ -238,3 +295,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
 export { MAIN_JS_TEMPLATE, RUNTIME_JS_TEMPLATE };
 export * from "./utils/index.js";
+export { listRuntimeSnapshots, restoreRuntimeSnapshot, snapshotRuntimeArtifacts } from "./runtime-artifacts.js";

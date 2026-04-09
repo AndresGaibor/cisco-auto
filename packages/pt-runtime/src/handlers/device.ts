@@ -74,7 +74,7 @@ export function handleAddDevice(payload: AddDevicePayload, deps: HandlerDeps): H
   // Use fallback mechanism for robust device creation
   const created = createDeviceWithFallback(model, x, y, typeList, lw, net);
   if (!created) {
-    return { ok: false, error: `Failed to add device for model: ${model}` };
+    return { ok: false, error: `Failed to add device for model: ${model}`, code: "DEVICE_CREATION_FAILED" };
   }
 
   const { autoName, device, typeId } = created;
@@ -161,7 +161,7 @@ export function handleRenameDevice(payload: RenameDevicePayload, deps: HandlerDe
   const device = getNet().getDevice(payload.oldName);
 
   if (!device) {
-    return { ok: false, error: `Device not found: ${payload.oldName}` };
+    return { ok: false, error: `Device not found: ${payload.oldName}`, code: "DEVICE_NOT_FOUND" };
   }
 
   device.setName(payload.newName);
@@ -176,7 +176,7 @@ export function handleMoveDevice(payload: MoveDevicePayload, deps: HandlerDeps):
   const device = getNet().getDevice(payload.name);
 
   if (!device) {
-    return { ok: false, error: `Device not found: ${payload.name}` };
+    return { ok: false, error: `Device not found: ${payload.name}`, code: "DEVICE_NOT_FOUND" };
   }
 
   const x = Math.round(payload.x);

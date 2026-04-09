@@ -97,6 +97,7 @@ export function handleGetRect(payload: GetRectPayload, deps: HandlerDeps): Handl
     return {
       ok: false,
       error: `Rect not found: ${payload.rectId}`,
+      code: "RECT_NOT_FOUND",
     };
   }
 
