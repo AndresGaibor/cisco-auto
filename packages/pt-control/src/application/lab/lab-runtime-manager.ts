@@ -63,8 +63,8 @@ export class LabRuntimeManager {
       throw new Error("FileBridge not available - cannot load runtime in PT");
     }
 
-    const mainPath = `${this.config.devDir}/main.js`;
-    await this.bridge.loadRuntimeFromFile(mainPath);
+    const runtimePath = `${this.config.devDir}/runtime.js`;
+    await this.bridge.loadRuntimeFromFile(runtimePath);
     this.status.runtimeLoaded = true;
   }
 
