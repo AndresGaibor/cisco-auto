@@ -176,10 +176,8 @@ function runSingleCommand(engine, term, cmd) {
       term.enterCommand(' ');
     }
 
-    if (engine.getState().awaitingConfirm) {
-      engine.answerConfirm('y');
-      term.enterCommand('y');
-    }
+    // NOTE: Auto-confirm 'y' removed - caused issues where router interprets 'y' as command
+    // Confirmations should only be handled explicitly when we know the operation requires it
 
     if (engine.isComplete()) break;
   }
