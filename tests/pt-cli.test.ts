@@ -10,9 +10,9 @@ describe('pt-cli helper', () => {
     expect(typeof res.success).toBe('boolean');
   });
 
-  it('`bun run pt --help` termina con código cero', async () => {
+  it('`bun run src/index.ts --help` termina con código cero', async () => {
     const proceso = Bun.spawn({
-      cmd: ['bun', 'run', 'pt', '--help'],
+      cmd: ['bun', 'run', 'apps/pt-cli/src/index.ts', '--help'],
       cwd: process.cwd(),
       stdout: 'pipe',
       stderr: 'pipe',
@@ -24,7 +24,7 @@ describe('pt-cli helper', () => {
     ]);
 
     expect(exitCode).toBe(0);
-    expect(stdout).toContain('Usage: pt');
+    expect(stdout).toContain('Usage: cisco-auto');
   });
 
   it('collectContextStatus refresca la snapshot viva antes de persistir estado', async () => {
@@ -40,7 +40,14 @@ describe('pt-cli helper', () => {
         topologyMaterialized: true,
         deviceCount,
         linkCount: 0,
-        heartbeat: { state: 'ok' as const },
+        heartbeat: { state: 'ok' as const, ageMs: 0, lastSeenTs: Date.now() },
+        warnings: [],
+      }),
+      getBridgeStatus: () => ({
+        ready: true,
+        leaseValid: true,
+        queuedCount: 0,
+        inFlightCount: 0,
         warnings: [],
       }),
     } as any;

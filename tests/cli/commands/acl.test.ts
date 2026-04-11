@@ -1,6 +1,6 @@
 import { test, expect } from 'bun:test';
 
-const aclModule = require('../../../apps/cli/src/commands/acl.ts');
+const aclModule = require('../../../apps/pt-cli/src/commands/acl.ts');
 
 test('create ACL generates IOS header for empty ACL', () => {
   const { createACLCommand } = aclModule;

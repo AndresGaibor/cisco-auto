@@ -5,16 +5,32 @@ import type { LabSpec } from '@cisco-auto/core';
 import { formatExamples, formatRelatedCommands } from '../../help/formatter';
 import { getExamples } from '../../help/examples';
 import { getRelatedCommands } from '../../help/related';
-import { toLabSpec } from '../../types/lab-spec.types';
+import { toLabSpec, snapshotToLabSpec } from '../../types/lab-spec.types';
+import { createDefaultPTController } from '@cisco-auto/pt-control';
 
 export function createTopologyAnalyzeCommand(): Command {
   const cmd = new Command('analyze')
     .description('Analizar topología de red')
-    .argument('<file>', 'Archivo YAML del lab')
-    .action(async (file) => {
+    .argument('[file]', 'Archivo YAML del lab (opcional: usa topología del canvas si no se especifica)')
+    .action(async (file?: string) => {
       try {
-        const parsedLab = loadLab(file);
-        const labSpec = toLabSpec(parsedLab);
+        let labSpec: LabSpec;
+
+        if (file) {
+          const parsedLab = loadLab(file);
+          labSpec = toLabSpec(parsedLab);
+        } else {
+          // Usar topología del canvas PT
+          const controller = createDefaultPTController();
+          try {
+            await controller.start();
+            const snapshot = await controller.snapshot();
+            labSpec = snapshotToLabSpec(snapshot);
+          } finally {
+            await controller.stop();
+          }
+        }
+
         const stats = analyzeTopology(labSpec);
 
         console.log('\n📈 Estadísticas de Topología:');

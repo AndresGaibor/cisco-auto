@@ -227,6 +227,28 @@ export class IosService {
     const value = result.value;
     const evidence = this._normalizeEvidence(value);
 
+    // Detect setup dialog in output
+    if (value?.raw) {
+      const setupPatterns = [
+        /initial configuration dialog/i,
+        /Would you like to enter the initial configuration dialog\?/i,
+        /Would you like to see the current interface summary\?/i,
+        /Do you want to configure Vlan1 interface\?/i,
+        /Enter enable secret:/i,
+        /Enter enable password:/i,
+        /Enter virtual terminal password:/i,
+        /Configuring global parameters:/i,
+        /Configuring interface parameters:/i,
+        /Configure SNMP Network Management\?/i,
+      ];
+      for (const pattern of setupPatterns) {
+        if (pattern.test(value.raw)) {
+          console.warn(`[ios-service] WARNING: Device '${device}' está en modo setup interactivo. El comando puede no ejecutarse correctamente. Sal del setup mode y guarda con 'write memory'.`);
+          break;
+        }
+      }
+    }
+
     if (!value || value.ok === false) {
       this._throwNormalizedIosError("execInteractive", device, value);
     }

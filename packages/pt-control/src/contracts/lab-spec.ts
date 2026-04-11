@@ -126,12 +126,14 @@ export const LabDhcpPoolSpecSchema = z.object({
   device: z.string(),
   /** Nombre del pool */
   poolName: z.string(),
-  /** Red a servir */
-  network: z.string(),
-  /** Máscara */
-  mask: z.string(),
-  /** Default gateway */
-  defaultRouter: z.string(),
+  /** ID de VLAN asociada (opcional - si se especifica, la config se deriva de la SVI de la VLAN) */
+  vlanId: z.number().min(1).max(4094).optional(),
+  /** Red a servir (opcional si se especifica vlanId) */
+  network: z.string().optional(),
+  /** Máscara (opcional si se especifica vlanId) */
+  mask: z.string().optional(),
+  /** Default gateway (opcional si se especifica vlanId) */
+  defaultRouter: z.string().optional(),
   /** DNS server */
   dnsServer: z.string().optional(),
   /** Direcciones excluidas (rangos) */

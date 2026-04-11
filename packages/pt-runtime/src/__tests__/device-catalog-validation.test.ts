@@ -317,7 +317,8 @@ describe('Device Management - Catalog Validation', () => {
       }, deps);
       
       const device = network.getDevice('Device1');
-      expect(device?.getModel()).toBe('2960-24TT-L');
+      // 2960-24TT-L is aliased to 2960-24TT in validated-models.ts
+      expect(device?.getModel()).toBe('2960-24TT');
       expect(device?.getType()).toBe(1);  // switch type
     });
   });

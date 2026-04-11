@@ -121,10 +121,10 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
       result = await options.execute(ctx);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      result = createErrorResult(options.action, {
+      result = createErrorResult<T>(options.action, {
         message,
         details: error instanceof Error ? { stack: error.stack } : undefined,
-      }) as CliResult<T>;
+      });
     }
   } finally {
     try {
@@ -137,9 +137,9 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
   }
 
   if (!result) {
-    result = createErrorResult(options.action, {
+    result = createErrorResult<T>(options.action, {
       message: 'No result produced after execution.',
-    }) as CliResult<T>;
+    });
   }
 
   const verificationWarnings = result.verification?.warnings ?? [];
@@ -210,9 +210,12 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
     action: options.action,
     status: result.ok ? 'success' : 'error',
     ok: result.ok,
-    flags: options.flags as unknown as Record<string, unknown>,
+    argv: process.argv,
+    flags: Object.fromEntries(Object.entries(options.flags)),
     payloadSummary: options.payloadPreview,
-    resultSummary: result.data as Record<string, unknown> | undefined,
+    resultSummary: result.data != null && typeof result.data === 'object' && !Array.isArray(result.data)
+      ? Object.fromEntries(Object.entries(result.data))
+      : undefined,
     commandIds: commandIds.length > 0 ? commandIds : (result.meta?.commandIds ?? []),
     interactionSummary: interactionSummary ? { summary: interactionSummary } : (result.meta?.interactionSummary ? { summary: result.meta.interactionSummary } : undefined),
     completionReason: result.ok ? 'completed' : (result.error?.message ? `error: ${result.error.message}` : 'failed'),

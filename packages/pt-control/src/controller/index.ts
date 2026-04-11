@@ -260,7 +260,7 @@ export class PTController {
     commands: string[],
     options?: { save?: boolean } | undefined
   ): Promise<IosConfigApplyResult> {
-    return this.iosService.configIosWithResult(device, commands, options);
+    return this.iosService.configIos(device, commands, options);
   }
 
   async configureDhcpServer(

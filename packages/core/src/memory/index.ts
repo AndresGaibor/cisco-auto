@@ -7,6 +7,7 @@ import { DeviceMemory } from './devices';
 import { TopologyMemory } from './topology';
 import { PreferencesStore } from './preferences';
 import { AuditMemory } from './audit';
+import { HistoryMemory } from './history';
 
 /**
  * Clase principal que encapsula todos los módulos de memoria
@@ -17,16 +18,18 @@ export class MemoryStore {
   public topology: TopologyMemory;
   public preferences: PreferencesStore;
   public audit: AuditMemory;
+  public history: HistoryMemory;
 
   private constructor(dbPath: string = ':memory:') {
     this.db = new Database(dbPath);
     initializeSchema(this.db);
-    
+
     // Inicializar todos los módulos
     this.devices = new DeviceMemory(this.db);
     this.topology = new TopologyMemory(this.db);
     this.preferences = new PreferencesStore(this.db);
     this.audit = new AuditMemory(this.db);
+    this.history = new HistoryMemory(this.db);
   }
 
   /**

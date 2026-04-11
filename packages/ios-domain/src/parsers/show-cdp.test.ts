@@ -26,8 +26,9 @@ describe("parseShowCdpNeighbors", () => {
       platform: "WS-C2960-24TT-L",
       portId: "Gig 0/2"
     });
-    
+
     // Check second neighbor (router)
+    // Note: Port ID column starts at ~73, so Router2's Ser 0/0/1 fits in the last column
     expect(result.neighbors[1]).toEqual({
       deviceId: "Router2",
       localInterface: "Ser 0/0/0",

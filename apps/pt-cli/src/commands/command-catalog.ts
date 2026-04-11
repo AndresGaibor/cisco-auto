@@ -308,7 +308,7 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
   topology: {
     id: 'topology',
     summary: 'Análisis y visualización de topología',
-    longDescription: 'Herramientas para analizar y visualizar la topología de red.',
+    longDescription: 'Herramientas para analizar, visualizar y gestionar topologías de red.',
     examples: ['pt topology analyze', 'pt topology visualize', 'pt topology export'],
     related: ['link', 'device list'],
     status: 'partial',
@@ -555,8 +555,54 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     requiresPT: false,
     requiresContext: false,
   },
+
+  lab: {
+    id: 'lab',
+    summary: 'Gestión de laboratorios Cisco',
+    longDescription: 'Comandos para crear, validar, parsear y levantar laboratorios Cisco en Packet Tracer.',
+    examples: ['pt lab list', 'pt lab create', 'pt lab validate', 'pt lab lift'],
+    related: ['device', 'topology', 'lab lift'],
+    status: 'partial',
+    supportsAutonomousUse: false,
+    requiresPT: true,
+    requiresContext: true,
+    notes: [
+      'lab create/list/parse/validate/interactive/pipeline son partial',
+      'lab lift es experimental - funcionalidad completa pero en验证',
+    ],
+  },
+
+  router: {
+    id: 'router',
+    summary: 'Gestión de routers Cisco',
+    longDescription: 'Comandos específicos para gestionar routers Cisco en Packet Tracer.',
+    examples: ['pt router add R1 2911', 'pt router add R1 2911 -x 200 -y 300'],
+    related: ['device add', 'device list'],
+    status: 'partial',
+    supportsAutonomousUse: false,
+    requiresPT: true,
+    requiresContext: true,
+    writesTopology: true,
+    requiresPostValidation: true,
+    postValidationKind: 'device-add',
+    notes: ['router add funciona bien con modo interactivo'],
+  },
+
+  'audit-query': {
+    id: 'audit-query',
+    summary: 'Consultar auditoría persistida',
+    longDescription: 'Consulta la tabla audit_log de SQLite para inspeccionar ejecuciones persistidas de la CLI.',
+    examples: ['pt audit query', 'pt audit query --device R1 --status failed'],
+    related: ['audit tail', 'audit export', 'audit failed'],
+    status: 'partial',
+    supportsAutonomousUse: true,
+    requiresPT: false,
+    requiresContext: false,
+    supportsJson: true,
+    notes: ['Usa pt audit tail para una vista rápida'],
+  },
 };
 
 export function getRegisteredCommandIds(): string[] {
-  return ['build', 'device', 'show', 'config-host', 'vlan', 'etherchannel', 'link', 'config-ios', 'routing', 'acl', 'stp', 'services', 'results', 'logs', 'help', 'history', 'doctor', 'completion', 'topology', 'status', 'setup', 'runtime', 'config-ospf', 'config-eigrp', 'config-bgp', 'config-acl', 'config-vlan', 'config-interface', 'config-apply', 'devices-list', 'devices-add', 'history-search', 'history-failed', 'topology-show', 'config-prefs', 'audit-tail', 'audit-export', 'audit-failed'];
+  return ['build', 'device', 'show', 'config-host', 'vlan', 'etherchannel', 'link', 'config-ios', 'routing', 'acl', 'stp', 'services', 'results', 'logs', 'help', 'history', 'doctor', 'completion', 'topology', 'status', 'setup', 'runtime', 'config-ospf', 'config-eigrp', 'config-bgp', 'config-acl', 'config-vlan', 'config-interface', 'config-apply', 'devices-list', 'devices-add', 'history-search', 'history-failed', 'topology-show', 'config-prefs', 'audit-tail', 'audit-export', 'audit-failed', 'lab', 'router', 'audit-query'];
 }

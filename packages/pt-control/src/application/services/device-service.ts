@@ -132,6 +132,13 @@ export class DeviceService {
   }
 
   /**
+   * Configure a host (PC/Server) to use DHCP for IP configuration
+   */
+  async configureHostDhcp(device: string): Promise<void> {
+    await this.configHost(device, { dhcp: true });
+  }
+
+  /**
    * Configure DHCP server on a device
    */
   async configureDhcpServer(

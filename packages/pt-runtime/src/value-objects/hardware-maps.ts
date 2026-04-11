@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { validatePTModel } from './validated-models.js';
 
 type PortMap = Record<string, Record<string, string>>;
 type ModuleCatalog = Record<string, { code: string; slotType: string; name: string }>;
@@ -40,8 +41,23 @@ export const PT_PORT_MAP = loadGeneratedPortMap();
 export const { catalog: PT_MODULE_CATALOG, slots: PT_DEVICE_MODULE_SLOTS } = loadGeneratedModuleMap();
 
 export function validatePortExists(deviceModel: string, portName: string): { valid: boolean; error?: string; connector?: string } {
-  const modelKey = (deviceModel || '').toLowerCase();
-  const ports = PT_PORT_MAP[modelKey];
+  const rawModel = (deviceModel || '').trim();
+  const requestedModel = (() => {
+    try {
+      return validatePTModel(rawModel);
+    } catch {
+      return rawModel;
+    }
+  })();
+  const modelKeys = Array.from(new Set([
+    requestedModel,
+    requestedModel.toLowerCase(),
+    requestedModel.toUpperCase(),
+    rawModel,
+    rawModel.toLowerCase(),
+    rawModel.toUpperCase(),
+  ].filter(Boolean)));
+  const ports = modelKeys.map((key) => PT_PORT_MAP[key]).find((value) => value);
 
   if (!ports) {
     return { valid: false, error: `Modelo '${deviceModel}' no encontrado en PT_PORT_MAP` };

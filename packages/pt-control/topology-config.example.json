@@ -1,34 +1,84 @@
 {
+  "rebuildTopology": true,
+  "devices": [
+    { "name": "CORE1", "model": "3560", "x": 520, "y": 120 },
+    { "name": "SW1", "model": "2960-24TT", "x": 220, "y": 280 },
+    { "name": "SW2", "model": "2960-24TT", "x": 820, "y": 280 },
+    { "name": "SRV1", "model": "Server", "x": 520, "y": 470 },
+    { "name": "PC1", "model": "PC", "x": 120, "y": 470 },
+    { "name": "PC2", "model": "PC", "x": 220, "y": 470 },
+    { "name": "PC3", "model": "PC", "x": 320, "y": 470 },
+    { "name": "PC4", "model": "PC", "x": 720, "y": 470 },
+    { "name": "PC5", "model": "PC", "x": 820, "y": 470 },
+    { "name": "PC6", "model": "PC", "x": 920, "y": 470 }
+  ],
+  "links": [
+    { "fromDevice": "CORE1", "fromPort": "GigabitEthernet0/1", "toDevice": "SW1", "toPort": "GigabitEthernet0/1", "cableType": "straight" },
+    { "fromDevice": "CORE1", "fromPort": "GigabitEthernet0/2", "toDevice": "SW2", "toPort": "GigabitEthernet0/1", "cableType": "straight" },
+    { "fromDevice": "CORE1", "fromPort": "FastEthernet0/24", "toDevice": "SRV1", "toPort": "FastEthernet0", "cableType": "straight" },
+    { "fromDevice": "SW1", "fromPort": "FastEthernet0/1", "toDevice": "PC1", "toPort": "FastEthernet0", "cableType": "straight" },
+    { "fromDevice": "SW1", "fromPort": "FastEthernet0/2", "toDevice": "PC2", "toPort": "FastEthernet0", "cableType": "straight" },
+    { "fromDevice": "SW1", "fromPort": "FastEthernet0/3", "toDevice": "PC3", "toPort": "FastEthernet0", "cableType": "straight" },
+    { "fromDevice": "SW2", "fromPort": "FastEthernet0/1", "toDevice": "PC4", "toPort": "FastEthernet0", "cableType": "straight" },
+    { "fromDevice": "SW2", "fromPort": "FastEthernet0/2", "toDevice": "PC5", "toPort": "FastEthernet0", "cableType": "straight" },
+    { "fromDevice": "SW2", "fromPort": "FastEthernet0/3", "toDevice": "PC6", "toPort": "FastEthernet0", "cableType": "straight" }
+  ],
   "vlans": [
-    { "id": 10, "name": "ADMIN" },
-    { "id": 20, "name": "USUARIOS" },
-    { "id": 30, "name": "SERVIDORES" },
-    { "id": 40, "name": "INVITADOS" },
-    { "id": 50, "name": "MANAGEMENT" }
+    { "id": 10, "name": "VLAN10" },
+    { "id": 20, "name": "VLAN20" },
+    { "id": 30, "name": "VLAN30" }
   ],
   "trunkPorts": {
-    "Switch1": ["GigabitEthernet0/1", "GigabitEthernet0/2"],
-    "Switch2": ["GigabitEthernet0/1", "GigabitEthernet0/2"],
-    "Switch-Test": ["GigabitEthernet0/1", "GigabitEthernet0/2"],
-    "Multilayer Switch0": ["GigabitEthernet0/1", "GigabitEthernet0/2"]
+    "CORE1": ["GigabitEthernet0/1", "GigabitEthernet0/2"],
+    "SW1": ["GigabitEthernet0/1"],
+    "SW2": ["GigabitEthernet0/1"]
   },
-  "sshConfig": {
-    "domain": "cisco-lab.local",
-    "username": "admin",
-    "password": "admin"
-  },
+  "accessPorts": [
+    { "device": "SW1", "port": "FastEthernet0/1", "vlan": 10 },
+    { "device": "SW1", "port": "FastEthernet0/2", "vlan": 20 },
+    { "device": "SW1", "port": "FastEthernet0/3", "vlan": 30 },
+    { "device": "SW2", "port": "FastEthernet0/1", "vlan": 10 },
+    { "device": "SW2", "port": "FastEthernet0/2", "vlan": 20 },
+    { "device": "SW2", "port": "FastEthernet0/3", "vlan": 30 }
+  ],
+  "svis": [
+    { "device": "CORE1", "vlan": 10, "ip": "192.168.10.1", "mask": "255.255.255.0", "helperAddress": "192.168.30.2" },
+    { "device": "CORE1", "vlan": 20, "ip": "192.168.20.1", "mask": "255.255.255.0", "helperAddress": "192.168.30.2" },
+    { "device": "CORE1", "vlan": 30, "ip": "192.168.30.1", "mask": "255.255.255.0" }
+  ],
+  "dhcpPools": [
+    {
+      "device": "SRV1",
+      "poolName": "VLAN10_POOL",
+      "network": "192.168.10.0",
+      "subnetMask": "255.255.255.0",
+      "defaultRouter": "192.168.10.1",
+      "excludedAddresses": ["192.168.10.1 192.168.10.9"]
+    },
+    {
+      "device": "SRV1",
+      "poolName": "VLAN20_POOL",
+      "network": "192.168.20.0",
+      "subnetMask": "255.255.255.0",
+      "defaultRouter": "192.168.20.1",
+      "excludedAddresses": ["192.168.20.1 192.168.20.19"]
+    },
+    {
+      "device": "SRV1",
+      "poolName": "VLAN30_POOL",
+      "network": "192.168.30.0",
+      "subnetMask": "255.255.255.0",
+      "defaultRouter": "192.168.30.1",
+      "excludedAddresses": ["192.168.30.1 192.168.30.29"]
+    }
+  ],
   "hostIpConfig": {
-    "PC10": { "ip": "192.168.10.10", "mask": "255.255.255.0", "gateway": "192.168.10.1" },
-    "PC11": { "ip": "192.168.10.11", "mask": "255.255.255.0", "gateway": "192.168.10.1" },
-    "PC12": { "ip": "192.168.10.12", "mask": "255.255.255.0", "gateway": "192.168.10.1" },
-    "PC13": { "ip": "192.168.10.13", "mask": "255.255.255.0", "gateway": "192.168.10.1" },
-    "PC20": { "ip": "192.168.20.20", "mask": "255.255.255.0", "gateway": "192.168.20.1" },
-    "PC21": { "ip": "192.168.20.21", "mask": "255.255.255.0", "gateway": "192.168.20.1" },
-    "PC22": { "ip": "192.168.20.22", "mask": "255.255.255.0", "gateway": "192.168.20.1" },
-    "PC23": { "ip": "192.168.20.23", "mask": "255.255.255.0", "gateway": "192.168.20.1" },
-    "Laptop0": { "ip": "192.168.10.50", "mask": "255.255.255.0", "gateway": "192.168.10.1" },
-    "EMAIL, IOT, APP": { "ip": "192.168.50.10", "mask": "255.255.255.0", "gateway": "192.168.50.1" },
-    "DHCP, DNS, WEB": { "ip": "192.168.50.20", "mask": "255.255.255.0", "gateway": "192.168.50.1" },
-    "Server0": { "ip": "192.168.50.30", "mask": "255.255.255.0", "gateway": "192.168.50.1" }
+    "PC1": { "dhcp": true },
+    "PC2": { "dhcp": true },
+    "PC3": { "dhcp": true },
+    "PC4": { "dhcp": true },
+    "PC5": { "dhcp": true },
+    "PC6": { "dhcp": true },
+    "SRV1": { "ip": "192.168.30.2", "mask": "255.255.255.0", "gateway": "192.168.30.1", "dns": "192.168.30.2" }
   }
 }

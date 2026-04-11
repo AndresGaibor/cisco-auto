@@ -44,9 +44,9 @@ describe('DeviceCatalog', () => {
     
     test('should find switch by ID', () => {
       const sw = deviceCatalog.getById('switch-2960-24tt');
-      
+
       expect(sw).toBeDefined();
-      expect(sw?.model).toBe('2960-24TT-L');
+      expect(sw?.model).toBe('2960-24TT');
       expect(sw?.type).toBe('switch');
     });
     
@@ -67,8 +67,8 @@ describe('DeviceCatalog', () => {
     });
     
     test('should find switch by model', () => {
-      const sw = deviceCatalog.getByModel('2960-24TT-L');
-      
+      const sw = deviceCatalog.getByModel('2960-24TT');
+
       expect(sw).toBeDefined();
       expect(sw?.type).toBe('switch');
     });
@@ -269,11 +269,11 @@ describe('Switch Catalog', () => {
     expect(l2.every(s => !s.capabilities.supportsRouting)).toBe(true);
   });
   
-  test('switches should have 24 or 48 ports', () => {
+  test('switches should have 6 or more ports', () => {
     switchCatalog.forEach(s => {
       const portCount = getTotalPorts(s.fixedPorts);
-      // Allow for switches with fewer ports (like industrial IE2000)
-      expect(portCount).toBeGreaterThanOrEqual(8);
+      // Allow for switches with fewer ports (like Switch-PT with 6 FE + console, IE-2000 with 8 FE + 2 SFP)
+      expect(portCount).toBeGreaterThanOrEqual(6);
     });
   });
 });
@@ -347,10 +347,10 @@ describe('Module Catalog', () => {
 
 describe('Port Definitions', () => {
   test('switch ports should start at 1 (not 0)', () => {
-    const sw2960 = deviceCatalog.getByModel('2960-24TT-L');
-    
+    const sw2960 = deviceCatalog.getByModel('2960-24TT');
+
     expect(sw2960).toBeDefined();
-    
+
     const faPorts = sw2960!.fixedPorts.find(p => p.type === 'FastEthernet');
     expect(faPorts).toBeDefined();
     expect(faPorts!.range[0]).toBe(1); // Start at 1, not 0

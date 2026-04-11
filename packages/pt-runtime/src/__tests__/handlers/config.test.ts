@@ -1,7 +1,8 @@
 import { describe, test, expect } from "bun:test";
-import { handleConfigHost, handleExecIos, handleConfigIos } from "../../handlers/config";
+import { handleConfigHost, handleExecIos, handleConfigIos, handleDeferredPoll } from "../../handlers/config";
 import type { HandlerDeps } from "../../utils/helpers";
 import { generateIosConfigHandlersTemplate } from "../../templates/ios-config-handlers-template";
+import { generateIosExecHandlersTemplate } from "../../templates/ios-exec-handlers-template";
 
 describe("handleConfigHost", () => {
   test("retorna error cuando device no existe", () => {
@@ -126,5 +127,110 @@ describe("ios config handlers template", () => {
     expect(source).toContain("terminate autoinstall");
     expect(source).toContain("syncEngineModeFromTerminal");
     expect(source).toContain("mode = inferModeFromPrompt(prompt) || mode;");
+  });
+});
+
+describe("ios exec handlers template", () => {
+  test("guards setup dialog dismissal behind a normal prompt check", () => {
+    const source = generateIosExecHandlersTemplate();
+
+    expect(source).toContain("isNormalPrompt");
+    expect(source).toContain("promptLooksNormal");
+    expect(source).toContain("Press RETURN to get started");
+    expect(source).toContain("Would you like to enter the initial configuration dialog?");
+  });
+});
+
+describe("handleDeferredPoll", () => {
+  test("returns job-not-found when the ticket is unknown", () => {
+    const previousJobs = (globalThis as any).IOS_JOBS;
+    (globalThis as any).IOS_JOBS = {};
+    try {
+      const deps = { dprint: () => {} } as HandlerDeps;
+      const result = handleDeferredPoll({ type: "__pollDeferred", ticket: "missing-ticket" } as any, deps);
+
+      expect(result.done).toBe(true);
+      expect((result as any).ok).toBe(false);
+      expect((result as any).code).toBe("JOB_NOT_FOUND");
+    } finally {
+      (globalThis as any).IOS_JOBS = previousJobs;
+    }
+  });
+
+  test("returns in-progress state when the job is still running", () => {
+    const previousJobs = (globalThis as any).IOS_JOBS;
+    (globalThis as any).IOS_JOBS = {
+      "ticket-1": {
+        finished: false,
+        state: "run-exec",
+      },
+    };
+
+    try {
+      const deps = { dprint: () => {} } as HandlerDeps;
+      const result = handleDeferredPoll({ type: "__pollDeferred", ticket: "ticket-1" } as any, deps);
+
+      expect(result.done).toBe(false);
+      expect((result as any).state).toBe("run-exec");
+    } finally {
+      (globalThis as any).IOS_JOBS = previousJobs;
+    }
+  });
+
+  test("returns a completed success payload for finished jobs", () => {
+    const previousJobs = (globalThis as any).IOS_JOBS;
+    (globalThis as any).IOS_JOBS = {
+      "ticket-2": {
+        finished: true,
+        state: "done",
+        output: "show version\nR1#",
+        status: 0,
+        lastMode: "priv-exec",
+        lastPrompt: "R1#",
+        autoConfirmed: true,
+        payload: { command: "show version" },
+      },
+    };
+
+    try {
+      const deps = { dprint: () => {} } as HandlerDeps;
+      const result = handleDeferredPoll({ type: "__pollDeferred", ticket: "ticket-2" } as any, deps);
+
+      expect(result.done).toBe(true);
+      expect((result as any).ok).toBe(true);
+      expect((result as any).source).toBe("terminal");
+      expect((result as any).raw).toContain("show version");
+      expect((result as any).session.autoDismissedInitialDialog).toBe(true);
+    } finally {
+      (globalThis as any).IOS_JOBS = previousJobs;
+    }
+  });
+
+  test("returns a completed error payload for failed jobs", () => {
+    const previousJobs = (globalThis as any).IOS_JOBS;
+    (globalThis as any).IOS_JOBS = {
+      "ticket-3": {
+        finished: true,
+        state: "error",
+        output: "% Invalid input detected at '^' marker.\n",
+        error: "Command failed",
+        errorCode: "COMMAND_FAILED",
+        lastMode: "priv-exec",
+        lastPrompt: "R1#",
+      },
+    };
+
+    try {
+      const deps = { dprint: () => {} } as HandlerDeps;
+      const result = handleDeferredPoll({ type: "__pollDeferred", ticket: "ticket-3" } as any, deps);
+
+      expect(result.done).toBe(true);
+      expect((result as any).ok).toBe(false);
+      expect((result as any).code).toBe("COMMAND_FAILED");
+      expect((result as any).error).toContain("Command failed");
+      expect((result as any).source).toBe("terminal");
+    } finally {
+      (globalThis as any).IOS_JOBS = previousJobs;
+    }
   });
 });

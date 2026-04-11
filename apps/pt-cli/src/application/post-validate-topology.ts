@@ -35,7 +35,7 @@ export async function validateLinkExists(
   try {
     const snapshot = await controller.snapshot();
     if (!snapshot || !snapshot.links) return false;
-    const links = Object.values(snapshot.links || {} as any) as Array<any>;
+    const links = Object.values(snapshot.links ?? {});
 
     for (const l of links) {
       const direct = l.device1 === device1 && l.port1 === port1 && l.device2 === device2 && l.port2 === port2;

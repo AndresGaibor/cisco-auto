@@ -118,7 +118,7 @@ export function createConfigEigrpCommand(): Command {
             const devices = await fetchDeviceList(ctx.controller);
             const iosDevices = getIOSCapableDevices(devices);
             const selected = iosDevices.find((d) => d.name === device);
-            if (!selected) { return createErrorResult('config-eigrp', { message: `Dispositivo "${device}" no encontrado` }) as CliResult<{ device: string; commands: string[]; executed: number }>; }
+            if (!selected) { return createErrorResult('config-eigrp', { message: `Dispositivo "${device}" no encontrado` }); }
             await ctx.controller.configIosWithResult(device, iosCommands, { save: true });
             return createSuccessResult('config-eigrp', { device, commands: iosCommands, executed: iosCommands.length });
           } finally { await ctx.controller.stop(); }

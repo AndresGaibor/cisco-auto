@@ -3,6 +3,9 @@
  * Handles DHCP pool setup and DHCP relay configurations
  */
 
+import type { DerivedPoolConfig } from './vlan-dhcp-resolver.js';
+import { VlanDhcpResolver } from './vlan-dhcp-resolver.js';
+
 export interface DHCPPoolBuilder {
   name: string;
   network: string;
@@ -55,6 +58,43 @@ export class DHCPBuilder {
     commands.push('exit');
 
     return commands;
+  }
+
+  /**
+   * Build DHCP pool configuration derived from VLAN SVI
+   * @param vlanId - VLAN ID
+   * @param sviIp - SVI IP address
+   * @param cidr - CIDR notation (e.g., 24)
+   * @param options - Optional overrides (poolName, dnsServer, leaseTime, excluded)
+   */
+  buildDHCPPoolFromVlan(
+    vlanId: number,
+    sviIp: string,
+    cidr: number,
+    options?: {
+      poolName?: string;
+      dnsServer?: string;
+      leaseTime?: number;
+      excluded?: string[];
+    }
+  ): string[] {
+    const resolver = new VlanDhcpResolver();
+    const derived = resolver.derivePoolConfig(vlanId, sviIp, cidr, {
+      poolName: options?.poolName,
+      dnsServer: options?.dnsServer,
+    });
+
+    const config: DHCPPoolBuilder = {
+      name: derived.poolName,
+      network: derived.network,
+      mask: derived.mask,
+      gateway: derived.defaultRouter,
+      dnsServers: derived.dnsServer ? [derived.dnsServer] : undefined,
+      leaseTime: options?.leaseTime,
+      excluded: options?.excluded,
+    };
+
+    return this.buildDHCPPool(config);
   }
 
   buildDHCPRelay(config: DHCPRelayConfig): string[] {

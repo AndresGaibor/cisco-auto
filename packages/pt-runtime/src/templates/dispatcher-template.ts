@@ -24,7 +24,7 @@ export function generateDispatcherTemplate(): string {
 // Never allows unhandled exceptions to escape.
 // ============================================================================
 
-return (function(payload, ipc, dprint) {
+function dispatch(payload, host) {
   if (!payload || typeof payload !== "object") {
     return { ok: false, error: "Invalid payload", code: "INVALID_PAYLOAD" };
   }
@@ -33,9 +33,12 @@ return (function(payload, ipc, dprint) {
     return { ok: false, error: "Missing payload.type", code: "MISSING_TYPE" };
   }
 
+  var ipc = host && host.ipc ? host.ipc : (typeof ipc !== "undefined" ? ipc : null);
+  var dprintFn = host && host.dprint ? host.dprint : (typeof dprint !== "undefined" ? dprint : function() {});
+
   try {
-    dprint("[Runtime] Processing: " + payload.type);
-    
+    dprintFn("[Runtime] Processing: " + payload.type);
+
     switch (payload.type) {
       case "__healthcheck__": return { ok: true, runtime: "pt-runtime", version: "0.1.0" };
 ${publicCases}
@@ -43,9 +46,9 @@ ${internalCases}
       default: return { ok: false, error: "Unknown payload type: " + payload.type, code: "UNKNOWN_HANDLER" };
     }
   } catch (e) {
-    dprint("[Runtime] Handler exception: " + String(e));
+    dprintFn("[Runtime] Handler exception: " + String(e));
     return { ok: false, error: String(e), code: "HANDLER_EXCEPTION" };
   }
-})(payload, ipc, dprint);
+}
 `;
 }

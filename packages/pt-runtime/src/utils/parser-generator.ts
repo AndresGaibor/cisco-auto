@@ -103,6 +103,8 @@ export function generateParserCode(): string {
   "show vlan": function(output) { return IOS_PARSERS['show vlan brief'](output); },
 
   "show ip route": function(output) {
+    return { entries: [], warnings: ["show ip route parser not implemented"] };
+  },
 };
 
 function __getParser(command) {

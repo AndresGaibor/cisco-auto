@@ -457,6 +457,8 @@ export function createHistoryCommand(): Command {
     .command('rerun')
     .description('Re-ejecuta una sesión anterior (si es rerunnable)')
     .argument('<sessionId>', 'ID de la sesión')
+    .option('--force', 'Forzar re-ejecución sin verificar si es rerunnable', false)
+    .option('--dry-run', 'Solo mostrar qué se re-ejecutaría', false)
     .option('--examples', 'Mostrar ejemplos', false)
     .option('--explain', 'Explicar', false)
     .option('--plan', 'Mostrar plan', false)
@@ -465,63 +467,88 @@ export function createHistoryCommand(): Command {
       const globalExplain = process.argv.includes('--explain');
       const globalPlan = process.argv.includes('--plan');
 
-      if (globalExamples || globalExplain || globalPlan) {
-        console.log('Clasifica si una sesión puede re-ejecutarse de forma segura.');
-        console.log('Solo comandos de lectura idempotentes son rerunnables.');
+      if (globalExamples) {
+        console.log(printExamples(HISTORY_META));
         return;
       }
 
-      const flags: GlobalFlags = {
-        json: false, jq: null, output: 'text', verbose: false, quiet: false,
-        trace: false, tracePayload: false, traceResult: false, traceDir: null,
-        traceBundle: false, traceBundlePath: null, sessionId: null,
-        examples: globalExamples, schema: false, explain: globalExplain, plan: globalPlan, verify: false,
-      };
-
-      type RerunResult = { sessionId: string; rerunnable: boolean; reason: string; action?: string };
-      const result = await runCommand<RerunResult>({
-        action: 'history.rerun',
-        meta: HISTORY_META,
-        flags,
-        payloadPreview: { sessionId },
-        execute: async (): Promise<CliResult<RerunResult>> => {
-          try {
-            const entry = await historyStore.read(sessionId);
-            
-            if (!entry) {
-              return createErrorResult('history.rerun', {
-                message: `No se encontró la sesión: ${sessionId}`,
-              }) as CliResult<RerunResult>;
-            }
-
-            const classification = classifyRerunnable(entry);
-
-            return createSuccessResult('history.rerun', {
-              sessionId,
-              rerunnable: classification.rerunnable,
-              reason: classification.reason,
-              action: entry.action,
-            });
-          } catch (error) {
-            return createErrorResult('history.rerun', {
-              message: error instanceof Error ? error.message : String(error),
-            }) as CliResult<RerunResult>;
-          }
-        },
-      });
-
-      const output = renderCliResult(result, flags.output);
-      if (!flags.quiet || !result.ok) console.log(output);
-
-      if (result.ok && result.data) {
-        const icon = result.data.rerunnable ? '✓' : '✗';
-        console.log(`\n${icon} ${result.data.sessionId} (${result.data.action})`);
-        console.log(`   Rerunnable: ${result.data.rerunnable ? 'Sí' : 'No'}`);
-        console.log(`   Razón: ${result.data.reason}`);
-        console.log('');
+      if (globalExplain) {
+        console.log('Re-ejecuta una sesión anterior preservando los argumentos originales.');
+        console.log('Solo comandos de lectura idempotentes son rerunnables por defecto.');
+        return;
       }
 
-      if (!result.ok) process.exit(1);
+      if (globalPlan) {
+        console.log('Plan de ejecución:');
+        console.log(`  1. Leer sesión: ${sessionId}`);
+        console.log('  2. Clasificar si es rerunnable');
+        console.log('  3. Si es rerunnable (o --force), re-ejecutar con argv original');
+        return;
+      }
+
+      const entry = await historyStore.read(sessionId);
+
+      if (!entry) {
+        console.error(`No se encontró la sesión: ${sessionId}`);
+        process.exit(1);
+      }
+
+      const classification = classifyRerunnable(entry);
+      const argv = entry.argv as string[] | undefined;
+
+      console.log(`\n═══ Re-ejecutar sesión ═══`);
+      console.log(`Sesión   : ${sessionId}`);
+      console.log(`Acción   : ${entry.action}`);
+      console.log(`Estado   : ${entry.status ?? (entry.ok ? 'éxito' : 'error')}`);
+      if (entry.startedAt) console.log(`Ejecutada: ${entry.startedAt}`);
+
+      if (!classification.rerunnable && !options.force) {
+        console.log(`\n✗ No es rerunnable de forma segura`);
+        console.log(`  Razón: ${classification.reason}`);
+        console.log(`\nUsa --force para forzar la re-ejecución:`);
+        console.log(`  pt history rerun ${sessionId} --force`);
+        process.exit(1);
+      }
+
+      if (options.force && !classification.rerunnable) {
+        console.log(`\n⚠ Forzando re-ejecución (acción de escritura)`);
+        console.log(`  Razón: ${classification.reason}`);
+      }
+
+      if (!argv || argv.length === 0) {
+        console.error(`\n✗ La sesión no tiene argv almacenado`);
+        console.error(`  No se puede re-ejecutar. Ejecuta comandos nuevamente para grabar argv.`);
+        process.exit(1);
+      }
+
+      // Mostrar dry-run info
+      if (options.dryRun) {
+        console.log(`\n── Dry run ──`);
+        console.log(`Comando que se ejecutaría:`);
+        console.log(`  ${argv.join(' ')}`);
+        console.log('');
+        return;
+      }
+
+      console.log(`\n▶ Re-ejecutando...`);
+      console.log(`  ${argv.join(' ')}`);
+      console.log('');
+
+      // Import here to avoid circular dependency issues
+      const { createProgram } = await import('../program.js');
+
+      try {
+        const program = createProgram();
+        // Re-ejecutar con el argv original (pero usando 'node' y el script original)
+        // El primer elemento es típicamente 'node' o 'bun', el segundo el script
+        // Solo usamos los argumentos del comando (去除 pt y history rerun)
+        const argsToParse = argv.slice(2);
+        program.parse(argsToParse, { from: 'user' });
+      } catch (error) {
+        console.error(`\n✗ Error durante re-ejecución:`);
+        console.error(`  ${error instanceof Error ? error.message : String(error)}`);
+        process.exit(1);
+      }
     });
 
   cmd

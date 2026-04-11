@@ -30,7 +30,7 @@ export async function applyAndVerify<TApply, TVerify, TResult>(
     return createErrorResult('apply-and-verify', {
       message,
       details: error instanceof Error ? { stack: error.stack } : undefined,
-    }) as CliResult<TResult>;
+    });
   }
 }
 
@@ -73,6 +73,6 @@ export async function applyAndVerifyWithChecks<TApply, TVerify, TResult>(
     return createErrorResult('apply-and-verify', {
       message,
       details: error instanceof Error ? { stack: error.stack } : undefined,
-    }) as CliResult<TResult>;
+    });
   }
 }

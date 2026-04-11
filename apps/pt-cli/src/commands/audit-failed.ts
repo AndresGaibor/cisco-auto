@@ -4,7 +4,7 @@ import chalk from 'chalk';
 import { listAuditEntries } from './audit-data.js';
 
 export function createAuditFailedCommand(): Command {
-  return new Command('failed')
+  return new Command('audit-failed')
     .description('Mostrar operaciones fallidas con filtros')
     .option('--device <device>', 'Filtrar por dispositivo')
     .option('--since <date>', 'Filtrar desde fecha (YYYY-MM-DD)')

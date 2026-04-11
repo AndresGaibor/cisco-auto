@@ -24,7 +24,7 @@ describe("parseShowIpRoute", () => {
     const result = parseShowIpRoute(output);
 
     expect(result.gatewayOfLastResort).toBe("192.168.1.1 to network 0.0.0.0");
-    expect(result.routes).toHaveLength(4);
+    expect(result.routes).toHaveLength(5); // 5 routes in test data
 
     // Check connected route
     expect(result.routes[0]).toEqual({

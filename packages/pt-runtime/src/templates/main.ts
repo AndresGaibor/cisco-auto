@@ -1009,6 +1009,17 @@ function getIosJobTerm(job) {
   return device.getCommandLine();
 }
 
+function isNormalPrompt(prompt, mode) {
+  var p = String(prompt || "");
+  var m = String(mode || "");
+  if (!p) return false;
+  return /\(config[^\)]*\)#\s*$/.test(p) ||
+    /#\s*$/.test(p) ||
+    />\s*$/.test(p) ||
+    /config/i.test(m) ||
+    /priv/i.test(m);
+}
+
 function containsInitialDialog(output) {
   if (!output) return false;
   return /initial configuration dialog/i.test(output) ||
@@ -1452,7 +1463,7 @@ function onTerminalCommandEnded(deviceName, args) {
     try { if (term && term.getPrompt) job.lastPrompt = term.getPrompt() || job.lastPrompt; } catch (e1) {}
     try { if (term && term.getMode) job.lastMode = term.getMode() || job.lastMode; } catch (e2) {}
 
-    if (containsInitialDialog(raw)) {
+    if (!isNormalPrompt(job.lastPrompt, job.lastMode) && containsInitialDialog(raw)) {
       if (job.dismissInitialDialog === false) {
         failIosJob(job.ticket, "Initial configuration dialog is blocking CLI", "INITIAL_DIALOG_BLOCKING");
         continue;

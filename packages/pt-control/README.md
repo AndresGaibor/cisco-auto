@@ -47,6 +47,8 @@ nano topology-config.json
 bun run scripts/topologia-apply.ts --config topology-config.json
 ```
 
+El archivo de configuración puede incluir `devices`, `links`, `vlans`, `trunkPorts`, `accessPorts`, `svis`, `dhcpPools` y `hostIpConfig` para levantar una topología completa sin hardcodearla en TypeScript.
+
 #### Opción 2: Argumentos CLI rápidos
 
 ```bash

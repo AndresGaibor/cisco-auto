@@ -109,10 +109,10 @@ export function createSuccessResult<T>(
  * @param error - Error ocurrido
  * @returns Resultado de CLI con error
  */
-export function createErrorResult(
+export function createErrorResult<T = never>(
   action: string,
   error: CliError
-): CliResult {
+): CliResult<T> {
   return {
     schemaVersion: '1.0',
     ok: false,

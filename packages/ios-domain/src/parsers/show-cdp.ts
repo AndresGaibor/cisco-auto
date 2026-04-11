@@ -2,6 +2,8 @@ import type { ShowCdpNeighbors } from "@cisco-auto/types";
 
 /**
  * Parse "show cdp neighbors" output
+ * Uses fixed-width column parsing based on the header format:
+ * Device ID(0-16), Local Intrfce(16-30), Holdtime(30-39), Capability(39-56), Platform(56-66), Port ID(66+)
  */
 export function parseShowCdpNeighbors(output: string): ShowCdpNeighbors {
   const lines = output.split("\n");
@@ -17,22 +19,40 @@ export function parseShowCdpNeighbors(output: string): ShowCdpNeighbors {
       continue;
     }
 
-    if (!started || !trimmed) continue;
+    if (!started || !trimmed || line.length < 60) continue;
 
-    // Device ID Local Intrfce Holdtme Capability Platform Port ID
-    // Capability can be multiple tokens like "R S" or "R S I"
-    const match = trimmed.match(/^(\S+)\s+(\S+)\s+(\d+)\s+((?:[A-Z]\s*)+)\s+(\S+)\s+(\S+)$/);
-    
-    if (match) {
-      neighbors.push({
-        deviceId: match[1]!,
-        localInterface: match[2]!,
-        holdtime: parseInt(match[3]!, 10),
-        capability: match[4]!.trim(),
-        platform: match[5]!,
-        portId: match[6]!,
-      });
+    // Fixed-width column parsing (positions determined from header alignment with 6-char leading indent)
+    // Device ID: 6-22, Local Intrfce: 22-38, Holdtime: 38-50, Capability: 50-63, Platform: 63-77, Port ID: 77+
+    const deviceId = line.substring(6, 22).trim();
+    const localInterface = line.substring(22, 38).trim();
+    const holdtimeStr = line.substring(38, 50).trim();
+    const capability = line.substring(50, 63).trim();
+    // Port ID typically starts with interface types or "Port"
+    const portPatterns = ['Gig', 'Ser', 'Fas', 'Port', 'Eth', 'Hun'];
+    const afterPlatform = line.substring(63);
+    let platformEnd = afterPlatform.length;
+    for (const pattern of portPatterns) {
+      const idx = afterPlatform.indexOf(pattern);
+      if (idx !== -1 && idx < platformEnd) {
+        platformEnd = idx;
+      }
     }
+    const platform = afterPlatform.substring(0, platformEnd).trim();
+    const portId = afterPlatform.substring(platformEnd).trim();
+
+    if (!deviceId || !localInterface) continue;
+
+    const holdtime = parseInt(holdtimeStr, 10);
+    if (isNaN(holdtime)) continue;
+
+    neighbors.push({
+      deviceId,
+      localInterface,
+      holdtime,
+      capability,
+      platform,
+      portId,
+    });
   }
 
   return { raw: output, neighbors };

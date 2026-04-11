@@ -55,15 +55,22 @@ export function parseShowIpRoute(output: string): ShowIpRoute {
           route.interface = ifaceMatch[1];
         }
       } else if (rest.includes("via")) {
-        const viaMatch = rest.match(/via\s+(\S+)/);
+        // via 192.168.1.1, 00:00:20, Serial0/0/0 - extract nextHop (skip timestamp)
+        const viaMatch = rest.match(/via\s+([\d.]+)/);
         if (viaMatch) {
-          route.nextHop = viaMatch[1]!.replace(",", "");
+          route.nextHop = viaMatch[1];
         }
 
-        // Interface after comma
-        const ifaceMatch = rest.match(/,\s*(\S+)/);
-        if (ifaceMatch) {
-          route.interface = ifaceMatch[1];
+        // Interface after comma (skip timestamp which is in format HH:MM:SS)
+        // Format: via IP, age, interface OR via IP, interface
+        const parts = rest.split(",").map(p => p.trim());
+        // Last part is interface
+        if (parts.length >= 2) {
+          const interfacePart = parts[parts.length - 1];
+          // Skip if it looks like a timestamp (has :)
+          if (!interfacePart.includes(":")) {
+            route.interface = interfacePart;
+          }
         }
       }
 

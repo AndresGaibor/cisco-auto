@@ -76,6 +76,7 @@ export function createACLCommand(): Command {
         trace: false, tracePayload: false, traceResult: false, traceDir: null,
         traceBundle: false, traceBundlePath: null, sessionId: null,
         examples: globalExamples, schema: false, explain: globalExplain, plan: globalPlan, verify: false,
+        timeout: null, noTimeout: false,
       };
 
       const result = await runCommand({
@@ -87,8 +88,8 @@ export function createACLCommand(): Command {
           try {
             const name = options.name;
             const type = options.type === 'extended' ? 'extended' : 'standard';
-            const acls = [{ name, type, entries: [] }];
-            const commands = SecurityGenerator.generateACLs(acls as any);
+            const acls: Parameters<typeof SecurityGenerator.generateACLs>[0] = [{ name, type, rules: [] }];
+            const commands = SecurityGenerator.generateACLs(acls);
 
             return createSuccessResult('acl.create', {
               name,
@@ -96,7 +97,7 @@ export function createACLCommand(): Command {
               commands,
             }, { advice: ['Usa pt acl add-rule para agregar reglas'] });
           } catch (error) {
-            return createErrorResult('acl.create', { message: error instanceof Error ? error.message : String(error) }) as CliResult<{ name: string; type: string; commands: string[] }>;
+            return createErrorResult<{ name: string; type: string; commands: string[] }>('acl.create', { message: error instanceof Error ? error.message : String(error) });
           }
         },
       });
@@ -145,6 +146,7 @@ export function createACLCommand(): Command {
         trace: false, tracePayload: false, traceResult: false, traceDir: null,
         traceBundle: false, traceBundlePath: null, sessionId: null,
         examples: globalExamples, schema: false, explain: globalExplain, plan: globalPlan, verify: false,
+        timeout: null, noTimeout: false,
       };
 
       const result = await runCommand({
@@ -203,6 +205,7 @@ export function createACLCommand(): Command {
         trace: false, tracePayload: false, traceResult: false, traceDir: null,
         traceBundle: false, traceBundlePath: null, sessionId: null,
         examples: globalExamples, schema: false, explain: globalExplain, plan: globalPlan, verify: true,
+        timeout: null, noTimeout: false,
       };
 
       const result = await runCommand({

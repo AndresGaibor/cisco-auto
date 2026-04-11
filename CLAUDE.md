@@ -187,6 +187,141 @@ bun run pt trunk apply Switch1 GigabitEthernet0/1
 bun run pt ssh setup Router1 --domain cisco.local --user admin --pass admin
 ```
 
+### Lab management
+```bash
+# Listar labs guardados
+bun run pt lab list
+# Crear nuevo lab
+bun run pt lab create <nombre>
+# Levantar lab desde YAML
+bun run pt lab lift <archivo>
+# Validar lab
+bun run pt lab validate <archivo>
+# Modo interactivo
+bun run pt lab interactive
+# Pipeline de labs
+bun run pt lab pipeline
+# Parsear lab
+bun run pt lab parse <archivo>
+```
+
+### Configuración de protocolos (YAML)
+```bash
+# OSPF
+bun run pt config-ospf --device R1 --process-id 1 --network "192.168.1.0,0.0.0.255,0"
+# EIGRP
+bun run pt config-eigrp --device R1 --as 100 --network "192.168.1.0,0.0.0.255"
+# BGP
+bun run pt config-bgp --device R1 --as 65000 --neighbor "10.0.0.2,65001"
+# ACL
+bun run pt config-acl --device R1 --name FILTER --type extended --rule "permit,ip,any,any"
+# VLAN
+bun run pt config-vlan --device S1 --vlan "10,ADMIN" --vlan "20,USERS"
+# Interface
+bun run pt config-interface --device R1 --name Gig0/0 --ip 192.168.1.1 --mask 255.255.255.0
+# Aplicar desde archivo YAML/JSON
+bun run pt config-apply configs/lab.yaml --dry-run
+```
+
+### Historial y auditoría
+```bash
+# Historial de comandos
+bun run pt history list              # Listar historial
+bun run pt history show <id>        # Ver comando específico
+bun run pt history last             # Último comando
+bun run pt history search "ospf"    # Buscar en historial
+bun run pt history failed           # Comandos fallidos
+bun run pt history rerun <id>      # Re-ejecutar comando
+
+# Audit log
+bun run pt audit-tail               # Ver últimas operaciones
+bun run pt audit-tail --lines 50    # Con cantidad de líneas
+bun run pt audit-export             # Exportar a archivo
+bun run pt audit-export --format json --output audit.json
+bun run pt audit-failed            # Operaciones fallidas
+bun run pt audit-failed --since "2026-04-01"
+```
+
+### Topología
+```bash
+# Analizar topología
+bun run pt topology analyze
+# Limpiar topología
+bun run pt topology clean
+# Exportar topología
+bun run pt topology export
+# Visualizar topología
+bun run pt topology visualize
+# Mostrar topología descubierta
+bun run pt topology show
+```
+
+### Gestión de enlaces
+```bash
+bun run pt link add R1 Gi0/0 S1 Fa0/1   # Agregar enlace
+bun run pt link list                      # Listar enlaces
+bun run pt link remove R1 Gi0/0           # Remover enlace
+```
+
+### Servicios de red
+```bash
+# DHCP server
+bun run pt services dhcp <device>
+# NTP server
+bun run pt services ntp <device>
+# Syslog
+bun run pt services syslog <device>
+```
+
+### STP y EtherChannel
+```bash
+# Spanning Tree Protocol
+bun run pt stp set Switch1 mode rapid-pvst
+bun run pt stp set Switch1 priority 4096
+# EtherChannel
+bun run pt etherchannel create Switch1 1 Gi0/1 Gi0/2
+bun run pt etherchannel list
+```
+
+### Routing y ACL (comandos legacy)
+```bash
+# Routing
+bun run pt routing ospf enable R1
+bun run pt routing static add 0.0.0.0 0.0.0.0 192.168.1.1
+# ACL
+bun run pt acl create 100 permit tcp any any eq 80
+bun run pt acl apply ACL-100 R1
+```
+
+### Router
+```bash
+bun run pt router add <nombre>           # Agregar router
+```
+
+### Resultados y logs
+```bash
+# Resultados de comandos
+bun run pt results list                  # Listar resultados
+bun run pt results show <id>            # Ver resultado específico
+bun run pt results last                  # Último resultado
+# Logs
+bun run pt logs tail                     # Ver logs
+bun run pt logs session <id>            # Logs de sesión
+bun run pt logs errors                  # Solo errores
+```
+
+### Dispositivos (memoria SQLite)
+```bash
+bun run pt devices-list                  # Listar dispositivos guardados
+bun run pt devices-add R1 --ip 10.0.0.1  # Agregar a memoria
+```
+
+### Preferencias
+```bash
+bun run pt config-prefs set default_router 2911   # Guardar preferencia
+bun run pt config-prefs get default_router         # Ver preferencia
+```
+
 ### Ruta de archivos
 - **macOS/Linux**: `~/pt-dev/`
 - **Windows**: `%USERPROFILE%\pt-dev\`

@@ -102,7 +102,7 @@ export function createConfigInterfaceCommand(): Command {
             const devices = await fetchDeviceList(ctx.controller);
             const iosDevices = getIOSCapableDevices(devices);
             const selected = iosDevices.find((d) => d.name === device);
-            if (!selected) { return createErrorResult('config-interface', { message: `Dispositivo "${device}" no encontrado` }) as CliResult<{ device: string; interface: string; commands: string[]; executed: number }>; }
+            if (!selected) { return createErrorResult('config-interface', { message: `Dispositivo "${device}" no encontrado` }); }
             await ctx.controller.configIosWithResult(device, iosCommands, { save: true });
             return createSuccessResult('config-interface', { device, interface: name, commands: iosCommands, executed: iosCommands.length });
           } finally { await ctx.controller.stop(); }

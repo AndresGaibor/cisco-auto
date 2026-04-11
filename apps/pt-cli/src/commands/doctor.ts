@@ -13,6 +13,7 @@ import type { CommandMeta } from '../contracts/command-meta.ts';
 import { createSuccessResult } from '../contracts/cli-result.ts';
 import { runCommand } from '../application/run-command.ts';
 import { COMMAND_CATALOG } from './command-catalog.ts';
+import { LockInfoSchema } from '@cisco-auto/types';
 
 interface DoctorCheckResult {
   name: string;
@@ -125,41 +126,46 @@ async function performDoctorChecks(controller: any, verbose: boolean): Promise<D
     const hbHealth = controller.getHeartbeatHealth();
     const systemCtx = controller.getSystemContext();
 
-    checks.push({
-      name: 'heartbeat-present',
-      ok: hb !== null,
-      message: hb ? `Heartbeat encontrado` : 'Archivo heartbeat.json no encontrado',
-      details: verbose ? JSON.stringify(hb, null, 2) : undefined,
-    });
+     checks.push({
+       name: 'heartbeat-present',
+       ok: hb !== null,
+       severity: 'info',
+       message: hb ? `Heartbeat encontrado` : 'Archivo heartbeat.json no encontrado',
+       details: verbose ? JSON.stringify(hb, null, 2) : undefined,
+     });
 
-    checks.push({
-      name: 'heartbeat-health',
-      ok: hbHealth.state === 'ok',
-      message: `Heartbeat estado: ${hbHealth.state}${hbHealth.ageMs ? ` (${hbHealth.ageMs}ms)` : ''}`,
-      details: verbose ? JSON.stringify(hbHealth, null, 2) : undefined,
-    });
+     checks.push({
+       name: 'heartbeat-health',
+       ok: hbHealth.state === 'ok',
+       severity: hbHealth.state === 'ok' ? 'info' : 'warning',
+       message: `Heartbeat estado: ${hbHealth.state}${hbHealth.ageMs ? ` (${hbHealth.ageMs}ms)` : ''}`,
+       details: verbose ? JSON.stringify(hbHealth, null, 2) : undefined,
+     });
 
-    checks.push({
-      name: 'bridge-status',
-      ok: systemCtx.bridgeReady,
-      message: `Bridge ready: ${systemCtx.bridgeReady ? 'yes' : 'no'}`,
-      details: verbose ? JSON.stringify(systemCtx, null, 2) : undefined,
-    });
+     checks.push({
+       name: 'bridge-status',
+       ok: systemCtx.bridgeReady,
+       severity: systemCtx.bridgeReady ? 'info' : 'warning',
+       message: `Bridge ready: ${systemCtx.bridgeReady ? 'yes' : 'no'}`,
+       details: verbose ? JSON.stringify(systemCtx, null, 2) : undefined,
+     });
 
-    checks.push({
-      name: 'topology-materialized',
-      ok: systemCtx.topologyMaterialized,
-      message: systemCtx.topologyMaterialized ? 'Topología materializada' : 'Topología no materializada',
-      details: verbose ? `devices: ${systemCtx.deviceCount}, links: ${systemCtx.linkCount}` : undefined,
-    });
-  } catch (err) {
-    checks.push({
-      name: 'bridge-connect',
-      ok: false,
-      message: 'No se pudo obtener información del controller/bridge',
-      details: String(err),
-    });
-  }
+     checks.push({
+       name: 'topology-materialized',
+       ok: systemCtx.topologyMaterialized,
+       severity: systemCtx.topologyMaterialized ? 'info' : 'warning',
+       message: systemCtx.topologyMaterialized ? 'Topología materializada' : 'Topología no materializada',
+       details: verbose ? `devices: ${systemCtx.deviceCount}, links: ${systemCtx.linkCount}` : undefined,
+     });
+   } catch (err) {
+     checks.push({
+       name: 'bridge-connect',
+       ok: false,
+       severity: 'critical',
+       message: 'No se pudo obtener información del controller/bridge',
+       details: String(err),
+     });
+   }
 
   return checks;
 }
@@ -290,19 +296,18 @@ function checkLease(ptDevDir: string, verbose: boolean): DoctorCheckResult {
     return { name: 'bridge-lease', ok: true, severity: 'info', message: 'Lease no presente (no es obligatorio)' };
   }
 
-  try {
-    const content = readFileSync(leasePath, 'utf-8');
-    const lease = JSON.parse(content) as { expiresAt?: string | number; pid?: number };
-    const expiresAt = lease.expiresAt ? new Date(lease.expiresAt).getTime() : 0;
-    const valid = expiresAt > Date.now();
-    return {
-      name: 'bridge-lease',
-      ok: valid,
-      severity: valid ? 'info' : 'warning',
-      message: valid ? 'Lease válido' : 'Lease expirado',
-      details: verbose ? JSON.stringify(lease, null, 2) : undefined,
-    };
-  } catch (err) {
-    return { name: 'bridge-lease', ok: false, severity: 'warning', message: 'No se pudo leer el lease', details: String(err) };
-  }
+   try {
+     const content = readFileSync(leasePath, 'utf-8');
+     const lease = LockInfoSchema.parse(JSON.parse(content));
+     const valid = !lease.expiresAt || new Date(lease.expiresAt).getTime() > Date.now();
+     return {
+       name: 'bridge-lease',
+       ok: valid,
+       severity: valid ? 'info' : 'warning',
+       message: valid ? 'Lease válido' : 'Lease expirado',
+       details: verbose ? JSON.stringify(lease, null, 2) : undefined,
+     };
+   } catch (err) {
+     return { name: 'bridge-lease', ok: false, severity: 'warning', message: 'No se pudo leer el lease', details: String(err) };
+   }
 }

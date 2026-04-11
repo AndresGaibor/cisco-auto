@@ -54,7 +54,7 @@ function generateAclCommands(config: Record<string, unknown>): string[] {
 }
 
 export function createConfigAclCommand(): Command {
-  const cmd = new Command('acl')
+  const cmd = new Command('config-acl')
     .description('Configurar Access Control Lists')
     .option('--device <device>', 'Dispositivo destino')
     .option('--name <name>', 'Nombre de la ACL')
@@ -96,11 +96,13 @@ export function createConfigAclCommand(): Command {
       if (rules.length === 0) { console.error(chalk.red('Error: al menos un --rule requerido')); process.exit(1); }
 
       const parsedRules = parseAclRules(rules);
-      const configInput: Record<string, unknown> = {
-        device, type: 'acl', name, type: aclType, rules: parsedRules,
+      const configInput = {
+        name,
+        type: aclType,
+        rules: parsedRules,
       };
 
-      const validationResult = AclConfigSchema.safeParse({ name: configInput.name, type: configInput.type, rules: configInput.rules });
+      const validationResult = AclConfigSchema.safeParse(configInput);
       if (!validationResult.success) {
         const errors = validationResult.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
         console.error(chalk.red('Error de validacion:\n' + errors));
@@ -126,7 +128,7 @@ export function createConfigAclCommand(): Command {
             const devices = await fetchDeviceList(ctx.controller);
             const iosDevices = getIOSCapableDevices(devices);
             const selected = iosDevices.find((d) => d.name === device);
-            if (!selected) { return createErrorResult('config-acl', { message: `Dispositivo "${device}" no encontrado` }) as CliResult<{ device: string; aclName: string; commands: string[]; executed: number }>; }
+            if (!selected) { return createErrorResult('config-acl', { message: `Dispositivo "${device}" no encontrado` }); }
             await ctx.controller.configIosWithResult(device, iosCommands, { save: true });
             return createSuccessResult('config-acl', { device, aclName: name, commands: iosCommands, executed: iosCommands.length });
           } finally { await ctx.controller.stop(); }

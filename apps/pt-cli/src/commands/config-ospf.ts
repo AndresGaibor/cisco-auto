@@ -144,7 +144,7 @@ export function createConfigOspfCommand(): Command {
             const iosDevices = getIOSCapableDevices(devices);
             const selected = iosDevices.find((d) => d.name === device);
             if (!selected) {
-              return createErrorResult('config-ospf', { message: `Dispositivo "${device}" no encontrado` }) as CliResult<{ device: string; commands: string[]; executed: number }>;
+              return createErrorResult('config-ospf', { message: `Dispositivo "${device}" no encontrado` });
             }
             await ctx.controller.configIosWithResult(device, iosCommands, { save: true });
             return createSuccessResult('config-ospf', { device, commands: iosCommands, executed: iosCommands.length });

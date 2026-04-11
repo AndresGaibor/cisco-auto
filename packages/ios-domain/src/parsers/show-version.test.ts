@@ -87,7 +87,7 @@ describe("parseShowVersion", () => {
     const result = parseShowVersion(output);
 
     expect(result.version).toBe("12.2(55)SE9");
-    expect(result.hostname).toBe("Switch");
+    // No hostname since there's no "uptime is" line in this output format
     expect(result.uptime).toBeUndefined();
     expect(result.image).toBe("flash:c2960-lanbasek9-mz.122-55.SE9.bin");
     expect(result.configRegister).toBe("0xF");

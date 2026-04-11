@@ -52,8 +52,13 @@ describe("VlanId", () => {
 
   describe("properties", () => {
     it("detects reserved VLANs", () => {
-      expect(new VlanId(1).isReserved).toBe(true);
+      // VLAN 1 is DEFAULT, not reserved
+      expect(new VlanId(1).isReserved).toBe(false);
+      expect(new VlanId(1).isDefault).toBe(true);
+      // Reserved: 1002-1005 (legacy FDDI/Token Ring)
       expect(new VlanId(1002).isReserved).toBe(true);
+      expect(new VlanId(1003).isReserved).toBe(true);
+      expect(new VlanId(1004).isReserved).toBe(true);
       expect(new VlanId(1005).isReserved).toBe(true);
       expect(new VlanId(100).isReserved).toBe(false);
     });

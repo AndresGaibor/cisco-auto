@@ -49,7 +49,7 @@ function generateVlanCommands(config: Record<string, unknown>): string[] {
 }
 
 export function createConfigVlanCommand(): Command {
-  const cmd = new Command('vlan')
+  const cmd = new Command('config-vlan')
     .description('Configurar VLANs')
     .option('--device <device>', 'Dispositivo destino (switch)')
     .option('--id <id>', 'ID de la VLAN')
@@ -132,7 +132,7 @@ export function createConfigVlanCommand(): Command {
             const devices = await fetchDeviceList(ctx.controller);
             const iosDevices = getIOSCapableDevices(devices);
             const selected = iosDevices.find((d) => d.name === device);
-            if (!selected) { return createErrorResult('config-vlan', { message: `Dispositivo "${device}" no encontrado` }) as CliResult<{ device: string; commands: string[]; executed: number }>; }
+            if (!selected) { return createErrorResult('config-vlan', { message: `Dispositivo "${device}" no encontrado` }); }
             await ctx.controller.configIosWithResult(device, iosCommands, { save: true });
             return createSuccessResult('config-vlan', { device, commands: iosCommands, executed: iosCommands.length });
           } finally { await ctx.controller.stop(); }

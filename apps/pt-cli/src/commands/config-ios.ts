@@ -274,40 +274,40 @@ export function createConfigIOSCommand(): Command {
             const iosDevices = getIOSCapableDevices(devices);
 
             if (iosDevices.length === 0) {
-              return createErrorResult('config-ios', {
+              return createErrorResult<ConfigIOSResult>('config-ios', {
                 message: 'No hay dispositivos capaces de ejecutar IOS',
-              }) as CliResult<ConfigIOSResult>;
+              });
             }
 
             let targetDevice = payload.device;
             if (!targetDevice) {
-              return createErrorResult('config-ios', {
+              return createErrorResult<ConfigIOSResult>('config-ios', {
                 message: 'Debe especificar un dispositivo. Use pt devices para listar.',
-              }) as CliResult<ConfigIOSResult>;
+              });
             }
 
             const selectedDevice = iosDevices.find((d) => d.name === targetDevice);
             if (!selectedDevice) {
-              return createErrorResult('config-ios', {
+              return createErrorResult<ConfigIOSResult>('config-ios', {
                 message: 'Dispositivo "' + targetDevice + '" no encontrado o no es capaz de ejecutar IOS',
-              }) as CliResult<ConfigIOSResult>;
+              });
             }
 
             if (payload.interactive) {
-              return createSuccessResult('config-ios', {
+              return createSuccessResult<ConfigIOSResult>('config-ios', {
                 device: targetDevice,
                 commands: [],
                 executed: 0,
                 errors: [],
               }, {
                 advice: ['Use el modo interactivo para ejecutar comandos uno por uno'],
-              }) as CliResult<ConfigIOSResult>;
+              });
             }
 
             if (payload.commands.length === 0) {
-              return createErrorResult('config-ios', {
+              return createErrorResult<ConfigIOSResult>('config-ios', {
                 message: 'Se requiere al menos un comando IOS',
-              }) as CliResult<ConfigIOSResult>;
+              });
             }
 
             const errors: string[] = [];
@@ -354,18 +354,18 @@ export function createConfigIOSCommand(): Command {
             };
 
             if (verificationChecks.length > 0) {
-              return createVerifiedResult('config-ios', resultData, {
+              return createVerifiedResult<ConfigIOSResult>('config-ios', resultData, {
                 executed: true,
                 verified,
                 partiallyVerified,
                 verificationSource: verificationPlan.map((step) => step.verifyCommand),
                 checks: verificationChecks,
-              }) as CliResult<ConfigIOSResult>;
+              });
             }
 
-            return createSuccessResult('config-ios', resultData, {
+            return createSuccessResult<ConfigIOSResult>('config-ios', resultData, {
               advice: ['La configuración se aplicó, pero no hubo un plan de verificación específico.'],
-            }) as CliResult<ConfigIOSResult>;
+            });
           } finally {
             await ctx.controller.stop();
           }

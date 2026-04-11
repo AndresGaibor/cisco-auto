@@ -6,18 +6,34 @@ import type { LabSpec } from '@cisco-auto/core';
 import { formatExamples, formatRelatedCommands } from '../../help/formatter';
 import { getExamples } from '../../help/examples';
 import { getRelatedCommands } from '../../help/related';
-import { toLabSpec } from '../../types/lab-spec.types';
+import { toLabSpec, snapshotToLabSpec } from '../../types/lab-spec.types';
+import { createDefaultPTController } from '@cisco-auto/pt-control';
 
 export function createTopologyExportCommand(): Command {
   const cmd = new Command('export')
     .description('Exportar topología a diferentes formatos')
-    .argument('<file>', 'Archivo YAML del lab')
+    .argument('[file]', 'Archivo YAML del lab (opcional: usa topología del canvas si no se especifica)')
     .option('-f, --format <format>', 'Formato de salida (mermaid|json)', 'mermaid')
     .option('-o, --output <file>', 'Archivo de salida')
     .action(async (file, options) => {
       try {
-        const parsedLab = loadLab(file);
-        const labSpec = toLabSpec(parsedLab);
+        let labSpec: LabSpec;
+
+        if (file) {
+          const parsedLab = loadLab(file);
+          labSpec = toLabSpec(parsedLab);
+        } else {
+          // Usar topología del canvas PT
+          const controller = createDefaultPTController();
+          try {
+            await controller.start();
+            const snapshot = await controller.snapshot();
+            labSpec = snapshotToLabSpec(snapshot);
+          } finally {
+            await controller.stop();
+          }
+        }
+
         const output = generateMermaidDiagram(labSpec);
 
         if (options.output) {

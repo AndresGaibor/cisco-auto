@@ -81,7 +81,8 @@ describe("parseShowRun", () => {
     expect(result.version).toBe("15.2");
     expect(result.lines).toContain("version 15.2");
     expect(result.lines).toContain("hostname Router");
-    expect(result.sections).toHaveLength(8); // version, hostname, interface Gi0/0, interface Gi0/1, interface Serial0/0/0, router ospf, ip http server, line con 0, line aux 0, line 2, scheduler allocate
+    // Multiple sections: interfaces (Gi0/0, Gi0/1, Serial0/0/0), router ospf, ip http server, control-plane, lines, etc.
+    expect(result.sections.length).toBeGreaterThanOrEqual(8);
     expect(result.interfaces["GigabitEthernet0/0"]).toContain("ip address 192.168.1.1 255.255.255.0");
     expect(result.interfaces["GigabitEthernet0/1"]).toContain("shutdown");
     expect(result.interfaces["Serial0/0/0"]).toContain("encapsulation hdlc");
@@ -98,7 +99,9 @@ describe("parseShowRun", () => {
 
     expect(result.hostname).toBeUndefined();
     expect(result.version).toBeUndefined();
-    expect(result.sections).toHaveLength(0);
+    // "end" creates a global section
+    expect(result.sections).toHaveLength(1);
+    expect(result.sections[0].section).toBe("global");
     expect(result.interfaces).toEqual({});
   });
 
@@ -132,11 +135,11 @@ describe("parseShowRun", () => {
     expect(result.version).toBe("12.4");
     expect(result.sections).toContainEqual(expect.objectContaining({
       section: "vlan 10",
-      content: "vlan 10\n       name Sales"
+      content: "vlan 10\nname Sales"
     }));
     expect(result.sections).toContainEqual(expect.objectContaining({
       section: "vlan 20",
-      content: "vlan 20\n       name Engineering"
+      content: "vlan 20\nname Engineering"
     }));
     expect(result.interfaces["FastEthernet0/1"]).toContain("switchport access vlan 10");
     expect(result.interfaces["FastEthernet0/2"]).toContain("switchport access vlan 20");

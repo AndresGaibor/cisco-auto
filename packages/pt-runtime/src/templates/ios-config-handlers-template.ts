@@ -17,6 +17,17 @@ function inferModeFromPrompt(prompt) {
   return '';
 }
 
+function isNormalPrompt(prompt, mode) {
+  var p = String(prompt || '');
+  var m = String(mode || '');
+  if (!p) return false;
+  return /\(config[^\)]*\)#\s*$/.test(p) ||
+    /#\s*$/.test(p) ||
+    />\s*$/.test(p) ||
+    /config/i.test(m) ||
+    /priv/i.test(m);
+}
+
 function syncEngineModeFromTerminal(engine, term) {
   var prompt = '';
   var mode = '';
@@ -36,7 +47,11 @@ function dismissInitialDialogIfNeeded(engine, term) {
 
   for (i = 0; i < 3; i++) {
     var output = term.getOutput ? String(term.getOutput() || '') : '';
+    var prompt = term.getPrompt ? String(term.getPrompt() || '') : '';
+    var mode = term.getMode ? String(term.getMode() || '') : '';
     var stepHandled = false;
+
+    if (isNormalPrompt(prompt, mode)) break;
 
     if (/initial configuration dialog/i.test(output) || /continue with configuration dialog/i.test(output)) {
       term.enterCommand('no');

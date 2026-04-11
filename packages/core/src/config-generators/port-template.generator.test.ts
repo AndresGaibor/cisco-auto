@@ -107,8 +107,8 @@ describe('PortTemplateGenerator', () => {
   });
 
   describe('getPortsByModel', () => {
-    it('should get ports for 2960-24TT-L switch', () => {
-      const ports = PortTemplateGenerator.getPortsByModel('2960-24TT-L');
+    it('should get ports for 2960-24TT switch', () => {
+      const ports = PortTemplateGenerator.getPortsByModel('2960-24TT');
 
       expect(ports.fastEthernet.length).toBe(24);
       expect(ports.sfp.length).toBe(2); // SFP uplinks (not in gigabitEthernet)
@@ -133,7 +133,7 @@ describe('PortTemplateGenerator', () => {
 
   describe('generateDefaultSwitchConfig', () => {
     it('should generate default config for 2960 switch', () => {
-      const commands = PortTemplateGenerator.generateDefaultSwitchConfig('2960-24TT-L');
+      const commands = PortTemplateGenerator.generateDefaultSwitchConfig('2960-24TT');
 
       expect(commands).toContain('! Default port configuration');
       expect(commands.filter(c => c.includes('interface ')).length).toBeGreaterThan(0);

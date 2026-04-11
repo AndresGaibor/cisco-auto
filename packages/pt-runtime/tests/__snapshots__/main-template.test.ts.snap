@@ -1,7 +1,13 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
 exports[`Phase 2 - Template Snapshot template snapshot is stable: main-js-template 1`] = `
-"
+// ============================================================================
+// Main.js Template - PT Script Module (Fase 5)
+// ============================================================================
+// PIPELINE DURABLE: commands/, in-flight/, results/, dead-letter/, journal NDJSON
+// ============================================================================
+
+
 /**
  * PT Control V2 - Main Script Module (Fase 5)
  *
@@ -595,7 +601,7 @@ function moveToDeadLetter(filePath, error) {
     }));
     
     // PT-side trace: dead-letter
-    var cmdIdMatch = basename.match(/cmd_(d+)/);
+    var cmdIdMatch = basename.match(/cmd_(\d+)/);
     if (cmdIdMatch) {
       writeCommandTracePatch("cmd_" + cmdIdMatch[1], {
         deadLetterAt: Date.now(),
@@ -713,7 +719,8 @@ function executeActiveCommand() {
   if (cmd && cmd.id) {
     writeCommandTracePatch(cmd.id, {
       runtimeStartedAt: startedAt,
-      payloadType: cmd.payload && cmd.payload.type
+      payloadType: cmd.payload && cmd.payload.type,
+      queueStateAtStart: { pending: countQueueFiles() }
     });
   }
 
@@ -741,7 +748,8 @@ function executeActiveCommand() {
       ok: result && result.ok !== false,
       deferred: result && result.deferred === true,
       ticket: result ? result.ticket : undefined,
-      error: result && result.ok === false ? result.error : undefined
+      error: result && result.ok === false ? result.error : undefined,
+      queueStateAtEnd: { pending: countQueueFiles() }
     });
   }
 
@@ -879,7 +887,8 @@ function pollDeferredCommands() {
     writeCommandTracePatch(pending.id, {
       deferredCompletedAt: Date.now(),
       finalStatus: envelope.status,
-      ok: envelope.ok
+      ok: envelope.ok,
+      jobPhase: pollResult.session ? pollResult.session.mode : undefined
     });
 
     delete pendingCommands[key];
@@ -1007,25 +1016,25 @@ function containsInitialDialog(output) {
   if (!output) return false;
   return /initial configuration dialog/i.test(output) ||
     /please answer 'yes' or 'no'/i.test(output) ||
-    /[yes/no]s*:s*$/i.test(output);
+    /\[yes\/no\]\s*:\s*$/i.test(output);
 }
 
 function containsEnablePasswordPrompt(output) {
   if (!output) return false;
-  return /passwords*:/i.test(output);
+  return /password\s*:/i.test(output);
 }
 
 function isConfigPrompt(prompt, mode) {
   var p = String(prompt || "");
   var m = String(mode || "");
-  return /(config[^)]*)#s*$/.test(p) || /config/i.test(m);
+  return /\(config[^\)]*\)#\s*$/.test(p) || /config/i.test(m);
 }
 
 function isPrivExecPrompt(prompt, mode) {
   var p = String(prompt || "");
   var m = String(mode || "");
   if (isConfigPrompt(prompt, mode)) return false;
-  return /#s*$/.test(p) || /priv/i.test(m);
+  return /#\s*$/.test(p) || /priv/i.test(m);
 }
 
 function mapCommandStatus(status) {
@@ -1685,5 +1694,4 @@ function cleanUp() {
 
   dprint("[PT] Stopped");
 }
-"
 `;

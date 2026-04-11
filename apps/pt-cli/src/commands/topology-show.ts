@@ -15,7 +15,7 @@ function getMemoryDb(): Database {
 }
 
 export function createTopologyShowCommand(): Command {
-  return new Command('show')
+  return new Command('topology-show')
     .description('Mostrar topologia descubierta')
     .option('--device <device>', 'Filtrar por dispositivo')
     .action((options) => {

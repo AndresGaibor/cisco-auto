@@ -4,7 +4,7 @@ import { handleAddLink, handleRemoveLink } from "../../handlers/link";
 import type { HandlerDeps } from "../../utils/helpers";
 import { DEVICE_TYPES } from "../../utils/constants.js";
 
-function createMockDevice(name: string, model: string, type: number = DEVICE_TYPES.router): unknown {
+function createMockDevice(name: string, model: string, type: number = DEVICE_TYPES.router, ports: string[] = []): unknown {
   return {
     getName: () => name,
     getModel: () => model,
@@ -14,8 +14,8 @@ function createMockDevice(name: string, model: string, type: number = DEVICE_TYP
     setName: () => {},
     skipBoot: () => {},
     getCommandLine: () => null,
-    getPortCount: () => 0,
-    getPortAt: () => null,
+    getPortCount: () => ports.length,
+    getPortAt: (i: number) => ports[i] ? { getName: () => ports[i] } : null,
     addModule: () => false,
     removeModule: () => false,
   };
@@ -81,7 +81,10 @@ describe("handleAddLink contract", () => {
   test("retorna LinkState-compatible payload con id, device1, port1, device2, port2, cableType", () => {
     const deps: HandlerDeps = {
       getLW: createMockLW(),
-      getNet: createMockNet({}),
+      getNet: createMockNet({
+        "R1": createMockDevice("R1", "2911", DEVICE_TYPES.router, ["GigabitEthernet0/0"]),
+        "S1": createMockDevice("S1", "2960", DEVICE_TYPES.switch, ["FastEthernet0/1"]),
+      }),
       dprint: () => {},
     };
 
@@ -114,7 +117,10 @@ describe("handleAddLink contract", () => {
   test("usa 'auto' cuando linkType no se especifica", () => {
     const deps: HandlerDeps = {
       getLW: createMockLW(),
-      getNet: createMockNet({}),
+      getNet: createMockNet({
+        "R1": createMockDevice("R1", "2911", DEVICE_TYPES.router, ["Serial0/0/0"]),
+        "R2": createMockDevice("R2", "2911", DEVICE_TYPES.router, ["Serial0/0/0"]),
+      }),
       dprint: () => {},
     };
 
@@ -126,6 +132,7 @@ describe("handleAddLink contract", () => {
       port2: "Serial0/0/0",
     }, deps);
 
+    expect(result.ok).toBe(true);
     expect(result.cableType).toBe("auto");
   });
 
@@ -137,7 +144,10 @@ describe("handleAddLink contract", () => {
         createLink: () => false,
         deleteLink: () => {},
       } as any),
-      getNet: createMockNet({}),
+      getNet: createMockNet({
+        "R1": createMockDevice("R1", "2911", DEVICE_TYPES.router, ["GigabitEthernet0/0"]),
+        "S1": createMockDevice("S1", "2960", DEVICE_TYPES.switch, ["FastEthernet0/1"]),
+      }),
       dprint: () => {},
     };
 

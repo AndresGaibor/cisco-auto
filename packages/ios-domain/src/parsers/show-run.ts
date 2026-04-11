@@ -31,19 +31,20 @@ export function parseShowRun(output: string): ShowRunningConfig {
   for (const line of lines) {
     const trimmed = line.trim();
 
-    if (!trimmed) {
-      pushCurrentSection();
-      continue;
-    }
-
+    // Skip non-content lines
     if (trimmed === "!" || trimmed === "--More--") {
       pushCurrentSection();
       continue;
     }
 
-    if (trimmed.startsWith("show running-config") || 
-        trimmed.startsWith("Building configuration...") || 
-        trimmed.startsWith("Router>") || 
+    if (!trimmed) {
+      pushCurrentSection();
+      continue;
+    }
+
+    if (trimmed.startsWith("show running-config") ||
+        trimmed.startsWith("Building configuration...") ||
+        trimmed.startsWith("Router>") ||
         trimmed.startsWith("Router#")) {
       continue;
     }
@@ -58,10 +59,9 @@ export function parseShowRun(output: string): ShowRunningConfig {
       version = trimmed.substring(8).trim();
     }
 
-    if (trimmed.length > 0 && 
-        trimmed !== "!" && 
-        !trimmed.startsWith("show running-config") && 
-        trimmed !== "Building configuration..." && 
+    if (trimmed.length > 0 &&
+        !trimmed.startsWith("show running-config") &&
+        trimmed !== "Building configuration..." &&
         !trimmed.includes("--More--")) {
       configLines.push(trimmed);
     }
@@ -74,7 +74,9 @@ export function parseShowRun(output: string): ShowRunningConfig {
       trimmed.startsWith("line ") ||
       trimmed.startsWith("class-map ") ||
       trimmed.startsWith("policy-map ") ||
-      trimmed.startsWith("control-plane");
+      trimmed.startsWith("control-plane") ||
+      trimmed.startsWith("banner ") ||
+      trimmed.startsWith("aaa ");
 
     if (startsNewSection) {
       pushCurrentSection();
@@ -85,7 +87,6 @@ export function parseShowRun(output: string): ShowRunningConfig {
 
     if (!currentSection) {
       currentSection = "global";
-      currentContent = [];
     }
 
     currentContent.push(trimmed);

@@ -592,7 +592,7 @@ export class FileBridgeV2 extends EventEmitter {
     warnings?: string[];
   } {
     const warnings: string[] = [];
-    const ready = this.running;
+    const ready = this.isReady();
     let leaseValid: boolean | undefined = undefined;
     try {
       leaseValid = this.leaseManager.hasValidLease();

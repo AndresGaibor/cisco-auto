@@ -5,7 +5,7 @@ import { join } from 'path';
 describe('Lab Interactive Wizard', () => {
   describe('generarYaml', () => {
     test('debe generar YAML válido con 1 router, 1 switch, 2 PCs', () => {
-      const { generarYaml } = require('../../../apps/cli/src/commands/lab/interactive.ts');
+      const { generarYaml } = require('../../../apps/pt-cli/src/commands/lab/interactive.ts');
       
       const params = {
         routerCount: 1,
@@ -36,7 +36,7 @@ describe('Lab Interactive Wizard', () => {
     });
 
     test('debe generar YAML con múltiples routers y switches', () => {
-      const { generarYaml } = require('../../../apps/cli/src/commands/lab/interactive.ts');
+      const { generarYaml } = require('../../../apps/pt-cli/src/commands/lab/interactive.ts');
       
       const params = {
         routerCount: 2,
@@ -70,7 +70,7 @@ describe('Lab Interactive Wizard', () => {
     });
 
     test('debe generar YAML sin DHCP cuando está deshabilitado', () => {
-      const { generarYaml } = require('../../../apps/cli/src/commands/lab/interactive.ts');
+      const { generarYaml } = require('../../../apps/pt-cli/src/commands/lab/interactive.ts');
       
       const params = {
         routerCount: 1,
@@ -91,7 +91,7 @@ describe('Lab Interactive Wizard', () => {
     });
 
     test('debe generar IPs secuenciales correctas', () => {
-      const { generarYaml } = require('../../../apps/cli/src/commands/lab/interactive.ts');
+      const { generarYaml } = require('../../../apps/pt-cli/src/commands/lab/interactive.ts');
       
       const params = {
         routerCount: 1,
@@ -116,7 +116,7 @@ describe('Lab Interactive Wizard', () => {
 
   describe('validarNumero', () => {
     test('debe retornar número válido dentro del rango', () => {
-      const { validarNumero } = require('../../../apps/cli/src/commands/lab/interactive.ts');
+      const { validarNumero } = require('../../../apps/pt-cli/src/commands/lab/interactive.ts');
       
       expect(validarNumero('5', 1, 10)).toBe(5);
       expect(validarNumero('1', 1, 10)).toBe(1);
@@ -124,7 +124,7 @@ describe('Lab Interactive Wizard', () => {
     });
 
     test('debe retornar null para número fuera de rango', () => {
-      const { validarNumero } = require('../../../apps/cli/src/commands/lab/interactive.ts');
+      const { validarNumero } = require('../../../apps/pt-cli/src/commands/lab/interactive.ts');
       
       expect(validarNumero('0', 1, 10)).toBe(null);
       expect(validarNumero('11', 1, 10)).toBe(null);
@@ -132,7 +132,7 @@ describe('Lab Interactive Wizard', () => {
     });
 
     test('debe retornar null para entrada no numérica', () => {
-      const { validarNumero } = require('../../../apps/cli/src/commands/lab/interactive.ts');
+      const { validarNumero } = require('../../../apps/pt-cli/src/commands/lab/interactive.ts');
       
       expect(validarNumero('abc', 1, 10)).toBe(null);
       expect(validarNumero('', 1, 10)).toBe(null);

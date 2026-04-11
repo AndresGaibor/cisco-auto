@@ -33,17 +33,15 @@ test("RuntimeGenerator deploy escribe los archivos esperados", async () => {
   const generator = new RuntimeGenerator({ outputDir, devDir });
   await generator.deploy();
 
-  const outputMain = join(outputDir, "main.js");
-  const outputRuntime = join(outputDir, "runtime.js");
+  // deploy() writes to devDir, not outputDir (build() writes to outputDir)
   const devMain = join(devDir, "main.js");
   const devRuntime = join(devDir, "runtime.js");
+  const devManifest = join(devDir, "manifest.json");
 
-  expect(existsSync(outputMain)).toBe(true);
-  expect(existsSync(outputRuntime)).toBe(true);
   expect(existsSync(devMain)).toBe(true);
   expect(existsSync(devRuntime)).toBe(true);
+  expect(existsSync(devManifest)).toBe(true);
 
-  expect(readFileSync(outputMain, "utf-8")).toContain(JSON.stringify(devDir));
-  expect(readFileSync(outputRuntime, "utf-8")).toContain("handleConfigIos");
-  expect(readFileSync(devRuntime, "utf-8")).toContain("handleExecIos");
+  expect(readFileSync(devMain, "utf-8")).toContain(JSON.stringify(devDir));
+  expect(readFileSync(devRuntime, "utf-8")).toContain("handleConfigIos");
 });

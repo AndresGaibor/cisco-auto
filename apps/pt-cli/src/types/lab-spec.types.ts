@@ -1,4 +1,5 @@
 import type { LabSpec, SwitchportMode, CableType, DeviceType } from '@cisco-auto/core';
+import type { TopologySnapshot, DeviceState, LinkState } from '@cisco-auto/types';
 
 /**
  * Convierte string a DeviceType válido
@@ -138,6 +139,44 @@ export function toLabSpec(parsed: ParsedLabYaml): LabSpec {
         from: { deviceId: '', deviceName: fromDevice, port: fromPort },
         to: { deviceId: '', deviceName: toDevice, port: toPort },
         cableType: toCableType(c.cable ?? c.type as string),
+      };
+    }),
+  };
+}
+
+/**
+ * Convierte un TopologySnapshot (del canvas PT) a LabSpec (modelo canónico)
+ */
+export function snapshotToLabSpec(snapshot: TopologySnapshot): LabSpec {
+  const devices = Object.values(snapshot.devices);
+  const links = Object.values(snapshot.links);
+
+  return {
+    metadata: {
+      name: 'Canvas Topology',
+      version: '1.0',
+      author: 'PT CLI',
+      createdAt: new Date(),
+    },
+    devices: devices.map((d) => {
+      const state = d as DeviceState;
+      const name = state.name || state.id || '';
+      return {
+        id: name,
+        name: name,
+        type: (state.type || 'router') as DeviceType,
+        hostname: name,
+        managementIp: (state as any).managementIp,
+      };
+    }),
+    connections: links.map((l) => {
+      const link = l as LinkState;
+      const from = typeof link.source === 'object' ? link.source : { deviceId: link.sourceDeviceId || '', port: link.sourcePort || '' };
+      const to = typeof link.target === 'object' ? link.target : { deviceId: link.targetDeviceId || '', port: link.targetPort || '' };
+      return {
+        id: `${from.deviceId}-${to.deviceId}`,
+        from: { deviceId: from.deviceId, deviceName: from.deviceId, port: from.port || '' },
+        to: { deviceId: to.deviceId, deviceName: to.deviceId, port: to.port || '' },
       };
     }),
   };

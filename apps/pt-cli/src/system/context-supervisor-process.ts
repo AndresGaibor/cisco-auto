@@ -41,6 +41,7 @@ let state: SupervisorState = {
 
 let running = true;
 let controller: PTController | null = null;
+let supervisorDevDir = getDefaultDevDir();
 
 /**
  * Maneja salida limpia del proceso
@@ -65,6 +66,24 @@ function setupSignalHandlers() {
   process.on("SIGTERM", cleanup);
   process.on("SIGINT", cleanup);
   process.on("SIGHUP", cleanup);
+}
+
+async function restartController(reason: string): Promise<void> {
+  console.log(`[supervisor] Reiniciando controller (${reason})...`);
+  try {
+    if (controller) {
+      await controller.stop();
+    }
+  } catch (e) {
+    console.error("[supervisor] Error al detener controller para reinicio:", e);
+  }
+
+  controller = new PTController({ devDir: supervisorDevDir });
+  await controller.start();
+  state.consecutiveHeartbeatFailures = 0;
+  state.consecutiveBridgeFailures = 0;
+  state.lastHealthyTs = Date.now();
+  console.log("[supervisor] Controller reiniciado");
 }
 
 /**
@@ -148,9 +167,7 @@ async function collectBridgeHealth(): Promise<ContextStatus["bridge"]> {
       return { ready: false };
     }
 
-    // Use PTController facade for bridge status
-    const health = controller.getBridgeStatus();
-    return { ready: health?.ready ?? false };
+    return controller.getBridgeStatus();
   } catch (e) {
     console.error("[supervisor] Error recolectando bridge health:", e);
     return { ready: false };
@@ -228,20 +245,21 @@ async function cycle() {
     updateLock();
 
     // Decidir si continuar
-    if (
-      state.consecutiveHeartbeatFailures >= FAILURE_THRESHOLD ||
-      state.consecutiveBridgeFailures >= FAILURE_THRESHOLD
-    ) {
+    if (state.consecutiveBridgeFailures >= FAILURE_THRESHOLD) {
       console.log(
-        `[supervisor] Demasiadas fallas consecutivas, apagando (HB: ${state.consecutiveHeartbeatFailures}, Bridge: ${state.consecutiveBridgeFailures})`
+        `[supervisor] Bridge inestable, reiniciando controller (Bridge failures: ${state.consecutiveBridgeFailures})`
+      );
+      try {
+        await restartController("bridge-failures");
+      } catch (e) {
+        console.error("[supervisor] No se pudo reiniciar el controller:", e);
+        running = false;
+      }
+    } else if (state.consecutiveHeartbeatFailures >= FAILURE_THRESHOLD) {
+      console.log(
+        `[supervisor] Demasiadas fallas de heartbeat, apagando (HB: ${state.consecutiveHeartbeatFailures})`
       );
       running = false;
-
-      // Escribir estado final = unavailable
-      status.heartbeat.state = "missing";
-      status.topology.health = "unknown";
-      status.warnings.push("Supervisor apagándose por demasiadas fallas");
-      writeContextStatus(status);
     }
   } catch (e) {
     console.error("[supervisor] Error en cycle:", e);
@@ -289,10 +307,10 @@ async function start() {
       `[supervisor] Supervisor iniciado con PID ${process.pid}`
     );
 
-    const devDir = getDefaultDevDir();
-    console.log(`[supervisor] Usando devDir: ${devDir}`);
+    supervisorDevDir = getDefaultDevDir();
+    console.log(`[supervisor] Usando devDir: ${supervisorDevDir}`);
 
-    controller = new PTController({ devDir });
+    controller = new PTController({ devDir: supervisorDevDir });
     await controller.start();
 
     console.log("[supervisor] Controller iniciado, comenzando loop principal");

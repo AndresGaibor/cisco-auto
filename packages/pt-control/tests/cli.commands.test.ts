@@ -35,25 +35,43 @@ describe("CLI commands smoke", () => {
   });
 });
 
-it("getHeartbeatHealth and bridge status via controller (Phase 5)", async () => {
-  // create a heartbeat file in the devDir that the controller will use
-  const hbPath = join(testDir, 'heartbeat.json');
-  const now = Date.now();
-  const { writeFileSync } = require('node:fs');
-  writeFileSync(hbPath, JSON.stringify({ timestamp: now }), 'utf-8');
+describe("getHeartbeatHealth", () => {
+  let testDir: string;
+  let controller: PTController;
 
-  await controller.start();
-  try {
-    const hb = controller.getHeartbeat();
-    expect(hb).not.toBeNull();
-    const hbHealth = controller.getHeartbeatHealth();
-    expect(hbHealth.state).toBe('ok');
-    const bridgeStatus = controller.getBridgeStatus();
-    expect(typeof bridgeStatus.ready).toBe('boolean');
-    const ctx = controller.getSystemContext();
-    expect(typeof ctx.bridgeReady).toBe('boolean');
-    expect(typeof ctx.deviceCount).toBe('number');
-  } finally {
-    await controller.stop();
-  }
+  beforeEach(() => {
+    testDir = join(tmpdir(), `pt-cli-test-${Date.now()}`);
+    mkdirSync(testDir, { recursive: true });
+    controller = new PTController({ devDir: testDir });
+  });
+
+  afterEach(() => {
+    try {
+      rmSync(testDir, { recursive: true, force: true });
+    } catch {
+      // ignore cleanup errors
+    }
+  });
+
+  it("getHeartbeatHealth and bridge status via controller (Phase 5)", async () => {
+    const hbPath = join(testDir, 'heartbeat.json');
+    const now = Date.now();
+    const { writeFileSync } = require('node:fs');
+    writeFileSync(hbPath, JSON.stringify({ timestamp: now }), 'utf-8');
+
+    await controller.start();
+    try {
+      const hb = controller.getHeartbeat();
+      expect(hb).not.toBeNull();
+      const hbHealth = controller.getHeartbeatHealth();
+      expect(hbHealth.state).toBe('ok');
+      const bridgeStatus = controller.getBridgeStatus();
+      expect(typeof bridgeStatus.ready).toBe('boolean');
+      const ctx = controller.getSystemContext();
+      expect(typeof ctx.bridgeReady).toBe('boolean');
+      expect(typeof ctx.deviceCount).toBe('number');
+    } finally {
+      await controller.stop();
+    }
+  });
 });

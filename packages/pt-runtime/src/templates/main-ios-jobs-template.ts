@@ -112,13 +112,24 @@ function readTerminalInput(term) {
   return "";
 }
 
+function isNormalPrompt(prompt, mode) {
+  var p = String(prompt || "");
+  var m = String(mode || "");
+  if (!p) return false;
+  return /\(config[^\)]*\)#\s*$/.test(p) ||
+    /#\s*$/.test(p) ||
+    />\s*$/.test(p) ||
+    /config/i.test(m) ||
+    /priv/i.test(m);
+}
+
 function classifyTerminalState(prompt, mode, currentInput, output) {
   var p = String(prompt || "");
   var m = String(mode || "");
   var i = String(currentInput || "");
   var o = String(output || "");
 
-  if (/initial configuration dialog/i.test(o)) return "setup-dialog";
+  if (!isNormalPrompt(p, m) && /initial configuration dialog/i.test(o)) return "setup-dialog";
   if (/continue with configuration dialog\?/i.test(o)) return "continue-dialog";
   if (/terminate autoinstall/i.test(o)) return "autoinstall-dialog";
   if (/password\s*:/i.test(o)) return "password-prompt";
@@ -294,8 +305,9 @@ function containsPager(output) {
 
 function handleTerminalPrompt(job, raw, phaseBefore) {
   var policy = getTerminalPolicy(job);
+  var promptLooksNormal = isNormalPrompt(job.lastPrompt, job.lastMode);
 
-  if (containsInitialDialog(raw)) {
+  if (!promptLooksNormal && containsInitialDialog(raw)) {
     if (policy.dismissInitialDialog === false || job.dismissInitialDialog === false) {
       failIosJob(job.ticket, "Initial configuration dialog is blocking CLI", "INITIAL_DIALOG_BLOCKING");
       return true;
