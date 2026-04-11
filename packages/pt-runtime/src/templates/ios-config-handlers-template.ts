@@ -45,7 +45,7 @@ function dismissInitialDialogIfNeeded(engine, term) {
   var handled = false;
   var i;
 
-  for (i = 0; i < 3; i++) {
+  for (i = 0; i < 10; i++) {
     var output = term.getOutput ? String(term.getOutput() || '') : '';
     var prompt = term.getPrompt ? String(term.getPrompt() || '') : '';
     var mode = term.getMode ? String(term.getMode() || '') : '';
@@ -153,7 +153,7 @@ function exitConfigMode(engine, term) {
     }
   }
 
-  return true;
+  return false;
 }
 
 // Helper: Run single command
