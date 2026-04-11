@@ -6,12 +6,12 @@ export {
   InterfaceName,
   parseInterfaceName,
   isValidInterfaceName,
-} from "./interface-name.js";
+} from "./interface-name.ts";
 
 export {
   InterfaceDescription,
   parseInterfaceDescription,
-} from "./interface-description.js";
+} from "./interface-description.ts";
 
 export {
   VlanId,
@@ -19,20 +19,20 @@ export {
   parseVlanId,
   parseOptionalVlanId,
   isValidVlanId,
-} from "./vlan-id.js";
+} from "./vlan-id.ts";
 
 export {
   VlanName,
   parseVlanName,
   parseOptionalVlanName,
   isValidVlanName,
-} from "./vlan-name.js";
+} from "./vlan-name.ts";
 
 export {
   VlanRange,
   parseVlanRange,
   isValidVlanRange,
-} from "./vlan-range.js";
+} from "./vlan-range.ts";
 
 export {
   VtpMode,
@@ -45,62 +45,62 @@ export {
   parseVtpVersion,
   type VtpModeType,
   type VtpVersionType,
-} from "./vtp-types.js";
+} from "./vtp-types.ts";
 
 export {
   Hostname,
   parseHostname,
   isValidHostname,
-} from "./hostname.js";
+} from "./hostname.ts";
 
 export {
   Ipv4Address,
   parseIpv4Address,
   isValidIpv4Address,
-} from "./ipv4-address.js";
+} from "./ipv4-address.ts";
 
 export {
   SubnetMask,
   parseSubnetMask,
   isValidSubnetMask,
-} from "./subnet-mask.js";
+} from "./subnet-mask.ts";
 
 export {
   CidrPrefix,
   parseCidrPrefix,
   isValidCidrPrefix,
-} from "./cidr-prefix.js";
+} from "./cidr-prefix.ts";
 
 export {
   RouteTarget,
   parseRouteTarget,
   isValidRouteTarget,
-} from "./route-target.js";
+} from "./route-target.ts";
 
 export {
   DeviceName,
   parseDeviceName,
   isValidDeviceName,
-} from "./device-name.js";
+} from "./device-name.ts";
 
 export {
   PortName,
   parsePortName,
   isValidPortName,
-} from "./port-name.js";
+} from "./port-name.ts";
 
 export {
   CommandId,
   parseCommandId,
   isValidCommandId,
   generateCommandId,
-} from "./command-id.js";
+} from "./command-id.ts";
 
 export {
   MacAddress,
   parseMacAddress,
   isValidMacAddress,
-} from "./mac-address.js";
+} from "./mac-address.ts";
 
 export {
   AdministrativeDistance,
@@ -108,7 +108,7 @@ export {
   isValidAdministrativeDistance,
   WELL_KNOWN_AD,
   type WellKnownAdKey,
-} from "./administrative-distance.js";
+} from "./administrative-distance.ts";
 
 export {
   LeaseTime,
@@ -116,30 +116,30 @@ export {
   fromSeconds,
   standardEnterpriseLease,
   isValidLeaseTime,
-} from "./lease-time.js";
+} from "./lease-time.ts";
 
 export {
   QosTrust,
   parseQosTrust,
   isValidQosTrust,
   type QosTrustMode,
-} from "./qos-trust.js";
+} from "./qos-trust.ts";
 
 export {
   SpanningTreePriority,
   parseSpanningTreePriority,
   isValidSpanningTreePriority,
   type ValidPriority,
-} from "./spanning-tree-priority.js";
+} from "./spanning-tree-priority.ts";
 
 export {
   WildcardMask,
   parseWildcardMask,
   isValidWildcardMask,
-} from "./wildcard-mask.js";
+} from "./wildcard-mask.ts";
 
 export {
   IpWithPrefix,
   parseIpWithPrefix,
   isValidIpWithPrefix,
-} from "./ip-with-prefix.js";
+} from "./ip-with-prefix.ts";
