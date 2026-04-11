@@ -43,6 +43,7 @@ export * from './config/types.ts';
 export * from './config/resolver.ts';
 export * from './config/loader.ts';
 export * from './context/index.ts';
+export * from './memory/index.ts';
 
 // =============================================================================
 // FUSED MODULES (from tools, templates)

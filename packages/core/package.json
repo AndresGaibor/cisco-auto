@@ -16,7 +16,11 @@
     "./executor": "./src/index.ts",
     "./validation": "./src/index.ts",
     "./tools": "./src/index.ts",
-    "./templates": "./src/index.ts"
+    "./templates": "./src/index.ts",
+    "./memory": "./src/memory/index.ts",
+    "./memory/schema": "./src/memory/schema.ts",
+    "./memory/devices": "./src/memory/devices.ts",
+    "./memory/audit": "./src/memory/audit.ts"
   },
   "dependencies": {
     "@cisco-auto/types": "workspace:*",
