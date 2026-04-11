@@ -13,12 +13,17 @@ import type {
   IosConfigApplyResult,
 } from "../../contracts/ios-execution-evidence.js";
 import { getParser, parseShowRunningConfig, parseShowCdpNeighbors, CliSession } from "@cisco-auto/ios-domain";
+import { IosSetupGuard } from "../../domain/ios/session/setup-guard.js";
 
 export class IosExecutionService {
+  private readonly setupGuard: IosSetupGuard;
+
   constructor(
     private bridge: FileBridgePort,
     private generateId: () => string,
-  ) {}
+  ) {
+    this.setupGuard = new IosSetupGuard(bridge);
+  }
 
   private readonly sessions = new Map<string, CliSession>();
 
@@ -147,6 +152,8 @@ export class IosExecutionService {
     command: string,
     options?: { timeout?: number; parse?: boolean; ensurePrivileged?: boolean }
   ): Promise<IosExecutionSuccess<ParsedOutput>> {
+    await this.setupGuard.ensureReady(device);
+
     const result = await this.bridge.sendCommandAndWait<any>("execInteractive", {
       id: this.generateId(),
       device,
@@ -160,28 +167,6 @@ export class IosExecutionService {
 
     const value = result.value;
     const evidence = this.normalizeEvidence(value);
-
-    if (value?.raw) {
-      const setupPatterns = [
-        /initial configuration dialog/i,
-        /Would you like to enter the initial configuration dialog\?/i,
-        /Would you like to see the current interface summary\?/i,
-        /Do you want to configure Vlan1 interface\?/i,
-        /Enter enable secret:/i,
-        /Enter enable password:/i,
-        /Enter virtual terminal password:/i,
-        /Configuring global parameters:/i,
-        /Configuring interface parameters:/i,
-        /Configure SNMP Network Management\?/i,
-      ];
-
-      for (const pattern of setupPatterns) {
-        if (pattern.test(value.raw)) {
-          console.warn(`[ios-service] WARNING: Device '${device}' está en modo setup interactivo. El comando puede no ejecutarse correctamente. Sal del setup mode y guarda con 'write memory'.`);
-          break;
-        }
-      }
-    }
 
     if (!value || value.ok === false) {
       this.throwNormalizedIosError("execInteractive", device, value);
