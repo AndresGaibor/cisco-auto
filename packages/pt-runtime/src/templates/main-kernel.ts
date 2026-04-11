@@ -68,6 +68,7 @@ var isShuttingDown = false;
 var isRunning = false;
 
 var activeCommand = null;
+var activeCommandFilename = null;
 var runtimeDirty = false;
 var runtimeLastMtime = 0;
 
@@ -149,7 +150,7 @@ function startLeaseWaitLoop() {
 }
 
 function activateRuntimeAfterLease() {
-  if (commandPollInterval || deferredPollInterval) {
+  if (commandPollInterval || deferredPollInterval || heartbeatInterval) {
     dprint("[PT] Kernel already active");
     return;
   }
@@ -160,6 +161,7 @@ function activateRuntimeAfterLease() {
 
   commandPollInterval = setInterval(pollCommandQueue, 250);
   deferredPollInterval = setInterval(pollDeferredJobs, 100);
+  heartbeatInterval = setInterval(writeHeartbeat, 1000);
 
   dprint("[PT] Kernel ready");
 }
@@ -378,15 +380,38 @@ function createRuntimeApi() {
 
 function listQueuedCommandFiles() {
   try {
-    var files = fm.getFilesInDirectory(COMMANDS_DIR);
-    if (!files) return [];
+    // Buscar en AMBOS directorios: COMMANDS_DIR (legacy) e IN_FLIGHT_DIR (FileBridge)
     var jsonFiles = [];
-    for (var i = 0; i < files.length; i++) {
-      if (files[i].indexOf(".json") !== -1) {
-        jsonFiles.push(files[i]);
+    
+    //Buscar en COMMANDS_DIR (legacy)
+    try {
+      var files = fm.getFilesInDirectory(COMMANDS_DIR);
+      if (files) {
+        for (var i = 0; i < files.length; i++) {
+          if (files[i].indexOf(".json") !== -1) {
+            jsonFiles.push(files[i]);
+          }
+        }
       }
-    }
+    } catch (e) {}
+    
+    // Buscar en IN_FLIGHT_DIR (FileBridge V2)
+    try {
+      var files = fm.getFilesInDirectory(IN_FLIGHT_DIR);
+      if (files) {
+        for (var i = 0; i < files.length; i++) {
+          var fname = files[i];
+          if (fname.indexOf(".json") !== -1 && jsonFiles.indexOf(fname) === -1) {
+            jsonFiles.push(fname);
+          }
+        }
+      }
+    } catch (e) {}
+    
     jsonFiles.sort();
+    if (jsonFiles.length > 0) {
+      dprint("[queue] Found " + jsonFiles.length + " commands: " + jsonFiles.join(", "));
+    }
     return jsonFiles;
   } catch (e) {
     dprint("[queue] list error: " + String(e));
@@ -395,11 +420,39 @@ function listQueuedCommandFiles() {
 }
 
 function countQueueFiles() {
+  var count = 0;
   try {
-    var files = fm.getFilesInDirectory(COMMANDS_DIR);
-    return files ? files.length : 0;
+    // Contar ambos directorios
+    try {
+      var files = fm.getFilesInDirectory(COMMANDS_DIR);
+      if (files) count += files.length;
+    } catch (e) {}
+    try {
+      var files = fm.getFilesInDirectory(IN_FLIGHT_DIR);
+      if (files) count += files.length;
+    } catch (e) {}
+    return count;
   } catch (e) {
     return 0;
+  }
+}
+
+// ============================================================================
+// Heartbeat
+// ============================================================================
+
+function writeHeartbeat() {
+  try {
+    var hbPath = DEV_DIR + "/heartbeat.json";
+    var hb = {
+      ts: Date.now(),
+      running: isRunning,
+      activeCommand: activeCommand ? activeCommand.id : null,
+      queued: countQueueFiles()
+    };
+    fm.writePlainTextToFile(hbPath, JSON.stringify(hb));
+  } catch (e) {
+    dprint("[heartbeat] Error: " + String(e));
   }
 }
 
@@ -411,35 +464,59 @@ function claimNextCommand() {
     var srcPath = COMMANDS_DIR + "/" + filename;
     var dstPath = IN_FLIGHT_DIR + "/" + filename;
 
-    var moved = false;
+    var cmd = null;
+    
+    // Determinar la ruta correcta: IN_FLIGHT_DIR tiene prioridad
+    var readPath = null;
+    var writePath = null;
     try {
-      if (!fm.fileExists(srcPath)) continue;
-      fm.moveSrcFileToDestFile(srcPath, dstPath, false);
-      moved = true;
-      dprint("[PT] Claimed: " + filename);
+      if (fm.fileExists(dstPath)) {
+        readPath = dstPath;
+        writePath = null;
+      } else if (fm.fileExists(srcPath)) {
+        readPath = srcPath;
+        writePath = dstPath;
+      }
     } catch (e) {
       continue;
     }
 
-    if (moved) {
-      try {
-        var content = fm.getFileContents(dstPath);
-        var cmd = JSON.parse(content);
+    if (!readPath) continue;
 
-        if (cmd && cmd.id) {
-          writeCommandTracePatch(cmd.id, {
-            id: cmd.id,
-            seq: cmd.seq,
-            type: cmd.payload && cmd.payload.type,
-            claimedAt: Date.now()
-          });
-        }
-
-        return { filename: filename, command: cmd };
-      } catch (e) {
-        dprint("[PT] Claimed file invalid: " + filename);
-        moveToDeadLetter(dstPath, e);
+    try {
+      var content = fm.getFileContents(readPath);
+      if (!content || content.length < 10) {
+        dprint("[PT] Empty file: " + filename);
+        continue;
       }
+      cmd = JSON.parse(content);
+
+      if (cmd && cmd.id) {
+        writeCommandTracePatch(cmd.id, {
+          id: cmd.id,
+          seq: cmd.seq,
+          type: cmd.payload && cmd.payload.type,
+          claimedAt: Date.now()
+        });
+        
+        //Mover a in-flight si veio de commands/
+        if (writePath) {
+          try {
+            fm.moveSrcFileToDestFile(readPath, writePath, false);
+            dprint("[PT] Moved to in-flight: " + filename);
+          } catch (e) {
+            // Si falla el move, eliminar el original para evitar re-reclamo
+            dprint("[PT] Move failed, removing original: " + String(e));
+            try { fm.removeFile(readPath); } catch(e2) {}
+          }
+        }
+        
+        dprint("[PT] Claimed: " + filename);
+        return { filename: filename, command: cmd };
+      }
+    } catch (e) {
+      dprint("[PT] Invalid command file: " + filename + " - " + String(e));
+      if (readPath) moveToDeadLetter(readPath, e);
     }
   }
 
@@ -486,6 +563,7 @@ function pollCommandQueue() {
   if (!claimed) return;
 
   activeCommand = claimed.command;
+  activeCommandFilename = claimed.filename;
   lastCommandId = claimed.command.id;
 
   executeActiveCommand();
@@ -506,14 +584,20 @@ function executeActiveCommand() {
     });
   }
 
+  dprint("[PT] EXEC payload=" + JSON.stringify(cmd.payload).substring(0, 200));
+
   try {
     if (!runtimeFn) {
       result = { ok: false, error: "Runtime not loaded" };
+      dprint("[PT] Runtime not loaded");
     } else {
       var api = createRuntimeApi();
+      dprint("[PT] Calling runtime with payload.type=" + (cmd.payload && cmd.payload.type));
       result = runtimeFn(cmd.payload, api);
+      dprint("[PT] Runtime returned: " + JSON.stringify(result).substring(0, 100));
     }
   } catch (e) {
+    dprint("[PT] RUNTIME EXCEPTION: " + String(e));
     result = {
       ok: false,
       error: String(e),
@@ -558,22 +642,34 @@ function executeActiveCommand() {
     device: cmd.payload && cmd.payload.device
   });
 
-  cleanupActiveInFlight(cmd);
+  cleanupActiveInFlight();
 
   if (!result || !result.deferred) {
     activeCommand = null;
+    activeCommandFilename = null;
   }
 
   dprint("[PT] Executed: " + (cmd.payload && cmd.payload.type) + " [" + cmd.id + "]");
 }
 
-function cleanupActiveInFlight(cmd) {
+function cleanupActiveInFlight() {
+  if (!activeCommandFilename) return;
   try {
-    var inFlightPath = IN_FLIGHT_DIR + "/" + (cmd.seq + "-" + (cmd.payload && cmd.payload.type) + ".json");
+    // Limpiar in-flight/
+    var inFlightPath = IN_FLIGHT_DIR + "/" + activeCommandFilename;
     if (fm.fileExists(inFlightPath)) {
       fm.removeFile(inFlightPath);
+      dprint("[PT] Cleaned up in-flight: " + activeCommandFilename);
     }
-  } catch (e) {}
+    // Limpiar commands/ por si quedó残留
+    var commandsPath = COMMANDS_DIR + "/" + activeCommandFilename;
+    if (fm.fileExists(commandsPath)) {
+      fm.removeFile(commandsPath);
+      dprint("[PT] Cleaned up commands: " + activeCommandFilename);
+    }
+  } catch (e) {
+    dprint("[PT] Cleanup error: " + String(e));
+  }
 }
 
 // ============================================================================

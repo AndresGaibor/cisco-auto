@@ -23,6 +23,7 @@ import { generateInspectHandlersTemplate } from "./inspect-handlers-template";
 import { generateCanvasHandlersTemplate } from "./canvas-handlers-template";
 import { generateHelpersTemplate } from "./helpers-template";
 import { generateSessionTemplate } from "./session-template";
+import { generateConstantsTemplate } from "./constants-template";
 
 // Re-export handlers for use in compose.ts
 export { generateDeviceHandlersTemplate, generateIosConfigHandlersTemplate, generateIosExecHandlersTemplate, generateInspectHandlersTemplate, generateCanvasHandlersTemplate, generateHelpersTemplate, generateSessionTemplate };
@@ -1826,6 +1827,12 @@ ${TERMINAL_EVENT_HANDLERS_TEMPLATE}
 ${INTERNAL_ENDPOINTS_TEMPLATE}
 
 // ============================================================================
+// Constants (DEVICE_TYPE_NAMES, CABLE_TYPES, etc.)
+// ============================================================================
+
+${generateConstantsTemplate()}
+
+// ============================================================================
 // IOS Configuration Handlers
 // ============================================================================
 
@@ -1878,8 +1885,13 @@ ${generateCanvasHandlersTemplate()}
 // ============================================================================
 
 ${DISPATCHER_TEMPLATE}
-`;
 
+// ============================================================================
+// Entry Point - El runtime se invoca como función(payload, api)
+// ============================================================================
+
+return dispatch(payload, { ipc: api.ipc, dprint: api.dprint });
+`;
   return code;
 }
 
