@@ -439,11 +439,8 @@ function handleExecInteractive(payload) {
           term.enterCommand(" ");
         }
 
-        if (engine.getState().awaitingConfirm) {
-          recorder.record("confirmAnswered", {});
-          engine.answerConfirm("y");
-          term.enterCommand("y");
-        }
+        // NOTE: Auto-confirm "y" removed - caused issues with commands that start with certain patterns
+        // Confirmation should only be handled by explicit user intent, not automatic detection
 
       } catch(e) {
         recorder.record("exception", { message: String(e) });
