@@ -4,233 +4,66 @@
 
 import type { FileBridgePort } from "../ports/file-bridge.port.js";
 import type { TopologyCachePort } from "../ports/topology-cache.port.js";
-import type { DeviceState } from "../../contracts/index.js";
-import { validateModuleExists, validateModuleSlotCompatible } from "@cisco-auto/pt-runtime/value-objects";
+import { DeviceQueryService } from "./device-query-service.js";
+import { DeviceMutationService } from "./device-mutation-service.js";
 
 export class DeviceService {
+  private readonly query: DeviceQueryService;
+  private readonly mutation: DeviceMutationService;
+
   constructor(
-    private bridge: FileBridgePort,
-    private cache: TopologyCachePort,
-    private generateId: () => string
-  ) {}
-
-  /**
-   * Inspect a specific device
-   */
-  async inspect(device: string, includeXml = false): Promise<DeviceState> {
-    if (!includeXml) {
-      const cachedDevice = this.cache.getDevice(device);
-
-      if (cachedDevice) {
-        return cachedDevice;
-      }
-    }
-
-    const result = await this.bridge.sendCommandAndWait<DeviceState>(
-      "inspect",
-      {
-        id: this.generateId(),
-        device,
-        includeXml,
-      },
-      30000,
-    );
-
-    if (!result.value) {
-      throw new Error(`Failed to inspect device '${device}'`);
-    }
-
-    return result.value;
+    bridge: FileBridgePort,
+    cache: TopologyCachePort,
+    generateId: () => string,
+  ) {
+    this.query = new DeviceQueryService(bridge, cache, generateId);
+    this.mutation = new DeviceMutationService(bridge, this.query, generateId);
   }
 
-  /**
-   * Add a module to a device
-   */
-  async addModule(device: string, slot: number, module: string): Promise<void> {
-    const currentDevice = await this.inspect(device, false);
-    const moduleValidation = validateModuleExists(module);
-    if (!moduleValidation.valid) {
-      throw new Error(moduleValidation.error ?? `Módulo inválido: ${module}`);
-    }
-
-    const slotValidation = validateModuleSlotCompatible(currentDevice.model, slot, module);
-    if (!slotValidation.valid) {
-      throw new Error(slotValidation.error ?? `El módulo ${module} no es válido para ${currentDevice.model}`);
-    }
-
-    await this.bridge.sendCommandAndWait("addModule", {
-      id: this.generateId(),
-      device,
-      slot,
-      module,
-    });
+  inspect(device: string, includeXml = false) {
+    return this.query.inspect(device, includeXml);
   }
 
-  /**
-   * Remove a module from a device
-   */
-  async removeModule(device: string, slot: number): Promise<void> {
-    await this.bridge.sendCommandAndWait("removeModule", {
-      id: this.generateId(),
-      device,
-      slot,
-    });
+  addModule(device: string, slot: number, module: string) {
+    return this.mutation.addModule(device, slot, module);
   }
 
-  /**
-   * Configure a host (PC/Server) IP settings
-   */
-  async configHost(
+  removeModule(device: string, slot: number) {
+    return this.mutation.removeModule(device, slot);
+  }
+
+  configHost(device: string, options: { ip?: string; mask?: string; gateway?: string; dns?: string; dhcp?: boolean }) {
+    return this.mutation.configHost(device, options);
+  }
+
+  hardwareInfo(device: string) {
+    return this.query.hardwareInfo(device);
+  }
+
+  hardwareCatalog(deviceType?: string) {
+    return this.query.hardwareCatalog(deviceType);
+  }
+
+  commandLog(device?: string, limit = 100) {
+    return this.query.commandLog(device, limit);
+  }
+
+  configureHostDhcp(device: string) {
+    return this.mutation.configureHostDhcp(device);
+  }
+
+  configureDhcpServer(
     device: string,
-    options: {
-      ip?: string;
-      mask?: string;
-      gateway?: string;
-      dns?: string;
-      dhcp?: boolean;
-    }
-  ): Promise<void> {
-    await this.bridge.sendCommandAndWait("configHost", {
-      id: this.generateId(),
-      device,
-      ...options,
-    });
+    options: { poolName: string; network: string; subnetMask: string; defaultRouter?: string; dnsServers?: string[]; excludedAddresses?: string[]; leaseTime?: number; domainName?: string; }
+  ) {
+    return this.mutation.configureDhcpServer(device, options);
   }
 
-  /**
-   * Get hardware info for a device
-   */
-  async hardwareInfo(device: string): Promise<unknown> {
-    const result = await this.bridge.sendCommandAndWait("hardwareInfo", {
-      id: this.generateId(),
-      device,
-    });
-    return result.value;
+  inspectDhcpServer(device: string) {
+    return this.query.inspectDhcpServer(device);
   }
 
-  /**
-   * Get hardware catalog
-   */
-  async hardwareCatalog(deviceType?: string): Promise<unknown> {
-    const result = await this.bridge.sendCommandAndWait("hardwareCatalog", {
-      id: this.generateId(),
-      deviceType,
-    });
-    return result.value;
-  }
-
-  /**
-   * Get command log
-   */
-  async commandLog(device?: string, limit = 100): Promise<unknown[]> {
-    const result = await this.bridge.sendCommandAndWait<unknown[]>("commandLog", {
-      id: this.generateId(),
-      device,
-      limit,
-    });
-    return result.value ?? [];
-  }
-
-  /**
-   * Configure a host (PC/Server) to use DHCP for IP configuration
-   */
-  async configureHostDhcp(device: string): Promise<void> {
-    await this.configHost(device, { dhcp: true });
-  }
-
-  /**
-   * Configure DHCP server on a device
-   */
-  async configureDhcpServer(
-    device: string,
-    options: {
-      poolName: string;
-      network: string;
-      subnetMask: string;
-      defaultRouter?: string;
-      dnsServers?: string[];
-      excludedAddresses?: string[];
-      leaseTime?: number;
-      domainName?: string;
-    }
-  ): Promise<void> {
-    await this.bridge.sendCommandAndWait("configureDhcpServer", {
-      id: this.generateId(),
-      device,
-      ...options,
-    });
-  }
-
-  /**
-   * Inspect DHCP server configuration on a device
-   */
-  async inspectDhcpServer(
-    device: string
-  ): Promise<{
-    ok: boolean;
-    device: string;
-    pools: Array<{
-      name: string;
-      network: string;
-      subnetMask: string;
-      defaultRouter?: string;
-      dnsServers?: string[];
-      leaseTime?: number;
-      domainName?: string;
-    }>;
-    excludedAddresses?: string[];
-    poolCount: number;
-    excludedAddressCount: number;
-  }> {
-    const result = await this.bridge.sendCommandAndWait<{
-      ok: boolean;
-      device: string;
-      pools: Array<{
-        name: string;
-        network: string;
-        subnetMask: string;
-        defaultRouter?: string;
-        dnsServers?: string[];
-        leaseTime?: number;
-        domainName?: string;
-      }>;
-      excludedAddresses?: string[];
-      poolCount: number;
-      excludedAddressCount: number;
-    }>("inspectDhcpServer", {
-      id: this.generateId(),
-      device,
-    });
-
-    if (!result.value) {
-      throw new Error(`Failed to inspect DHCP server on device '${device}'`);
-    }
-
-    return result.value;
-  }
-
-  /**
-   * Move a device to a new position on the canvas
-   */
-  async moveDevice(
-    name: string,
-    x: number,
-    y: number
-  ): Promise<{ ok: true; name: string; x: number; y: number } | { ok: false; error: string; code: string }> {
-    const result = await this.bridge.sendCommandAndWait<{ ok: boolean; name?: string; x?: number; y?: number; error?: string; code?: string }>(
-      "moveDevice",
-      {
-        id: this.generateId(),
-        name,
-        x,
-        y,
-      },
-    );
-
-    const value = result.value;
-    if (value?.ok) {
-      return { ok: true, name: value.name!, x: value.x!, y: value.y! };
-    }
-    return { ok: false, error: value?.error ?? "Unknown error", code: value?.code ?? "UNKNOWN" };
+  moveDevice(name: string, x: number, y: number) {
+    return this.mutation.moveDevice(name, x, y);
   }
 }

@@ -228,12 +228,6 @@ export class IosVerificationService {
         return this.makeResult(true, !!found, checks, warnings, sources);
       }
 
-      const poolMatch = raw.match(new RegExp(`ip dhcp pool\\s+${poolName.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}`, 'i'));
-      if (poolMatch) {
-        checks.push({ name: 'dhcp-pool-present', ok: true, details: { poolName } });
-        return this.makeResult(true, true, checks, warnings, sources);
-      }
-
       // fallback raw
       var re = new RegExp('^S\\s+' + network.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") + "\\b.*via\\s+" + nextHop.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&"), 'im');
       if (re.test(raw)) {
