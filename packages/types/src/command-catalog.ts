@@ -131,18 +131,36 @@ export const PUBLIC_COMMAND_CATALOG: CommandCatalogEntry[] = [
     resultSchemaName: 'RemoveLinkResultSchema',
   },
 
-  // Host Configuration
-  {
-    type: 'configHost',
-    visibility: 'public',
-    execution: 'immediate',
-    handler: 'handleConfigHost',
-    service: 'device',
-    payloadSchemaName: 'ConfigHostPayloadSchema',
-    resultSchemaName: 'ConfigHostResultSchema',
-  },
+   // Host Configuration
+   {
+     type: 'configHost',
+     visibility: 'public',
+     execution: 'immediate',
+     handler: 'handleConfigHost',
+     service: 'device',
+     payloadSchemaName: 'ConfigHostPayloadSchema',
+     resultSchemaName: 'ConfigHostResultSchema',
+   },
+   {
+     type: 'configureDhcpServer',
+     visibility: 'public',
+     execution: 'immediate',
+     handler: 'handleConfigureDhcpServer',
+     service: 'device',
+     payloadSchemaName: 'ConfigureDhcpServerPayloadSchema',
+     resultSchemaName: 'ConfigureDhcpServerResultSchema',
+   },
+   {
+     type: 'inspectDhcpServer',
+     visibility: 'public',
+     execution: 'immediate',
+     handler: 'handleInspectDhcpServer',
+     service: 'device',
+     payloadSchemaName: 'InspectDhcpServerPayloadSchema',
+     resultSchemaName: 'InspectDhcpServerResultSchema',
+   },
 
-  // IOS Commands
+   // IOS Commands
   {
     type: 'configIos',
     visibility: 'public',
@@ -334,11 +352,13 @@ export const COMMAND_TYPES = {
   EXEC_IOS: "execIos",
   EXEC_INTERACTIVE: "execInteractive",
   
-  // Snapshot & Inspect
-  SNAPSHOT: "snapshot",
-  INSPECT: "inspect",
-  
-  // Hardware Commands
+   // Snapshot & Inspect
+   SNAPSHOT: "snapshot",
+   INSPECT: "inspect",
+   CONFIGURE_DHCP_SERVER: "configureDhcpServer",
+   INSPECT_DHCP_SERVER: "inspectDhcpServer",
+   
+   // Hardware Commands
   HARDWARE_INFO: "hardwareInfo",
   HARDWARE_CATALOG: "hardwareCatalog",
   

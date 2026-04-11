@@ -218,6 +218,66 @@ export const ResolveCapabilitiesPayloadSchema = z.object({
   device: z.string(),
 });
 
+// ============================================================================
+// DHCP Server Commands
+// ============================================================================
+
+export const ConfigureDhcpServerPayloadSchema = z.object({
+  id: z.string(),
+  type: z.literal('configureDhcpServer'),
+  device: z.string(),
+  poolName: z.string(),
+  network: z.string(),
+  subnetMask: z.string(),
+  defaultRouter: z.string().optional(),
+  dnsServers: z.array(z.string()).optional(),
+  excludedAddresses: z.array(z.string()).optional(),
+  leaseTime: z.number().optional(),
+  domainName: z.string().optional(),
+});
+
+export const ConfigureDhcpServerResultSchema = z.object({
+  id: z.string(),
+  type: z.literal('configureDhcpServer'),
+  ok: z.boolean(),
+  device: z.string(),
+  poolName: z.string(),
+  network: z.string(),
+  subnetMask: z.string(),
+  defaultRouter: z.string().optional(),
+  dnsServers: z.array(z.string()).optional(),
+  excludedAddresses: z.array(z.string()).optional(),
+  leaseTime: z.number().optional(),
+  domainName: z.string().optional(),
+  poolCount: z.number().int().nonnegative(),
+  excludedAddressCount: z.number().int().nonnegative(),
+});
+
+export const InspectDhcpServerPayloadSchema = z.object({
+  id: z.string(),
+  type: z.literal('inspectDhcpServer'),
+  device: z.string(),
+});
+
+export const InspectDhcpServerResultSchema = z.object({
+  id: z.string(),
+  type: z.literal('inspectDhcpServer'),
+  ok: z.boolean(),
+  device: z.string(),
+  pools: z.array(z.object({
+    name: z.string(),
+    network: z.string(),
+    subnetMask: z.string(),
+    defaultRouter: z.string().optional(),
+    dnsServers: z.array(z.string()).optional(),
+    leaseTime: z.number().optional(),
+    domainName: z.string().optional(),
+  })).optional(),
+  excludedAddresses: z.array(z.string()).optional(),
+  poolCount: z.number().int().nonnegative(),
+  excludedAddressCount: z.number().int().nonnegative(),
+});
+
 export const ExecInteractivePayloadSchema = z.object({
   id: z.string(),
   type: z.literal('execInteractive'),

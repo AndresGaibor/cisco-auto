@@ -15,6 +15,7 @@ import type {
   ShowVlan,
   ShowIpRoute,
   ShowRunningConfig,
+  ShowCdpNeighbors,
   ParsedOutput,
   AddLinkPayload,
   DevicesInRectResult,
@@ -229,6 +230,10 @@ export class PTController {
     return this.iosService.showRunningConfig(device);
   }
 
+  async showCdpNeighbors(device: string): Promise<ShowCdpNeighbors> {
+    return this.iosService.showCdpNeighbors(device);
+  }
+
   async execInteractive(
     device: string,
     command: string,
@@ -253,9 +258,46 @@ export class PTController {
   async configIosWithResult(
     device: string,
     commands: string[],
-    options?: { save?: boolean }
+    options?: { save?: boolean } | undefined
   ): Promise<IosConfigApplyResult> {
-    return this.iosService.configIos(device, commands, options);
+    return this.iosService.configIosWithResult(device, commands, options);
+  }
+
+  async configureDhcpServer(
+    device: string,
+    options: {
+      poolName: string;
+      network: string;
+      subnetMask: string;
+      defaultRouter?: string;
+      dnsServers?: string[];
+      excludedAddresses?: string[];
+      leaseTime?: number;
+      domainName?: string;
+    }
+  ): Promise<void> {
+    await this.deviceService.configureDhcpServer(device, options);
+  }
+
+  async inspectDhcpServer(
+    device: string
+  ): Promise<{
+    ok: boolean;
+    device: string;
+    pools: Array<{
+      name: string;
+      network: string;
+      subnetMask: string;
+      defaultRouter?: string;
+      dnsServers?: string[];
+      leaseTime?: number;
+      domainName?: string;
+    }>;
+    excludedAddresses?: string[];
+    poolCount: number;
+    excludedAddressCount: number;
+  }> {
+    return this.deviceService.inspectDhcpServer(device);
   }
 
   async showParsed<T = ParsedOutput>(

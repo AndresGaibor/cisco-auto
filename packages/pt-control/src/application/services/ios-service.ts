@@ -9,6 +9,7 @@ import type {
   ShowVlan,
   ShowIpRoute,
   ShowRunningConfig,
+  ShowCdpNeighbors,
   DeviceState,
 } from "../../contracts/index.js";
 import type {
@@ -30,6 +31,7 @@ import {
   planConfigureDhcpRelay,
   getParser,
   parseShowRunningConfig,
+  parseShowCdpNeighbors,
 } from "@cisco-auto/ios-domain";
 import { resolveCapabilitySet } from "@cisco-auto/ios-domain";
 import type { CapabilitySet } from "@cisco-auto/ios-domain";
@@ -380,6 +382,11 @@ export class IosService {
     const normalizedRaw = marker >= 0 ? raw.slice(marker) : raw;
 
     return parseShowRunningConfig(normalizedRaw);
+  }
+
+  async showCdpNeighbors(device: string): Promise<ShowCdpNeighbors> {
+    const result = await this.showParsed<ShowCdpNeighbors>(device, "show cdp neighbors");
+    return result.parsed ?? parseShowCdpNeighbors(result.raw);
   }
 
   // ==========================================================================
