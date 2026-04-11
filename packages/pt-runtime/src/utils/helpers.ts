@@ -130,9 +130,13 @@ export const HandlerErrorCode = {
   COMMAND_FAILED: "COMMAND_FAILED",
   SESSION_ERROR: "SESSION_ERROR",
   INTERNAL_ERROR: "INTERNAL_ERROR",
+  RECT_NOT_FOUND: "RECT_NOT_FOUND",
+  DEVICE_CREATION_FAILED: "DEVICE_CREATION_FAILED",
+  INVALID_PORT: "INVALID_PORT",
+  UNSUPPORTED_OPERATION: "UNSUPPORTED_OPERATION",
 } as const;
 
-export type HandlerErrorCode = (typeof HandlerErrorCode)[keyof typeof HandlerErrorCode];
+export type HandlerErrorCode = (typeof HandlerErrorCode)[keyof typeof HandlerErrorCode] | string | undefined;
 
 /** Structured error interface */
 export interface HandlerError {

@@ -168,9 +168,10 @@ const LIFECYCLE_RULE_C = {
 };
 
 // Regla D: runtime.js no debe tener jobs + listeners + polling síncrono mezclados
+// En la nueva arquitectura, IOS_JOBS puede estar en runtime, pero no con listeners + sync polling
 const LIFECYCLE_RULE_D = {
   pattern: /IOS_JOBS[\s\S]{0,200}attachTerminalListeners[\s\S]{0,200}while\s*\(\s*attempt\s*<\s*maxAttempts/,
-  reason: "WARNING: runtime.js mixes IOS_JOBS + attachTerminalListeners + sync polling - consider moving to main.js",
+  reason: "ARCHITECTURE VIOLATION: runtime.js mixes IOS_JOBS + attachTerminalListeners + sync polling",
 };
 
 // ============================================================================
@@ -269,6 +270,11 @@ function findLifecycleViolations(code: string, target: "main" | "runtime"): stri
   }
   
   // Regla D: Solo aplica a runtime.js - ADVERTENCIA (no error en validateMainJs)
+  if (target === "runtime") {
+    if (LIFECYCLE_RULE_D.pattern.test(code)) {
+      errors.push(`ARCHITECTURE VIOLATION: ${LIFECYCLE_RULE_D.reason}`);
+    }
+  }
   
   return errors;
 }
@@ -455,28 +461,23 @@ export function validateRuntimeJs(code: string): ValidationResult {
     }
   }
   
-  // 7. Check deferred support - warning
+  // 3. Check deferred support - warning
   if (!code.includes("deferred")) {
     warnings.push("runtime.js should support deferred commands");
   }
-  
-  // 8. Check poll handler - warning
+
+  // 4. Check poll handler - warning
   if (!code.includes("handlePollDeferred")) {
     warnings.push("runtime.js should have handlePollDeferred");
   }
+
+  // 5. Lifecycle violations - Regla D aplica a runtime.js
+  const lifecycleErrors = findLifecycleViolations(code, "runtime");
+  errors.push(...lifecycleErrors);
   
   // Warnings
   if (!code.includes("IOS_JOBS")) {
     warnings.push("runtime.js does not define IOS_JOBS - job system may not work");
-  }
-  
-  // Regla D: runtime.js no debe mezclar jobs + listeners + sync polling
-  const hasJobs = code.includes("IOS_JOBS");
-  const hasListeners = code.includes("attachTerminalListeners") || code.includes("TERMINAL_LISTENERS");
-  const hasSyncPolling = /while\s*\(\s*\w+\s*<\s*\w+Attempts/.test(code);
-
-  if (hasJobs && hasListeners && hasSyncPolling) {
-    errors.push("ARCHITECTURE VIOLATION: runtime.js mixes IOS_JOBS + attachTerminalListeners + sync polling - this can crash PT on stop");
   }
   
   const metadata = {

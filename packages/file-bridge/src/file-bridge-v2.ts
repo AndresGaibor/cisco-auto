@@ -75,7 +75,7 @@ export class FileBridgeV2 extends EventEmitter {
 
     this.leaseManager = new LeaseManager(
       this.paths.leaseFile(),
-      options.leaseTtlMs ?? 5000,
+      options.leaseTtlMs ?? 30000,
     );
     this.commandProcessor = new CommandProcessor(this.paths, this.eventWriter, this.seq);
     this.crashRecovery = new CrashRecovery(this.paths, this.seq, this.eventWriter, this.leaseManager);
@@ -131,7 +131,7 @@ export class FileBridgeV2 extends EventEmitter {
     // FASE 8: Only start lease renewal if lease is valid
     this.leaseTimer = setInterval(() => {
       this.leaseManager.renewLease();
-    }, this.options.leaseIntervalMs ?? 1_000);
+    }, this.options.leaseIntervalMs ?? 5_000);
 
     // FASE 8: Only start consumer if we have valid lease
     this.consumer.start();

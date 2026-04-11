@@ -82,6 +82,7 @@ interface RuntimeErrorResult {
     paging?: boolean;
     autoDismissedInitialDialog?: boolean;
   };
+  [key: string]: unknown;
 }
 
 interface RuntimeSuccessResult {

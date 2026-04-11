@@ -27,16 +27,28 @@ const LOOP_INTERVAL_MS = 4000; // 4 segundos
 const HEARTBEAT_STALE_MS = 15000; // 15 segundos sin actualización
 const FAILURE_THRESHOLD = 3; // Apagar después de 3 ciclos seguidos fallando
 
+// Grace periods para esperar a que PT conecte
+const STARTUP_GRACE_PERIOD_MS = 120000; // 2 minutos al inicio
+const POST_DISCONNECT_GRACE_MS = 60000; // 1 minuto después de desconectar PT
+
 interface SupervisorState {
+  startedAt: number;
+  inGracePeriod: boolean;
+  gracePeriodEndsAt: number;
   consecutiveHeartbeatFailures: number;
   consecutiveBridgeFailures: number;
   lastHealthyTs: number;
+  ptWasConnected: boolean;
 }
 
 let state: SupervisorState = {
+  startedAt: Date.now(),
+  inGracePeriod: true,
+  gracePeriodEndsAt: Date.now() + STARTUP_GRACE_PERIOD_MS,
   consecutiveHeartbeatFailures: 0,
   consecutiveBridgeFailures: 0,
   lastHealthyTs: Date.now(),
+  ptWasConnected: false,
 };
 
 let running = true;
@@ -203,12 +215,37 @@ async function cycle() {
     const topology = await collectTopologyHealth();
     const bridge = await collectBridgeHealth();
 
-    // Actualizar contadores de fallos
-    if (heartbeat.state === "ok" && bridge.ready && topology.health === "healthy") {
+    const now = Date.now();
+    const elapsedSinceStart = now - state.startedAt;
+    const inGracePeriod = state.inGracePeriod && now < state.gracePeriodEndsAt;
+
+    // Detectar conexión/desconexión de PT
+    const ptJustConnected = heartbeat.state === "ok" && !state.ptWasConnected;
+    const ptJustDisconnected = heartbeat.state !== "ok" && state.ptWasConnected;
+
+    if (ptJustConnected) {
+      state.ptWasConnected = true;
+      state.inGracePeriod = false;
       state.consecutiveHeartbeatFailures = 0;
       state.consecutiveBridgeFailures = 0;
-      state.lastHealthyTs = Date.now();
-    } else {
+      state.lastHealthyTs = now;
+      console.log("[supervisor] PT connected, exiting grace period");
+    }
+
+    if (ptJustDisconnected) {
+      state.ptWasConnected = false;
+      state.inGracePeriod = true;
+      state.gracePeriodEndsAt = now + POST_DISCONNECT_GRACE_MS;
+      console.log("[supervisor] PT disconnected, entering grace period");
+    }
+
+    // Calcular grace period remaining para logging
+    const graceRemainingSec = inGracePeriod 
+      ? Math.round((state.gracePeriodEndsAt - now) / 1000) 
+      : 0;
+
+    // Actualizar contadores de fallos (solo fuera del grace period)
+    if (!inGracePeriod) {
       if (heartbeat.state !== "ok") {
         state.consecutiveHeartbeatFailures++;
       } else {
@@ -226,16 +263,25 @@ async function cycle() {
     const status: ContextStatus = {
       schemaVersion: "1.0",
       updatedAt: new Date().toISOString(),
+      mode: inGracePeriod 
+        ? "waiting-for-pt" 
+        : (heartbeat.state === "ok" ? "active" : "shutting-down"),
+      gracePeriod: {
+        active: inGracePeriod,
+        startedAt: new Date(state.startedAt).toISOString(),
+        endsAt: new Date(state.gracePeriodEndsAt).toISOString(),
+        remainingMs: inGracePeriod ? Math.max(0, state.gracePeriodEndsAt - now) : 0,
+      },
       heartbeat,
       bridge,
       topology,
-      warnings:
-        heartbeat.state === "stale"
-          ? ["Heartbeat stale - PT podría no estar respondiendo"]
-          : [],
+      warnings: inGracePeriod
+        ? [`Waiting for PT (${Math.round(elapsedSinceStart / 1000)}s / ${STARTUP_GRACE_PERIOD_MS / 1000}s grace period)`]
+        : (heartbeat.state === "stale" ? ["Heartbeat stale - PT no responde"] : []),
       notes: [
         `Supervisor PID: ${process.pid}`,
-        `Health cycle: ${state.consecutiveHeartbeatFailures} HB failures, ${state.consecutiveBridgeFailures} bridge failures`,
+        `Health: ${state.consecutiveHeartbeatFailures} HB fails, ${state.consecutiveBridgeFailures} bridge fails`,
+        inGracePeriod ? `Grace period: ${graceRemainingSec}s remaining` : "Grace period: inactive",
       ],
     };
 
@@ -245,21 +291,31 @@ async function cycle() {
     updateLock();
 
     // Decidir si continuar
-    if (state.consecutiveBridgeFailures >= FAILURE_THRESHOLD) {
-      console.log(
-        `[supervisor] Bridge inestable, reiniciando controller (Bridge failures: ${state.consecutiveBridgeFailures})`
-      );
-      try {
-        await restartController("bridge-failures");
-      } catch (e) {
-        console.error("[supervisor] No se pudo reiniciar el controller:", e);
+    if (inGracePeriod) {
+      // Durante grace period: no apagar, mantener bridge vivo
+      if (graceRemainingSec > 0 && graceRemainingSec % 30 === 0) {
+        console.log(
+          `[supervisor] Grace period active (${graceRemainingSec}s remaining), waiting for PT...`
+        );
+      }
+    } else {
+      // Fuera del grace period: comportamiento normal
+      if (state.consecutiveBridgeFailures >= FAILURE_THRESHOLD) {
+        console.log(
+          `[supervisor] Bridge inestable, reiniciando controller (failures: ${state.consecutiveBridgeFailures})`
+        );
+        try {
+          await restartController("bridge-failures");
+        } catch (e) {
+          console.error("[supervisor] No se pudo reiniciar el controller:", e);
+          running = false;
+        }
+      } else if (state.consecutiveHeartbeatFailures >= FAILURE_THRESHOLD) {
+        console.log(
+          `[supervisor] PT no disponible después del grace period, apagando (failures: ${state.consecutiveHeartbeatFailures})`
+        );
         running = false;
       }
-    } else if (state.consecutiveHeartbeatFailures >= FAILURE_THRESHOLD) {
-      console.log(
-        `[supervisor] Demasiadas fallas de heartbeat, apagando (HB: ${state.consecutiveHeartbeatFailures})`
-      );
-      running = false;
     }
   } catch (e) {
     console.error("[supervisor] Error en cycle:", e);

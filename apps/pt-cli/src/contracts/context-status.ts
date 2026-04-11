@@ -5,9 +5,18 @@
 
 export type HeartbeatState = "ok" | "stale" | "missing" | "unknown";
 
+export type SupervisorMode = "waiting-for-pt" | "active" | "shutting-down";
+
 export interface ContextStatus {
   schemaVersion: "1.0";
   updatedAt: string; // ISO timestamp
+  mode: SupervisorMode;
+  gracePeriod: {
+    active: boolean;
+    startedAt: string;
+    endsAt: string;
+    remainingMs: number;
+  };
   heartbeat: {
     state: HeartbeatState;
     ageMs?: number;

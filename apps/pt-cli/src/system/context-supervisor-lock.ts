@@ -19,7 +19,7 @@ interface LockInfo {
 }
 
 const LOCK_FILE = "context-supervisor.pid";
-const LOCK_STALE_MS = 30000; // 30 segundos sin actualizar = stale
+const LOCK_STALE_MS = 60000; // 60 segundos sin actualizar = stale
 
 /**
  * Obtiene la ruta del archivo de lock

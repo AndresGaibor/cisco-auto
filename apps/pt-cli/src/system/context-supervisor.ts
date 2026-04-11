@@ -77,10 +77,10 @@ async function launchSupervisor(): Promise<number> {
     // Desacoplar proceso - permitir que el parent muera sin matar el child
     child.unref();
 
-    // Dar tiempo para que el supervisor adquiera el lock
+    // Dar tiempo para que el supervisor adquiera el lock y el lease
     setTimeout(() => {
       resolve(pid);
-    }, 500);
+    }, 2000);
   });
 }
 

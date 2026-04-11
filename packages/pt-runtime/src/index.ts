@@ -2,7 +2,7 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { homedir, hostname, platform } from "node:os";
 import { resolve } from "node:path";
-import { MAIN_JS_TEMPLATE } from "./templates/main.js";
+import { MAIN_JS_TEMPLATE } from "./templates/main-kernel.js";
 import { RUNTIME_JS_TEMPLATE } from "./templates/runtime.js";
 import { validateMainJs, validateRuntimeJs, validateGeneratedArtifacts, formatValidationErrors } from "./runtime-validator.js";
 

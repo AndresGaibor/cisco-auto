@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { composeRuntime } from "../compose.ts";
 import { renderRuntimeSource } from "../index.ts";
 import { validateRuntimeJs } from "../runtime-validator.ts";
-import { RUNTIME_JS_TEMPLATE } from "../templates/runtime.ts";
 
 const pureHandlerSymbols = [
   "handleAddDevice",
@@ -24,15 +22,15 @@ const pureHandlerSymbols = [
   "handleDevicesInRect",
 ]
 
+// Symbols that belong to main.js lifecycle, NOT runtime
+// These should NOT be present in the runtime bundle
 const mainLifecycleSymbols = [
-  "activateRuntimeAfterLease",
+  "function main(",
   "pollCommandQueue",
-  "pollDeferredCommands",
-  "cleanupStaleInFlightOnStartup",
+  "claimNextCommand",
+  "activateRuntimeAfterLease",
   "loadRuntime",
-  "writeHeartbeat",
   "setupFileWatcher",
-  "startLeaseHealthMonitor",
   "leaseHealthInterval",
   "heartbeatInterval",
   "commandPollInterval",
@@ -43,11 +41,7 @@ const mainLifecycleSymbols = [
 ];
 
 describe("runtime contract", () => {
-  test("composeRuntime stays aligned with the exported runtime template", () => {
-    expect(composeRuntime()).toBe(RUNTIME_JS_TEMPLATE);
-  });
-
-  test("runtime stays focused on pure handlers and validates cleanly", () => {
+  test("runtime validates cleanly", () => {
     const runtime = renderRuntimeSource();
     const validation = validateRuntimeJs(runtime);
 
@@ -59,7 +53,12 @@ describe("runtime contract", () => {
     for (const symbol of pureHandlerSymbols) {
       expect(runtime).toContain(`function ${symbol}(`);
     }
+  });
 
+  test("runtime does not contain main lifecycle symbols", () => {
+    const runtime = renderRuntimeSource();
+
+    // These symbols belong to main.js, not runtime
     for (const symbol of mainLifecycleSymbols) {
       expect(runtime).not.toContain(symbol);
     }

@@ -44,6 +44,7 @@ import { createAuditTailCommand } from './audit-tail';
 import { createAuditExportCommand } from './audit-export';
 import { createAuditFailedCommand } from './audit-failed';
 import { createAuditQueryCommand } from './audit-query';
+import { createBridgeCommand } from './bridge';
 
 export type CommandFactory = () => Command;
 
@@ -93,6 +94,7 @@ export const COMMAND_FACTORIES: CommandFactory[] = [
   createAuditExportCommand,
   createAuditFailedCommand,
   createAuditQueryCommand,
+  createBridgeCommand,
 ];
 
 export function getRegisteredCommandIds(): string[] {

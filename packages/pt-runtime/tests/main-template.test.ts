@@ -1,16 +1,28 @@
 /**
- * Phase 2 Tests - main.js template validation
- * Verifies: durable queue only, no legacy, lifecycle, IOS state machine
+ * Phase 2 Tests - main.js template validation (kernel architecture)
+ * Verifies: main.js is kernel only (no business logic), runtime handles all domain logic
  */
 
-import { describe, it, expect, beforeEach, afterEach, test } from "bun:test";
-import { MAIN_JS_TEMPLATE } from "../src/templates/main.js";
-import { join } from "node:path";
-import { mkdtempSync, rmSync, existsSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, it, expect } from "bun:test";
+import { MAIN_JS_TEMPLATE } from "../src/templates/main-kernel.js";
 
-describe("Phase 2 - Main.js Template", () => {
-  describe("durable queue only (no legacy)", () => {
+describe("Phase 2 - Main.js Template (Kernel Architecture)", () => {
+  describe("kernel only (no business logic)", () => {
+    it("does NOT contain handler implementations", () => {
+      const code = MAIN_JS_TEMPLATE;
+      expect(code).not.toContain("handleAddDevice");
+      expect(code).not.toContain("handleConfigIos");
+      expect(code).not.toContain("handleExecIos");
+    });
+
+    it("does NOT contain parse logic", () => {
+      const code = MAIN_JS_TEMPLATE;
+      expect(code).not.toContain("parseIpInterfaceBrief");
+      expect(code).not.toContain("parseVlanBrief");
+    });
+  });
+
+  describe("durable queue (commands/, in-flight/, results/)", () => {
     it("uses commands/, in-flight/, results/, dead-letter/", () => {
       const code = MAIN_JS_TEMPLATE;
       expect(code).toContain('"/commands"');
@@ -19,135 +31,90 @@ describe("Phase 2 - Main.js Template", () => {
       expect(code).toContain('"/dead-letter"');
     });
 
-    it("does NOT contain command.json references", () => {
+    it("does NOT contain legacy command.json references", () => {
       const code = MAIN_JS_TEMPLATE;
       expect(code).not.toContain("COMMAND_FILE");
       expect(code).not.toContain("CURRENT_COMMAND_FILE");
-      expect(code).not.toContain('migrateLegacyCommand');
       expect(code).not.toContain('/command.json"');
     });
+  });
 
-    it("does NOT contain migrateLegacyCommand", () => {
+  describe("kernel functions (lifecycle/orchestration)", () => {
+    it("contains function main", () => {
       const code = MAIN_JS_TEMPLATE;
-      expect(code).not.toContain("migrateLegacyCommand");
+      expect(code).toContain("function main()");
     });
 
-    it("contains IOS_JOBS system", () => {
+    it("contains loadRuntime and reloadRuntimeIfNeeded", () => {
       const code = MAIN_JS_TEMPLATE;
-      expect(code).toContain("IOS_JOBS");
-      expect(code).toContain("createIosJob");
-      expect(code).toContain("pollIosJob");
-      expect(code).toContain("startIosJob");
+      expect(code).toContain("loadRuntime");
+      expect(code).toContain("reloadRuntimeIfNeeded");
+    });
+
+    it("contains pollCommandQueue", () => {
+      const code = MAIN_JS_TEMPLATE;
+      expect(code).toContain("pollCommandQueue");
+    });
+
+    it("contains cleanUp", () => {
+      const code = MAIN_JS_TEMPLATE;
+      expect(code).toContain("function cleanUp");
     });
   });
 
-  describe("cleanup of stale in-flight (not full recovery)", () => {
-    it("has cleanupStaleInFlightOnStartup instead of recoverInFlightOnStartup", () => {
+  describe("job kernel (minimal step interpreter)", () => {
+    it("contains ACTIVE_JOBS and DEVICE_SESSIONS state", () => {
       const code = MAIN_JS_TEMPLATE;
-      expect(code).toContain("cleanupStaleInFlightOnStartup");
-      expect(code).not.toContain("recoverInFlightOnStartup");
+      expect(code).toContain("ACTIVE_JOBS");
+      expect(code).toContain("DEVICE_SESSIONS");
     });
 
-    it("cleanupStaleInFlightOnStartup does NOT requeue or increment attempts", () => {
+    it("contains createJob and getJobState", () => {
       const code = MAIN_JS_TEMPLATE;
-      expect(code).not.toContain("requeue");
-      expect(code).not.toMatch(/MAX_RETRIES.*recovered/);
-    });
-  });
-
-  describe("lifecycle guards", () => {
-    it("activateRuntimeAfterLease has idempotency guard", () => {
-      const code = MAIN_JS_TEMPLATE;
-      expect(code).toContain("Runtime already active");
+      expect(code).toContain("function createJob");
+      expect(code).toContain("function getJobState");
     });
 
-    it("cleanUp clears leaseHealthInterval", () => {
+    it("contains step handlers (minimal interpreter)", () => {
       const code = MAIN_JS_TEMPLATE;
-      expect(code).toContain("clear-lease-health");
-      expect(code).toContain("leaseHealthInterval");
-    });
-
-    it("cleanUp does NOT call invokeRuntimeCleanupHook", () => {
-      const code = MAIN_JS_TEMPLATE;
-      expect(code).not.toContain("invokeRuntimeCleanupHook()");
-    });
-
-    it("cleanUp saves pending before clearing", () => {
-      const code = MAIN_JS_TEMPLATE;
-      const cleanUpStart = code.indexOf("function cleanUp()");
-      const cleanUpEnd = code.indexOf('dprint("[PT] Stopped")', cleanUpStart);
-      const cleanUpSection = code.slice(cleanUpStart, cleanUpEnd);
-      const saveIdx = cleanUpSection.indexOf("savePendingCommands");
-      const nullRuntimeIdx = cleanUpSection.indexOf("runtimeFn = null");
-      expect(saveIdx).toBeGreaterThan(-1);
-      expect(nullRuntimeIdx).toBeGreaterThan(saveIdx);
+      expect(code).toContain("handleEnsureModeStep");
+      expect(code).toContain("handleCommandStep");
+      expect(code).toContain("handleConfirmStep");
+      expect(code).toContain("handleSaveConfigStep");
     });
   });
 
-  describe("hot reload constraints", () => {
-    it("documents runtime.js hot reload vs main.js lifecycle", () => {
+  describe("hot reload support", () => {
+    it("contains runtimeDirty flag", () => {
       const code = MAIN_JS_TEMPLATE;
-      expect(code).toContain("runtime.js can be reloaded dynamically");
-      expect(code).toContain("Script Engine lifecycle");
+      expect(code).toContain("runtimeDirty");
     });
 
-    it("only reloads runtime when no pending deferred", () => {
+    it("contains runtimeLastMtime for file watching", () => {
       const code = MAIN_JS_TEMPLATE;
-      expect(code).toContain("runtimeDirty && !hasPendingDeferredCommands()");
-    });
-  });
-
-  describe("IOS job state machine helpers", () => {
-    it("has setIosJobPhase helper", () => {
-      const code = MAIN_JS_TEMPLATE;
-      expect(code).toContain("function setIosJobPhase");
-      expect(code).toContain("job.phase = phase");
-      expect(code).toContain("job.state = phase");
+      expect(code).toContain("runtimeLastMtime");
     });
 
-    it("guards initial dialog dismissal behind prompt state", () => {
+    it("contains createRuntimeApi (injects api into runtime)", () => {
       const code = MAIN_JS_TEMPLATE;
-      expect(code).toContain("function isNormalPrompt");
-      expect(code).toContain("containsInitialDialog(raw)");
-    });
-
-    it("has buildIosSuccessResult helper", () => {
-      const code = MAIN_JS_TEMPLATE;
-      expect(code).toContain("function buildIosSuccessResult");
-    });
-
-    it("has buildIosConfigSuccessResult helper", () => {
-      const code = MAIN_JS_TEMPLATE;
-      expect(code).toContain("function buildIosConfigSuccessResult");
-    });
-
-    it("has cleanupActiveInFlight helper", () => {
-      const code = MAIN_JS_TEMPLATE;
-      expect(code).toContain("function cleanupActiveInFlight");
+      expect(code).toContain("createRuntimeApi");
     });
   });
 
-  describe("deferred command validation", () => {
-    it("fails deferred command without ticket", () => {
+  describe("does NOT contain legacy IOS patterns", () => {
+    it("does NOT contain IOS_JOBS (old global jobs object)", () => {
       const code = MAIN_JS_TEMPLATE;
-      expect(code).toContain("INVALID_DEFERRED_RESULT");
-      expect(code).toContain("Deferred command missing ticket");
+      expect(code).not.toContain("var IOS_JOBS");
     });
 
-    it("structures failed deferred envelope", () => {
+    it("does NOT contain createIosJob (old function)", () => {
       const code = MAIN_JS_TEMPLATE;
-      expect(code).toContain("RUNTIME_NOT_LOADED");
+      expect(code).not.toContain("function createIosJob");
     });
-  });
-});
 
-describe("Phase 2 - Template Snapshot", () => {
-  it("template contains key runtime functions", () => {
-    const code = MAIN_JS_TEMPLATE;
-    // Verify key functions exist - template is stable
-    expect(code).toContain("function activateRuntimeAfterLease()");
-    expect(code).toContain("function pollCommandQueue()");
-    expect(code).toContain("function cleanUp()");
-    expect(code).toContain("IOS_JOBS");
+    it("does NOT contain setIosJobPhase", () => {
+      const code = MAIN_JS_TEMPLATE;
+      expect(code).not.toContain("setIosJobPhase");
+    });
   });
 });
