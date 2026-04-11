@@ -9,6 +9,45 @@ Default to using Bun instead of Node.js.
 - Use `bunx <package> <command>` instead of `npx <package> <command>`
 - Bun automatically loads .env, so don't use dotenv.
 
+## Arquitectura TypeScript
+
+**Código fuente es TypeScript puro (.ts)** - Bun ejecuta TypeScript directamente sin compilación.
+
+### Archivos NO trackeados en git
+El repositorio excluye del tracking estos archivos compilados:
+```
+*.js          (compilado de TypeScript)
+*.d.ts        (declaraciones TypeScript)
+*.js.map      (source maps)
+*.d.ts.map    (declaration maps)
+```
+
+Estos se generan en tiempo de desarrollo pero no deben commitearse. El código fuente es `.ts`.
+
+### Paquetes npm workspace
+```json
+"dependencies": {
+  "@cisco-auto/types": "workspace:*",
+  "@cisco-auto/core": "workspace:*",
+  "@cisco-auto/pt-control": "workspace:*",
+  "@cisco-auto/pt-runtime": "workspace:*"
+}
+```
+
+Los paquetes usan exports directos a `.ts`:
+```json
+"exports": {
+  ".": "./src/index.ts",
+  "./schemas": "./src/schemas/index.ts"
+}
+```
+
+### Importante: No ejecutar `tsc` para compilar
+- El proyecto usa TypeScript source directo
+- Bun ejecuta `.ts` sin compilación
+- Si necesitas verificar tipos: `bun run typecheck` (solo lectura, no emite archivos)
+- NO usar `tsc` sin `-p` (emitiría archivos en el source)
+
 ## APIs
 
 - `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
