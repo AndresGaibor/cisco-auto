@@ -11,7 +11,7 @@ export {
   type IPCidr,
   type IPAddress,
   type MACAddress,
-} from './common.js';
+} from './common.ts';
 
 // Device schemas (Device, Interface, VLAN)
 export {
@@ -25,7 +25,7 @@ export {
   type VLAN,
   type Interface,
   type Device,
-} from './device.js';
+} from './device.ts';
 
 // Protocol schemas (OSPF, EIGRP, VTP)
 export {
@@ -35,7 +35,7 @@ export {
   type OSPF,
   type EIGRP,
   type VTP,
-} from './protocols.js';
+} from './protocols.ts';
 
 // Security schemas (ACL, NAT)
 export {
@@ -43,7 +43,7 @@ export {
   NATSchema,
   type ACL,
   type NAT,
-} from './security.js';
+} from './security.ts';
 
 // Lab schemas (Lab topology, connections, validation)
 export {
@@ -55,7 +55,7 @@ export {
   type Connection,
   type Validation,
   type Lab,
-} from './lab.js';
+} from './lab.ts';
 
 // PT Control - Topology
 export {
@@ -80,7 +80,7 @@ export {
   type DeviceDelta,
   type LinkDelta,
   type TopologyDelta,
-} from './pt-topology.js';
+} from './pt-topology.ts';
 
 // PT Control - Parsed Output
 export {
@@ -140,7 +140,7 @@ export {
   type ParsedOutput,
   type ParserFunction,
   type ParserRegistry,
-} from './pt-parsed-output.js';
+} from './pt-parsed-output.ts';
 
 // PT Control - Commands
 export {
@@ -181,7 +181,7 @@ export {
   type CommandPayloadTypeMap,
   type CommandType,
   type CommandFile,
-} from './pt-commands.js';
+} from './pt-commands.ts';
 
 // PT Control - Events
 export {
@@ -206,7 +206,7 @@ export {
   type PTEvent,
   type PTEventTypeMap,
   type PTEventType,
-} from './pt-events.js';
+} from './pt-events.ts';
 
 // File Bridge
 export {
@@ -225,7 +225,7 @@ export {
   type Snapshot,
   generateBridgeCommandId,
   calculatePayloadChecksum,
-} from './bridge.js';
+} from './bridge.ts';
 
 // IOS Results
 export {
@@ -247,7 +247,7 @@ export {
   type ExecInteractiveResult,
   type IosErrorCode,
   type IosError,
-} from './ios-results.js';
+} from './ios-results.ts';
 
 // IOS Interactive Result (Fase 6 - Real Interactive Terminal)
 export {
@@ -266,7 +266,31 @@ export {
   type Diagnostics,
   type TranscriptEntry,
   type IosInteractiveResult,
-} from './ios-interactive-result.js';
+} from './ios-interactive-result.ts';
+
+// Context Status
+export {
+  ContextStatusSchema,
+  type ContextStatus,
+} from './context-status.ts';
+
+// History entry
+export {
+  HistoryEntrySchema,
+  type HistoryEntry,
+} from './history-entry.ts';
+
+// Session log events
+export {
+  SessionLogEventSchema,
+  type SessionLogEvent,
+} from './session-log-event.ts';
+
+// Lock info
+export {
+  LockInfoSchema,
+  type LockInfo,
+} from './lock-info.ts';
 
 // Command Catalog - Single Source of Truth
 export {
@@ -286,4 +310,4 @@ export {
   type CommandCatalogEntry,
   type CommandVisibility,
   type ExecutionModel,
-} from '../command-catalog.js';
+} from '../command-catalog.ts';
