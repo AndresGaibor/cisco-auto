@@ -6,8 +6,8 @@ import { COMMAND_CATALOG } from "../../src/commands/command-catalog";
 // Simplemente necesitamos saber qué comandos se registran
 describe("CLI Metadata Consistency", () => {
   test("Every root command in COMMAND_CATALOG should exist in the real CLI (manual check of index.ts)", async () => {
-    // Leemos index.ts para ver los comandos registrados
-    const indexContent = await Bun.file("apps/pt-cli/src/index.ts").text();
+    // Leemos command-registry.ts para ver los comandos registrados
+    const registryContent = await Bun.file("apps/pt-cli/src/commands/command-registry.ts").text();
     
     // Extraer nombres de comandos de program.addCommand(create...Command())
     // o similar en index.ts. Buscamos patrones de registro.
@@ -24,7 +24,7 @@ describe("CLI Metadata Consistency", () => {
       // Verificar si el id aparece en index.ts (aunque sea como parte de una importación o creación)
       // Esto es una validación débil pero útil para detectar drift grueso
       const normalizedId = id.includes('-') ? id : id;
-      expect(indexContent).toContain(normalizedId);
+      expect(registryContent).toContain(normalizedId);
     }
   });
 
@@ -40,18 +40,20 @@ describe("CLI Metadata Consistency", () => {
   });
 
   test("No orphan commands in index.ts without catalog entry", async () => {
-    const indexContent = await Bun.file("apps/pt-cli/src/index.ts").text();
+    const registryContent = await Bun.file("apps/pt-cli/src/commands/command-registry.ts").text();
     
-    // Lista de comandos que sabemos que están en index.ts
-    // (Extracción manual basada en la lectura previa de index.ts)
-    const expectedFromIndex = [
+    // Lista de comandos que sabemos que estan en command-registry.ts
+    const expectedFromRegistry = [
       'build', 'device', 'show', 'config-host', 'vlan', 'etherchannel',
       'link', 'config-ios', 'routing', 'acl', 'stp', 'services',
       'results', 'logs', 'help', 'history', 'doctor', 'completion',
-      'topology', 'status'
+      'topology', 'status', 'config-ospf', 'config-eigrp', 'config-bgp',
+      'config-vlan', 'config-acl', 'config-interface', 'config-apply',
+      'devices-list', 'devices-add', 'history-search', 'history-failed',
+      'topology-show', 'config-prefs', 'audit-tail', 'audit-export', 'audit-failed',
     ];
 
-    for (const cmd of expectedFromIndex) {
+    for (const cmd of expectedFromRegistry) {
       expect(COMMAND_CATALOG[cmd]).toBeDefined();
     }
   });

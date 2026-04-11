@@ -32,6 +32,8 @@ export interface GlobalFlags {
   explain: boolean;
   plan: boolean;
   verify: boolean;
+  timeout: number | null;
+  noTimeout: boolean;
 }
 
 /**
@@ -58,6 +60,8 @@ export function getGlobalFlags(program: Command): GlobalFlags {
     explain: program.opts().explain ?? false,
     plan: program.opts().plan ?? false,
     verify: program.opts().verify ?? true,
+    timeout: program.opts().timeout ?? null,
+    noTimeout: program.opts().noTimeout ?? false,
   };
 }
 
@@ -89,7 +93,9 @@ export function addGlobalFlags(program: Command): Command {
     .option('--explain', 'Explicar qué hace el comando y salir', false)
     .option('--plan', 'Mostrar plan de ejecución sin ejecutar', false)
     .option('--verify', 'Verificar cambios post-ejecución', true)
-    .option('--no-verify', 'Omitir verificación post-ejecución', false);
+    .option('--no-verify', 'Omitir verificación post-ejecución', false)
+    .option('--timeout <ms>', 'Timeout global para operaciones en milisegundos', undefined)
+    .option('--no-timeout', 'Desactivar timeout global', false);
 }
 
 /**

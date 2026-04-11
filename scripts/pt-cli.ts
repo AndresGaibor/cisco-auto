@@ -1,27 +1,17 @@
 #!/usr/bin/env bun
-import { promisify } from 'util';
-import { exec } from 'child_process';
-const execAsync = promisify(exec);
 
-export async function runPtCommand(args: string[]): Promise<{ success: boolean; stdout?: string; stderr?: string }> {
-  try {
-    // Prefer 'pt' binary
-    try {
-      const whichRes = await execAsync('which pt');
-      const whichOut = (whichRes && (whichRes as any).stdout || '').trim();
-      if (whichOut) {
-        const { stdout, stderr } = await execAsync(`pt ${args.map(a => String(a)).join(' ')}`);
-        return { success: true, stdout, stderr };
-      }
-    } catch {
-      // continue to fallback
-    }
+import { runSubprocess, type RunSubprocessResult } from '../apps/pt-cli/src/system/run-subprocess.ts';
 
-    const comando = ['bun', 'run', 'packages/pt-control/bin/run.js', ...args.map((a) => String(a))].join(' ');
-    const { stdout, stderr } = await execAsync(comando);
-    return { success: true, stdout, stderr };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { success: false, stderr: msg };
+export async function runPtCommand(args: string[]): Promise<RunSubprocessResult> {
+  const ptBinary = Bun.which('pt');
+
+  if (ptBinary) {
+    return runSubprocess({
+      cmd: [ptBinary, ...args.map((arg) => String(arg))],
+    });
   }
+
+  return runSubprocess({
+    cmd: ['bun', 'run', 'packages/pt-control/bin/run.js', ...args.map((arg) => String(arg))],
+  });
 }

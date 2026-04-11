@@ -1,16 +1,7 @@
 import { Command } from 'commander';
 import { COMMAND_CATALOG } from './command-catalog.ts';
-import { getRegisteredCommandIds } from './command-registry';
 
-/**
- * Tipos de shell soportados
- */
-type ShellType = 'bash' | 'zsh' | 'fish' | 'powershell';
-
-/**
- * Obtener lista de comandos actuales del catálogo
- */
-const AVAILABLE_COMMANDS = getRegisteredCommandIds();
+const AVAILABLE_COMMANDS = Object.keys(COMMAND_CATALOG);
 
 
 /**

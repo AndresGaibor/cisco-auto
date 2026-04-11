@@ -3,22 +3,22 @@
 import { Command } from 'commander';
 import { addGlobalFlags } from './flags';
 import { COMMAND_FACTORIES } from './commands/command-registry';
+import { ExitCodes } from './errors';
 
 export function createProgram(): Command {
   const program = new Command();
 
-  addGlobalFlags(program);
-
   program
-    .name('pt')
-    .description('CLI para controlar Cisco Packet Tracer en tiempo real')
+    .name('cisco-auto')
+    .description('CLI de cisco-auto para automatización de Packet Tracer')
     .version('0.2.0')
     .exitOverride()
     .configureOutput({
-      writeErr: (str) => console.error(str.trim()),
+      outputError: (str, write) => write(str),
     });
 
-  program.addCommand(createBuildCommand());
+  addGlobalFlags(program);
+
   for (const factory of COMMAND_FACTORIES) {
     program.addCommand(factory());
   }

@@ -18,6 +18,7 @@ import type { GlobalFlags, OutputFormat } from '../flags.js';
 import { sessionLogStore } from '../telemetry/session-log-store.js';
 import { historyStore } from '../telemetry/history-store.js';
 import { bundleWriter } from '../telemetry/bundle-writer.js';
+import { persistHistoryEntryToMemory } from './memory-persistence.js';
 import type { CommandRuntimeContext } from './context-inspector.js';
 import { inspectCommandContext } from './context-inspector.js';
 import { buildContextWarnings } from './context-advice.js';
@@ -236,6 +237,12 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
     await historyStore.append(historyEntry);
   } catch (err) {
     console.error('Error writing history:', err);
+  }
+
+  try {
+    persistHistoryEntryToMemory(historyEntry);
+  } catch (err) {
+    console.error('Error writing memory audit:', err);
   }
 
   if (options.flags.traceBundle) {

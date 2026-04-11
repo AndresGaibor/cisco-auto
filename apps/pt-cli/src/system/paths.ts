@@ -172,3 +172,9 @@ export function getContextStatusPath(): string {
   return join(getContextDir(), 'context-status.json');
 }
 
+/**
+ * Obtiene la ruta de la base de datos SQLite de memoria compartida.
+ */
+export function getMemoryDbPath(): string {
+  return resolvePtDevPath('memory.db');
+}
