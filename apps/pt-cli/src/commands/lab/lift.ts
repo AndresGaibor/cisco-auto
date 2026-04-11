@@ -301,20 +301,6 @@ async function waitForDeviceNames(
   return false;
 }
 
-async function dismissInitialDialog(controller: {
-  execInteractive: (device: string, command: string, options?: { timeout?: number; parse?: boolean; ensurePrivileged?: boolean }) => Promise<unknown>;
-}, device: string): Promise<void> {
-  try {
-    await controller.execInteractive(device, 'no', {
-      timeout: 5000,
-      parse: false,
-      ensurePrivileged: false,
-    });
-  } catch {
-    // Si no hay diálogo inicial, continuamos igual.
-  }
-}
-
 async function enablePrivilegedMode(controller: {
   execInteractive: (device: string, command: string, options?: { timeout?: number; parse?: boolean; ensurePrivileged?: boolean }) => Promise<unknown>;
 }, device: string): Promise<void> {
@@ -522,12 +508,6 @@ export function createLabLiftCommand(): Command {
                 message: 'Los dispositivos no materializaron a tiempo en Packet Tracer. Revisa que la topología esté lista y vuelve a intentar.',
               }) as CliResult<LiftResult>;
             }
-
-            await dismissInitialDialog(ctx.controller, CORE_NAME);
-            await dismissInitialDialog(ctx.controller, 'SW1');
-            await dismissInitialDialog(ctx.controller, 'SW2');
-            await dismissInitialDialog(ctx.controller, 'SW3');
-            await dismissInitialDialog(ctx.controller, 'SW4');
 
             await enablePrivilegedMode(ctx.controller, CORE_NAME);
             await enablePrivilegedMode(ctx.controller, 'SW1');
