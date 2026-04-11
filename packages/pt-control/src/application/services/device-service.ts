@@ -132,6 +132,77 @@ export class DeviceService {
   }
 
   /**
+   * Configure DHCP server on a device
+   */
+  async configureDhcpServer(
+    device: string,
+    options: {
+      poolName: string;
+      network: string;
+      subnetMask: string;
+      defaultRouter?: string;
+      dnsServers?: string[];
+      excludedAddresses?: string[];
+      leaseTime?: number;
+      domainName?: string;
+    }
+  ): Promise<void> {
+    await this.bridge.sendCommandAndWait("configureDhcpServer", {
+      id: this.generateId(),
+      device,
+      ...options,
+    });
+  }
+
+  /**
+   * Inspect DHCP server configuration on a device
+   */
+  async inspectDhcpServer(
+    device: string
+  ): Promise<{
+    ok: boolean;
+    device: string;
+    pools: Array<{
+      name: string;
+      network: string;
+      subnetMask: string;
+      defaultRouter?: string;
+      dnsServers?: string[];
+      leaseTime?: number;
+      domainName?: string;
+    }>;
+    excludedAddresses?: string[];
+    poolCount: number;
+    excludedAddressCount: number;
+  }> {
+    const result = await this.bridge.sendCommandAndWait<{
+      ok: boolean;
+      device: string;
+      pools: Array<{
+        name: string;
+        network: string;
+        subnetMask: string;
+        defaultRouter?: string;
+        dnsServers?: string[];
+        leaseTime?: number;
+        domainName?: string;
+      }>;
+      excludedAddresses?: string[];
+      poolCount: number;
+      excludedAddressCount: number;
+    }>("inspectDhcpServer", {
+      id: this.generateId(),
+      device,
+    });
+
+    if (!result.value) {
+      throw new Error(`Failed to inspect DHCP server on device '${device}'`);
+    }
+
+    return result.value;
+  }
+
+  /**
    * Move a device to a new position on the canvas
    */
   async moveDevice(
