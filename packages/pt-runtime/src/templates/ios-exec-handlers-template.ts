@@ -420,8 +420,6 @@ function handleExecInteractive(payload) {
 
     var maxAttempts = 100;
     var attempt = 0;
-    var setupDialogDismissed = false;
-    var pressReturnDismissed = false;
 
     while (attempt < maxAttempts && !engine.isComplete()) {
       try {
@@ -445,59 +443,6 @@ function handleExecInteractive(payload) {
           recorder.record("confirmAnswered", {});
           engine.answerConfirm("y");
           term.enterCommand("y");
-        }
-
-        // Setup dialog detection - dismiss initial config dialog automatically (once)
-        var currentOutput = term.getOutput ? term.getOutput() : "";
-        var currentPrompt = term.getPrompt ? String(term.getPrompt() || "") : "";
-        var promptLooksNormal = isNormalPrompt(currentPrompt, currentMode);
-        var setupHandledThisPass = false;
-        if (!setupDialogDismissed && !promptLooksNormal && (
-            /initial configuration dialog/i.test(currentOutput) ||
-            /Would you like to enter the initial configuration dialog\?/i.test(currentOutput))) {
-          setupDialogDismissed = true;
-          setupHandledThisPass = true;
-          recorder.record("setupDialogDetected", {});
-          term.enterCommand("no");
-          // Wait for dialog to dismiss before resending command
-          var dismissOutput = "";
-          var dismissAttempts = 0;
-          while (dismissAttempts < 20) {
-            var newOutput = term.getOutput ? term.getOutput() : "";
-            if (newOutput.length > dismissOutput.length) {
-              dismissOutput = newOutput;
-              // Check if we're past the initial dialog
-              if (!/initial configuration dialog/i.test(dismissOutput) &&
-                  !/Would you like to enter the initial configuration dialog\?/i.test(dismissOutput)) {
-                break;
-              }
-            }
-            dismissAttempts++;
-          }
-          // Now re-enter the original command
-          term.enterCommand(command);
-        }
-
-        // Handle "Press RETURN to get started!" after dialog dismissal (once)
-        currentOutput = term.getOutput ? term.getOutput() : "";
-        if (!setupHandledThisPass && !pressReturnDismissed && !promptLooksNormal && /Press RETURN to get started/i.test(currentOutput)) {
-          pressReturnDismissed = true;
-          recorder.record("pressReturnDetected", {});
-          term.enterCommand("");
-          var pressReturnOutput = "";
-          var pressAttempts = 0;
-          while (pressAttempts < 20) {
-            var newOutput = term.getOutput ? term.getOutput() : "";
-            if (newOutput.length > pressReturnOutput.length) {
-              pressReturnOutput = newOutput;
-              if (!/Press RETURN to get started/i.test(pressReturnOutput)) {
-                break;
-              }
-            }
-            pressAttempts++;
-          }
-          // Now re-enter the original command
-          term.enterCommand(command);
         }
 
       } catch(e) {
