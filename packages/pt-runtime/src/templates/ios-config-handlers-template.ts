@@ -63,6 +63,12 @@ function dismissInitialDialogIfNeeded(engine, term) {
       stepHandled = true;
     }
 
+    // Handle "Press RETURN to get started" - send empty command (Enter key)
+    if (/Press RETURN to get started/i.test(output)) {
+      term.enterCommand('');
+      stepHandled = true;
+    }
+
     if (!stepHandled) break;
     handled = true;
     syncEngineModeFromTerminal(engine, term);
@@ -100,7 +106,7 @@ function ensurePrivilegedExec(engine, term) {
     }
   }
 
-  return true;
+  return false;
 }
 
 // Helper: Ensure config mode
@@ -125,7 +131,7 @@ function ensureConfigMode(engine, term) {
     }
   }
 
-  return true;
+  return false;
 }
 
 // Helper: Exit config mode
