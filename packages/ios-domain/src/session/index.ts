@@ -5,3 +5,8 @@ export { InteractiveStateHandler } from "./cli-session-handlers.js";
 export { inferPromptState, IOS_PROMPT_PATTERNS, type PromptState, type IosMode, isPrivilegedMode, isConfigMode, isInteractiveDialog, isRecoverableState, needsResponse } from "./prompt-state.js";
 export { createErrorResult, createSuccessResult, isSuccessResult, isErrorResult, isPagingResult, isConfirmPrompt, isPasswordPrompt, isParseErrorResult, classifyOutput, type CommandResult, type OutputClassificationType } from "./command-result.js";
 export type { SessionTranscript, CommandTranscriptEntry } from "./session-transcript.js";
+export { Transaction, type TransactionCommand, type TransactionLogEntry, type TransactionResult } from "./transaction.js";
+export { TransactionBuilder, type InterfaceConfig, type OspfConfig, type EigrpConfig, type AclConfig, type VlanConfig, type DeviceConfig } from "./transaction-builder.js";
+export { AuditLogger, type AuditLogEntry } from "./audit-log.js";
+export { executeTransactionWithMemory, type TransactionMemoryResult } from "./integration.ts";
+export { logTransactionWithMemory, persistAuditLogger } from "./audit-integration.ts";
