@@ -1,0 +1,63 @@
+name: LAN Basica - 2 PCs y 1 Switch
+description: Laboratorio para validar conectividad L2/L3 en una sola red
+
+devices:
+  - name: Switch1
+    type: switch
+    model: 2960
+    x: 300
+    y: 200
+
+  - name: PC1
+    type: pc
+    model: PC
+    x: 150
+    y: 350
+
+  - name: PC2
+    type: pc
+    model: PC
+    x: 450
+    y: 350
+
+links:
+  - from: PC1
+    fromPort: Fa0
+    to: Switch1
+    toPort: Fa0/1
+
+  - from: PC2
+    fromPort: Fa0
+    to: Switch1
+    toPort: Fa0/2
+
+configs:
+  - device: PC1
+    type: host
+    ip: 192.168.10.10
+    mask: 255.255.255.0
+    # Sin gateway - LAN local
+
+  - device: PC2
+    type: host
+    ip: 192.168.10.20
+    mask: 255.255.255.0
+    # Sin gateway - LAN local
+
+validation:
+  - type: ping
+    from: PC1
+    to: 192.168.10.20
+    expect: success
+
+  - type: arp
+    device: PC1
+    expect:
+      - ip: 192.168.10.20
+        present: true
+
+  - type: mac_table
+    device: Switch1
+    expect:
+      mac_count: 2
+      ports_different: true

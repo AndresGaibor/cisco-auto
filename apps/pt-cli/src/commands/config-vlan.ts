@@ -13,7 +13,7 @@ import { CapabilitySet } from '@cisco-auto/ios-domain/capabilities';
 import { planConfigureVlan } from '@cisco-auto/ios-domain/operations';
 import { VlanId } from '@cisco-auto/kernel/domain/ios/value-objects';
 
-type ParsedVlan = { id: string; name: string; state?: string };
+type ParsedVlan = { id: string | number; name: string; state?: string };
 
 export const CONFIG_VLAN_META: CommandMeta = {
   id: 'config-vlan',
@@ -38,7 +38,7 @@ export function generateVlanCommands(vlans: ParsedVlan[]): string[] {
 
   for (const vlan of vlans) {
     const plan = planConfigureVlan(caps, {
-      vlan: VlanId.fromString(vlan.id),
+      vlan: VlanId.fromString(String(vlan.id)),
       name: vlan.name,
     });
 

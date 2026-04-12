@@ -52,7 +52,7 @@ function parseEnteroObligatorio(valor: string, etiqueta: string): number {
     throw new Error(`${etiqueta} debe ser un número entero válido`);
   }
   const numero = Number.parseInt(valor, 10);
-  if (!Number.isInteger(numero) || numero <= 0) {
+  if (!Number.isInteger(numero) || numero < 0) {
     throw new Error(`${etiqueta} debe ser un número entero válido`);
   }
   return numero;

@@ -147,6 +147,28 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
     }
   }
 
+  if (!usedAttempt && payload.linkType === "auto") {
+    const autoCableType = getCableTypeId("auto");
+
+    for (const attempt of attempts) {
+      try {
+        const success = !!lw.createLink(
+          attempt.devName1,
+          attempt.port1,
+          attempt.devName2,
+          attempt.port2,
+          autoCableType,
+        );
+        if (success) {
+          usedAttempt = attempt;
+          break;
+        }
+      } catch (error) {
+        lastError = String(error);
+      }
+    }
+  }
+
   if (!usedAttempt) {
     return {
       ok: false,

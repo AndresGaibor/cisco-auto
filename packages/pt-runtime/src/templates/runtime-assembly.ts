@@ -1680,6 +1680,25 @@ function handleAddLink(payload) {
     }
   }
 
+  if (!success && payload.linkType === "auto") {
+    var autoCableType = CABLE_TYPES.auto;
+
+    for (var j = 0; j < attempts.length; j++) {
+      var autoAttempt = attempts[j];
+      dprint("[handleAddLink] Auto fallback attempt " + (j + 1) + ": createLink(" +
+        autoAttempt.devName1 + ":" + autoAttempt.p1 + " <-> " +
+        autoAttempt.devName2 + ":" + autoAttempt.p2 + " cable=auto(" + autoCableType + "))");
+      try {
+        success = !!lw.createLink(autoAttempt.devName1, autoAttempt.p1, autoAttempt.devName2, autoAttempt.p2, autoCableType);
+        if (success) { usedAttempt = autoAttempt; dprint("[handleAddLink] SUCCESS on auto fallback attempt " + (j + 1)); break; }
+        else dprint("[handleAddLink] Auto fallback attempt " + (j + 1) + " returned false");
+      } catch (e) {
+        lastError = String(e);
+        dprint("[handleAddLink] Auto fallback attempt " + (j + 1) + " threw: " + lastError);
+      }
+    }
+  }
+
   if (!success) {
     return {
       ok: false,
@@ -1735,6 +1754,25 @@ function handleRemoveLink(payload) {
   saveLinkRegistry();
   return { ok: true };
 }
+
+function handleSyncLinks(payload) {
+  dprint("[handleSyncLinks] Starting link synchronization");
+  
+  if (!payload || !payload.links) {
+    return { ok: false, error: "Missing payload.links", code: "INVALID_PAYLOAD" };
+  }
+  
+  var result = syncLinksFromSnapshot(payload.links);
+  dprint("[handleSyncLinks] Sync complete: added=" + result.added + ", removed=" + result.removed);
+  
+  return {
+    ok: result.ok,
+    added: result.added,
+    removed: result.removed,
+    totalLinks: result.totalAfter,
+    error: result.error
+  };
+}
 `;
 
 const DISPATCHER_TEMPLATE = `
@@ -1779,6 +1817,7 @@ function dispatch(payload, host) {
       // Link handlers
       case "addLink": return handleAddLink(payload);
       case "removeLink": return handleRemoveLink(payload);
+      case "syncLinks": return handleSyncLinks(payload);
 
       // Config handlers
       case "configHost": return handleConfigHost(payload);
@@ -1786,6 +1825,7 @@ function dispatch(payload, host) {
       case "configIos": return handleConfigIos(payload);
       case "execIos": return handleExecIos(payload);
       case "execInteractive": return handleExecIos(payload);
+      case "execPc": return handleExecPc(payload);
 
       // Inspect handlers
       case "inspect": return handleInspect(payload);

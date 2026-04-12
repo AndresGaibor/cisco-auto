@@ -266,107 +266,251 @@ function executeCommandAsync(term, cmd) {
 }
 
 // ============================================================================
-// IOS Execution Handlers - Async execution using TerminalLine events
+// IOS Execution Handlers - Synchronous polling (ES5 compatible)
 // ============================================================================
 
 function handleExecIos(payload) {
   var deviceName = payload.device;
-  var device = getNet().getDevice(deviceName);
+  var command = payload.command;
+  var timeoutMs = payload.timeoutMs || 30000;
   
+  dprint("[handleExecIos] device=" + deviceName + " command=" + command);
+  
+  var device = getNet().getDevice(deviceName);
   if (!device) {
-    return { 
-      ok: false, 
-      code: "DEVICE_NOT_FOUND",
-      error: "Device not found: " + deviceName 
-    };
+    return { ok: false, code: "DEVICE_NOT_FOUND", error: "Device not found: " + deviceName };
   }
-
+  
   var term;
   try {
     term = device.getCommandLine();
   } catch (e) {
-    return { 
-      ok: false, 
-      code: "CLI_UNAVAILABLE",
-      error: "TerminalLine not available for device " + deviceName 
-    };
+    return { ok: false, code: "CLI_UNAVAILABLE", error: "TerminalLine not available: " + deviceName };
   }
   
   if (!term) {
-    return { 
-      ok: false, 
-      code: "CLI_UNAVAILABLE",
-      error: "TerminalLine not available for device " + deviceName 
-    };
+    return { ok: false, code: "CLI_UNAVAILABLE", error: "TerminalLine is null for " + deviceName };
   }
-
-  var command = payload.command;
-  dprint("[handleExecIos] Command: '" + command + "'");
-  var currentMode = "priv-exec";
-  // Would you like to enter the initial configuration dialog?
+  
+  var output = "";
+  var startTime = Date.now();
+  
   try {
-    var prompt = term.getPrompt ? term.getPrompt() : "";
-    
-    if (prompt.indexOf("(config") >= 0) {
-      currentMode = "config";
-    } else if (prompt.indexOf("#") >= 0) {
-      currentMode = "priv-exec";
-    } else if (prompt.indexOf(">") >= 0) {
-      currentMode = "user-exec";
-    }
-
-    var isShowCommand = command.toLowerCase().indexOf("show ") === 0;
-    
-    if (currentMode === "config" && isShowCommand) {
-      var endResult = executeCommandAsync(term, "end");
-      endResult.then(function(r) {
-        if (r.output && r.output.indexOf("#") >= 0) {
-          currentMode = "priv-exec";
-        }
-      });
-    }
-
-    if (isShowCommand && currentMode !== "priv-exec") {
-      var enableResult = executeCommandAsync(term, "enable");
-      enableResult.then(function(r) {
-        if (r.output && r.output.indexOf("#") >= 0) {
-          currentMode = "priv-exec";
-        }
-      });
-    }
-
-    var maxWaitMs = 30000;
-    var startTime = Date.now();
-    var result = executeCommandAsync(term, command);
-    var output = "";
-    var status = 0;
-    
-    result.then(function(r) {
-      output = r.output || "";
-      status = r.status;
-    }).catch(function(err) {
-      status = 1;
-      output = String(err);
-    });
-    
-    var outputLines = output.split("\\n");
-    var lastLines = outputLines.slice(-5).join("\\n");
-    if (lastLines.indexOf("% Invalid") >= 0 || lastLines.indexOf("% Incomplete") >= 0 || 
-        lastLines.indexOf("% Ambiguous") >= 0 || lastLines.indexOf("Error") >= 0) {
-      status = 1;
-    }
-    
-  } catch (e) {
-    status = 1;
-    output = String(e);
+    var initialLen = term.getOutput ? term.getOutput().length : 0;
+    dprint("[handleExecIos] initial output length=" + initialLen);
+  } catch(e) {
+    initialLen = 0;
   }
+  
+  try {
+    term.enterCommand(command);
+  } catch(e) {
+    return { ok: false, code: "COMMAND_ERROR", error: String(e) };
+  }
+  
+  var maxPolls = 300;
+  var poll = 0;
+  var lastOutputLen = initialLen;
+  var commandCompleted = false;
+  var promptSeen = false;
+  
+  while (poll < maxPolls) {
+    poll++;
+    
+    try {
+      if (term.getOutput) {
+        var currentOutput = term.getOutput();
+        if (currentOutput.length > lastOutputLen) {
+          output = currentOutput;
+          lastOutputLen = currentOutput.length;
+          dprint("[handleExecIos] poll #" + poll + " output len=" + currentOutput.length);
+        }
+      }
+      
+      if (term.getPrompt) {
+        var currentPrompt = term.getPrompt();
+        // IOS prompt contains "#" when command completes in priv-exec
+        // or ">" for user-exec
+        if (currentPrompt && currentPrompt.indexOf("#") >= 0) {
+          promptSeen = true;
+          dprint("[handleExecIos] poll #" + poll + " priv-exec prompt detected: " + currentPrompt);
+          // Wait one more poll to ensure full output
+          if (poll > 1) {
+            commandCompleted = true;
+            break;
+          }
+        } else if (currentPrompt && currentPrompt.indexOf(">") >= 0) {
+          promptSeen = true;
+          dprint("[handleExecIos] poll #" + poll + " user-exec prompt detected: " + currentPrompt);
+          commandCompleted = true;
+          break;
+        }
+      }
+    } catch(e) {
+      dprint("[handleExecIos] poll error: " + e);
+    }
+    
+    if (Date.now() - startTime > timeoutMs) {
+      dprint("[handleExecIos] poll #" + poll + " timeout after " + (Date.now() - startTime) + "ms");
+      break;
+    }
+  }
+  
+  dprint("[handleExecIos] final output length=" + output.length);
+  dprint("[handleExecIos] commandCompleted=" + commandCompleted + " promptSeen=" + promptSeen);
+  
+  // Detect error patterns in output
+  var hasError = false;
+  if (output) {
+    var upperOutput = output.toUpperCase();
+    if (upperOutput.indexOf("% INVALID") >= 0 || 
+        upperOutput.indexOf("% INCOMPLETE") >= 0 || 
+        upperOutput.indexOf("% AMBIGUOUS") >= 0 ||
+        upperOutput.indexOf("ERROR") >= 0) {
+      hasError = true;
+    }
+  }
+  
+  var status = commandCompleted && !hasError ? 0 : 1;
   
   return {
     ok: status === 0,
     raw: output,
     status: status,
     source: "terminal",
-    session: { mode: currentMode }
+    session: { mode: promptSeen ? "priv-exec" : "user-exec" }
+  };
+}
+
+// ============================================================================
+// PC/Server Execution Handler - Uses polling pattern like IOS exec
+// ============================================================================
+
+function handleExecPc(payload) {
+  var deviceName = payload.device;
+  var command = payload.command;
+  var timeoutMs = payload.timeoutMs || 30000;
+  
+  dprint("[handleExecPc] device=" + deviceName + " command=" + command);
+  
+  var device = getNet().getDevice(deviceName);
+  if (!device) {
+    return { ok: false, code: "DEVICE_NOT_FOUND", error: "Device not found: " + deviceName };
+  }
+  
+  var term;
+  try {
+    term = device.getCommandPrompt();
+  } catch (e) {
+    return { ok: false, code: "CLI_UNAVAILABLE", error: "getCommandPrompt not available: " + deviceName };
+  }
+  
+  if (!term) {
+    return { ok: false, code: "CLI_UNAVAILABLE", error: "Command prompt not available for " + deviceName };
+  }
+  
+  var output = "";
+  var startTime = Date.now();
+  
+  // Clear any pending output first
+  try {
+    if (term.getOutput) {
+      var initial = term.getOutput();
+      dprint("[handleExecPc] initial output length=" + initial.length);
+    }
+  } catch(e) {}
+  
+  try {
+    term.enterCommand(command);
+  } catch(e) {
+    return { ok: false, code: "COMMAND_ERROR", error: String(e) };
+  }
+  
+  // Poll for output using getOutput() and check for completion via prompt
+  var maxPolls = 300;
+  var poll = 0;
+  var lastOutputLen = 0;
+  var commandCompleted = false;
+  
+  while (poll < maxPolls) {
+    poll++;
+    
+    try {
+      if (term.getOutput) {
+        var currentOutput = term.getOutput();
+        if (currentOutput.length > lastOutputLen) {
+          output = currentOutput;
+          lastOutputLen = currentOutput.length;
+          dprint("[handleExecPc] poll #" + poll + " output len=" + currentOutput.length);
+        }
+      }
+      
+      // Check if command completed by looking at prompt
+      if (term.getPrompt) {
+        var prompt = term.getPrompt();
+        // PC command prompt is usually "C:\>" when idle
+        if (prompt && prompt.indexOf(">") >= 0 && output.indexOf("Reply from") >= 0) {
+          commandCompleted = true;
+          dprint("[handleExecPc] poll #" + poll + " command completed, prompt=" + prompt);
+          break;
+        }
+        if (prompt && prompt.indexOf(">") >= 0 && output.indexOf("timeout") >= 0) {
+          commandCompleted = true;
+          dprint("[handleExecPc] poll #" + poll + " command timed out");
+          break;
+        }
+      }
+    } catch(e) {
+      dprint("[handleExecPc] poll error: " + e);
+    }
+    
+    // Check timeout
+    if (Date.now() - startTime > timeoutMs) {
+      dprint("[handleExecPc] poll #" + poll + " timeout after " + (Date.now() - startTime) + "ms");
+      break;
+    }
+  }
+  
+  dprint("[handleExecPc] final output length=" + output.length);
+  
+  // Simple detection: if there's "Reply from" in the recent output, ping worked
+  // Find the last "Reply from" and check if the corresponding stats show success
+  var hasReplyFrom = output.indexOf("Reply from") >= 0;
+  var hasInvalidCmd = false;
+  var hasTimeout = false;
+  var hasSuccessPing = false;
+  
+  // Check if the most recent ping attempt was successful
+  var lastReplyIdx = output.lastIndexOf("Reply from");
+  var lastTimeoutIdx = output.lastIndexOf("Request timed out");
+  var lastInvalidIdx = output.lastIndexOf("Invalid Command");
+  var lastStatsIdx = output.lastIndexOf("Ping statistics for");
+  
+  if (lastReplyIdx >= 0) {
+    // Get the section after the last "Reply from"
+    var afterReply = output.substring(lastReplyIdx);
+    // Check if there's a ping stats showing 0% loss after this reply
+    if (afterReply.indexOf("0% loss") >= 0 || afterReply.indexOf("Received = 4") >= 0) {
+      hasSuccessPing = true;
+    }
+  }
+  
+  if (lastTimeoutIdx > lastReplyIdx) {
+    hasTimeout = true;
+  }
+  if (lastInvalidIdx > lastReplyIdx && lastInvalidIdx > lastStatsIdx) {
+    hasInvalidCmd = true;
+  }
+  
+  dprint("[handleExecPc] hasReplyFrom=" + hasReplyFrom + " hasSuccessPing=" + hasSuccessPing + " hasTimeout=" + hasTimeout + " hasInvalidCmd=" + hasInvalidCmd);
+  
+  var ok = hasSuccessPing && !hasTimeout;
+  
+  return {
+    ok: ok,
+    raw: output,
+    status: ok ? 0 : 1,
+    source: "terminal"
   };
 }
 

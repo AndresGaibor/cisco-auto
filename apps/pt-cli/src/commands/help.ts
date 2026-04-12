@@ -66,12 +66,13 @@ function getCommandSchema(commandId: string): string | undefined {
 export function createHelpCommand(): Command {
   const cmd = new Command('help')
     .description('Muestra ayuda enriquecida para comandos')
-    .argument('[comando]', 'Comando a consultar (opcional)')
-    .argument('[subcomando]', 'Subcomando a consultar (opcional)')
-    .action(async (comando?: string, subcomando?: string) => {
-      const key = comando && subcomando 
-        ? `${comando} ${subcomando}` 
-        : comando || '';
+    .argument('[comando...]', 'Comando y subcomandos a consultar (ej: routing static add)')
+    .action(async (args: string[]) => {
+      const parts = args || [];
+      const comando = parts[0] || '';
+      // Soportar hasta 2 subcomandos (ej: routing static add)
+      const subcomando = parts.slice(1, 3).join(' ') || '';
+      const key = comando && subcomando ? `${comando} ${subcomando}` : comando;
       
       // Intentar buscar en el catálogo
       let info = COMMAND_CATALOG[key];
@@ -92,49 +93,35 @@ export function createHelpCommand(): Command {
           const padding = ' '.repeat(Math.max(2, 15 - c.id.length));
           console.log(`  ${c.id}${padding}${c.summary}${c.status !== 'stable' ? ` [${c.status}]` : ''}`);
         }
-
-        console.log('\n⚠️  Algunas capacidades están en estado PARTIAL o EXPERIMENTAL.');
-        console.log('Consulta docs/CLI_AGENT_SKILL.md para políticas de autonomía y troubleshooting.\n');
-        console.log('\nUsa "pt help <comando>" para ver más detalles.');
-        console.log('Usa "pt help <comando> <subcomando>" para subcomandos.');
-        return;
-      }
-
-      if (!info) {
-        console.log(`\nComando no encontrado: ${key}\n`);
-        console.log('Usa "pt help" para ver todos los comandos disponibles.');
+        console.log('\n\nUsa "pt help <comando>" para más información.');
         return;
       }
       
-      console.log(formatHelpHeader(info.id + formatStatusLine(info.status)));
-      console.log(`\n${info.summary}`);
+      if (!info && key) {
+        console.log(`\n⚠️  Comando "${key}" no encontrado en el catálogo de ayuda.\n`);
+        console.log('Usa "pt help" para ver todos los comandos disponibles.\n');
+        return;
+      }
+
+      const cmdInfo = info as CommandInfo;
+      console.log(formatHelpHeader(cmdInfo.id));
       
-      if (info.longDescription) {
-        console.log(`\n${info.longDescription}`);
+      if (cmdInfo.longDescription) {
+        console.log(`\n${cmdInfo.longDescription}\n`);
+      } else {
+        console.log(`\n${cmdInfo.summary}\n`);
       }
       
-      if (info.examples) {
-        console.log(formatExamplesSection(info.examples));
-      }
-      
-      if (info.related) {
-        console.log(formatRelatedSection(info.related));
-      }
-      
-      const schema = getCommandSchema(key);
+      const schema = getCommandSchema(cmdInfo.id);
       if (schema) {
         console.log(formatSchemaSection(schema));
       }
       
-      if (info.notes && info.notes.length > 0) {
-        console.log('\nNotes:');
-        for (const note of info.notes) {
-          console.log(`  - ${note}`);
-        }
-      }
-
+      console.log(formatExamplesSection(cmdInfo.examples || []));
+      console.log(formatRelatedSection(cmdInfo.related || []));
+      console.log(formatStatusLine(cmdInfo.status || 'stable'));
       console.log('');
     });
-  
+
   return cmd;
 }

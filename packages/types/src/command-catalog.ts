@@ -130,6 +130,15 @@ export const PUBLIC_COMMAND_CATALOG: CommandCatalogEntry[] = [
     payloadSchemaName: 'RemoveLinkPayloadSchema',
     resultSchemaName: 'RemoveLinkResultSchema',
   },
+  {
+    type: 'syncLinks',
+    visibility: 'public',
+    execution: 'immediate',
+    handler: 'handleSyncLinks',
+    service: 'topology',
+    payloadSchemaName: 'SyncLinksPayloadSchema',
+    resultSchemaName: 'SyncLinksResultSchema',
+  },
 
    // Host Configuration
    {
@@ -218,6 +227,15 @@ export const PUBLIC_COMMAND_CATALOG: CommandCatalogEntry[] = [
     service: 'ios',
     payloadSchemaName: 'ExecInteractivePayloadSchema',
     resultSchemaName: 'ExecInteractiveResultSchema',
+  },
+  {
+    type: 'execPc',
+    visibility: 'public',
+    execution: 'immediate',
+    handler: 'handleExecPc',
+    service: 'ios',
+    payloadSchemaName: 'ExecPcPayloadSchema',
+    resultSchemaName: 'ExecPcResultSchema',
   },
 
   // Snapshot & Inspect
@@ -374,6 +392,7 @@ export const COMMAND_TYPES = {
   // Link Commands
   ADD_LINK: "addLink",
   REMOVE_LINK: "removeLink",
+  SYNC_LINKS: "syncLinks",
   
   // Host Configuration
   CONFIG_HOST: "configHost",
@@ -382,6 +401,7 @@ export const COMMAND_TYPES = {
   CONFIG_IOS: "configIos",
   EXEC_IOS: "execIos",
   EXEC_INTERACTIVE: "execInteractive",
+  EXEC_PC: "execPc",
   
    // Snapshot & Inspect
    SNAPSHOT: "snapshot",

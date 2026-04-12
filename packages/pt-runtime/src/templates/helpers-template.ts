@@ -274,6 +274,140 @@ function loadLinkRegistry() {
   }
 }
 
+function cleanLinkRegistry() {
+  // Only clean STALE links (devices that don't exist)
+  // DO NOT deduplicate here - that should only happen when saving new links
+  var currentDevices = new Set();
+  var devicesDetected = false;
+  try {
+    var net = getNet();
+    if (net) {
+      var count = net.getDeviceCount();
+      if (count > 0) {
+        for (var i = 0; i < count; i++) {
+          var device = net.getDeviceAt(i);
+          if (device) {
+            currentDevices.add(device.getName());
+          }
+        }
+        devicesDetected = true;
+      }
+    }
+  } catch (e) {
+    dprint("[cleanLinkRegistry] Could not get devices: " + e);
+  }
+  
+  // If we couldn't detect devices, don't filter anything (safer)
+  if (!devicesDetected) {
+    dprint("[cleanLinkRegistry] Devices not detected, skipping cleanup");
+    return;
+  }
+  
+  dprint("[cleanLinkRegistry] Detected devices: " + Array.from(currentDevices).join(", "));
+  
+  // Only filter stale links (devices don't exist), keep all others
+  var cleanedLinks = {};
+  var cleanedCount = 0;
+  
+  for (var linkId in LINK_REGISTRY) {
+    var link = LINK_REGISTRY[linkId];
+    if (!link || typeof link !== 'object') continue;
+    
+    var d1 = link.device1;
+    var d2 = link.device2;
+    
+    // Skip if either device doesn't exist (stale link)
+    if (!currentDevices.has(d1) || !currentDevices.has(d2)) {
+      dprint("[cleanLinkRegistry] Filtering stale link: " + linkId + " (" + d1 + " or " + d2 + " not in devices)");
+      cleanedCount++;
+      continue;
+    }
+    
+    cleanedLinks[linkId] = link;
+  }
+  
+  if (cleanedCount > 0) {
+    dprint("[cleanLinkRegistry] Cleaned " + cleanedCount + " stale links");
+    LINK_REGISTRY = cleanedLinks;
+    saveLinkRegistry();
+  }
+}
+
+function syncLinksFromSnapshot(snapshotLinks) {
+  loadLinkRegistry();
+  
+  var added = 0;
+  var removed = 0;
+  var existing = Object.keys(LINK_REGISTRY).length;
+  
+  var currentDevices = new Set();
+  try {
+    var net = getNet();
+    if (net) {
+      var count = net.getDeviceCount();
+      for (var i = 0; i < count; i++) {
+        var device = net.getDeviceAt(i);
+        if (device) {
+          currentDevices.add(device.getName());
+        }
+      }
+    }
+  } catch (e) {
+    dprint("[syncLinksFromSnapshot] Could not get devices: " + e);
+    return { ok: false, error: "Could not get devices from network", added: 0, removed: 0 };
+  }
+  
+  if (snapshotLinks && typeof snapshotLinks === "object") {
+    for (var linkId in snapshotLinks) {
+      var link = snapshotLinks[linkId];
+      if (!link || typeof link !== "object") continue;
+      
+      var d1 = link.device1;
+      var d2 = link.device2;
+      
+      if (!d1 || !d2) continue;
+      
+      if (!currentDevices.has(d1) || !currentDevices.has(d2)) {
+        dprint("[syncLinksFromSnapshot] Skipping link with missing device: " + linkId);
+        continue;
+      }
+      
+      if (!LINK_REGISTRY[linkId]) {
+        LINK_REGISTRY[linkId] = {
+          device1: d1,
+          port1: link.port1 || "",
+          device2: d2,
+          port2: link.port2 || "",
+          linkType: link.cableType || "auto"
+        };
+        added++;
+        dprint("[syncLinksFromSnapshot] Added link: " + linkId);
+      }
+    }
+  }
+  
+  for (var regLinkId in LINK_REGISTRY) {
+    var regLink = LINK_REGISTRY[regLinkId];
+    if (!regLink) continue;
+    
+    var rd1 = regLink.device1;
+    var rd2 = regLink.device2;
+    
+    if (!currentDevices.has(rd1) || !currentDevices.has(rd2)) {
+      dprint("[syncLinksFromSnapshot] Removing stale link: " + regLinkId);
+      delete LINK_REGISTRY[regLinkId];
+      removed++;
+    }
+  }
+  
+  if (added > 0 || removed > 0) {
+    saveLinkRegistry();
+    dprint("[syncLinksFromSnapshot] Saved: +" + added + " added, -" + removed + " removed");
+  }
+  
+  return { ok: true, added: added, removed: removed, totalBefore: existing, totalAfter: Object.keys(LINK_REGISTRY).length };
+}
+
 function saveLinkRegistry() {
   try {
     fm.writePlainTextToFile(LINKS_FILE, JSON.stringify(LINK_REGISTRY, null, 2));

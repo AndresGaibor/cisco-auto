@@ -89,7 +89,7 @@ export async function runInspectTopology(options: { device?: string; json?: bool
         '  ' +
           chalk.cyan(device.name.padEnd(20)) +
           chalk.gray(device.model).padEnd(15) +
-          chalk.yellow(device.status),
+          chalk.yellow(device.type),
       );
     }
 

@@ -32,8 +32,8 @@ export interface GlobalFlags {
   explain: boolean;
   plan: boolean;
   verify: boolean;
-  timeout: number | null;
-  noTimeout: boolean;
+  timeout?: number | null;
+  noTimeout?: boolean;
 }
 
 /**

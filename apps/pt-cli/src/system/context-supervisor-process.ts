@@ -31,6 +31,9 @@ const FAILURE_THRESHOLD = 3; // Apagar después de 3 ciclos seguidos fallando
 const STARTUP_GRACE_PERIOD_MS = 120000; // 2 minutos al inicio
 const POST_DISCONNECT_GRACE_MS = 60000; // 1 minuto después de desconectar PT
 
+// Link sync cada 10 ciclos = 40 segundos
+const LINK_SYNC_INTERVAL_CYCLES = 10;
+
 interface SupervisorState {
   startedAt: number;
   inGracePeriod: boolean;
@@ -39,6 +42,7 @@ interface SupervisorState {
   consecutiveBridgeFailures: number;
   lastHealthyTs: number;
   ptWasConnected: boolean;
+  lastLinkCount: number;
 }
 
 let state: SupervisorState = {
@@ -49,11 +53,13 @@ let state: SupervisorState = {
   consecutiveBridgeFailures: 0,
   lastHealthyTs: Date.now(),
   ptWasConnected: false,
+  lastLinkCount: 0,
 };
 
 let running = true;
 let controller: PTController | null = null;
 let supervisorDevDir = getDefaultDevDir();
+let cycleCount = 0;
 
 /**
  * Maneja salida limpia del proceso
@@ -206,10 +212,54 @@ function writeContextStatus(status: ContextStatus) {
 }
 
 /**
+ * Sincroniza links.json con la topología actual de PT
+ */
+async function syncLinksFromPT(): Promise<void> {
+  if (!controller) return;
+
+  try {
+    const cached = controller.getCachedSnapshot();
+    if (!cached) {
+      dprint("[supervisor] No cached snapshot available for link sync");
+      return;
+    }
+
+    const currentLinkCount = Object.keys(cached.links || {}).length;
+
+    if (currentLinkCount === state.lastLinkCount) {
+      dprint("[supervisor] Link count unchanged (" + currentLinkCount + "), skipping sync");
+      return;
+    }
+
+    dprint("[supervisor] Link count changed: " + state.lastLinkCount + " -> " + currentLinkCount + ", syncing...");
+
+    const bridge = controller.getBridge();
+    const result = await bridge.sendCommandAndWait('syncLinks', {
+      links: cached.links,
+    }, 10000);
+
+    const value = result?.value;
+    if (value?.ok) {
+      console.log(
+        "[supervisor] Links synced: +" + (value.added || 0) + " added, -" + (value.removed || 0) + " removed, total=" + (value.totalLinks || 0)
+      );
+    } else {
+      console.error("[supervisor] Link sync failed: " + (value?.error || 'unknown error'));
+    }
+
+    state.lastLinkCount = currentLinkCount;
+  } catch (e) {
+    console.error("[supervisor] Error syncing links:", e);
+  }
+}
+
+/**
  * Recolecta y escribe el estado completo
  */
 async function cycle() {
   try {
+    cycleCount++;
+
     // Recolectar todos los datos
     const heartbeat = await collectHeartbeatHealth();
     const topology = await collectTopologyHealth();
@@ -218,6 +268,11 @@ async function cycle() {
     const now = Date.now();
     const elapsedSinceStart = now - state.startedAt;
     const inGracePeriod = state.inGracePeriod && now < state.gracePeriodEndsAt;
+
+    // Sync links cada N ciclos (solo fuera del grace period)
+    if (!inGracePeriod && cycleCount % LINK_SYNC_INTERVAL_CYCLES === 0) {
+      await syncLinksFromPT();
+    }
 
     // Detectar conexión/desconexión de PT
     const ptJustConnected = heartbeat.state === "ok" && !state.ptWasConnected;

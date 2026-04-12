@@ -24,13 +24,16 @@ function handleSnapshot() {
   } catch(e) {}
   var count = net.getDeviceCount();
   var devices = {};
-  var linksMap = {}; // Use endpoint key for O(1) deduplication
+  var linksMap = {};
 
+  // PASO 1: Recolectar información de dispositivos
+  var deviceNames = {};
   for (var i = 0; i < count; i++) {
     var device = net.getDeviceAt(i);
     if (!device) continue;
-
     var name = device.getName();
+    deviceNames[name] = true;
+    
     var portCount = device.getPortCount();
     var ports = [];
 
@@ -46,63 +49,6 @@ function handleSnapshot() {
         try { portInfo.macAddress = port.getMacAddress(); } catch(e) {}
 
         ports.push(portInfo);
-
-        // O(n) link handling using UUID instead of O(n²) nested loops
-        var link = port.getLink();
-        if (link) {
-          for (var j = 0; j < count; j++) {
-            var otherDevice = net.getDeviceAt(j);
-            if (!otherDevice || otherDevice.getName() === name) continue;
-
-            var otherPortCount = otherDevice.getPortCount();
-            for (var op = 0; op < otherPortCount; op++) {
-              try {
-                var otherPort = otherDevice.getPortAt(op);
-                if (!otherPort) continue;
-
-                var otherLink = otherPort.getLink();
-                if (otherLink && otherLink === link) {
-                  var dev1 = name;
-                  var pt1 = port.getName();
-                  var dev2 = otherDevice.getName();
-                  var pt2 = otherPort.getName();
-
-                  if (dev2 < dev1 || (dev2 === dev1 && pt2 < pt1)) {
-                    dev1 = otherDevice.getName();
-                    pt1 = otherPort.getName();
-                    dev2 = name;
-                    pt2 = port.getName();
-                  }
-
-                  var linkId = dev1 + ":" + pt1 + "--" + dev2 + ":" + pt2;
-
-                  if (!linksMap[linkId]) {
-                    var cableType = "auto";
-                    try {
-                      if (typeof link.getLinkType === "function") {
-                        cableType = CABLE_TYPE_NAMES[link.getLinkType()] || "auto";
-                      } else if (typeof link.connType === "number") {
-                        cableType = CABLE_TYPE_NAMES[link.connType] || "auto";
-                      }
-                    } catch(e) {}
-
-                    linksMap[linkId] = {
-                      id: linkId,
-                      device1: dev1,
-                      port1: pt1,
-                      device2: dev2,
-                      port2: pt2,
-                      cableType: cableType,
-                      connected: true
-                    };
-                  }
-
-                  break;
-                }
-              } catch(e) { /* ignore */ }
-            }
-          }
-        }
       } catch(e) {
         ports.push({ name: "port" + p });
       }
@@ -117,6 +63,159 @@ function handleSnapshot() {
     };
   }
 
+  // PASO 2: Obtener links desde net.getLinkAt() (API directa de PT)
+  var linkCount = 0;
+  try {
+    linkCount = net.getLinkCount ? net.getLinkCount() : 0;
+    dprint("[handleSnapshot] net.getLinkCount() = " + linkCount);
+  } catch(e) {
+    dprint("[handleSnapshot] net.getLinkCount error: " + e);
+  }
+  
+if (linkCount > 0) {
+    for (var li = 0; li < linkCount; li++) {
+      try {
+        var linkObj = net.getLinkAt(li);
+        if (!linkObj) continue;
+        
+        var dev1 = null, dev2 = null, pt1 = null, pt2 = null, cableType = "auto";
+        
+        // Obtener puertos y dispositivos desde el link object
+        try {
+          var port1Obj = linkObj.getPort1 ? linkObj.getPort1() : null;
+          var port2Obj = linkObj.getPort2 ? linkObj.getPort2() : null;
+          
+          if (port1Obj && typeof port1Obj.getName === "function") {
+            pt1 = port1Obj.getName();
+            var d1Obj = port1Obj.getOwnerDevice ? port1Obj.getOwnerDevice() : null;
+            if (d1Obj && typeof d1Obj.getName === "function") {
+              dev1 = d1Obj.getName();
+            }
+          }
+          
+          if (port2Obj && typeof port2Obj.getName === "function") {
+            pt2 = port2Obj.getName();
+            var d2Obj = port2Obj.getOwnerDevice ? port2Obj.getOwnerDevice() : null;
+            if (d2Obj && typeof d2Obj.getName === "function") {
+              dev2 = d2Obj.getName();
+            }
+          }
+          
+          // Cable type
+          if (typeof linkObj.getConnectionType === "function") {
+            try {
+              var ct = linkObj.getConnectionType();
+              cableType = CABLE_TYPE_NAMES[ct] || "auto";
+            } catch(e) {}
+          }
+        } catch(e) {}
+        
+        // Validar que tenemos ambos dispositivos y puertos
+        if (!dev1 || !dev2 || !pt1 || !pt2) {
+          continue;
+        }
+        
+        // Verificar que los dispositivos existen
+        if (!deviceNames[dev1] || !deviceNames[dev2]) {
+          continue;
+        }
+        
+        // Normalizar ID del link (orden alfabético)
+        var linkId;
+        if (dev2 < dev1 || (dev2 === dev1 && pt2 < pt1)) {
+          linkId = dev2 + ":" + pt2 + "--" + dev1 + ":" + pt1;
+          var tmp = dev1; dev1 = dev2; dev2 = tmp;
+          var tmpPort = pt1; pt1 = pt2; pt2 = tmpPort;
+        } else {
+          linkId = dev1 + ":" + pt1 + "--" + dev2 + ":" + pt2;
+        }
+        
+        if (!linksMap[linkId]) {
+          linksMap[linkId] = {
+            id: linkId,
+            device1: dev1,
+            port1: pt1,
+            device2: dev2,
+            port2: pt2,
+            cableType: cableType,
+            connected: true
+          };
+        }
+      } catch(e) {}
+    }
+  } else {
+    // Fallback: escanear puertos si net.getLinkCount() no funciona
+    for (var i = 0; i < count; i++) {
+      var device = net.getDeviceAt(i);
+      if (!device) continue;
+      var name = device.getName();
+      var portCount = device.getPortCount();
+
+      for (var p = 0; p < portCount; p++) {
+        try {
+          var port = device.getPortAt(p);
+          if (!port) continue;
+
+          var link = port.getLink();
+          if (link) {
+            for (var j = 0; j < count; j++) {
+              var otherDevice = net.getDeviceAt(j);
+              if (!otherDevice || otherDevice.getName() === name) continue;
+
+              var otherPortCount = otherDevice.getPortCount();
+              for (var op = 0; op < otherPortCount; op++) {
+                try {
+                  var otherPort = otherDevice.getPortAt(op);
+                  if (!otherPort) continue;
+
+                  var otherLink = otherPort.getLink();
+                  if (otherLink && otherLink === link) {
+                    var dev1 = name;
+                    var pt1 = port.getName();
+                    var dev2 = otherDevice.getName();
+                    var pt2 = otherPort.getName();
+
+                    if (dev2 < dev1 || (dev2 === dev1 && pt2 < pt1)) {
+                      dev1 = otherDevice.getName();
+                      pt1 = otherPort.getName();
+                      dev2 = name;
+                      pt2 = port.getName();
+                    }
+
+                    var linkId = dev1 + ":" + pt1 + "--" + dev2 + ":" + pt2;
+
+                    if (!linksMap[linkId]) {
+                      var cableType = "auto";
+                      try {
+                        if (typeof link.getLinkType === "function") {
+                          cableType = CABLE_TYPE_NAMES[link.getLinkType()] || "auto";
+                        } else if (typeof link.connType === "number") {
+                          cableType = CABLE_TYPE_NAMES[link.connType] || "auto";
+                        }
+                      } catch(e) {}
+
+                      linksMap[linkId] = {
+                        id: linkId,
+                        device1: dev1,
+                        port1: pt1,
+                        device2: dev2,
+                        port2: pt2,
+                        cableType: cableType,
+                        connected: true
+                      };
+                    }
+
+                    break;
+                  }
+                } catch(e) { /* ignore */ }
+              }
+            }
+          }
+        } catch(e) { /* ignore */ }
+      }
+    }
+  }
+
   // Mezclar enlaces registrados explícitamente por el runtime
   try {
     for (var linkId in LINK_REGISTRY) {
@@ -126,7 +225,6 @@ function handleSnapshot() {
     }
   } catch(e) {}
 
-  // Return links as Record (consistent with TopologySnapshot schema)
   return {
     ok: true,
     version: "1.0",

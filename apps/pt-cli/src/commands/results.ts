@@ -5,7 +5,7 @@
  */
 
 import { Command } from 'commander';
-import { resolve } from 'path';
+import { resolve, join } from 'path';
 import { homedir } from 'os';
 import chalk from 'chalk';
 import { existsSync, readdirSync, statSync, readFileSync } from 'node:fs';

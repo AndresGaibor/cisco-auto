@@ -48,6 +48,9 @@ import { createBridgeCommand } from './bridge';
 import { createDhcpServerCommand } from './dhcp-server';
 import { createHostCommand } from './host';
 import { createInspectCommand } from './inspect/index';
+import { createPingCommand } from './ping';
+import { createShowMacCommand } from './show-mac';
+import { createCheckCommand } from './check';
 import { createLayoutCommand } from './layout/index';
 import { createVerifyCommand } from './verify/index';
 import { createAgentCommand } from './agent/index';
@@ -115,6 +118,9 @@ export const COMMAND_FACTORIES: CommandFactory[] = [
   createBridgeCommand,
   createDhcpServerCommand,
   createHostCommand,
+  createPingCommand,
+  createShowMacCommand,
+  createCheckCommand,
   // Módulos avanzados
   createLintCommand,
   createCapabilityCommand,

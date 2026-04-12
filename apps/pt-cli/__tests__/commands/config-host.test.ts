@@ -37,6 +37,6 @@ test('CONFIG_HOST_META tiene related commands', () => {
 });
 
 test('CONFIG_HOST_META tiene nextSteps', () => {
-  expect(CONFIG_HOST_META.nextSteps.length).toBeGreaterThan(0);
-  expect(CONFIG_HOST_META.nextSteps).toContain('pt device get <device>');
+  expect(CONFIG_HOST_META.nextSteps!.length).toBeGreaterThan(0);
+  expect(CONFIG_HOST_META.nextSteps!).toContain('pt device get <device>');
 });

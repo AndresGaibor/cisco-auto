@@ -4,6 +4,7 @@ import { createLinkRemoveCommand } from './remove.js';
 import { createLinkListCommand } from './list.js';
 import { createLinkSuggestCommand } from './suggest.js';
 import { createLinkVerifyCommand } from './verify.js';
+import { createLinkSyncCommand } from './sync.js';
 
 export function createLinkCommand(): Command {
   const command = new Command('link')
@@ -14,6 +15,7 @@ export function createLinkCommand(): Command {
   command.addCommand(createLinkListCommand());
   command.addCommand(createLinkSuggestCommand());
   command.addCommand(createLinkVerifyCommand());
+  command.addCommand(createLinkSyncCommand());
 
   return command;
 }

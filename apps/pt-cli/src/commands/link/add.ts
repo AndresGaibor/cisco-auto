@@ -227,6 +227,12 @@ export function createLinkAddCommand(): Command {
             });
 
             await controller.addLink(dev1, p1, dev2, p2, linkType);
+            
+            await logPhase('refresh', { message: 'Refrescando topología después de agregar enlace' });
+            const cache = controller.getTopologyCache();
+            if (cache) {
+              cache.refreshFromState();
+            }
 
             if (verifyEnabled) {
               await logPhase('verify', { device1: dev1, port1: p1, device2: dev2, port2: p2 });

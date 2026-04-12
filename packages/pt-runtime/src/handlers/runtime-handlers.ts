@@ -61,9 +61,11 @@ export interface PollDeferredPayload {
   ticket: string;
 }
 
-export interface PollDeferredPayload {
-  type: "__pollDeferred";
-  ticket: string;
+export interface ExecPcPayload {
+  type: "execPc";
+  device: string;
+  command: string;
+  timeoutMs?: number;
 }
 
 interface PollStateInProgress {
@@ -470,6 +472,109 @@ export function handlePing(api: RuntimeApi): RuntimeResult {
   return createSuccessResult({ status: "alive", timestamp: api.now() });
 }
 
+export function handleExecPc(payload: ExecPcPayload, api: RuntimeApi): RuntimeResult {
+  const { device, command, timeoutMs = 30000 } = payload;
+
+  api.dprint(`[execPc] device=${device} command="${command}"`);
+
+  const deviceRef = api.getDeviceByName(device);
+  if (!deviceRef) {
+    return createErrorResult(`Device not found: ${device}`, "DEVICE_NOT_FOUND");
+  }
+
+  const net = deviceRef.getNetwork();
+  const dev = net.getDevice(device) as any;
+  if (!dev) {
+    return createErrorResult(`Device not found in network: ${device}`, "DEVICE_NOT_FOUND");
+  }
+
+  if (typeof dev.getCommandPrompt !== "function") {
+    return createErrorResult(`Device ${device} does not support getCommandPrompt() - not a PC/Server?`, "NOT_A_PC");
+  }
+
+  const term = dev.getCommandPrompt() as any;
+  if (!term) {
+    return createErrorResult(`Device ${device} command prompt is null`, "NO_COMMAND_PROMPT");
+  }
+
+  const ticket = "pc_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
+  const timeout = timeoutMs;
+
+  const jobState: any = {
+    ticket,
+    device,
+    command,
+    output: "",
+    finished: false,
+    status: undefined,
+    startedAt: Date.now(),
+    timeoutId: null
+  };
+
+  if (typeof (api as any).registerPcJob === "function") {
+    (api as any).registerPcJob(ticket, jobState);
+  }
+
+  jobState.timeoutId = setTimeout(() => {
+    if (!jobState.finished) {
+      jobState.finished = true;
+      jobState.status = 1;
+      jobState.output += "\n[timeout after " + timeout + "ms]";
+      if (typeof (api as any).completePcJob === "function") {
+        (api as any).completePcJob(ticket, { ok: false, status: 1, output: jobState.output, timedOut: true });
+      }
+    }
+  }, timeout);
+
+  term.registerEvent("outputWritten", jobState, function(_src: any, args: any) {
+    if (!args.isDebug) {
+      jobState.output += args.newOutput;
+    }
+  });
+
+  term.registerEvent("moreDisplayed", jobState, function(_src: any, _args: any) {
+    term.enterChar(32, 0);
+  });
+
+  term.registerEvent("commandEnded", jobState, function(_src: any, args: any) {
+    if (jobState.finished) return;
+    jobState.finished = true;
+    jobState.status = args.status;
+
+    if (jobState.timeoutId) {
+      clearTimeout(jobState.timeoutId);
+      jobState.timeoutId = null;
+    }
+
+    if (typeof (api as any).completePcJob === "function") {
+      (api as any).completePcJob(ticket, {
+        ok: args.status === 0,
+        status: args.status,
+        output: jobState.output,
+        prompt: term.getPrompt ? term.getPrompt() : "",
+        mode: term.getMode ? term.getMode() : ""
+      });
+    }
+  });
+
+  term.enterCommand(command);
+
+  return {
+    ok: true,
+    deferred: true,
+    ticket,
+    job: {
+      id: ticket,
+      kind: "pc-session",
+      version: 1,
+      device,
+      plan: [{ type: "pc-command" as any, value: command }],
+      options: { stopOnError: false, commandTimeoutMs: timeout, stallTimeoutMs: timeout },
+      payload: { device, command }
+    }
+  } as unknown as RuntimeResult;
+}
+
 // ============================================================================
 // Dispatcher - Punto de entrada del runtime
 // ============================================================================
@@ -495,6 +600,9 @@ export function runtimeDispatcher(payload: Record<string, unknown>, api: Runtime
 
       case "__ping":
         return handlePing(api);
+
+      case "execPc":
+        return handleExecPc(payload as unknown as ExecPcPayload, api);
 
       default:
         return createErrorResult(`Unknown command type: ${type}`, "UNKNOWN_COMMAND");
