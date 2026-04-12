@@ -27,6 +27,7 @@
     "@cisco-auto/core": "workspace:*",
     "@cisco-auto/file-bridge": "workspace:*",
     "@cisco-auto/ios-domain": "workspace:*",
+    "@cisco-auto/kernel": "workspace:*",
     "@cisco-auto/pt-control": "workspace:*",
     "@cisco-auto/types": "workspace:*",
     "fast-xml-parser": "^5.5.6",

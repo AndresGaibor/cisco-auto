@@ -4,6 +4,9 @@
  * Soporta flags como --network, --passive-interface, --neighbor, etc.
  */
 
+import { VlanConfigSchema } from '@cisco-auto/ios-domain/schemas';
+import { VlanId, parseVlanName } from '@cisco-auto/ios-domain/value-objects';
+
 /**
  * Parsea un flag repeatable con formato key=value.
  * Ejemplo: --network "192.168.1.0,0.0.0.255,0" --network "10.0.0.0,0.0.0.3,1"
@@ -140,11 +143,11 @@ export function parseAclRules(
 /**
  * Parsea VLANs con formato "id,name" o "id,name,state".
  * @param values - Array de strings con formato VLAN
- * @returns Array de objetos { id, name, state? }
+ * @returns Array de objetos canónicos { id, name, state? }
  */
 export function parseVlans(
   values: string[] | undefined
-): Array<{ id: string; name: string; state?: string }> {
+): Array<{ id: string; name: string; state?: 'active' | 'suspended' | 'act/unsup' }> {
   if (!values || values.length === 0) return [];
 
   return values.map((value) => {
@@ -155,11 +158,16 @@ export function parseVlans(
       );
     }
 
-    return {
-      id: parts[0]!,
-      name: parts[1]!,
-      state: parts[2] || undefined,
-    };
+    try {
+      return VlanConfigSchema.parse({
+        id: String(VlanId.fromString(parts[0]!).value),
+        name: parseVlanName(parts[1]!).value,
+        state: parts[2] || undefined,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Error de validación de VLAN: ${message}`);
+    }
   });
 }
 

@@ -8,6 +8,7 @@
         "@cisco-auto/core": "workspace:*",
         "@cisco-auto/file-bridge": "workspace:*",
         "@cisco-auto/ios-domain": "workspace:*",
+        "@cisco-auto/kernel": "workspace:*",
         "@cisco-auto/pt-control": "workspace:*",
         "@cisco-auto/types": "workspace:*",
         "fast-xml-parser": "^5.5.6",
@@ -28,6 +29,7 @@
       "dependencies": {
         "@cisco-auto/core": "workspace:*",
         "@cisco-auto/file-bridge": "workspace:*",
+        "@cisco-auto/kernel": "workspace:*",
         "@cisco-auto/pt-control": "workspace:*",
         "@inquirer/prompts": "^8.3.2",
         "chalk": "^5.6.2",
@@ -74,6 +76,18 @@
       "version": "0.1.0",
       "dependencies": {
         "@cisco-auto/types": "workspace:*",
+        "zod": "^4.3.6",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5",
+      },
+    },
+    "packages/kernel": {
+      "name": "@cisco-auto/kernel",
+      "version": "0.1.0",
+      "dependencies": {
+        "@cisco-auto/pt-control": "workspace:*",
         "zod": "^4.3.6",
       },
       "devDependencies": {
@@ -135,6 +149,8 @@
     "@cisco-auto/file-bridge": ["@cisco-auto/file-bridge@workspace:packages/file-bridge"],
 
     "@cisco-auto/ios-domain": ["@cisco-auto/ios-domain@workspace:packages/ios-domain"],
+
+    "@cisco-auto/kernel": ["@cisco-auto/kernel@workspace:packages/kernel"],
 
     "@cisco-auto/pt-cli": ["@cisco-auto/pt-cli@workspace:apps/pt-cli"],
 
@@ -422,6 +438,8 @@
 
     "@cisco-auto/ios-domain/@types/bun": ["@types/bun@1.3.12", "", { "dependencies": { "bun-types": "1.3.12" } }, "sha512-DBv81elK+/VSwXHDlnH3Qduw+KxkTIWi7TXkAeh24zpi5l0B2kUg9Ga3tb4nJaPcOFswflgi/yAvMVBPrxMB+A=="],
 
+    "@cisco-auto/kernel/@types/bun": ["@types/bun@1.3.12", "", { "dependencies": { "bun-types": "1.3.12" } }, "sha512-DBv81elK+/VSwXHDlnH3Qduw+KxkTIWi7TXkAeh24zpi5l0B2kUg9Ga3tb4nJaPcOFswflgi/yAvMVBPrxMB+A=="],
+
     "@cisco-auto/pt-cli/@types/bun": ["@types/bun@1.3.12", "", { "dependencies": { "bun-types": "1.3.12" } }, "sha512-DBv81elK+/VSwXHDlnH3Qduw+KxkTIWi7TXkAeh24zpi5l0B2kUg9Ga3tb4nJaPcOFswflgi/yAvMVBPrxMB+A=="],
 
     "@cisco-auto/pt-control/@types/bun": ["@types/bun@1.3.12", "", { "dependencies": { "bun-types": "1.3.12" } }, "sha512-DBv81elK+/VSwXHDlnH3Qduw+KxkTIWi7TXkAeh24zpi5l0B2kUg9Ga3tb4nJaPcOFswflgi/yAvMVBPrxMB+A=="],
@@ -437,6 +455,8 @@
     "@cisco-auto/file-bridge/@types/bun/bun-types": ["bun-types@1.3.12", "", { "dependencies": { "@types/node": "*" } }, "sha512-HqOLj5PoFajAQciOMRiIZGNoKxDJSr6qigAttOX40vJuSp6DN/CxWp9s3C1Xwm4oH7ybueITwiaOcWXoYVoRkA=="],
 
     "@cisco-auto/ios-domain/@types/bun/bun-types": ["bun-types@1.3.12", "", { "dependencies": { "@types/node": "*" } }, "sha512-HqOLj5PoFajAQciOMRiIZGNoKxDJSr6qigAttOX40vJuSp6DN/CxWp9s3C1Xwm4oH7ybueITwiaOcWXoYVoRkA=="],
+
+    "@cisco-auto/kernel/@types/bun/bun-types": ["bun-types@1.3.12", "", { "dependencies": { "@types/node": "*" } }, "sha512-HqOLj5PoFajAQciOMRiIZGNoKxDJSr6qigAttOX40vJuSp6DN/CxWp9s3C1Xwm4oH7ybueITwiaOcWXoYVoRkA=="],
 
     "@cisco-auto/pt-cli/@types/bun/bun-types": ["bun-types@1.3.12", "", { "dependencies": { "@types/node": "*" } }, "sha512-HqOLj5PoFajAQciOMRiIZGNoKxDJSr6qigAttOX40vJuSp6DN/CxWp9s3C1Xwm4oH7ybueITwiaOcWXoYVoRkA=="],
 

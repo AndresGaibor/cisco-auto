@@ -1,0 +1,34 @@
+{
+  "name": "@cisco-auto/kernel",
+  "version": "0.1.0",
+  "description": "Core kernel with domain, application, and plugin API",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./domain": "./src/domain/index.ts",
+    "./domain/ios": "./src/domain/ios/index.ts",
+    "./domain/topology": "./src/domain/topology/index.ts",
+    "./domain/lab": "./src/domain/lab/index.ts",
+    "./application": "./src/application/index.ts",
+    "./plugin-api": "./src/plugin-api/index.ts",
+    "./plugin-api/*": "./src/plugin-api/*.ts",
+    "./plugins/vlan": "./src/plugins/vlan/index.ts",
+    "./plugins/vlan/*": "./src/plugins/vlan/*.ts",
+    "./backends/packet-tracer": "./src/backends/packet-tracer/index.ts",
+    "./backends/packet-tracer/*": "./src/backends/packet-tracer/*.ts"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@cisco-auto/pt-control": "workspace:*",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  },
+  "files": ["/src"],
+  "license": "MIT"
+}
