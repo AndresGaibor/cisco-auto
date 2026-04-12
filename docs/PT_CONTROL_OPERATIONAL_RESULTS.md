@@ -223,3 +223,16 @@ Estos resultados provienen de la sesión QA previa y sirven como referencia hist
 | 2026-04-12 | TC-091 | `bun run pt logs errors` | PASS | 0 errores recientes. | - | salida CLI |
 | 2026-04-12 | TC-088 | `bun run pt history list` | PASS | Lista las últimas ejecuciones con duración y estado. | - | salida CLI |
 | 2026-04-12 | TC-093 | `bun run pt device list` | PASS | Actualmente quedan R1 y S1; PC1 fue removido. | - | salida CLI |
+
+### Sesión ejecutada 2026-04-12 — cuarta tanda
+
+| Fecha | ID | Comando | Estado | Observado | Causa probable | Evidencia |
+|---|---|---|---|---|---|---|
+| 2026-04-12 | TC-042 | `bun run pt config-host PC1 --dhcp` | PASS | Marca DHCP Sí correctamente tras revalidar con pausa. | - | salida CLI |
+| 2026-04-12 | TC-041 | `bun run pt device get PC1` | PASS | PC1 muestra DHCP Sí; IP sigue en 0.0.0.0 como era esperado para el modo DHCP sin lease. | - | salida CLI |
+| 2026-04-12 | TC-093 | `bun run pt show ip-int-brief PC1 --json` | BLOCKED | JSON con `raw: ""` e interfaces vacías. | Limitación conocida del runtime show | salida CLI |
+| 2026-04-12 | TC-088 | `bun run pt results list` | PASS | Lista 20 archivos de resultados recientes correctamente. | - | salida CLI |
+| 2026-04-12 | TC-089 | `bun run pt results last` | N/I | El comando no existe (`unknown command 'last'`). | Subcomando no implementado / no expuesto | salida CLI |
+| 2026-04-12 | TC-090 | `bun run pt logs tail` | WARN | Últimos eventos aparecen como `unknown -> ok`, señal de telemetría poco descriptiva. | Logs poco enriquecidos | salida CLI |
+| 2026-04-12 | TC-134 | `bun run pt history show s-1775982486561-fcafca52` | PASS | Muestra el timeline completo de la sesión de topology.clean. | - | salida CLI |
+| 2026-04-12 | TC-135 | `bun run pt history explain s-1775982486561-fcafca52` | PASS | Devuelve correctamente que la sesión fue exitosa y no hay error que explicar. | - | salida CLI |
