@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 /**
  * IOS Command Result Schemas
@@ -11,29 +11,29 @@ import { z } from 'zod';
 // ============================================================================
 
 export const OutputClassificationSchema = z.enum([
-  'success',
-  'invalid',
-  'incomplete',
-  'ambiguous',
-  'error',
-  'paging',
-  'dns-lookup',
-  'dns-lookup-timeout',
-  'confirmation-required',
-  'copy-destination',
-  'reload-confirm',
-  'erase-confirm',
-  'unsupported-command',
-  'unsupported-platform',
-  'interface-not-found',
-  'vlan-not-found',
-  'mask-invalid',
-  'ip-conflict',
-  'permission-denied',
-  'session-desync',
-  'truncated-output',
-  'warning',
-  'save-failed',
+  "success",
+  "invalid",
+  "incomplete",
+  "ambiguous",
+  "error",
+  "paging",
+  "dns-lookup",
+  "dns-lookup-timeout",
+  "confirmation-required",
+  "copy-destination",
+  "reload-confirm",
+  "erase-confirm",
+  "unsupported-command",
+  "unsupported-platform",
+  "interface-not-found",
+  "vlan-not-found",
+  "mask-invalid",
+  "ip-conflict",
+  "permission-denied",
+  "session-desync",
+  "truncated-output",
+  "warning",
+  "save-failed",
 ]);
 
 export type OutputClassification = z.infer<typeof OutputClassificationSchema>;
@@ -43,35 +43,36 @@ export type OutputClassification = z.infer<typeof OutputClassificationSchema>;
 // ============================================================================
 
 export const IosModeSchema = z.enum([
-  'user-exec',
-  'priv-exec',
-  'config',
-  'config-if',
-  'config-line',
-  'config-router',
-  'config-subif',
-  'config-vlan',
-  'config-router-af',
-  'config-route-map',
-  'config-class-map',
-  'config-policy-map',
-  'config-dhcp',
-  'config-crypto-map',
-  'config-keychain',
-  'config-std-nacl',
-  'config-ext-nacl',
-  'awaiting-password',
-  'awaiting-confirm',
-  'resolving-hostname',
-  'copy-destination',
-  'copy-progress',
-  'reload-confirm',
-  'erase-confirm',
-  'username-prompt',
-  'login-prompt',
-  'desynced',
-  'paging',
-  'unknown',
+  "user-exec",
+  "privileged-exec",
+  "config",
+  "config-if",
+  "config-line",
+  "config-router",
+  "config-subif",
+  "config-vlan",
+  "config-router-af",
+  "config-route-map",
+  "config-class-map",
+  "config-policy-map",
+  "config-dhcp",
+  "config-crypto-map",
+  "config-keychain",
+  "config-std-nacl",
+  "config-ext-nacl",
+  "awaiting-password",
+  "awaiting-confirm",
+  "resolving-hostname",
+  "copy-destination",
+  "copy-progress",
+  "reload-confirm",
+  "erase-confirm",
+  "username-prompt",
+  "login-prompt",
+  "desynced",
+  "paging",
+  "rommon",
+  "unknown",
 ]);
 
 export type IosMode = z.infer<typeof IosModeSchema>;
@@ -129,12 +130,16 @@ export const ConfigIosResultSchema = z.object({
   modeFinal: IosModeSchema.optional(),
 
   // Results array
-  results: z.array(z.object({
-    command: z.string(),
-    status: z.number(),
-    output: z.string(),
-    classification: z.string(),
-  })).optional(),
+  results: z
+    .array(
+      z.object({
+        command: z.string(),
+        status: z.number(),
+        output: z.string(),
+        classification: z.string(),
+      }),
+    )
+    .optional(),
 
   // Error details (when ok: false)
   error: z.string().optional(),
@@ -179,7 +184,7 @@ export const ExecInteractiveResultSchema = z.object({
   classification: z.string().optional(),
   modeBefore: z.string().optional(),
   modeAfter: z.string().optional(),
-  source: z.enum(['terminal', 'synthetic', 'hybrid']).optional(),
+  source: z.enum(["terminal", "synthetic", "hybrid"]).optional(),
 });
 
 export type ExecInteractiveResult = z.infer<typeof ExecInteractiveResultSchema>;
@@ -188,7 +193,7 @@ export type ExecInteractiveResult = z.infer<typeof ExecInteractiveResultSchema>;
 // Output Source (real, synthetic, hybrid)
 // ============================================================================
 
-export const OutputSourceSchema = z.enum(['terminal', 'synthetic', 'hybrid']);
+export const OutputSourceSchema = z.enum(["terminal", "synthetic", "hybrid"]);
 export type OutputSource = z.infer<typeof OutputSourceSchema>;
 
 // ============================================================================
@@ -196,26 +201,26 @@ export type OutputSource = z.infer<typeof OutputSourceSchema>;
 // ============================================================================
 
 export const IosErrorCodeSchema = z.enum([
-  'IOS_INVALID_INPUT',
-  'IOS_INCOMPLETE_COMMAND',
-  'IOS_AMBIGUOUS_COMMAND',
-  'IOS_PASSWORD_REQUIRED',
-  'IOS_CONFIRMATION_REQUIRED',
-  'IOS_PAGING_TIMEOUT',
-  'IOS_SAVE_FAILED',
-  'IOS_UNSUPPORTED_DEVICE',
-  'IOS_DEVICE_NOT_FOUND',
-  'IOS_NO_CLI',
-  'IOS_TIMEOUT',
-  'IOS_UNKNOWN_ERROR',
-  'IOS_INTERFACE_NOT_FOUND',
-  'IOS_VLAN_NOT_FOUND',
-  'IOS_MASK_INVALID',
-  'IOS_IP_CONFLICT',
-  'IOS_PERMISSION_DENIED',
-  'IOS_DNS_LOOKUP_TIMEOUT',
-  'IOS_SESSION_DESYNC',
-  'IOS_TRUNCATED_OUTPUT',
+  "IOS_INVALID_INPUT",
+  "IOS_INCOMPLETE_COMMAND",
+  "IOS_AMBIGUOUS_COMMAND",
+  "IOS_PASSWORD_REQUIRED",
+  "IOS_CONFIRMATION_REQUIRED",
+  "IOS_PAGING_TIMEOUT",
+  "IOS_SAVE_FAILED",
+  "IOS_UNSUPPORTED_DEVICE",
+  "IOS_DEVICE_NOT_FOUND",
+  "IOS_NO_CLI",
+  "IOS_TIMEOUT",
+  "IOS_UNKNOWN_ERROR",
+  "IOS_INTERFACE_NOT_FOUND",
+  "IOS_VLAN_NOT_FOUND",
+  "IOS_MASK_INVALID",
+  "IOS_IP_CONFLICT",
+  "IOS_PERMISSION_DENIED",
+  "IOS_DNS_LOOKUP_TIMEOUT",
+  "IOS_SESSION_DESYNC",
+  "IOS_TRUNCATED_OUTPUT",
 ]);
 
 export type IosErrorCode = z.infer<typeof IosErrorCodeSchema>;

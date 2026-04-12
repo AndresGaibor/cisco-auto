@@ -4,24 +4,27 @@
   "description": "Control en tiempo real de Packet Tracer - Automation toolkit Bun-first",
   "private": true,
   "type": "module",
+  "packageManager": "bun@1.3.10",
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
-    "start": "bun run --cwd apps/pt-cli start",
-    "dev": "bun run --cwd apps/pt-cli dev",
+    "start": "turbo run start --filter=pt-cli",
+    "dev": "turbo run dev --filter=pt-cli",
     "test": "bun test",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint packages/pt-runtime/src/ --max-warnings 2000 2>&1 || true",
-    "format": "prettier --write 'packages/pt-runtime/src/**/*.ts'",
-    "format:check": "prettier --check 'packages/pt-runtime/src/**/*.ts'",
-    "pre-release-check": "bun scripts/pre-release-check.ts",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "format": "turbo run format",
+    "format:check": "turbo run format:check",
+    "pre-release-check": "turbo run pre-release-check",
+    "build": "turbo run build",
+    "clean": "turbo run clean",
     "pt": "bun run --cwd apps/pt-cli start",
-    "pt:build": "bun run --cwd packages/pt-runtime src/index.ts deploy",
-    "pt:generate": "bun run --cwd packages/pt-runtime src/index.ts generate",
-    "pt:validate": "bun run --cwd packages/pt-runtime src/index.ts validate",
-    "pt:deploy": "bun run --cwd packages/pt-runtime src/index.ts deploy"
+    "pt:build": "cd packages/pt-runtime && bun src/index.ts deploy",
+    "pt:generate": "cd packages/pt-runtime && bun src/index.ts generate",
+    "pt:validate": "cd packages/pt-runtime && bun src/index.ts validate",
+    "pt:deploy": "cd packages/pt-runtime && bun src/index.ts deploy"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -31,6 +34,7 @@
     "eslint": "^10.2.0",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.8.2",
+    "turbo": "^2.9.6",
     "typescript": "^5"
   },
   "dependencies": {

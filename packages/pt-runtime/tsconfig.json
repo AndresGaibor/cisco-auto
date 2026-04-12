@@ -13,8 +13,7 @@
     "sourceMap": true,
     "outDir": "./dist",
     "rootDir": "./src",
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true
+    "emitDeclarationOnly": true
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "generated", "__tests__"]

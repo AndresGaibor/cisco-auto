@@ -37,7 +37,8 @@
     "./backends/packet-tracer/*": "./src/backends/packet-tracer/*.ts"
   },
   "scripts": {
-    "test": "bun test"
+    "test": "bun test",
+    "build": "echo no build needed"
   },
   "dependencies": {
     "@cisco-auto/pt-control": "workspace:*",

@@ -12,7 +12,8 @@
     "./types/*": "./src/types/*.ts"
   },
   "scripts": {
-    "test": "bun test"
+    "test": "bun test",
+    "build": "echo no build needed"
   },
   "dependencies": {
     "zod": "^4.3.6"

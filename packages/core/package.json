@@ -5,7 +5,8 @@
   "type": "module",
   "main": "./src/index.ts",
   "scripts": {
-    "test": "bun test"
+    "test": "bun test",
+    "build": "echo no build needed"
   },
   "exports": {
     ".": "./src/index.ts",
