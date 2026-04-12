@@ -1,3 +1,7 @@
+/**
+ * @deprecated Use src/build/ instead
+ * This file will be removed in next major version
+ */
 // ============================================================================
 // Main.js Template - Kernel Mínimo / Runtime Lógica de Negocio
 // ============================================================================

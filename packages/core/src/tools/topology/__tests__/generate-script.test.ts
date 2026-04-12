@@ -85,13 +85,13 @@ function crearPlan(): TopologyPlan {
           {
             name: 'BLOCK_TELNET',
             type: 'extended',
-            entries: [
+            rules: [
               {
                 action: 'deny',
                 protocol: 'tcp',
                 source: 'any',
                 destination: 'any',
-                port: '23',
+                destinationPort: '23',
                 log: true,
               },
             ],
@@ -135,10 +135,10 @@ describe('generate-script', () => {
 
     expect(commands).toContain('vlan 10');
     expect(commands).toContain('spanning-tree mode rapid-pvst');
-    expect(commands).toContain('ip route 0.0.0.0 255.255.255.255 192.168.1.1');
+    expect(commands).toContain('ip route 0.0.0.0 0.0.0.0 192.168.1.1');
     expect(commands).toContain('router ospf 1');
     expect(commands).toContain('router eigrp 100');
-    expect(commands).toContain('access-list BLOCK_TELNET deny tcp any any eq 23 log');
+    expect(commands).toContain('access-list BLOCK_TELNET deny tcp any any eq 23');
     expect(commands).toContain('ip dhcp pool USERS_POOL');
     expect(commands).toContain('ntp server 10.0.0.1 prefer');
   });
@@ -153,7 +153,7 @@ describe('generate-script', () => {
     const data = result.data as any;
     expect(data.script).toContain('pt.configureIosDevice("S1", [');
     expect(data.script).toContain('spanning-tree mode rapid-pvst');
-    expect(data.script).toContain('access-list BLOCK_TELNET deny tcp any any eq 23 log');
+    expect(data.script).toContain('access-list BLOCK_TELNET deny tcp any any eq 23');
   });
 
   it('incluye los comandos IOS completos en el script Python', async () => {

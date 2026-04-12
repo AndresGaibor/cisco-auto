@@ -4,7 +4,7 @@
 
 export * from './parser/yaml-parser';
 export * from './types/index';
-// Re-export VLAN value objects from ios-domain
+// Re-export VLAN value objects from kernel
 export {
   VlanId,
   VlanName,
@@ -22,11 +22,11 @@ export {
   isValidVlanId,
   isValidVlanName,
   isValidVlanRange,
-} from '@cisco-auto/ios-domain/value-objects';
+} from '@cisco-auto/kernel/domain/ios/value-objects';
 export type {
   VtpModeType,
   VtpVersionType,
-} from '@cisco-auto/ios-domain/value-objects';
+} from '@cisco-auto/kernel/domain/ios/value-objects';
 export { validateLab, LabValidator } from './validation/index';
 
 export {

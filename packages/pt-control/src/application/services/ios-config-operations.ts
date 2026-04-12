@@ -21,7 +21,7 @@ import {
   parseIpv4Address as Ipv4Address,
   parseSubnetMask as SubnetMask,
   parseInterfaceName as InterfaceName,
-} from "@cisco-auto/ios-domain";
+} from "@cisco-auto/kernel/domain/ios/value-objects";
 
 export class IosConfigOperations {
   constructor(

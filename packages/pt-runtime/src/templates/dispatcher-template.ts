@@ -1,4 +1,8 @@
 /**
+ * @deprecated Use src/build/ instead
+ * This file will be removed in next major version
+ */
+/**
  * Runtime Dispatcher Template - Command dispatcher and factory
  * Routes payloads to appropriate handlers with validation and error handling
  * GENERATED from command-catalog.ts - DO NOT EDIT MANUALLY

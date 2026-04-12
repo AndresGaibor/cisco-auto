@@ -47,10 +47,19 @@ import { createAuditQueryCommand } from './audit-query';
 import { createBridgeCommand } from './bridge';
 import { createDhcpServerCommand } from './dhcp-server';
 import { createHostCommand } from './host';
+import { createInspectCommand } from './inspect/index';
+import { createLayoutCommand } from './layout/index';
+import { createVerifyCommand } from './verify/index';
+import { createAgentCommand } from './agent/index';
+
 
 export type CommandFactory = () => Command;
 
 export const COMMAND_FACTORIES: CommandFactory[] = [
+  createInspectCommand,
+  createLayoutCommand,
+  createVerifyCommand,
+  createAgentCommand,
   createDeviceCommand,
   createShowCommand,
   createShowRunCommand,

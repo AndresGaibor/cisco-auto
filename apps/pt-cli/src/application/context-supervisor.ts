@@ -26,7 +26,7 @@ export async function collectContextStatus(controller: PTController): Promise<Co
   const bridge = controller.getBridgeStatus();
   const deviceCount = liveSnapshot?.devices ? Object.keys(liveSnapshot.devices).length : sys.deviceCount;
   const linkCount = liveSnapshot?.links ? Object.keys(liveSnapshot.links).length : sys.linkCount;
-
+  const bridgeReady = bridge.ready && sys.bridgeReady;
   const warnings: string[] = Array.isArray(sys.warnings) ? [...sys.warnings] : [];
 
   const topologyHealth = computeTopologyHealth({
@@ -36,16 +36,24 @@ export async function collectContextStatus(controller: PTController): Promise<Co
     warnings,
   });
 
+  const now = Date.now();
   const status: ContextStatus = {
     schemaVersion: '1.0',
     updatedAt: new Date().toISOString(),
+    mode: bridgeReady ? 'active' : 'waiting-for-pt',
+    gracePeriod: {
+      active: !bridgeReady,
+      startedAt: new Date(now).toISOString(),
+      endsAt: new Date(now).toISOString(),
+      remainingMs: 0,
+    },
     heartbeat: {
       state: sys.heartbeat.state,
       ageMs: sys.heartbeat.ageMs,
       lastSeenTs: sys.heartbeat.lastSeenTs,
     },
     bridge: {
-      ready: bridge.ready && sys.bridgeReady,
+      ready: bridgeReady,
       leaseValid: bridge.leaseValid,
       queuedCount: bridge.queuedCount,
       inFlightCount: bridge.inFlightCount,
@@ -58,6 +66,11 @@ export async function collectContextStatus(controller: PTController): Promise<Co
       health: topologyHealth,
     },
     warnings,
+    notes: [
+      'Context refreshed from PTController',
+      `Snapshot: ${deviceCount} devices / ${linkCount} links`,
+      `Bridge: ${bridgeReady ? 'ready' : 'not ready'}; heartbeat: ${sys.heartbeat.state}`,
+    ],
   };
 
   return status;

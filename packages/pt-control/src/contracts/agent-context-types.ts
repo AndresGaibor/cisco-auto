@@ -19,6 +19,14 @@ export const AgentBaseContextSchema = z.object({
     selectedZone: z.string().optional(),
     focusDevices: z.array(z.string()).default([]),
   }).optional(),
+  task: z.object({
+    goal: z.string(),
+    scope: z.enum(['global', 'device', 'zone', 'task']).default('task'),
+    affectedDevices: z.array(z.string()).default([]),
+    affectedZones: z.array(z.string()).default([]),
+    suggestedCommands: z.array(z.string()).default([]),
+    notes: z.array(z.string()).default([]),
+  }).optional(),
   zones: z.array(z.object({
     id: z.string(),
     label: z.string().optional(),

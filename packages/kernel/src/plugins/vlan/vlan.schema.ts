@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { parseVlanId, VlanId } from '../../domain/ios/value-objects/vlan-id.vo.js';
-import { parseVlanName } from '@cisco-auto/ios-domain/value-objects';
+import { parseVlanName } from '../../domain/ios/value-objects/vlan-name.vo.js';
 
 const vlanIdSchema = z
   .union([z.number().int(), z.string().regex(/^\d+$/)])

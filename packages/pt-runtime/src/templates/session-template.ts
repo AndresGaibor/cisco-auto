@@ -1,4 +1,8 @@
 /**
+ * @deprecated Use src/build/ instead
+ * This file will be removed in next major version
+ */
+/**
  * Runtime Session Template - Generates IOS session management section
  * Handles state persistence, cleanup, and session lifecycle
  * NOTE: IOS JOBS y Terminal Listeners fueron migrados a main.ts (Phase 5)

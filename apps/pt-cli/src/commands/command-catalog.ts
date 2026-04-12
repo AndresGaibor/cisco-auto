@@ -89,6 +89,68 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
     ],
   },
 
+  inspect: {
+    id: 'inspect',
+    summary: 'Inspección canónica del estado del laboratorio y del twin',
+    longDescription: 'Consulta la topología materializada, vecinos, puertos libres y drift desde el contexto del controller.',
+    examples: ['pt inspect topology', 'pt inspect neighbors R1', 'pt inspect free-ports R1'],
+    related: ['status', 'topology', 'device'],
+    status: 'partial',
+    supportsAutonomousUse: false,
+    requiresPT: true,
+    requiresContext: true,
+    supportsJson: true,
+    supportsPlan: true,
+    supportsExplain: true,
+    notes: ['Comando raíz para inspección canónica'],
+  },
+
+  layout: {
+    id: 'layout',
+    summary: 'Disposición espacial del laboratorio',
+    longDescription: 'Orienta el canvas del laboratorio con comandos de alto nivel para acomodar dispositivos y zonas.',
+    examples: ['pt layout place R1 right-of S1 --gap 160', 'pt layout grid access-switches --columns 3'],
+    related: ['inspect', 'device', 'link'],
+    status: 'partial',
+    supportsAutonomousUse: false,
+    requiresPT: true,
+    requiresContext: true,
+    writesTopology: true,
+    supportsPlan: true,
+    supportsExplain: true,
+    notes: ['Apunta a layout semántico en vez de coordenadas crudas'],
+  },
+
+  verify: {
+    id: 'verify',
+    summary: 'Verificación del estado y evidencia',
+    longDescription: 'Valida resultados de ejecución, evidencia IOS y coherencia operativa del laboratorio.',
+    examples: ['pt verify ios R1', 'pt verify link R1 Gi0/0 S1 Fa0/1'],
+    related: ['inspect', 'status', 'config-ios'],
+    status: 'partial',
+    supportsAutonomousUse: false,
+    requiresPT: true,
+    requiresContext: true,
+    supportsJson: true,
+    supportsVerify: true,
+    supportsExplain: true,
+    notes: ['Pensado para comprobaciones posteriores a cambios'],
+  },
+
+  agent: {
+    id: 'agent',
+    summary: 'Flujos explícitos para agentes',
+    longDescription: 'Construye contexto recortado, planes y pasos de verificación para agentes autónomos o semiautónomos.',
+    examples: ['pt agent context --task "connect R1 and S1"', 'pt agent plan --goal "normalize access layer"'],
+    related: ['inspect', 'verify', 'layout'],
+    status: 'experimental',
+    supportsAutonomousUse: true,
+    requiresPT: false,
+    requiresContext: true,
+    supportsPlan: true,
+    supportsExplain: true,
+    notes: ['Optimizado para contexto de agente y output compacto'],
+  },
   show: {
     id: 'show',
     summary: 'Ejecuta comandos show en dispositivos',
@@ -604,5 +666,5 @@ export const COMMAND_CATALOG: Record<string, CommandCatalogEntry> = {
 };
 
 export function getRegisteredCommandIds(): string[] {
-  return ['build', 'device', 'show', 'config-host', 'vlan', 'etherchannel', 'link', 'config-ios', 'routing', 'acl', 'stp', 'services', 'results', 'logs', 'help', 'history', 'doctor', 'completion', 'topology', 'status', 'setup', 'runtime', 'config-ospf', 'config-eigrp', 'config-bgp', 'config-acl', 'config-vlan', 'config-interface', 'config-apply', 'devices-list', 'devices-add', 'history-search', 'history-failed', 'topology-show', 'config-prefs', 'audit-tail', 'audit-export', 'audit-failed', 'lab', 'router', 'audit-query'];
+  return ['build', 'device', 'inspect', 'layout', 'verify', 'agent', 'show', 'config-host', 'vlan', 'etherchannel', 'link', 'config-ios', 'routing', 'acl', 'stp', 'services', 'results', 'logs', 'help', 'history', 'doctor', 'completion', 'topology', 'status', 'setup', 'runtime', 'config-ospf', 'config-eigrp', 'config-bgp', 'config-acl', 'config-vlan', 'config-interface', 'config-apply', 'devices-list', 'devices-add', 'history-search', 'history-failed', 'topology-show', 'config-prefs', 'audit-tail', 'audit-export', 'audit-failed', 'lab', 'router', 'audit-query'];
 }

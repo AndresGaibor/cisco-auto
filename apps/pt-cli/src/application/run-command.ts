@@ -90,6 +90,7 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
       warnings: [],
     },
     warnings: ['Controller no se pudo iniciar'],
+    notes: ['Contexto del controller no disponible'],
   };
   let contextStatusToPersist: Awaited<ReturnType<typeof collectContextStatus>> | null = null;
 
@@ -177,6 +178,8 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
       linkCount: runtimeContext.linkCount,
       heartbeat: runtimeContext.heartbeat,
       bridge: runtimeContext.bridge,
+      warnings: runtimeContext.warnings,
+      notes: runtimeContext.notes,
     };
   } else {
     result.meta = {
@@ -191,6 +194,8 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
         linkCount: runtimeContext.linkCount,
         heartbeat: runtimeContext.heartbeat,
         bridge: runtimeContext.bridge,
+        warnings: runtimeContext.warnings,
+        notes: runtimeContext.notes,
       },
     };
   }

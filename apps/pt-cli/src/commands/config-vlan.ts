@@ -11,7 +11,7 @@ import { parseVlans } from '../utils/cli-parser';
 import { parseConfigFile, requireDevice } from '../utils/config-parser';
 import { CapabilitySet } from '@cisco-auto/ios-domain/capabilities';
 import { planConfigureVlan } from '@cisco-auto/ios-domain/operations';
-import { VlanId } from '@cisco-auto/ios-domain/value-objects';
+import { VlanId } from '@cisco-auto/kernel/domain/ios/value-objects';
 
 type ParsedVlan = { id: string; name: string; state?: string };
 

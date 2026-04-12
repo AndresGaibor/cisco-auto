@@ -19,7 +19,7 @@ import { fetchDeviceList, getIOSCapableDevices } from '../utils/device-utils.js'
 import { parseStrictVlanId } from '../utils/cli-parser.js';
 import { CapabilitySet, resolveCapabilitySet } from '@cisco-auto/ios-domain/capabilities';
 import { planConfigureTrunkPort, planConfigureVlan } from '@cisco-auto/ios-domain/operations';
-import { VlanId, parseInterfaceName } from '@cisco-auto/ios-domain/value-objects';
+import { VlanId, parseInterfaceName } from '@cisco-auto/kernel/domain/ios/value-objects';
 
 const VLAN_LIST_SEPARATOR = ',';
 

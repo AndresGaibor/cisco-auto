@@ -91,14 +91,23 @@ export class AgentContextService {
     affectedZones: string[] = []
   ): Promise<AgentBaseContext> {
     const base = await this.buildBaseContext(twin, session);
+    const focusDevices = Array.from(new Set([...session.focusDevices, ...affectedDevices]));
+    const scope = affectedZones.length > 0 ? 'zone' : focusDevices.length > 0 ? 'device' : 'task';
 
-    // Enrich with task-specific context
     const taskContext: AgentBaseContext = {
       ...base,
       selection: {
         selectedDevice: session.selectedDevice,
         selectedZone: session.selectedZone,
-        focusDevices: affectedDevices,
+        focusDevices,
+      },
+      task: {
+        goal: task,
+        scope,
+        affectedDevices: focusDevices,
+        affectedZones,
+        suggestedCommands: this.buildSuggestedCommands(task, focusDevices, affectedZones, session),
+        notes: this.buildTaskNotes(task, focusDevices, affectedZones),
       },
     };
 
@@ -341,6 +350,51 @@ export class AgentContextService {
     if (ageMs > 5 * 60 * 1000) return [];
 
     return [{ type: "refresh", target: "lab", ts: updatedAt }];
+  }
+
+  private buildSuggestedCommands(
+    task: string,
+    focusDevices: string[],
+    affectedZones: string[],
+    session: AgentSessionState,
+  ): string[] {
+    const suggestions: string[] = [];
+    const target = session.selectedDevice ?? focusDevices[0];
+
+    suggestions.push('pt inspect topology');
+
+    if (target) {
+      suggestions.push(`pt inspect neighbors ${target}`);
+    }
+
+    if (affectedZones.length > 0) {
+      suggestions.push(`pt inspect topology --zone ${affectedZones[0]}`);
+    }
+
+    if (/verify|check|validate/i.test(task) && target) {
+      suggestions.push(`pt verify ios ${target}`);
+    }
+
+    return suggestions.slice(0, 4);
+  }
+
+  private buildTaskNotes(
+    task: string,
+    focusDevices: string[],
+    affectedZones: string[],
+  ): string[] {
+    const notes: string[] = [];
+    notes.push(`Task scoped to ${focusDevices.length > 0 ? focusDevices.join(', ') : 'lab-wide context'}`);
+    if (affectedZones.length > 0) {
+      notes.push(`Zones in scope: ${affectedZones.join(', ')}`);
+    }
+    if (/connect|link/i.test(task)) {
+      notes.push('Prefer connectivity checks before mutation.');
+    }
+    if (/verify|check|validate/i.test(task)) {
+      notes.push('Use verification data and avoid assuming success from execution alone.');
+    }
+    return notes;
   }
 }
 

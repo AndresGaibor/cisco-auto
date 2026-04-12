@@ -5,7 +5,7 @@ import { resolveCapabilities, type DeviceCapabilities } from "../../domain/ios/c
 import { planConfigureSvi, planConfigureAccessPort, planConfigureTrunkPort, planConfigureSubinterface, planConfigureStaticRoute, planConfigureDhcpRelay, resolveCapabilitySet } from "@cisco-auto/ios-domain";
 import { IosVerificationService } from "./ios-verification-service.js";
 import { IosExecutionService } from "./ios-execution-service.js";
-import { parseIpv4Address as Ipv4Address, parseSubnetMask as SubnetMask, parseInterfaceName as InterfaceName, parseVlanId as VlanId } from "@cisco-auto/ios-domain";
+import { parseIpv4Address as Ipv4Address, parseSubnetMask as SubnetMask, parseInterfaceName as InterfaceName, parseVlanId as VlanId } from "@cisco-auto/kernel/domain/ios/value-objects";
 
 export class IosSemanticService {
   private readonly verifier: IosVerificationService;

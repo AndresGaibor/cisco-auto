@@ -1,4 +1,8 @@
 /**
+ * @deprecated Use src/build/ instead
+ * This file will be removed in next major version
+ */
+/**
  * Runtime New - Consolidated runtime with ALL IOS job logic migrated from main.js
  *
  * This file exports RUNTIME_JS_TEMPLATE as a JavaScript string that is evaluated

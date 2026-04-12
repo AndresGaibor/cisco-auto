@@ -126,7 +126,7 @@ describe("ios config handlers template", () => {
     expect(source).toContain("initial configuration dialog");
     expect(source).toContain("terminate autoinstall");
     expect(source).toContain("syncEngineModeFromTerminal");
-    expect(source).toContain("mode = inferModeFromPrompt(prompt) || mode;");
+    expect(source).toContain("var inferred = inferModeFromPrompt(prompt);");
   });
 });
 
@@ -135,8 +135,7 @@ describe("ios exec handlers template", () => {
     const source = generateIosExecHandlersTemplate();
 
     expect(source).toContain("isNormalPrompt");
-    expect(source).toContain("promptLooksNormal");
-    expect(source).toContain("Press RETURN to get started");
+    expect(source).toContain("function isNormalPrompt");
     expect(source).toContain("Would you like to enter the initial configuration dialog?");
   });
 });

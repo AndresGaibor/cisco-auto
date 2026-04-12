@@ -28,3 +28,28 @@ export const PortTwinSchema = z.object({
   lastSeenAt: z.number(),
 });
 export type PortTwin = z.infer<typeof PortTwinSchema>;
+
+export const PortCandidateSchema = z.object({
+  device: z.string(),
+  port: z.string(),
+  score: z.number().default(0),
+  occupied: z.boolean().default(false),
+  reason: z.string().optional(),
+});
+export type PortCandidate = z.infer<typeof PortCandidateSchema>;
+
+export const PortPlanSchema = z.object({
+  sourceCandidates: z.array(PortCandidateSchema).default([]),
+  targetCandidates: z.array(PortCandidateSchema).default([]),
+  warnings: z.array(z.string()).default([]),
+});
+export type PortPlan = z.infer<typeof PortPlanSchema>;
+
+export const LinkFeasibilitySchema = z.object({
+  feasible: z.boolean(),
+  source: PortCandidateSchema.optional(),
+  target: PortCandidateSchema.optional(),
+  reasons: z.array(z.string()).default([]),
+  suggestions: z.array(PortCandidateSchema).default([]),
+});
+export type LinkFeasibility = z.infer<typeof LinkFeasibilitySchema>;

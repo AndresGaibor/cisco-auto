@@ -5,7 +5,7 @@
 import type { NetworkTwin, DeviceTwin } from "../contracts/twin-types.js";
 import type { CommandPlan } from "@cisco-auto/ios-domain";
 import type { ParsedIntent, IntentKind } from "./intent-parser.js";
-import { InterfaceName, VlanId, Ipv4Address, SubnetMask } from "@cisco-auto/ios-domain";
+import { InterfaceName, VlanId, Ipv4Address, SubnetMask } from "@cisco-auto/kernel/domain/ios/value-objects";
 import { planConfigureAccessPort, type ConfigureAccessPortInput } from "@cisco-auto/ios-domain";
 import { planConfigureTrunkPort, type ConfigureTrunkPortInput } from "@cisco-auto/ios-domain";
 import { planConfigureStaticRoute, type ConfigureStaticRouteInput } from "@cisco-auto/ios-domain";
