@@ -1,3 +1,9 @@
+// Device ID Value Object
+export {
+  DeviceId,
+  DeviceType,
+} from './device-id.vo.js';
+
 // VLAN ID Value Object
 export {
   VlanId,
