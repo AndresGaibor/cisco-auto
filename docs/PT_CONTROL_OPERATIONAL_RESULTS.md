@@ -151,3 +151,37 @@ Estos resultados provienen de la sesión QA previa y sirven como referencia hist
 3. Si falla, anota el error exacto en `Observado` y la causa probable.
 4. Si está bloqueado o no existe, marca `BLOCKED` o `N/I`.
 5. Si quieres, yo puedo ir normalizando tus notas y devolviéndote el resultado en formato limpio.
+
+---
+
+## Sesión ejecutada 2026-04-12
+
+| Fecha | ID | Comando | Estado | Observado | Causa probable | Evidencia |
+|---|---|---|---|---|---|---|
+| 2026-04-12 | TC-001 | `bun run pt doctor` | WARN | 5 OK, 4 warnings, 1 critical. Bridge no listo, lease inválido, cola con dead-letter. | Estado parcial del bridge / lease | salida CLI |
+| 2026-04-12 | TC-002 | `bun run pt --help` | PASS | Muestra comandos y flags correctamente. | - | salida CLI |
+| 2026-04-12 | TC-003 | `bun run pt device list` | PASS | Canvas vacío tras limpieza; 0 dispositivos. | - | salida CLI |
+| 2026-04-12 | TC-010 | `bun run pt device add R1 2911` | WARN | Dispositivo creado; verificación de posición incompleta por contexto parcial. | Bridge no listo / topología no materializada | salida CLI |
+| 2026-04-12 | TC-011 | `bun run pt device add S1 2960` | WARN | Acepta el alias pero normaliza a `2960-24TT`; verificación de posición incompleta. | Normalización interna de PT + contexto parcial | salida CLI |
+| 2026-04-12 | TC-012 | `bun run pt device add PC1 pc` | WARN | Dispositivo creado como `PC-PT`; verificación de posición incompleta. | Normalización interna de PT + contexto parcial | salida CLI |
+| 2026-04-12 | TC-014 | `bun run pt device get R1` | PASS | Devuelve tipo, modelo e interfaces esperadas. | - | salida CLI |
+| 2026-04-12 | TC-017 | `bun run pt device add R1 2911` | PASS | Error claro: `Device 'R1' already exists in topology`. | Validación correcta de duplicado | salida CLI |
+| 2026-04-12 | TC-018 | `bun run pt device add X9 modelo-inexistente` | PASS | Error claro de modelo inválido con lista de alias válidos. | Validación correcta de catálogo | salida CLI |
+| 2026-04-12 | TC-030 | `bun run pt link add R1 GigabitEthernet0/0 S1 GigabitEthernet0/1` | WARN | Enlace aceptado pero `link-visible` falla; bridge/topología aún parciales. | Contexto parcial del bridge | salida CLI |
+| 2026-04-12 | TC-031 | `bun run pt link add PC1 FastEthernet0 S1 FastEthernet0/2` | WARN | Enlace aceptado pero no aparece como visible todavía. | Contexto parcial del bridge | salida CLI |
+| 2026-04-12 | TC-032 | `bun run pt link list` | BLOCKED | El comando informa que requiere PT corriendo en el host para ver la topología. | Limitación actual del comando / entorno | salida CLI |
+| 2026-04-12 | TC-040 | `bun run pt config-host PC1 192.168.1.10 255.255.255.0 192.168.1.1` | FAIL | IP y máscara aplicadas, pero gateway queda vacío y `config-applied` falla. | Fallo parcial de configuración host | salida CLI |
+| 2026-04-12 | TC-041 | `bun run pt device get PC1` | FAIL | Muestra IP/máscara pero no gateway; confirma la falla anterior. | Gateway no persistido | salida CLI |
+| 2026-04-12 | TC-045 | `bun run pt config-ios R1 "show version"` | BLOCKED | `IOS configuration failed`. | Runtime/privileged exec no funcional | salida CLI |
+| 2026-04-12 | TC-053 | `bun run pt show ip-int-brief R1` | BLOCKED | JSON con `raw: ""` e interfaces vacías. | Limitación conocida del runtime show | salida CLI |
+| 2026-04-12 | TC-054 | `bun run pt show vlan S1` | BLOCKED | JSON con `raw: ""` y VLANs vacías. | Limitación conocida del runtime show | salida CLI |
+| 2026-04-12 | TC-055 | `bun run pt show ip-route R1` | BLOCKED | JSON con `raw: ""` y rutas vacías. | Limitación conocida del runtime show | salida CLI |
+| 2026-04-12 | TC-056 | `bun run pt show run-config R1` | BLOCKED | JSON con `raw: ""` y sin secciones. | Limitación conocida del runtime show | salida CLI |
+| 2026-04-12 | TC-057 | `bun run pt show ip-int-brief R1 --json` | BLOCKED | JSON parseable pero vacío (`raw: ""`, `interfaces: []`). | Limitación conocida del runtime show | salida CLI |
+| 2026-04-12 | TC-060 | `bun run pt vlan create --name ADMIN --id 10` | PASS | Genera comandos VLAN correctos en dry-run. | - | salida CLI |
+| 2026-04-12 | TC-070 | `bun run pt routing static add --device R1 --network 192.168.10.0/24 --next-hop 10.0.0.1` | BLOCKED | `Failed to enter configuration mode`. | Runtime IOS/config mode no estable | salida CLI |
+| 2026-04-12 | TC-074 | `bun run pt acl create --name BLOCK_NET --type standard` | FAIL | Error de esquema: faltan reglas ACL mínimas. | Sintaxis real requiere reglas o payload más completo | salida CLI |
+| 2026-04-12 | TC-075 | `bun run pt config-acl --device R1 --name BLOCK_NET --type standard --rule "deny,ip,any,any" --dry-run` | PASS | Genera ACL dry-run correcto: `access-list BLOCK_NET deny any any`. | - | salida CLI |
+| 2026-04-12 | TC-080 | `bun run pt topology clean --list` | PASS | Dry-run muestra 0 dispositivos a eliminar. | - | salida CLI |
+| 2026-04-12 | TC-086 | `bun run pt logs tail` | WARN | Muestra eventos pero aparecen como `unknown -> ok`. | Telemetría/logs incompletos | salida CLI |
+| 2026-04-12 | TC-089 | `bun run pt history last` | PASS | Devuelve la última acción registrada (`topology.clean --list`). | - | salida CLI |
