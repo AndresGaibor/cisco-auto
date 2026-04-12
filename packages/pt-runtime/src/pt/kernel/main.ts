@@ -3,7 +3,7 @@
 
 export { createQueuePoller, type QueuedCommand, type QueueConfig } from "./queue";
 export { createHeartbeat, type HeartbeatConfig } from "./heartbeat";
-export { createRuntimeLoader, type RuntimeLoaderConfig, type LoadedRuntime } from "./runtime-loader";
+export { createRuntimeLoader, type RuntimeLoader } from "./runtime-loader";
 export { createCleanupManager, type CleanupState } from "./cleanup";
 
 // Main kernel boot function (will be filled in later)
