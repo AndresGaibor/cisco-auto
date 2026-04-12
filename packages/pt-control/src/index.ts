@@ -86,5 +86,10 @@ export {
 // Application Services - planners and helpers
 export { LayoutPlannerService, PortPlannerService, LinkFeasibilityService } from "./application/services/index.js";
 
+// PT feature modules - canonical stack
+export * from "./pt/planner/index.js";
+export * from "./pt/ledger/index.js";
+export * from "./pt/diagnosis/index.js";
+
 // Agent workflow - task-scoped context building and rendering
 export * from "./agent/index.js";

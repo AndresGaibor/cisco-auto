@@ -46,8 +46,8 @@ export class OperationCompiler {
    */
   private compileRouterOnAStick(intent: OperationIntent): DeferredJobPlan {
     const devices = intent.devices;
-    const router = devices[0];
-    const switch_ = devices[1];
+    const router = devices[0] ?? 'Router1';
+    const switch_ = devices[1] ?? 'Switch1';
     const vlans = (intent.parameters['vlans'] as number[]) || [10, 20];
     const subnets = (intent.parameters['subnets'] as string[]) || [];
 
@@ -147,13 +147,14 @@ export class OperationCompiler {
    */
   private compileVlanSegmentation(intent: OperationIntent): DeferredJobPlan {
     const devices = intent.devices;
+    const device = devices[0] ?? 'Switch1';
     const vlans = (intent.parameters['vlans'] as number[]) || [];
     const names = (intent.parameters['names'] as string[]) || [];
 
     const planId = `plan-${Date.now()}-vlan-segmentation`;
 
     const prechecks: Precheck[] = [
-      { type: 'capability', device: devices[0], check: 'VLAN support', required: true },
+      { type: 'capability', device, check: 'VLAN support', required: true },
     ];
 
     const steps: DeferredStep[] = [];
@@ -165,7 +166,7 @@ export class OperationCompiler {
       steps.push({
         order: i + 1,
         surface: 'ios',
-        device: devices[0],
+        device,
         commands: [`vlan ${vlan}`, `name ${name}`],
         verification: {
           command: `show vlan ${vlan}`,
@@ -188,12 +189,12 @@ export class OperationCompiler {
       estimatedDuration: steps.length * 20,
     };
   }
-
   /**
    * Compilar DHCP service
    */
   private compileDhcpService(intent: OperationIntent): DeferredJobPlan {
     const devices = intent.devices;
+    const device = devices[0] ?? 'Router1';
     const network = (intent.parameters['network'] as string) || '192.168.1.0';
     const pool = (intent.parameters['pool'] as string) || 'DHCP-POOL';
     const gateway = (intent.parameters['gateway'] as string) || '';
@@ -203,8 +204,8 @@ export class OperationCompiler {
 
     const prechecks: Precheck[] = [
       isServer 
-        ? { type: 'capability', device: devices[0], check: 'DHCP appliance', required: true }
-        : { type: 'capability', device: devices[0], check: 'DHCP pool support', required: true },
+        ? { type: 'capability', device, check: 'DHCP appliance', required: true }
+        : { type: 'capability', device, check: 'DHCP pool support', required: true },
     ];
 
     const steps: DeferredStep[] = [];
@@ -214,7 +215,7 @@ export class OperationCompiler {
       steps.push({
         order: 1,
         surface: 'dhcp-appliance',
-        device: devices[0],
+        device,
         commands: [`create-pool ${pool} ${network}`],
         verification: {
           command: `show dhcp pool ${pool}`,
@@ -227,7 +228,7 @@ export class OperationCompiler {
       steps.push({
         order: 1,
         surface: 'ios',
-        device: devices[0],
+        device,
         commands: [
           `ip dhcp pool ${pool}`,
           `network ${network} 255.255.255.0`,
@@ -260,6 +261,7 @@ export class OperationCompiler {
    */
   private compileRoutingProtocol(intent: OperationIntent): DeferredJobPlan {
     const devices = intent.devices;
+    const device = devices[0] ?? 'Router1';
     const protocol = (intent.parameters['protocol'] as string) || 'ospf';
     const processId = (intent.parameters['processId'] as number) || 1;
     const networks = (intent.parameters['networks'] as string[]) || [];
@@ -279,7 +281,7 @@ export class OperationCompiler {
     steps.push({
       order: 1,
       surface: 'ios',
-      device: devices[0],
+      device,
       commands: [`router ${protocol} ${processId}`],
       verification: {
         command: `show ip ${protocol}`,
@@ -287,14 +289,14 @@ export class OperationCompiler {
       },
       timeout: 15000,
     });
-
     // Add networks
     for (let i = 0; i < networks.length; i++) {
+      const network = networks[i] ?? '0.0.0.0';
       steps.push({
         order: i + 2,
         surface: 'ios',
-        device: devices[0],
-        commands: [`network ${networks[i]} 0.0.0.255 area 0`],
+        device,
+        commands: [`network ${network} 0.0.0.255 area 0`],
         timeout: 10000,
       });
     }
@@ -318,7 +320,7 @@ export class OperationCompiler {
    * Compilar ACL security
    */
   private compileAclSecurity(intent: OperationIntent): DeferredJobPlan {
-    const device = intent.devices[0];
+    const device = intent.devices[0] ?? 'Router1';
     const name = (intent.parameters['name'] as string) || 'ACL-SECURITY';
     const type = (intent.parameters['type'] as string) || 'extended';
     const rules = (intent.parameters['rules'] as string[]) || [];
@@ -346,11 +348,13 @@ export class OperationCompiler {
 
     // Add rules
     for (let i = 0; i < rules.length; i++) {
+      const rule = rules[i];
+      if (!rule) continue;
       steps.push({
         order: i + 2,
         surface: 'ios',
         device,
-        commands: [rules[i]],
+        commands: [rule],
         timeout: 10000,
       });
     }
@@ -373,8 +377,8 @@ export class OperationCompiler {
    * Compilar trunk connection
    */
   private compileTrunkConnection(intent: OperationIntent): DeferredJobPlan {
-    const switchA = intent.devices[0];
-    const switchB = intent.devices[1];
+    const switchA = intent.devices[0] ?? 'SwitchA';
+    const switchB = intent.devices[1] ?? 'SwitchB';
     const vlans = (intent.parameters['vlans'] as number[]) || [];
     const portA = (intent.parameters['portA'] as string) || 'GigabitEthernet0/1';
     const portB = (intent.parameters['portB'] as string) || 'GigabitEthernet0/1';
@@ -438,7 +442,7 @@ export class OperationCompiler {
    * Compilar access layer
    */
   private compileAccessLayer(intent: OperationIntent): DeferredJobPlan {
-    const switch_ = intent.devices[0];
+    const switch_ = intent.devices[0] ?? 'Switch1';
     const ports = (intent.parameters['ports'] as string[]) || [];
     const vlan = (intent.parameters['vlan'] as number) || 1;
 
@@ -490,12 +494,11 @@ export class OperationCompiler {
       checkpoints: [],
     };
   }
-
   /**
    * Extraer gateway de subred
    */
   private getGatewayFromSubnet(subnet: string): string {
-    const [network, mask] = subnet.split('/');
+    const [network = '0.0.0.0'] = subnet.split('/');
     const parts = network.split('.');
     parts[3] = '1';
     return parts.join('.');

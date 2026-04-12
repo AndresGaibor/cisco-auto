@@ -51,10 +51,10 @@ export class CheckpointExecutor {
       // Execute steps
       for (let i = 0; i < plan.steps.length; i++) {
         execution.currentStep = i + 1;
-        
         const step = plan.steps[i];
+        if (!step) continue;
         const stepResult = await this.executeStep(step);
-        
+
         if (!stepResult.success) {
           if (step.onError === 'abort' || !step.onError) {
             return this.failExecution(execution, i + 1, stepResult.error || 'Step failed');
@@ -66,6 +66,7 @@ export class CheckpointExecutor {
             }
           }
         }
+
 
         // Check checkpoint after step
         const checkpoint = plan.checkpoints.find(c => c.step === i + 1);
