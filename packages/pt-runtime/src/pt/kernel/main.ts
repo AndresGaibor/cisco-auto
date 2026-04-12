@@ -2,13 +2,15 @@
 // Kernel boot implementation
 
 import type { KernelConfig, CommandEnvelope, ResultEnvelope } from "./types";
-import type { DeviceRef } from "../../runtime/contracts";
+import type { DeviceRef, DeferredJobPlan } from "../../runtime/contracts";
 import { createDirectoryManager } from "./directories";
 import { createLeaseManager } from "./lease";
 import { createCommandQueue } from "./command-queue";
 import { createRuntimeLoader } from "./runtime-loader";
 import { createHeartbeat } from "./heartbeat";
 import { createCleanupManager } from "./cleanup";
+import { createTerminalEngine } from "../terminal/terminal-engine";
+import { createJobExecutor, type ActiveJob } from "./job-executor";
 
 export { createDirectoryManager } from "./directories";
 export { createLeaseManager } from "./lease";
@@ -21,6 +23,8 @@ export interface Kernel {
   boot(): void;
   shutdown(): void;
   isRunning(): boolean;
+  startDeferredJob(plan: DeferredJobPlan): string;
+  getDeferredJob(jobId: string): ActiveJob | null;
 }
 
 export function createKernel(config: KernelConfig) {
@@ -41,6 +45,13 @@ export function createKernel(config: KernelConfig) {
   const runtimeLoader = createRuntimeLoader({ runtimeFile: config.devDir + "/runtime.js" });
   const heartbeat = createHeartbeat({ devDir: config.devDir, intervalMs: config.heartbeatIntervalMs });
   const cleanup = createCleanupManager();
+  
+  const terminal = createTerminalEngine({
+    commandTimeoutMs: 8000,
+    stallTimeoutMs: 15000,
+    pagerTimeoutMs: 30000,
+  });
+  const jobExecutor = createJobExecutor(terminal);
 
   // Intervals
   let commandPollInterval: ReturnType<typeof setInterval> | null = null;
@@ -240,5 +251,12 @@ export function createKernel(config: KernelConfig) {
     boot,
     shutdown,
     isRunning: () => isRunning,
+    startDeferredJob(plan: DeferredJobPlan): string {
+      const job = jobExecutor.startJob(plan);
+      return job.id;
+    },
+    getDeferredJob(jobId: string): ActiveJob | null {
+      return jobExecutor.getJob(jobId);
+    },
   };
 }
