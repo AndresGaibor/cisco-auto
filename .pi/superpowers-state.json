@@ -1,14 +1,14 @@
 {
   "workflow": {
     "phases": {
-      "brainstorm": "active",
+      "brainstorm": "pending",
       "plan": "pending",
-      "execute": "pending",
+      "execute": "active",
       "verify": "pending",
       "review": "pending",
       "finish": "pending"
     },
-    "currentPhase": "brainstorm",
+    "currentPhase": "execute",
     "artifacts": {
       "brainstorm": null,
       "plan": null,
@@ -30,7 +30,13 @@
     "phase": "red-pending",
     "testFiles": [
       "tests/pt-cli.test.ts",
-      "packages/pt-control/src/agent/agent-context-service.test.ts"
+      "packages/pt-control/src/agent/agent-context-service.test.ts",
+      "tests/pt-cli-inspect.test.ts",
+      "packages/pt-control/src/application/services/layout-planner-service.test.ts",
+      "packages/pt-control/src/application/services/link-feasibility-service.test.ts",
+      "tests/pt-cli-layout-link.test.ts",
+      "tests/pt-cli-host.test.ts",
+      "packages/pt-control/src/application/services/device-service.test.ts"
     ],
     "sourceFiles": [
       "apps/pt-cli/src/commands/inspect/index.ts",
@@ -43,7 +49,30 @@
       "apps/pt-cli/src/application/run-command.ts",
       "packages/pt-control/src/contracts/agent-context-types.ts",
       "packages/pt-control/src/agent/queries.ts",
-      "packages/pt-control/src/agent/context-renderer.ts"
+      "packages/pt-control/src/agent/context-renderer.ts",
+      "packages/pt-control/src/agent/agent-context-service.ts",
+      "apps/pt-cli/src/commands/inspect/topology.ts",
+      "apps/pt-cli/src/commands/inspect/neighbors.ts",
+      "apps/pt-cli/src/commands/inspect/free-ports.ts",
+      "apps/pt-cli/src/commands/inspect/drift.ts",
+      "apps/pt-cli/src/commands/topology-show.ts",
+      "apps/pt-cli/src/commands/topology/show.ts",
+      "apps/pt-cli/src/commands/command-catalog.ts",
+      "packages/pt-control/src/contracts/placement-types.ts",
+      "packages/pt-control/src/contracts/port-types.ts",
+      "packages/pt-control/src/application/services/layout-planner-service.ts",
+      "packages/pt-control/src/application/services/port-planner-service.ts",
+      "packages/pt-control/src/application/services/link-feasibility-service.ts",
+      "packages/pt-control/src/application/services/index.ts",
+      "apps/pt-cli/src/commands/layout/place.ts",
+      "apps/pt-cli/src/commands/layout/align.ts",
+      "apps/pt-cli/src/commands/layout/grid.ts",
+      "apps/pt-cli/src/commands/layout/zone.ts",
+      "packages/pt-control/src/index.ts",
+      "apps/pt-cli/src/commands/link/suggest.ts",
+      "apps/pt-cli/src/commands/link/verify.ts",
+      "apps/pt-cli/src/commands/link/index.ts",
+      "apps/pt-cli/src/commands/services.ts"
     ],
     "redVerificationPending": true
   },
