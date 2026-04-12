@@ -236,3 +236,22 @@ Estos resultados provienen de la sesión QA previa y sirven como referencia hist
 | 2026-04-12 | TC-090 | `bun run pt logs tail` | WARN | Últimos eventos aparecen como `unknown -> ok`, señal de telemetría poco descriptiva. | Logs poco enriquecidos | salida CLI |
 | 2026-04-12 | TC-134 | `bun run pt history show s-1775982486561-fcafca52` | PASS | Muestra el timeline completo de la sesión de topology.clean. | - | salida CLI |
 | 2026-04-12 | TC-135 | `bun run pt history explain s-1775982486561-fcafca52` | PASS | Devuelve correctamente que la sesión fue exitosa y no hay error que explicar. | - | salida CLI |
+
+### Sesión ejecutada 2026-04-12 — quinta tanda
+
+| Fecha | ID | Comando | Estado | Observado | Causa probable | Evidencia |
+|---|---|---|---|---|---|---|
+| 2026-04-12 | TC-061 | `bun run pt routing static --examples` | N/I | Muestra ayuda del subcomando y sale con error de uso; no entrega ejemplos. | Flag no implementado en este nivel | salida CLI |
+| 2026-04-12 | TC-071 | `bun run pt routing ospf --examples` | N/I | Muestra ayuda del subcomando y sale con error de uso; no entrega ejemplos. | Flag no implementado en este nivel | salida CLI |
+| 2026-04-12 | TC-077 | `bun run pt services dhcp --examples` | N/I | Muestra ayuda del subcomando y sale con error de uso; no entrega ejemplos. | Flag no implementado en este nivel | salida CLI |
+| 2026-04-12 | TC-078 | `bun run pt services ntp --examples` | N/I | Muestra ayuda del subcomando y sale con error de uso; no entrega ejemplos. | Flag no implementado en este nivel | salida CLI |
+| 2026-04-12 | TC-079 | `bun run pt services syslog --examples` | N/I | Muestra ayuda del subcomando y sale con error de uso; no entrega ejemplos. | Flag no implementado en este nivel | salida CLI |
+| 2026-04-12 | TC-074 | `bun run pt acl create --examples` | FAIL | Requiere `--name` aunque solo se pidió ejemplos. | UX/CLI conflictivo con flags de ayuda | salida CLI |
+| 2026-04-12 | TC-075 | `bun run pt acl apply --examples` | FAIL | Requiere `--acl` aunque solo se pidió ejemplos. | UX/CLI conflictivo con flags de ayuda | salida CLI |
+| 2026-04-12 | TC-080 | `bun run pt etherchannel --examples` | N/I | Muestra ayuda del subcomando y sale con error de uso; no entrega ejemplos. | Flag no implementado en este nivel | salida CLI |
+| 2026-04-12 | TC-081 | `bun run pt stp --examples` | N/I | Muestra ayuda del subcomando y sale con error de uso; no entrega ejemplos. | Flag no implementado en este nivel | salida CLI |
+| 2026-04-12 | TC-076 | `bun run pt config-acl --device R1 --name BLOCK_NET --type standard --rule "deny,ip,any,any" --apply` | FAIL | `IOS configuration failed`. | Runtime IOS/config mode aún no estable para aplicar ACL | salida CLI |
+| 2026-04-12 | TC-072 | `bun run pt routing ospf add-network --device R1 --network 192.168.10.0/24 --area 0` | FAIL | Sigue reportando que el área debe ser entero válido. | Parser/validation del área OSPF | salida CLI |
+| 2026-04-12 | TC-074 | `bun run pt acl apply --acl BLOCK_NET --device R1 --interface GigabitEthernet0/0 --direction in --plan` | PASS | Muestra plan de aplicación correcto. | - | salida CLI |
+| 2026-04-12 | TC-071 | `bun run pt routing ospf enable --plan --device R1 --process-id 1` | PASS | Muestra plan de habilitación OSPF correcto. | - | salida CLI |
+| 2026-04-12 | TC-077 | `bun run pt services dhcp create --plan --device R1 --pool LAN10 --network 192.168.10.0/24` | PASS | Muestra plan de creación de pool DHCP correcto. | - | salida CLI |
