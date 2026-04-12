@@ -2,7 +2,7 @@
 // Entry point for main.js - will be compiled to JS
 
 export { createQueuePoller, type QueuedCommand, type QueueConfig } from "./queue";
-export { createHeartbeat, type HeartbeatConfig } from "./heartbeat";
+export { createHeartbeat, type HeartbeatManager } from "./heartbeat";
 export { createRuntimeLoader, type RuntimeLoader } from "./runtime-loader";
 export { createCleanupManager, type CleanupState } from "./cleanup";
 
