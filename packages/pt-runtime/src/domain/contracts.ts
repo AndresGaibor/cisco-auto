@@ -13,6 +13,7 @@ export type {
   DeviceRef,
   SessionStateSnapshot,
   KernelJobState,
+  JobStatePhase,
   DeviceSessionState,
   CommandEnvelope,
   ResultEnvelope,
