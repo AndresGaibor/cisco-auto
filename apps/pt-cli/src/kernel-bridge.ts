@@ -5,6 +5,9 @@
 
 import { DefaultPluginRegistry, type PluginRegistry } from '@cisco-auto/kernel/plugin-api';
 import { vlanPlugin } from '@cisco-auto/kernel/plugins/vlan';
+import { routingPlugin } from '@cisco-auto/kernel/plugins/routing';
+import { securityPlugin } from '@cisco-auto/kernel/plugins/security';
+import { servicesPlugin } from '@cisco-auto/kernel/plugins/services';
 import { packetTracerBackendPlugin, type PacketTracerBackendPlugin } from '@cisco-auto/kernel/backends/packet-tracer';
 import { generateVlanCommands, validateVlanConfig } from '@cisco-auto/kernel/plugins/vlan';
 import type { VlanConfigInput } from '@cisco-auto/kernel/plugins/vlan';
@@ -22,17 +25,27 @@ export function getKernelRegistry(): PluginRegistry {
   if (!registry) {
     registry = new DefaultPluginRegistry();
     registry.register('protocol', vlanPlugin);
+    registry.register('protocol', routingPlugin);
+    registry.register('protocol', securityPlugin);
+    registry.register('protocol', servicesPlugin);
     registry.register('backend', packetTracerBackendPlugin);
   }
   return registry;
 }
 
 /**
+ * Obtiene un plugin de protocolo por ID.
+ */
+export function getProtocolPlugin(id: string) {
+  const reg = getKernelRegistry();
+  return reg.get('protocol', id);
+}
+
+/**
  * Obtiene el plugin VLAN del registro.
  */
 export function getVlanPlugin() {
-  const reg = getKernelRegistry();
-  return reg.get('protocol', 'vlan');
+  return getProtocolPlugin('vlan');
 }
 
 /**
