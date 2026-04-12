@@ -52,6 +52,13 @@ import { createLayoutCommand } from './layout/index';
 import { createVerifyCommand } from './verify/index';
 import { createAgentCommand } from './agent/index';
 
+// Nuevos comandos de módulos avanzados
+import { createLintCommand } from './lint';
+import { createCapabilityCommand } from './capability';
+import { createPlannerCommand } from './planner';
+import { createLedgerCommand } from './ledger';
+import { createDiagnoseCommand } from './diagnose';
+
 
 export type CommandFactory = () => Command;
 
@@ -108,6 +115,12 @@ export const COMMAND_FACTORIES: CommandFactory[] = [
   createBridgeCommand,
   createDhcpServerCommand,
   createHostCommand,
+  // Módulos avanzados
+  createLintCommand,
+  createCapabilityCommand,
+  createPlannerCommand,
+  createLedgerCommand,
+  createDiagnoseCommand,
 ];
 
 export function getRegisteredCommandIds(): string[] {
