@@ -125,8 +125,6 @@ export function createShowMacCommand(): Command {
         flags,
         payloadPreview: { device, filters: { vlan: options.vlan, address: options.address, port: options.port } },
         execute: async (ctx) => {
-          await ctx.controller.start();
-
           try {
             await ctx.logPhase('inspect', { device });
 
@@ -143,7 +141,10 @@ export function createShowMacCommand(): Command {
 
             let raw: string = '';
             try {
-              const execResult = await ctx.controller.execIos(device, command, true, 5000);
+              const execResult = await ctx.controller.showParsed(device, command, {
+                ensurePrivileged: true,
+                timeout: 10000,
+              });
               raw = execResult.raw || '';
             } catch (iosError: any) {
               const deviceInfo = await ctx.controller.inspectDevice(device);

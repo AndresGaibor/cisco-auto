@@ -1,4 +1,5 @@
-import type { HandlerDeps, HandlerResult } from "../utils/helpers";
+import type { PtDeps } from "../pt-api/pt-deps.js";
+import type { PtResult } from "../pt-api/pt-results.js";
 
 export interface HandlerPayload {
   type: string;
@@ -8,7 +9,8 @@ export interface HandlerPayload {
 export interface HandlerPort {
   readonly name: string;
   readonly supportedTypes: readonly string[];
-  execute(payload: HandlerPayload, deps: HandlerDeps): HandlerResult | Promise<HandlerResult>;
+  execute(payload: HandlerPayload, deps: PtDeps): PtResult | Promise<PtResult>;
 }
 
-export type { HandlerDeps, HandlerResult };
+export type { PtDeps as HandlerDeps } from "../pt-api/pt-deps.js";
+export type { PtResult as HandlerResult } from "../pt-api/pt-results.js";

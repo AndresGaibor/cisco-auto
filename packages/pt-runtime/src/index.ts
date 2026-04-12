@@ -20,47 +20,27 @@ export * from "./pt/kernel";
 // PT Terminal
 export * from "./pt/terminal";
 
-// Templates
-export { MAIN_JS_TEMPLATE } from "./templates/main-kernel";
-export { RUNTIME_JS_TEMPLATE } from "./templates/runtime";
-
 // Runtime artifacts (snapshots)
 export { listRuntimeSnapshots, restoreRuntimeSnapshot } from "./runtime-artifacts";
 
 // Build system exports
 export { validatePtSafe, formatValidationResult } from "./build/validate-pt-safe";
 export { transformToPtSafe, wrapRuntimeBootstrap, wrapMainBootstrap } from "./build/pt-safe-transforms";
+export { renderRuntimeV2, renderRuntimeV2Sync } from "./build/render-runtime-v2";
+export { renderMainV2 } from "./build/render-main-v2";
 export * from "./build";
 
-// Runtime contract validators
-export {
-  validateMainJs,
-  validateRuntimeJs,
-  validateGeneratedArtifacts,
-  validateQtScriptArtifacts,
-  formatValidationErrors,
-  validateMainCode,
-  validateRuntimeCode,
-} from "./runtime-validator.js";
-
-// Simplified render wrappers for test compatibility
-import { MAIN_JS_TEMPLATE } from "./templates/main-kernel";
-import { RUNTIME_JS_TEMPLATE } from "./templates/runtime";
+// Build utilities
 import { validatePtSafe } from "./build/validate-pt-safe";
+import { renderRuntimeV2Sync } from "./build/render-runtime-v2";
+import { renderMainV2 } from "./build/render-main-v2";
 import * as fs from "fs";
 import * as path from "path";
-
-export function renderMainSource(devDir: string): string {
-  return MAIN_JS_TEMPLATE.replace(/{{DEV_DIR_LITERAL}}/g, JSON.stringify(devDir));
-}
-
-export function renderRuntimeSource(): string {
-  return RUNTIME_JS_TEMPLATE;
-}
 
 export interface RuntimeGeneratorConfig {
   outputDir: string;
   devDir: string;
+  useV2Pipeline?: boolean;
 }
 
 export interface RuntimeArtifactManifest {
@@ -89,11 +69,19 @@ export class RuntimeGenerator {
   }
 
   generateMain(): string {
-    return renderMainSource(this.config.devDir);
+    return renderMainV2({
+      srcDir: path.resolve(__dirname),
+      outputPath: "",
+      injectDevDir: this.config.devDir,
+    });
   }
 
   generateRuntime(): string {
-    return renderRuntimeSource();
+    return renderRuntimeV2Sync({
+      srcDir: path.resolve(__dirname),
+      outputPath: "",
+      injectDevDir: this.config.devDir,
+    });
   }
 
   async generate(): Promise<{ main: string; runtime: string }> {

@@ -21,6 +21,7 @@
     "dev:runtime": "tsc -p tsconfig.runtime.json --watch",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.runtime.json --noEmit",
+    "validate:api": "bun run src/build/validate-pt-api.ts",
     "generate-models": "bun run src/scripts/generate-model-map.ts",
     "generate": "bun run build:runtime && bun run src/index.ts generate",
     "validate": "bun run build:runtime && bun run src/index.ts validate",

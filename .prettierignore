@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+coverage/
+.git/
+.github/
+docs/
+tests/smoke/
+*.js
+*.d.ts
+*.json
+*.yml
+*.yaml

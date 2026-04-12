@@ -1,13 +1,8 @@
-import { generateCanvasHandlersTemplate } from "../templates/canvas-handlers-template";
-import { generateConstantsTemplate } from "../templates/constants-template";
-import { generateDeviceHandlersTemplate } from "../templates/device-handlers-template";
-import { generateHelpersTemplate } from "../templates/helpers-template";
-import { generateInspectHandlersTemplate } from "../templates/inspect-handlers-template";
-import { generateIosConfigHandlersTemplate } from "../templates/ios-config-handlers-template";
-import { generateIosExecHandlersTemplate } from "../templates/ios-exec-handlers-template";
-import { MAIN_JS_TEMPLATE } from "../templates/main-kernel";
-import { generateSessionTemplate } from "../templates/session-template";
-import { generateDispatcherTemplate } from "../templates/dispatcher-template";
+// packages/pt-runtime/src/core/runtime-builder.ts
+// Runtime builder - assembles runtime from handlers or templates
+
+import { renderRuntimeV2Sync } from "../build/render-runtime-v2";
+import { renderMainV2 } from "../build/render-main-v2";
 import type { HandlerRegistryPort } from "../ports";
 import { globalRegistry } from "./registry";
 
@@ -19,30 +14,25 @@ export interface RuntimeBuildResult {
 export class RuntimeBuilder {
   constructor(private readonly registry: HandlerRegistryPort = globalRegistry) {}
 
-  buildRuntime(): string {
-    const sections = [
-      generateConstantsTemplate(),
-      generateHelpersTemplate(),
-      generateSessionTemplate(),
-      generateDeviceHandlersTemplate(),
-      generateIosConfigHandlersTemplate(),
-      generateIosExecHandlersTemplate(),
-      generateInspectHandlersTemplate(),
-      generateCanvasHandlersTemplate(),
-      generateDispatcherTemplate(),
-    ];
-
-    return sections.filter(Boolean).join("\n\n");
+  buildRuntimeFromHandlers(inputDir: string): string {
+    return renderRuntimeV2Sync({
+      srcDir: inputDir,
+      outputPath: "",
+    });
   }
 
-  buildMainKernel(): string {
-    return MAIN_JS_TEMPLATE;
+  buildMainKernel(devDir?: string): string {
+    return renderMainV2({
+      srcDir: process.cwd() + "/src",
+      outputPath: "",
+      injectDevDir: devDir,
+    });
   }
 
-  buildAll(): RuntimeBuildResult {
+  buildAll(inputDir: string, devDir?: string): RuntimeBuildResult {
     return {
-      main: this.buildMainKernel(),
-      runtime: this.buildRuntime(),
+      main: this.buildMainKernel(devDir),
+      runtime: this.buildRuntimeFromHandlers(inputDir),
     };
   }
 

@@ -2,20 +2,7 @@
 // SessionMode Value Object - Validates IOS session modes
 // ============================================================================
 
-/**
- * Valid IOS session modes
- */
-export type IosMode =
-  | 'user-exec'       // Router>
-  | 'priv-exec'       // Router#
-  | 'config'          // Router(config)#
-  | 'config-if'       // Router(config-if)#
-  | 'config-line'     // Router(config-line)#
-  | 'config-router'   // Router(config-router)#
-  | 'config-vlan'     // Router(config-vlan)#
-  | 'config-subif'    // Router(config-subif)#
-  | 'rommon'          // rommon 1 >
-  | 'unknown';
+import type { IosMode } from "@cisco-auto/types";
 
 /**
  * Mode hierarchy (lower = less privileged)
@@ -24,7 +11,7 @@ const MODE_HIERARCHY: Record<IosMode, number> = {
   'unknown': 0,
   'rommon': 1,
   'user-exec': 2,
-  'priv-exec': 3,
+  'privileged-exec': 3,
   'config': 4,
   'config-if': 5,
   'config-line': 5,
@@ -44,7 +31,7 @@ export class SessionMode {
 
   constructor(value: IosMode) {
     const validModes: IosMode[] = [
-      'user-exec', 'priv-exec', 'config', 'config-if', 
+      'user-exec', 'privileged-exec', 'config', 'config-if', 
       'config-line', 'config-router', 'config-vlan', 
       'config-subif', 'rommon', 'unknown'
     ];
@@ -89,7 +76,7 @@ export class SessionMode {
    * Check if this is an exec mode (user or privileged)
    */
   get isExecMode(): boolean {
-    return this.value === 'user-exec' || this.value === 'priv-exec';
+    return this.value === 'user-exec' || this.value === 'privileged-exec';
   }
 
   /**
@@ -103,7 +90,7 @@ export class SessionMode {
    * Check if this is privileged exec mode
    */
   get isPrivileged(): boolean {
-    return this.value === 'priv-exec';
+    return this.value === 'privileged-exec';
   }
 
   /**
@@ -140,7 +127,7 @@ export class SessionMode {
   get promptSuffix(): string {
     switch (this.value) {
       case 'user-exec': return '>';
-      case 'priv-exec': return '#';
+      case 'privileged-exec': return '#';
       case 'config': return '(config)#';
       case 'config-if': return '(config-if)#';
       case 'config-line': return '(config-line)#';
@@ -185,7 +172,7 @@ export class SessionMode {
         return null; // Can't do in one step
       }
       
-      if (from.value === 'priv-exec') {
+      if (from.value === 'privileged-exec') {
         return 'configure terminal';
       }
       
@@ -242,7 +229,7 @@ export class SessionMode {
     if (trimmed.endsWith('(config)#')) return new SessionMode('config');
     
     // Exec modes
-    if (trimmed.endsWith('#')) return new SessionMode('priv-exec');
+    if (trimmed.endsWith('#')) return new SessionMode('privileged-exec');
     if (trimmed.endsWith('>')) return new SessionMode('user-exec');
     
     return new SessionMode('unknown');

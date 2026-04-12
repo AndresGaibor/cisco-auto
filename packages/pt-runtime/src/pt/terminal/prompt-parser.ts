@@ -1,15 +1,7 @@
 // packages/pt-runtime/src/pt/terminal/prompt-parser.ts
 // Parse IOS prompts to extract mode and command context
 
-export type IosMode = 
-  | "user-exec"        // Router>
-  | "privileged-exec"  // Router#
-  | "config"           // Router(config)#
-  | "config-if"        // Router(config-if)#
-  | "config-subif"     // Router(config-subif)#
-  | "config-line"      // Router(config-line)#
-  | "config-router"    // Router(config-router)#
-  | "unknown";
+import type { IosMode } from "@cisco-auto/types";
 
 export interface ParsedPrompt {
   mode: IosMode;

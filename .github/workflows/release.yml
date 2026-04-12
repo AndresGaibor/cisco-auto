@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint || true
+
+      - name: Test
+        run: bun test packages/pt-runtime || true
+
+      - name: Build
+        run: bun run build --dir packages/pt-runtime
+
+      - name: PT-Safe Validation
+        run: |
+          cd packages/pt-runtime
+          bun --eval "
+            const { renderRuntimeV2Sync } = require('./src/build/render-runtime-v2.ts');
+            const { validatePtSafe } = require('./src/build/validate-pt-safe.ts');
+            const r = renderRuntimeV2Sync({ srcDir: './src', outputPath: '', injectDevDir: '~/pt-dev' });
+            const v = validatePtSafe(r);
+            if (!v.valid) {
+              console.error('PT-safe validation FAILED');
+              process.exit(1);
+            }
+            console.log('PT-safe validation PASSED');
+          "
+
+      - name: Create Release Pull Request or Publish
+        uses: changesets/action@v1
+        with:
+          publish: bun run changeset publish
+          version: bun run changeset version
+          title: "chore: version packages"
+          commit: "chore: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

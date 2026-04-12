@@ -1,5 +1,6 @@
 import { transformToPtSafe, wrapRuntimeBootstrap } from "./pt-safe-transforms";
 import { validatePtSafe, formatValidationResult } from "./validate-pt-safe";
+import { renderRuntimeFromHandlers } from "./render-from-handlers";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -57,7 +58,9 @@ export async function renderRuntimeSource(options: RenderRuntimeOptions): Promis
 }
 
 export async function buildRuntime(options: RenderRuntimeOptions): Promise<void> {
-  const code = await renderRuntimeSource(options);
-  await fs.promises.writeFile(options.outputPath, code, "utf-8");
+  const code = renderRuntimeFromHandlers({
+    handlersDir: options.inputDir,
+    outputPath: options.outputPath,
+  });
   console.log(`Generated ${options.outputPath}`);
 }

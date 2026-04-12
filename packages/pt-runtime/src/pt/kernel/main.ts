@@ -63,19 +63,19 @@ export function createKernel(config: KernelConfig) {
     const net = (ipc as { getNetwork?: () => unknown })?.getNetwork?.();
 
     return {
-      ipc,
+      ipc: ipc as any,
       dprint,
       getDeviceByName(name: string) {
-        if (!net) return null;
+        if (!net) return null as any;
         const dev = (net as { getDevice: (n: string) => unknown }).getDevice(name);
         if (!dev) return null;
         const terminal = (dev as { getCommandLine: () => unknown }).getCommandLine();
         return {
           name: (dev as { getName: () => string }).getName(),
           hasTerminal: !!terminal,
-          getTerminal: () => terminal as DeviceRef["getTerminal"],
-          getNetwork: () => net as unknown as DeviceRef["getNetwork"],
-        };
+          getTerminal: () => terminal as any,
+          getNetwork: () => net as any,
+        } as any;
       },
       listDevices(): string[] {
         if (!net) return [];

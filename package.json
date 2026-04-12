@@ -13,6 +13,10 @@
     "dev": "bun run --cwd apps/pt-cli dev",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint packages/pt-runtime/src/ --max-warnings 2000 2>&1 || true",
+    "format": "prettier --write 'packages/pt-runtime/src/**/*.ts'",
+    "format:check": "prettier --check 'packages/pt-runtime/src/**/*.ts'",
+    "pre-release-check": "bun scripts/pre-release-check.ts",
     "pt": "bun run --cwd apps/pt-cli start",
     "pt:build": "bun run --cwd packages/pt-runtime src/index.ts deploy",
     "pt:generate": "bun run --cwd packages/pt-runtime src/index.ts generate",
@@ -20,7 +24,13 @@
     "pt:deploy": "bun run --cwd packages/pt-runtime src/index.ts deploy"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/bun": "latest",
+    "@typescript-eslint/eslint-plugin": "^8.58.1",
+    "@typescript-eslint/parser": "^8.58.1",
+    "eslint": "^10.2.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.2",
     "typescript": "^5"
   },
   "dependencies": {

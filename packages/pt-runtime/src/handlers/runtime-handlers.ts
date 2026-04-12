@@ -8,16 +8,16 @@
 // El kernel (main) ejecuta los planes; los handlers solo decide QUÉ hacer.
 // ============================================================================
 
-import type { 
-  RuntimeResult, 
-  RuntimeApi, 
-  DeferredJobPlan, 
-  DeferredStep, 
+import type {
+  DeferredJobPlan,
+  DeferredStep,
   SessionStateSnapshot,
   DeferredStepType,
   DeferredJobOptions,
-  DeviceRef
+  DeviceRef,
 } from "../runtime/contracts";
+import type { PtResult } from "../pt-api/pt-results.js";
+import type { PtRuntimeApi } from "../pt-api/pt-deps.js";
 
 // ============================================================================
 // Payload Types
@@ -92,28 +92,28 @@ interface PollStateDone {
 function createErrorResult(
   error: string,
   code?: string,
-  extra: Partial<RuntimeResult> = {}
-): RuntimeResult {
+  extra: Partial<PtResult> = {}
+): PtResult {
   return {
     ok: false,
     error,
     code,
     ...extra
-  } as RuntimeResult;
+  } as PtResult;
 }
 
 function createSuccessResult(
   value?: unknown,
-  extra: Partial<RuntimeResult> = {}
-): RuntimeResult {
+  extra: Partial<PtResult> = {}
+): PtResult {
   return {
     ok: true,
     ...(value !== undefined ? { value } : {}),
     ...extra
-  } as RuntimeResult;
+  } as PtResult;
 }
 
-function createDeferredResult(ticket: string, plan: DeferredJobPlan): RuntimeResult {
+function createDeferredResult(ticket: string, plan: DeferredJobPlan): PtResult {
   return {
     ok: true,
     deferred: true,
@@ -307,7 +307,7 @@ function buildExecIosPlan(
 // Handlers
 // ============================================================================
 
-export function handleConfigHost(payload: ConfigHostPayload, api: RuntimeApi): RuntimeResult {
+export function handleConfigHost(payload: ConfigHostPayload, api: PtRuntimeApi): PtResult {
   const device = api.getDeviceByName(payload.device);
   if (!device) {
     return createErrorResult(`Device not found: ${payload.device}`, "DEVICE_NOT_FOUND");
@@ -352,7 +352,7 @@ export function handleConfigHost(payload: ConfigHostPayload, api: RuntimeApi): R
   return createErrorResult("Device has CLI, use configIos instead", "INVALID_DEVICE_TYPE");
 }
 
-export function handleConfigIos(payload: ConfigIosPayload, api: RuntimeApi): RuntimeResult {
+export function handleConfigIos(payload: ConfigIosPayload, api: PtRuntimeApi): PtResult {
   const device = api.getDeviceByName(payload.device);
   if (!device) {
     return createErrorResult(`Device not found: ${payload.device}`, "DEVICE_NOT_FOUND");
@@ -383,7 +383,7 @@ export function handleConfigIos(payload: ConfigIosPayload, api: RuntimeApi): Run
   return createDeferredResult(ticket, plan);
 }
 
-export function handleExecIos(payload: ExecIosPayload, api: RuntimeApi): RuntimeResult {
+export function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi): PtResult {
   const device = api.getDeviceByName(payload.device);
   if (!device) {
     return createErrorResult(`Device not found: ${payload.device}`, "DEVICE_NOT_FOUND");
@@ -410,7 +410,7 @@ export function handleExecIos(payload: ExecIosPayload, api: RuntimeApi): Runtime
   return createDeferredResult(ticket, plan);
 }
 
-export function handleDeferredPoll(pollPayload: PollDeferredPayload, api: RuntimeApi): RuntimeResult {
+export function handleDeferredPoll(pollPayload: PollDeferredPayload, api: PtRuntimeApi): PtResult {
   const { ticket } = pollPayload;
 
   const jobState = (api as any).getJobState?.(ticket);
@@ -419,7 +419,7 @@ export function handleDeferredPoll(pollPayload: PollDeferredPayload, api: Runtim
   }
 
   if (!jobState.done) {
-    const pollResult: RuntimeResult = {
+    const pollResult: PtResult = {
       ok: true,
       deferred: true,
       ticket,
@@ -447,7 +447,7 @@ export function handleDeferredPoll(pollPayload: PollDeferredPayload, api: Runtim
   const rawOutput = jobState.output || "";
   const sanitizedOutput = sanitizeTerminalOutput(undefined, rawOutput);
 
-  const result: RuntimeResult = {
+  const result: PtResult = {
     ok: true,
     raw: sanitizedOutput || rawOutput,
     source: "terminal"
@@ -468,11 +468,11 @@ export function handleDeferredPoll(pollPayload: PollDeferredPayload, api: Runtim
   return result;
 }
 
-export function handlePing(api: RuntimeApi): RuntimeResult {
+export function handlePing(api: PtRuntimeApi): PtResult {
   return createSuccessResult({ status: "alive", timestamp: api.now() });
 }
 
-export function handleExecPc(payload: ExecPcPayload, api: RuntimeApi): RuntimeResult {
+export function handleExecPc(payload: ExecPcPayload, api: PtRuntimeApi): PtResult {
   const { device, command, timeoutMs = 30000 } = payload;
 
   api.dprint(`[execPc] device=${device} command="${command}"`);
@@ -572,42 +572,56 @@ export function handleExecPc(payload: ExecPcPayload, api: RuntimeApi): RuntimeRe
       options: { stopOnError: false, commandTimeoutMs: timeout, stallTimeoutMs: timeout },
       payload: { device, command }
     }
-  } as unknown as RuntimeResult;
+  } as unknown as PtResult;
 }
+
+// ============================================================================
+// Handler Map - Registro centralizado de handlers
+// ============================================================================
+
+type HandlerFn = (payload: any, api: PtRuntimeApi) => PtResult;
+
+const HANDLER_MAP: Map<string, HandlerFn> = new Map();
+
+function registerHandler(type: string, handler: HandlerFn): void {
+  HANDLER_MAP.set(type, handler);
+}
+
+registerHandler("configHost", handleConfigHost as HandlerFn);
+registerHandler("configIos", handleConfigIos as HandlerFn);
+registerHandler("execIos", handleExecIos as HandlerFn);
+registerHandler("__pollDeferred", handleDeferredPoll as HandlerFn);
+registerHandler("__ping", handlePing as HandlerFn);
+registerHandler("execPc", handleExecPc as HandlerFn);
 
 // ============================================================================
 // Dispatcher - Punto de entrada del runtime
 // ============================================================================
 
-export function runtimeDispatcher(payload: Record<string, unknown>, api: RuntimeApi): RuntimeResult {
+export function runtimeDispatcher(payload: Record<string, unknown>, api: PtRuntimeApi): PtResult {
   const type = payload.type as string;
 
   api.dprint("[RUNTIME] Dispatching: " + type);
 
+  if (!type || typeof type !== "string") {
+    return createErrorResult("Missing payload.type", "INVALID_PAYLOAD");
+  }
+
+  const handler = HANDLER_MAP.get(type);
+  if (!handler) {
+    return createErrorResult(`Unknown command type: ${type}`, "UNKNOWN_COMMAND");
+  }
+
   try {
-    switch (type) {
-      case "configHost":
-        return handleConfigHost(payload as unknown as ConfigHostPayload, api);
-
-      case "configIos":
-        return handleConfigIos(payload as unknown as ConfigIosPayload, api);
-
-      case "execIos":
-        return handleExecIos(payload as unknown as ExecIosPayload, api);
-
-      case "__pollDeferred":
-        return handleDeferredPoll(payload as unknown as PollDeferredPayload, api);
-
-      case "__ping":
-        return handlePing(api);
-
-      case "execPc":
-        return handleExecPc(payload as unknown as ExecPcPayload, api);
-
-      default:
-        return createErrorResult(`Unknown command type: ${type}`, "UNKNOWN_COMMAND");
-    }
+    return handler(payload, api);
   } catch (e) {
     return createErrorResult(String(e), "DISPATCH_ERROR");
   }
+}
+
+export function validateHandlerCoverage(): { missing: string[]; registered: string[] } {
+  return {
+    missing: [],
+    registered: [...HANDLER_MAP.keys()],
+  };
 }

@@ -1,0 +1,52 @@
+root: true
+
+parser: "@typescript-eslint/parser"
+parserOptions:
+  ecmaVersion: 2022
+  sourceType: module
+  project: "./tsconfig.json"
+
+plugins:
+  - "@typescript-eslint"
+
+extends:
+  - eslint:recommended
+  - plugin:@typescript-eslint/recommended
+  - prettier
+
+rules:
+  "@typescript-eslint/no-explicit-any": warn
+  "@typescript-eslint/no-unused-vars":
+    - error
+    - argsIgnorePattern: "^_"
+  "@typescript-eslint/no-non-null-assertion": warn
+  "@typescript-eslint/prefer-nullish-coalescing": off
+  "@typescript-eslint/prefer-optional-chain": off
+
+  no-restricted-syntax:
+    - error
+    - selector: "TemplateLiteral"
+      message: "Template literals are not ES5-compatible — use string concatenation in runtime code"
+
+  complexity:
+    - warn
+    - max: 15
+  max-lines-per-function:
+    - warn
+    - max: 100
+    - skipBlankLines: true
+    - skipComments: true
+
+overrides:
+  - files:
+      - "packages/pt-runtime/src/build/**"
+    rules:
+      no-restricted-syntax: off
+      "@typescript-eslint/no-explicit-any": off
+
+  - files:
+      - "**/*.test.ts"
+      - "**/__tests__/**"
+    rules:
+      "@typescript-eslint/no-explicit-any": off
+      max-lines-per-function: off

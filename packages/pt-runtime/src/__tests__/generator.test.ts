@@ -45,3 +45,18 @@ test("RuntimeGenerator deploy escribe los archivos esperados", async () => {
   expect(readFileSync(devMain, "utf-8")).toContain(JSON.stringify(devDir));
   expect(readFileSync(devRuntime, "utf-8")).toContain("handleConfigIos");
 });
+
+test("RuntimeGenerator buildFromHandlers escribe runtime desde handlers", async () => {
+  const raiz = mkdtempSync(join(tmpdir(), "pt-control-"));
+  carpetasTemporales.push(raiz);
+
+  const outputDir = join(raiz, "generated");
+  const devDir = join(raiz, "pt-dev");
+
+  const generator = new RuntimeGenerator({ outputDir, devDir });
+  await generator.buildFromHandlers(join(".", "packages", "pt-runtime", "src"));
+
+  const runtimePath = join(outputDir, "runtime.js");
+  expect(existsSync(runtimePath)).toBe(true);
+  expect(readFileSync(runtimePath, "utf-8")).toContain("handleEnsureVlans");
+});

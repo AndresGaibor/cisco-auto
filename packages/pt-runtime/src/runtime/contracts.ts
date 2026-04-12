@@ -7,40 +7,27 @@
 // ============================================================================
 
 // ============================================================================
-// PT Types (duplicated to avoid rootDir issues)
+// Tipos PT compartidos
 // ============================================================================
 
-interface PTNetwork {
-  getDeviceCount(): number;
-  getDeviceAt(index: number): PTDevice | null;
-  getDevice(name: string): PTDevice | null;
-}
+import type {
+  PTNetwork,
+  PTDevice,
+  PTCommandLine,
+  PTPort,
+} from "../pt-api/pt-api-registry.js";
 
-interface PTDevice {
-  getName(): string;
-  getModel(): string;
-  getType(): number;
-  getPower(): boolean;
-  setPower(on: boolean): void;
-  setName(name: string): void;
-  skipBoot(): void;
-  getCommandLine(): PTCommandLine | null;
-  getPortCount(): number;
-  getPortAt(index: number): PTPort | null;
-  addModule(slot: string, module: string): boolean;
-  removeModule(slot: string): boolean;
-}
-
-interface PTCommandLine {
-  enterCommand(cmd: string, prompt?: string): [number, string];
-  getPrompt(): string;
-}
-
-interface PTPort {
-  getName(): string;
-  getIpAddress(): string;
-  getSubnetMask(): string;
-}
+export type {
+  PTNetwork,
+  PTDevice,
+  PTCommandLine,
+  PTPort,
+  PTIpc,
+  PTLogicalWorkspace,
+  PTFileManager,
+  PTGlobalScope,
+  PTTerminalEventName,
+} from "../pt-api/pt-api-registry.js";
 
 // ============================================================================
 // Step Types - Minimal instruction set for IOS engine in main

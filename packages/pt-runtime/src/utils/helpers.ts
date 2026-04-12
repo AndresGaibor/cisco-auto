@@ -8,6 +8,8 @@ import type { DeviceName } from "../value-objects/device-name.js";
 import type { InterfaceName } from "../value-objects/interface-name.js";
 import type { SessionMode } from "../value-objects/session-mode.js";
 import type { CableType } from "../value-objects/cable-type.js";
+import type { PtDeps } from "../pt-api/pt-deps.js";
+import type { PtResult } from "../pt-api/pt-results.js";
 
 /** Logical workspace interface */
 export interface PTLogicalWorkspace {
@@ -180,20 +182,10 @@ export interface PTCommandLine {
 }
 
 /** Dependencies injected into handlers */
-export interface HandlerDeps {
-  getLW: () => PTLogicalWorkspace;
-  getNet: () => PTNetwork;
-  dprint: (msg: string) => void;
-}
+export type HandlerDeps = PtDeps;
 
 /** Handler result type */
-export interface HandlerResult {
-  ok: boolean;
-  error?: string;
-  code?: HandlerErrorCode;
-  details?: unknown;
-  [key: string]: unknown;
-}
+export type HandlerResult = PtResult;
 
 /** Error codes for structured error handling */
 export const HandlerErrorCode = {

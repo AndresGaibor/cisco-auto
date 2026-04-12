@@ -13,3 +13,6 @@ export * from './types/index.js';
 
 // Export command catalog
 export * from './command-catalog.js';
+
+// Export PT API types
+export * from './pt-api/index.js';
