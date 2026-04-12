@@ -86,13 +86,18 @@ export type IosExecutionResult<TParsed = unknown> =
  * Resultado de aplicar configuración IOS.
  * Solo indica que los comandos se ejecutaron — NO que quedaron verificados.
  */
+export interface IosConfigCommandResult {
+  index: number;
+  command: string;
+  ok: boolean;
+  output: string;
+}
+
 export interface IosConfigApplyResult {
   executed: true;
-  /** Dispositivo configurado */
   device: string;
-  /** Comandos que se enviaron */
   commands: string[];
-  /** Evidencia de la ejecución */
+  results: IosConfigCommandResult[];
   evidence: IosExecutionEvidence;
 }
 

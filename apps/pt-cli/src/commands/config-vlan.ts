@@ -9,7 +9,11 @@ import type { GlobalFlags } from '../flags';
 import { fetchDeviceList, getIOSCapableDevices } from '../utils/device-utils';
 import { parseVlans } from '../utils/cli-parser';
 import { parseConfigFile, requireDevice } from '../utils/config-parser';
-import { getPacketTracerBackend, validateVlanConfig, generateVlanCommands, type VlanConfigInput } from '../kernel-bridge';
+import { CapabilitySet } from '@cisco-auto/ios-domain/capabilities';
+import { planConfigureVlan } from '@cisco-auto/ios-domain/operations';
+import { VlanId } from '@cisco-auto/ios-domain/value-objects';
+
+type ParsedVlan = { id: string; name: string; state?: string };
 
 export const CONFIG_VLAN_META: CommandMeta = {
   id: 'config-vlan',
@@ -28,39 +32,30 @@ export const CONFIG_VLAN_META: CommandMeta = {
   supportsExplain: true,
 };
 
-type ParsedVlan = { id: string; name: string; state?: 'active' | 'suspended' | 'act/unsup' };
+export function generateVlanCommands(vlans: ParsedVlan[]): string[] {
+  const commands: string[] = [];
+  const caps = CapabilitySet.l2Switch('2960');
 
-/**
- * Genera comandos VLAN para un switch usando el plugin del kernel.
- */
-function buildVlanSpec(vlans: ParsedVlan[]): VlanConfigInput {
-  return {
-    switchName: 'switch',
-    vlans: vlans.map((v) => ({ id: v.id, name: v.name })),
-  };
+  for (const vlan of vlans) {
+    const plan = planConfigureVlan(caps, {
+      vlan: VlanId.fromString(vlan.id),
+      name: vlan.name,
+    });
+
+    if (!plan) {
+      throw new Error('El dispositivo no soporta configuración de VLANs');
+    }
+
+    const vlanCommands = plan.steps.map((step, index) => (index === 0 ? step.command : ` ${step.command}`));
+    if (vlan.state && vlan.state !== 'active') {
+      vlanCommands.splice(vlanCommands.length - 1, 0, ` state ${vlan.state}`);
+    }
+
+    commands.push(...vlanCommands);
+  }
+
+  return commands;
 }
-
-/**
- * Wrapper de compatibilidad para tests.
- * @deprecated Usa `validateVlanConfig` directamente con `VlanConfigInput`.
- */
-export function validateVlanConfigCompat(vlans: ParsedVlan[]) {
-  return validateVlanConfig(buildVlanSpec(vlans));
-}
-
-/**
- * Wrapper de compatibilidad para tests.
- * @deprecated Usa `generateVlanCommands` directamente con `VlanConfigInput`.
- */
-export function generateVlanCommandsCompat(vlans: ParsedVlan[]): string[] {
-  return generateVlanCommands(buildVlanSpec(vlans));
-}
-
-/**
- * Alias compat con tests antiguos que llaman con array de vlans.
- * @deprecated
- */
-export { generateVlanCommandsCompat as generateVlanCommands };
 
 export function createConfigVlanCommand(): Command {
   const cmd = new Command('config-vlan')
@@ -107,27 +102,11 @@ export function createConfigVlanCommand(): Command {
       if (!vlanId && vlans.length === 0) { console.error(chalk.red('Error: --id o al menos un --vlan requerido')); process.exit(1); }
       if (vlanId && !vlanName) { console.error(chalk.red('Error: --name requerido cuando se usa --id')); process.exit(1); }
 
-      let vlanConfigs: ParsedVlan[];
+      const vlanConfigs = vlanId
+        ? parseVlans([`${vlanId},${vlanName}${vlanState ? `,${vlanState}` : ''}`])
+        : parseVlans(vlans);
 
-      try {
-        vlanConfigs = vlanId
-          ? parseVlans([`${vlanId},${vlanName}${vlanState ? `,${vlanState}` : ''}`])
-          : parseVlans(vlans) as ParsedVlan[];
-      } catch (error) {
-        console.error(chalk.red('Error de validacion:\n' + (error instanceof Error ? error.message : String(error))));
-        process.exit(1);
-      }
-
-      // Validar con el plugin VLAN del kernel
-      const vlanSpec = buildVlanSpec(vlanConfigs);
-      const validationResult = validateVlanConfig(vlanSpec);
-      if (!validationResult.ok) {
-        console.error(chalk.red('Error de validacion del plugin VLAN:\n' + validationResult.errors.map((e) => `${e.path}: ${e.message}`).join('\n')));
-        process.exit(1);
-      }
-
-      // Generar comandos con el plugin VLAN del kernel
-      const iosCommands = generateVlanCommands(vlanSpec);
+      const iosCommands = generateVlanCommands(vlanConfigs as ParsedVlan[]);
       const isDryRun = options.dryRun || !options.apply;
 
       if (isDryRun) {
@@ -135,12 +114,6 @@ export function createConfigVlanCommand(): Command {
         iosCommands.forEach((c, i) => console.log(`  ${i + 1}. ${chalk.green(c)}`));
         console.log();
         return;
-      }
-
-      const backend = getPacketTracerBackend();
-      if (!backend) {
-        console.error(chalk.red('Error: Backend de Packet Tracer no disponible'));
-        process.exit(1);
       }
 
       const result = await runCommand<{ device: string; commands: string[]; executed: number }>({
@@ -153,8 +126,7 @@ export function createConfigVlanCommand(): Command {
             const iosDevices = getIOSCapableDevices(devices);
             const selected = iosDevices.find((d) => d.name === device);
             if (!selected) { return createErrorResult('config-vlan', { message: `Dispositivo "${device}" no encontrado` }); }
-            // Usar el backend plugin para configurar el dispositivo
-            await backend.configureDevice(device, iosCommands);
+            await ctx.controller.configIosWithResult(device, iosCommands, { save: true });
             return createSuccessResult('config-vlan', { device, commands: iosCommands, executed: iosCommands.length });
           } finally { await ctx.controller.stop(); }
         },

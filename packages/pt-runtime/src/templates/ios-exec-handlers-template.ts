@@ -415,7 +415,21 @@ function handleExecInteractive(payload) {
     recorder.record("commandStarted", { command: command });
     engine.processEvent({ type: "commandStarted", command: command });
 
-    preLen = term.getOutput ? term.getOutput().length : 0;
+    var currentOutput = term.getOutput ? term.getOutput() : "";
+    preLen = currentOutput.length;
+    var promptBefore = term.getPrompt ? term.getPrompt() : "N/A";
+    dprint("[handleExecInteractive] sending command='" + command + "' preLen=" + preLen + " promptBefore=" + promptBefore);
+
+    if (currentOutput.length > 0 && command) {
+      term.enterCommand("");
+      for (var flushAttempt = 0; flushAttempt < 5; flushAttempt++) {
+        var newOutput = term.getOutput ? term.getOutput() : "";
+        if (newOutput.length <= preLen) break;
+        preLen = newOutput.length;
+      }
+      preLen = term.getOutput ? term.getOutput().length : 0;
+    }
+
     term.enterCommand(command);
 
     var maxAttempts = 100;
@@ -439,8 +453,19 @@ function handleExecInteractive(payload) {
           term.enterCommand(" ");
         }
 
-        // NOTE: Auto-confirm "y" removed - caused issues with commands that start with certain patterns
-        // Confirmation should only be handled by explicit user intent, not automatic detection
+        var currentState = engine.getState();
+        if (currentState.awaitingPassword || currentState.awaitingConfirm || currentState.awaitingDestinationFilename) {
+          attempt++;
+          continue;
+        }
+
+        var prompt = term.getPrompt ? term.getPrompt() : "";
+        if (prompt && (prompt.indexOf("#") >= 0 || prompt.indexOf(">") >= 0)) {
+          if (currentState.state === "awaiting-output" || currentState.state === "idle") {
+            engine.processEvent({ type: "commandEnded" });
+            break;
+          }
+        }
 
       } catch(e) {
         recorder.record("exception", { message: String(e) });

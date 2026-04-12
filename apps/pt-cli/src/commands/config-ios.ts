@@ -50,6 +50,12 @@ interface ConfigIOSResult {
   commands: string[];
   executed: number;
   errors: string[];
+  commandOutputs?: Array<{
+    index: number;
+    command: string;
+    ok: boolean;
+    output: string;
+  }>;
 }
 
 export function buildVerificationPlan(commands: string[]): Array<{
@@ -147,6 +153,7 @@ export function createConfigIOSCommand(): Command {
     .option('-i, --interactive', 'Modo interactivo (ejecutar comandos uno por uno)')
     .option('--verify', 'Ejecutar verificacion automatica despues del comando', true)
     .option('--no-verify', 'Deshabilitar verificacion automatica')
+    .option('--show-output', 'Mostrar output raw de los comandos IOS ejecutados')
     .action(async (device, commands, options) => {
       const globalExamples = process.argv.includes('--examples');
       const globalSchema = process.argv.includes('--schema');
@@ -310,6 +317,8 @@ export function createConfigIOSCommand(): Command {
               });
             }
 
+            const showOutputEnabled = (options as any).showOutput === true;
+
             const errors: string[] = [];
 
             const applyResult = await ctx.controller.configIosWithResult(targetDevice, payload.commands, { save: true });
@@ -346,11 +355,21 @@ export function createConfigIOSCommand(): Command {
             const verified = verificationChecks.length > 0 && verificationChecks.every((check) => check.ok);
             const partiallyVerified = verificationChecks.some((check) => check.ok) && !verified;
 
+            const commandOutputs = showOutputEnabled && applyResult?.results?.length > 0
+              ? applyResult.results.map((r) => ({
+                  index: r.index,
+                  command: r.command,
+                  ok: r.ok,
+                  output: r.output,
+                }))
+              : undefined;
+
             const resultData: ConfigIOSResult = {
               device: targetDevice,
               commands: payload.commands,
               executed: payload.commands.length,
               errors,
+              commandOutputs,
             };
 
             if (verificationChecks.length > 0) {
@@ -374,6 +393,19 @@ export function createConfigIOSCommand(): Command {
 
       if (result.ok) {
         console.log('\n' + chalk.green('*') + ' ' + result.data?.executed + ' comando(s) ejecutado(s) en ' + chalk.cyan(result.data?.device) + '\n');
+
+        if (result.data?.commandOutputs?.length) {
+          console.log(chalk.bold('\n--- Output de comandos ---\n'));
+          for (const cmdResult of result.data.commandOutputs) {
+            const status = cmdResult.ok ? chalk.green('OK') : chalk.red('FAIL');
+            console.log(chalk.cyan(`${cmdResult.index + 1}. [${status}] ${cmdResult.command}`));
+            if (cmdResult.output) {
+              console.log(cmdResult.output.slice(0, 2000));
+            }
+            console.log();
+          }
+        }
+
         if (result.verification) {
           const status = result.verification.verified ? 'verificado' : result.verification.partiallyVerified ? 'parcialmente verificado' : 'no verificado';
           console.log(chalk.bold(`Verificación: ${status}`));

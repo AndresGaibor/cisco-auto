@@ -1778,6 +1778,7 @@ function dispatch(payload, host) {
       case "configHost": return handleConfigHost(payload);
       case "configIos": return handleConfigIos(payload);
       case "execIos": return handleExecIos(payload);
+      case "execInteractive": return handleExecIos(payload);
 
       // Inspect handlers
       case "inspect": return handleInspect(payload);
@@ -1833,16 +1834,16 @@ ${INTERNAL_ENDPOINTS_TEMPLATE}
 ${generateConstantsTemplate()}
 
 // ============================================================================
+// IOS Exec Handlers (MUST be before config handlers - defines IosSessionEngine)
+// ============================================================================
+
+${generateIosExecHandlersTemplate()}
+
+// ============================================================================
 // IOS Configuration Handlers
 // ============================================================================
 
 ${generateIosConfigHandlersTemplate()}
-
-// ============================================================================
-// IOS Exec Handlers
-// ============================================================================
-
-${generateIosExecHandlersTemplate()}
 
 // ============================================================================
 // Session Helpers

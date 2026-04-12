@@ -15,8 +15,11 @@ import type { GlobalFlags } from '../flags.js';
 import { runCommand } from '../application/run-command.js';
 import { renderCliResult } from '../ux/renderers.js';
 import { printExamples } from '../ux/examples.js';
-import { VlanId } from '@cisco-auto/ios-domain/value-objects';
-import { getKernelRegistry, getPacketTracerBackend, generateVlanCommands, validateVlanConfig, type VlanConfigInput } from '../kernel-bridge';
+import { fetchDeviceList, getIOSCapableDevices } from '../utils/device-utils.js';
+import { parseStrictVlanId } from '../utils/cli-parser.js';
+import { CapabilitySet, resolveCapabilitySet } from '@cisco-auto/ios-domain/capabilities';
+import { planConfigureTrunkPort, planConfigureVlan } from '@cisco-auto/ios-domain/operations';
+import { VlanId, parseInterfaceName } from '@cisco-auto/ios-domain/value-objects';
 
 const VLAN_LIST_SEPARATOR = ',';
 
@@ -38,28 +41,37 @@ const VLAN_META: CommandMeta = {
   supportsExplain: true,
 };
 
-function parseVlanIdToken(token: string): VlanId {
-  const trimmed = token.trim();
+type VlanTarget = { name: string; model: string };
+type VlanController = {
+  start: () => Promise<void>;
+  stop: () => Promise<void>;
+  configIosWithResult: (device: string, commands: string[], options: { save: boolean }) => Promise<unknown>;
+};
 
-  if (!/^\d+$/.test(trimmed)) {
-    throw new Error('La lista de VLANs debe contener IDs válidos entre 1 y 4094');
-  }
+function toVlanId(value: number | VlanId): VlanId {
+  return value instanceof VlanId ? value : VlanId.from(value);
+}
 
-  return VlanId.from(Number(trimmed));
+function planToCommands(plan: { steps: Array<{ command: string }> }): string[] {
+  return plan.steps.map((step, index) => (index === 0 ? step.command : ` ${step.command}`));
 }
 
 export function parseVlanIds(raw: string): VlanId[] {
-  const ids = raw
-    .split(VLAN_LIST_SEPARATOR)
-    .map((token) => token.trim())
-    .filter(Boolean)
-    .map((token) => parseVlanIdToken(token));
+  try {
+    const ids = raw
+      .split(VLAN_LIST_SEPARATOR)
+      .map((token) => token.trim())
+      .filter(Boolean)
+      .map((token) => parseStrictVlanId(token));
 
-  if (ids.length === 0) {
+    if (ids.length === 0) {
+      throw new Error('La lista de VLANs debe contener IDs válidos entre 1 y 4094');
+    }
+
+    return ids;
+  } catch {
     throw new Error('La lista de VLANs debe contener IDs válidos entre 1 y 4094');
   }
-
-  return ids;
 }
 
 export function buildVlanCreateCommands(name: string, id: number, description?: string): string[] {
@@ -73,19 +85,20 @@ export function buildVlanCreateCommands(name: string, id: number, description?: 
   return commands;
 }
 
-export function buildVlanApplyCommands(vlanIds: number[]): string[] {
+export function buildVlanApplyCommands(vlanIds: Array<number | VlanId>, caps: CapabilitySet = CapabilitySet.l2Switch('2960')): string[] {
   const commands = ['! Configuración de VLANs'];
   for (const id of vlanIds) {
-    commands.push(`vlan ${id}`);
-    commands.push(` name VLAN${id}`);
-    commands.push(' exit');
+    const vlanId = toVlanId(id);
+    const plan = planConfigureVlan(caps, { vlan: vlanId, name: `VLAN${vlanId.value}` });
+
+    if (!plan) {
+      throw new Error('El dispositivo no soporta configuración de VLANs');
+    }
+
+    commands.push(...planToCommands(plan));
   }
   return commands;
 }
-
-type VlanController = {
-  configIosWithResult: (device: string, commands: string[], options: { save: boolean }) => Promise<unknown>;
-};
 
 interface VlanApplyResult {
   device: string;
@@ -108,126 +121,35 @@ interface VlanTrunkResult {
 }
 
 export function buildVlanTrunkCommands(iface: string, allowedVlans: number[]): string[] {
-  return [
-    '! Configuración de interfaces',
-    `interface ${iface}`,
-    ' switchport mode trunk',
-    ` switchport trunk allowed vlan ${allowedVlans.join(',')}`,
-    ' no shutdown',
-    ' exit',
-  ];
+  return buildVlanTrunkCommandsWithCapability(iface, allowedVlans, CapabilitySet.l2Switch('2960'));
 }
 
-/**
- * Aplica VLANs usando el plugin registry y el backend plugin.
- */
-export async function executeVlanApplyViaPlugin(
-  device: string,
-  vlanIds: VlanId[],
-  backend = getPacketTracerBackend()
-): Promise<CliResult<{ device: string; vlanIds: number[]; commands: string[] }>> {
-  if (!backend) {
-    return createErrorResult('vlan.apply', {
-      message: 'Backend de Packet Tracer no disponible',
-    }) as CliResult<{ device: string; vlanIds: number[]; commands: string[] }>;
+function buildVlanTrunkCommandsWithCapability(iface: string, allowedVlans: Array<number | VlanId>, caps: CapabilitySet): string[] {
+  const vlans = allowedVlans.map((value) => toVlanId(value));
+  const port = parseInterfaceName(iface);
+  const plan = planConfigureTrunkPort(caps, { port, vlans });
+
+  if (!plan) {
+    throw new Error('El dispositivo no soporta configuración trunk');
   }
 
-  const spec: VlanConfigInput = {
-    switchName: device,
-    vlans: vlanIds.map((vlanId) => ({ id: vlanId.value })),
-  };
-
-  // Validar con el plugin VLAN
-  const validation = validateVlanConfig(spec);
-  if (!validation.ok) {
-    return createErrorResult('vlan.apply', {
-      message: validation.errors.map((e) => `${e.path}: ${e.message}`).join('; '),
-    }) as CliResult<{ device: string; vlanIds: number[]; commands: string[] }>;
-  }
-
-  // Generar comandos con el plugin VLAN
-  const commands = generateVlanCommands(spec);
-
-  try {
-    await backend.configureDevice(device, commands);
-
-    return createSuccessResult('vlan.apply', {
-      device,
-      vlanIds: vlanIds.map((vlanId) => vlanId.value),
-      commands,
-    });
-  } catch (error) {
-    return createErrorResult('vlan.apply', {
-      message: error instanceof Error ? error.message : String(error),
-    }) as CliResult<{ device: string; vlanIds: number[]; commands: string[] }>;
-  }
+  return ['! Configuración de interfaces', ...planToCommands(plan)];
 }
 
-/**
- * Configura trunk usando el plugin registry y el backend plugin.
- */
-export async function executeVlanTrunkViaPlugin(
-  device: string,
-  iface: string,
-  allowedVlans: VlanId[],
-  backend = getPacketTracerBackend()
-): Promise<CliResult<{ device: string; interface: string; allowedVlans: number[]; commands: string[] }>> {
-  if (!backend) {
-    return createErrorResult('vlan.trunk', {
-      message: 'Backend de Packet Tracer no disponible',
-    }) as CliResult<{ device: string; interface: string; allowedVlans: number[]; commands: string[] }>;
-  }
-
-  const spec: VlanConfigInput = {
-    switchName: device,
-    vlans: allowedVlans.map((vlanId) => ({ id: vlanId.value })),
-    trunkPorts: [iface],
-  };
-
-  // Validar con el plugin VLAN
-  const validation = validateVlanConfig(spec);
-  if (!validation.ok) {
-    return createErrorResult('vlan.trunk', {
-      message: validation.errors.map((e) => `${e.path}: ${e.message}`).join('; '),
-    }) as CliResult<{ device: string; interface: string; allowedVlans: number[]; commands: string[] }>;
-  }
-
-  // Generar comandos con el plugin VLAN
-  const commands = generateVlanCommands(spec);
-
-  try {
-    await backend.configureDevice(device, commands);
-
-    return createSuccessResult('vlan.trunk', {
-      device,
-      interface: iface,
-      allowedVlans: allowedVlans.map((vlanId) => vlanId.value),
-      commands,
-    });
-  } catch (error) {
-    return createErrorResult('vlan.trunk', {
-      message: error instanceof Error ? error.message : String(error),
-    }) as CliResult<{ device: string; interface: string; allowedVlans: number[]; commands: string[] }>;
-  }
-}
-
-/**
- * @deprecated Usa `executeVlanApplyViaPlugin` que utiliza el plugin del kernel.
- * Esta función legacy no usa plugins y será removida en una versión futura.
- */
 export async function executeVlanApply(
   controller: VlanController,
-  device: string,
-  vlanIds: VlanId[]
+  target: VlanTarget,
+  vlanIds: Array<number | VlanId>
 ): Promise<CliResult<{ device: string; vlanIds: number[]; commands: string[] }>> {
-  const commands = buildVlanApplyCommands(vlanIds.map((vlanId) => vlanId.value)).slice(1);
+  const caps = resolveCapabilitySet(target.model);
+  const commands = buildVlanApplyCommands(vlanIds, caps).slice(1);
 
   try {
-    await controller.configIosWithResult(device, commands, { save: true });
+    await controller.configIosWithResult(target.name, commands, { save: true });
 
     return createSuccessResult('vlan.apply', {
-      device,
-      vlanIds: vlanIds.map((vlanId) => vlanId.value),
+      device: target.name,
+      vlanIds: vlanIds.map((value) => toVlanId(value).value),
       commands,
     });
   } catch (error) {
@@ -237,25 +159,22 @@ export async function executeVlanApply(
   }
 }
 
-/**
- * @deprecated Usa `executeVlanTrunkViaPlugin` que utiliza el plugin del kernel.
- * Esta función legacy no usa plugins y será removida en una versión futura.
- */
 export async function executeVlanTrunk(
   controller: VlanController,
-  device: string,
+  target: VlanTarget,
   iface: string,
-  allowedVlans: VlanId[]
+  allowedVlans: Array<number | VlanId>
 ): Promise<CliResult<{ device: string; interface: string; allowedVlans: number[]; commands: string[] }>> {
-  const commands = buildVlanTrunkCommands(iface, allowedVlans.map((vlanId) => vlanId.value)).slice(1);
+  const caps = resolveCapabilitySet(target.model);
+  const commands = buildVlanTrunkCommandsWithCapability(iface, allowedVlans, caps).slice(1);
 
   try {
-    await controller.configIosWithResult(device, commands, { save: true });
+    await controller.configIosWithResult(target.name, commands, { save: true });
 
     return createSuccessResult('vlan.trunk', {
-      device,
+      device: target.name,
       interface: iface,
-      allowedVlans: allowedVlans.map((vlanId) => vlanId.value),
+      allowedVlans: allowedVlans.map((value) => toVlanId(value).value),
       commands,
     });
   } catch (error) {
@@ -423,23 +342,30 @@ export function createLabVlanCommand(): Command {
         execute: async (ctx): Promise<CliResult> => {
           try {
             await ctx.controller.start();
+
             try {
-              const vlanIds = parseVlanIds(options.vlans);
-              const result = await executeVlanApplyViaPlugin(options.device, vlanIds);
+            const vlanIds = parseVlanIds(options.vlans);
+            const devices = await fetchDeviceList(ctx.controller);
+            const iosDevices = getIOSCapableDevices(devices);
+            const selected = iosDevices.find((d) => d.name === options.device);
 
-              await ctx.logPhase('verify', { device: options.device });
+            if (!selected) {
+              return createErrorResult('vlan.apply', { message: `Dispositivo "${options.device}" no encontrado` }) as CliResult<VlanApplyResult>;
+            }
 
-              if (!result.ok) {
-                return result;
-              }
+            const result = await executeVlanApply(ctx.controller, { name: selected.name, model: selected.model }, vlanIds);
 
+            if (result.ok) {
               return createSuccessResult('vlan.apply', {
-                device: options.device,
+                device: selected.name,
                 vlanIds: vlanIds.map((vlanId) => vlanId.value),
                 commandsGenerated: result.data?.commands.length ?? 0,
               }, {
                 advice: [`Usa pt show vlan ${options.device} para verificar`],
               });
+            }
+
+            return result as CliResult<VlanApplyResult>;
             } finally {
               await ctx.controller.stop();
             }
@@ -516,22 +442,31 @@ export function createLabVlanCommand(): Command {
         execute: async (ctx): Promise<CliResult<VlanTrunkResult>> => {
           try {
             await ctx.controller.start();
+
             try {
-              const vlanIds = parseVlanIds(options.allowed);
-              const result = await executeVlanTrunkViaPlugin(options.device, options.interface, vlanIds);
+            const vlanIds = parseVlanIds(options.allowed);
+            const devices = await fetchDeviceList(ctx.controller);
+            const iosDevices = getIOSCapableDevices(devices);
+            const selected = iosDevices.find((d) => d.name === options.device);
 
-              if (!result.ok) {
-                return result;
-              }
+            if (!selected) {
+              return createErrorResult('vlan.trunk', { message: `Dispositivo "${options.device}" no encontrado` }) as CliResult<VlanTrunkResult>;
+            }
 
+            const result = await executeVlanTrunk(ctx.controller, { name: selected.name, model: selected.model }, options.interface, vlanIds);
+
+            if (result.ok) {
               return createSuccessResult('vlan.trunk', {
-                device: options.device,
+                device: selected.name,
                 interface: options.interface,
                 allowedVlans: vlanIds.map((vlanId) => vlanId.value),
                 commands: result.data?.commands ?? [],
               }, {
                 advice: [`Usa pt config-ios ${options.device} para aplicar`],
               });
+            }
+
+            return result as CliResult<VlanTrunkResult>;
             } finally {
               await ctx.controller.stop();
             }

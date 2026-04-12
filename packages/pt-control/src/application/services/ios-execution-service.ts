@@ -195,7 +195,7 @@ export class IosExecutionService {
 
     if (value && typeof value === "object") {
       if (value.deferred === true) {
-        return { executed: true, device, commands, evidence: { source: "unknown" as const } };
+        return { executed: true, device, commands, results: [], evidence: { source: "unknown" as const } };
       }
 
       const evidence = this.normalizeEvidence(value);
@@ -220,10 +220,19 @@ export class IosExecutionService {
       if (evidence.source === "synthetic") {
         throw new Error(`IOS configuration returned synthetic result for device '${device}'. Terminal execution is not available.`);
       }
+
+      const results = (value.results || []).map((r: any) => ({
+        index: r.index,
+        command: r.command,
+        ok: r.ok,
+        output: r.output || "",
+      }));
+
+      return { executed: true, device, commands, results, evidence };
     }
 
     const evidence = value ? this.normalizeEvidence(value) : { source: "unknown" as const };
-    return { executed: true, device, commands, evidence };
+    return { executed: true, device, commands, results: [], evidence };
   }
 
   async showParsed<T = ParsedOutput>(device: string, command: string, options?: { ensurePrivileged?: boolean; timeout?: number }): Promise<IosExecutionSuccess<T>> {

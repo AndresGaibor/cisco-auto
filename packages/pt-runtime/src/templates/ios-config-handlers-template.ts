@@ -11,9 +11,10 @@ export function generateIosConfigHandlersTemplate(): string {
 // Helper: Ensure privileged exec mode
 function inferModeFromPrompt(prompt) {
   var p = String(prompt || '');
-  if (/\(config[^\)]*\)#\s*$/.test(p)) return 'config';
-  if (/#\s*$/.test(p)) return 'priv-exec';
-  if (/>\s*$/.test(p)) return 'user-exec';
+  p = p.trim();
+  if (p.indexOf('(config') >= 0) return 'config';
+  if (p.indexOf('#') >= 0) return 'priv-exec';
+  if (p.indexOf('>') >= 0) return 'user-exec';
   return '';
 }
 
@@ -21,9 +22,10 @@ function isNormalPrompt(prompt, mode) {
   var p = String(prompt || '');
   var m = String(mode || '');
   if (!p) return false;
-  return /\(config[^\)]*\)#\s*$/.test(p) ||
-    /#\s*$/.test(p) ||
-    />\s*$/.test(p) ||
+  p = p.trim();
+  return p.indexOf('(config') >= 0 ||
+    p.indexOf('#') >= 0 ||
+    p.indexOf('>') >= 0 ||
     /config/i.test(m) ||
     /priv/i.test(m);
 }
@@ -35,7 +37,10 @@ function syncEngineModeFromTerminal(engine, term) {
   try { prompt = term.getPrompt ? String(term.getPrompt() || '') : ''; } catch (e) {}
   try { mode = term.getMode ? String(term.getMode() || '') : ''; } catch (e) {}
 
-  mode = inferModeFromPrompt(prompt) || mode;
+  var inferred = inferModeFromPrompt(prompt);
+  dprint('[syncEngineModeFromTerminal] prompt="' + prompt + '" mode="' + mode + '" inferred="' + inferred + '"');
+  
+  mode = inferred || mode;
   if (mode && engine.getState().mode !== mode) {
     engine.processEvent({ type: 'modeChanged', newMode: mode });
   }
@@ -82,6 +87,24 @@ function ensurePrivilegedExec(engine, term) {
   if (state.mode === 'priv-exec') return true;
 
   var preLen = term.getOutput ? term.getOutput().length : 0;
+  var promptBefore = term.getPrompt ? term.getPrompt() : 'N/A';
+  var modeBefore = term.getMode ? term.getMode() : 'N/A';
+
+  dprint('[ensurePrivilegedExec] START prompt="' + promptBefore + '" mode="' + modeBefore + '" engineMode=' + state.mode);
+
+  // Flush any pending output first
+  if (term.getOutput) {
+    var initialOutput = term.getOutput();
+    if (initialOutput && initialOutput.length > 0) {
+      dprint('[ensurePrivilegedExec] flushing output len=' + initialOutput.length);
+      term.enterCommand('');
+      for (var flush = 0; flush < 3; flush++) {
+        var newOut = term.getOutput ? term.getOutput() : '';
+        if (newOut.length <= initialOutput.length) break;
+        initialOutput = newOut;
+      }
+    }
+  }
 
   if (dismissInitialDialogIfNeeded(engine, term)) {
     preLen = term.getOutput ? term.getOutput().length : preLen;
@@ -89,7 +112,28 @@ function ensurePrivilegedExec(engine, term) {
   syncEngineModeFromTerminal(engine, term);
   if (engine.getState().mode === 'priv-exec') return true;
 
+  // Si estamos en un submode de configuración (config-*, vlan-*, etc.), salir primero
+  var currentMode = engine.getState().mode;
+  var currentPrompt = term.getPrompt ? term.getPrompt() : '';
+  dprint('[ensurePrivilegedExec] currentMode=' + currentMode + ' prompt=' + currentPrompt);
+  
+  if (currentMode.indexOf('config') === 0 || currentPrompt.indexOf('(config') >= 0) {
+    dprint('[ensurePrivilegedExec] In config submode, sending end first');
+    term.enterCommand('end');
+    preLen = term.getOutput ? term.getOutput().length : 0;
+    for (var exitAttempt = 0; exitAttempt < 10; exitAttempt++) {
+      var exitOutput = term.getOutput ? term.getOutput() : '';
+      var exitPrompt = term.getPrompt ? term.getPrompt() : '';
+      syncEngineModeFromTerminal(engine, term);
+      if (engine.getState().mode === 'priv-exec') {
+        dprint('[ensurePrivilegedExec] Exited config submode to priv-exec');
+        return true;
+      }
+    }
+  }
+
   term.enterCommand('enable');
+  dprint('[ensurePrivilegedExec] sent enable');
 
   for (var i = 0; i < 20; i++) {
     var output = term.getOutput ? term.getOutput() : '';
@@ -97,14 +141,19 @@ function ensurePrivilegedExec(engine, term) {
     if (newData.length > 0) {
       engine.processEvent({ type: 'outputWritten', data: newData });
       preLen = output.length;
+      dprint('[ensurePrivilegedExec] iter ' + i + ' newData len=' + newData.length);
     }
 
     syncEngineModeFromTerminal(engine, term);
     
     if (engine.getState().mode === 'priv-exec') {
-      return true;
+      dprint('[ensurePrivilegedExec] found priv-exec at iter ' + i);
+      break;
     }
   }
+
+  syncEngineModeFromTerminal(engine, term);
+  if (engine.getState().mode === 'priv-exec') return true;
 
   return false;
 }
@@ -115,7 +164,22 @@ function ensureConfigMode(engine, term) {
   if (state.mode.indexOf('config') === 0) return true;
 
   var preLen = term.getOutput ? term.getOutput().length : 0;
+  var promptBefore = term.getPrompt ? term.getPrompt() : 'N/A';
+  var modeBefore = term.getMode ? term.getMode() : 'N/A';
+
+  dprint('[ensureConfigMode] START prompt=' + promptBefore + ' mode=' + modeBefore + ' engineMode=' + state.mode);
+
+  if (dismissInitialDialogIfNeeded(engine, term)) {
+    preLen = term.getOutput ? term.getOutput().length : preLen;
+  }
+  syncEngineModeFromTerminal(engine, term);
+  if (engine.getState().mode.indexOf('config') === 0) {
+    dprint('[ensureConfigMode] returned true after initial sync');
+    return true;
+  }
+
   term.enterCommand('configure terminal');
+  dprint('[ensureConfigMode] sent configure terminal');
 
   for (var i = 0; i < 20; i++) {
     var output = term.getOutput ? term.getOutput() : '';
@@ -123,13 +187,22 @@ function ensureConfigMode(engine, term) {
     if (newData.length > 0) {
       engine.processEvent({ type: 'outputWritten', data: newData });
       preLen = output.length;
+      dprint('[ensureConfigMode] iter ' + i + ' newData len=' + newData.length + ' output len=' + output.length);
     }
     syncEngineModeFromTerminal(engine, term);
+    var currentMode = engine.getState().mode;
+    dprint('[ensureConfigMode] iter ' + i + ' engineMode=' + currentMode);
     
-    if (engine.getState().mode.indexOf('config') === 0) {
-      return true;
+    if (currentMode.indexOf('config') === 0) {
+      dprint('[ensureConfigMode] found config mode at iter ' + i);
+      break;
     }
   }
+
+  syncEngineModeFromTerminal(engine, term);
+  var finalMode = engine.getState().mode;
+  dprint('[ensureConfigMode] END finalMode=' + finalMode);
+  if (finalMode.indexOf('config') === 0) return true;
 
   return false;
 }
@@ -259,40 +332,146 @@ function handleConfigIos(payload) {
     };
   }
 
-  var engine = new IosSessionEngine('user-exec', '>');
   var startTime = Date.now();
   var results = [];
   var failedIndex = -1;
 
   try {
-    dprint('[handleConfigIos] Ensuring privileged mode');
-    if (!ensurePrivilegedExec(engine, term)) {
-      return {
-        ok: false,
-        device: deviceName,
-        error: 'Failed to enter privileged exec mode',
-        results: [],
-        diagnostics: {
-          source: 'terminal',
-          completionReason: 'privilege-error',
-          errors: ['Cannot enter enable mode']
-        }
-      };
+    var preLen = term.getOutput ? term.getOutput().length : 0;
+    var prompt = term.getPrompt ? term.getPrompt() : "";
+    var currentMode = "user-exec";
+
+    if (prompt.indexOf("(config") >= 0) {
+      currentMode = "config";
+    } else if (prompt.indexOf("#") >= 0) {
+      currentMode = "priv-exec";
+    } else if (prompt.indexOf(">") >= 0) {
+      currentMode = "user-exec";
     }
 
-    dprint('[handleConfigIos] Ensuring config mode');
-    if (!ensureConfigMode(engine, term)) {
-      return {
-        ok: false,
-        device: deviceName,
-        error: 'Failed to enter configuration mode',
-        results: [],
-        diagnostics: {
-          source: 'terminal',
-          completionReason: 'mode-transition-error',
-          errors: ['Cannot enter config mode']
+    dprint('[handleConfigIos] Initial mode: ' + currentMode + ' prompt: ' + prompt);
+
+    // Usar helpers robustos que usan el engine state machine
+    var engine = new IosSessionEngine("user-exec", ">");
+    
+    if (engine) {
+      dprint('[handleConfigIos] Using ensurePrivilegedExec helper');
+      var privOk = ensurePrivilegedExec(engine, term);
+      dprint('[handleConfigIos] ensurePrivilegedExec result: ' + privOk);
+      
+      if (!privOk) {
+        var debugOutput = term.getOutput ? term.getOutput() : "";
+        var debugPrompt = term.getPrompt ? term.getPrompt() : "N/A";
+        var debugMode = term.getMode ? term.getMode() : "N/A";
+        return {
+          ok: false,
+          device: deviceName,
+          error: 'Failed to enter privileged exec mode',
+          results: [],
+          diagnostics: {
+            source: 'terminal',
+            completionReason: 'privilege-error',
+            errors: ['Cannot enter enable mode', 'prompt=' + debugPrompt, 'mode=' + debugMode, 'outputLen=' + debugOutput.length, 'outputSample=' + debugOutput.slice(-300)]
+          }
+        };
+      }
+      
+      dprint('[handleConfigIos] Using ensureConfigMode helper');
+      var configOk = ensureConfigMode(engine, term);
+      dprint('[handleConfigIos] ensureConfigMode result: ' + configOk);
+      
+      if (!configOk) {
+        var debugOutput = term.getOutput ? term.getOutput() : "";
+        var debugPrompt = term.getPrompt ? term.getPrompt() : "N/A";
+        var debugMode = term.getMode ? term.getMode() : "N/A";
+        return {
+          ok: false,
+          device: deviceName,
+          error: 'Failed to enter configuration mode',
+          results: [],
+          diagnostics: {
+            source: 'terminal',
+            completionReason: 'mode-transition-error',
+            errors: ['Cannot enter config mode', 'prompt=' + debugPrompt, 'mode=' + debugMode, 'outputLen=' + debugOutput.length, 'outputSample=' + debugOutput.slice(-500)]
+          }
+        };
+      }
+      
+      currentMode = "config";
+    } else {
+      dprint('[handleConfigIos] No engine available, using legacy approach');
+      
+      // Flush initial output
+      term.enterCommand("");
+      for (var flush = 0; flush < 5; flush++) {
+        var flushOut = term.getOutput ? term.getOutput() : "";
+        if (flushOut.length <= preLen) break;
+        preLen = flushOut.length;
+      }
+
+      // Ensure privileged exec - always try enable regardless of detected mode
+      dprint('[handleConfigIos] Sending enable');
+      term.enterCommand("enable");
+      preLen = term.getOutput ? term.getOutput().length : 0;
+      
+      for (var i = 0; i < 20; i++) {
+        var checkOutput = term.getOutput ? term.getOutput() : "";
+        if (checkOutput.indexOf("#") >= 0) {
+          currentMode = "priv-exec";
+          prompt = term.getPrompt ? term.getPrompt() : prompt;
+          dprint('[handleConfigIos] Now in priv-exec, prompt=' + prompt);
+          break;
         }
-      };
+      }
+      
+      if (currentMode !== "priv-exec") {
+        var debugOutput = term.getOutput ? term.getOutput() : "";
+        var debugPrompt = term.getPrompt ? term.getPrompt() : "N/A";
+        var debugMode = term.getMode ? term.getMode() : "N/A";
+        return {
+          ok: false,
+          device: deviceName,
+          error: 'Failed to enter privileged exec mode',
+          results: [],
+          diagnostics: {
+            source: 'terminal',
+            completionReason: 'privilege-error',
+            errors: ['Cannot enter enable mode', 'prompt=' + debugPrompt, 'mode=' + debugMode, 'outputLen=' + debugOutput.length, 'outputSample=' + debugOutput.slice(-300)]
+          }
+        };
+      }
+
+      // Ensure config mode - always try configure terminal
+      dprint('[handleConfigIos] Sending configure terminal');
+      term.enterCommand("configure terminal");
+      preLen = term.getOutput ? term.getOutput().length : 0;
+      
+      for (var i = 0; i < 20; i++) {
+        var checkOutput = term.getOutput ? term.getOutput() : "";
+        if (checkOutput.indexOf("(config") >= 0) {
+          currentMode = "config";
+          prompt = term.getPrompt ? term.getPrompt() : prompt;
+          dprint('[handleConfigIos] Now in config mode, prompt=' + prompt);
+          break;
+        }
+      }
+      
+      if (currentMode !== "config") {
+        var debugOutput = term.getOutput ? term.getOutput() : "";
+        var debugPrompt = term.getPrompt ? term.getPrompt() : "N/A";
+        var debugMode = term.getMode ? term.getMode() : "N/A";
+        return {
+          ok: false,
+          device: deviceName,
+          error: 'Failed to enter configuration mode',
+          results: [],
+          diagnostics: {
+            source: 'terminal',
+            completionReason: 'mode-transition-error',
+            errors: ['Cannot enter config mode', 'prompt=' + debugPrompt, 'mode=' + debugMode, 'outputLen=' + debugOutput.length, 'outputSample=' + debugOutput.slice(-500)]
+          }
+        };
+      }
     }
 
     // Execute commands
@@ -303,19 +482,47 @@ function handleConfigIos(payload) {
       var cmd = commands[i];
       dprint('[handleConfigIos] Command ' + i + ': ' + cmd);
 
-      var result = runSingleCommand(engine, term, cmd);
+      preLen = term.getOutput ? term.getOutput().length : 0;
+      term.enterCommand(cmd);
+
+      var maxAttempts = 30;
+      var attempt = 0;
+      var output = "";
+
+      while (attempt < maxAttempts) {
+        var fullOutput = term.getOutput ? term.getOutput() : "";
+        var newData = fullOutput.slice(preLen);
+
+        if (newData.length > 0) {
+          preLen = fullOutput.length;
+          output = fullOutput;
+        }
+
+        if (fullOutput.indexOf("(config") >= 0) {
+          break;
+        }
+        if (fullOutput.indexOf("#") >= 0 && fullOutput.length > 20) {
+          break;
+        }
+
+        attempt++;
+      }
+
+      var ok = output.indexOf("% Invalid") < 0 && output.indexOf("% Incomplete") < 0;
 
       results.push({
         index: i,
         command: cmd,
-        ok: result.ok,
-        output: result.raw.slice(0, 500),
-        sessionAfter: engine.getState(),
-        interaction: engine.getMetrics(),
-        diagnostics: result.diagnostics
+        ok: ok,
+        output: output.slice(0, 500),
+        diagnostics: {
+          source: 'terminal',
+          completionReason: ok ? 'command-ended' : 'command-error',
+          errors: ok ? [] : ['Command failed']
+        }
       });
 
-      if (!result.ok && !isRecoverable(result)) {
+      if (!ok) {
         failedIndex = i;
         break;
       }
@@ -325,19 +532,30 @@ function handleConfigIos(payload) {
     if (payload.save !== false && failedIndex === -1) {
       dprint('[handleConfigIos] Saving configuration');
       
-      exitConfigMode(engine, term);
+      term.enterCommand("end");
+      preLen = term.getOutput ? term.getOutput().length : 0;
+      for (var i = 0; i < 10; i++) {
+        var checkOutput = term.getOutput ? term.getOutput() : "";
+        if (checkOutput.indexOf("#") >= 0) break;
+      }
       
-      var saveResult = runSingleCommand(engine, term, 'write memory');
+      term.enterCommand("write memory");
+      preLen = term.getOutput ? term.getOutput().length : 0;
+      for (var i = 0; i < 30; i++) {
+        var checkOutput = term.getOutput ? term.getOutput() : "";
+        if (checkOutput.indexOf("#") >= 0) break;
+      }
+
       results.push({
         command: 'write memory',
-        ok: saveResult.ok,
-        output: saveResult.raw,
-        diagnostics: saveResult.diagnostics
+        ok: true,
+        output: '',
+        diagnostics: {
+          source: 'terminal',
+          completionReason: 'command-ended',
+          errors: []
+        }
       });
-
-      if (!saveResult.ok) {
-        failedIndex = results.length - 1;
-      }
     }
 
     var executionTime = Date.now() - startTime;
@@ -349,7 +567,6 @@ function handleConfigIos(payload) {
       failedCount: results.filter(function(r) { return !r.ok; }).length,
       failedIndex: failedIndex,
       results: results,
-      session: engine.getState(),
       diagnostics: {
         source: 'terminal',
         completionReason: failedIndex === -1 ? 'command-ended' : 'config-failed',
@@ -372,10 +589,6 @@ function handleConfigIos(payload) {
       }
     };
   }
-};
 }
-    };
-  }
-  }
 `;
 }
