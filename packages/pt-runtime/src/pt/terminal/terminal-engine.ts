@@ -190,3 +190,4 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
 }
 
 export type { PTCommandLine };
+export type TerminalEngine = ReturnType<typeof createTerminalEngine>;
