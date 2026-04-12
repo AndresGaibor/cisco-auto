@@ -185,3 +185,14 @@ Estos resultados provienen de la sesión QA previa y sirven como referencia hist
 | 2026-04-12 | TC-080 | `bun run pt topology clean --list` | PASS | Dry-run muestra 0 dispositivos a eliminar. | - | salida CLI |
 | 2026-04-12 | TC-086 | `bun run pt logs tail` | WARN | Muestra eventos pero aparecen como `unknown -> ok`. | Telemetría/logs incompletos | salida CLI |
 | 2026-04-12 | TC-089 | `bun run pt history last` | PASS | Devuelve la última acción registrada (`topology.clean --list`). | - | salida CLI |
+
+### Sesión ejecutada 2026-04-12 — segunda tanda
+
+| Fecha | ID | Comando | Estado | Observado | Causa probable | Evidencia |
+|---|---|---|---|---|---|---|
+| 2026-04-12 | TC-051 | `bun run pt config-ios --examples` | PASS | Muestra 10 ejemplos reales y el comando sale sin error. | - | salida CLI |
+| 2026-04-12 | TC-052 | `bun run pt config-ios R1 --plan "show version"` | PASS | Muestra el plan de 1 paso con verificación. | - | salida CLI |
+| 2026-04-12 | TC-019 | `bun run pt device remove PC1` | PASS | PC1 removido correctamente. | - | salida CLI |
+| 2026-04-12 | TC-036 | `bun run pt link remove R1 GigabitEthernet0/0` | PASS | Conexión removida exitosamente. | - | salida CLI |
+| 2026-04-12 | TC-020 | `bun run pt device get PC1` | PASS | Error claro `Dispositivo 'PC1' no encontrado`. | Validación correcta post-eliminación | salida CLI |
+| 2026-04-12 | TC-010 | `bun run pt device list` | PASS | Tras eliminar PC1, la lista queda en 2 dispositivos (R1, S1). | - | salida CLI |
