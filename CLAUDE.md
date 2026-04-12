@@ -1,4 +1,3 @@
-
 Default to using Bun instead of Node.js.
 
 - Use `bun <file>` instead of `node <file>` or `ts-node <file>`
@@ -179,22 +178,16 @@ bun run pt config-ios R1 interface GigabitEthernet0/0 ip address 192.168.1.1 255
 
 # VLANs
 bun run pt vlan apply Switch1 10 20 30
-
-# Trunk
-bun run pt trunk apply Switch1 GigabitEthernet0/1
-
-# SSH
-bun run pt ssh setup Router1 --domain cisco.local --user admin --pass admin
 ```
 
 ### Lab management
 ```bash
-# Listar labs guardados
+# Listar labs en directorio
 bun run pt lab list
 # Crear nuevo lab
 bun run pt lab create <nombre>
 # Levantar lab desde YAML
-bun run pt lab lift <archivo>
+bun run pt lab lift
 # Validar lab
 bun run pt lab validate <archivo>
 # Modo interactivo
@@ -205,15 +198,15 @@ bun run pt lab pipeline
 bun run pt lab parse <archivo>
 ```
 
-### Configuración de protocolos (YAML)
+### Configuración de protocolos
 ```bash
-# OSPF
-bun run pt config-ospf --device R1 --process-id 1 --network "192.168.1.0,0.0.0.255,0"
-# EIGRP
-bun run pt config-eigrp --device R1 --as 100 --network "192.168.1.0,0.0.0.255"
-# BGP
-bun run pt config-bgp --device R1 --as 65000 --neighbor "10.0.0.2,65001"
-# ACL
+# OSPF (comando directo)
+bun run pt ospf --device R1 --process-id 1 --network "192.168.1.0,0.0.0.255,0"
+# EIGRP (comando directo)
+bun run pt eigrp --device R1 --as 100 --network "192.168.1.0,0.0.0.255"
+# BGP (comando directo)
+bun run pt bgp --device R1 --as 65000 --neighbor "10.0.0.2,65001"
+# ACL (comando directo)
 bun run pt config-acl --device R1 --name FILTER --type extended --rule "permit,ip,any,any"
 # VLAN
 bun run pt config-vlan --device S1 --vlan "10,ADMIN" --vlan "20,USERS"
@@ -231,13 +224,12 @@ bun run pt history show <id>        # Ver comando específico
 bun run pt history last             # Último comando
 bun run pt history search "ospf"    # Buscar en historial
 bun run pt history failed           # Comandos fallidos
-bun run pt history rerun <id>      # Re-ejecutar comando
 
 # Audit log
-bun run pt audit-tail               # Ver últimas operaciones
-bun run pt audit-tail --lines 50    # Con cantidad de líneas
-bun run pt audit-export             # Exportar a archivo
-bun run pt audit-export --format json --output audit.json
+bun run pt audit tail               # Ver últimas operaciones
+bun run pt audit tail --lines 50    # Con cantidad de líneas
+bun run pt audit export             # Exportar a archivo
+bun run pt audit export --format json --output audit.json
 bun run pt audit-failed            # Operaciones fallidas
 bun run pt audit-failed --since "2026-04-01"
 ```
@@ -283,11 +275,15 @@ bun run pt etherchannel create Switch1 1 Gi0/1 Gi0/2
 bun run pt etherchannel list
 ```
 
-### Routing y ACL (comandos legacy)
+### Routing (comandos legacy)
 ```bash
 # Routing
 bun run pt routing ospf enable R1
 bun run pt routing static add 0.0.0.0 0.0.0.0 192.168.1.1
+```
+
+### ACL (comandos legacy)
+```bash
 # ACL
 bun run pt acl create 100 permit tcp any any eq 80
 bun run pt acl apply ACL-100 R1
@@ -295,7 +291,7 @@ bun run pt acl apply ACL-100 R1
 
 ### Router
 ```bash
-bun run pt router add <nombre>           # Agregar router
+bun run pt router add R1 2911           # Agregar router
 ```
 
 ### Resultados y logs
@@ -312,14 +308,56 @@ bun run pt logs errors                  # Solo errores
 
 ### Dispositivos (memoria SQLite)
 ```bash
-bun run pt devices-list                  # Listar dispositivos guardados
-bun run pt devices-add R1 --ip 10.0.0.1  # Agregar a memoria
+bun run pt list                  # Listar dispositivos guardados (bajo 'devices')
+bun run pt add R1 --ip 10.0.0.1  # Agregar a memoria (bajo 'devices')
 ```
 
 ### Preferencias
 ```bash
 bun run pt config-prefs set default_router 2911   # Guardar preferencia
 bun run pt config-prefs get default_router         # Ver preferencia
+```
+
+### Comandos avanzados
+```bash
+# Lint - Validación de topología
+bun run pt lint
+# Capability - Consultar capacidades
+bun run pt capability list
+bun run pt capability model 2911
+# Planner - Change planner con checkpoints
+bun run pt planner list
+bun run pt planner execute <plan-id>
+# Ledger - Trazabilidad de operaciones
+bun run pt ledger list
+bun run pt ledger stats
+# Diagnose - Diagnóstico causal
+bun run pt diagnose ping-fails R1
+bun run pt diagnose no-dhcp R1
+```
+
+### Inspección y verificación
+```bash
+# Inspección canónica
+bun run pt inspect topology
+bun run pt inspect neighbors R1
+bun run pt inspect free-ports R1
+bun run pt inspect drift
+# Verificación
+bun run pt verify ios R1
+bun run pt verify link R1 Gi0/0 S1 Fa0/1
+# Layout
+bun run pt layout place R1 right-of S1
+```
+
+### Agent workflow
+```bash
+# Contexto para agente
+bun run pt agent context --task "connect R1 and S1"
+# Plan para agente
+bun run pt agent plan --goal "normalize access layer"
+# Verificación
+bun run pt agent verify
 ```
 
 ### Ruta de archivos
