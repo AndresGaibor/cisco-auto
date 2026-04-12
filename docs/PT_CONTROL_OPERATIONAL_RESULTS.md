@@ -288,3 +288,18 @@ Estos resultados provienen de la sesión QA previa y sirven como referencia hist
 | 2026-04-12 | TC-153 | `bun run pt failed --limit 5` | PASS | Lista los 5 comandos fallidos recientes. | - | salida CLI |
 | 2026-04-12 | TC-154 | `bun run pt status` | WARN | Bridge running con lease valid, pero topology stale y 4 devices / 8 links. | Contexto mixto / parcial | salida CLI |
 | 2026-04-12 | TC-155 | `bun run pt inspect topology` | WARN | Reporta 4 dispositivos y 8 conexiones, incluyendo un Power Distribution Device0 heredado. | Contexto mixto / topología heredada | salida CLI |
+
+### Sesión ejecutada 2026-04-12 — octava tanda
+
+| Fecha | ID | Comando | Estado | Observado | Causa probable | Evidencia |
+|---|---|---|---|---|---|---|
+| 2026-04-12 | TC-156 | `bun run pt results view cmd_000000001979.json` | PASS | Expone el envelope completo del resultado con protocolo v3, timestamps y value. | - | salida CLI |
+| 2026-04-12 | TC-157 | `bun run pt results show cmd_000000001979` | FAIL | Revienta con `ReferenceError: join is not defined` en `results.ts:446`. | Bug real en el subcomando results.show | salida CLI |
+| 2026-04-12 | TC-158 | `bun run pt results show cmd_000000001979 --json` | FAIL | Mismo `ReferenceError: join is not defined`. | Bug real en el subcomando results.show | salida CLI |
+| 2026-04-12 | TC-159 | `bun run pt device list --json` | FAIL | Imprime salida textual normal, no JSON. | Flag JSON ignorado o no aplicado en device list | salida CLI |
+| 2026-04-12 | TC-160 | `bun run pt host inspect PC1 --schema` | PASS | Devuelve schema JSON del comando host.inspect. | - | salida CLI |
+| 2026-04-12 | TC-161 | `bun run pt failed --device R1 --limit 5` | PASS | No hay comandos fallidos para el dispositivo R1. | - | salida CLI |
+| 2026-04-12 | TC-162 | `bun run pt search --device R1 topology.clean` | PASS | No se encontraron comandos con ese texto para R1. | - | salida CLI |
+| 2026-04-12 | TC-163 | `bun run pt inspect neighbors PC1` | PASS | Muestra vecinos SW1 y S1 para PC1. | - | salida CLI |
+| 2026-04-12 | TC-164 | `bun run pt inspect free-ports PC1` | PASS | Muestra puertos libres FastEthernet0 y Bluetooth. | - | salida CLI |
+| 2026-04-12 | TC-165 | `bun run pt inspect drift` | PASS | Drift de contexto: no. Snapshot y sistema coinciden 4/8. | - | salida CLI |
