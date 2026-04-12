@@ -303,3 +303,30 @@ Estos resultados provienen de la sesión QA previa y sirven como referencia hist
 | 2026-04-12 | TC-163 | `bun run pt inspect neighbors PC1` | PASS | Muestra vecinos SW1 y S1 para PC1. | - | salida CLI |
 | 2026-04-12 | TC-164 | `bun run pt inspect free-ports PC1` | PASS | Muestra puertos libres FastEthernet0 y Bluetooth. | - | salida CLI |
 | 2026-04-12 | TC-165 | `bun run pt inspect drift` | PASS | Drift de contexto: no. Snapshot y sistema coinciden 4/8. | - | salida CLI |
+
+### Sesión ejecutada 2026-04-12 — novena tanda
+
+| Fecha | ID | Comando | Estado | Observado | Causa probable | Evidencia |
+|---|---|---|---|---|---|---|
+| 2026-04-12 | TC-166 | `bun run pt lab list` | PASS | No hay laboratorios registrados. | - | salida CLI |
+| 2026-04-12 | TC-167 | `bun run pt lab validate /Users/andresgaibor/code/javascript/cisco-auto/labs/vlan-rstp-services.lab.ts` | FAIL | Error YAML: se esperaba separador al encontrar código TS. | Archivo no es YAML válido para lab.validate | salida CLI |
+| 2026-04-12 | TC-168 | `bun run pt lab parse /Users/andresgaibor/code/javascript/cisco-auto/labs/vlan-rstp-services.lab.ts` | FAIL | Mismo error YAML al intentar parsear el lab TS. | Archivo no es YAML válido para lab.parse | salida CLI |
+| 2026-04-12 | TC-169 | `bun run pt topology-show` | PASS | Alias deprecado pero funcional; muestra topología inspectada. | - | salida CLI |
+| 2026-04-12 | TC-170 | `bun run pt topology-show --json` | FAIL | Sigue mostrando salida textual, no JSON. | Flag JSON ignorado en el alias deprecated | salida CLI |
+| 2026-04-12 | TC-171 | `bun run pt diagnose no-access PC1` | PASS | Devuelve diagnóstico de no acceso con causa probable y recomendación. | - | salida CLI |
+| 2026-04-12 | TC-172 | `bun run pt diagnose packet-loss PC1` | PASS | Devuelve diagnóstico de pérdida de paquetes / duplex mismatch. | - | salida CLI |
+| 2026-04-12 | TC-173 | `bun run pt diagnose acl-block PC1` | PASS | Devuelve diagnóstico ACL block con causa raíz. | - | salida CLI |
+| 2026-04-12 | TC-174 | `bun run pt diagnose stats` | PASS | Stats vacías: 0 diagnósticos, 0% probabilidad promedio. | - | salida CLI |
+| 2026-04-12 | TC-175 | `bun run pt diagnose history` | PASS | Historial de diagnósticos vacío. | - | salida CLI |
+| 2026-04-12 | TC-176 | `bun run pt diagnose ping-fails PC1` | FAIL | Sale con exit 0 pero no imprime diagnóstico alguno. | Silencio inesperado / no-op | salida CLI |
+| 2026-04-12 | TC-177 | `bun run pt diagnose no-dhcp PC1` | FAIL | Sale con exit 0 pero no imprime diagnóstico alguno. | Silencio inesperado / no-op | salida CLI |
+| 2026-04-12 | TC-178 | `bun run pt planner compile routing R1 S1 --protocol ospf` | PASS | Genera plan `plan-1775982958988-generic` con tipo routing y 0 pasos. | - | salida CLI |
+| 2026-04-12 | TC-179 | `bun run pt planner compile vlan R1 S1 --vlans 10 20` | FAIL | Sale con exit 0 pero no produce salida visible ni plan persistido. | Compilación VLAN silenciosa / no persistente | salida CLI |
+| 2026-04-12 | TC-180 | `bun run pt planner list` | PASS | No hay planes registrados. | - | salida CLI |
+| 2026-04-12 | TC-181 | `bun run pt planner stats` | PASS | Total de planes: 0. | - | salida CLI |
+| 2026-04-12 | TC-182 | `bun run pt planner show plan-1775982958988-generic` | FAIL | Plan no encontrado. | El plan generado no se persiste | salida CLI |
+| 2026-04-12 | TC-183 | `bun run pt ledger list` | PASS | No hay operaciones registradas. | - | salida CLI |
+| 2026-04-12 | TC-184 | `bun run pt ledger stats` | PASS | Total de operaciones: 0. | - | salida CLI |
+| 2026-04-12 | TC-185 | `bun run pt ledger query --device PC1 --limit 5` | PASS | Resultados: 0. | - | salida CLI |
+| 2026-04-12 | TC-186 | `bun run pt host config PC1 --dhcp --ipv6-enabled --ipv6-auto-config` | WARN | Configura DHCP correctamente; IPv6 flags aceptadas pero no se reflejan en el output de inspect. | IPv6 no visible / contexto parcial | salida CLI |
+| 2026-04-12 | TC-187 | `bun run pt host inspect PC1 --json` | PASS | JSON coherente con DHCP true e IP 0.0.0.0 en contexto parcial. | - | salida CLI |
