@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { CapabilitySet } from "../capabilities/capability-set.js";
-import { InterfaceName, Ipv4Address } from "../value-objects/index.js";
+import { InterfaceName, Ipv4Address } from '@cisco-auto/kernel/domain/ios/value-objects';
 import type { CommandPlan } from "./command-plan.js";
 import { CommandPlanBuilder } from "./command-plan.js";
 

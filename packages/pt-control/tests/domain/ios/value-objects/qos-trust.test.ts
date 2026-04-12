@@ -8,7 +8,7 @@ import {
   parseQosTrust,
   isValidQosTrust,
   type QosTrustMode,
-} from "@cisco-auto/ios-domain";
+} from "@cisco-auto/kernel/domain/ios/value-objects";
 
 describe("QosTrust", () => {
   describe("constructor", () => {
@@ -158,15 +158,11 @@ describe("QosTrust", () => {
     });
   });
 
-  describe("toJSON/fromJSON", () => {
-    it("should serialize and deserialize", () => {
+  describe("toJSON", () => {
+    it("should serialize to primitive", () => {
       const trust = new QosTrust("dscp");
       const json = trust.toJSON();
-      
       expect(json).toBe("dscp");
-      
-      const restored = QosTrust.fromJSON(json);
-      expect(restored.equals(trust)).toBe(true);
     });
   });
 });

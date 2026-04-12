@@ -4,8 +4,8 @@
  * Soporta flags como --network, --passive-interface, --neighbor, etc.
  */
 
-import { VlanConfigSchema, type VlanConfig } from '@cisco-auto/ios-domain/schemas';
-import { VlanId, parseVlanName } from '@cisco-auto/ios-domain/value-objects';
+import { VlanConfigSchema, type VlanConfig } from '@cisco-auto/kernel/domain/ios/schemas';
+import { VlanId, parseVlanName } from '@cisco-auto/kernel/domain/ios/value-objects';
 
 /**
  * Parsea un flag repeatable con formato key=value.

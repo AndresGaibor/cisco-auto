@@ -8,6 +8,8 @@
     ".": "./src/index.ts",
     "./domain": "./src/domain/index.ts",
     "./domain/ios": "./src/domain/ios/index.ts",
+    "./domain/ios/value-objects": "./src/domain/ios/value-objects/index.ts",
+    "./domain/ios/schemas": "./src/domain/ios/schemas/index.ts",
     "./domain/topology": "./src/domain/topology/index.ts",
     "./domain/lab": "./src/domain/lab/index.ts",
     "./application": "./src/application/index.ts",

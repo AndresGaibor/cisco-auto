@@ -1,4 +1,8 @@
 /**
+ * @deprecated Use src/build/ instead
+ * This file will be removed in next major version
+ */
+/**
  * Runtime Helpers Template - Generates helper functions section
  * Device type resolution, model lookup, etc.
  */

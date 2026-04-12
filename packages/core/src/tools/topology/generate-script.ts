@@ -1,6 +1,6 @@
 /**
  * TOOL: pt_generate_script
- * 
+ *
  * Genera un script de Packet Tracer (JavaScript o Python) a partir de un
  * TopologyPlan. El script incluye comandos para:
  * - Añadir dispositivos
@@ -20,15 +20,11 @@ import type {
   RoutingPlan,
   VLANPlan,
 } from '../..';
-import type { Device, ACL, NAT } from '../..';
-import type { ACLSpec, NATSpec } from '../../canonical/index.js';
-import { VlanId, VlanName } from '@cisco-auto/ios-domain/value-objects';
+import type { Device, ACL } from '../..';
 import type {
   BGPSpec,
   DHCPServerSpec,
   EtherChannelSpec,
-  FTPSpec,
-  HTTPSpec,
   IPv6Spec,
   NTPSpec,
   RIPSpec,
@@ -36,15 +32,13 @@ import type {
   STPSpec,
   SyslogSpec,
 } from '../..';
-import { BaseGenerator } from '../..';
-import { VlanGenerator } from '../..';
-import { STPGenerator } from '../..';
-import { EtherChannelGenerator } from '../..';
-import { RoutingGenerator } from '../..';
-import { AdvancedRoutingGenerator } from '../..';
-import { SecurityGenerator } from '../..';
-import { ServicesGenerator } from '../..';
-import { IPv6Generator } from '../..';
+import { generateBasicCommands, type BasicConfigInput } from '@cisco-auto/kernel/plugins/basic-config';
+import { generateVlanCommands, type VlanConfigInput } from '@cisco-auto/kernel/plugins/vlan';
+import { generateStpCommands, generateVtpCommands, generateEtherChannelCommands, type StpConfigInput, type EtherChannelConfigInput } from '@cisco-auto/kernel/plugins/switching';
+import { generateRoutingCommands, type RoutingConfigInput } from '@cisco-auto/kernel/plugins/routing';
+import { generateSecurityCommands, type SecurityConfigInput } from '@cisco-auto/kernel/plugins/security';
+import { generateServicesCommands, type ServicesConfigInput } from '@cisco-auto/kernel/plugins/services';
+import { generateIpv6Commands, type Ipv6ConfigInput } from '@cisco-auto/kernel/plugins/ipv6';
 
 /**
  * Comando generado para un dispositivo
@@ -87,8 +81,8 @@ type ExtendedRoutingPlan = RoutingPlan & {
 type ExtendedServicesPlan = {
   ntp?: NTPSpec;
   snmp?: SNMPSpec;
-  http?: HTTPSpec;
-  ftp?: FTPSpec;
+  http?: { enabled: boolean };
+  ftp?: { enabled: boolean };
   syslog?: SyslogSpec;
   dhcp?: DHCPServerSpec[];
 };
@@ -97,7 +91,6 @@ type ExtendedDevicePlan = DevicePlan & {
   vtp?: Device['vtp'];
   lines?: Device['lines'];
   acls?: ACL[];
-  nat?: NAT;
   ssh?: Device['ssh'];
   telnet?: Device['telnet'];
   stp?: STPSpec;
@@ -119,113 +112,109 @@ function appendSection(target: string[], section: string[]): void {
   target.push(...section);
 }
 
-function maskToCidr(mask: string): number {
-  if (!mask) {
-    return 24;
-  }
-
-  if (mask.includes('/')) {
-    const parts = mask.split('/');
-    const parsed = Number.parseInt(parts[1] || '24', 10);
-    return Number.isFinite(parsed) ? parsed : 24;
-  }
-
-  const octets = mask.split('.').map(part => Number.parseInt(part, 10));
-  if (octets.length !== 4 || octets.some(octet => Number.isNaN(octet))) {
-    return 24;
-  }
-
-  return octets
-    .map(octet => octet.toString(2).padStart(8, '0'))
-    .join('')
-    .split('1').length - 1;
+function cidrToWildcard(prefix: number): string {
+  const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
+  const octets = [
+    (mask >>> 24) & 0xff,
+    (mask >>> 16) & 0xff,
+    (mask >>> 8) & 0xff,
+    mask & 0xff,
+  ];
+  return octets.join('.');
 }
 
-function mapDhcpPlanToSpec(pool: DHCPPlan): DHCPServerSpec {
+function ipPrefixToNetworkWildcard(cidr: string): { network: string; wildcard: string } {
+  const [ip, prefixStr] = cidr.split('/');
+  const prefix = prefixStr ? parseInt(prefixStr, 10) : 24;
   return {
-    poolName: pool.poolName,
-    network: pool.network,
-    subnetMask: pool.subnetMask,
-    defaultRouter: pool.defaultRouter,
-    dnsServers: pool.dnsServer ? [pool.dnsServer] : undefined,
-    excludedAddresses: pool.exclude,
+    network: ip!,
+    wildcard: cidrToWildcard(prefix),
   };
 }
 
-function mapVlanPlanToSpec(vlan: VLANPlan) {
+function mapDhcpPlanToKernel(pool: DHCPPlan | DHCPServerSpec): { name: string; network: string; mask: string; defaultRouter?: string; dnsServers?: string[]; excludedAddresses?: string[] } {
+  const p = pool as unknown as Record<string, unknown>;
+  const poolName = (p.poolName as string) || (p.name as string);
+  const dnsServer = p.dnsServer as string | undefined;
+  const dnsServers = (p.dnsServers as string[]) || (dnsServer ? [dnsServer] : undefined);
+  return {
+    name: poolName,
+    network: p.network as string,
+    mask: (p.subnetMask as string) || (p.mask as string),
+    defaultRouter: p.defaultRouter as string | undefined,
+    dnsServers,
+    excludedAddresses: (p.exclude as string[]) || (p.excludedAddresses as string[]),
+  };
+}
+
+function mapVlanPlanToKernel(vlan: VLANPlan): { id: number; name?: string } {
   return {
     id: vlan.id,
     name: vlan.name,
-    active: true,
-    description: vlan.dhcpPool ? `Pool DHCP ${vlan.dhcpPool}` : undefined,
-    ip: vlan.ipRange && vlan.ipRange.includes('/') ? vlan.ipRange : undefined,
   };
 }
 
-function mapRoutingPlanToSpec(routing: RoutingPlan): Parameters<typeof RoutingGenerator.generateRouting>[0] {
-  const routingSpec: {
-    static?: Array<{ network: string; mask: string; nextHop: string; distance: number; description?: string }>;
-    ospf?: { processId: number; routerId: string; areas: Array<{ areaId: string; networks: string[] }>; networks: Array<{ network: string; area: string }>; defaultRoute: boolean; passiveInterfaces?: string[] };
-    eigrp?: { asNumber: number; networks: string[]; noAutoSummary: boolean };
-  } = {};
+function mapRoutingPlanToKernel(routing: RoutingPlan): Omit<RoutingConfigInput, 'deviceName'> {
+  const spec: Omit<RoutingConfigInput, 'deviceName'> = {};
 
   if (routing.static && routing.static.length > 0) {
-    routingSpec.static = routing.static.map(route => ({
+    spec.staticRoutes = routing.static.map(route => ({
       network: route.network,
-      mask: route.network === '0.0.0.0' && route.mask === '0.0.0.0' ? '255.255.255.255' : route.mask,
+      mask: route.mask,
       nextHop: route.nextHop,
-      distance: 1,
-      description: undefined,
     }));
   }
 
   if (routing.ospf) {
-    routingSpec.ospf = {
+    spec.ospf = {
       processId: routing.ospf.processId,
-      routerId: routing.ospf.routerId || '0.0.0.0',
+      routerId: routing.ospf.routerId || undefined,
       areas: routing.ospf.areas.map(area => ({
-        areaId: area.area.toString(),
-        networks: area.networks,
+        areaId: area.area,
+        networks: area.networks.map(n => ipPrefixToNetworkWildcard(n)),
       })),
-      networks: routing.ospf.areas.flatMap(area => area.networks.map(network => ({
-        network,
-        area: area.area.toString(),
-      }))),
-      defaultRoute: Boolean(routing.ospf.defaultRoute),
-      passiveInterfaces: undefined,
     };
   }
 
   if (routing.eigrp) {
-    routingSpec.eigrp = {
+    spec.eigrp = {
       asNumber: routing.eigrp.asNumber,
       networks: routing.eigrp.networks,
-      noAutoSummary: (routing.eigrp as RoutingPlan['eigrp'] & { noAutoSummary?: boolean }).noAutoSummary ?? true,
     };
   }
 
-  return routingSpec;
+  return spec;
 }
 
-function mapAdvancedRoutingPlanToSpec(routing: ExtendedRoutingPlan): string[] {
-  const commands: string[] = [];
-
-  if (routing.rip) {
-    commands.push(...AdvancedRoutingGenerator.generateRIP(routing.rip));
-  }
-
-  if (routing.bgp) {
-    commands.push(...AdvancedRoutingGenerator.generateBGP(routing.bgp));
-  }
-
-  return commands;
-}
-
-function buildStpSpec(device: ExtendedDevicePlan): STPSpec | undefined {
+function mapStpToKernel(device: ExtendedDevicePlan): StpConfigInput | undefined {
   if (device.stp) {
-    return device.stp;
+    return {
+      mode: device.stp.mode,
+      priority: (device.stp as any).priority,
+      portfastDefault: device.stp.portfastDefault,
+      bpduguardDefault: device.stp.bpduguardDefault,
+      bpdufilterDefault: (device.stp as any).bpdufilterDefault,
+      vlanConfig: device.stp.vlanConfig?.map(vc => ({
+        vlanId: vc.vlanId,
+        priority: vc.priority,
+        rootPrimary: vc.rootPrimary,
+        rootSecondary: vc.rootSecondary,
+      })),
+      rootPrimary: (device.stp as any).rootPrimary,
+      rootSecondary: (device.stp as any).rootSecondary,
+      interfaceConfig: device.stp.interfaceConfig?.map(ic => ({
+        interface: ic.interface,
+        portfast: ic.portfast,
+        bpduguard: ic.bpduguard,
+        bpdufilter: (ic as any).bpdufilter,
+        cost: (ic as any).cost,
+        portPriority: (ic as any).portPriority,
+        linkType: (ic as any).linkType,
+      })),
+    };
   }
 
+  // Infer STP para switches sin configuración explícita
   if (device.model.type !== 'switch' && device.model.type !== 'multilayer-switch') {
     return undefined;
   }
@@ -246,153 +235,353 @@ function buildStpSpec(device: ExtendedDevicePlan): STPSpec | undefined {
     rootPrimary: device.model.type === 'multilayer-switch'
       ? device.vlans?.map(vlan => vlan.id)
       : undefined,
-    vlanConfig: device.vlans?.map(vlan => ({ vlanId: vlan.id })),
-    interfaceConfig,
+    interfaceConfig: interfaceConfig.length > 0 ? interfaceConfig : undefined,
   };
 }
 
-function buildEtherChannels(device: ExtendedDevicePlan): EtherChannelSpec[] {
-  return device.etherchannel && device.etherchannel.length > 0 ? device.etherchannel : [];
+function mapEtherChannelsToKernel(device: ExtendedDevicePlan): EtherChannelConfigInput[] {
+  if (!device.etherchannel || device.etherchannel.length === 0) return [];
+
+  return device.etherchannel.map(ec => ({
+    groupId: ec.groupId,
+    mode: ec.mode,
+    interfaces: ec.interfaces,
+    portChannel: ec.portChannel || `Port-channel${ec.groupId}`,
+    trunkMode: (ec as any).trunkMode,
+    accessVlan: (ec as any).accessVlan,
+    nativeVlan: (ec as any).nativeVlan,
+    allowedVlans: (ec as any).allowedVlans,
+    description: (ec as any).description,
+    loadBalancing: (ec as any).loadBalancing,
+  }));
 }
 
-function buildIpv6Spec(device: ExtendedDevicePlan): IPv6Spec | undefined {
-  return device.ipv6;
+function mapAclsToKernel(acls: ACL[]): SecurityConfigInput['acls'] {
+  return acls.map(acl => {
+    const entries = (acl as any).entries || (acl as any).rules || [];
+    const rules = entries.map((entry: any) => ({
+      action: entry.action as 'permit' | 'deny',
+      protocol: entry.protocol as 'ip' | 'tcp' | 'udp' | 'icmp' | undefined,
+      source: entry.source,
+      sourceWildcard: entry.sourceWildcard,
+      destination: entry.destination,
+      destinationWildcard: entry.destinationWildcard,
+      destinationPort: entry.port || entry.destinationPort,
+    }));
+
+    return {
+      name: acl.name,
+      type: (acl as any).type || 'extended',
+      rules,
+      appliedOn: (acl as any).appliedOn,
+      direction: (acl as any).direction,
+    };
+  });
 }
 
-function buildSecurityCommands(device: ExtendedDevicePlan): string[] {
-  const commands: string[] = [];
+function mapNatToKernel(nat: any): Partial<SecurityConfigInput> {
+  if (!nat) return {};
 
-  if (device.acls && device.acls.length > 0) {
-    const canonicalAcls = (device.acls as Array<{ name: string; type?: string; rules?: unknown[]; entries?: Array<{ action: string; protocol?: string; source: string; destination: string; port?: string; log?: boolean }> }>).map((acl) => {
-      if (acl.rules) return acl;
-      if (acl.entries) {
-        return {
-          name: acl.name,
-          type: acl.type,
-          rules: acl.entries.map((entry) => ({
-            action: entry.action,
-            protocol: entry.protocol ?? 'ip',
-            source: entry.source,
-            destination: entry.destination,
-            destinationPort: entry.port,
-            log: entry.log,
-          })),
-        };
-      }
-      return acl;
-    });
-    commands.push(...SecurityGenerator.generateACLs(canonicalAcls as ACLSpec[]));
+  const result: Partial<SecurityConfigInput> = {};
+
+  if (nat.static) {
+    result.natStatic = nat.static.map((s: any) => ({
+      localIp: s.localIp,
+      globalIp: s.globalIp,
+    }));
   }
 
-  if (device.nat) {
-    commands.push(...SecurityGenerator.generateNAT(device.nat as NATSpec));
+  if (nat.pool) {
+    result.natPool = {
+      name: nat.pool.name,
+      startIp: nat.pool.startIp,
+      endIp: nat.pool.endIp,
+      netmask: nat.pool.netmask,
+    };
   }
 
-  return commands;
+  if (nat.insideInterfaces) {
+    result.natInsideInterfaces = nat.insideInterfaces;
+  }
+
+  if (nat.outsideInterfaces) {
+    result.natOutsideInterfaces = nat.outsideInterfaces;
+  }
+
+  return result;
 }
 
-function buildServiceCommands(device: ExtendedDevicePlan): string[] {
-  const commands: string[] = [];
+function mapVlanConfigToKernel(device: ExtendedDevicePlan): VlanConfigInput | undefined {
+  if (!device.vlans || device.vlans.length === 0) return undefined;
 
-  if (device.dhcp && device.dhcp.length > 0) {
-    commands.push(...ServicesGenerator.generateDHCP(device.dhcp.map(mapDhcpPlanToSpec)));
+  const trunkPorts: string[] = [];
+  const accessPorts: { port: string; vlan: number }[] = [];
+
+  for (const iface of device.interfaces) {
+    const mode = (iface as any).mode;
+    if (mode === 'trunk') {
+      trunkPorts.push(iface.name);
+    } else if (typeof iface.vlan === 'number') {
+      accessPorts.push({ port: iface.name, vlan: iface.vlan });
+    }
   }
 
-  if (device.services?.dhcp && device.services.dhcp.length > 0) {
-    commands.push(...ServicesGenerator.generateDHCP(device.services.dhcp));
-  }
-
-  if (device.services?.ntp) {
-    commands.push(...ServicesGenerator.generateNTP(device.services.ntp));
-  }
-
-  if (device.services?.snmp) {
-    commands.push(...ServicesGenerator.generateSNMP(device.services.snmp));
-  }
-
-  if (device.services?.http) {
-    commands.push(...ServicesGenerator.generateHTTP(device.services.http));
-  }
-
-  if (device.services?.ftp) {
-    commands.push(...ServicesGenerator.generateFTP(device.services.ftp));
-  }
-
-  if (device.services?.syslog) {
-    commands.push(...ServicesGenerator.generateSyslog(device.services.syslog));
-  }
-
-  return commands;
-}
-
-function buildBaseDevice(device: ExtendedDevicePlan): Device {
   return {
-    name: device.name,
-    type: device.model.type,
-    model: device.model.name,
-    hostname: device.name,
-    ssh: device.ssh,
-    telnet: device.telnet,
-    credentials: device.credentials,
-    interfaces: device.interfaces as unknown as Device['interfaces'],
-    vlans: device.vlans?.map(mapVlanPlanToSpec) as Device['vlans'],
-    vtp: device.vtp,
-    routing: mapRoutingPlanToSpec(device.routing || ({} as RoutingPlan)) as unknown as Device['routing'],
-    acls: device.acls,
-    nat: device.nat,
-    lines: device.lines,
+    switchName: device.name,
+    vlans: device.vlans.map(mapVlanPlanToKernel),
+    trunkPorts: trunkPorts.length > 0 ? trunkPorts : undefined,
+    accessPorts: accessPorts.length > 0 ? accessPorts : undefined,
   };
+}
+
+function mapVtpToKernel(device: ExtendedDevicePlan): { domainName: string; keySize: number; version: number } | undefined {
+  if (!device.vtp) return undefined;
+
+  const vtp = device.vtp as any;
+  return {
+    domainName: vtp.domain || device.name + '.local',
+    keySize: vtp.keySize || 2048,
+    version: vtp.version || 2,
+  };
+}
+
+function mapServicesToKernel(device: ExtendedDevicePlan): Omit<ServicesConfigInput, 'deviceName'> | undefined {
+  const services: Omit<ServicesConfigInput, 'deviceName'> = {};
+
+  // DHCP desde device.dhcp (TopologyPlan legacy)
+  if (device.dhcp && device.dhcp.length > 0) {
+    services.dhcp = device.dhcp.map(mapDhcpPlanToKernel);
+  }
+
+  // DHCP desde device.services.dhcp
+  if (device.services?.dhcp && device.services.dhcp.length > 0) {
+    const mapped = device.services.dhcp.map(mapDhcpPlanToKernel);
+    const existing = services.dhcp || [];
+    services.dhcp = [...existing, ...mapped];
+  }
+
+  // NTP
+  if (device.services?.ntp) {
+    services.ntp = {
+      servers: device.services.ntp.servers,
+      master: (device.services.ntp as any).master,
+      stratum: (device.services.ntp as any).stratum,
+    };
+  }
+
+  // SNMP
+  if (device.services?.snmp) {
+    const snmp = device.services.snmp as any;
+    services.snmp = {};
+    if (snmp.communities) {
+      services.snmp.communities = snmp.communities.map((c: any) => ({
+        name: c.name,
+        access: c.access || 'ro',
+      }));
+    }
+    if (snmp.hosts) {
+      services.snmp.hosts = snmp.hosts;
+    }
+  }
+
+  // Syslog
+  if (device.services?.syslog) {
+    services.syslog = {
+      servers: device.services.syslog.servers,
+      trap: (device.services.syslog as any).trap,
+    };
+  }
+
+  // DNS
+  if (device.services?.http || device.services?.ftp) {
+    services.dns = {};
+  }
+
+  // Verificar si hay alguna configuración
+  if (!services.dhcp && !services.ntp && !services.snmp && !services.syslog && !services.dns) {
+    return undefined;
+  }
+
+  return services;
 }
 
 /**
- * Genera los comandos IOS completos para un dispositivo
+ * Genera los comandos IOS completos para un dispositivo usando plugins del kernel.
  */
 export function generateIosCommands(device: DevicePlan): string[] {
   const dispositivo = device as ExtendedDevicePlan;
-  const baseDevice = buildBaseDevice(dispositivo);
   const commands: string[] = [];
 
-  appendSection(commands, BaseGenerator.generateBasic(baseDevice as any));
-  appendSection(commands, VlanGenerator.generateInterfaces(baseDevice as any));
+  // === 1. Configuración básica (hostname, SSH, líneas) ===
+  const basic: BasicConfigInput = {
+    deviceName: dispositivo.name,
+    hostname: dispositivo.name,
+  };
 
-  if (dispositivo.vlans && dispositivo.vlans.length > 0) {
-    // Convert primitive VLANs to VLANSpec with VlanId/VlanName value objects
-    const vlanSpecs = dispositivo.vlans.map(vlan => ({
-      id: VlanId.from(vlan.id),
-      name: VlanName.from(vlan.name),
-    }));
-    appendSection(commands, VlanGenerator.generateVLANs(vlanSpecs, dispositivo.vtp as any));
+  if (dispositivo.credentials?.username) {
+    basic.passwordEncryption = true;
+    basic.noIpDomainLookup = true;
+    basic.loggingSynchronous = true;
+  }
+
+  if (dispositivo.ssh) {
+    const sshConf = dispositivo.ssh as any;
+    basic.ssh = {
+      domainName: sshConf.domainName || `${dispositivo.name}.local`,
+      keySize: sshConf.keySize || 2048,
+      version: sshConf.version || 2,
+    };
   }
 
   if (dispositivo.vtp) {
-    appendSection(commands, VlanGenerator.generateVTP(dispositivo.vtp as any));
+    const vtpConf = dispositivo.vtp as any;
+    basic.ssh = basic.ssh || {
+      domainName: vtpConf.domain || `${dispositivo.name}.local`,
+    };
   }
 
+  // Líneas de consola/VTY
+  if (dispositivo.lines) {
+    const lines: BasicConfigInput['lines'] = [];
+    const linesConf = dispositivo.lines as any;
+
+    if (linesConf.console) {
+      lines.push({
+        type: 'console',
+        loginLocal: linesConf.console.login,
+        execTimeout: linesConf.console.execTimeout,
+        transportInput: linesConf.console.transportInput,
+        password: linesConf.console.password,
+      });
+    }
+
+    if (linesConf.vty) {
+      lines.push({
+        type: 'vty',
+        range: `${linesConf.vty.start} ${linesConf.vty.end}`,
+        loginLocal: linesConf.vty.login,
+        transportInput: linesConf.vty.transportInput,
+        execTimeout: linesConf.vty.execTimeout,
+        password: linesConf.vty.password,
+      });
+    }
+
+    if (linesConf.aux) {
+      lines.push({
+        type: 'aux',
+        loginLocal: linesConf.aux.login,
+        execTimeout: linesConf.aux.execTimeout,
+        transportInput: linesConf.aux.transportInput,
+        password: linesConf.aux.password,
+      });
+    }
+
+    if (lines.length > 0) {
+      basic.lines = lines;
+    }
+  }
+
+  appendSection(commands, generateBasicCommands(basic));
+
+  // === 2. VLANs ===
+  const vlanConfig = mapVlanConfigToKernel(dispositivo);
+  if (vlanConfig) {
+    appendSection(commands, generateVlanCommands(vlanConfig));
+  }
+
+  // === 3. VTP ===
+  if (dispositivo.vtp) {
+    const vtp = dispositivo.vtp as any;
+    appendSection(commands, generateVtpCommands({
+      mode: vtp.mode || 'server',
+      domain: vtp.domain,
+      password: vtp.password,
+      version: vtp.version,
+    }));
+  }
+
+  // === 4. STP ===
+  const stpConfig = mapStpToKernel(dispositivo);
+  if (stpConfig) {
+    appendSection(commands, generateStpCommands(stpConfig));
+  }
+
+  // === 5. EtherChannel ===
+  const etherChannels = mapEtherChannelsToKernel(dispositivo);
+  for (const ec of etherChannels) {
+    appendSection(commands, generateEtherChannelCommands(ec));
+  }
+
+  // === 6. Routing ===
   if (dispositivo.routing) {
-    appendSection(commands, RoutingGenerator.generateRouting(mapRoutingPlanToSpec(dispositivo.routing)));
-    appendSection(commands, mapAdvancedRoutingPlanToSpec(dispositivo.routing));
+    const routingSpec: RoutingConfigInput = {
+      ...mapRoutingPlanToKernel(dispositivo.routing),
+      deviceName: dispositivo.name,
+    };
+
+    // BGP desde ExtendedRoutingPlan
+    const extRouting = dispositivo.routing as ExtendedRoutingPlan;
+    if (extRouting.bgp) {
+      routingSpec.bgp = {
+        asn: extRouting.bgp.asn,
+        routerId: extRouting.bgp.routerId,
+        neighbors: extRouting.bgp.neighbors.map((n: any) => ({
+          ip: n.ip,
+          remoteAs: n.remoteAs,
+          description: n.description,
+          nextHopSelf: n.nextHopSelf,
+        })),
+        networks: extRouting.bgp.networks?.map((net: any) => ({
+          network: net.network,
+          mask: net.mask,
+        })),
+      };
+    }
+
+    appendSection(commands, generateRoutingCommands(routingSpec));
   }
 
-  appendSection(commands, buildSecurityCommands(dispositivo));
-  appendSection(commands, buildServiceCommands(dispositivo));
+  // === 7. Security (ACLs + NAT) ===
+  const securitySpec: SecurityConfigInput = { deviceName: dispositivo.name };
+  if (dispositivo.acls && dispositivo.acls.length > 0) {
+    securitySpec.acls = mapAclsToKernel(dispositivo.acls);
+  }
+  const natSpec = mapNatToKernel((dispositivo as any).nat);
+  if (natSpec.natStatic) securitySpec.natStatic = natSpec.natStatic;
+  if (natSpec.natPool) securitySpec.natPool = natSpec.natPool;
+  if (natSpec.natInsideInterfaces) securitySpec.natInsideInterfaces = natSpec.natInsideInterfaces;
+  if (natSpec.natOutsideInterfaces) securitySpec.natOutsideInterfaces = natSpec.natOutsideInterfaces;
 
-  const stpSpec = buildStpSpec(dispositivo);
-  if (stpSpec) {
-    appendSection(commands, STPGenerator.generate(stpSpec));
+  if (securitySpec.acls || securitySpec.natStatic || securitySpec.natPool) {
+    appendSection(commands, generateSecurityCommands(securitySpec));
   }
 
-  const etherChannels = buildEtherChannels(dispositivo);
-  if (etherChannels.length > 0) {
-    appendSection(commands, EtherChannelGenerator.generate(etherChannels));
+  // === 8. Services ===
+  const servicesConfig = mapServicesToKernel(dispositivo);
+  if (servicesConfig) {
+    appendSection(commands, generateServicesCommands({ deviceName: dispositivo.name, ...servicesConfig }));
   }
 
-  const ipv6Spec = buildIpv6Spec(dispositivo);
-  if (ipv6Spec) {
-    appendSection(commands, IPv6Generator.generate(ipv6Spec));
-  }
-
-  if (Array.isArray(dispositivo.lines) && dispositivo.lines.length > 0) {
-    appendSection(commands, BaseGenerator.generateLines(dispositivo.lines as any));
+  // === 9. IPv6 ===
+  if (dispositivo.ipv6) {
+    const ipv6Conf = dispositivo.ipv6 as any;
+    const ipv6Spec: Ipv6ConfigInput = {
+      deviceName: dispositivo.name,
+      routing: dispositivo.ipv6.routing,
+      interfaces: ipv6Conf.interfaces?.map((iface: any) => ({
+        name: iface.name,
+        address: iface.address,
+        linkLocal: iface.linkLocal,
+        eui64: iface.eui64,
+        autoConfig: iface.autoConfig,
+        ospfv3: iface.ospfv3,
+        ripng: iface.ripng,
+      })),
+      staticRoutes: ipv6Conf.staticRoutes,
+      ripng: ipv6Conf.ripng,
+      ospfv3: ipv6Conf.ospfv3,
+    };
+    appendSection(commands, generateIpv6Commands(ipv6Spec));
   }
 
   return commands;

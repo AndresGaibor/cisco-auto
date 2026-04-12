@@ -6,7 +6,7 @@
  */
 
 import type { DeviceSpec, InterfaceSpec, VLANSpec, RoutingSpec, OSPFSpec, EIGRPSpec, BGPSpec } from '../canonical/device.spec';
-import { VlanId, VlanName } from '@cisco-auto/ios-domain/value-objects';
+import { VlanId, VlanName } from '@cisco-auto/kernel/domain/ios/value-objects';
 
 // Re-export types and constants for backwards compatibility
 export type {

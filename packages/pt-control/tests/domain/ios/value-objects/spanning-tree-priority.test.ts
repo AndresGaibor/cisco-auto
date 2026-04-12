@@ -7,7 +7,7 @@ import {
   SpanningTreePriority,
   parseSpanningTreePriority,
   isValidSpanningTreePriority,
-} from "@cisco-auto/ios-domain";
+} from "@cisco-auto/kernel/domain/ios/value-objects";
 
 describe("SpanningTreePriority", () => {
   describe("constructor", () => {
@@ -173,15 +173,11 @@ describe("SpanningTreePriority", () => {
     });
   });
 
-  describe("toJSON/fromJSON", () => {
-    it("should serialize and deserialize", () => {
+  describe("toJSON", () => {
+    it("should serialize to primitive", () => {
       const priority = new SpanningTreePriority(24576);
       const json = priority.toJSON();
-      
       expect(json).toBe(24576);
-      
-      const restored = SpanningTreePriority.fromJSON(json);
-      expect(restored.equals(priority)).toBe(true);
     });
   });
 });

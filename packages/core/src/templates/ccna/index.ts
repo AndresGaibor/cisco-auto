@@ -5,7 +5,7 @@
 
 import type { LabSpec, DeviceSpec, ConnectionSpec } from '../../canonical';
 import { CableType } from '../../canonical';
-import { VlanId, VlanName } from '@cisco-auto/ios-domain/value-objects';
+import { VlanId, VlanName } from '@cisco-auto/kernel/domain/ios/value-objects';
 
 export interface LabTemplate {
   id: string;

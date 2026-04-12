@@ -8,7 +8,7 @@ import {
   executeVlanTrunk,
   parseVlanIds,
 } from '../../src/commands/vlan.ts';
-import { VlanId } from '@cisco-auto/ios-domain/value-objects';
+import { VlanId } from '@cisco-auto/kernel/domain/ios/value-objects';
 
 test('buildVlanCreateCommands genera comandos de configuración de VLAN con descripción', () => {
   const comandos = buildVlanCreateCommands('Ventas', 10, 'Segmento de ventas');

@@ -1,4 +1,8 @@
 /**
+ * @deprecated Use src/build/ instead
+ * This file will be removed in next major version
+ */
+/**
  * Runtime Constants Template - Generates constants section
  * Exports constants for device types, cables, etc. as JavaScript string
  */

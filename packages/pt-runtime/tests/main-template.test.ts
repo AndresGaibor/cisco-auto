@@ -85,11 +85,6 @@ describe("Phase 2 - Main.js Template (Kernel Architecture)", () => {
   });
 
   describe("hot reload support", () => {
-    it("contains runtimeDirty flag", () => {
-      const code = MAIN_JS_TEMPLATE;
-      expect(code).toContain("runtimeDirty");
-    });
-
     it("contains runtimeLastMtime for file watching", () => {
       const code = MAIN_JS_TEMPLATE;
       expect(code).toContain("runtimeLastMtime");

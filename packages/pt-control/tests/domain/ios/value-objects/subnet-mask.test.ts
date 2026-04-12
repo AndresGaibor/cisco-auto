@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { SubnetMask, parseSubnetMask, isValidSubnetMask } from "@cisco-auto/ios-domain";
+import { SubnetMask, parseSubnetMask, isValidSubnetMask } from "@cisco-auto/kernel/domain/ios/value-objects";
 
 describe("SubnetMask", () => {
   describe("constructor", () => {

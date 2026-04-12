@@ -8,7 +8,7 @@ import {
   parseAdministrativeDistance,
   isValidAdministrativeDistance,
   WELL_KNOWN_AD,
-} from "@cisco-auto/ios-domain";
+} from "@cisco-auto/kernel/domain/ios/value-objects";
 
 describe("AdministrativeDistance", () => {
   describe("constructor", () => {

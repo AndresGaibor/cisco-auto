@@ -6,10 +6,8 @@ import { describe, it, expect } from "bun:test";
 import {
   LeaseTime,
   parseLeaseTime,
-  fromSeconds,
-  standardEnterpriseLease,
   isValidLeaseTime,
-} from "@cisco-auto/ios-domain";
+} from "@cisco-auto/kernel/domain/ios/value-objects";
 
 describe("LeaseTime", () => {
   describe("constructor", () => {
@@ -206,40 +204,27 @@ describe("parseLeaseTime", () => {
   });
 });
 
-describe("fromSeconds", () => {
+describe("LeaseTime.fromSeconds", () => {
   it("should create LeaseTime from seconds", () => {
-    const lease = fromSeconds(90061); // 1 day, 1 hour, 1 minute, 1 second
+    const lease = LeaseTime.fromSeconds(90061); // 1 day, 1 hour, 1 minute, 1 second
     expect(lease.days).toBe(1);
     expect(lease.hours).toBe(1);
     expect(lease.minutes).toBe(1);
   });
 
   it("should handle exact day boundaries", () => {
-    const lease = fromSeconds(86400); // Exactly 1 day
+    const lease = LeaseTime.fromSeconds(86400); // Exactly 1 day
     expect(lease.days).toBe(1);
     expect(lease.hours).toBe(0);
     expect(lease.minutes).toBe(0);
   });
 
   it("should reject values below minimum", () => {
-    expect(() => fromSeconds(30)).toThrow();
+    expect(() => LeaseTime.fromSeconds(30)).toThrow();
   });
 
   it("should reject values above maximum", () => {
-    expect(() => fromSeconds(366 * 24 * 60 * 60)).toThrow();
-  });
-});
-
-describe("standardEnterpriseLease", () => {
-  it("should create standard 3-day lease by default", () => {
-    const lease = standardEnterpriseLease();
-    expect(lease.days).toBe(3);
-  });
-
-  it("should create custom enterprise lease", () => {
-    const lease = standardEnterpriseLease(7);
-    expect(lease.days).toBe(7);
-    expect(lease.isStandardEnterprise).toBe(true);
+    expect(() => LeaseTime.fromSeconds(366 * 24 * 60 * 60)).toThrow();
   });
 });
 

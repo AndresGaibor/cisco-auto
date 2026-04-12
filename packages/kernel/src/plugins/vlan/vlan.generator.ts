@@ -1,5 +1,5 @@
 import { vlanSchema, type VlanConfigInput, type VlanConfig, sviSchema, type SviConfigInput } from './vlan.schema.js';
-import { parseVlanName } from '@cisco-auto/ios-domain/value-objects';
+import { parseVlanName } from '../../domain/ios/value-objects/vlan-name.vo.js';
 
 export const VLAN_VERIFY_COMMANDS = ['show vlan brief'] as const;
 export const SVI_VERIFY_COMMANDS = ['show ip interface brief', 'show running-config | include interface Vlan'] as const;

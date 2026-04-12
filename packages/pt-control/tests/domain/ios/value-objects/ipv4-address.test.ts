@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { Ipv4Address, parseIpv4Address, isValidIpv4Address } from "@cisco-auto/ios-domain";
+import { Ipv4Address, parseIpv4Address, isValidIpv4Address } from "@cisco-auto/kernel/domain/ios/value-objects";
 
 describe("Ipv4Address", () => {
   describe("constructor", () => {

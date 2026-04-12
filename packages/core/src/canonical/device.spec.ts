@@ -36,7 +36,7 @@ import type {
 } from './protocol.spec';
 
 // Import VLAN value objects
-import type { VlanId, VlanName, VlanRange, VtpDomain, VtpMode, VtpModeType, VtpVersion, VtpVersionType, VtpPassword } from '@cisco-auto/ios-domain/value-objects';
+import type { VlanId, VlanName, VlanRange, VtpDomain, VtpMode, VtpModeType, VtpVersion, VtpVersionType, VtpPassword } from '@cisco-auto/kernel/domain/ios/value-objects';
 
 // Re-export for backwards compatibility (types imported from protocol.spec)
 export type {
