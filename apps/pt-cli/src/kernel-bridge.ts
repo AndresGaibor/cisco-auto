@@ -8,6 +8,8 @@ import { vlanPlugin } from '@cisco-auto/kernel/plugins/vlan';
 import { routingPlugin } from '@cisco-auto/kernel/plugins/routing';
 import { securityPlugin } from '@cisco-auto/kernel/plugins/security';
 import { servicesPlugin } from '@cisco-auto/kernel/plugins/services';
+import { ipv6Plugin } from '@cisco-auto/kernel/plugins/ipv6';
+import { portTemplatePlugin } from '@cisco-auto/kernel/plugins/port-template';
 import { packetTracerBackendPlugin, type PacketTracerBackendPlugin } from '@cisco-auto/kernel/backends/packet-tracer';
 import { generateVlanCommands, validateVlanConfig } from '@cisco-auto/kernel/plugins/vlan';
 import type { VlanConfigInput } from '@cisco-auto/kernel/plugins/vlan';
@@ -28,6 +30,8 @@ export function getKernelRegistry(): PluginRegistry {
     registry.register('protocol', routingPlugin);
     registry.register('protocol', securityPlugin);
     registry.register('protocol', servicesPlugin);
+    registry.register('protocol', ipv6Plugin);
+    registry.register('protocol', portTemplatePlugin);
     registry.register('backend', packetTracerBackendPlugin);
   }
   return registry;

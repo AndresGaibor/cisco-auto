@@ -182,6 +182,14 @@ function ensurePrivilegedExec(engine, term) {
   return false;
 }
 
+// Helper: Check if prompt indicates a config submode (like dhcp-config, vlan-config, etc.)
+function isConfigSubmode(prompt) {
+  var p = String(prompt || '');
+  // Match patterns like (dhcp-config), (vlan-config), (config-if), etc.
+  // but NOT plain (config) which is the standard config mode
+  return /\([a-zA-Z0-9\-]+-config\)/.test(p) || /\(config-[a-zA-Z0-9\-]+\)/.test(p);
+}
+
 // Helper: Ensure config mode
 function ensureConfigMode(engine, term) {
   var state = engine.getState();
@@ -190,9 +198,24 @@ function ensureConfigMode(engine, term) {
   var currentPrompt = term.getPrompt ? term.getPrompt() : '';
   dprint('[ensureConfigMode] START prompt="' + currentPrompt + '" engineMode=' + state.mode);
   
-  // If already in config mode (or any config submode), return true
-  if (currentPrompt.indexOf('(config') >= 0) {
-    dprint('[ensureConfigMode] Already in config mode (prompt contains "(config")');
+  // If in a config submode (dhcp-config, vlan-config, etc.), exit first
+  if (isConfigSubmode(currentPrompt)) {
+    dprint('[ensureConfigMode] In config submode, sending end first');
+    term.enterCommand('end');
+    var preLen = term.getOutput ? term.getOutput().length : 0;
+    for (var exitAttempt = 0; exitAttempt < 10; exitAttempt++) {
+      var exitPrompt = term.getPrompt ? term.getPrompt() : '';
+      if (exitPrompt.indexOf('#') >= 0 && exitPrompt.indexOf('(') < 0) {
+        dprint('[ensureConfigMode] Exited submode to priv-exec');
+        engine.processEvent({ type: 'modeChanged', newMode: 'priv-exec' });
+        break;
+      }
+    }
+  }
+  
+  // If already in config mode (standard (config)#), return true
+  if (currentPrompt.indexOf('(config)#') >= 0) {
+    dprint('[ensureConfigMode] Already in config mode');
     engine.processEvent({ type: 'modeChanged', newMode: 'config' });
     return true;
   }
@@ -526,6 +549,7 @@ function handleConfigIos(payload) {
       var maxAttempts = 100;
       var attempt = 0;
       var output = "";
+      var commandOutput = "";
       var commandDone = false;
 
       while (attempt < maxAttempts && !commandDone) {
@@ -534,6 +558,7 @@ function handleConfigIos(payload) {
 
         if (newData.length > 0) {
           engine.processEvent({ type: 'outputWritten', data: newData });
+          commandOutput += newData;
           preLen = fullOutput.length;
           output = fullOutput;
         }
@@ -561,8 +586,8 @@ function handleConfigIos(payload) {
 
       var currentPrompt = term.getPrompt ? term.getPrompt() : "";
       var stillInConfigMode = currentPrompt.indexOf("(config") >= 0;
-      var hasErrorInOutput = output.indexOf("% Invalid") >= 0 || output.indexOf("% Incomplete") >= 0 || output.indexOf("% Unknown") >= 0;
-      var ok = stillInConfigMode && !hasErrorInOutput;
+      var hasErrorInCommandOutput = commandOutput.indexOf("% Invalid") >= 0 || commandOutput.indexOf("% Incomplete") >= 0 || commandOutput.indexOf("% Unknown") >= 0;
+      var ok = stillInConfigMode && !hasErrorInCommandOutput;
 
       results.push({
         index: i,
