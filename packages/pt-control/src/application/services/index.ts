@@ -89,3 +89,33 @@ export type {
   Checkpoint,
   RollbackConfig,
 } from "../../pt/planner/change-planner-types.js";
+
+// PT Evidence Ledger Service
+export { EvidenceLedgerService, createEvidenceLedgerService } from "../../pt/ledger/evidence-ledger-service.js";
+export type {
+  IEvidenceLedgerService,
+  OperationRecord,
+  OperationResult,
+  OperationQuery,
+  EvidenceStats,
+  VerificationRecord,
+  Evidence,
+} from "../../pt/ledger/evidence-types.js";
+
+// PT Diagnosis Service
+export { DiagnosisService, createDiagnosisService } from "../../pt/diagnosis/diagnosis-service.js";
+export { DiagnosisEngine, createDiagnosisEngine } from "../../pt/diagnosis/diagnosis-engine.js";
+export type {
+  IDiagnosisService,
+  IDiagnosisEngine,
+  DiagnosisCategory,
+  Severity,
+  Symptom,
+  DiagnosisResult,
+  DeviceDiagnosis,
+  DeviceIssue,
+  DiagnosticCheck,
+  RootCause,
+  Recommendation,
+  DiagnosisOptions,
+} from "../../pt/diagnosis/diagnosis-types.js";
