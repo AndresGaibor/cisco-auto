@@ -65,7 +65,7 @@ bun run pt verify ios R1
 # Ver topología descubierta:
 bun run pt topology show
 
-# Ver todas las interfaces:
+# Ver todas lasinterfaces:
 bun run pt show ip-int-brief R1
 ```
 
@@ -132,6 +132,25 @@ bun run pt apply config.yaml --dry-run  # Probar primero
 bun run pt apply config.yaml             # Ejecutar
 ```
 
+### 11. "Algo no funciona, ¿qué hago?"
+```bash
+# Paso 1: Verificar estado
+bun run pt status
+bun run pt doctor
+
+# Paso 2: Ver logs
+bun run pt logs tail
+bun run pt logs errors
+
+# Paso 3: Verificar dispositivo
+bun run pt show ip-int-brief <device>
+bun run pt verify ios <device>
+
+# Paso 4: Diagnóstico
+bun run pt lint
+bun run pt diagnose ping-fails <device>
+```
+
 ---
 
 ## 🔧 Guía de Comandos por Objetivo
@@ -146,6 +165,15 @@ bun run pt apply config.yaml             # Ejecutar
 | Listar dispositivos | `bun run pt device list` |
 
 ### Ver Información (Show Commands)
+| Objetivo | Comando |
+|----------|---------|
+| Ver interfaces IP | `bun run pt show ip-int-brief R1` |
+| Ver VLANs | `bun run pt show vlan Switch1` |
+| Ver rutas | `bun run pt show ip-route R1` |
+| Ver configuración | `bun run pt show run-config R1` |
+| Ver vecinos CDP | `bun run pt show cdp R1` |
+| Ver tabla ARP | `bun run pt show ip arp R1` (ejecuta `show ip arp` en IOS) |
+| Ver MAC table | `bun run pt show mac-address-table Switch1` (ejecuta `show mac-address-table` en IOS) |
 | Objetivo | Comando |
 |----------|---------|
 | Ver interfaces IP | `bun run pt show ip-int-brief R1` |
@@ -364,6 +392,109 @@ bun run pt topology show
 
 ---
 
+## 🔥 Errores Comunes y Soluciones
+
+### Error: "Device not found"
+```bash
+# Verificar que PT esté corriendo y con scripting cargado
+bun run pt status
+bun run pt doctor
+
+# Listar dispositivos disponibles
+bun run pt device list
+```
+
+### Error: "Command timeout"
+```bash
+# Aumentar timeout
+bun run pt <comando> --timeout 300000
+```
+
+### Error: "Permission denied" o "Cannot connect to PT"
+```bash
+# Verificar estado del bridge
+bun run pt bridge
+
+# Reiniciar setup
+bun run pt setup
+```
+
+### Error: "Invalid model"
+```bash
+# Ver modelos válidos
+bun run pt capability list
+```
+
+### Error: "Configuration failed"
+```bash
+# Ver logs detallados
+bun run pt <comando> --verbose
+
+# Ver último comando ejecutado
+bun run pt history last
+
+# Verificar con verify
+bun run pt verify ios <device>
+```
+
+### Error: "VLAN not found"
+```bash
+# Ver VLANs existentes
+bun run pt show vlan <switch>
+```
+
+### Error: "Link already exists"
+```bash
+# Listar enlaces actuales
+bun run pt link list
+```
+
+---
+
+## 🐛 Casos No Cubiertos - Cómo Reportar
+
+Si encuentras un caso que NO está cubierto por esta skill:
+
+### 1. Verificar si es un bug conocido
+```bash
+# Revisar historial de errores
+bun run pt history failed
+bun run pt audit-failed
+
+# Revisar logs
+bun run pt logs errors
+```
+
+### 2. Recopilar información
+```bash
+# Estado del sistema
+bun run pt status
+bun run pt doctor
+
+# Estado del lab
+bun run pt device list
+bun run pt topology show
+
+# Logs relevantes
+bun run pt logs tail --lines 100
+```
+
+### 3. Documentar el caso
+Incluir:
+- Comando que intentaste
+- Error recibido
+- Salida de `bun run pt status`
+- Versión de Packet Tracer (si aplica)
+- Pasos para reproducir
+
+### 4. Crear issue en repositorio
+```bash
+# El agente debe documentar el caso y sugerir mejora
+# Usar el formato de issue del proyecto
+```
+
+---
+
 ## 📋 Chuleta Rápida
 
 ```
@@ -386,6 +517,7 @@ bun run pt inspect topology               # Topología
 # Problemas
 bun run pt diagnose ping-fails <device>   # Ping fails
 bun run pt lint                           # Validar topología
+bun run pt doctor                         # Diagnóstico general
 ```
 
 ---
@@ -403,3 +535,4 @@ bun run pt lint                           # Validar topología
 - Después de `config-*`, siempre ejecuta `verify ios <device>`
 - Para debugging usa `--verbose` y `--trace`
 - La skill se activa automáticamente - no preguntar al usuario
+- Para casos no cubiertos, sigue la sección "Casos No Cubiertos"
