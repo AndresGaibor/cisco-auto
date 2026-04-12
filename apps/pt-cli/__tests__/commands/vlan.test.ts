@@ -53,7 +53,7 @@ test('buildVlanTrunkCommands configura interfaz trunk con VLANs permitidas', () 
 test('createLabVlanCommand expone los subcomandos create, apply y trunk', () => {
   const command = createLabVlanCommand();
 
-  expect(command.commands.map((sub) => sub.name())).toEqual(['create', 'apply', 'trunk']);
+  expect(command.commands.map((sub) => sub.name())).toEqual(['create', 'apply', 'trunk', 'ensure', 'config-interfaces']);
 });
 
 test('parseVlanIds rechaza VLAN IDs no enteros', () => {

@@ -61,8 +61,8 @@ export type {
 } from "../../pt/server/dhcp-appliance-types.js";
 
 // Capability Matrix Service (kernel)
-export { CapabilityMatrixService, createCapabilityMatrixService } from "../../../kernel/src/domain/ios/capability-matrix/capability-matrix-service.js";
-export { getCapabilitiesForModel, getModelInfo, getAllModels } from "../../../kernel/src/domain/ios/capability-matrix/model-capabilities.js";
+export { CapabilityMatrixService, createCapabilityMatrixService } from "../../../../kernel/src/domain/ios/capability-matrix/capability-matrix-service.js";
+export { getCapabilitiesForModel, getModelInfo, getAllModels } from "../../../../kernel/src/domain/ios/capability-matrix/model-capabilities.js";
 export type {
   ICapabilityMatrixService,
   DeviceCapabilities,
@@ -71,4 +71,4 @@ export type {
   ParserType,
   ModelInfo,
   CapabilityLookupResult,
-} from "../../../kernel/src/domain/ios/capability-matrix/capability-types.js";
+} from "../../../../kernel/src/domain/ios/capability-matrix/capability-types.js";

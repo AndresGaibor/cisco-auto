@@ -303,7 +303,7 @@ function handleExecIos(payload) {
   var command = payload.command;
   dprint("[handleExecIos] Command: '" + command + "'");
   var currentMode = "priv-exec";
-  
+  // Would you like to enter the initial configuration dialog?
   try {
     var prompt = term.getPrompt ? term.getPrompt() : "";
     

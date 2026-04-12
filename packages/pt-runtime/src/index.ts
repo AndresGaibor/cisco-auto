@@ -46,6 +46,7 @@ export {
 // Simplified render wrappers for test compatibility
 import { MAIN_JS_TEMPLATE } from "./templates/main-kernel";
 import { RUNTIME_JS_TEMPLATE } from "./templates/runtime";
+import { validatePtSafe } from "./build/validate-pt-safe";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -98,6 +99,11 @@ export class RuntimeGenerator {
   async generate(): Promise<{ main: string; runtime: string }> {
     const main = this.generateMain();
     const runtime = this.generateRuntime();
+
+    await fs.promises.mkdir(this.config.outputDir, { recursive: true });
+    await fs.promises.writeFile(path.join(this.config.outputDir, "main.js"), main, "utf-8");
+    await fs.promises.writeFile(path.join(this.config.outputDir, "runtime.js"), runtime, "utf-8");
+
     return { main, runtime };
   }
 
@@ -119,6 +125,7 @@ export class RuntimeGenerator {
       generatedAt: Date.now()
     };
 
+    await fs.promises.mkdir(outputDir, { recursive: true });
     const manifestPath = path.join(outputDir, "manifest.json");
     await fs.promises.writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf-8");
     return manifest;

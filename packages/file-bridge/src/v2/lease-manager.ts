@@ -20,7 +20,7 @@ export class LeaseManager {
   constructor(leaseFilePath: string, leaseTtlMs: number = 30000) {
     this.leaseFilePath = leaseFilePath;
     this.leaseTtlMs = leaseTtlMs;
-    this.ownerId = String(process.pid); // Usar PID como ownerId para que múltiples procesos puedan compartir el lease
+    this.ownerId = randomUUID();
     this.logger = debug('bridge:lease');
   }
 
@@ -35,9 +35,7 @@ export class LeaseManager {
   hasValidLease(): boolean {
     const existing = this.readLease();
     if (!existing) return false;
-    
-    // Aceptar cualquier lease no-expired (no solo el nuestro)
-    // Esto permite que múltiples procesos compartan el mismo lease
+    if (existing.ownerId !== this.ownerId) return false;
     return !this.isLeaseStale(existing);
   }
 
@@ -50,15 +48,16 @@ export class LeaseManager {
 
   acquireLease(): boolean {
     const existing = this.readLease();
-    
-    // Si ya existe un lease válido, usarlo
+
     if (existing && !this.isLeaseStale(existing)) {
-      // Actualizar el lease con nuestro PID para que otros procesos vean quién lo usa
+      if (existing.ownerId !== this.ownerId) {
+        return false;
+      }
       this.renewLease();
       this.logger(`Using existing lease (ownerId=${existing.ownerId.substring(0, 8)}..., expiresAt=${new Date(existing.expiresAt).toISOString()})`);
       return true;
     }
-    
+
     return this.tryAcquireLease();
   }
 
