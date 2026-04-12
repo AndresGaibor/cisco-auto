@@ -72,3 +72,20 @@ export type {
   ModelInfo,
   CapabilityLookupResult,
 } from "../../../../kernel/src/domain/ios/capability-matrix/capability-types.js";
+
+// PT Change Planner Service
+export { ChangePlannerService, createChangePlannerService } from "../../pt/planner/change-planner-service.js";
+export { OperationCompiler } from "../../pt/planner/operation-compiler.js";
+export { CheckpointExecutor } from "../../pt/planner/checkpoint-executor.js";
+export type {
+  IChangePlannerService,
+  OperationIntent,
+  OperationIntentType,
+  DeferredJobPlan,
+  DeferredStep,
+  ExecutionResult,
+  RollbackResult,
+  Precheck,
+  Checkpoint,
+  RollbackConfig,
+} from "../../pt/planner/change-planner-types.js";
