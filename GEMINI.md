@@ -32,6 +32,14 @@ Always use `bun` for development tasks.
 - **Build Project:** `bun run build`
 - **Type Check:** `bun run typecheck`
 
+## PT CLI Skill
+**IMPORTANTE**: Para cualquier tarea relacionada con Packet Tracer, VLANs, routing, switching, o automatización Cisco, USAR LA SKILL `pt-cli` automáticamente.
+
+La skill pt-cli está ubicada en `.skills/pt-cli/SKILL.md` y provee:
+- Todos los comandos disponibles de `bun run pt`
+- Ejemplos de uso para cada categoría
+- Flags globales y opciones de salida
+
 ## Real-Time Packet Tracer Control
 
 ### Setup
@@ -40,42 +48,6 @@ Always use `bun` for development tasks.
 bun run pt:build
 
 # 2. Dentro de PT: cargar el script desde File > Open > selecciona ~/pt-dev/main.js
-```
-
-### CLI Commands (all via `bun run pt`)
-```bash
-# Ver ayuda
-bun run pt --help
-
-# Device management
-bun run pt device list
-bun run pt device add R1 2911
-bun run pt device remove R1
-bun run pt device move R1 --xpos 300 --ypos 200
-
-# Show commands
-bun run pt show ip-int-brief R1
-bun run pt show vlan Switch1
-bun run pt show ip-route R1
-bun run pt show run-config R1
-
-# Configuration
-bun run pt config-host R1 --ip 192.168.1.1 --mask 255.255.255.0
-bun run pt config-ios R1 interface GigabitEthernet0/0 ip address 192.168.1.1 255.255.255.0
-
-# VLANs
-bun run pt vlan create --id 10 --name DATA
-bun run pt vlan apply Switch1 10 20 30
-
-# Trunk
-bun run pt vlan trunk Switch1 GigabitEthernet0/1
-
-# Routing
-bun run pt routing static add --device R1 --network 192.168.10.0 --mask 255.255.255.0 --next-hop 192.168.1.1
-
-# ACL
-bun run pt acl create --name ACLExt --type extended
-bun run pt acl add-rule --name ACLExt --rule "permit tcp any host 192.168.1.1 eq 80"
 ```
 
 ### Platform-Aware Directory
@@ -94,7 +66,11 @@ Adhere to these standards to maintain consistency and quality:
 - **Environment:** Bun automatically loads `.env` files; do not use `dotenv`.
 
 ## AI Skills Integration
-The project includes specialized skills. Refer to `.gemini/skills/` for available AI assistants.
+The project includes specialized skills in `.gemini/skills/`:
+- **`pt-cli`**: Automation skill for Packet Tracer CLI (USE THIS for any Cisco/PT task)
+- **`cisco-networking-assistant`**: Modular orchestration driver
+- **`skill-creator`**: For creating new skills
 
 ---
+
 *Refer to `CLAUDE.md` for detailed tool usage and `PRD.md` for full functional requirements.*
