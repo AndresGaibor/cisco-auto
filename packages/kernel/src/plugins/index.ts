@@ -1,3 +1,4 @@
+export * from './basic-config/index.js';
 export * from './vlan/index.js';
 export * from './switching/index.js';
 export * from './security/index.js';
@@ -5,3 +6,4 @@ export * from './routing/index.js';
 export * from './services/index.js';
 export * from './ipv6/index.js';
 export * from './port-template/index.js';
+export * from './orchestrator/index.js';

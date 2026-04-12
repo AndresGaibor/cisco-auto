@@ -15,9 +15,7 @@ import type { GlobalFlags } from '../flags.js';
 import { runCommand } from '../application/run-command.js';
 import { renderCliResult } from '../ux/renderers.js';
 import { printExamples } from '../ux/examples.js';
-import { RoutingGenerator } from '@cisco-auto/core';
-import { AdvancedRoutingGenerator } from '@cisco-auto/core';
-import type { OSPFSpec, EIGRPSpec } from '@cisco-auto/core';
+import { generateRoutingCommands, type RoutingConfigInput } from '@cisco-auto/kernel/plugins/routing';
 
 const IPV4_REGEX = /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 const CIDR_REGEX = /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}\/(?:[0-9]|[12]\d|3[0-2])$/;
@@ -60,38 +58,67 @@ function parseEnteroObligatorio(valor: string, etiqueta: string): number {
   return numero;
 }
 
-export function buildStaticRouteCommands(network: string, nextHop: string): string[] {
-  return RoutingGenerator.generateRouting({
-    static: [
+function cidrToSubnetMask(cidr: string): string {
+  if (cidr.includes('/')) {
+    const bits = Number(cidr.split('/')[1]);
+    if (Number.isNaN(bits) || bits < 0 || bits > 32) return '255.255.255.0';
+    const mask = bits === 0 ? 0 : (~((1 << (32 - bits)) - 1) >>> 0);
+    return `${(mask >>> 24) & 255}.${(mask >>> 16) & 255}.${(mask >>> 8) & 255}.${mask & 255}`;
+  }
+  return '255.255.255.0';
+}
+
+export function buildStaticRouteCommands(deviceName: string, network: string, nextHop: string): string[] {
+  const mask = cidrToSubnetMask(network);
+  const networkAddr = network.includes('/') ? (network.split('/')[0] ?? network) : network;
+  const config: RoutingConfigInput = {
+    deviceName,
+    staticRoutes: [
       {
-        network,
+        network: networkAddr,
+        mask,
         nextHop: nextHop === 'null0' ? 'null0' : nextHop,
-        distance: 1,
       },
     ],
-  });
-}
-
-export function buildOspfEnableCommands(processId: number): string[] {
-  const spec: OSPFSpec = { processId, areas: [] };
-  return RoutingGenerator.generateRouting({ ospf: spec });
-}
-
-export function buildOspfAddNetworkCommands(processId: number, network: string, area: number | string): string[] {
-  const spec: OSPFSpec = {
-    processId,
-    areas: [{ areaId: String(area), networks: [network] }],
   };
-  return RoutingGenerator.generateRouting({ ospf: spec });
+  return generateRoutingCommands(config);
 }
 
-export function buildEigrpEnableCommands(asn: number): string[] {
-  const spec: EIGRPSpec = { asNumber: asn, networks: [], noAutoSummary: true };
-  return RoutingGenerator.generateRouting({ eigrp: spec });
+export function buildOspfEnableCommands(deviceName: string, processId: number): string[] {
+  return [`router ospf ${processId}`, ' exit'];
 }
 
-export function buildBgpEnableCommands(asn: number): string[] {
-  return AdvancedRoutingGenerator.generateBGP({ asn, neighbors: [] });
+export function buildOspfAddNetworkCommands(deviceName: string, processId: number, network: string, area: number | string): string[] {
+  const [net, wildcard] = network.includes('/') ? parseCidrToNetworkWildcard(network) : [network, '0.0.0.255'];
+  const config: RoutingConfigInput = {
+    deviceName,
+    ospf: {
+      processId,
+      areas: [{ areaId: area, networks: [{ network: net, wildcard }] }],
+    },
+  };
+  return generateRoutingCommands(config);
+}
+
+function parseCidrToNetworkWildcard(cidr: string): [string, string] {
+  const parts = cidr.split('/');
+  const cidrBits = Number(parts[1]) || 24;
+  const wildcardBits = 32 - cidrBits;
+  const wildcardNum = (1 << wildcardBits) - 1;
+  const octets = [0, 0, 0, 0];
+  for (let i = 0; i < 4; i++) {
+    const shift = 8 * (3 - i);
+    octets[i] = (wildcardNum >>> shift) & 255;
+  }
+  return [parts[0] ?? cidr, octets.join('.')];
+}
+
+export function buildEigrpEnableCommands(deviceName: string, asn: number): string[] {
+  return [`router eigrp ${asn}`, ' no auto-summary', ' exit'];
+}
+
+export function buildBgpEnableCommands(deviceName: string, asn: number): string[] {
+  return [`router bgp ${asn}`, ' bgp log-neighbor-changes', ' exit'];
 }
 
 export function createRoutingCommand(): Command {
@@ -145,6 +172,7 @@ export function createRoutingCommand(): Command {
         trace: false, tracePayload: false, traceResult: false, traceDir: null,
         traceBundle: false, traceBundlePath: null, sessionId: null,
         examples: globalExamples, schema: false, explain: globalExplain, plan: globalPlan, verify: true,
+        timeout: null, noTimeout: false,
       };
 
       const result = await runCommand({
@@ -161,7 +189,7 @@ export function createRoutingCommand(): Command {
               return createErrorResult('routing.static.add', { message: `El next-hop debe ser una IPv4 válida o null0: ${options.nextHop}` });
             }
 
-            const comandos = buildStaticRouteCommands(options.network, options.nextHop);
+            const comandos = buildStaticRouteCommands(options.device, options.network, options.nextHop);
 
             await ctx.controller.start();
             try {
@@ -227,6 +255,7 @@ export function createRoutingCommand(): Command {
         trace: false, tracePayload: false, traceResult: false, traceDir: null,
         traceBundle: false, traceBundlePath: null, sessionId: null,
         examples: globalExamples, schema: false, explain: globalExplain, plan: globalPlan, verify: true,
+        timeout: null, noTimeout: false,
       };
 
       const result = await runCommand({
@@ -237,7 +266,7 @@ export function createRoutingCommand(): Command {
         execute: async (ctx): Promise<CliResult> => {
           try {
             const processId = parseEnteroObligatorio(options.processId, 'El process-id');
-            const comandos = buildOspfEnableCommands(processId);
+            const comandos = buildOspfEnableCommands(options.device, processId);
 
             await ctx.controller.start();
             try {
@@ -289,6 +318,7 @@ export function createRoutingCommand(): Command {
         trace: false, tracePayload: false, traceResult: false, traceDir: null,
         traceBundle: false, traceBundlePath: null, sessionId: null,
         examples: globalExamples, schema: false, explain: false, plan: globalPlan, verify: true,
+        timeout: null, noTimeout: false,
       };
 
       const result = await runCommand({
@@ -303,7 +333,7 @@ export function createRoutingCommand(): Command {
             }
             const area = /^\d+$/.test(options.area) ? parseEnteroObligatorio(options.area, 'El área') : options.area;
             const processId = 1;
-            const comandos = buildOspfAddNetworkCommands(processId, options.network, area);
+            const comandos = buildOspfAddNetworkCommands(options.device, processId, options.network, area);
 
             await ctx.controller.start();
             try {
@@ -350,6 +380,7 @@ export function createRoutingCommand(): Command {
         trace: false, tracePayload: false, traceResult: false, traceDir: null,
         traceBundle: false, traceBundlePath: null, sessionId: null,
         examples: globalExamples, schema: false, explain: globalExplain, plan: globalPlan, verify: true,
+        timeout: null, noTimeout: false,
       };
 
       const result = await runCommand({
@@ -360,7 +391,7 @@ export function createRoutingCommand(): Command {
         execute: async (ctx): Promise<CliResult> => {
           try {
             const autonomousSystem = parseEnteroObligatorio(options.as, 'El AS');
-            const comandos = buildEigrpEnableCommands(autonomousSystem);
+            const comandos = buildEigrpEnableCommands(options.device, autonomousSystem);
 
             await ctx.controller.start();
             try {
@@ -407,6 +438,7 @@ export function createRoutingCommand(): Command {
         trace: false, tracePayload: false, traceResult: false, traceDir: null,
         traceBundle: false, traceBundlePath: null, sessionId: null,
         examples: globalExamples, schema: false, explain: globalExplain, plan: globalPlan, verify: true,
+        timeout: null, noTimeout: false,
       };
 
       const result = await runCommand({
@@ -417,7 +449,7 @@ export function createRoutingCommand(): Command {
         execute: async (ctx): Promise<CliResult> => {
           try {
             const autonomousSystem = parseEnteroObligatorio(options.as, 'El AS');
-            const comandos = buildBgpEnableCommands(autonomousSystem);
+            const comandos = buildBgpEnableCommands(options.device, autonomousSystem);
 
             await ctx.controller.start();
             try {

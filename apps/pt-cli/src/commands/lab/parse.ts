@@ -1,12 +1,8 @@
 import { Command } from 'commander';
-import { loadLab, YAMLParser } from '@cisco-auto/core';
-import { validateLabSafe } from '@cisco-auto/core';
-import { visualizeTopology, generateMermaidDiagram, analyzeTopology } from '@cisco-auto/core';
-import type { LabSpec } from '@cisco-auto/core';
+import { loadLabYaml, validateLabSafe, toLabSpec, visualizeTopology, generateMermaidDiagram, analyzeTopology } from '../../contracts/lab-spec';
 import { formatExamples, formatRelatedCommands } from '../../help/formatter';
 import { getExamples } from '../../help/examples';
 import { getRelatedCommands } from '../../help/related';
-import { toLabSpec } from '../../types/lab-spec.types';
 
 export function createLabParseCommand(): Command {
   const cmd = new Command('parse')
@@ -20,8 +16,14 @@ export function createLabParseCommand(): Command {
       try {
         console.log('🔍 Parseando archivo:', file);
         
-        const parsedLab = loadLab(file);
-        const summary = YAMLParser.getSummary(parsedLab);
+        const parsedLab = loadLabYaml(file);
+        const devices = parsedLab.lab?.topology?.devices || [];
+        const connections = parsedLab.lab?.topology?.connections || [];
+        const deviceTypes: Record<string, number> = {};
+        for (const d of devices) {
+          const type = d.type || 'router';
+          deviceTypes[type] = (deviceTypes[type] || 0) + 1;
+        }
         
         if (options.format === 'json') {
           console.log(JSON.stringify(parsedLab.lab, null, 2));
@@ -30,11 +32,11 @@ export function createLabParseCommand(): Command {
         
         console.log('\n📋 Resumen del Laboratorio:');
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log(`Nombre: ${summary.name}`);
-        console.log(`Dispositivos: ${summary.deviceCount}`);
-        console.log(`Conexiones: ${summary.connectionCount}`);
+        console.log(`Nombre: ${parsedLab.lab?.metadata?.name || 'N/A'}`);
+        console.log(`Dispositivos: ${devices.length}`);
+        console.log(`Conexiones: ${connections.length}`);
         console.log('\nTipos de dispositivos:');
-        Object.entries(summary.deviceTypes).forEach(([type, count]) => {
+        Object.entries(deviceTypes).forEach(([type, count]) => {
           console.log(`  • ${type}: ${count}`);
         });
         

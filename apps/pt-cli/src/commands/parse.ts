@@ -1,117 +1,18 @@
+#!/usr/bin/env bun
+/**
+ * Comando parse - Parsear archivo de definición de lab (YAML)
+ * 
+ * Implementación local sin dependencias de @cisco-auto/core.
+ */
+
 import { Command } from 'commander';
-import { loadLab, YAMLParser } from '@cisco-auto/core';
-import { validateLabSafe } from '@cisco-auto/core';
-import { visualizeTopology, generateMermaidDiagram, analyzeTopology } from '@cisco-auto/core';
-import { generateId, CableType } from '@cisco-auto/core';
-import type { LabSpec, DeviceSpec, ConnectionSpec, DeviceType } from '@cisco-auto/core';
-
-interface ParsedDeviceInput {
-  name: string;
-  type: string;
-  hostname?: string;
-  management?: { ip?: string };
-  interfaces?: Array<{
-    name?: string;
-    description?: string;
-    ip?: string;
-    shutdown?: boolean;
-    mode?: string;
-    vlan?: number;
-  }>;
-  security?: unknown;
-  vlans?: unknown;
-  routing?: unknown;
-  services?: unknown;
-}
-
-interface ParsedConnectionInput {
-  from: { device?: string; port?: string } | string;
-  to: { device?: string; port?: string } | string;
-  fromInterface?: string;
-  toInterface?: string;
-  cable?: string;
-  type?: string;
-}
-
-interface ParsedLabInput {
-  lab?: {
-    metadata?: { name?: string; version?: string; author?: string };
-    topology?: {
-      devices?: ParsedDeviceInput[];
-      connections?: ParsedConnectionInput[];
-    };
-  };
-}
+import { loadLabYaml, validateLabSafe, toLabSpec, visualizeTopology, generateMermaidDiagram, analyzeTopology } from '../contracts/lab-spec';
 
 interface ParseCommandOptions {
   format: string;
   topology: boolean;
   mermaid: boolean;
   stats: boolean;
-}
-
-function toLabSpec(parsed: ParsedLabInput): LabSpec {
-  const devices: DeviceSpec[] = (parsed.lab?.topology?.devices || []).map((d) => ({
-    id: generateId(),
-    name: d.name,
-    type: d.type as DeviceType,
-    hostname: d.hostname || d.name,
-    managementIp: d.management?.ip,
-    interfaces: (d.interfaces || []).map((i) => ({
-      id: generateId(),
-      name: i.name || '',
-      description: i.description,
-      ipAddress: i.ip,
-      shutdown: i.shutdown,
-      switchport: i.mode ? {
-        mode: i.mode,
-        accessVlan: i.vlan
-      } : undefined
-    })),
-    security: d.security as DeviceSpec['security'],
-    vlans: d.vlans as DeviceSpec['vlans'],
-    routing: d.routing as DeviceSpec['routing'],
-    services: d.services as DeviceSpec['services']
-  }));
-
-  const connections = (parsed.lab?.topology?.connections || []).map((c) => {
-    const fromDeviceName = typeof c.from === 'string' ? c.from : c.from.device || '';
-    const toDeviceName = typeof c.to === 'string' ? c.to : c.to.device || '';
-    const cableTypeStr = c.cable || c.type || 'ethernet';
-    const cableTypeMap: Record<string, string> = {
-      'ethernet': 'eStraightThrough',
-      'straight': 'eStraightThrough',
-      'cross': 'eCrossOver',
-      'crossover': 'eCrossOver',
-      'serial': 'eSerialDTE',
-      'console': 'eConsole',
-    };
-    return {
-      id: generateId(),
-      from: { 
-        deviceId: generateId(), 
-        deviceName: fromDeviceName, 
-        port: c.fromInterface || (typeof c.from === 'object' ? c.from.port || '' : '')
-      },
-      to: { 
-        deviceId: generateId(), 
-        deviceName: toDeviceName, 
-        port: c.toInterface || (typeof c.to === 'object' ? c.to.port || '' : '')
-      },
-      cableType: (cableTypeMap[cableTypeStr] || 'eStraightThrough') as ConnectionSpec['cableType']
-    };
-  });
-
-  return {
-    metadata: {
-      name: parsed.lab?.metadata?.name || 'Lab',
-      version: parsed.lab?.metadata?.version || '1.0',
-      author: parsed.lab?.metadata?.author || 'unknown',
-      createdAt: new Date()
-    },
-    devices,
-    connections
-  };
 }
 
 export function createParseCommand(): Command {
@@ -125,25 +26,33 @@ export function createParseCommand(): Command {
     .action(async (file: string, options: ParseCommandOptions) => {
       try {
         console.log('🔍 Parseando archivo:', file);
-        
-        const parsedLab = loadLab(file);
-        const summary = YAMLParser.getSummary(parsedLab);
-        
+
+        const parsedLab = loadLabYaml(file);
+        const devices = parsedLab.lab?.topology?.devices || [];
+        const connections = parsedLab.lab?.topology?.connections || [];
+
+        // Calcular resumen manualmente
+        const deviceTypes: Record<string, number> = {};
+        for (const d of devices) {
+          const type = d.type || 'router';
+          deviceTypes[type] = (deviceTypes[type] || 0) + 1;
+        }
+
         if (options.format === 'json') {
           console.log(JSON.stringify(parsedLab.lab, null, 2));
           return;
         }
-        
+
         console.log('\n📋 Resumen del Laboratorio:');
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log(`Nombre: ${summary.name}`);
-        console.log(`Dispositivos: ${summary.deviceCount}`);
-        console.log(`Conexiones: ${summary.connectionCount}`);
+        console.log(`Nombre: ${parsedLab.lab?.metadata?.name || 'N/A'}`);
+        console.log(`Dispositivos: ${devices.length}`);
+        console.log(`Conexiones: ${connections.length}`);
         console.log('\nTipos de dispositivos:');
-        Object.entries(summary.deviceTypes).forEach(([type, count]) => {
+        Object.entries(deviceTypes).forEach(([type, count]) => {
           console.log(`  • ${type}: ${count}`);
         });
-        
+
         console.log('\n📄 Validación:');
         const validation = validateLabSafe(parsedLab.lab);
         if (validation.success) {
@@ -152,21 +61,21 @@ export function createParseCommand(): Command {
           console.log('  ❌ Errores de validación:');
           validation.errors?.forEach(err => console.log(`    - ${err}`));
         }
-        
-        // Topology visualization
+
+        // Visualización de topología
         if (options.topology) {
           const labSpec = toLabSpec(parsedLab);
           console.log(visualizeTopology(labSpec, { showIPs: true, showPorts: true }));
         }
-        
-        // Mermaid diagram
+
+        // Diagrama Mermaid
         if (options.mermaid) {
           const labSpec = toLabSpec(parsedLab);
           console.log('\n📊 Diagrama Mermaid:');
           console.log(generateMermaidDiagram(labSpec));
         }
-        
-        // Stats
+
+        // Estadísticas
         if (options.stats) {
           const labSpec = toLabSpec(parsedLab);
           const stats = analyzeTopology(labSpec);

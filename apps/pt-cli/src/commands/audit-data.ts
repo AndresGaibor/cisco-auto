@@ -2,9 +2,52 @@ import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import { initializeSchema } from '@cisco-auto/core/memory/schema';
-
 import { getMemoryDbPath } from '../system/paths.js';
+
+function initializeSchema(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS devices (
+      id TEXT PRIMARY KEY,
+      hostname TEXT NOT NULL,
+      ip_address TEXT,
+      device_type TEXT,
+      os_version TEXT,
+      last_connected INTEGER,
+      created_at INTEGER DEFAULT (strftime('%s', 'now')),
+      updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+    );
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_devices_hostname ON devices(hostname);
+    CREATE INDEX IF NOT EXISTS idx_devices_ip ON devices(ip_address);
+    CREATE INDEX IF NOT EXISTS idx_devices_last_connected ON devices(last_connected);
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      device_id TEXT,
+      command TEXT NOT NULL,
+      status TEXT NOT NULL,
+      output TEXT,
+      error TEXT,
+      duration_ms INTEGER,
+      transaction_id TEXT,
+      FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE SET NULL
+    );
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_audit_log_session_id ON audit_log(session_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_device_id ON audit_log(device_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_status ON audit_log(status);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_transaction_id ON audit_log(transaction_id);
+  `);
+}
 
 export interface AuditEntryRow {
   id: number;

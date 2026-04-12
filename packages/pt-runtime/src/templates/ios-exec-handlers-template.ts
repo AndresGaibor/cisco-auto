@@ -232,7 +232,41 @@ IosTranscriptRecorder.prototype.getCompact = function() {
 };
 
 // ============================================================================
-// IOS Execution Handlers - Synchronous execution
+// Async Command Execution Helper (uses TerminalLine events)
+// ============================================================================
+
+function executeCommandAsync(term, cmd) {
+  return new Promise(function(resolve) {
+    var buffer = [];
+    var ended = false;
+    
+    function onOutput(src, args) {
+      var data = args && (args.newOutput !== undefined ? args.newOutput : args.data);
+      if (data) {
+        buffer.push(String(data));
+      }
+    }
+    
+    function onEnded(src, args) {
+      if (ended) return;
+      ended = true;
+      try { term.unregisterEvent("outputWritten", null, onOutput); } catch(e) {}
+      try { term.unregisterEvent("commandEnded", null, onEnded); } catch(e) {}
+      resolve({
+        ok: args.status === 0,
+        status: args.status,
+        output: buffer.join("")
+      });
+    }
+    
+    try { term.registerEvent("outputWritten", null, onOutput); } catch(e) {}
+    try { term.registerEvent("commandEnded", null, onEnded); } catch(e) {}
+    term.enterCommand(cmd);
+  });
+}
+
+// ============================================================================
+// IOS Execution Handlers - Async execution using TerminalLine events
 // ============================================================================
 
 function handleExecIos(payload) {
@@ -268,12 +302,9 @@ function handleExecIos(payload) {
 
   var command = payload.command;
   dprint("[handleExecIos] Command: '" + command + "'");
-  var output = "";
-  var status = 0;
   var currentMode = "priv-exec";
   
   try {
-    var preCommandLength = term.getOutput ? term.getOutput().length : 0;
     var prompt = term.getPrompt ? term.getPrompt() : "";
     
     if (prompt.indexOf("(config") >= 0) {
@@ -287,55 +318,36 @@ function handleExecIos(payload) {
     var isShowCommand = command.toLowerCase().indexOf("show ") === 0;
     
     if (currentMode === "config" && isShowCommand) {
-      term.enterCommand("end");
-      for (var i = 0; i < 10; i++) {
-        var checkOutput = term.getOutput ? term.getOutput() : "";
-        if (checkOutput.indexOf("#") >= 0) {
+      var endResult = executeCommandAsync(term, "end");
+      endResult.then(function(r) {
+        if (r.output && r.output.indexOf("#") >= 0) {
           currentMode = "priv-exec";
-          preCommandLength = checkOutput.length;
-          break;
         }
-      }
+      });
     }
 
     if (isShowCommand && currentMode !== "priv-exec") {
-      term.enterCommand("enable");
-      for (var i = 0; i < 10; i++) {
-        var checkOutput = term.getOutput ? term.getOutput() : "";
-        if (checkOutput.indexOf("#") >= 0) {
+      var enableResult = executeCommandAsync(term, "enable");
+      enableResult.then(function(r) {
+        if (r.output && r.output.indexOf("#") >= 0) {
           currentMode = "priv-exec";
-          preCommandLength = checkOutput.length;
-          break;
         }
-      }
+      });
     }
 
-    term.enterCommand(command);
+    var maxWaitMs = 30000;
+    var startTime = Date.now();
+    var result = executeCommandAsync(term, command);
+    var output = "";
+    var status = 0;
     
-    var maxAttempts = 30;
-    var attempt = 0;
-    while (attempt < maxAttempts) {
-      try {
-        var checkOutput = term.getOutput ? term.getOutput() : "";
-        if (checkOutput.length > preCommandLength) {
-          output = checkOutput.slice(preCommandLength);
-          if (output.indexOf("--More--") >= 0) {
-            term.enterCommand(" ");
-            preCommandLength = term.getOutput().length;
-          }
-          if (output.indexOf("[confirm]") >= 0) {
-            term.enterCommand("\\n");
-            preCommandLength = term.getOutput().length;
-          }
-          if ((output.indexOf("#") >= 0 || output.indexOf(">") >= 0) && output.length > 20) {
-            break;
-          }
-        }
-      } catch(e) {
-        break;
-      }
-      attempt++;
-    }
+    result.then(function(r) {
+      output = r.output || "";
+      status = r.status;
+    }).catch(function(err) {
+      status = 1;
+      output = String(err);
+    });
     
     var outputLines = output.split("\\n");
     var lastLines = outputLines.slice(-5).join("\\n");

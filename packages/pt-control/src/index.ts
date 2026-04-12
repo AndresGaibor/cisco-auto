@@ -38,13 +38,6 @@ export type { LogEntry, LogSession, LogConfig, LogQueryOptions, LogStats } from 
 export { redactSensitive } from "./logging/index.js";
 export type { CommandTraceEntry } from "./controller/index.js";
 
-// IOS Command Utilities - Re-export from core
-export {
-  VlanGenerator,
-  buildTrunkCommands,
-  buildSshCommands,
-} from "../../core/src/index.ts";
-
 // IOS Session - Stateful IOS CLI session management
 export {
   CliSession,

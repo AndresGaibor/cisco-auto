@@ -276,36 +276,29 @@ export class DeployOrchestrator {
    * Genera configuración para un dispositivo
    */
   private generateConfig(device: DeviceSpec): string[] {
-    // Importar dinámicamente para evitar circular deps
-    const { generateIOS } = require('../config-generators/ios-generator');
-    try {
-      const result = generateIOS(deviceSpecToDevice(device));
-      return result.commands || [];
-    } catch {
-      // Fallback: generar configuración básica
-      const lines: string[] = [];
-      lines.push('!');
-      lines.push(`! Configuration for ${device.name}`);
-      lines.push('!');
-      
-      if (device.interfaces) {
-        for (const iface of device.interfaces) {
-          lines.push(`interface ${iface.name}`);
-          if (iface.description) {
-            lines.push(` description ${iface.description}`);
-          }
-          if (iface.ip) {
-            const [ip, cidr] = iface.ip.split('/');
-            lines.push(` ip address ${ip} 255.255.255.0`);
-          }
-          lines.push(' no shutdown');
-          lines.push(' exit');
+    // Generar configuración básica directamente
+    const lines: string[] = [];
+    lines.push('!');
+    lines.push(`! Configuration for ${device.name}`);
+    lines.push('!');
+    
+    if (device.interfaces) {
+      for (const iface of device.interfaces) {
+        lines.push(`interface ${iface.name}`);
+        if (iface.description) {
+          lines.push(` description ${iface.description}`);
         }
+        if (iface.ip) {
+          const [ip, cidr] = iface.ip.split('/');
+          lines.push(` ip address ${ip} 255.255.255.0`);
+        }
+        lines.push(' no shutdown');
+        lines.push(' exit');
       }
-      
-      lines.push('end');
-      return lines;
     }
+    
+    lines.push('end');
+    return lines;
   }
 
   /**

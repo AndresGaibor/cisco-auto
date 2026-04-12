@@ -55,6 +55,79 @@ export interface PTPort {
   getLink(): unknown;
 }
 
+/** HostPort interface - for PC/Server ports with DHCP support (PT official API) */
+export interface PTHostPort extends PTPort {
+  isDhcpClientOn(): boolean;
+  setDhcpClientFlag(enabled: boolean): void;
+}
+
+/** PC/Server device interface with DHCP flag (PT official API) */
+export interface PTPcLikeDevice extends PTDevice {
+  setDhcpFlag(enabled: boolean): void;
+  getDhcpFlag(): boolean;
+}
+
+/** DHCP Pool interface (PT official API) */
+export interface PTDhcpPool {
+  getPoolName(): string;
+  getNetworkAddress(): string;
+  getNetworkMask(): string;
+  getDefaultRouter(): string;
+  getDnsServerIp(): string;
+  getStartIp(): string;
+  getEndIp(): string;
+  getMaxUsers(): number;
+  setNetworkAddress(ip: string): void;
+  setNetworkMask(mask: string): void;
+  setDefaultRouter(router: string): void;
+  setDnsServerIp(dns: string): void;
+  setStartIp(ip: string): void;
+  setEndIp(ip: string): void;
+  setMaxUsers(count: number): void;
+  getLeaseCount(): number;
+  getLeaseAt(index: number): { mac: string; ip: string; expires: string } | null;
+}
+
+/** DHCP Server Process interface (PT official API) */
+export interface PTDhcpServerProcess {
+  setEnable(enabled: boolean): void;
+  isEnabled(): boolean;
+  addNewPool(name: string): PTDhcpPool | null;
+  addPool(pool: PTDhcpPool): boolean;
+  getPoolCount(): number;
+  getPoolAt(index: number): PTDhcpPool | null;
+  getPoolByName(name: string): PTDhcpPool | null;
+  removePool(name: string): boolean;
+  addExcludedAddress(start: string, end: string): void;
+  getExcludedAddressCount(): number;
+  getExcludedAddressAt(index: number): { start: string; end: string } | null;
+}
+
+/** DHCP Server Main Process interface (PT official API) */
+export interface PTDhcpServerMainProcess {
+  getDhcpServerProcessByPortName(portName: string): PTDhcpServerProcess | null;
+  getDhcpServerProcessCount(): number;
+}
+
+/** VLAN Manager interface (PT official API) */
+export interface PTVlanManager {
+  addVlan(vlanId: number, name?: string): boolean;
+  removeVlan(vlanId: number): boolean;
+  getVlanCount(): number;
+  getVlanAt(index: number): { id: number; name: string } | null;
+  addVlanInt(vlanId: number): boolean;
+  getVlanInt(vlanId: number): PTHostPort | null;
+}
+
+/** Router Port interface (extends HostPort for IP config) (PT official API) */
+export interface PTRouterPort extends PTHostPort {
+}
+
+/** Extended Device interface with process access (PT official API) */
+export interface PTDeviceWithProcesses extends PTDevice {
+  getProcess(name: string): unknown | null;
+}
+
 /** Normalize a port name for comparison across interface families. */
 function normalizePortKey(name: string): string {
   const value = String(name || "").replace(/\s+/g, "").toLowerCase();

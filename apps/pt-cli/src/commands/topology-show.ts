@@ -2,7 +2,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { Database } from 'bun:sqlite';
-import { initializeSchema } from '@cisco-auto/core/memory/schema';
+import { initializeLocalSchema } from '../utils/local-schema';
 
 function getMemoryDb(): Database {
   const home = process.env.HOME || process.env.USERPROFILE || '.';
@@ -10,7 +10,7 @@ function getMemoryDb(): Database {
   const dir = dbPath.substring(0, dbPath.lastIndexOf('/'));
   try { require('node:fs').mkdirSync(dir, { recursive: true }); } catch { }
   const db = new Database(dbPath);
-  initializeSchema(db);
+  initializeLocalSchema(db);
   return db;
 }
 

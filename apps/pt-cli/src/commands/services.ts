@@ -15,7 +15,8 @@ import type { GlobalFlags } from '../flags.js';
 import { runCommand } from '../application/run-command.js';
 import { renderCliResult } from '../ux/renderers.js';
 import { printExamples } from '../ux/examples.js';
-import { ServicesGenerator } from '@cisco-auto/core';
+import { generateServicesCommands, validateServicesConfig } from '@cisco-auto/kernel/plugins/services';
+import type { ServicesConfigInput } from '@cisco-auto/kernel/plugins/services';
 
 const SERVICES_EXAMPLES = [
   { command: 'pt services dhcp create --device R1 --pool MI_POOL --network 192.168.1.0/24', description: 'Crear pool DHCP' },
@@ -40,39 +41,48 @@ function cidrToMask(cidr: number): string {
   return [(mask >>> 24) & 0xff, (mask >>> 16) & 0xff, (mask >>> 8) & 0xff, mask & 0xff].join('.');
 }
 
-function parseNetwork(input: string): { network: string; subnetMask: string } {
-  if (!input) return { network: '0.0.0.0', subnetMask: '255.255.255.0' };
+function parseNetwork(input: string): { network: string; mask: string } {
+  if (!input) return { network: '0.0.0.0', mask: '255.255.255.0' };
   const parts = input.split('/');
   if (parts.length === 2) {
     const cidr = Number(parts[1]);
     const mask = Number.isFinite(cidr) ? cidrToMask(cidr) : '255.255.255.0';
-    return { network: parts[0]!, subnetMask: mask };
+    return { network: parts[0]!, mask };
   }
-  return { network: input, subnetMask: '255.255.255.0' };
+  return { network: input, mask: '255.255.255.0' };
 }
 
-export function buildDhcpCommands(poolName: string, networkCidr: string): string[] {
-  const { network, subnetMask } = parseNetwork(networkCidr);
-  const spec = { poolName, network, subnetMask } as any;
-  const validation = (ServicesGenerator as any).validateDHCP(spec);
-  if (!validation.valid) {
-    throw new Error(`Invalid DHCP spec: ${validation.errors.join('; ')}`);
+export function buildDhcpCommands(deviceName: string, poolName: string, networkCidr: string): string[] {
+  const { network, mask } = parseNetwork(networkCidr);
+  const spec: ServicesConfigInput = {
+    deviceName,
+    dhcp: [{ name: poolName, network, mask }],
+  };
+  const validation = validateServicesConfig(spec);
+  if (!validation.ok) {
+    throw new Error(`Invalid DHCP spec: ${validation.errors.map((e) => e.message).join('; ')}`);
   }
-  return ServicesGenerator.generateDHCP([spec]);
+  return generateServicesCommands(spec);
 }
 
-export function buildNtpCommands(server: string): string[] {
-  const spec = { servers: [{ ip: server }] } as any;
-  const validation = (ServicesGenerator as any).validateNTP(spec);
-  if (!validation.valid) {
-    throw new Error(`Invalid NTP spec: ${validation.errors.join('; ')}`);
+export function buildNtpCommands(deviceName: string, server: string): string[] {
+  const spec: ServicesConfigInput = {
+    deviceName,
+    ntp: { servers: [{ ip: server }] },
+  };
+  const validation = validateServicesConfig(spec);
+  if (!validation.ok) {
+    throw new Error(`Invalid NTP spec: ${validation.errors.map((e) => e.message).join('; ')}`);
   }
-  return ServicesGenerator.generateNTP(spec);
+  return generateServicesCommands(spec);
 }
 
-export function buildSyslogCommands(server: string): string[] {
-  const spec = { servers: [{ ip: server }] } as any;
-  return ServicesGenerator.generateSyslog(spec);
+export function buildSyslogCommands(deviceName: string, server: string): string[] {
+  const spec: ServicesConfigInput = {
+    deviceName,
+    syslog: { servers: [{ ip: server }] },
+  };
+  return generateServicesCommands(spec);
 }
 
 export function createLabServicesCommand(): Command {
@@ -134,7 +144,7 @@ export function createLabServicesCommand(): Command {
         payloadPreview: { device: options.device, pool: options.pool, network: options.network },
         execute: async (ctx): Promise<CliResult> => {
           try {
-            const commands = buildDhcpCommands(options.pool, options.network);
+            const commands = buildDhcpCommands(options.device, options.pool, options.network);
 
             await ctx.controller.start();
             try {
@@ -203,7 +213,7 @@ export function createLabServicesCommand(): Command {
         payloadPreview: { device: options.device, server: options.server },
         execute: async (ctx): Promise<CliResult> => {
           try {
-            const commands = buildNtpCommands(options.server);
+            const commands = buildNtpCommands(options.device, options.server);
 
             await ctx.controller.start();
             try {
@@ -271,7 +281,7 @@ export function createLabServicesCommand(): Command {
         payloadPreview: { device: options.device, server: options.server },
         execute: async (ctx): Promise<CliResult> => {
           try {
-            const commands = buildSyslogCommands(options.server);
+            const commands = buildSyslogCommands(options.device, options.server);
 
             await ctx.controller.start();
             try {

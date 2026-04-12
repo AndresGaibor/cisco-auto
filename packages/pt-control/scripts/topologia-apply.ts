@@ -23,7 +23,7 @@ import * as pc from "picocolors";
 import { readFileSync, existsSync } from "fs";
 import { readdir, unlink } from "node:fs/promises";
 import { createDefaultPTController } from "../src/controller/index.js";
-import { VlanGenerator, buildTrunkCommands, buildSshCommands } from '@cisco-auto/core';
+import { buildTrunkCommands, buildSshCommands } from '@cisco-auto/ios-domain';
 import type { DeviceState } from "../src/types/index.js";
 
 // ============================================================================

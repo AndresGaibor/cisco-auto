@@ -15,7 +15,7 @@ import type { GlobalFlags } from '../flags.js';
 import { runCommand } from '../application/run-command.js';
 import { renderCliResult } from '../ux/renderers.js';
 import { printExamples } from '../ux/examples.js';
-import { SecurityGenerator } from '@cisco-auto/core';
+import { generateSecurityCommands } from '@cisco-auto/kernel/plugins/security';
 
 const ACL_EXAMPLES = [
   { command: 'pt acl create --name MiACL --type standard', description: 'Crear ACL estándar vacía' },
@@ -88,8 +88,11 @@ export function createACLCommand(): Command {
           try {
             const name = options.name;
             const type = options.type === 'extended' ? 'extended' : 'standard';
-            const acls: Parameters<typeof SecurityGenerator.generateACLs>[0] = [{ name, type, rules: [] }];
-            const commands = SecurityGenerator.generateACLs(acls);
+            const securityInput = {
+              deviceName: 'temp',
+              acls: [{ name, type: type as 'standard' | 'extended', rules: [] }],
+            };
+            const commands = generateSecurityCommands(securityInput);
 
             return createSuccessResult('acl.create', {
               name,

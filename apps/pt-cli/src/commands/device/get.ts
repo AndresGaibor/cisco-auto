@@ -54,6 +54,11 @@ interface DeviceGetResult {
   type: string;
   hostname?: string;
   power: boolean;
+  dhcp?: boolean;
+  ip?: string;
+  mask?: string;
+  gateway?: string;
+  dns?: string;
   ports: Array<{
     name: string;
     type?: string;
@@ -67,6 +72,7 @@ interface DeviceGetResult {
     vlan?: number;
     mode?: string;
     link?: string;
+    dhcp?: boolean;
   }>;
   x?: number;
   y?: number;
@@ -152,6 +158,11 @@ export function createDeviceGetCommand(): Command {
               type: device.type,
               hostname: device.hostname,
               power: device.power,
+              dhcp: device.dhcp,
+              ip: device.ip,
+              mask: device.mask,
+              gateway: device.gateway,
+              dns: device.dns,
               ports: device.ports || [],
               x: device.x,
               y: device.y,
@@ -174,6 +185,18 @@ export function createDeviceGetCommand(): Command {
         console.log(`Tipo: ${result.data.type}`);
         console.log(`Modelo: ${result.data.model}`);
         console.log(`Estado: ${result.data.power ? 'Encendido' : 'Apagado'}`);
+        
+        if (result.data.dhcp !== undefined) {
+          console.log(`DHCP: ${result.data.dhcp ? 'Sí' : 'No'}`);
+        }
+        
+        if (result.data.ip) {
+          console.log(`IP: ${result.data.ip}/${result.data.mask || 'N/A'}`);
+        }
+        
+        if (result.data.gateway) {
+          console.log(`Gateway: ${result.data.gateway}`);
+        }
         
         if (result.data.hostname) {
           console.log(`Hostname: ${result.data.hostname}`);

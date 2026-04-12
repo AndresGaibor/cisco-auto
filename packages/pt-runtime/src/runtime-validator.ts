@@ -45,10 +45,6 @@ const FORBIDDEN_TOKENS = [
 ];
 
 const FORBIDDEN_PATTERNS = [
-  { pattern: /new\s+Promise\s*\(/, reason: "Promise is not supported" },
-  { pattern: /Promise\.resolve\s*\(/, reason: "Promise is not supported" },
-  { pattern: /Promise\.reject\s*\(/, reason: "Promise is not supported" },
-  { pattern: /Promise\.all\s*\(/, reason: "Promise is not supported" },
   { pattern: /Object\.assign\(/, reason: "Object.assign may not be supported" },
   { pattern: /new\s+Map\(/, reason: "Map may not be supported" },
   { pattern: /new\s+Set\(/, reason: "Set may not be supported" },

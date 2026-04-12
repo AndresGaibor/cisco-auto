@@ -160,7 +160,38 @@ export const PUBLIC_COMMAND_CATALOG: CommandCatalogEntry[] = [
      resultSchemaName: 'InspectDhcpServerResultSchema',
    },
 
-   // IOS Commands
+   // DHCP Server (alternate naming for pt-runtime handlers)
+   {
+     type: 'configDhcpServer',
+     visibility: 'public',
+     execution: 'immediate',
+     handler: 'handleConfigDhcpServer',
+     service: 'device',
+     payloadSchemaName: 'ConfigDhcpServerPayloadSchema',
+     resultSchemaName: 'ConfigDhcpServerResultSchema',
+   },
+
+   // VLAN Commands
+   {
+     type: 'ensureVlans',
+     visibility: 'public',
+     execution: 'immediate',
+     handler: 'handleEnsureVlans',
+     service: 'device',
+     payloadSchemaName: 'EnsureVlansPayloadSchema',
+     resultSchemaName: 'EnsureVlansResultSchema',
+   },
+   {
+     type: 'configVlanInterfaces',
+     visibility: 'public',
+     execution: 'immediate',
+     handler: 'handleConfigVlanInterfaces',
+     service: 'device',
+     payloadSchemaName: 'ConfigVlanInterfacesPayloadSchema',
+     resultSchemaName: 'ConfigVlanInterfacesResultSchema',
+   },
+
+    // IOS Commands
   {
     type: 'configIos',
     visibility: 'public',
@@ -355,10 +386,13 @@ export const COMMAND_TYPES = {
    // Snapshot & Inspect
    SNAPSHOT: "snapshot",
    INSPECT: "inspect",
-   CONFIGURE_DHCP_SERVER: "configureDhcpServer",
-   INSPECT_DHCP_SERVER: "inspectDhcpServer",
-   
-   // Hardware Commands
+    CONFIGURE_DHCP_SERVER: "configureDhcpServer",
+    INSPECT_DHCP_SERVER: "inspectDhcpServer",
+    CONFIG_DHCP_SERVER: "configDhcpServer",
+    ENSURE_VLANS: "ensureVlans",
+    CONFIG_VLAN_INTERFACES: "configVlanInterfaces",
+    
+    // Hardware Commands
   HARDWARE_INFO: "hardwareInfo",
   HARDWARE_CATALOG: "hardwareCatalog",
   

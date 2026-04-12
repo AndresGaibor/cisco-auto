@@ -5,6 +5,40 @@
 
 export function generateIosConfigHandlersTemplate(): string {
   return `// ============================================================================
+// Async Command Execution Helper (uses TerminalLine events)
+// ============================================================================
+
+function executeCommandAsync(term, cmd) {
+  return new Promise(function(resolve) {
+    var buffer = [];
+    var ended = false;
+    
+    function onOutput(src, args) {
+      var data = args && (args.newOutput !== undefined ? args.newOutput : args.data);
+      if (data) {
+        buffer.push(String(data));
+      }
+    }
+    
+    function onEnded(src, args) {
+      if (ended) return;
+      ended = true;
+      try { term.unregisterEvent("outputWritten", null, onOutput); } catch(e) {}
+      try { term.unregisterEvent("commandEnded", null, onEnded); } catch(e) {}
+      resolve({
+        ok: args.status === 0,
+        status: args.status,
+        output: buffer.join("")
+      });
+    }
+    
+    try { term.registerEvent("outputWritten", null, onOutput); } catch(e) {}
+    try { term.registerEvent("commandEnded", null, onEnded); } catch(e) {}
+    term.enterCommand(cmd);
+  });
+}
+
+// ============================================================================
 // IOS Configuration Handlers - Fase 6 (State Machine + Helpers)
 // ============================================================================
 
@@ -244,47 +278,35 @@ function exitConfigMode(engine, term) {
   return false;
 }
 
-// Helper: Run single command
+// Helper: Run single command (uses TerminalLine events)
 function runSingleCommand(engine, term, cmd) {
   var startTime = Date.now();
-  var output = '';
-
   engine.reset();
   engine.processEvent({ type: 'commandStarted', command: cmd });
 
-  var preLen = term.getOutput ? term.getOutput().length : 0;
-  term.enterCommand(cmd);
+  var result = executeCommandAsync(term, cmd);
+  var output = "";
+  var status = 0;
 
-  for (var i = 0; i < 30; i++) {
-    var fullOutput = term.getOutput ? term.getOutput() : '';
-    var newData = fullOutput.slice(preLen);
-
-    if (newData.length > 0) {
-      engine.processEvent({ type: 'outputWritten', data: newData });
-      preLen = fullOutput.length;
-      output = fullOutput;
+  result.then(function(r) {
+    output = r.output || "";
+    status = r.status;
+    if (output) {
+      engine.processEvent({ type: 'outputWritten', data: output });
     }
-
-    if (engine.getState().paging) {
-      engine.advancePaging();
-      term.enterCommand(' ');
-    }
-
-    // NOTE: Auto-confirm 'y' removed - caused issues where router interprets 'y' as command
-    // Confirmations should only be handled explicitly when we know the operation requires it
-
-    if (engine.isComplete()) break;
-  }
-
-  engine.processEvent({ type: 'commandEnded' });
+    engine.processEvent({ type: 'commandEnded' });
+  }).catch(function(err) {
+    output = String(err);
+    status = 1;
+    engine.processEvent({ type: 'commandEnded' });
+  });
 
   return {
-    ok: engine.getExecutionState() === 'completed',
+    ok: status === 0,
     raw: output,
     diagnostics: {
       source: 'terminal',
-      completionReason: engine.getExecutionState() === 'completed' ? 
-        'command-ended' : 'timeout',
+      completionReason: status === 0 ? 'command-ended' : 'command-error',
       errors: []
     },
     executionTimeMs: Date.now() - startTime

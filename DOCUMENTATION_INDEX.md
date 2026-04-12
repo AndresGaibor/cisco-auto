@@ -112,6 +112,48 @@ Toda la documentación necesaria para entender y ejecutar la migración de runti
 
 ---
 
+## 📡 Packet Tracer API Reference
+
+### 7. **docs/pt-api/README.md** 🗺️
+**Descripción**: Índice y mapa de la documentación oficial de la API IPC de Packet Tracer
+
+**Contiene**:
+- Principio de diseño: API directa > IOS > eventos > CLI textual
+- Tabla de mapeo: clases PT → handlers del repo
+- Fases de implementación recomendadas
+
+**Leer cuando**: Necesitas navegar la referencia de la API de PT
+
+**Tiempo de lectura**: 3 minutos
+
+---
+
+### 8. **docs/pt-api/COMPLETE_API_REFERENCE.md** 📖
+**Descripción**: Referencia completa de toda la API de Packet Tracer que el proyecto aún no aprovecha
+
+**Contiene**:
+- `Network`, `Device`, `LogicalWorkspace` — inventario y topología
+- `HostPort`, `SwitchPort`, `RouterPort` — configuración de puertos
+- `VlanManager` — VLANs y SVIs vía API-first
+- `DhcpServerProcess` + `DhcpPool` — DHCP server real con pools
+- Servicios del Server-PT: DNS, TFTP, NTP, SSH, Syslog, RADIUS/TACACS
+- `RoutingProcess`, `OspfProcess`, `AclProcess`, `StpProcess`
+- `TerminalLine` correcto con eventos (no asumir que `enterCommand` retorna output)
+- Eventos: `registerEvent`, lifecycle, observabilidad
+- Ejemplos de código PT-safe para cada API
+- Plan de integración en el repo (handlers, tipos, CLI commands)
+- Orden de implementación en 6 fases
+
+**Leer cuando**: 
+- Necesitas implementar un handler nuevo y quieres saber qué API de PT usar
+- Quieres entender por qué `config-host --dhcp` no verifica correctamente
+- Estás diseñando una nueva funcionalidad y necesitas saber si PT ya la expone
+- Quieres reescribir `execIos`/`configIos` sobre eventos en vez de polling
+
+**Tiempo de lectura**: 30-40 minutos (completo), 5-10 minutos (por sección)
+
+---
+
 ## 🎯 Cómo Usar Esta Documentación
 
 ### Para Entender (Primera Vez)

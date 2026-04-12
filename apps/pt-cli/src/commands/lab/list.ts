@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { readdirSync } from 'fs';
-import { loadLab } from '@cisco-auto/core';
+import { loadLabYaml, validateLabSafe } from '../../contracts/lab-spec';
 import { formatExamples, formatRelatedCommands } from '../../help/formatter';
 import { getExamples } from '../../help/examples';
 import { getRelatedCommands } from '../../help/related';
@@ -19,10 +19,13 @@ export function createLabListCommand(): Command {
         
         for (const file of files) {
           try {
-            const lab = loadLab(`${options.directory}/${file}`);
+            const lab = loadLabYaml(`${options.directory}/${file}`);
+            const validation = validateLabSafe(lab.lab);
+            const isValid = validation.success;
             console.log(`\n📋 ${file}`);
-            console.log(`   Nombre: ${lab.lab.metadata?.name || 'N/A'}`);
-            console.log(`   Dispositivos: ${lab.lab.topology?.devices?.length || 0}`);
+            console.log(`   Nombre: ${lab.lab?.metadata?.name || 'N/A'}`);
+            console.log(`   Dispositivos: ${lab.lab?.topology?.devices?.length || 0}`);
+            console.log(`   Estado: ${isValid ? '✅ Válido' : '❌ Inválido'}`);
           } catch {
             console.log(`\n⚠️  ${file} (no válido)`);
           }

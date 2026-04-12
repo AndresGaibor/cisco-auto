@@ -9,7 +9,7 @@ import type { GlobalFlags } from '../flags';
 import { fetchDeviceList, getIOSCapableDevices } from '../utils/device-utils';
 import { parseBgpNeighbors } from '../utils/cli-parser';
 import { parseConfigFile, requireDevice } from '../utils/config-parser';
-import { BgpConfigSchema } from '@cisco-auto/ios-domain/schemas';
+import { generateRoutingCommands, validateRoutingConfig, type RoutingConfigInput } from '@cisco-auto/kernel/plugins/routing';
 
 export const CONFIG_BGP_META: CommandMeta = {
   id: 'config-bgp',
@@ -28,26 +28,28 @@ export const CONFIG_BGP_META: CommandMeta = {
   supportsExplain: true,
 };
 
-function generateBgpCommands(config: Record<string, unknown>): string[] {
-  const cmds: string[] = [];
-  const as = config.autonomousSystem;
-  cmds.push(`router bgp ${as}`);
-  const neighbors = config.neighbors as Array<{ ip: string; remoteAs: string | number; description?: string }>;
-  for (const n of (neighbors || [])) {
-    cmds.push(`neighbor ${n.ip} remote-as ${n.remoteAs}`);
-    if (n.description) cmds.push(`neighbor ${n.ip} description ${n.description}`);
-  }
-  const networks = config.networks as string[];
-  for (const net of (networks || [])) {
-    const parts = net.split('/');
-    cmds.push(`network ${parts[0]} mask ${cidrToMask(Number(parts[1]) || 24)}`);
-  }
-  return cmds;
+function cidrToMask(cidr: number): string {
+  const mask = cidr === 0 ? 0 : (~((1 << (32 - cidr)) - 1) >>> 0);
+  return `${(mask >>> 24) & 255}.${(mask >>> 16) & 255}.${(mask >>> 8) & 255}.${mask & 255}`;
 }
 
-function cidrToMask(cidr: number): string {
-  const mask = cidr === 0 ? '0.0.0.0' : (~((1 << (32 - cidr)) - 1) >>> 0);
-  return `${(mask >>> 24) & 255}.${(mask >>> 16) & 255}.${(mask >>> 8) & 255}.${mask & 255}`;
+function generateBgpCommands(deviceName: string, asn: number, neighbors: Array<{ ip: string; remoteAs: number; description?: string }>, networks: string[] | undefined): string[] {
+  const bgpNetworks = networks?.map((net) => {
+    const parts = net.split('/');
+    const cidr = Number(parts[1]) || 24;
+    return { network: parts[0] ?? '', mask: cidrToMask(cidr) };
+  });
+
+  const config: RoutingConfigInput = {
+    deviceName,
+    bgp: {
+      asn,
+      neighbors,
+      networks: bgpNetworks,
+    },
+  };
+
+  return generateRoutingCommands(config);
 }
 
 export function createConfigBgpCommand(): Command {
@@ -93,19 +95,21 @@ export function createConfigBgpCommand(): Command {
       if (!device) { console.error(chalk.red('Error: --device requerido')); process.exit(1); }
       if (!autonomousSystem) { console.error(chalk.red('Error: --as requerido')); process.exit(1); }
 
-      const parsedNeighbors = parseBgpNeighbors(neighbors);
-      const configInput: Record<string, unknown> = {
-        device, type: 'bgp', autonomousSystem, neighbors: parsedNeighbors, networks,
-      };
+      const asn = typeof autonomousSystem === 'string' ? parseInt(autonomousSystem, 10) : autonomousSystem;
+      const parsedNeighbors = parseBgpNeighbors(neighbors).map((n) => ({
+        ip: n.ip,
+        remoteAs: typeof n.remoteAs === 'string' ? parseInt(n.remoteAs, 10) : n.remoteAs,
+        description: n.description,
+      }));
+      const iosCommands = generateBgpCommands(device, asn, parsedNeighbors, networks.length > 0 ? networks : undefined);
 
-      const validationResult = BgpConfigSchema.safeParse(configInput);
-      if (!validationResult.success) {
-        const errors = validationResult.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
+      const validationResult = validateRoutingConfig({ deviceName: device, bgp: { asn, neighbors: parsedNeighbors, networks: networks.length > 0 ? networks.map((net: string) => { const parts = net.split('/'); const cidr = Number(parts[1]) || 24; return { network: parts[0] ?? '', mask: cidrToMask(cidr) }; }) : undefined } });
+      if (!validationResult.ok) {
+        const errors = validationResult.errors.map((e) => `  - ${e.path}: ${e.message}`).join('\n');
         console.error(chalk.red('Error de validacion:\n' + errors));
         process.exit(1);
       }
 
-      const iosCommands = generateBgpCommands(configInput);
       const isDryRun = options.dryRun || !options.apply;
 
       if (isDryRun) {

@@ -17,7 +17,32 @@ import { runCommand } from '../application/run-command.js';
 import { renderCliResult } from '../ux/renderers.js';
 import { printExamples } from '../ux/examples.js';
 import { getMemoryDbPath } from '../system/paths.js';
-import { initializeSchema } from '@cisco-auto/core/memory/schema';
+
+function initializeSchema(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      device_id TEXT,
+      command TEXT NOT NULL,
+      status TEXT NOT NULL,
+      output TEXT,
+      error TEXT,
+      duration_ms INTEGER,
+      transaction_id TEXT,
+      FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE SET NULL
+    );
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_audit_log_session_id ON audit_log(session_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_device_id ON audit_log(device_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_status ON audit_log(status);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_transaction_id ON audit_log(transaction_id);
+  `);
+}
 
 interface AuditQueryRow {
   id: number;

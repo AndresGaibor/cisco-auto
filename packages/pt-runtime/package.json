@@ -28,7 +28,6 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@cisco-auto/core": "workspace:*",
     "@cisco-auto/types": "workspace:*"
   },
   "devDependencies": {

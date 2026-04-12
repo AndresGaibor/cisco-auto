@@ -27,6 +27,10 @@
     "./plugins/ipv6/*": "./src/plugins/ipv6/*.ts",
     "./plugins/port-template": "./src/plugins/port-template/index.ts",
     "./plugins/port-template/*": "./src/plugins/port-template/*.ts",
+    "./plugins/basic-config": "./src/plugins/basic-config/index.ts",
+    "./plugins/basic-config/*": "./src/plugins/basic-config/*.ts",
+    "./plugins/orchestrator": "./src/plugins/orchestrator/index.ts",
+    "./plugins/orchestrator/*": "./src/plugins/orchestrator/*.ts",
     "./backends/packet-tracer": "./src/backends/packet-tracer/index.ts",
     "./backends/packet-tracer/*": "./src/backends/packet-tracer/*.ts"
   },

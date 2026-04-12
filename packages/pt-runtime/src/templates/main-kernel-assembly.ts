@@ -668,6 +668,40 @@ function cleanupActiveInFlight() {
 }
 
 // ============================================================================
+// Async Command Execution Helper (uses TerminalLine events)
+// ============================================================================
+
+function executeCommandAsync(term, cmd) {
+  return new Promise(function(resolve) {
+    var buffer = [];
+    var ended = false;
+    
+    function onOutput(src, args) {
+      var data = args && (args.newOutput !== undefined ? args.newOutput : args.data);
+      if (data) {
+        buffer.push(String(data));
+      }
+    }
+    
+    function onEnded(src, args) {
+      if (ended) return;
+      ended = true;
+      try { term.unregisterEvent("outputWritten", null, onOutput); } catch(e) {}
+      try { term.unregisterEvent("commandEnded", null, onEnded); } catch(e) {}
+      resolve({
+        ok: args.status === 0,
+        status: args.status,
+        output: buffer.join("")
+      });
+    }
+    
+    try { term.registerEvent("outputWritten", null, onOutput); } catch(e) {}
+    try { term.registerEvent("commandEnded", null, onEnded); } catch(e) {}
+    term.enterCommand(cmd);
+  });
+}
+
+// ============================================================================
 // Deferred Jobs Kernel - Minimal IOS Step Interpreter
 // ============================================================================
 
@@ -691,6 +725,37 @@ function advanceJob(job) {
     job.state = "error";
     job.error = "No terminal session for device: " + deviceName;
     job.finished = true;
+    return;
+  }
+
+  if (job.pendingCommand) {
+    job.pendingCommand.then(function(result) {
+      job.pendingCommand = null;
+      job.outputBuffer += result.output || "";
+      updateSessionFromOutput(session, result.output || "");
+      job.stepResults.push({
+        stepIndex: job.lastCompletedStep,
+        stepType: "command",
+        command: job.lastCommand,
+        raw: result.output || "",
+        status: result.status,
+        completedAt: Date.now()
+      });
+      if (result.status !== 0 && job.lastCommandOptions && job.lastCommandOptions.stopOnError) {
+        job.error = "Command failed with status " + result.status;
+        job.errorCode = "COMMAND_FAILED";
+        job.state = "error";
+        job.finished = true;
+      } else {
+        job.currentStep++;
+      }
+    }).catch(function(err) {
+      job.pendingCommand = null;
+      job.error = String(err);
+      job.errorCode = "COMMAND_FAILED";
+      job.state = "error";
+      job.finished = true;
+    });
     return;
   }
 
@@ -752,13 +817,20 @@ function handleEnsureModeStep(job, session, step) {
     return;
   }
 
-  var result = session.term.enterCommand(transitionCmd);
-  job.outputBuffer += result[1] || "";
-  updateSessionFromOutput(session, result[1] || "");
-
-  if (session.lastMode === targetMode) {
-    job.currentStep++;
-  }
+  job.pendingCommand = executeCommandAsync(session.term, transitionCmd);
+  job.pendingCommand.then(function(result) {
+    job.pendingCommand = null;
+    job.outputBuffer += result.output || "";
+    updateSessionFromOutput(session, result.output || "");
+    if (session.lastMode === targetMode) {
+      job.currentStep++;
+    }
+  }).catch(function(err) {
+    job.pendingCommand = null;
+    job.error = String(err);
+    job.state = "error";
+    job.finished = true;
+  });
 }
 
 function getModeTransitionCommand(fromMode, toMode) {
@@ -776,59 +848,41 @@ function handleCommandStep(job, session, step) {
   var cmd = step.value;
   var options = step.options || {};
 
-  job.waitingForCommandEnd = true;
-
-  var result = session.term.enterCommand(cmd);
-  var output = result[1] || "";
-  var status = result[0];
-
-  job.outputBuffer += output;
-  updateSessionFromOutput(session, output);
-
-  job.stepResults.push({
-    stepIndex: job.currentStep,
-    stepType: "command",
-    command: cmd,
-    raw: output,
-    status: status,
-    completedAt: Date.now()
-  });
-
-  if (status !== 0 && options.stopOnError) {
-    job.error = "Command failed with status " + status;
-    job.errorCode = "COMMAND_FAILED";
-    job.state = "error";
-    job.finished = true;
-    return;
-  }
-
-  if (output.indexOf("--More--") !== -1) {
-    session.paged = true;
-    job.paged = true;
-    session.term.enterCommand(" ");
-    return;
-  }
-
-  if (output.indexOf("[confirm]") !== -1) {
-    job.state = "waiting-confirm";
-    return;
-  }
-
-  job.waitingForCommandEnd = false;
-  job.currentStep++;
+  job.lastCommand = cmd;
+  job.lastCommandOptions = options;
+  job.lastCompletedStep = job.currentStep;
+  job.pendingCommand = executeCommandAsync(session.term, cmd);
 }
 
 function handleConfirmStep(job, session, step) {
   var answer = step.value || "y";
-  var result = session.term.enterCommand(answer);
-  job.outputBuffer += result[1] || "";
-  job.currentStep++;
+  job.pendingCommand = executeCommandAsync(session.term, answer);
+  job.pendingCommand.then(function(result) {
+    job.pendingCommand = null;
+    job.outputBuffer += result.output || "";
+    updateSessionFromOutput(session, result.output || "");
+    job.currentStep++;
+  }).catch(function(err) {
+    job.pendingCommand = null;
+    job.error = String(err);
+    job.state = "error";
+    job.finished = true;
+  });
 }
 
 function handleSaveConfigStep(job, session) {
-  var result = session.term.enterCommand("write memory");
-  job.outputBuffer += result[1] || "";
-  job.currentStep++;
+  job.pendingCommand = executeCommandAsync(session.term, "write memory");
+  job.pendingCommand.then(function(result) {
+    job.pendingCommand = null;
+    job.outputBuffer += result.output || "";
+    updateSessionFromOutput(session, result.output || "");
+    job.currentStep++;
+  }).catch(function(err) {
+    job.pendingCommand = null;
+    job.error = String(err);
+    job.state = "error";
+    job.finished = true;
+  });
 }
 
 function handleDelayStep(job, step) {

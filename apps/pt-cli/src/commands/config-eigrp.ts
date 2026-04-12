@@ -9,8 +9,7 @@ import type { GlobalFlags } from '../flags';
 import { fetchDeviceList, getIOSCapableDevices } from '../utils/device-utils';
 import { parseNetworks } from '../utils/cli-parser';
 import { parseConfigFile, requireDevice } from '../utils/config-parser';
-import type { EigrpConfig } from '@cisco-auto/ios-domain/schemas';
-import { EigrpConfigSchema } from '@cisco-auto/ios-domain/schemas';
+import { generateRoutingCommands, validateRoutingConfig, type RoutingConfigInput } from '@cisco-auto/kernel/plugins/routing';
 
 export const CONFIG_EIGRP_META: CommandMeta = {
   id: 'config-eigrp',
@@ -29,18 +28,17 @@ export const CONFIG_EIGRP_META: CommandMeta = {
   supportsExplain: true,
 };
 
-function generateEigrpCommands(config: EigrpConfig): string[] {
-  const cmds: string[] = [];
-  cmds.push(`router eigrp ${config.autonomousSystem}`);
-  for (const net of config.networks) {
-    cmds.push(`network ${net.network} ${net.wildcard}`);
-  }
-  if (config.passiveInterfaces) {
-    for (const iface of config.passiveInterfaces) {
-      cmds.push(`passive-interface ${iface}`);
-    }
-  }
-  return cmds;
+function generateEigrpCommands(deviceName: string, asNumber: number, networks: Array<{ network: string; wildcard: string }>, passiveInterfaces: string[] | undefined): string[] {
+  const config: RoutingConfigInput = {
+    deviceName,
+    eigrp: {
+      asNumber,
+      networks: networks.map((n) => n.network),
+      passiveInterfaces,
+    },
+  };
+
+  return generateRoutingCommands(config);
 }
 
 export function createConfigEigrpCommand(): Command {
@@ -85,21 +83,17 @@ export function createConfigEigrpCommand(): Command {
       if (!autonomousSystem) { console.error(chalk.red('Error: --as requerido')); process.exit(1); }
       if (networks.length === 0) { console.error(chalk.red('Error: al menos un --network requerido')); process.exit(1); }
 
+      const asNumber = typeof autonomousSystem === 'string' ? parseInt(autonomousSystem, 10) : autonomousSystem;
       const parsedNetworks = parseNetworks(networks).map((n) => ({ network: n.network, wildcard: n.wildcard }));
-      const configInput: Record<string, unknown> = {
-        device, type: 'eigrp', autonomousSystem, networks: parsedNetworks,
-        passiveInterfaces: passiveInterfaces.length > 0 ? passiveInterfaces : undefined,
-      };
+      const iosCommands = generateEigrpCommands(device, asNumber, parsedNetworks, passiveInterfaces.length > 0 ? passiveInterfaces : undefined);
 
-      const validationResult = EigrpConfigSchema.safeParse(configInput);
-      if (!validationResult.success) {
-        const errors = validationResult.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
+      const validationResult = validateRoutingConfig({ deviceName: device, eigrp: { asNumber, networks: parsedNetworks.map((n) => n.network), passiveInterfaces: passiveInterfaces.length > 0 ? passiveInterfaces : undefined } });
+      if (!validationResult.ok) {
+        const errors = validationResult.errors.map((e) => `  - ${e.path}: ${e.message}`).join('\n');
         console.error(chalk.red('Error de validacion:\n' + errors));
         process.exit(1);
       }
 
-      const config = validationResult.data;
-      const iosCommands = generateEigrpCommands(config);
       const isDryRun = options.dryRun || !options.apply;
 
       if (isDryRun) {

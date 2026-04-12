@@ -45,6 +45,8 @@ import { createAuditExportCommand } from './audit-export';
 import { createAuditFailedCommand } from './audit-failed';
 import { createAuditQueryCommand } from './audit-query';
 import { createBridgeCommand } from './bridge';
+import { createDhcpServerCommand } from './dhcp-server';
+import { createHostCommand } from './host';
 
 export type CommandFactory = () => Command;
 
@@ -95,6 +97,8 @@ export const COMMAND_FACTORIES: CommandFactory[] = [
   createAuditFailedCommand,
   createAuditQueryCommand,
   createBridgeCommand,
+  createDhcpServerCommand,
+  createHostCommand,
 ];
 
 export function getRegisteredCommandIds(): string[] {

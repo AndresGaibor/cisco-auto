@@ -1,6 +1,5 @@
 import { Command } from 'commander';
-import { loadLab } from '@cisco-auto/core';
-import { validateLabSafe } from '@cisco-auto/core';
+import { loadLabYaml, validateLabSafe } from '../../contracts/lab-spec';
 import { formatExamples, formatRelatedCommands } from '../../help/formatter';
 import { getExamples } from '../../help/examples';
 import { getRelatedCommands } from '../../help/related';
@@ -14,7 +13,7 @@ export function createLabValidateCommand(): Command {
       try {
         console.log('🔍 Validando archivo:', file);
         
-        const parsedLab = loadLab(file);
+        const parsedLab = loadLabYaml(file);
         const validation = validateLabSafe(parsedLab.lab);
         
         console.log('\n📋 Resultado de Validación:');
@@ -22,12 +21,16 @@ export function createLabValidateCommand(): Command {
         
         if (validation.success) {
           console.log('✅ Lab válido');
+          if (validation.warnings && validation.warnings.length > 0) {
+            console.log('\n⚠️  Warnings:');
+            validation.warnings.forEach(warn => console.log(`  - ${warn}`));
+          }
           process.exit(0);
         } else {
           console.log('❌ Errores de validación:');
           validation.errors?.forEach(err => console.log(`  - ${err}`));
           
-          if (options.strict) {
+          if (options.strict || validation.errors && validation.errors.length > 0) {
             process.exit(1);
           }
         }

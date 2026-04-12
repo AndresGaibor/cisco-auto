@@ -1,12 +1,9 @@
 import { Command } from 'commander';
 import * as fs from 'fs';
-import { loadLab } from '@cisco-auto/core';
-import { generateMermaidDiagram } from '@cisco-auto/core';
-import type { LabSpec } from '@cisco-auto/core';
+import { loadLabYaml, toLabSpec, generateMermaidDiagram } from '../../contracts/lab-spec';
 import { formatExamples, formatRelatedCommands } from '../../help/formatter';
 import { getExamples } from '../../help/examples';
 import { getRelatedCommands } from '../../help/related';
-import { toLabSpec, snapshotToLabSpec } from '../../types/lab-spec.types';
 import { createDefaultPTController } from '@cisco-auto/pt-control';
 
 export function createTopologyExportCommand(): Command {
@@ -17,24 +14,42 @@ export function createTopologyExportCommand(): Command {
     .option('-o, --output <file>', 'Archivo de salida')
     .action(async (file, options) => {
       try {
-        let labSpec: LabSpec;
+        let output: string;
 
         if (file) {
-          const parsedLab = loadLab(file);
-          labSpec = toLabSpec(parsedLab);
+          const parsedLab = loadLabYaml(file);
+          const labSpec = toLabSpec(parsedLab);
+          output = generateMermaidDiagram(labSpec);
         } else {
           // Usar topología del canvas PT
           const controller = createDefaultPTController();
           try {
             await controller.start();
             const snapshot = await controller.snapshot();
-            labSpec = snapshotToLabSpec(snapshot);
+            const devices = Object.values(snapshot.devices);
+            const links = Object.values(snapshot.links);
+
+            const lines: string[] = ['graph TD'];
+
+            for (const device of devices) {
+              const name = device.name || device.id || 'unknown';
+              const shape = device.type === 'switch' ? `[{{${name}}}]` :
+                            device.type === 'pc' ? `[(${name})]` :
+                            `[${name}]`;
+              lines.push(`  ${name}${shape}`);
+            }
+
+            for (const link of links) {
+              const from = typeof link.source === 'object' ? link.source : { deviceId: link.sourceDeviceId || '', port: link.sourcePort || '' };
+              const to = typeof link.target === 'object' ? link.target : { deviceId: link.targetDeviceId || '', port: link.targetPort || '' };
+              lines.push(`  ${from.deviceId} -->|${from.port} - ${to.port}| ${to.deviceId}`);
+            }
+
+            output = lines.join('\n');
           } finally {
             await controller.stop();
           }
         }
-
-        const output = generateMermaidDiagram(labSpec);
 
         if (options.output) {
           fs.writeFileSync(options.output, output);

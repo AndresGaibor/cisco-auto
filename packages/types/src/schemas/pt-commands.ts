@@ -278,6 +278,92 @@ export const InspectDhcpServerResultSchema = z.object({
   excludedAddressCount: z.number().int().nonnegative(),
 });
 
+// ============================================================================
+// VLAN Commands
+// ============================================================================
+
+export const ConfigDhcpServerPayloadSchema = z.object({
+  id: z.string(),
+  type: z.literal('configDhcpServer'),
+  device: z.string(),
+  port: z.string().optional(),
+  enabled: z.boolean().optional(),
+  pools: z.array(z.object({
+    name: z.string(),
+    network: z.string().optional(),
+    mask: z.string().optional(),
+    defaultRouter: z.string().optional(),
+    dns: z.string().optional(),
+    startIp: z.string().optional(),
+    endIp: z.string().optional(),
+    maxUsers: z.number().optional(),
+  })).optional(),
+  excluded: z.array(z.object({
+    start: z.string(),
+    end: z.string(),
+  })).optional(),
+});
+
+export const ConfigDhcpServerResultSchema = z.object({
+  id: z.string(),
+  type: z.literal('configDhcpServer'),
+  ok: z.boolean(),
+  device: z.string(),
+  enabled: z.boolean().optional(),
+  pools: z.array(z.object({
+    name: z.string(),
+    network: z.string(),
+    mask: z.string(),
+  })).optional(),
+});
+
+export const EnsureVlansPayloadSchema = z.object({
+  id: z.string(),
+  type: z.literal('ensureVlans'),
+  device: z.string(),
+  vlans: z.array(z.object({
+    id: z.number(),
+    name: z.string().optional(),
+  })),
+});
+
+export const EnsureVlansResultSchema = z.object({
+  id: z.string(),
+  type: z.literal('ensureVlans'),
+  ok: z.boolean(),
+  device: z.string(),
+  vlans: z.array(z.object({
+    id: z.number(),
+    name: z.string(),
+    created: z.boolean(),
+    error: z.string().optional(),
+  })),
+});
+
+export const ConfigVlanInterfacesPayloadSchema = z.object({
+  id: z.string(),
+  type: z.literal('configVlanInterfaces'),
+  device: z.string(),
+  interfaces: z.array(z.object({
+    vlanId: z.number(),
+    ip: z.string().optional(),
+    mask: z.string().optional(),
+  })),
+});
+
+export const ConfigVlanInterfacesResultSchema = z.object({
+  id: z.string(),
+  type: z.literal('configVlanInterfaces'),
+  ok: z.boolean(),
+  device: z.string(),
+  interfaces: z.array(z.object({
+    vlanId: z.number(),
+    ip: z.string().optional(),
+    mask: z.string().optional(),
+    error: z.string().optional(),
+  })),
+});
+
 export const ExecInteractivePayloadSchema = z.object({
   id: z.string(),
   type: z.literal('execInteractive'),
@@ -344,6 +430,11 @@ export const CommandPayloadSchema = z.discriminatedUnion('type', [
   DevicesInRectPayloadSchema,
   ResolveCapabilitiesPayloadSchema,
   ExecInteractivePayloadSchema,
+  ConfigureDhcpServerPayloadSchema,
+  InspectDhcpServerPayloadSchema,
+  ConfigDhcpServerPayloadSchema,
+  EnsureVlansPayloadSchema,
+  ConfigVlanInterfacesPayloadSchema,
 ]);
 
 export type CommandPayload = z.infer<typeof CommandPayloadSchema>;
@@ -372,6 +463,11 @@ export interface CommandPayloadTypeMap {
   'devicesInRect': z.infer<typeof DevicesInRectPayloadSchema>;
   'resolveCapabilities': z.infer<typeof ResolveCapabilitiesPayloadSchema>;
   'execInteractive': z.infer<typeof ExecInteractivePayloadSchema>;
+  'configureDhcpServer': z.infer<typeof ConfigureDhcpServerPayloadSchema>;
+  'inspectDhcpServer': z.infer<typeof InspectDhcpServerPayloadSchema>;
+  'configDhcpServer': z.infer<typeof ConfigDhcpServerPayloadSchema>;
+  'ensureVlans': z.infer<typeof EnsureVlansPayloadSchema>;
+  'configVlanInterfaces': z.infer<typeof ConfigVlanInterfacesPayloadSchema>;
 }
 
 export type CommandType = keyof CommandPayloadTypeMap;

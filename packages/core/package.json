@@ -9,7 +9,6 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./config-generators": "./src/index.ts",
     "./parser": "./src/index.ts",
     "./topology": "./src/index.ts",
     "./canonical": "./src/index.ts",

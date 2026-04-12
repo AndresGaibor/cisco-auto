@@ -1,16 +1,15 @@
 #!/usr/bin/env bun
 /**
- * Comando lab pipeline - Pipeline de integración Plan → Validate → Fix
+ * Comando lab pipeline - Pipeline de validación de laboratorio
  * 
- * Ejecuta un pipeline completo de validación y corrección sobre un laboratorio.
+ * Ejecuta un pipeline completo de validación sobre un laboratorio.
  */
 
 import { Command } from 'commander';
 import { readFileSync, writeFileSync } from 'fs';
 import chalk from 'chalk';
 import { createInterface } from 'readline';
-import type { ToolResult, TopologyPlan } from '@cisco-auto/core';
-import { loadLab, ptValidatePlanTool, ptFixPlanTool, isToolResultSuccess, getToolResultError, createToolContext } from '@cisco-auto/core';
+import { loadLabYaml, validateLabSafe, toLabSpec, analyzeTopology } from '../../contracts/lab-spec';
 
 /**
  * Crea interfaz readline
@@ -39,7 +38,7 @@ function preguntar(rl: ReturnType<typeof createInterface>, pregunta: string): Pr
 function mostrarBanner() {
   console.log(`
 ╔══════════════════════════════════════════════════════════════╗
-║          PIPELINE: PLAN → VALIDATE → FIX                    ║
+║              PIPELINE DE VALIDACIÓN DE LAB                   ║
 ╚══════════════════════════════════════════════════════════════╝
 `);
 }
@@ -47,93 +46,62 @@ function mostrarBanner() {
 /**
  * Ejecuta el pipeline
  */
-async function ejecutarPipeline(archivo: string, autoFix: boolean = false): Promise<void> {
-  const rl = autoFix ? null : crearReadline();
+async function ejecutarPipeline(archivo: string, _autoFix: boolean = false): Promise<void> {
+  const rl = null; // Modo interactivo deshabilitado temporalmente
   
   try {
     mostrarBanner();
     
-    // Paso 1: Cargar plan
+    // Paso 1: Cargar lab
     console.log(chalk.blue('📂 Paso 1: Cargando laboratorio...'));
-    const { lab } = loadLab(archivo);
-    console.log(chalk.green(`   ✅ Laboratorio cargado: ${lab.metadata?.name || 'Lab'}`));
-    console.log(`   📊 Dispositivos: ${lab.topology?.devices?.length || 0}`);
+    const parsedLab = loadLabYaml(archivo);
+    const lab = parsedLab.lab;
+    console.log(chalk.green(`   ✅ Laboratorio cargado: ${lab?.metadata?.name || 'Lab'}`));
+    console.log(`   📊 Dispositivos: ${lab?.topology?.devices?.length || 0}`);
+    console.log(`   🔗 Conexiones: ${lab?.topology?.connections?.length || 0}`);
     
-    // Paso 2: Validar
-    console.log(chalk.blue('\n🔍 Paso 2: Validando plan...'));
-    const validateResult = await ptValidatePlanTool.handler(
-      { plan: lab },
-      createToolContext('pipeline')
-    ) as ToolResult<{ valid: boolean; errors: Array<{ message: string }>; warnings: Array<{ message: string }> }>;
+    // Paso 2: Validar estructura
+    console.log(chalk.blue('\n🔍 Paso 2: Validando estructura...'));
+    const validation = validateLabSafe(lab);
 
-    if (!isToolResultSuccess(validateResult)) {
-      console.log(chalk.yellow('   ⚠️  Validación completada con observaciones'));
+    if (validation.success) {
+      console.log(chalk.green('   ✅ Validación estructural exitosa'));
     } else {
-      console.log(chalk.green('   ✅ Validación exitosa'));
-      if (validateResult.data.warnings?.length === 0) {
-        console.log(chalk.green('\n✨ El plan está perfecto. No se requieren correcciones.'));
-        if (rl) rl.close();
-        return;
-      }
+      console.log(chalk.yellow('   ⚠️  Validación completada con observaciones'));
     }
 
     // Mostrar errores y warnings
-    const errors = isToolResultSuccess(validateResult) ? (validateResult.data?.errors || []) : [];
-    const warnings = isToolResultSuccess(validateResult) ? (validateResult.data?.warnings || []) : [];
+    const errors = validation.errors || [];
+    const warnings = validation.warnings || [];
 
     if (errors.length > 0) {
       console.log(chalk.red(`\n   ❌ Errores encontrados: ${errors.length}`));
       errors.forEach((err, idx) => {
-        console.log(chalk.red(`      ${idx + 1}. ${err.message}`));
+        console.log(chalk.red(`      ${idx + 1}. ${err}`));
       });
     }
 
     if (warnings.length > 0) {
       console.log(chalk.yellow(`\n   ⚠️  Warnings encontrados: ${warnings.length}`));
       warnings.forEach((warn, idx) => {
-        console.log(chalk.yellow(`      ${idx + 1}. ${warn.message}`));
+        console.log(chalk.yellow(`      ${idx + 1}. ${warn.message || warn}`));
       });
     }
 
-    // Paso 3: Preguntar si aplicar fixes
-    let aplicarFixes = autoFix;
+    // Paso 3: Análisis de topología
+    console.log(chalk.blue('\n📈 Paso 3: Analizando topología...'));
+    const labSpec = toLabSpec(parsedLab);
+    const stats = analyzeTopology(labSpec);
+    
+    console.log(chalk.green('   ✅ Análisis completado'));
+    console.log(`   📊 Densidad: ${(stats.density * 100).toFixed(1)}%`);
+    console.log(`   🔗 Componentes conectados: ${stats.connectedComponents}`);
+    console.log(`   📈 Promedio conexiones/dispositivo: ${stats.avgConnections.toFixed(1)}`);
 
-    if (!autoFix && rl) {
-      const respuesta = await preguntar(rl, chalk.cyan('\n¿Deseas aplicar correcciones automáticas? (s/n): '));
-      aplicarFixes = respuesta.toLowerCase() === 's';
-    }
-
-    if (aplicarFixes) {
-      console.log(chalk.blue('\n🔧 Paso 3: Aplicando correcciones...'));
-
-      const fixResult = await ptFixPlanTool.handler(
-        { plan: lab, autoApply: true },
-        createToolContext('pipeline')
-      ) as ToolResult<{ plan: TopologyPlan; appliedFixes: Array<{ description: string }>; remainingErrors: Array<{ message: string }> }>;
-
-      if (isToolResultSuccess(fixResult)) {
-        console.log(chalk.green('   ✅ Correcciones aplicadas'));
-
-        if (fixResult.data.appliedFixes?.length > 0) {
-          console.log(chalk.green(`\n   📝 Fixes aplicados: ${fixResult.data.appliedFixes.length}`));
-          fixResult.data.appliedFixes.forEach((fix, idx) => {
-            console.log(chalk.green(`      ${idx + 1}. ${fix.description}`));
-          });
-        }
-
-        // Guardar plan corregido
-        const outputFile = archivo.replace('.yaml', '-fixed.yaml');
-        writeFileSync(outputFile, JSON.stringify(fixResult.data.plan, null, 2));
-        console.log(chalk.green(`\n💾 Plan corregido guardado en: ${outputFile}`));
-      } else {
-        console.log(chalk.red('   ❌ No se pudieron aplicar correcciones'));
-        console.log(chalk.red(`      ${getToolResultError(fixResult)}`));
-      }
-    } else {
-      console.log(chalk.yellow('\n⏭️  Correcciones omitidas por el usuario'));
+    if (stats.connectedComponents > 1) {
+      console.log(chalk.yellow('\n   ⚠️  La topología tiene múltiples componentes desconectados'));
     }
     
-    if (rl) rl.close();
     console.log(chalk.green('\n✅ Pipeline completado\n'));
     
   } catch (error) {
@@ -148,7 +116,7 @@ async function ejecutarPipeline(archivo: string, autoFix: boolean = false): Prom
  */
 export function createLabPipelineCommand(): Command {
   const cmd = new Command('pipeline')
-    .description('Ejecutar pipeline Plan → Validate → Fix')
+    .description('Ejecutar pipeline de validación de laboratorio')
     .argument('<file>', 'Archivo YAML del laboratorio')
     .option('--auto-fix', 'Aplicar correcciones automáticamente sin preguntar', false)
     .action(async (file, options) => {

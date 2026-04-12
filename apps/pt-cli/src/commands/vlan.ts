@@ -240,6 +240,8 @@ export function createLabVlanCommand(): Command {
         explain: globalExplain,
         plan: globalPlan,
         verify: false,
+        timeout: null,
+        noTimeout: false,
       };
 
       const result = await runCommand({
@@ -332,6 +334,8 @@ export function createLabVlanCommand(): Command {
         explain: globalExplain,
         plan: globalPlan,
         verify: true,
+        timeout: null,
+        noTimeout: false,
       };
 
       const result = await runCommand({
@@ -432,6 +436,8 @@ export function createLabVlanCommand(): Command {
         explain: globalExplain,
         plan: globalPlan,
         verify: false,
+        timeout: null,
+        noTimeout: false,
       };
 
       const result = await runCommand({
@@ -487,6 +493,302 @@ export function createLabVlanCommand(): Command {
         console.log(chalk.blue('\n➡️  Comandos para configurar trunk:'));
         const cmds = result.data?.commands as string[] | undefined;
         cmds?.forEach((cmd) => console.log(cmd));
+      }
+
+      if (!result.ok) process.exit(1);
+    });
+
+  command
+    .command('ensure')
+    .description('Crear VLANs en un dispositivo')
+    .argument('<device>', 'Nombre del dispositivo (ej: Switch1)')
+    .option('--vlan <id,name...>', 'VLAN a crear en formato id,nombre (ej: 10,ADMIN). Puede especificarse múltiples veces')
+    .option('--examples', 'Mostrar ejemplos de uso y salir', false)
+    .option('--schema', 'Mostrar schema JSON del resultado y salir', false)
+    .option('--explain', 'Explicar qué hace el comando y salir', false)
+    .option('--plan', 'Mostrar plan de ejecución sin ejecutar', false)
+    .action(async (deviceName, options) => {
+      const globalExamples = process.argv.includes('--examples');
+      const globalSchema = process.argv.includes('--schema');
+      const globalExplain = process.argv.includes('--explain');
+      const globalPlan = process.argv.includes('--plan');
+
+      if (globalExamples) {
+        const ensureExamples: CommandMeta = {
+          ...VLAN_META,
+          examples: [
+            { command: 'pt vlan ensure Switch1 --vlan 10,ADMIN --vlan 20,USERS', description: 'Crear VLANs 10 y 20 en Switch1' },
+            { command: 'pt vlan ensure Router1 --vlan 100,SERVIDORES', description: 'Crear VLAN 100 en Router1' },
+          ],
+        };
+        console.log(printExamples(ensureExamples));
+        return;
+      }
+
+      if (globalSchema) {
+        console.log(JSON.stringify(VLAN_META, null, 2));
+        return;
+      }
+
+      if (globalExplain) {
+        console.log('Crea VLANs en un dispositivo. Cada --vlan acepta formato id,nombre.');
+        return;
+      }
+
+      if (globalPlan) {
+        console.log('Plan de ejecución:');
+        console.log(`  1. Validar dispositivo: ${deviceName}`);
+        console.log('  2. Parsear lista de VLANs');
+        console.log('  3. TODO: Llamar controller.ensureVlans()');
+        return;
+      }
+
+      const vlansOption = options.vlan;
+      if (!vlansOption || (Array.isArray(vlansOption) && vlansOption.length === 0)) {
+        console.error('Debes especificar al menos una VLAN con --vlan');
+        process.exit(1);
+      }
+
+      const vlans = Array.isArray(vlansOption) ? vlansOption : [vlansOption];
+
+      const flags: GlobalFlags = {
+        json: false,
+        jq: null,
+        output: 'text',
+        verbose: false,
+        quiet: false,
+        trace: false,
+        tracePayload: false,
+        traceResult: false,
+        traceDir: null,
+        traceBundle: false,
+        traceBundlePath: null,
+        sessionId: null,
+        examples: globalExamples,
+        schema: globalSchema,
+        explain: globalExplain,
+        plan: globalPlan,
+        verify: true,
+        timeout: null,
+        noTimeout: false,
+      };
+
+      interface VlanEnsureResult {
+        device: string;
+        vlans: Array<{ id: number; name: string }>;
+      }
+
+      const result = await runCommand<VlanEnsureResult>({
+        action: 'vlan.ensure',
+        meta: VLAN_META,
+        flags,
+        payloadPreview: { device: deviceName, vlans },
+        execute: async (ctx): Promise<CliResult<VlanEnsureResult>> => {
+          try {
+            await ctx.controller.start();
+
+            try {
+              const devices = await fetchDeviceList(ctx.controller);
+              const iosDevices = getIOSCapableDevices(devices);
+              const selected = iosDevices.find((d) => d.name === deviceName);
+
+              if (!selected) {
+                return createErrorResult('vlan.ensure', { message: `Dispositivo "${deviceName}" no encontrado` }) as CliResult<VlanEnsureResult>;
+              }
+
+              const parsedVlans: Array<{ id: number; name: string }> = [];
+              for (const vlanSpec of vlans) {
+                const parts = vlanSpec.split(',');
+                if (parts.length !== 2) {
+                  return createErrorResult('vlan.ensure', { message: `VLAN inválida: "${vlanSpec}". Formato esperado: id,nombre (ej: 10,ADMIN)` }) as CliResult<VlanEnsureResult>;
+                }
+                const id = Number(parts[0].trim());
+                const name = parts[1].trim();
+                if (Number.isNaN(id) || id < 1 || id > 4094) {
+                  return createErrorResult('vlan.ensure', { message: `ID de VLAN inválido: "${parts[0]}". Debe ser entre 1 y 4094` }) as CliResult<VlanEnsureResult>;
+                }
+                parsedVlans.push({ id, name });
+              }
+
+              // TODO: Llamar controller.ensureVlans(deviceName, parsedVlans)
+
+              return createSuccessResult('vlan.ensure', {
+                device: deviceName,
+                vlans: parsedVlans,
+              }, {
+                advice: [`Usa pt show vlan ${deviceName} para verificar`],
+              });
+            } finally {
+              await ctx.controller.stop();
+            }
+          } catch (error) {
+            return createErrorResult('vlan.ensure', {
+              message: error instanceof Error ? error.message : String(error),
+            }) as CliResult<VlanEnsureResult>;
+          }
+        },
+      });
+
+      const output = renderCliResult(result, flags.output);
+      if (!flags.quiet || !result.ok) {
+        console.log(output);
+      }
+
+      if (!result.ok) process.exit(1);
+    });
+
+  command
+    .command('config-interfaces')
+    .description('Configurar interfaces SVI VLAN en un dispositivo')
+    .argument('<device>', 'Nombre del dispositivo (ej: Router1)')
+    .option('--interface <vlanId,ip,mask...>', 'SVI a configurar en formato vlanId,ip,mask (ej: 10,192.168.10.1,255.255.255.0). Puede especificarse múltiples veces')
+    .option('--examples', 'Mostrar ejemplos de uso y salir', false)
+    .option('--schema', 'Mostrar schema JSON del resultado y salir', false)
+    .option('--explain', 'Explicar qué hace el comando y salir', false)
+    .option('--plan', 'Mostrar plan de ejecución sin ejecutar', false)
+    .action(async (deviceName, options) => {
+      const globalExamples = process.argv.includes('--examples');
+      const globalSchema = process.argv.includes('--schema');
+      const globalExplain = process.argv.includes('--explain');
+      const globalPlan = process.argv.includes('--plan');
+
+      if (globalExamples) {
+        const ifExamples: CommandMeta = {
+          ...VLAN_META,
+          examples: [
+            { command: 'pt vlan config-interfaces Router1 --interface "10,192.168.10.1,255.255.255.0"', description: 'Configurar SVI para VLAN 10' },
+            { command: 'pt vlan config-interfaces Router1 --interface "10,192.168.10.1,255.255.255.0" --interface "20,192.168.20.1,255.255.255.0"', description: 'Configurar múltiples SVIs' },
+          ],
+        };
+        console.log(printExamples(ifExamples));
+        return;
+      }
+
+      if (globalSchema) {
+        console.log(JSON.stringify(VLAN_META, null, 2));
+        return;
+      }
+
+      if (globalExplain) {
+        console.log('Configura interfaces SVI (Switch Virtual Interface) para VLANs en un dispositivo router.');
+        return;
+      }
+
+      if (globalPlan) {
+        console.log('Plan de ejecución:');
+        console.log(`  1. Validar dispositivo: ${deviceName}`);
+        console.log('  2. Parsear lista de interfaces SVI');
+        console.log('  3. TODO: Llamar controller.configVlanInterfaces()');
+        return;
+      }
+
+      const interfacesOption = options.interface;
+      if (!interfacesOption || (Array.isArray(interfacesOption) && interfacesOption.length === 0)) {
+        console.error('Debes especificar al menos una interfaz con --interface');
+        process.exit(1);
+      }
+
+      const sviSpecs = Array.isArray(interfacesOption) ? interfacesOption : [interfacesOption];
+
+      const flags: GlobalFlags = {
+        json: false,
+        jq: null,
+        output: 'text',
+        verbose: false,
+        quiet: false,
+        trace: false,
+        tracePayload: false,
+        traceResult: false,
+        traceDir: null,
+        traceBundle: false,
+        traceBundlePath: null,
+        sessionId: null,
+        examples: globalExamples,
+        schema: globalSchema,
+        explain: globalExplain,
+        plan: globalPlan,
+        verify: false,
+        timeout: null,
+        noTimeout: false,
+      };
+
+      interface SviConfig {
+        vlanId: number;
+        ip: string;
+        mask: string;
+      }
+
+      interface VlanConfigInterfacesResult {
+        device: string;
+        interfaces: SviConfig[];
+      }
+
+      const result = await runCommand<VlanConfigInterfacesResult>({
+        action: 'vlan.config-interfaces',
+        meta: VLAN_META,
+        flags,
+        payloadPreview: { device: deviceName, interfaces: sviSpecs },
+        execute: async (ctx): Promise<CliResult<VlanConfigInterfacesResult>> => {
+          try {
+            await ctx.controller.start();
+
+            try {
+              const devices = await fetchDeviceList(ctx.controller);
+              const iosDevices = getIOSCapableDevices(devices);
+              const selected = iosDevices.find((d) => d.name === deviceName);
+
+              if (!selected) {
+                return createErrorResult('vlan.config-interfaces', { message: `Dispositivo "${deviceName}" no encontrado` }) as CliResult<VlanConfigInterfacesResult>;
+              }
+
+              const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+              const maskRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+              const parsedInterfaces: SviConfig[] = [];
+
+              for (const sviSpec of sviSpecs) {
+                const parts = sviSpec.split(',');
+                if (parts.length !== 3) {
+                  return createErrorResult('vlan.config-interfaces', { message: `SVI inválida: "${sviSpec}". Formato esperado: vlanId,ip,mask` }) as CliResult<VlanConfigInterfacesResult>;
+                }
+                const vlanId = Number(parts[0].trim());
+                const ip = parts[1].trim();
+                const mask = parts[2].trim();
+
+                if (Number.isNaN(vlanId) || vlanId < 1 || vlanId > 4094) {
+                  return createErrorResult('vlan.config-interfaces', { message: `ID de VLAN inválido: "${parts[0]}"` }) as CliResult<VlanConfigInterfacesResult>;
+                }
+                if (!ipRegex.test(ip)) {
+                  return createErrorResult('vlan.config-interfaces', { message: `IP inválida: "${ip}"` }) as CliResult<VlanConfigInterfacesResult>;
+                }
+                if (!maskRegex.test(mask)) {
+                  return createErrorResult('vlan.config-interfaces', { message: `Máscara inválida: "${mask}"` }) as CliResult<VlanConfigInterfacesResult>;
+                }
+
+                parsedInterfaces.push({ vlanId, ip, mask });
+              }
+
+              // TODO: Llamar controller.configVlanInterfaces(deviceName, parsedInterfaces)
+
+              return createSuccessResult('vlan.config-interfaces', {
+                device: deviceName,
+                interfaces: parsedInterfaces,
+              }, {
+                advice: [`Usa pt show ip int brief ${deviceName} para verificar`],
+              });
+            } finally {
+              await ctx.controller.stop();
+            }
+          } catch (error) {
+            return createErrorResult('vlan.config-interfaces', {
+              message: error instanceof Error ? error.message : String(error),
+            }) as CliResult<VlanConfigInterfacesResult>;
+          }
+        },
+      });
+
+      const output = renderCliResult(result, flags.output);
+      if (!flags.quiet || !result.ok) {
+        console.log(output);
       }
 
       if (!result.ok) process.exit(1);

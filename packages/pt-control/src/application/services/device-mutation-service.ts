@@ -35,9 +35,62 @@ export class DeviceMutationService {
 
   async configureDhcpServer(
     device: string,
-    options: { poolName: string; network: string; subnetMask: string; defaultRouter?: string; dnsServers?: string[]; excludedAddresses?: string[]; leaseTime?: number; domainName?: string; }
+    options: {
+      enabled: boolean;
+      port?: string;
+      pools: Array<{
+        name: string;
+        network: string;
+        mask: string;
+        defaultRouter: string;
+        dns?: string;
+        startIp?: string;
+        endIp?: string;
+        maxUsers?: number;
+      }>;
+      excluded?: Array<{ start: string; end: string }>;
+    }
   ): Promise<void> {
-    await this.bridge.sendCommandAndWait("configureDhcpServer", { id: this.generateId(), device, ...options });
+    await this.bridge.sendCommandAndWait("configDhcpServer", { id: this.generateId(), device, ...options });
+  }
+
+  async inspectDhcpServer(device: string, port?: string): Promise<{
+    ok: boolean;
+    device: string;
+    enabled: boolean;
+    pools: Array<{
+      name: string;
+      network: string;
+      mask: string;
+      defaultRouter: string;
+      dns?: string;
+      startIp?: string;
+      endIp?: string;
+      maxUsers?: number;
+      leaseCount: number;
+      leases: Array<{ mac: string; ip: string; expires: string }>;
+    }>;
+    excludedAddresses: Array<{ start: string; end: string }>;
+  }> {
+    const result = await this.bridge.sendCommandAndWait<{
+      ok: boolean;
+      device: string;
+      enabled: boolean;
+      pools: Array<{
+        name: string;
+        network: string;
+        mask: string;
+        defaultRouter: string;
+        dns?: string;
+        startIp?: string;
+        endIp?: string;
+        maxUsers?: number;
+        leaseCount: number;
+        leases: Array<{ mac: string; ip: string; expires: string }>;
+      }>;
+      excludedAddresses: Array<{ start: string; end: string }>;
+    }>("inspectDhcpServer", { id: this.generateId(), device, port });
+    return result.value!;
   }
 
   async moveDevice(name: string, x: number, y: number): Promise<{ ok: true; name: string; x: number; y: number } | { ok: false; error: string; code: string }> {
@@ -45,5 +98,37 @@ export class DeviceMutationService {
     const value = result.value;
     if (value?.ok) return { ok: true, name: value.name!, x: value.x!, y: value.y! };
     return { ok: false, error: value?.error ?? "Unknown error", code: value?.code ?? "UNKNOWN" };
+  }
+
+  async ensureVlans(
+    device: string,
+    vlans: Array<{ id: number; name?: string }>
+  ): Promise<{
+    ok: boolean;
+    device: string;
+    vlans: Array<{ id: number; name: string; created: boolean }>;
+  }> {
+    const result = await this.bridge.sendCommandAndWait<{
+      ok: boolean;
+      device: string;
+      vlans: Array<{ id: number; name: string; created: boolean; error?: string }>;
+    }>("ensureVlans", { id: this.generateId(), device, vlans });
+    return result.value!;
+  }
+
+  async configVlanInterfaces(
+    device: string,
+    interfaces: Array<{ vlanId: number; ip: string; mask: string }>
+  ): Promise<{
+    ok: boolean;
+    device: string;
+    interfaces: Array<{ vlanId: number; ip: string; mask: string; error?: string }>;
+  }> {
+    const result = await this.bridge.sendCommandAndWait<{
+      ok: boolean;
+      device: string;
+      interfaces: Array<{ vlanId: number; ip: string; mask: string; error?: string }>;
+    }>("configVlanInterfaces", { id: this.generateId(), device, interfaces });
+    return result.value!;
   }
 }

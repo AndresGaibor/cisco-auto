@@ -1,11 +1,8 @@
 import { Command } from 'commander';
-import { loadLab } from '@cisco-auto/core';
-import { visualizeTopology, generateMermaidDiagram } from '@cisco-auto/core';
-import type { LabSpec } from '@cisco-auto/core';
+import { loadLabYaml, toLabSpec, visualizeTopology, generateMermaidDiagram } from '../../contracts/lab-spec';
 import { formatExamples, formatRelatedCommands } from '../../help/formatter';
 import { getExamples } from '../../help/examples';
 import { getRelatedCommands } from '../../help/related';
-import { toLabSpec, type ParsedLabYaml } from '../../types/lab-spec.types';
 
 export function createTopologyVisualizeCommand(): Command {
   const cmd = new Command('visualize')
@@ -21,7 +18,7 @@ export function createTopologyVisualizeCommand(): Command {
       }
 
       try {
-        const parsedLab = loadLab(file);
+        const parsedLab = loadLabYaml(file);
         const labSpec = toLabSpec(parsedLab);
 
         if (options.mermaid) {

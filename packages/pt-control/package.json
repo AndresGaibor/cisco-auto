@@ -8,7 +8,6 @@
     "test": "bun test tests"
   },
   "dependencies": {
-    "@cisco-auto/core": "workspace:*",
     "@cisco-auto/file-bridge": "workspace:*",
     "@cisco-auto/ios-domain": "workspace:*",
     "@cisco-auto/pt-runtime": "workspace:*",

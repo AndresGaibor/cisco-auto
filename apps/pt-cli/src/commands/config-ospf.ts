@@ -7,10 +7,9 @@ import { createSuccessResult, createErrorResult } from '../contracts/cli-result'
 import type { CommandMeta } from '../contracts/command-meta';
 import type { GlobalFlags } from '../flags';
 import { fetchDeviceList, getIOSCapableDevices } from '../utils/device-utils';
-import { parseNetworks, parseRepeatableSimple } from '../utils/cli-parser';
+import { parseNetworks } from '../utils/cli-parser';
 import { parseConfigFile, requireDevice } from '../utils/config-parser';
-import type { OspfConfig } from '@cisco-auto/ios-domain/schemas';
-import { OspfConfigSchema } from '@cisco-auto/ios-domain/schemas';
+import { generateRoutingCommands, validateRoutingConfig, type RoutingConfigInput } from '@cisco-auto/kernel/plugins/routing';
 
 export const CONFIG_OSPF_META: CommandMeta = {
   id: 'config-ospf',
@@ -30,19 +29,29 @@ export const CONFIG_OSPF_META: CommandMeta = {
   supportsExplain: true,
 };
 
-function generateOspfCommands(config: OspfConfig): string[] {
-  const cmds: string[] = [];
-  cmds.push(`router ospf ${config.processId}`);
-  if (config.routerId) cmds.push(`router-id ${config.routerId}`);
-  for (const net of config.networks) {
-    cmds.push(`network ${net.network} ${net.wildcard} area ${net.area}`);
+function generateOspfCommands(deviceName: string, processId: number, routerId: string | undefined, networks: Array<{ network: string; wildcard: string; area: string | number }>, passiveInterfaces: string[] | undefined): string[] {
+  const areasByArea = new Map<string | number, Array<{ network: string; wildcard: string }>>();
+  for (const n of networks) {
+    if (!areasByArea.has(n.area)) areasByArea.set(n.area, []);
+    areasByArea.get(n.area)!.push({ network: n.network, wildcard: n.wildcard });
   }
-  if (config.passiveInterfaces) {
-    for (const iface of config.passiveInterfaces) {
-      cmds.push(`passive-interface ${iface}`);
-    }
-  }
-  return cmds;
+
+  const areas = Array.from(areasByArea.entries()).map(([areaId, nets]) => ({
+    areaId,
+    networks: nets,
+  }));
+
+  const config: RoutingConfigInput = {
+    deviceName,
+    ospf: {
+      processId,
+      routerId,
+      passiveInterfaces,
+      areas,
+    },
+  };
+
+  return generateRoutingCommands(config);
 }
 
 export function createConfigOspfCommand(): Command {
@@ -105,24 +114,15 @@ export function createConfigOspfCommand(): Command {
       }
 
       const parsedNetworks = parseNetworks(networks);
-      const configInput: Record<string, unknown> = {
-        device,
-        type: 'ospf',
-        processId,
-        routerId,
-        networks: parsedNetworks,
-        passiveInterfaces: passiveInterfaces.length > 0 ? passiveInterfaces : undefined,
-      };
+      const iosCommands = generateOspfCommands(device, processId, routerId, parsedNetworks, passiveInterfaces.length > 0 ? passiveInterfaces : undefined);
 
-      const validationResult = OspfConfigSchema.safeParse(configInput);
-      if (!validationResult.success) {
-        const errors = validationResult.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
+      const validationResult = validateRoutingConfig({ deviceName: device, ospf: { processId, routerId, passiveInterfaces: passiveInterfaces.length > 0 ? passiveInterfaces : undefined, areas: parsedNetworks.map((n) => ({ areaId: n.area, networks: [{ network: n.network, wildcard: n.wildcard }] })) } });
+      if (!validationResult.ok) {
+        const errors = validationResult.errors.map((e) => `  - ${e.path}: ${e.message}`).join('\n');
         console.error(chalk.red('Error de validacion:\n' + errors));
         process.exit(1);
       }
 
-      const config = validationResult.data;
-      const iosCommands = generateOspfCommands(config);
       const isDryRun = options.dryRun || !options.apply;
 
       if (isDryRun) {

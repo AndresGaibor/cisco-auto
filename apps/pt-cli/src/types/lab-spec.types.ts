@@ -1,153 +1,44 @@
-import type { LabSpec, SwitchportMode, CableType, DeviceType } from '@cisco-auto/core';
-import type { TopologySnapshot, DeviceState, LinkState } from '@cisco-auto/types';
-
+#!/usr/bin/env bun
 /**
- * Convierte string a DeviceType válido
+ * Tipos de especificación de laboratorios
+ * 
+ * Implementación local sin dependencias de @cisco-auto/core.
+ * Reexporta tipos desde contracts/lab-spec.ts para compatibilidad.
  */
-function toDeviceType(type?: string): DeviceType {
-  if (!type) return 'router';
-  const lower = type.toLowerCase();
-  if (['router', 'switch', 'pc', 'server', 'firewall', 'ids', 'voip'].includes(lower)) {
-    return lower as DeviceType;
-  }
-  return 'router';
-}
 
-/**
- * Convierte string a SwitchportMode válido
- */
-function toSwitchportMode(mode?: string): SwitchportMode | undefined {
-  if (!mode) return undefined;
-  const lower = mode.toLowerCase();
-  if (['access', 'trunk', 'dynamic'].includes(lower)) {
-    return lower as SwitchportMode;
-  }
-  return undefined;
-}
+export type {
+  LabSpec,
+  LabDevice,
+  LabConnection,
+  DeviceInterface,
+  ConnectionEndpoint,
+  DeviceType,
+  SwitchportMode,
+  CableType,
+  LabMetadata,
+  ParsedLabYaml,
+  ParsedDevice,
+  ParsedConnection,
+  TopologyStats,
+  LabValidationResult,
+} from '../contracts/lab-spec';
 
-/**
- * Convierte string a CableType válido
- */
-function toCableType(cable?: string): CableType {
-  if (!cable) return 'straight-through' as CableType;
-  const lower = cable.toLowerCase();
-  if (['straight-through', 'crossover', 'rollover'].includes(lower)) {
-    return lower as CableType;
-  }
-  return 'straight-through' as CableType;
-}
-
-/**
- * Estructura mínima de un archivo YAML de laboratorio parsed
- */
-export interface ParsedLabYaml {
-  lab?: {
-    metadata?: {
-      name?: string;
-      version?: string;
-      author?: string;
-    };
-    topology?: {
-      devices?: Array<ParsedDevice>;
-      connections?: Array<ParsedConnection>;
-    };
-  };
-}
-
-/**
- * Dispositivo en formato YAML parsed
- */
-export interface ParsedDevice {
-  name?: string;
-  type?: string;
-  model?: string;
-  hostname?: string;
-  management?: {
-    ip?: string;
-  };
-  interfaces?: Array<ParsedInterface>;
-  security?: unknown;
-  vlans?: unknown;
-  routing?: unknown;
-  services?: unknown;
-  [key: string]: unknown;
-}
-
-/**
- * Interfaz en formato YAML parsed
- */
-export interface ParsedInterface {
-  name?: string;
-  ip?: string;
-  subnetMask?: string;
-  description?: string;
-  shutdown?: boolean;
-  mode?: string;
-  vlan?: number;
-  [key: string]: unknown;
-}
-
-/**
- * Conexión en formato YAML parsed
- */
-export interface ParsedConnection {
-  from?: string | { device?: string; port?: string };
-  to?: string | { device?: string; port?: string };
-  fromInterface?: string;
-  toInterface?: string;
-  cable?: string;
-  type?: string;
-  [key: string]: unknown;
-}
-
-export function toLabSpec(parsed: ParsedLabYaml): LabSpec {
-  return {
-    metadata: {
-      name: parsed.lab?.metadata?.name ?? 'Lab',
-      version: parsed.lab?.metadata?.version ?? '1.0',
-      author: parsed.lab?.metadata?.author ?? 'unknown',
-      createdAt: new Date(),
-    },
-    devices: (parsed.lab?.topology?.devices || []).map((d) => ({
-      id: d.name ?? '',
-      name: d.name ?? '',
-      type: toDeviceType(d.type),
-      hostname: d.hostname ?? d.name ?? '',
-      managementIp: d.management?.ip,
-      interfaces: (d.interfaces || []).map((i) => ({
-        name: i.name ?? '',
-        description: i.description,
-        ip: i.ip,
-        subnetMask: i.subnetMask,
-        shutdown: i.shutdown,
-        switchportMode: toSwitchportMode(i.mode),
-        vlan: i.vlan ? { brandedValue: i.vlan.toString() } as any : undefined, // TODO: Use proper VlanId
-      })),
-      security: d.security,
-      vlans: d.vlans,
-      routing: d.routing,
-      services: d.services,
-    } as any)),
-    connections: (parsed.lab?.topology?.connections || []).map((c) => {
-      const fromDevice = typeof c.from === 'string' ? c.from : c.from?.device ?? '';
-      const fromPort = typeof c.from === 'string' ? c.fromInterface ?? 'unknown' : c.from?.port ?? c.fromInterface ?? 'unknown';
-      const toDevice = typeof c.to === 'string' ? c.to : c.to?.device ?? '';
-      const toPort = typeof c.to === 'string' ? c.toInterface ?? 'unknown' : c.to?.port ?? c.toInterface ?? 'unknown';
-
-      return {
-        id: `${fromDevice}-${toDevice}`,
-        from: { deviceId: '', deviceName: fromDevice, port: fromPort },
-        to: { deviceId: '', deviceName: toDevice, port: toPort },
-        cableType: toCableType(c.cable ?? c.type as string),
-      };
-    }),
-  };
-}
+export {
+  toLabSpec,
+  loadLabYaml,
+  validateLabSafe,
+  analyzeTopology,
+  generateMermaidDiagram,
+  visualizeTopology,
+} from '../contracts/lab-spec';
 
 /**
  * Convierte un TopologySnapshot (del canvas PT) a LabSpec (modelo canónico)
  */
-export function snapshotToLabSpec(snapshot: TopologySnapshot): LabSpec {
+export function snapshotToLabSpec(snapshot: {
+  devices: Record<string, { id?: string; name?: string; type?: string; [key: string]: unknown }>;
+  links: Record<string, { source?: string | { deviceId: string; port?: string }; target?: string | { deviceId: string; port?: string }; sourceDeviceId?: string; targetDeviceId?: string; sourcePort?: string; targetPort?: string; [key: string]: unknown }>;
+}): import('../contracts/lab-spec').LabSpec {
   const devices = Object.values(snapshot.devices);
   const links = Object.values(snapshot.links);
 
@@ -159,20 +50,17 @@ export function snapshotToLabSpec(snapshot: TopologySnapshot): LabSpec {
       createdAt: new Date(),
     },
     devices: devices.map((d) => {
-      const state = d as DeviceState;
-      const name = state.name || state.id || '';
+      const name = d.name || d.id || '';
       return {
         id: name,
         name: name,
-        type: (state.type || 'router') as DeviceType,
+        type: (d.type || 'router') as import('../contracts/lab-spec').DeviceType,
         hostname: name,
-        managementIp: (state as any).managementIp,
       };
     }),
     connections: links.map((l) => {
-      const link = l as LinkState;
-      const from = typeof link.source === 'object' ? link.source : { deviceId: link.sourceDeviceId || '', port: link.sourcePort || '' };
-      const to = typeof link.target === 'object' ? link.target : { deviceId: link.targetDeviceId || '', port: link.targetPort || '' };
+      const from = typeof l.source === 'object' ? l.source : { deviceId: l.sourceDeviceId || '', port: l.sourcePort || '' };
+      const to = typeof l.target === 'object' ? l.target : { deviceId: l.targetDeviceId || '', port: l.targetPort || '' };
       return {
         id: `${from.deviceId}-${to.deviceId}`,
         from: { deviceId: from.deviceId, deviceName: from.deviceId, port: from.port || '' },

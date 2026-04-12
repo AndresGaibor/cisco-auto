@@ -246,22 +246,120 @@ function ensureIosTerm(device: PTDevice): PTCommandLine | null {
 // ============================================================================
 
 export function handleConfigHost(payload: ConfigHostPayload, deps: HandlerDeps): HandlerResult {
-  const { getNet } = deps;
+  const { getNet, dprint } = deps;
   const device = getNet().getDevice(payload.device);
   if (!device) return { ok: false, error: `Device not found: ${payload.device}` };
 
   const port = device.getPortAt(0);
   if (!port) return { ok: false, error: "No ports on device" };
 
+  let dhcpEnabled = false;
+  let actualIp = "";
+  let actualMask = "";
+  let actualGateway = "";
+  const actualDns = payload.dns || "";
+
   if (payload.dhcp === true) {
-    try { port.setDhcpEnabled(true); } catch {}
-  } else {
-    if (payload.ip && payload.mask) port.setIpSubnetMask(payload.ip, payload.mask);
-    if (payload.gateway) port.setDefaultGateway(payload.gateway);
-    if (payload.dns) port.setDnsServerIp(payload.dns);
+    // Intentar setDhcpFlag a nivel dispositivo (Pc/Server)
+    if (typeof (device as any).setDhcpFlag === "function") {
+      try {
+        (device as any).setDhcpFlag(true);
+        if (typeof (device as any).getDhcpFlag === "function") {
+          dhcpEnabled = !!(device as any).getDhcpFlag();
+        }
+      } catch (e) {
+        dprint(`[handleConfigHost] setDhcpFlag failed: ${String(e)}`);
+      }
+    }
+
+    // Intentar setDhcpClientFlag en el puerto (HostPort)
+    if (!dhcpEnabled && typeof (port as any).setDhcpClientFlag === "function") {
+      try {
+        (port as any).setDhcpClientFlag(true);
+        if (typeof (port as any).isDhcpClientOn === "function") {
+          dhcpEnabled = !!(port as any).isDhcpClientOn();
+        }
+      } catch (e) {
+        dprint(`[handleConfigHost] setDhcpClientFlag failed: ${String(e)}`);
+      }
+    }
+
+    // Fallback a setDhcpEnabled (API antigua)
+    if (!dhcpEnabled && typeof (port as any).setDhcpEnabled === "function") {
+      try {
+        (port as any).setDhcpEnabled(true);
+        dhcpEnabled = true;
+      } catch (e) {
+        dprint(`[handleConfigHost] setDhcpEnabled failed: ${String(e)}`);
+      }
+    }
+
+    // Leer IP adicional asignada por DHCP
+    try { actualIp = String(port.getIpAddress()); } catch {}
+    try { actualMask = String(port.getSubnetMask()); } catch {}
+    try { actualGateway = String(port.getDefaultGateway()); } catch {}
+
+    return {
+      ok: true,
+      device: payload.device,
+      dhcp: dhcpEnabled,
+      ip: actualIp,
+      mask: actualMask,
+      gateway: actualGateway,
+    };
   }
 
-  return { ok: true, device: payload.device, ip: payload.ip, mask: payload.mask, gateway: payload.gateway };
+  // Configuración estática
+  if (payload.ip && payload.mask) {
+    try {
+      port.setIpSubnetMask(payload.ip, payload.mask);
+    } catch (e) {
+      return { ok: false, error: `Failed to set IP: ${String(e)}` };
+    }
+  }
+  if (payload.gateway) {
+    try {
+      port.setDefaultGateway(payload.gateway);
+    } catch (e) {
+      return { ok: false, error: `Failed to set gateway: ${String(e)}` };
+    }
+  }
+  if (payload.dns && typeof (port as any).setDnsServerIp === "function") {
+    try {
+      (port as any).setDnsServerIp(payload.dns);
+    } catch {}
+  }
+
+  // Desactivar DHCP si estaba activo
+  if (typeof (device as any).setDhcpFlag === "function") {
+    try { (device as any).setDhcpFlag(false); } catch {}
+  } else if (typeof (port as any).setDhcpClientFlag === "function") {
+    try { (port as any).setDhcpClientFlag(false); } catch {}
+  } else if (typeof (port as any).setDhcpEnabled === "function") {
+    try { (port as any).setDhcpEnabled(false); } catch {}
+  }
+
+  // Leer valores actuales
+  try { actualIp = String(port.getIpAddress()); } catch {}
+  try { actualMask = String(port.getSubnetMask()); } catch {}
+  try { actualGateway = String(port.getDefaultGateway()); } catch {}
+  try {
+    if (typeof (device as any).getDhcpFlag === "function") {
+      dhcpEnabled = !!(device as any).getDhcpFlag();
+    } else if (typeof (port as any).isDhcpClientOn === "function") {
+      dhcpEnabled = !!(port as any).isDhcpClientOn();
+    }
+  } catch {}
+
+  return {
+    ok: true,
+    device: payload.device,
+    dhcp: dhcpEnabled,
+    ip: actualIp,
+    mask: actualMask,
+    gateway: actualGateway,
+    dns: actualDns,
+  };
 }
 
 // ============================================================================

@@ -1,0 +1,2 @@
+## Qwen Added Memories
+- Created docs/pt-api/ directory with complete Packet Tracer IPC API reference documentation. Two files: README.md (index/map) and COMPLETE_API_REFERENCE.md (full reference covering Network, Device, HostPort, SwitchPort, VlanManager, DhcpServerProcess, DhcpPool, TerminalLine events, Server-PT services, routing/ACL/STP processes, and implementation phases). Updated DOCUMENTATION_INDEX.md to reference the new docs.

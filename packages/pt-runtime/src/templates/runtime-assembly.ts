@@ -17,6 +17,8 @@
  */
 
 import { generateDeviceHandlersTemplate } from "./device-handlers-template";
+import { generateDhcpServerHandlersTemplate } from "./dhcp-server-handlers-template";
+import { generateVlanHandlersTemplate } from "./vlan-handlers-template";
 import { generateIosConfigHandlersTemplate } from "./ios-config-handlers-template";
 import { generateIosExecHandlersTemplate } from "./ios-exec-handlers-template";
 import { generateInspectHandlersTemplate } from "./inspect-handlers-template";
@@ -26,7 +28,7 @@ import { generateSessionTemplate } from "./session-template";
 import { generateConstantsTemplate } from "./constants-template";
 
 // Re-export handlers for use in compose.ts
-export { generateDeviceHandlersTemplate, generateIosConfigHandlersTemplate, generateIosExecHandlersTemplate, generateInspectHandlersTemplate, generateCanvasHandlersTemplate, generateHelpersTemplate, generateSessionTemplate };
+export { generateDeviceHandlersTemplate, generateDhcpServerHandlersTemplate, generateVlanHandlersTemplate, generateIosConfigHandlersTemplate, generateIosExecHandlersTemplate, generateInspectHandlersTemplate, generateCanvasHandlersTemplate, generateHelpersTemplate, generateSessionTemplate };
 
 // ============================================================================
 // IOS Jobs Constants
@@ -1776,6 +1778,7 @@ function dispatch(payload, host) {
 
       // Config handlers
       case "configHost": return handleConfigHost(payload);
+      case "inspect-host": return handleInspectHost(payload);
       case "configIos": return handleConfigIos(payload);
       case "execIos": return handleExecIos(payload);
       case "execInteractive": return handleExecIos(payload);
@@ -1787,6 +1790,14 @@ function dispatch(payload, host) {
       case "hardwareCatalog": return handleHardwareCatalog(payload);
       case "commandLog": return handleCommandLog(payload);
       case "resolveCapabilities": return handleResolveCapabilities(payload);
+
+      // DHCP Server handlers
+      case "configDhcpServer": return handleConfigDhcpServer(payload);
+      case "inspectDhcpServer": return handleInspectDhcpServer(payload);
+
+      // VLAN handlers
+      case "ensureVlans": return handleEnsureVlans(payload);
+      case "configVlanInterfaces": return handleConfigVlanInterfaces(payload);
 
       // Canvas handlers
       case "listCanvasRects": return handleListCanvasRects(payload);
@@ -1874,6 +1885,18 @@ ${LINK_HANDLERS_TEMPLATE}
 // ============================================================================
 
 ${generateInspectHandlersTemplate()}
+
+// ============================================================================
+// DHCP Server Handlers
+// ============================================================================
+
+${generateDhcpServerHandlersTemplate()}
+
+// ============================================================================
+// VLAN Handlers
+// ============================================================================
+
+${generateVlanHandlersTemplate()}
 
 // ============================================================================
 // Canvas Handlers

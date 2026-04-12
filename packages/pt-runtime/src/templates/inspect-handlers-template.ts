@@ -47,7 +47,7 @@ function handleSnapshot() {
 
         ports.push(portInfo);
 
-        // O(n) link processing using UUID instead of O(n²) nested loops
+        // O(n) link handling using UUID instead of O(n²) nested loops
         var link = port.getLink();
         if (link) {
           for (var j = 0; j < count; j++) {
@@ -147,6 +147,12 @@ function handleInspect(payload) {
   
   var portCount = device.getPortCount();
   var ports = [];
+  var dhcp = false;
+  
+  // Intentar leer DHCP flag a nivel dispositivo
+  if (typeof device.getDhcpFlag === "function") {
+    try { dhcp = !!device.getDhcpFlag(); } catch(e) {}
+  }
   
   for (var i = 0; i < portCount; i++) {
     try {
@@ -154,10 +160,20 @@ function handleInspect(payload) {
       if (!port) continue;
       
       var portInfo = { name: port.getName() };
-      try { portInfo.ipAddress = port.getIpAddress(); } catch(e) {}
-      try { portInfo.subnetMask = port.getSubnetMask(); } catch(e) {}
-      try { portInfo.macAddress = port.getMacAddress(); } catch(e) {}
-      try { portInfo.defaultGateway = port.getDefaultGateway(); } catch(e) {}
+      try { portInfo.ipAddress = String(port.getIpAddress()); } catch(e) {}
+      try { portInfo.subnetMask = String(port.getSubnetMask()); } catch(e) {}
+      try { portInfo.macAddress = String(port.getMacAddress()); } catch(e) {}
+      try { portInfo.defaultGateway = String(port.getDefaultGateway()); } catch(e) {}
+      
+      // Leer DHCP status del puerto si no está a nivel dispositivo
+      if (!dhcp && typeof port.isDhcpClientOn === "function") {
+        try { 
+          if (port.isDhcpClientOn()) {
+            portInfo.dhcp = true;
+            dhcp = true;
+          }
+        } catch(e) {}
+      }
       
       ports.push(portInfo);
     } catch(e) {}
@@ -169,8 +185,16 @@ function handleInspect(payload) {
     model: device.getModel(),
     type: DEVICE_TYPE_NAMES[device.getType()] || "generic",
     power: device.getPower(),
-    ports: ports
+    ports: ports,
+    dhcp: dhcp
   };
+  
+  // Poblar campos de IP a nivel dispositivo si están disponibles
+  if (ports.length > 0) {
+    try { result.ip = ports[0].ipAddress; } catch(e) {}
+    try { result.mask = ports[0].subnetMask; } catch(e) {}
+    try { result.gateway = ports[0].defaultGateway; } catch(e) {}
+  }
   
   if (payload.includeXml && device.serializeToXml) {
     try { result.xml = device.serializeToXml(); } catch(e) {}

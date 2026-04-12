@@ -1,7 +1,19 @@
 import { Command } from 'commander';
 import { createInterface } from 'readline';
 import { writeFileSync } from 'fs';
-import type { TopologyPlanParams } from '@cisco-auto/core';
+
+interface TopologyPlanParams {
+  routerCount: number;
+  switchCount: number;
+  pcCount: number;
+  serverCount: number;
+  networkType: 'single_lan' | 'multi_lan' | 'star' | 'router_on_a_stick' | 'triangle';
+  routingProtocol: 'static' | 'ospf' | 'eigrp' | 'none';
+  dhcpEnabled: boolean;
+  vlans?: number[];
+  baseNetwork?: string;
+  subnetMask?: string;
+}
 
 const NETWORK_TYPES = [
   { value: 'single_lan', label: 'LAN Única', description: 'Todos los dispositivos en una sola red' },

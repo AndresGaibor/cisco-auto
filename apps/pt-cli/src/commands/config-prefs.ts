@@ -2,7 +2,16 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { Database } from 'bun:sqlite';
-import { initializeSchema } from '@cisco-auto/core/memory/schema';
+
+function initializeSchema(db: Database): void {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS preferences (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  `);
+}
 
 function getMemoryDb(): Database {
   const home = process.env.HOME || process.env.USERPROFILE || '.';
@@ -41,9 +50,9 @@ export function createConfigPrefsCommand(): Command {
       .argument('<key>', 'Clave de la preferencia')
       .action((key) => {
         const db = getMemoryDb();
-        const row = db.get('SELECT value FROM preferences WHERE key = ?', [key]);
+        const row = db.query('SELECT value FROM preferences WHERE key = ?').get(key);
         if (row) {
-          console.log(row.value);
+          console.log((row as { value: string }).value);
         } else {
           console.log(chalk.yellow(`Preferencia "${key}" no encontrada`));
         }
@@ -56,14 +65,14 @@ export function createConfigPrefsCommand(): Command {
       .description('Listar todas las preferencias')
       .action(() => {
         const db = getMemoryDb();
-        const prefs = db.all('SELECT * FROM preferences ORDER BY key');
+        const prefs = db.query('SELECT * FROM preferences ORDER BY key').all();
         if (prefs.length === 0) {
           console.log(chalk.yellow('No hay preferencias guardadas.'));
           db.close();
           return;
         }
         console.log(chalk.bold('\n⚙️ Preferencias\n'));
-        for (const p of prefs) {
+        for (const p of prefs as Array<{ key: string; value: string }>) {
           console.log(`  ${chalk.yellow(p.key)}: ${p.value}`);
         }
         console.log();

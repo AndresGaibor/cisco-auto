@@ -1,6 +1,172 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { resolveConfig, ConfigResolver, getGlobalConfigPath, getProjectConfigPath, hasGlobalConfig, hasProjectConfig, saveGlobalConfig, saveProjectConfig, type CiscoAutoConfig } from '@cisco-auto/core';
+import * as fs from 'fs';
+import * as path from 'path';
+import yaml from 'js-yaml';
+
+interface CiscoAutoConfig {
+  defaultRouter?: string;
+  defaultSwitch?: string;
+  defaultPc?: string;
+  defaultVlan?: number;
+  defaultSubnet?: string;
+  outputDir?: string;
+  logLevel?: 'debug' | 'info' | 'warn' | 'error';
+  format?: 'json' | 'yaml' | 'table';
+}
+
+type ConfigSource = 'defaults' | 'global' | 'project' | 'env' | 'flags';
+
+interface ResolvedConfig {
+  key: string;
+  value: unknown;
+  source: ConfigSource;
+}
+
+const DEFAULT_CONFIG: Required<CiscoAutoConfig> = {
+  defaultRouter: '2911',
+  defaultSwitch: '2960-24TT',
+  defaultPc: 'PC-PT',
+  defaultVlan: 10,
+  defaultSubnet: '255.255.255.0',
+  outputDir: './output',
+  logLevel: 'info',
+  format: 'table'
+};
+
+function getGlobalConfigPath(): string {
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+  return path.join(home, '.cisco-auto', 'config.yaml');
+}
+
+function getProjectConfigPath(dir: string = process.cwd()): string {
+  return path.join(dir, 'cisco-auto.yaml');
+}
+
+function loadConfigFile(filepath: string): { success: boolean; config?: Partial<CiscoAutoConfig>; error?: string } {
+  try {
+    if (!fs.existsSync(filepath)) {
+      return { success: false, error: `Archivo no encontrado: ${filepath}` };
+    }
+    const content = fs.readFileSync(filepath, 'utf-8');
+    const config = yaml.load(content) as Partial<CiscoAutoConfig>;
+    return { success: true, config };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
+  }
+}
+
+function hasGlobalConfig(): boolean {
+  return fs.existsSync(getGlobalConfigPath());
+}
+
+function hasProjectConfig(dir: string = process.cwd()): boolean {
+  return fs.existsSync(getProjectConfigPath(dir));
+}
+
+function saveGlobalConfig(config: Partial<CiscoAutoConfig>): boolean {
+  return saveConfigFile(getGlobalConfigPath(), config);
+}
+
+function saveProjectConfig(config: Partial<CiscoAutoConfig>, dir: string = process.cwd()): boolean {
+  return saveConfigFile(getProjectConfigPath(dir), config);
+}
+
+function saveConfigFile(filepath: string, config: Partial<CiscoAutoConfig>): boolean {
+  try {
+    const dir = path.dirname(filepath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const content = yaml.dump(config, { indent: 2, lineWidth: 120 });
+    fs.writeFileSync(filepath, content, 'utf-8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function loadEnvConfig(): Partial<CiscoAutoConfig> {
+  const config: Partial<CiscoAutoConfig> = {};
+  const prefix = 'CISCO_AUTO_';
+  for (const [envKey, value] of Object.entries(process.env)) {
+    if (envKey.startsWith(prefix) && value !== undefined) {
+      const rawKey = envKey.slice(prefix.length);
+      const configKey = rawKey.replace(/_/g, '').toLowerCase();
+      switch (configKey) {
+        case 'defaultrouter': config.defaultRouter = value; break;
+        case 'defaultswitch': config.defaultSwitch = value; break;
+        case 'defaultpc': config.defaultPc = value; break;
+        case 'defaultvlan': config.defaultVlan = parseInt(value, 10); break;
+        case 'defaultsubnet': config.defaultSubnet = value; break;
+        case 'outputdir': config.outputDir = value; break;
+        case 'loglevel': config.logLevel = value as CiscoAutoConfig['logLevel']; break;
+        case 'format': config.format = value as CiscoAutoConfig['format']; break;
+      }
+    }
+  }
+  return config;
+}
+
+class ConfigResolver {
+  private config: Partial<CiscoAutoConfig>;
+  private resolvedKeys: Map<string, ResolvedConfig>;
+
+  constructor() {
+    this.config = {};
+    this.resolvedKeys = new Map();
+  }
+
+  loadDefaults(): this {
+    this.config = { ...DEFAULT_CONFIG };
+    for (const [key, value] of Object.entries(DEFAULT_CONFIG)) {
+      this.resolvedKeys.set(key, { key, value, source: 'defaults' });
+    }
+    return this;
+  }
+
+  loadGlobal(): this {
+    const result = loadConfigFile(getGlobalConfigPath());
+    if (result.success && result.config) {
+      this.mergeConfig(result.config, 'global');
+    }
+    return this;
+  }
+
+  loadProject(dir: string = process.cwd()): this {
+    const result = loadConfigFile(getProjectConfigPath(dir));
+    if (result.success && result.config) {
+      this.mergeConfig(result.config, 'project');
+    }
+    return this;
+  }
+
+  loadEnv(): this {
+    this.mergeConfig(loadEnvConfig(), 'env');
+    return this;
+  }
+
+  private mergeConfig(newConfig: Partial<CiscoAutoConfig>, source: ConfigSource): void {
+    for (const [key, value] of Object.entries(newConfig)) {
+      if (value !== undefined) {
+        (this.config as Record<string, unknown>)[key] = value;
+        this.resolvedKeys.set(key, { key, value, source });
+      }
+    }
+  }
+
+  resolve(): CiscoAutoConfig {
+    return { ...DEFAULT_CONFIG, ...this.config } as CiscoAutoConfig;
+  }
+
+  getResolved(key: string): ResolvedConfig | undefined {
+    return this.resolvedKeys.get(key);
+  }
+
+  getAllResolved(): ResolvedConfig[] {
+    return Array.from(this.resolvedKeys.values());
+  }
+}
 
 const VALID_KEYS = [
   'defaultRouter',

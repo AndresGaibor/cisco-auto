@@ -9,7 +9,8 @@ import type { GlobalFlags } from '../flags';
 import { fetchDeviceList, getIOSCapableDevices } from '../utils/device-utils';
 import { parseAclRules } from '../utils/cli-parser';
 import { parseConfigFile, requireDevice } from '../utils/config-parser';
-import { AclConfigSchema } from '@cisco-auto/ios-domain/schemas';
+import { generateSecurityCommands, validateSecurityConfig } from '@cisco-auto/kernel/plugins/security';
+import type { SecurityConfigInput } from '@cisco-auto/kernel/plugins/security';
 
 export const CONFIG_ACL_META: CommandMeta = {
   id: 'config-acl',
@@ -27,31 +28,6 @@ export const CONFIG_ACL_META: CommandMeta = {
   supportsPlan: true,
   supportsExplain: true,
 };
-
-function generateAclCommands(config: Record<string, unknown>): string[] {
-  const name = config.name as string;
-  const type = config.type as string;
-  const rules = config.rules as Array<{
-    action: string; protocol: string; source: string; sourceWildcard?: string;
-    destination?: string; destinationWildcard?: string; log?: boolean;
-  }>;
-
-  const cmds: string[] = [];
-  cmds.push(`ip access-list ${type} ${name}`);
-
-  for (const rule of (rules || [])) {
-    let cmd = ` ${rule.action} ${rule.protocol} ${rule.source}`;
-    if (rule.sourceWildcard && rule.source.toLowerCase() !== 'any') cmd += ` ${rule.sourceWildcard}`;
-    if (rule.destination) {
-      cmd += ` ${rule.destination}`;
-      if (rule.destinationWildcard && rule.destination.toLowerCase() !== 'any') cmd += ` ${rule.destinationWildcard}`;
-    }
-    if (rule.log) cmd += ' log';
-    cmds.push(cmd);
-  }
-
-  return cmds;
-}
 
 export function createConfigAclCommand(): Command {
   const cmd = new Command('config-acl')
@@ -96,20 +72,30 @@ export function createConfigAclCommand(): Command {
       if (rules.length === 0) { console.error(chalk.red('Error: al menos un --rule requerido')); process.exit(1); }
 
       const parsedRules = parseAclRules(rules);
-      const configInput = {
-        name,
-        type: aclType,
-        rules: parsedRules,
+      const securityInput: SecurityConfigInput = {
+        deviceName: device,
+        acls: [{
+          name,
+          type: aclType as 'standard' | 'extended',
+          rules: parsedRules.map((r) => ({
+            action: r.action,
+            protocol: r.protocol as 'ip' | 'tcp' | 'udp' | 'icmp' | undefined,
+            source: r.source,
+            sourceWildcard: r.sourceWildcard,
+            destination: r.destination,
+            destinationWildcard: r.destinationWildcard,
+          })),
+        }],
       };
 
-      const validationResult = AclConfigSchema.safeParse(configInput);
-      if (!validationResult.success) {
-        const errors = validationResult.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
+      const validationResult = validateSecurityConfig(securityInput);
+      if (!validationResult.ok) {
+        const errors = validationResult.errors.map((e) => `  - ${e.path}: ${e.message}`).join('\n');
         console.error(chalk.red('Error de validacion:\n' + errors));
         process.exit(1);
       }
 
-      const iosCommands = generateAclCommands(configInput);
+      const iosCommands = generateSecurityCommands(securityInput);
       const isDryRun = options.dryRun || !options.apply;
 
       if (isDryRun) {

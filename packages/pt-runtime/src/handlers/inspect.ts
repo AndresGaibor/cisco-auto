@@ -51,6 +51,14 @@ export function handleInspect(payload: InspectPayload, deps: HandlerDeps): Handl
 
   const portCount = device.getPortCount();
   const ports: Array<Record<string, unknown>> = [];
+  let dhcp = false;
+
+  // Intentar leer DHCP flag a nivel dispositivo
+  if (typeof (device as any).getDhcpFlag === "function") {
+    try {
+      dhcp = !!(device as any).getDhcpFlag();
+    } catch { /* ignore */ }
+  }
 
   for (let i = 0; i < portCount; i++) {
     try {
@@ -60,20 +68,30 @@ export function handleInspect(payload: InspectPayload, deps: HandlerDeps): Handl
       const portInfo: Record<string, unknown> = { name: port.getName() };
 
       try {
-        portInfo.ipAddress = port.getIpAddress();
+        portInfo.ipAddress = String(port.getIpAddress());
       } catch { /* ignore */ }
 
       try {
-        portInfo.subnetMask = port.getSubnetMask();
+        portInfo.subnetMask = String(port.getSubnetMask());
       } catch { /* ignore */ }
 
       try {
-        portInfo.macAddress = port.getMacAddress();
+        portInfo.macAddress = String(port.getMacAddress());
       } catch { /* ignore */ }
 
       try {
-        portInfo.defaultGateway = port.getDefaultGateway();
+        portInfo.defaultGateway = String(port.getDefaultGateway());
       } catch { /* ignore */ }
+
+      // Leer DHCP status del puerto si no está a nivel dispositivo
+      if (!dhcp && typeof (port as any).isDhcpClientOn === "function") {
+        try {
+          if ((port as any).isDhcpClientOn()) {
+            portInfo.dhcp = true;
+            dhcp = true;
+          }
+        } catch { /* ignore */ }
+      }
 
       ports.push(portInfo);
     } catch {
@@ -81,14 +99,22 @@ export function handleInspect(payload: InspectPayload, deps: HandlerDeps): Handl
     }
   }
 
-  const result: HandlerResult = {
+  const result: Record<string, unknown> = {
     ok: true,
     name: device.getName(),
     model: device.getModel(),
     type: device.getType(),
     power: device.getPower(),
     ports,
+    dhcp,
   };
+
+  // Poblar campos de IP a nivel dispositivo si están disponibles
+  if (ports.length > 0) {
+    try { result.ip = ports[0].ipAddress; } catch {}
+    try { result.mask = ports[0].subnetMask; } catch {}
+    try { result.gateway = ports[0].defaultGateway; } catch {}
+  }
 
   const serializeToXml = device as unknown as { serializeToXml?: () => string };
 
@@ -100,7 +126,7 @@ export function handleInspect(payload: InspectPayload, deps: HandlerDeps): Handl
     }
   }
 
-  return result;
+  return result as HandlerResult;
 }
 
 /**

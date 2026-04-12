@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Comando etherchannel - EtherChannel (Port-Channel) management
- * Migrado al patrón runCommand con CliResult
+ * Migrado al patrón runCommand con kernel plugins
  */
 
 import { Command } from 'commander';
@@ -16,6 +16,9 @@ import type { GlobalFlags } from '../flags.js';
 import { runCommand } from '../application/run-command.js';
 import { renderCliResult } from '../ux/renderers.js';
 import { printExamples } from '../ux/examples.js';
+import { fetchDeviceList, getIOSCapableDevices } from '../utils/device-utils.js';
+import { parseConfigFile, requireDevice } from '../utils/config-parser.js';
+import { generateEtherChannelCommands, validateEtherChannelConfig, type EtherChannelConfigInput } from '@cisco-auto/kernel/plugins/switching';
 
 const ETHERCHANNEL_EXAMPLES = [
   { command: 'pt etherchannel create --device Switch1 --group-id 1 --interfaces Gi0/1,Gi0/2', description: 'Crear EtherChannel con LACP' },
@@ -36,61 +39,21 @@ const ETHERCHANNEL_META: CommandMeta = {
   supportsExplain: true,
 };
 
-interface EtherchannelCreateOptions {
-  groupId: number;
-  interfaces: string;
-  mode: 'active' | 'passive' | 'desirable' | 'auto' | 'on';
-  protocol: 'lacp' | 'pagp' | 'static';
-  trunk: boolean;
-  allowedVlans?: string;
-  nativeVlan?: number;
-  description?: string;
-  dryRun: boolean;
-}
-
-interface EtherchannelResult {
+interface EtherchannelCreateResult {
   device: string;
   groupId: number;
   interfaces: string[];
-  commands?: string[];
-  dryRun?: boolean;
-  commandsGenerated?: number;
+  commandsGenerated: number;
 }
 
-function buildEtherchannelCommands(
-  groupId: number,
-  interfaces: string[],
-  options: EtherchannelCreateOptions
-): string[] {
-  const commands: string[] = [];
+interface EtherchannelRemoveResult {
+  device: string;
+  groupId: number;
+}
 
-  commands.push(`! EtherChannel Group ${groupId} (${options.protocol.toUpperCase()})`);
-
-  for (const iface of interfaces) {
-    commands.push(`interface ${iface}`);
-    commands.push(` channel-group ${groupId} mode ${options.mode}`);
-    commands.push(' no shutdown');
-  }
-
-  commands.push(`interface Port-channel${groupId}`);
-  if (options.description) {
-    commands.push(` description ${options.description}`);
-  }
-
-  if (options.trunk) {
-    commands.push(' switchport trunk encapsulation dot1q');
-    commands.push(' switchport mode trunk');
-    if (options.allowedVlans) {
-      commands.push(` switchport trunk allowed vlan ${options.allowedVlans}`);
-    }
-    if (options.nativeVlan) {
-      commands.push(` switchport trunk native vlan ${options.nativeVlan}`);
-    }
-  } else {
-    commands.push(' switchport mode access');
-  }
-
-  return commands;
+interface EtherchannelListResult {
+  device: string;
+  output: string;
 }
 
 export function createEtherchannelCommand(): Command {
@@ -156,6 +119,7 @@ export function createEtherchannelCommand(): Command {
         explain: globalExplain,
         plan: globalPlan,
         verify: true,
+        timeout: null, noTimeout: false,
       };
 
       const result = await runCommand({
@@ -163,75 +127,100 @@ export function createEtherchannelCommand(): Command {
         meta: ETHERCHANNEL_META,
         flags,
         payloadPreview: { device: deviceName, groupId: options.groupId, interfaces: options.interfaces },
-        execute: async (ctx): Promise<CliResult<EtherchannelResult>> => {
+        execute: async (ctx): Promise<CliResult<EtherchannelCreateResult>> => {
           try {
             let targetDevice = deviceName;
 
             if (!targetDevice && !options.interactive) {
-              return createErrorResult('etherchannel.create', { message: 'Debes pasar --device o usar --interactive' }) as CliResult<EtherchannelResult>;
+              return createErrorResult('etherchannel.create', { message: 'Debes pasar --device o usar --interactive' }) as CliResult<EtherchannelCreateResult>;
             }
 
             if (!targetDevice) {
-              const devices = await ctx.controller.listDevices();
-              const switches = devices.filter((d: any) => 
-                d.type === 'switch' || d.type === 'multilayer_switch' || d.model?.includes('2960') || d.model?.includes('3650')
-              );
-              
-              if (switches.length === 0) {
-                return createErrorResult('etherchannel.create', { message: 'No hay switches disponibles' }) as CliResult<EtherchannelResult>;
-              }
+              await ctx.controller.start();
+              try {
+                const devices = await fetchDeviceList(ctx.controller);
+                const switches = devices.filter((d) =>
+                  d.type === 'switch' || d.type === 'switch_layer3' || d.model?.includes('2960') || d.model?.includes('3650')
+                );
 
-              targetDevice = await select({
-                message: 'Selecciona el switch',
-                choices: switches.map((d: any) => ({ name: d.name, value: d.name })),
-              });
+                if (switches.length === 0) {
+                  return createErrorResult('etherchannel.create', { message: 'No hay switches disponibles' }) as CliResult<EtherchannelCreateResult>;
+                }
+
+                targetDevice = await select({
+                  message: 'Selecciona el switch',
+                  choices: switches.map((d) => ({ name: d.name, value: d.name })),
+                });
+              } finally {
+                await ctx.controller.stop();
+              }
             }
 
             if (!options.interfaces) {
-              return createErrorResult('etherchannel.create', { message: 'Se requiere --interfaces' }) as CliResult<EtherchannelResult>;
+              return createErrorResult('etherchannel.create', { message: 'Se requiere --interfaces' }) as CliResult<EtherchannelCreateResult>;
             }
 
             const interfaces = options.interfaces.split(',').map((s: string) => s.trim());
             const groupId = parseInt(options.groupId, 10);
-            
-            const opts: EtherchannelCreateOptions = {
+
+            if (Number.isNaN(groupId) || groupId < 1 || groupId > 64) {
+              return createErrorResult('etherchannel.create', { message: 'Group ID inválido. Debe estar entre 1 y 64' }) as CliResult<EtherchannelCreateResult>;
+            }
+
+            const ecConfig: EtherChannelConfigInput = {
               groupId,
+              mode: options.mode as 'active' | 'passive' | 'on' | 'desirable' | 'auto',
               interfaces,
-              mode: options.mode as any,
-              protocol: options.protocol as any,
-              trunk: options.trunk,
-              allowedVlans: options.allowedVlans,
+              portChannel: `Port-channel${groupId}`,
+              trunkMode: options.trunk ? 'trunk' : 'access',
               nativeVlan: options.nativeVlan ? parseInt(options.nativeVlan, 10) : undefined,
+              allowedVlans: options.allowedVlans === 'all' ? 'all' : options.allowedVlans ? options.allowedVlans.split(',').map((v: string) => parseInt(v.trim(), 10)) : undefined,
               description: options.description,
-              dryRun: options.dryRun
             };
 
-            const commands = buildEtherchannelCommands(groupId, interfaces, opts);
+            const validation = validateEtherChannelConfig(ecConfig);
+            if (!validation.ok) {
+              return createErrorResult('etherchannel.create', { message: validation.errors.map((e) => e.message).join(', ') }) as CliResult<EtherchannelCreateResult>;
+            }
+
+            const commands = generateEtherChannelCommands(ecConfig);
 
             if (options.dryRun) {
               return createSuccessResult('etherchannel.create', {
                 device: targetDevice,
                 groupId,
                 interfaces,
-                commands,
-                dryRun: true,
-              });
+                commandsGenerated: commands.length,
+              }, {
+                advice: ['Usa --apply para ejecutar los comandos en el dispositivo'],
+              }) as CliResult<EtherchannelCreateResult>;
             }
 
-            await ctx.controller.configIos(targetDevice, commands);
+            await ctx.controller.start();
+            try {
+              const devices = await fetchDeviceList(ctx.controller);
+              const iosDevices = getIOSCapableDevices(devices);
+              const selected = iosDevices.find((d) => d.name === targetDevice);
+              if (!selected) {
+                return createErrorResult('etherchannel.create', { message: `Dispositivo "${targetDevice}" no encontrado` }) as CliResult<EtherchannelCreateResult>;
+              }
 
-            return createSuccessResult('etherchannel.create', {
-              device: targetDevice,
-              groupId,
-              interfaces,
-              commandsGenerated: commands.length,
-            }, {
-              advice: [`Usa pt etherchannel list ${targetDevice} para verificar`],
-            });
+              await ctx.controller.configIosWithResult(targetDevice, commands, { save: true });
+              return createSuccessResult('etherchannel.create', {
+                device: targetDevice,
+                groupId,
+                interfaces,
+                commandsGenerated: commands.length,
+              }, {
+                advice: [`Usa pt etherchannel list ${targetDevice} para verificar`],
+              });
+            } finally {
+              await ctx.controller.stop();
+            }
           } catch (error) {
             return createErrorResult('etherchannel.create', {
               message: error instanceof Error ? error.message : String(error),
-            }) as CliResult<EtherchannelResult>;
+            }) as CliResult<EtherchannelCreateResult>;
           }
         },
       });
@@ -241,12 +230,11 @@ export function createEtherchannelCommand(): Command {
         console.log(output);
       }
 
-      if (result.ok && !options.dryRun) {
-        console.log(chalk.green('✅ EtherChannel configurado'));
-      } else if (result.ok && options.dryRun) {
+      if (result.ok && options.dryRun) {
+        console.log(chalk.green('✅ EtherChannel configurado (dry-run)'));
         console.log('--- Commands (dry-run) ---');
-        const cmds = result.data?.commands as string[] | undefined;
-        cmds?.forEach(c => console.log(c));
+      } else if (result.ok && !options.dryRun) {
+        console.log(chalk.green('✅ EtherChannel configurado'));
       }
 
       if (!result.ok) process.exit(1);
@@ -293,6 +281,7 @@ export function createEtherchannelCommand(): Command {
         explain: false,
         plan: globalPlan,
         verify: false,
+        timeout: null, noTimeout: false,
       };
 
       const result = await runCommand({
@@ -300,20 +289,33 @@ export function createEtherchannelCommand(): Command {
         meta: ETHERCHANNEL_META,
         flags,
         payloadPreview: { device: deviceName, groupId: options.groupId },
-        execute: async (ctx): Promise<CliResult> => {
+        execute: async (ctx): Promise<CliResult<EtherchannelRemoveResult>> => {
           try {
             let targetDevice = deviceName;
 
             if (!targetDevice && !options.interactive) {
-              return createErrorResult('etherchannel.remove', { message: 'Debes pasar --device o usar --interactive' }) as CliResult;
+              return createErrorResult('etherchannel.remove', { message: 'Debes pasar --device o usar --interactive' }) as CliResult<EtherchannelRemoveResult>;
             }
 
             if (!targetDevice) {
-              const devices = await ctx.controller.listDevices();
-              targetDevice = await select({
-                message: 'Selecciona el switch',
-                choices: devices.map((d: any) => ({ name: d.name, value: d.name })),
-              });
+              await ctx.controller.start();
+              try {
+                const devices = await fetchDeviceList(ctx.controller);
+                const switches = devices.filter((d) =>
+                  d.type === 'switch' || d.type === 'switch_layer3' || d.model?.includes('2960') || d.model?.includes('3650')
+                );
+
+                if (switches.length === 0) {
+                  return createErrorResult('etherchannel.remove', { message: 'No hay switches disponibles' }) as CliResult<EtherchannelRemoveResult>;
+                }
+
+                targetDevice = await select({
+                  message: 'Selecciona el switch',
+                  choices: switches.map((d) => ({ name: d.name, value: d.name })),
+                });
+              } finally {
+                await ctx.controller.stop();
+              }
             }
 
             const groupId = parseInt(options.groupId, 10);
@@ -323,21 +325,32 @@ export function createEtherchannelCommand(): Command {
               return createSuccessResult('etherchannel.remove', {
                 device: targetDevice,
                 groupId,
-                commands,
-                dryRun: true,
-              });
+              }, {
+                advice: ['Comandos para remover el EtherChannel:', ...commands],
+              }) as CliResult<EtherchannelRemoveResult>;
             }
 
-            await ctx.controller.configIos(targetDevice, commands);
+            await ctx.controller.start();
+            try {
+              const devices = await fetchDeviceList(ctx.controller);
+              const iosDevices = getIOSCapableDevices(devices);
+              const selected = iosDevices.find((d) => d.name === targetDevice);
+              if (!selected) {
+                return createErrorResult('etherchannel.remove', { message: `Dispositivo "${targetDevice}" no encontrado` }) as CliResult<EtherchannelRemoveResult>;
+              }
 
-            return createSuccessResult('etherchannel.remove', {
-              device: targetDevice,
-              groupId,
-            });
+              await ctx.controller.configIosWithResult(targetDevice, commands, { save: true });
+              return createSuccessResult('etherchannel.remove', {
+                device: targetDevice,
+                groupId,
+              });
+            } finally {
+              await ctx.controller.stop();
+            }
           } catch (error) {
             return createErrorResult('etherchannel.remove', {
               message: error instanceof Error ? error.message : String(error),
-            });
+            }) as CliResult<EtherchannelRemoveResult>;
           }
         },
       });
@@ -381,6 +394,7 @@ export function createEtherchannelCommand(): Command {
         explain: false,
         plan: false,
         verify: false,
+        timeout: null, noTimeout: false,
       };
 
       const result = await runCommand({
@@ -388,32 +402,49 @@ export function createEtherchannelCommand(): Command {
         meta: ETHERCHANNEL_META,
         flags,
         payloadPreview: { device: deviceName },
-        execute: async (ctx): Promise<CliResult> => {
+        execute: async (ctx): Promise<CliResult<EtherchannelListResult>> => {
           try {
             let targetDevice = deviceName;
 
             if (!targetDevice && !options.interactive) {
-              throw new Error('Debes pasar el dispositivo o usar --interactive');
+              return createErrorResult('etherchannel.list', { message: 'Debes pasar --device o usar --interactive' }) as CliResult<EtherchannelListResult>;
             }
 
             if (!targetDevice) {
-              const devices = await ctx.controller.listDevices();
-              targetDevice = await select({
-                message: 'Selecciona el switch',
-                choices: devices.map((d: any) => ({ name: d.name, value: d.name })),
-              });
+              await ctx.controller.start();
+              try {
+                const devices = await fetchDeviceList(ctx.controller);
+                const switches = devices.filter((d) =>
+                  d.type === 'switch' || d.type === 'switch_layer3' || d.model?.includes('2960') || d.model?.includes('3650')
+                );
+
+                if (switches.length === 0) {
+                  return createErrorResult('etherchannel.list', { message: 'No hay switches disponibles' }) as CliResult<EtherchannelListResult>;
+                }
+
+                targetDevice = await select({
+                  message: 'Selecciona el switch',
+                  choices: switches.map((d) => ({ name: d.name, value: d.name })),
+                });
+              } finally {
+                await ctx.controller.stop();
+              }
             }
 
-            const output = await ctx.controller.execIos(targetDevice, 'show etherchannel summary', true);
-
-            return createSuccessResult('etherchannel.list', {
-              device: targetDevice,
-              output: output.raw,
-            });
+            await ctx.controller.start();
+            try {
+              const output = await ctx.controller.execIos(targetDevice, 'show etherchannel summary', true);
+              return createSuccessResult('etherchannel.list', {
+                device: targetDevice,
+                output: output.raw,
+              });
+            } finally {
+              await ctx.controller.stop();
+            }
           } catch (error) {
             return createErrorResult('etherchannel.list', {
               message: error instanceof Error ? error.message : String(error),
-            });
+            }) as CliResult<EtherchannelListResult>;
           }
         },
       });

@@ -54,13 +54,27 @@ export class DeviceService {
 
   configureDhcpServer(
     device: string,
-    options: { poolName: string; network: string; subnetMask: string; defaultRouter?: string; dnsServers?: string[]; excludedAddresses?: string[]; leaseTime?: number; domainName?: string; }
+    options: {
+      enabled: boolean;
+      port?: string;
+      pools: Array<{
+        name: string;
+        network: string;
+        mask: string;
+        defaultRouter: string;
+        dns?: string;
+        startIp?: string;
+        endIp?: string;
+        maxUsers?: number;
+      }>;
+      excluded?: Array<{ start: string; end: string }>;
+    }
   ) {
     return this.mutation.configureDhcpServer(device, options);
   }
 
-  inspectDhcpServer(device: string) {
-    return this.query.inspectDhcpServer(device);
+  inspectDhcpServer(device: string, port?: string) {
+    return this.mutation.inspectDhcpServer(device, port);
   }
 
   moveDevice(name: string, x: number, y: number) {

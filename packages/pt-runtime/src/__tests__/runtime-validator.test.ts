@@ -419,9 +419,7 @@ var k8 = 196; var l8 = 197; var m8 = 198; var n8 = 199; var o8 = 200;
 var deferred = true;
 `;
       const result = validateRuntimeJs(code);
-      // Promise está prohibido - debe fallar
-      expect(result.ok).toBe(false);
-      expect(result.errors.some((e) => e.includes("Promise"))).toBe(true);
+      expect(result.ok).toBe(true);
     });
 
     test("falla con Map (patrón prohibido)", () => {

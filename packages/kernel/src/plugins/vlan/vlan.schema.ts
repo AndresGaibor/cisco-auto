@@ -34,3 +34,25 @@ export const vlanSchema = z.object({
 
 export type VlanConfig = z.output<typeof vlanSchema>;
 export type VlanConfigInput = z.input<typeof vlanSchema>;
+
+export const sviEntrySchema = z.object({
+  vlanId: z
+    .union([z.number().int(), z.string().regex(/^\d+$/)])
+    .refine((value) => VlanId.isValid(value), {
+      message: 'Invalid VLAN ID for SVI',
+    })
+    .transform((value) => parseVlanId(value)),
+  ipAddress: z.string().min(1).describe('Dirección IP de la SVI'),
+  subnetMask: z.string().min(1).describe('Máscara de subred'),
+  description: z.string().optional(),
+  shutdown: z.boolean().optional().default(false),
+});
+
+export const sviSchema = z.object({
+  deviceName: z.string().min(1),
+  svis: z.array(sviEntrySchema),
+  ipRouting: z.boolean().optional().default(false).describe('Activar ip routing si es switch L3'),
+});
+
+export type SviConfig = z.output<typeof sviSchema>;
+export type SviConfigInput = z.input<typeof sviSchema>;

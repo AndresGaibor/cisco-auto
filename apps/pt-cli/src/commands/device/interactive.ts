@@ -2,18 +2,169 @@
 /**
  * Comando device interactive - Selector interactivo de dispositivos
  * 
- * Muestra el catálogo de dispositivos y permite seleccionar
- * múltiples dispositivos con sus especificaciones.
+ * Implementación local sin dependencias de @cisco-auto/core.
+ * Usa catálogo de dispositivos directamente.
  */
 
 import { Command } from 'commander';
 import { createInterface } from 'readline';
-import type { ToolResult } from '@cisco-auto/core';
-import { ptListDevicesTool, ptGetDeviceDetailsTool, isToolResultSuccess, getToolResultError, createToolContext } from '@cisco-auto/core';
 
-/**
- * Crea interfaz readline
- */
+interface DeviceCatalogEntry {
+  name: string;
+  type: string;
+  ptType: string;
+  description: string;
+  ports: Array<{ name: string; type: string; speed: string; available: boolean }>;
+  portCount: number;
+  maxModules: number;
+  defaultIOS: string | null;
+}
+
+const deviceCatalog: DeviceCatalogEntry[] = [
+  {
+    name: '1941',
+    type: 'router',
+    ptType: 'Router-PT',
+    description: 'Router Cisco 1941 con 2 puertos GigabitEthernet',
+    ports: [
+      { name: 'GigabitEthernet0/0', type: 'gigabitethernet', speed: '1Gbps', available: true },
+      { name: 'GigabitEthernet0/1', type: 'gigabitethernet', speed: '1Gbps', available: true }
+    ],
+    maxModules: 2,
+    defaultIOS: '15.1',
+    portCount: 2
+  },
+  {
+    name: '2901',
+    type: 'router',
+    ptType: 'Router-PT',
+    description: 'Router Cisco 2901 con 2 puertos GigabitEthernet',
+    ports: [
+      { name: 'GigabitEthernet0/0', type: 'gigabitethernet', speed: '1Gbps', available: true },
+      { name: 'GigabitEthernet0/1', type: 'gigabitethernet', speed: '1Gbps', available: true }
+    ],
+    maxModules: 2,
+    defaultIOS: '15.1',
+    portCount: 2
+  },
+  {
+    name: '2911',
+    type: 'router',
+    ptType: 'Router-PT',
+    description: 'Router Cisco 2911 con 3 puertos GigabitEthernet',
+    ports: [
+      { name: 'GigabitEthernet0/0', type: 'gigabitethernet', speed: '1Gbps', available: true },
+      { name: 'GigabitEthernet0/1', type: 'gigabitethernet', speed: '1Gbps', available: true },
+      { name: 'GigabitEthernet0/2', type: 'gigabitethernet', speed: '1Gbps', available: true }
+    ],
+    maxModules: 0,
+    defaultIOS: '15.1',
+    portCount: 3
+  },
+  {
+    name: '4321',
+    type: 'router',
+    ptType: 'Router-PT',
+    description: 'Router Cisco 4321 con 4 puertos GigabitEthernet',
+    ports: [
+      { name: 'GigabitEthernet0/0/0', type: 'gigabitethernet', speed: '1Gbps', available: true },
+      { name: 'GigabitEthernet0/0/1', type: 'gigabitethernet', speed: '1Gbps', available: true },
+      { name: 'GigabitEthernet0/0/2', type: 'gigabitethernet', speed: '1Gbps', available: true },
+      { name: 'GigabitEthernet0/0/3', type: 'gigabitethernet', speed: '1Gbps', available: true }
+    ],
+    maxModules: 2,
+    defaultIOS: '16.1',
+    portCount: 4
+  },
+  {
+    name: '2960-24TT',
+    type: 'switch',
+    ptType: 'Switch-PT',
+    description: 'Switch Cisco 2960 con 24 puertos FastEthernet y 2 puertos GigabitEthernet',
+    ports: [
+      ...Array.from({ length: 24 }, (_, i) => ({
+        name: `FastEthernet0/${i}`,
+        type: 'fastethernet',
+        speed: '100Mbps',
+        available: true
+      })),
+      { name: 'GigabitEthernet0/1', type: 'gigabitethernet', speed: '1Gbps', available: true },
+      { name: 'GigabitEthernet0/2', type: 'gigabitethernet', speed: '1Gbps', available: true }
+    ],
+    maxModules: 0,
+    defaultIOS: '15.0',
+    portCount: 26
+  },
+  {
+    name: '3560-24PS',
+    type: 'multilayer-switch',
+    ptType: 'Multilayer Switch-PT',
+    description: 'Switch multicapa Cisco 3560 con 24 puertos FastEthernet PoE y 4 puertos GigabitEthernet',
+    ports: [
+      ...Array.from({ length: 24 }, (_, i) => ({
+        name: `FastEthernet0/${i}`,
+        type: 'fastethernet',
+        speed: '100Mbps',
+        available: true
+      })),
+      ...Array.from({ length: 4 }, (_, i) => ({
+        name: `GigabitEthernet0/${i + 1}`,
+        type: 'gigabitethernet',
+        speed: '1Gbps',
+        available: true
+      }))
+    ],
+    maxModules: 0,
+    defaultIOS: '15.0',
+    portCount: 28
+  },
+  {
+    name: 'PC-PT',
+    type: 'pc',
+    ptType: 'PC-PT',
+    description: 'PC genérica con interfaz FastEthernet',
+    ports: [
+      { name: 'FastEthernet0', type: 'fastethernet', speed: '100Mbps', available: true }
+    ],
+    maxModules: 0,
+    defaultIOS: null,
+    portCount: 1
+  },
+  {
+    name: 'Server-PT',
+    type: 'server',
+    ptType: 'Server-PT',
+    description: 'Servidor genérico con interfaz FastEthernet',
+    ports: [
+      { name: 'FastEthernet0', type: 'fastethernet', speed: '100Mbps', available: true }
+    ],
+    maxModules: 0,
+    defaultIOS: null,
+    portCount: 1
+  },
+  {
+    name: 'Laptop-PT',
+    type: 'pc',
+    ptType: 'Laptop-PT',
+    description: 'Laptop genérica con interfaz FastEthernet',
+    ports: [
+      { name: 'FastEthernet0', type: 'fastethernet', speed: '100Mbps', available: true }
+    ],
+    maxModules: 0,
+    defaultIOS: null,
+    portCount: 1
+  }
+];
+
+function getDevicesByType(type?: string): DeviceCatalogEntry[] {
+  if (!type) return deviceCatalog;
+  return deviceCatalog.filter(d => d.type === type);
+}
+
+function getDeviceDetails(name: string): DeviceCatalogEntry | undefined {
+  return deviceCatalog.find(d => d.name === name);
+}
+
 function crearReadline() {
   return createInterface({
     input: process.stdin,
@@ -21,9 +172,6 @@ function crearReadline() {
   });
 }
 
-/**
- * Hace una pregunta y retorna la respuesta
- */
 function preguntar(rl: ReturnType<typeof createInterface>, pregunta: string): Promise<string> {
   return new Promise((resolve) => {
     rl.question(pregunta, (respuesta: string) => {
@@ -32,9 +180,6 @@ function preguntar(rl: ReturnType<typeof createInterface>, pregunta: string): Pr
   });
 }
 
-/**
- * Valida que el input sea un número válido
- */
 function validarNumero(valor: string, min: number, max: number): number | null {
   const num = parseInt(valor, 10);
   if (isNaN(num) || num < min || num > max) {
@@ -43,33 +188,16 @@ function validarNumero(valor: string, min: number, max: number): number | null {
   return num;
 }
 
-/**
- * Muestra el banner del selector
- */
 function mostrarBanner() {
   console.log(`
 ╔══════════════════════════════════════════════════════════════╗
 ║          SELECTOR DE DISPOSITIVOS                           ║
-║     Catálogo Cisco Packet Tracer                            ║
-╚══════════════════════════════════════════════════════════════╝
+║     Catálogo Cisco Packet Tracer                            ╚══════════════════════════════════════════════════════════════╝
 `);
 }
 
-/**
- * Muestra lista de dispositivos
- */
 async function mostrarDispositivos(tipo?: string): Promise<void> {
-  const result = await ptListDevicesTool.handler(
-    tipo ? { type: tipo } : {},
-    createToolContext('list-devices')
-  ) as ToolResult<{ devices: Array<{ name: string; type: string; ptType: string; description: string; portCount: number }>; total: number }>;
-
-  if (!isToolResultSuccess(result)) {
-    console.log(`❌ Error al cargar catálogo: ${getToolResultError(result)}`);
-    return;
-  }
-
-  const devices = result.data.devices;
+  const devices = getDevicesByType(tipo);
 
   console.log('\n📋 Dispositivos disponibles:\n');
   console.log('─'.repeat(70));
@@ -89,21 +217,13 @@ async function mostrarDispositivos(tipo?: string): Promise<void> {
   console.log('\n' + '─'.repeat(70));
 }
 
-/**
- * Muestra detalles de un dispositivo
- */
 async function mostrarDetalles(deviceName: string): Promise<void> {
-  const result = await ptGetDeviceDetailsTool.handler(
-    { name: deviceName },
-    createToolContext('list-devices')
-  ) as ToolResult<{ device: { name: string; type: string; ptType: string; description: string; defaultIOS: string | null; maxModules: number; ports: Array<{ name: string; type: string; speed: string; available: boolean }> } }>;
+  const device = getDeviceDetails(deviceName);
 
-  if (!isToolResultSuccess(result)) {
+  if (!device) {
     console.log(`❌ No se encontró el dispositivo: ${deviceName}`);
     return;
   }
-
-  const device = result.data.device;
 
   console.log(`
 ╔══════════════════════════════════════════════════════════════╗
@@ -126,9 +246,6 @@ async function mostrarDetalles(deviceName: string): Promise<void> {
   console.log('\n');
 }
 
-/**
- * Ejecuta el selector interactivo
- */
 async function ejecutarSelector(): Promise<void> {
   const rl = crearReadline();
   const seleccionados: string[] = [];
@@ -136,7 +253,6 @@ async function ejecutarSelector(): Promise<void> {
   try {
     mostrarBanner();
 
-    // Preguntar si filtrar por tipo
     console.log('\n  Tipos de dispositivos:');
     console.log('    1. Todos');
     console.log('    2. Routers');
@@ -144,11 +260,11 @@ async function ejecutarSelector(): Promise<void> {
     console.log('    4. Multilayer Switches');
     console.log('    5. PCs');
     console.log('    6. Servers');
-    
+
     let tipo: string | undefined;
     const tipoStr = await preguntar(rl, '\n  Selecciona tipo (1-6) [1]: ');
     const tipoNum = validarNumero(tipoStr || '1', 1, 6);
-    
+
     switch (tipoNum) {
       case 2: tipo = 'router'; break;
       case 3: tipo = 'switch'; break;
@@ -158,37 +274,28 @@ async function ejecutarSelector(): Promise<void> {
       default: tipo = undefined;
     }
 
-    // Mostrar dispositivos
     await mostrarDispositivos(tipo);
 
-    // Ciclo de selección
     let continuar = true;
     while (continuar) {
       const opcion = await preguntar(rl, '\n  Opciones:\n    [número] Ver detalles\n    [s] Seleccionar dispositivo\n    [q] Salir\n\n  Tu elección: ');
-      
+
       if (opcion.toLowerCase() === 'q') {
         continuar = false;
       } else if (opcion.toLowerCase() === 's') {
-        // Seleccionar dispositivo
         const deviceName = await preguntar(rl, '  Nombre del dispositivo a seleccionar: ');
         if (deviceName.trim()) {
           seleccionados.push(deviceName.trim());
           console.log(`  ✅ ${deviceName} agregado a la selección`);
         }
       } else {
-        // Ver detalles
         const deviceNum = validarNumero(opcion, 1, 50);
         if (deviceNum !== null) {
-          // Obtener lista para mapear número a nombre
-          const result = await ptListDevicesTool.handler(
-            tipo ? { type: tipo } : {},
-            createToolContext('select-devices')
-          ) as ToolResult<{ devices: Array<{ name: string; type: string; ptType: string; description: string; portCount: number }>; total: number }>;
-
-          if (isToolResultSuccess(result) && result.data.devices[deviceNum - 1]) {
-            const deviceName = result.data.devices[deviceNum - 1]!.name;
+          const devices = getDevicesByType(tipo);
+          if (devices[deviceNum - 1]) {
+            const deviceName = devices[deviceNum - 1]!.name;
             await mostrarDetalles(deviceName);
-            
+
             const agregar = await preguntar(rl, '  ¿Agregar a selección? (s/n): ');
             if (agregar.toLowerCase() === 's') {
               seleccionados.push(deviceName);
@@ -203,7 +310,6 @@ async function ejecutarSelector(): Promise<void> {
       }
     }
 
-    // Mostrar resumen
     if (seleccionados.length > 0) {
       console.log('\n╔══════════════════════════════════════════════════════════════╗');
       console.log('║           DISPOSITIVOS SELECCIONADOS                        ║');
@@ -211,19 +317,19 @@ async function ejecutarSelector(): Promise<void> {
       seleccionados.forEach((device, idx) => {
         console.log(`  ${idx + 1}. ${device}`);
       });
-      
+
       const guardar = await preguntar(rl, '\n  ¿Guardar selección en archivo? (s/n): ');
       if (guardar.toLowerCase() === 's') {
         const fs = await import('fs');
         const nombreArchivo = await preguntar(rl, '  Nombre del archivo [seleccion.json]: ');
         const archivo = nombreArchivo.trim() || 'seleccion.json';
-        
+
         fs.writeFileSync(archivo, JSON.stringify({
           dispositivos: seleccionados,
           fecha: new Date().toISOString(),
           total: seleccionados.length
         }, null, 2));
-        
+
         console.log(`  ✅ Selección guardada en: ${archivo}`);
       }
     } else {
@@ -240,9 +346,6 @@ async function ejecutarSelector(): Promise<void> {
   }
 }
 
-/**
- * Crea el comando device interactive
- */
 export function createDeviceInteractiveCommand(): Command {
   const cmd = new Command('interactive')
     .alias('i')

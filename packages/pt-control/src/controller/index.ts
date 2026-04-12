@@ -194,6 +194,14 @@ export class PTController {
     await this.topologyFacade.configHost(device, options);
   }
 
+  async inspectHost(device: string): Promise<DeviceState> {
+    const deviceState = await this.deviceService.inspect(device);
+    if (deviceState.type !== 'pc' && deviceState.type !== 'server') {
+      throw new Error(`Dispositivo '${device}' no es un host (PC/Server-PT). Tipo: ${deviceState.type}`);
+    }
+    return deviceState;
+  }
+
   async configIos(
     device: string,
     commands: string[],

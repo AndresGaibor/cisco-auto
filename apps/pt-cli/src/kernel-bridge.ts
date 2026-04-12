@@ -4,18 +4,25 @@
  */
 
 import { DefaultPluginRegistry, type PluginRegistry } from '@cisco-auto/kernel/plugin-api';
+import { basicConfigPlugin } from '@cisco-auto/kernel/plugins/basic-config';
 import { vlanPlugin } from '@cisco-auto/kernel/plugins/vlan';
+import { switchingPlugin } from '@cisco-auto/kernel/plugins/switching';
 import { routingPlugin } from '@cisco-auto/kernel/plugins/routing';
 import { securityPlugin } from '@cisco-auto/kernel/plugins/security';
 import { servicesPlugin } from '@cisco-auto/kernel/plugins/services';
 import { ipv6Plugin } from '@cisco-auto/kernel/plugins/ipv6';
 import { portTemplatePlugin } from '@cisco-auto/kernel/plugins/port-template';
+import { configOrchestratorPlugin } from '@cisco-auto/kernel/plugins/orchestrator';
 import { packetTracerBackendPlugin, type PacketTracerBackendPlugin } from '@cisco-auto/kernel/backends/packet-tracer';
 import { generateVlanCommands, validateVlanConfig } from '@cisco-auto/kernel/plugins/vlan';
 import type { VlanConfigInput } from '@cisco-auto/kernel/plugins/vlan';
+import { generateBasicCommands, validateBasicConfig } from '@cisco-auto/kernel/plugins/basic-config';
+import type { BasicConfigInput } from '@cisco-auto/kernel/plugins/basic-config';
+import { orchestrateConfig } from '@cisco-auto/kernel/plugins/orchestrator';
+import type { DeviceConfigSpecInput } from '@cisco-auto/kernel/plugins/orchestrator';
 
-export type { VlanConfigInput };
-export { generateVlanCommands, validateVlanConfig };
+export type { VlanConfigInput, BasicConfigInput, DeviceConfigSpecInput };
+export { generateVlanCommands, validateVlanConfig, generateBasicCommands, validateBasicConfig, orchestrateConfig };
 
 let registry: PluginRegistry | null = null;
 
@@ -26,12 +33,15 @@ let registry: PluginRegistry | null = null;
 export function getKernelRegistry(): PluginRegistry {
   if (!registry) {
     registry = new DefaultPluginRegistry();
+    registry.register('protocol', basicConfigPlugin);
     registry.register('protocol', vlanPlugin);
+    registry.register('protocol', switchingPlugin);
     registry.register('protocol', routingPlugin);
     registry.register('protocol', securityPlugin);
     registry.register('protocol', servicesPlugin);
     registry.register('protocol', ipv6Plugin);
     registry.register('protocol', portTemplatePlugin);
+    registry.register('protocol', configOrchestratorPlugin);
     registry.register('backend', packetTracerBackendPlugin);
   }
   return registry;
@@ -46,10 +56,24 @@ export function getProtocolPlugin(id: string) {
 }
 
 /**
+ * Obtiene el plugin de configuración básica del registro.
+ */
+export function getBasicConfigPlugin() {
+  return getProtocolPlugin('basic-config');
+}
+
+/**
  * Obtiene el plugin VLAN del registro.
  */
 export function getVlanPlugin() {
   return getProtocolPlugin('vlan');
+}
+
+/**
+ * Obtiene el plugin de switching del registro.
+ */
+export function getSwitchingPlugin() {
+  return getProtocolPlugin('switching');
 }
 
 /**
