@@ -1,6 +1,3 @@
-// packages/pt-runtime/src/build/render-runtime.ts
-// Generate runtime.js from TypeScript handler modules
-
 import { transformToPtSafe, wrapRuntimeBootstrap } from "./pt-safe-transforms";
 import { validatePtSafe, formatValidationResult } from "./validate-pt-safe";
 import * as fs from "fs";

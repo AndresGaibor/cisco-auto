@@ -7,6 +7,7 @@ import type {
   DeviceTwin,
   ZoneTwin,
   PortTwin,
+  PortCandidate,
   LinkTwin,
   DeviceSpatialContext,
   ConfigTwin,
@@ -73,6 +74,101 @@ export function getDeviceContext(twin: NetworkTwin, deviceName: string): DeviceC
     uplinks,
     config: device.config,
   };
+}
+
+// ==========================================================================
+// Agent Task Scope Helpers
+// ==========================================================================
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function findMentionedDeviceNames(twin: NetworkTwin, text: string): string[] {
+  const matches: string[] = [];
+  for (const device of Object.values(twin.devices)) {
+    const pattern = new RegExp(`\\b${escapeRegExp(device.name)}\\b`, 'i');
+    if (pattern.test(text)) {
+      matches.push(device.name);
+    }
+  }
+  return matches;
+}
+
+export function findMentionedZoneIds(twin: NetworkTwin, text: string): string[] {
+  const matches: string[] = [];
+  for (const zone of Object.values(twin.zones)) {
+    const candidates = [zone.id, zone.label].filter(Boolean) as string[];
+    if (candidates.some((candidate) => new RegExp(`\\b${escapeRegExp(candidate)}\\b`, 'i').test(text))) {
+      matches.push(zone.id);
+    }
+  }
+  return matches;
+}
+
+export function getFreePortCandidates(twin: NetworkTwin, deviceNames: string[]): PortCandidate[] {
+  const uniqueNames = Array.from(new Set(deviceNames));
+  const candidates: PortCandidate[] = [];
+
+  for (const deviceName of uniqueNames) {
+    const device = selectDeviceByName(twin, deviceName);
+    if (!device) continue;
+    for (const port of Object.values(device.ports)) {
+      if (port.connectedTo) continue;
+      candidates.push({
+        device: deviceName,
+        port: port.name,
+        score: port.media === 'fiber' ? 80 : 100,
+        occupied: false,
+        reason: port.media ? `Puerto libre (${port.media})` : 'Puerto libre',
+      });
+    }
+  }
+
+  return candidates.sort((left, right) => {
+    if (left.device !== right.device) {
+      return left.device.localeCompare(right.device);
+    }
+    return left.port.localeCompare(right.port);
+  });
+}
+
+export function getTaskRisks(
+  twin: NetworkTwin,
+  task: string,
+  deviceNames: string[],
+  zoneIds: string[],
+  candidates: PortCandidate[]
+): string[] {
+  const risks: string[] = [];
+  const deviceScope = Array.from(new Set(deviceNames));
+
+  if (/connect|link/i.test(task)) {
+    risks.push('Validar ambos extremos antes de mutar la conectividad.');
+    if (deviceScope.length < 2) {
+      risks.push('La tarea de conexión necesita al menos dos dispositivos en alcance.');
+    }
+  }
+
+  if (/verify|check|validate/i.test(task)) {
+    risks.push('Usar evidencia de verificación y no asumir éxito por ejecución.');
+  }
+
+  for (const deviceName of deviceScope) {
+    const deviceCandidates = candidates.filter((candidate) => candidate.device === deviceName);
+    if (deviceCandidates.length === 0) {
+      risks.push(`No hay puertos libres en ${deviceName}.`);
+    }
+  }
+
+  for (const zoneId of zoneIds) {
+    const devicesInZone = selectDevicesInZone(twin, zoneId);
+    if (devicesInZone.length >= 4) {
+      risks.push(`La zona ${zoneId} agrupa ${devicesInZone.length} dispositivos; coordinar cambios por etapas.`);
+    }
+  }
+
+  return Array.from(new Set(risks));
 }
 
 // ============================================================================

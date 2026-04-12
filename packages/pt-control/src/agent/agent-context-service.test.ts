@@ -11,7 +11,10 @@ function createTwin() {
         name: 'R1',
         family: 'router',
         logicalPosition: { x: 10, y: 10, width: 20, height: 20, centerX: 20, centerY: 20 },
-        ports: {},
+        ports: {
+          Gi0_0: { name: 'Gi0/0', media: 'copper', connectedTo: { device: 'S1', port: 'Fa0/1' } },
+          Gi0_1: { name: 'Gi0/1', media: 'copper' },
+        },
         modules: [],
         config: undefined,
       },
@@ -19,7 +22,10 @@ function createTwin() {
         name: 'S1',
         family: 'switch-l2',
         logicalPosition: { x: 60, y: 20, width: 20, height: 20, centerX: 70, centerY: 30 },
-        ports: {},
+        ports: {
+          Fa0_1: { name: 'Fa0/1', media: 'copper', connectedTo: { device: 'R1', port: 'Gi0/0' } },
+          Fa0_2: { name: 'Fa0/2', media: 'copper' },
+        },
         modules: [],
         config: undefined,
       },
@@ -58,10 +64,17 @@ describe('AgentContextService', () => {
     expect(context.task?.goal).toBe('connect R1 to S1');
     expect(context.task?.affectedDevices).toEqual(['S1', 'R1']);
     expect(context.task?.affectedZones).toEqual(['Z_USERS']);
+    expect(context.task?.candidatePorts?.map((candidate) => candidate.port)).toEqual([
+      'Gi0/1',
+      'Fa0/2',
+    ]);
+    expect(context.task?.risks?.some((risk) => risk.includes('connect'))).toBe(true);
 
     const rendered = renderBaseContext(context);
     expect(rendered).toContain('Tarea actual');
     expect(rendered).toContain('connect R1 to S1');
+    expect(rendered).toContain('Puertos candidatos');
+    expect(rendered).toContain('Riesgos');
     expect(rendered).toContain('S1');
   });
 

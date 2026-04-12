@@ -1,5 +1,6 @@
-// packages/pt-runtime/src/index.ts
+// ============================================================================
 // PT Runtime - Main exports
+// ============================================================================
 
 // Domain layer
 export * from "./domain";
@@ -30,6 +31,17 @@ export { listRuntimeSnapshots, restoreRuntimeSnapshot } from "./runtime-artifact
 export { validatePtSafe, formatValidationResult } from "./build/validate-pt-safe";
 export { transformToPtSafe, wrapRuntimeBootstrap, wrapMainBootstrap } from "./build/pt-safe-transforms";
 export * from "./build";
+
+// Runtime contract validators
+export {
+  validateMainJs,
+  validateRuntimeJs,
+  validateGeneratedArtifacts,
+  validateQtScriptArtifacts,
+  formatValidationErrors,
+  validateMainCode,
+  validateRuntimeCode,
+} from "./runtime-validator.js";
 
 // Simplified render wrappers for test compatibility
 import { MAIN_JS_TEMPLATE } from "./templates/main-kernel";

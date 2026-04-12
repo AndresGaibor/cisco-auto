@@ -20,8 +20,8 @@ import type { ServicesConfigInput } from '@cisco-auto/kernel/plugins/services';
 
 const SERVICES_EXAMPLES = [
   { command: 'pt services dhcp create --device R1 --pool MI_POOL --network 192.168.1.0/24', description: 'Crear pool DHCP' },
-  { command: 'pt services ntp add-server --device R1 --server  pool.ntp.org', description: 'Configurar NTP' },
-  { command: 'pt services syslog add-server --device R1 --server  192.168.1.100', description: 'Configurar Syslog' },
+  { command: 'pt services ntp add-server --device R1 --server pool.ntp.org', description: 'Configurar NTP' },
+  { command: 'pt services syslog add-server --device R1 --server 192.168.1.100', description: 'Configurar Syslog' },
 ];
 
 const SERVICES_META: CommandMeta = {
@@ -86,13 +86,15 @@ export function buildSyslogCommands(deviceName: string, server: string): string[
 }
 
 export function createLabServicesCommand(): Command {
-  const cmd = new Command('services')
+  const cmd = new Command('service')
+    .alias('services')
     .description('Comandos para configurar servicios de red (DHCP/NTP/Syslog)')
     .option('--examples', 'Mostrar ejemplos de uso', false)
     .option('--explain', 'Explicar qué hace el comando', false)
     .option('--plan', 'Mostrar plan de ejecución sin ejecutar', false);
 
   const dhcpCmd = new Command('dhcp')
+    .alias('dhcp-server')
     .description('Operaciones sobre DHCP')
     .option('--examples', 'Mostrar ejemplos', false)
     .option('--explain', 'Explicar', false)
@@ -257,6 +259,11 @@ export function createLabServicesCommand(): Command {
 
       if (globalExamples) {
         console.log(printExamples(SERVICES_META));
+        return;
+      }
+
+      if (globalExplain) {
+        console.log(SERVICES_META.longDescription ?? SERVICES_META.summary);
         return;
       }
 

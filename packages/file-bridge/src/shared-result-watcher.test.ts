@@ -1,11 +1,8 @@
-/**
- * Tests for SharedResultWatcher - watch results directory for completion
- */
-
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { BridgePathLayout } from './shared/path-layout';
 import { join } from 'node:path';
+import { SharedResultWatcher } from './shared-result-watcher.js';
 
 const TEST_ROOT = '/tmp/watcher-test-' + Math.random().toString(36).slice(2);
 
@@ -15,6 +12,7 @@ describe('SharedResultWatcher', () => {
   beforeEach(() => {
     mkdirSync(TEST_ROOT, { recursive: true });
     paths = new BridgePathLayout(TEST_ROOT);
+    mkdirSync(paths.resultsDir(), { recursive: true });
   });
 
   afterEach(() => {
@@ -58,6 +56,37 @@ describe('SharedResultWatcher', () => {
 
       expect(config.pollingIntervalMs).toBe(500);
       expect(config.maxRetries).toBe(3);
+    });
+  });
+
+  describe('watch registration', () => {
+    test('tracks listeners per command id and resets on destroy', () => {
+      const watcher = new SharedResultWatcher(paths.resultsDir());
+      const callbackA = () => undefined;
+      const callbackB = () => undefined;
+
+      watcher.watch('cmd_1', callbackA);
+      watcher.watch('cmd_2', callbackB);
+
+      expect(watcher.getStats()).toEqual({
+        watching: true,
+        listenersCount: 2,
+        commandsWatched: 2,
+      });
+
+      watcher.unwatch('cmd_1', callbackA);
+      expect(watcher.getStats()).toEqual({
+        watching: true,
+        listenersCount: 1,
+        commandsWatched: 1,
+      });
+
+      watcher.destroy();
+      expect(watcher.getStats()).toEqual({
+        watching: false,
+        listenersCount: 0,
+        commandsWatched: 0,
+      });
     });
   });
 
@@ -260,167 +289,6 @@ describe('SharedResultWatcher', () => {
       callbacks.onError(new Error('test'));
 
       expect(allCallbacks).toHaveLength(2);
-    });
-  });
-
-  describe('dead letter handling', () => {
-    test('should move failed results to dead letter', () => {
-      mkdirSync(paths.resultsDir(), { recursive: true });
-      mkdirSync(paths.deadLetterDir(), { recursive: true });
-
-      const resultFile = 'result-1.json';
-      const deadLetterFile = join(paths.deadLetterDir(), resultFile);
-
-      expect(deadLetterFile).toContain('dead-letter');
-    });
-
-    test('should track dead letter files', () => {
-      const deadLetterFiles = [
-        { file: 'result-1.json', reason: 'parse error' },
-        { file: 'result-2.json', reason: 'timeout' }
-      ];
-
-      expect(deadLetterFiles).toHaveLength(2);
-    });
-
-    test('should handle dead letter directory creation', () => {
-      mkdirSync(paths.deadLetterDir(), { recursive: true });
-
-      const dir = paths.deadLetterDir();
-      expect(dir).toBeDefined();
-      expect(dir).toContain('dead-letter');
-    });
-
-    test('should log dead letter entries', () => {
-      const deadLetterLog: any[] = [];
-
-      const logDeadLetter = (file: string, reason: string) => {
-        deadLetterLog.push({ file, reason, timestamp: Date.now() });
-      };
-
-      logDeadLetter('result-1.json', 'invalid format');
-      expect(deadLetterLog).toHaveLength(1);
-    });
-  });
-
-  describe('polling mechanism', () => {
-    test('should poll directory at intervals', () => {
-      const pollingInterval = 500;
-      expect(pollingInterval).toBeGreaterThan(0);
-      expect(pollingInterval).toBeLessThan(5000);
-    });
-
-    test('should batch process results', () => {
-      const results = [
-        { id: 1, status: 'completed' },
-        { id: 2, status: 'completed' },
-        { id: 3, status: 'completed' }
-      ];
-
-      const batchSize = results.length;
-      expect(batchSize).toBe(3);
-    });
-
-    test('should handle empty poll results', () => {
-      const results: any[] = [];
-
-      if (results.length === 0) {
-        expect(true).toBe(true);
-      }
-    });
-
-    test('should implement exponential backoff', () => {
-      const backoff = (attempt: number) => Math.min(100 * Math.pow(2, attempt), 10000);
-
-      expect(backoff(0)).toBe(100);
-      expect(backoff(1)).toBe(200);
-      expect(backoff(5)).toBe(3200);
-      expect(backoff(10)).toBe(10000);
-    });
-  });
-
-  describe('cleanup', () => {
-    test('should remove processed results', () => {
-      const results = ['result-1.json', 'result-2.json'];
-      const processed = results.filter(f => f === 'result-1.json');
-
-      const remaining = results.filter(f => !processed.includes(f as never));
-      expect(remaining).toHaveLength(1);
-    });
-
-    test('should stop watching on close', () => {
-      let isWatching = true;
-
-      const stop = () => {
-        isWatching = false;
-      };
-
-      stop();
-      expect(isWatching).toBe(false);
-    });
-
-    test('should clean up timers', () => {
-      let timerActive = true;
-
-      const clearTimer = () => {
-        timerActive = false;
-      };
-
-      clearTimer();
-      expect(timerActive).toBe(false);
-    });
-
-    test('should close file watchers', () => {
-      const watchers: any[] = [];
-      const watcher = { close: () => {} };
-
-      watchers.push(watcher);
-      watchers.forEach(w => w.close());
-
-      expect(watchers).toHaveLength(1);
-    });
-  });
-
-  describe('edge cases', () => {
-    test('should handle results without commandId', () => {
-      const result = { status: 'completed' };
-
-      const hasCommandId = 'commandId' in result;
-      expect(hasCommandId).toBe(false);
-    });
-
-    test('should handle very large result files', () => {
-      const largeResult = {
-        commandId: 'cmd-1',
-        output: 'x'.repeat(10000000)
-      };
-
-      const json = JSON.stringify(largeResult);
-      expect(json.length).toBeGreaterThan(10000000);
-    });
-
-    test('should handle rapid file creation', () => {
-      const files = Array.from({ length: 100 }, (_, i) => `result-${i}.json`);
-
-      expect(files).toHaveLength(100);
-      expect(files[0]).toBe('result-0.json');
-    });
-
-    test('should handle file rename operations', () => {
-      const originalName = 'result-temp-1.json';
-      const finalName = 'result-1.json';
-
-      expect(originalName).not.toBe(finalName);
-    });
-
-    test('should handle concurrent result creation', () => {
-      const results = new Set<string>();
-
-      for (let i = 0; i < 10; i++) {
-        results.add(`result-${i}.json`);
-      }
-
-      expect(results.size).toBe(10);
     });
   });
 });

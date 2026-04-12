@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PortCandidateSchema } from './port-types.js';
 
 export const AgentBaseContextSchema = z.object({
   lab: z.object({
@@ -26,6 +27,8 @@ export const AgentBaseContextSchema = z.object({
     affectedZones: z.array(z.string()).default([]),
     suggestedCommands: z.array(z.string()).default([]),
     notes: z.array(z.string()).default([]),
+    candidatePorts: z.array(PortCandidateSchema).default([]),
+    risks: z.array(z.string()).default([]),
   }).optional(),
   zones: z.array(z.object({
     id: z.string(),
@@ -41,6 +44,17 @@ export const AgentBaseContextSchema = z.object({
     ts: z.number(),
   })).default([]),
 });
+export type AgentBaseContext = z.infer<typeof AgentBaseContextSchema>;
+
+export const AgentSessionStateSchema = z.object({
+  selectedDevice: z.string().optional(),
+  selectedZone: z.string().optional(),
+  focusDevices: z.array(z.string()).default([]),
+  lastTask: z.string().optional(),
+  lastPlan: z.array(z.string()).optional(),
+  verbosity: z.enum(['compact', 'normal', 'detailed']).default('normal'),
+});
+export type AgentSessionState = z.infer<typeof AgentSessionStateSchema>;
 export type AgentBaseContext = z.infer<typeof AgentBaseContextSchema>;
 
 export const AgentSessionStateSchema = z.object({

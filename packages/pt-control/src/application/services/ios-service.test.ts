@@ -26,6 +26,36 @@ describe("IosService show", () => {
     expect(result.interfaces[0]?.interface).toBe("GigabitEthernet0/0");
   });
 
+  test("expone evidencia estructurada en execIos", async () => {
+    const bridge = {
+      sendCommandAndWait: async () => ({
+        ok: true,
+        value: {
+          raw: "show version\nRouter#",
+          status: 0,
+          source: "terminal",
+          session: { mode: "privileged-exec", prompt: "Router#", paging: false, awaitingConfirm: false },
+          diagnostics: { source: "terminal", completionReason: "command-ended" },
+        },
+      }),
+    };
+
+    const service = new IosService(bridge as any, () => "test-id", async () => ({
+      model: "2911",
+      name: "R1",
+    } as any));
+
+    const result = await service.execIos("R1", "show version");
+
+    expect(result.ok).toBe(true);
+    expect(result.evidence.source).toBe("terminal");
+    expect(result.evidence.status).toBe(0);
+    expect(result.evidence.mode).toBe("privileged-exec");
+    expect(result.evidence.prompt).toBe("Router#");
+    expect(result.evidence.paging).toBe(false);
+    expect(result.evidence.awaitingConfirm).toBe(false);
+  });
+
   test("devuelve rutas reales para show ip route", async () => {
     const bridge = {
       sendCommandAndWait: async () => ({

@@ -1,0 +1,58 @@
+{
+  "metadata": { "updatedAt": 1700000000000 },
+  "devices": {
+    "R1": {
+      "name": "R1",
+      "family": "router",
+      "logicalPosition": { "x": 10, "y": 10, "width": 20, "height": 20, "centerX": 20, "centerY": 20 },
+      "ports": {
+        "Gi0_0": { "name": "Gi0/0", "media": "copper", "connectedTo": { "device": "S1", "port": "Fa0/1" } },
+        "Gi0_1": { "name": "Gi0/1", "media": "copper" }
+      },
+      "modules": [],
+      "config": null
+    },
+    "S1": {
+      "name": "S1",
+      "family": "switch-l2",
+      "logicalPosition": { "x": 60, "y": 20, "width": 20, "height": 20, "centerX": 70, "centerY": 30 },
+      "ports": {
+        "Fa0_1": { "name": "Fa0/1", "media": "copper", "connectedTo": { "device": "R1", "port": "Gi0/0" } },
+        "Fa0_2": { "name": "Fa0/2", "media": "copper" }
+      },
+      "modules": [],
+      "config": null
+    },
+    "PC1": {
+      "name": "PC1",
+      "family": "pc",
+      "logicalPosition": { "x": 90, "y": 30, "width": 16, "height": 16, "centerX": 98, "centerY": 38 },
+      "ports": {
+        "Fa0_1": { "name": "Fa0/1", "media": "copper" }
+      },
+      "modules": [],
+      "config": null
+    }
+  },
+  "links": {
+    "L1": {
+      "id": "L1",
+      "device1": "R1",
+      "port1": "Gi0/0",
+      "device2": "S1",
+      "port2": "Fa0/1"
+    }
+  },
+  "zones": {
+    "Z_USERS": {
+      "id": "Z_USERS",
+      "kind": "rectangle",
+      "label": "Users",
+      "geometry": { "x1": 0, "y1": 0, "x2": 120, "y2": 120 },
+      "style": { "fillColor": "#FF00FF" },
+      "semantics": { "vlanId": 20, "role": "users", "tags": ["access"] },
+      "membershipRule": { "mode": "center-inside" }
+    }
+  },
+  "annotations": {}
+}

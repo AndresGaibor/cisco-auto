@@ -1,6 +1,3 @@
-// packages/pt-runtime/src/build/render-main.ts
-// Generate main.js from TypeScript kernel modules
-
 import { transformToPtSafe, wrapMainBootstrap } from "./pt-safe-transforms";
 import { validatePtSafe, formatValidationResult } from "./validate-pt-safe";
 import * as fs from "fs";

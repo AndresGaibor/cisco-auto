@@ -36,6 +36,10 @@ import {
   getDeviceContext as queryDeviceContext,
   getZoneContext as queryZoneContext,
   getDevicesInZone,
+  findMentionedDeviceNames,
+  findMentionedZoneIds,
+  getFreePortCandidates,
+  getTaskRisks,
 } from "./queries.js";
 
 export { createCache } from "./context-cache.js";
@@ -91,27 +95,52 @@ export class AgentContextService {
     affectedZones: string[] = []
   ): Promise<AgentBaseContext> {
     const base = await this.buildBaseContext(twin, session);
-    const focusDevices = Array.from(new Set([...session.focusDevices, ...affectedDevices]));
-    const scope = affectedZones.length > 0 ? 'zone' : focusDevices.length > 0 ? 'device' : 'task';
+    const inferredDevices = affectedDevices.length > 0 ? affectedDevices : findMentionedDeviceNames(twin, task);
+    const inferredZones = affectedZones.length > 0 ? affectedZones : findMentionedZoneIds(twin, task);
+    const focusDevices = this.uniqueStrings([
+      ...session.focusDevices,
+      ...inferredDevices,
+    ]);
+    const scopeZoneIds = this.uniqueStrings([
+      ...inferredZones,
+      ...(session.selectedZone ? [session.selectedZone] : []),
+    ]);
+    const derivedZoneIds = scopeZoneIds.length > 0
+      ? scopeZoneIds
+      : this.getZonesForDevices(twin, focusDevices);
+    const zoneDeviceNames = derivedZoneIds.flatMap((zoneId) =>
+      getDevicesInZone(twin, zoneId).map((device) => device.name),
+    );
+    const visibleDevices = this.uniqueStrings([
+      ...focusDevices,
+      ...zoneDeviceNames,
+    ]);
+    const taskDevices = visibleDevices.length > 0 ? visibleDevices : focusDevices;
+    const candidatePorts = getFreePortCandidates(twin, taskDevices);
+    const risks = getTaskRisks(twin, task, taskDevices, derivedZoneIds, candidatePorts);
+    const scope = derivedZoneIds.length > 0 ? 'zone' : taskDevices.length > 0 ? 'device' : 'task';
 
-    const taskContext: AgentBaseContext = {
+    return {
       ...base,
+      topology: this.trimTopology(base.topology, taskDevices),
+      zones: this.trimZones(base.zones, derivedZoneIds),
+      alerts: this.computeAlerts(twin, taskDevices),
       selection: {
         selectedDevice: session.selectedDevice,
         selectedZone: session.selectedZone,
-        focusDevices,
+        focusDevices: taskDevices,
       },
       task: {
         goal: task,
         scope,
-        affectedDevices: focusDevices,
-        affectedZones,
-        suggestedCommands: this.buildSuggestedCommands(task, focusDevices, affectedZones, session),
-        notes: this.buildTaskNotes(task, focusDevices, affectedZones),
+        affectedDevices: taskDevices,
+        affectedZones: derivedZoneIds,
+        suggestedCommands: this.buildSuggestedCommands(task, taskDevices, derivedZoneIds, session),
+        notes: this.buildTaskNotes(task, taskDevices, derivedZoneIds),
+        candidatePorts,
+        risks,
       },
     };
-
-    return taskContext;
   }
 
   async buildDeviceContext(
@@ -312,12 +341,58 @@ export class AgentContextService {
     };
   }
 
-  private computeAlerts(twin: NetworkTwin): string[] {
+  private uniqueStrings(values: string[]): string[] {
+    return Array.from(new Set(values.filter(Boolean)));
+  }
+
+  private trimTopology(
+    topology: AgentBaseContext['topology'],
+    deviceNames: string[]
+): AgentBaseContext['topology'] {
+    if (deviceNames.length === 0) {
+      return topology;
+    }
+    const deviceSet = new Set(deviceNames);
+    return {
+      coreDevices: topology.coreDevices.filter((name) => deviceSet.has(name)),
+      accessDevices: topology.accessDevices.filter((name) => deviceSet.has(name)),
+      serverDevices: topology.serverDevices.filter((name) => deviceSet.has(name)),
+      edgeDevices: topology.edgeDevices.filter((name) => deviceSet.has(name)),
+    };
+  }
+
+  private trimZones(
+    zones: AgentBaseContext['zones'],
+    zoneIds: string[]
+): AgentBaseContext['zones'] {
+    if (zoneIds.length === 0) {
+      return zones;
+    }
+    const zoneSet = new Set(zoneIds);
+    return zones.filter((zone) => zoneSet.has(zone.id));
+  }
+
+  private getZonesForDevices(twin: NetworkTwin, deviceNames: string[]): string[] {
+    const zoneIds: string[] = [];
+    for (const deviceName of deviceNames) {
+      const deviceContext = queryDeviceContext(twin, deviceName);
+      for (const membership of deviceContext?.spatial.zones ?? []) {
+        zoneIds.push(membership.zoneId);
+      }
+    }
+    return this.uniqueStrings(zoneIds);
+  }
+
+  private computeAlerts(twin: NetworkTwin, deviceScope: string[] = []): string[] {
     const alerts: string[] = [];
+    const deviceSet = deviceScope.length > 0 ? new Set(deviceScope) : undefined;
 
     // Check for devices without IP that might need one
     for (const [name, device] of Object.entries(twin.devices)) {
-      if (device.family === "pc" || device.family === "server") {
+      if (deviceSet && !deviceSet.has(name)) {
+        continue;
+      }
+      if (device.family === 'pc' || device.family === 'server') {
         const hasIp = Object.values(device.ports).some((p) => p.ipAddress);
         if (!hasIp) {
           alerts.push(`${name} no tiene IP configurada`);
@@ -327,15 +402,18 @@ export class AgentContextService {
 
     // Check for ports that are admin up but oper down
     for (const [deviceName, device] of Object.entries(twin.devices)) {
+      if (deviceSet && !deviceSet.has(deviceName)) {
+        continue;
+      }
       for (const [portName, port] of Object.entries(device.ports)) {
-        if ((port.adminStatus === "up" || port.adminStatus === "administratively down") &&
-            port.operStatus === "down") {
+        if ((port.adminStatus === 'up' || port.adminStatus === 'administratively down') &&
+            port.operStatus === 'down') {
           alerts.push(`${deviceName}:${portName} está caído`);
         }
       }
     }
 
-    return alerts.slice(0, 5); // Limit to 5 alerts
+    return alerts.slice(0, 5);
   }
 
   private computeRecentChanges(twin: NetworkTwin): AgentBaseContext["recentChanges"] {

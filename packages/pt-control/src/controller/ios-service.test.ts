@@ -4,14 +4,14 @@ import { ControllerIosService } from "./ios-service.js";
 function createIosService() {
   return {
     configIos: async () => undefined,
-    execIos: async () => ({ raw: "ok" }),
+    execIos: async () => ({ ok: true, raw: "ok", evidence: { source: "terminal", status: 0, mode: "privileged-exec", prompt: "R1#", paging: false, awaitingConfirm: false } }),
     show: async () => ({ raw: "ok" }),
     showIpInterfaceBrief: async () => ({ raw: "ok", interfaces: [] }),
     showVlan: async () => ({ raw: "ok", vlans: [] }),
     showIpRoute: async () => ({ raw: "ok", routes: [] }),
     showRunningConfig: async () => ({ raw: "ok" }),
     showCdpNeighbors: async () => ({ raw: "ok", neighbors: [] }),
-    execInteractive: async () => ({ raw: "ok" }),
+    execInteractive: async () => ({ raw: "ok", session: { mode: "privileged-exec" } }),
     showParsed: async () => ({ ok: true, raw: "ok" }),
     getConfidence: async () => "verified",
     configureDhcpPool: async () => undefined,
@@ -40,5 +40,18 @@ describe("ControllerIosService", () => {
     await expect(service.configIos("R1", ["hostname R1"])).resolves.toBeUndefined();
     await expect(service.inspect("R1")).resolves.toMatchObject({ name: "R1" });
     await expect(service.commandLog("R1")).resolves.toEqual([]);
+  });
+
+  test("expone execIosWithEvidence con evidencia estructurada", async () => {
+    const service = new ControllerIosService(createIosService(), createDeviceService());
+    const result = await service.execIosWithEvidence("R1", "show version");
+
+    expect(result.ok).toBe(true);
+    expect(result.evidence.source).toBe("terminal");
+    expect(result.evidence.status).toBe(0);
+    expect(result.evidence.mode).toBe("privileged-exec");
+    expect(result.evidence.prompt).toBe("R1#");
+    expect(result.evidence.paging).toBe(false);
+    expect(result.evidence.awaitingConfirm).toBe(false);
   });
 });

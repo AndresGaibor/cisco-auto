@@ -328,15 +328,17 @@ export function validateMainJs(code: string): ValidationResult {
   const lifecycleErrors = findLifecycleViolations(code, "main");
   errors.push(...lifecycleErrors);
   
-  // 3. Required symbols - intentar ambos modos (legacy y cola real)
+  // 3. Required symbols - queue protocol is the only supported contract
   const missingSymbolsLegacy = findMissingSymbols(code, REQUIRED_MAIN_SYMBOLS_V2);
   const missingSymbolsQueue = findMissingSymbols(code, REQUIRED_MAIN_SYMBOLS_QUEUE);
-  
-  // Si faltan symbols de ambos, reportar los que faltan (pero no fallar si es modo transición)
-  // Aceptamos ambos modos: legacy (command.json) o queue (commands/)
+
+  // Legacy single-file command contract is no longer supported.
   const usesQueue = code.includes("COMMANDS_DIR") && code.includes("IN_FLIGHT_DIR");
-  const usesLegacy = code.includes("COMMAND_FILE") && code.includes("command.json");
-  
+  const usesLegacy = code.includes("COMMAND_FILE") || code.includes("CURRENT_COMMAND_FILE") || code.includes("command.json");
+  if (usesLegacy) {
+    errors.push("Legacy command.json bridge contract is no longer supported; use commands/ and in-flight/ queue files.");
+  }
+
   if (missingSymbolsLegacy.length > 0 && missingSymbolsQueue.length > 0 && !usesQueue && !usesLegacy) {
     // Ningún modo detectado - error
     errors.push(...missingSymbolsLegacy.slice(0, 3));
@@ -345,7 +347,7 @@ export function validateMainJs(code: string): ValidationResult {
     // Modo cola pero faltan symbols - warning
     warnings.push("Queue mode: missing " + missingSymbolsQueue.slice(0, 3).join(", "));
   } else if (usesLegacy && missingSymbolsLegacy.length > 0) {
-    // Modo legacy pero faltan symbols - warning
+    // Modo legacy no soportado, pero mantenemos detalle para diagnóstico
     warnings.push("Legacy mode: missing " + missingSymbolsLegacy.slice(0, 3).join(", "));
   }
   

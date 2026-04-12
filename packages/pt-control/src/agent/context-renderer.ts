@@ -26,8 +26,19 @@ function appendTaskLines(lines: string[], context: AgentBaseContext): void {
     lines.push(`- Zonas foco: ${context.task.affectedZones.join(", ")}`);
   }
 
+  if (context.task.candidatePorts.length > 0) {
+    const candidateSummary = context.task.candidatePorts
+      .map((candidate) => `${candidate.device}:${candidate.port}`)
+      .join(" | ");
+    lines.push(`- Puertos candidatos: ${candidateSummary}`);
+  }
+
   if (context.task.suggestedCommands.length > 0) {
     lines.push(`- Sugerencias: ${context.task.suggestedCommands.join(" | ")}`);
+  }
+
+  if (context.task.risks.length > 0) {
+    lines.push(`- Riesgos: ${context.task.risks.join("; ")}`);
   }
 
   if (context.task.notes.length > 0) {
@@ -179,8 +190,17 @@ export function renderDetailedContext(context: AgentBaseContext): string {
       if (context.task.affectedZones.length) {
         lines.push(`Affected zones: ${context.task.affectedZones.join(", ")}`);
       }
+      if (context.task.candidatePorts.length) {
+        const candidateSummary = context.task.candidatePorts
+          .map((candidate) => `${candidate.device}:${candidate.port}`)
+          .join(" | ");
+        lines.push(`Candidate ports: ${candidateSummary}`);
+      }
       if (context.task.suggestedCommands.length) {
         lines.push(`Suggestions: ${context.task.suggestedCommands.join(" | ")}`);
+      }
+      if (context.task.risks.length) {
+        lines.push(`Risks: ${context.task.risks.join("; ")}`);
       }
     }
   }
