@@ -255,3 +255,15 @@ Estos resultados provienen de la sesión QA previa y sirven como referencia hist
 | 2026-04-12 | TC-074 | `bun run pt acl apply --acl BLOCK_NET --device R1 --interface GigabitEthernet0/0 --direction in --plan` | PASS | Muestra plan de aplicación correcto. | - | salida CLI |
 | 2026-04-12 | TC-071 | `bun run pt routing ospf enable --plan --device R1 --process-id 1` | PASS | Muestra plan de habilitación OSPF correcto. | - | salida CLI |
 | 2026-04-12 | TC-077 | `bun run pt services dhcp create --plan --device R1 --pool LAN10 --network 192.168.10.0/24` | PASS | Muestra plan de creación de pool DHCP correcto. | - | salida CLI |
+
+### Sesión ejecutada 2026-04-12 — sexta tanda
+
+| Fecha | ID | Comando | Estado | Observado | Causa probable | Evidencia |
+|---|---|---|---|---|---|---|
+| 2026-04-12 | TC-061 | `bun run pt routing static add --explain --device R1 --network 192.168.10.0/24 --next-hop 10.0.0.1` | PASS | Explica que es routing estático para varias familias de protocolos. | - | salida CLI |
+| 2026-04-12 | TC-077 | `bun run pt services dhcp create --explain --device R1 --pool LAN10 --network 192.168.10.0/24` | PASS | Explica que son comandos de servicios básicos DHCP/NTP/Syslog. | - | salida CLI |
+| 2026-04-12 | TC-074 | `bun run pt acl create --explain --name BLOCK_NET --type standard` | PASS | Explica que sirve para crear/agregar/aplicar ACLs. | - | salida CLI |
+| 2026-04-12 | TC-080 | `bun run pt etherchannel create --explain S1 --group-id 1 --interfaces Gi0/1,Gi0/2` | PASS | Explica bundles EtherChannel en switches Cisco. | - | salida CLI |
+| 2026-04-12 | TC-069 | `bun run pt stp set-root --explain --device S1 --vlan 1` | PASS | Muestra explicación/plan del root bridge para VLAN 1. | - | salida CLI |
+| 2026-04-12 | TC-000 | `bun run pt status` | WARN | Bridge ready pero lease invalid; topology stale; 4 devices / 8 links. | Estado parcial del bridge | salida CLI |
+| 2026-04-12 | TC-000 | `bun run pt inspect topology` | WARN | Reporta 4 dispositivos, 8 conexiones; incluye Power Distribution Device0 y enlaces heredados. | Contexto mixto / topología heredada | salida CLI |
