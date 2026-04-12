@@ -87,7 +87,6 @@ export {
 export { LayoutPlannerService, PortPlannerService, LinkFeasibilityService } from "./application/services/index.js";
 
 // PT feature modules - canonical stack
-// PT feature modules - canonical stack
 export * from "./pt/terminal/index.js";
 export * from "./pt/topology/index.js";
 export * from "./pt/server/index.js";
@@ -97,8 +96,6 @@ export * from "./pt/diagnosis/index.js";
 
 // Capability Matrix (kernel)
 export * from "../../kernel/src/domain/ios/capability-matrix/index.js";
-export * from "./pt/ledger/index.js";
-export * from "./pt/diagnosis/index.js";
 
 // Agent workflow - task-scoped context building and rendering
 export * from "./agent/index.js";
