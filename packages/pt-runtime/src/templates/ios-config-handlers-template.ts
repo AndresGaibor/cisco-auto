@@ -83,27 +83,23 @@ function dismissInitialDialogIfNeeded(engine, term) {
 }
 
 function ensurePrivilegedExec(engine, term) {
-  var state = engine.getState();
-  
-  // Check terminal prompt directly - more reliable than engine state
   var currentPrompt = term.getPrompt ? term.getPrompt() : '';
-  dprint('[ensurePrivilegedExec] START prompt="' + currentPrompt + '" engineMode=' + state.mode);
+  dprint('[ensurePrivilegedExec] START prompt="' + currentPrompt + '"');
   
-  // If already in priv-exec (prompt ends with # but not in config submode), return true
-  if (currentPrompt.indexOf('#') >= 0 && currentPrompt.indexOf('(config') < 0) {
-    dprint('[ensurePrivilegedExec] Already in priv-exec (prompt has # without config)');
+  // If already in priv-exec (prompt ends with # but not in any submode), return true
+  if (currentPrompt.indexOf('#') >= 0 && currentPrompt.indexOf('(') < 0) {
+    dprint('[ensurePrivilegedExec] Already in priv-exec (prompt has # without parens)');
     engine.processEvent({ type: 'modeChanged', newMode: 'priv-exec' });
     return true;
   }
   
-  // If in config submode (has (config), we need to exit first
-  if (currentPrompt.indexOf('(config') >= 0) {
+  // If in any config submode (dhcp-config, vlan-config, config-if, etc.), exit first
+  if (isConfigSubmode(currentPrompt) || currentPrompt.indexOf('(config') >= 0) {
     dprint('[ensurePrivilegedExec] In config submode, sending end first');
     term.enterCommand('end');
-    var preLen = term.getOutput ? term.getOutput().length : 0;
     for (var exitAttempt = 0; exitAttempt < 10; exitAttempt++) {
       var exitPrompt = term.getPrompt ? term.getPrompt() : '';
-      if (exitPrompt.indexOf('#') >= 0 && exitPrompt.indexOf('(config') < 0) {
+      if (exitPrompt.indexOf('#') >= 0 && exitPrompt.indexOf('(') < 0) {
         dprint('[ensurePrivilegedExec] Exited to priv-exec');
         engine.processEvent({ type: 'modeChanged', newMode: 'priv-exec' });
         return true;
@@ -111,12 +107,11 @@ function ensurePrivilegedExec(engine, term) {
     }
   }
 
-  if (state.mode === 'priv-exec') return true;
-
-  var preLen = term.getOutput ? term.getOutput().length : 0;
-  var modeBefore = term.getMode ? term.getMode() : 'N/A';
+  syncEngineModeFromTerminal(engine, term);
+  if (engine.getState().mode === 'priv-exec') return true;
 
   // Flush any pending output first
+  var preLen = term.getOutput ? term.getOutput().length : 0;
   if (term.getOutput) {
     var initialOutput = term.getOutput();
     if (initialOutput && initialOutput.length > 0) {
@@ -124,8 +119,8 @@ function ensurePrivilegedExec(engine, term) {
       term.enterCommand('');
       for (var flush = 0; flush < 3; flush++) {
         var newOut = term.getOutput ? term.getOutput() : '';
-        if (newOut.length <= initialOutput.length) break;
-        initialOutput = newOut;
+        if (newOut.length <= preLen) break;
+        preLen = newOut.length;
       }
     }
   }
@@ -135,26 +130,6 @@ function ensurePrivilegedExec(engine, term) {
   }
   syncEngineModeFromTerminal(engine, term);
   if (engine.getState().mode === 'priv-exec') return true;
-
-  // Si estamos en un submode de configuración (config-*, vlan-*, etc.), salir primero
-  var currentMode = engine.getState().mode;
-  var currentPrompt = term.getPrompt ? term.getPrompt() : '';
-  dprint('[ensurePrivilegedExec] currentMode=' + currentMode + ' prompt=' + currentPrompt);
-  
-  if (currentMode.indexOf('config') === 0 || currentPrompt.indexOf('(config') >= 0) {
-    dprint('[ensurePrivilegedExec] In config submode, sending end first');
-    term.enterCommand('end');
-    preLen = term.getOutput ? term.getOutput().length : 0;
-    for (var exitAttempt = 0; exitAttempt < 10; exitAttempt++) {
-      var exitOutput = term.getOutput ? term.getOutput() : '';
-      var exitPrompt = term.getPrompt ? term.getPrompt() : '';
-      syncEngineModeFromTerminal(engine, term);
-      if (engine.getState().mode === 'priv-exec') {
-        dprint('[ensurePrivilegedExec] Exited config submode to priv-exec');
-        return true;
-      }
-    }
-  }
 
   term.enterCommand('enable');
   dprint('[ensurePrivilegedExec] sent enable');
@@ -172,12 +147,9 @@ function ensurePrivilegedExec(engine, term) {
     
     if (engine.getState().mode === 'priv-exec') {
       dprint('[ensurePrivilegedExec] found priv-exec at iter ' + i);
-      break;
+      return true;
     }
   }
-
-  syncEngineModeFromTerminal(engine, term);
-  if (engine.getState().mode === 'priv-exec') return true;
 
   return false;
 }
@@ -192,48 +164,43 @@ function isConfigSubmode(prompt) {
 
 // Helper: Ensure config mode
 function ensureConfigMode(engine, term) {
-  var state = engine.getState();
-  
-  // Check terminal prompt directly - more reliable than engine state
   var currentPrompt = term.getPrompt ? term.getPrompt() : '';
-  dprint('[ensureConfigMode] START prompt="' + currentPrompt + '" engineMode=' + state.mode);
+  dprint('[ensureConfigMode] START prompt="' + currentPrompt + '"');
   
   // If in a config submode (dhcp-config, vlan-config, etc.), exit first
   if (isConfigSubmode(currentPrompt)) {
     dprint('[ensureConfigMode] In config submode, sending end first');
     term.enterCommand('end');
-    var preLen = term.getOutput ? term.getOutput().length : 0;
     for (var exitAttempt = 0; exitAttempt < 10; exitAttempt++) {
       var exitPrompt = term.getPrompt ? term.getPrompt() : '';
       if (exitPrompt.indexOf('#') >= 0 && exitPrompt.indexOf('(') < 0) {
         dprint('[ensureConfigMode] Exited submode to priv-exec');
         engine.processEvent({ type: 'modeChanged', newMode: 'priv-exec' });
+        currentPrompt = exitPrompt;
         break;
       }
     }
   }
   
+  // Sync engine state with terminal
+  syncEngineModeFromTerminal(engine, term);
+  var state = engine.getState();
+  
   // If already in config mode (standard (config)#), return true
-  if (currentPrompt.indexOf('(config)#') >= 0) {
+  if (currentPrompt.indexOf('(config)#') >= 0 || state.mode.indexOf('config') === 0) {
     dprint('[ensureConfigMode] Already in config mode');
-    engine.processEvent({ type: 'modeChanged', newMode: 'config' });
     return true;
   }
-  
-  if (state.mode.indexOf('config') === 0) return true;
-
-  var preLen = term.getOutput ? term.getOutput().length : 0;
-  var modeBefore = term.getMode ? term.getMode() : 'N/A';
 
   dprint('[ensureConfigMode] Not in config, attempting to enter...');
 
   if (dismissInitialDialogIfNeeded(engine, term)) {
-    preLen = term.getOutput ? term.getOutput().length : preLen;
-  }
-  syncEngineModeFromTerminal(engine, term);
-  if (engine.getState().mode.indexOf('config') === 0) {
-    dprint('[ensureConfigMode] returned true after initial sync');
-    return true;
+    syncEngineModeFromTerminal(engine, term);
+    state = engine.getState();
+    if (state.mode.indexOf('config') === 0) {
+      dprint('[ensureConfigMode] returned true after initial sync');
+      return true;
+    }
   }
 
   term.enterCommand('configure terminal');
@@ -241,27 +208,17 @@ function ensureConfigMode(engine, term) {
 
   for (var i = 0; i < 20; i++) {
     var output = term.getOutput ? term.getOutput() : '';
-    var newData = output.slice(preLen);
-    if (newData.length > 0) {
-      engine.processEvent({ type: 'outputWritten', data: newData });
-      preLen = output.length;
-      dprint('[ensureConfigMode] iter ' + i + ' newData len=' + newData.length + ' output len=' + output.length);
-    }
     syncEngineModeFromTerminal(engine, term);
-    var currentMode = engine.getState().mode;
-    dprint('[ensureConfigMode] iter ' + i + ' engineMode=' + currentMode);
+    state = engine.getState();
+    dprint('[ensureConfigMode] iter ' + i + ' engineMode=' + state.mode + ' prompt=' + (term.getPrompt ? term.getPrompt() : ''));
     
-    if (currentMode.indexOf('config') === 0) {
+    if (state.mode.indexOf('config') === 0) {
       dprint('[ensureConfigMode] found config mode at iter ' + i);
-      break;
+      return true;
     }
   }
 
-  syncEngineModeFromTerminal(engine, term);
-  var finalMode = engine.getState().mode;
-  dprint('[ensureConfigMode] END finalMode=' + finalMode);
-  if (finalMode.indexOf('config') === 0) return true;
-
+  dprint('[ensureConfigMode] END failed, finalMode=' + state.mode);
   return false;
 }
 
@@ -585,7 +542,7 @@ function handleConfigIos(payload) {
       }
 
       var currentPrompt = term.getPrompt ? term.getPrompt() : "";
-      var stillInConfigMode = currentPrompt.indexOf("(config") >= 0;
+      var stillInConfigMode = isConfigSubmode(currentPrompt) || currentPrompt.indexOf("(config") >= 0;
       var hasErrorInCommandOutput = commandOutput.indexOf("% Invalid") >= 0 || commandOutput.indexOf("% Incomplete") >= 0 || commandOutput.indexOf("% Unknown") >= 0;
       var ok = stillInConfigMode && !hasErrorInCommandOutput;
 

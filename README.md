@@ -4,9 +4,94 @@
 
 Diseñado especialmente para estudiantes de Redes de Computadores (con enfoque en ESPOCH), este proyecto busca reducir drásticamente el tiempo de configuración manual (de 45 a menos de 2 minutos), minimizar errores humanos y garantizar el cumplimiento de los estándares de topología mediante un enfoque declarativo.
 
+**Arquitectura**: Plugin-First, Clean Architecture, Hexagonal (Ports & Adapters) y Domain-Driven Design (DDD).
+
 [![Bun](https://img.shields.io/badge/Bun-1.1%2B-black?logo=bun)](https://bun.sh/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+---
+
+## 🏗️ Arquitectura
+
+El proyecto utiliza una **arquitectura Plugin-First** basada en tres patrones fundamentales:
+
+| Patrón | Aplicación |
+|--------|-----------|
+| **Clean Architecture** | Capas concéntricas: dominio → aplicación → infraestructura. Las dependencias apuntan hacia adentro. |
+| **Hexagonal Architecture** | El dominio define puertos (interfaces), los adaptadores externos los implementan. |
+| **Domain-Driven Design (DDD)** | Bounded contexts, aggregates, entities, value objects, domain events. |
+| **Plugin-First** | Toda funcionalidad de protocolo es un plugin registrable. El backend (Packet Tracer) también es un plugin. |
+
+### Principios de Diseño
+
+1. **Plugin-First**: VLAN, Routing, Security, Services, Switching e IPv6 son plugins independientes. Agregar un nuevo protocolo solo requiere crear un plugin y registrarlo.
+2. **Backend como Plugin**: Packet Tracer es un `BackendPlugin` intercambiable. Se pueden agregar backends alternativos (GNS3, EVE-NG, dispositivos reales).
+3. **Dominio Puro**: El núcleo no tiene dependencias externas. Usa Value Objects, Entities y Aggregates con validación incorporada.
+4. **Filesystem como IPC**: FileBridge usa el filesystem (`~/pt-dev/`) como medio de comunicación con Packet Tracer — sobrevive a reinicios y permite auditoría completa.
+
+### Estructura del Proyecto (Monorepo)
+
+```
+cisco-auto/
+├── apps/
+│   └── pt-cli/                 # CLI principal (entry point)
+│
+├── packages/
+│   ├── kernel/                 # ★ Núcleo: dominio, aplicación, plugins, backends
+│   │   ├── src/domain/         #   Dominio (aggregates, entities, value objects)
+│   │   ├── src/application/    #   Casos de uso (use cases, ports)
+│   │   ├── src/plugin-api/     #   Interfaces de plugin (contratos)
+│   │   ├── src/plugins/        #   Plugins de protocolo (8 plugins)
+│   │   └── src/backends/       #   Backends (packet-tracer)
+│   │
+│   ├── types/                  # Tipos compartidos y schemas Zod
+│   ├── core/                   # Lógica de negocio legacy (orquestadores, parsers)
+│   ├── pt-control/             # Motor de control en tiempo real de Packet Tracer
+│   ├── pt-runtime/             # Generador de runtime JS para Packet Tracer
+│   ├── file-bridge/            # Puente de comunicación CLI ↔ Packet Tracer
+│   └── ios-domain/             # Dominio IOS (generadores, parsers, schemas)
+│
+├── labs/                       # Definiciones de laboratorios YAML
+├── configs/                    # Configuraciones generadas
+└── docs/                       # Documentación técnica
+```
+
+---
+
+## 🧩 Plugins Disponibles
+
+El kernel incluye **8 plugins** listos para usar:
+
+| Plugin | ID | Categoría | Descripción |
+|--------|-----|-----------|-------------|
+| **VLAN** | `vlan` | switching | Configuración de VLANs, trunks y puertos de acceso |
+| **Routing** | `routing` | routing | OSPF, EIGRP, BGP y rutas estáticas |
+| **Security** | `security` | security | ACLs, NAT (Static, Dynamic, Overload), VPN IPsec |
+| **Services** | `services` | services | DHCP, DNS, NTP, Syslog, SNMP |
+| **Switching** | `switching` | switching | STP (Rapid-PVST), EtherChannel (LACP/PAgP), Port Security |
+| **IPv6** | `ipv6` | routing | Addressing, OSPFv3, EIGRP for IPv6, dual-stack |
+| **Port Template** | `port-template` | switching | Plantillas de configuración de puertos |
+| **Packet Tracer Backend** | `packet-tracer` | backend | Adaptador para Cisco Packet Tracer |
+
+### Backend: Packet Tracer
+
+El backend de Packet Tracer implementa las siguientes operaciones:
+
+```typescript
+interface BackendPort {
+  connect(config): Promise<void>;
+  disconnect(): Promise<void>;
+  isConnected(): boolean;
+  addDevice(name, model, options): Promise<void>;
+  removeDevice(name): Promise<void>;
+  configureDevice(name, commands): Promise<void>;
+  execShow(name, command): Promise<string>;
+  addLink(d1, p1, d2, p2): Promise<void>;
+  removeLink(device, port): Promise<void>;
+  getTopology(): Promise<Topology>;
+}
+```
 
 ---
 
@@ -24,26 +109,14 @@ Diseñado especialmente para estudiantes de Redes de Computadores (con enfoque e
 
 ---
 
-## 🏗️ Arquitectura y Tecnologías
-
-El proyecto está construido priorizando el rendimiento, la seguridad y la mantenibilidad:
-
-- **Runtime Principal:** [Bun](https://bun.sh/) (Rendimiento superior, TypeScript nativo, obligatorio).
-- **Lenguaje:** TypeScript estricto.
-- **Validación y Tipado:** Zod.
-- **Conectividad:** `node-ssh` (SSH) y Telnet como fallback.
-- **Criptografía (PKA):** Implementación personalizada de XOR + Twofish CBC + zlib.
-
----
-
-## 📥 Instalación
+## 🚀 Inicio Rápido
 
 ### Requisitos Previos
 
 - [Bun](https://bun.sh/) (v1.1 o superior) instalado en tu sistema. *No uses Node.js/npm.*
 - [Cisco Packet Tracer](https://www.netacad.com/courses/packet-tracer) (opcional, para visualización de labs).
 
-### Pasos de Instalación
+### Instalación
 
 ```bash
 # 1. Clonar el repositorio
@@ -57,13 +130,35 @@ bun install
 bun run cisco-auto --help
 ```
 
----
+### Uso Básico con Plugins
 
-## 💻 Uso de la Interfaz de Línea de Comandos (CLI)
+```typescript
+import { vlanPlugin, validateVlanConfig, generateVlanCommands } from '@cisco-auto/kernel/plugins/vlan';
+import { getPacketTracerBackend } from './kernel-bridge';
 
-La CLI proporciona acceso rápido a todas las funcionalidades principales.
+// 1. Validar configuración
+const validation = validateVlanConfig({
+  switchName: 'SW1',
+  vlans: [{ id: 10, name: 'ADMIN' }, { id: 20, name: 'USERS' }],
+});
 
-### 🎮 Control en Tiempo Real de Packet Tracer
+if (!validation.ok) {
+  console.error('Errores:', validation.errors);
+  process.exit(1);
+}
+
+// 2. Generar comandos IOS
+const commands = generateVlanCommands({
+  switchName: 'SW1',
+  vlans: [{ id: 10, name: 'ADMIN' }, { id: 20, name: 'USERS' }],
+});
+
+// 3. Aplicar via backend
+const backend = getPacketTracerBackend();
+await backend.configureDevice('SW1', commands);
+```
+
+### Setup de Packet Tracer
 
 ```bash
 # Setup inicial (solo una vez)
@@ -75,12 +170,13 @@ bun run pt device add S1 2960-24TT 300 100
 bun run pt link add R1:GigabitEthernet0/0 S1:GigabitEthernet0/1 straight
 bun run pt config host PC1 192.168.1.10 255.255.255.0 192.168.1.1
 bun run pt snapshot
-
-# Ver guía completa
-cat docs/PT_CONTROL_QUICKSTART.md
 ```
 
-### Analizar Laboratorios
+---
+
+## 💻 Referencia de Comandos CLI
+
+### 🎮 Control en Tiempo Real de Packet Tracer
 
 ```bash
 # Ver estado actual del contexto y Packet Tracer
@@ -90,11 +186,14 @@ bun run pt status
 bun run pt device list
 bun run pt device add R1 2911
 bun run pt device remove R1
+bun run pt device move R1 --xpos 300 --ypos 200
 
 # Configuración de red
-bun run pt config-host R1 --ip 192.168.1.1 --mask 255.255.255.0
+bun run pt config-host R1 --ip 192.168.1.1 --mask 255.255.255.0 --gateway 192.168.1.254
+bun run pt config-ios R1 interface GigabitEthernet0/0 ip address 192.168.1.1 255.255.255.0
 bun run pt vlan apply Switch1 10 20 30
-bun run pt link add R1 Gi0/0 S1 Fa0/1
+bun run pt trunk apply Switch1 GigabitEthernet0/1
+bun run pt ssh setup Router1 --domain cisco.local --user admin --pass admin
 
 # Diagnóstico y logs
 bun run pt doctor
@@ -102,6 +201,167 @@ bun run pt logs tail
 bun run pt history list
 ```
 
+### Lab Management
+
+```bash
+# Listar labs guardados
+bun run pt lab list
+
+# Crear nuevo lab
+bun run pt lab create <nombre>
+
+# Levantar lab desde YAML
+bun run pt lab lift <archivo>
+
+# Validar lab
+bun run pt lab validate <archivo>
+
+# Modo interactivo
+bun run pt lab interactive
+
+# Pipeline de labs
+bun run pt lab pipeline
+
+# Parsear lab
+bun run pt lab parse <archivo>
+```
+
+### Configuración de Protocolos (YAML)
+
+```bash
+# OSPF
+bun run pt config-ospf --device R1 --process-id 1 --network "192.168.1.0,0.0.0.255,0"
+
+# EIGRP
+bun run pt config-eigrp --device R1 --as 100 --network "192.168.1.0,0.0.0.255"
+
+# BGP
+bun run pt config-bgp --device R1 --as 65000 --neighbor "10.0.0.2,65001"
+
+# ACL
+bun run pt config-acl --device R1 --name FILTER --type extended --rule "permit,ip,any,any"
+
+# VLAN
+bun run pt config-vlan --device S1 --vlan "10,ADMIN" --vlan "20,USERS"
+
+# Interface
+bun run pt config-interface --device R1 --name Gig0/0 --ip 192.168.1.1 --mask 255.255.255.0
+
+# Aplicar desde archivo YAML/JSON
+bun run pt config-apply configs/lab.yaml --dry-run
+```
+
+### Historial y Auditoría
+
+```bash
+# Historial de comandos
+bun run pt history list              # Listar historial
+bun run pt history show <id>        # Ver comando específico
+bun run pt history last             # Último comando
+bun run pt history search "ospf"    # Buscar en historial
+bun run pt history failed           # Comandos fallidos
+bun run pt history rerun <id>      # Re-ejecutar comando
+
+# Audit log
+bun run pt audit-tail               # Ver últimas operaciones
+bun run pt audit-tail --lines 50    # Con cantidad de líneas
+bun run pt audit-export             # Exportar a archivo
+bun run pt audit-export --format json --output audit.json
+bun run pt audit-failed            # Operaciones fallidas
+bun run pt audit-failed --since "2026-04-01"
+```
+
+### Topología
+
+```bash
+# Analizar topología
+bun run pt topology analyze
+
+# Limpiar topología
+bun run pt topology clean
+
+# Exportar topología
+bun run pt topology export
+
+# Visualizar topología
+bun run pt topology visualize
+
+# Mostrar topología descubierta
+bun run pt topology show
+```
+
+### Gestión de Enlaces
+
+```bash
+bun run pt link add R1 Gi0/0 S1 Fa0/1   # Agregar enlace
+bun run pt link list                      # Listar enlaces
+bun run pt link remove R1 Gi0/0           # Remover enlace
+```
+
+### Servicios de Red
+
+```bash
+# DHCP server
+bun run pt services dhcp <device>
+
+# NTP server
+bun run pt services ntp <device>
+
+# Syslog
+bun run pt services syslog <device>
+```
+
+### STP y EtherChannel
+
+```bash
+# Spanning Tree Protocol
+bun run pt stp set Switch1 mode rapid-pvst
+bun run pt stp set Switch1 priority 4096
+
+# EtherChannel
+bun run pt etherchannel create Switch1 1 Gi0/1 Gi0/2
+bun run pt etherchannel list
+```
+
+### Routing y ACL
+
+```bash
+# Routing
+bun run pt routing ospf enable R1
+bun run pt routing static add 0.0.0.0 0.0.0.0 192.168.1.1
+
+# ACL
+bun run pt acl create 100 permit tcp any any eq 80
+bun run pt acl apply ACL-100 R1
+```
+
+### Resultados y Logs
+
+```bash
+# Resultados de comandos
+bun run pt results list                  # Listar resultados
+bun run pt results show <id>            # Ver resultado específico
+bun run pt results last                  # Último resultado
+
+# Logs
+bun run pt logs tail                     # Ver logs
+bun run pt logs session <id>            # Logs de sesión
+bun run pt logs errors                  # Solo errores
+```
+
+### Dispositivos (memoria SQLite)
+
+```bash
+bun run pt devices-list                  # Listar dispositivos guardados
+bun run pt devices-add R1 --ip 10.0.0.1  # Agregar a memoria
+```
+
+### Preferencias
+
+```bash
+bun run pt config-prefs set default_router 2911   # Guardar preferencia
+bun run pt config-prefs get default_router         # Ver preferencia
+```
 
 ---
 
@@ -150,21 +410,112 @@ La CLI de cisco-auto (basada en pt-control) implementa:
 
 ---
 
-## 📁 Estructura del Proyecto (Monorepo)
+## 🔧 Desarrollo
 
-```text
-cisco-auto/
-├── apps/
-│   └── pt-cli/             # CLI principal (Commander.js)
-├── packages/
-│   ├── core/               # Lógica de negocio y orquestadores
-│   ├── pt-control/         # 🎮 Control en tiempo real de Packet Tracer
-│   ├── file-bridge/        # Bridge para comunicación CLI ↔ Packet Tracer
-│   └── pt-runtime/         # Generador de runtime para Packet Tracer
-├── labs/                   # Archivos YAML de topologías de ejemplo
-├── docs/                   # Documentación técnica y guías
-└── scripts/                # Scripts de utilidad
+### Cómo Agregar un Nuevo Plugin
+
+1. **Crear la estructura de archivos:**
+   ```
+   packages/kernel/src/plugins/<nombre>/
+   ├── index.ts              # Export público
+   ├── <nombre>.plugin.ts    # Definición del plugin
+   ├── <nombre>.schema.ts    # Schema Zod de validación
+   ├── <nombre>.generator.ts # Generador de comandos IOS
+   └── <nombre>.plugin.test.ts  # Tests
+   ```
+
+2. **Definir el schema Zod:**
+   ```typescript
+   import { z } from 'zod';
+   
+   export const miPluginSchema = z.object({
+     deviceName: z.string().min(1),
+     // ... campos específicos del protocolo
+   });
+   ```
+
+3. **Implementar validación y plugin:**
+   ```typescript
+   import type { ProtocolPlugin } from '../../plugin-api/protocol.plugin.js';
+   
+   export const miPlugin: ProtocolPlugin = {
+     id: 'mi-protocolo',
+     category: 'switching', // o 'routing', 'security', 'services'
+     name: 'Mi Protocolo',
+     version: '1.0.0',
+     description: 'Generates and validates IOS Mi Protocolo configuration.',
+     commands: [/* ... */],
+     validate: validateConfig,
+   };
+   ```
+
+4. **Exportar desde el index del plugin:**
+   ```typescript
+   export { miPlugin } from './mi-plugino.plugin.js';
+   export { generateMiProtocoloCommands } from './mi-plugino.generator.js';
+   ```
+
+5. **Registrar en `packages/kernel/src/plugins/index.ts`:**
+   ```typescript
+   export * from './<nombre>/index.js';
+   ```
+
+6. **Registrar en el PluginRegistry (kernel-bridge.ts):**
+   ```typescript
+   import { miPlugin } from '@cisco-auto/kernel/plugins';
+   registry.register('protocol', miPlugin);
+   ```
+
+### Comandos de Desarrollo
+
+```bash
+# Instalar dependencias
+bun install
+
+# Ejecutar tests
+bun test
+
+# Verificar tipos
+bun run typecheck
+
+# Build runtime de PT
+bun run pt:build
+
+# Generar runtime
+bun run pt:generate
+
+# Validar runtime
+bun run pt:validate
+
+# Deploy runtime
+bun run pt:deploy
 ```
+
+### Convenciones de Código
+
+- **Runtime:** Bun (obligatorio, no usar Node.js/npm)
+- **Lenguaje:** TypeScript estricto
+- **Comentarios:** En español
+- **Variables de dominio:** En español (`usuario`, `calcularTotal`)
+- **Términos técnicos:** En inglés (`middleware`, `request`, `payload`)
+- Ver `CLAUDE.md` para convenciones completas
+
+---
+
+## 📚 Documentación
+
+| Documento | Descripción |
+|-----------|-------------|
+| [Arquitectura General](docs/architecture/OVERVIEW.md) | Visión general de la arquitectura |
+| [Sistema de Plugins](docs/architecture/PLUGIN_SYSTEM.md) | Cómo crear y registrar plugins |
+| [Bounded Contexts](docs/architecture/BOUNDED_CONTEXTS.md) | Dominios y límites contextuales |
+| [Reglas de Dependencia](docs/architecture/DEPENDENCY_RULE.md) | Reglas de dependencia entre capas |
+| [Estrategia de Testing](docs/architecture/TESTING_STRATEGY.md) | Cómo testear el proyecto |
+| [Guía de Migración](docs/MIGRATION_GUIDE.md) | Migrar de generadores legacy a plugins |
+| [PT Control Arquitectura](docs/PT_CONTROL_ARCHITECTURE.md) | Arquitectura de PT Control V2 |
+| [PT Control Quickstart](docs/PT_CONTROL_QUICKSTART.md) | Inicio rápido de PT Control |
+| [Modelos de Dispositivos](docs/PT_CONTROL_MODELS.md) | Catálogo de dispositivos soportados |
+| [Troubleshooting](docs/PT_CONTROL_TROUBLESHOOTING.md) | Guía de resolución de problemas |
 
 ---
 
