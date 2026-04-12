@@ -267,3 +267,24 @@ Estos resultados provienen de la sesión QA previa y sirven como referencia hist
 | 2026-04-12 | TC-069 | `bun run pt stp set-root --explain --device S1 --vlan 1` | PASS | Muestra explicación/plan del root bridge para VLAN 1. | - | salida CLI |
 | 2026-04-12 | TC-000 | `bun run pt status` | WARN | Bridge ready pero lease invalid; topology stale; 4 devices / 8 links. | Estado parcial del bridge | salida CLI |
 | 2026-04-12 | TC-000 | `bun run pt inspect topology` | WARN | Reporta 4 dispositivos, 8 conexiones; incluye Power Distribution Device0 y enlaces heredados. | Contexto mixto / topología heredada | salida CLI |
+
+### Sesión ejecutada 2026-04-12 — séptima tanda
+
+| Fecha | ID | Comando | Estado | Observado | Causa probable | Evidencia |
+|---|---|---|---|---|---|---|
+| 2026-04-12 | TC-140 | `bun run pt help device` | PASS | Devuelve help enriquecido para device con ejemplos y notas de estado parcial. | - | salida CLI |
+| 2026-04-12 | TC-141 | `bun run pt help link` | PASS | Devuelve help enriquecido para link con ejemplos. | - | salida CLI |
+| 2026-04-12 | TC-142 | `bun run pt help routing static add` | FAIL | `help` no acepta 3 argumentos; demasiados argumentos. | Límite del dispatcher help | salida CLI |
+| 2026-04-12 | TC-143 | `bun run pt help services dhcp create` | FAIL | `help` no acepta 3 argumentos; demasiados argumentos. | Límite del dispatcher help | salida CLI |
+| 2026-04-12 | TC-144 | `bun run pt help acl create` | PASS | Reporta que no encuentra el comando compuesto y sugiere usar `pt help`. | Límite/UX del helper, pero comportamiento claro | salida CLI |
+| 2026-04-12 | TC-145 | `bun run pt bridge` | PASS | Bridge running, lease valid, TTL visible. | - | salida CLI |
+| 2026-04-12 | TC-146 | `bun run pt results pending` | PASS | Muestra 1 queued, 0 in-flight, 40 dead-letter. | - | salida CLI |
+| 2026-04-12 | TC-147 | `bun run pt results failed --limit 5` | PASS | Lista resultados fallidos recientes. | - | salida CLI |
+| 2026-04-12 | TC-148 | `bun run pt search topology.clean --limit 5` | PASS | Devuelve 5 resultados del historial relacionados. | - | salida CLI |
+| 2026-04-12 | TC-149 | `bun run pt host inspect PC1` | PASS | Muestra host PC1 con DHCP Sí y datos básicos. | - | salida CLI |
+| 2026-04-12 | TC-150 | `bun run pt host config PC1 --ip 192.168.1.50 --mask 255.255.255.0 --gateway 192.168.1.1` | PASS | Configura host PC1 correctamente por la sintaxis real del subcomando. | - | salida CLI |
+| 2026-04-12 | TC-151 | `bun run pt host inspect PC1 --json` | WARN | JSON correcto pero reporta IP 0.0.0.0 y DHCP true en el contexto parcial. | Contexto parcial / lease no reflejado en host inspect | salida CLI |
+| 2026-04-12 | TC-152 | `bun run pt results show cmd_000000002025.json` | FAIL | Resultado no encontrado. | ID no existe o ya fue rotado | salida CLI |
+| 2026-04-12 | TC-153 | `bun run pt failed --limit 5` | PASS | Lista los 5 comandos fallidos recientes. | - | salida CLI |
+| 2026-04-12 | TC-154 | `bun run pt status` | WARN | Bridge running con lease valid, pero topology stale y 4 devices / 8 links. | Contexto mixto / parcial | salida CLI |
+| 2026-04-12 | TC-155 | `bun run pt inspect topology` | WARN | Reporta 4 dispositivos y 8 conexiones, incluyendo un Power Distribution Device0 heredado. | Contexto mixto / topología heredada | salida CLI |
