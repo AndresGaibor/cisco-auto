@@ -330,3 +330,13 @@ Estos resultados provienen de la sesión QA previa y sirven como referencia hist
 | 2026-04-12 | TC-185 | `bun run pt ledger query --device PC1 --limit 5` | PASS | Resultados: 0. | - | salida CLI |
 | 2026-04-12 | TC-186 | `bun run pt host config PC1 --dhcp --ipv6-enabled --ipv6-auto-config` | WARN | Configura DHCP correctamente; IPv6 flags aceptadas pero no se reflejan en el output de inspect. | IPv6 no visible / contexto parcial | salida CLI |
 | 2026-04-12 | TC-187 | `bun run pt host inspect PC1 --json` | PASS | JSON coherente con DHCP true e IP 0.0.0.0 en contexto parcial. | - | salida CLI |
+
+### Sesión ejecutada 2026-04-12 — décima tanda
+
+| Fecha | ID | Comando | Estado | Observado | Causa probable | Evidencia |
+|---|---|---|---|---|---|---|
+| 2026-04-12 | TC-188 | `bun run pt planner execute plan-1775982958988-generic` | FAIL | Sale con exit 0 pero no imprime nada ni persiste nada. | Execute es no-op / no persistente | salida CLI |
+| 2026-04-12 | TC-189 | `bun run pt planner execute --json plan-1775982958988-generic` | FAIL | Igual: exit 0 sin salida visible ni persistencia. | Execute es no-op / no persistente | salida CLI |
+| 2026-04-12 | TC-190 | `bun run pt ledger show cmd_000000001979` | FAIL | `Operation cmd_000000001979 not found`. | Ledger no indexa resultados del envelope | salida CLI |
+| 2026-04-12 | TC-191 | `bun run pt ledger show --help` | PASS | Ayuda correcta con `--json` y `operation-id`. | - | salida CLI |
+| 2026-04-12 | TC-192 | `bun run pt planner execute --help` | PASS | Ayuda correcta con `plan-id` y `--json`. | - | salida CLI |
