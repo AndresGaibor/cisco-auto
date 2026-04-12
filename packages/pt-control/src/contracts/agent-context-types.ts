@@ -55,14 +55,3 @@ export const AgentSessionStateSchema = z.object({
   verbosity: z.enum(['compact', 'normal', 'detailed']).default('normal'),
 });
 export type AgentSessionState = z.infer<typeof AgentSessionStateSchema>;
-export type AgentBaseContext = z.infer<typeof AgentBaseContextSchema>;
-
-export const AgentSessionStateSchema = z.object({
-  selectedDevice: z.string().optional(),
-  selectedZone: z.string().optional(),
-  focusDevices: z.array(z.string()).default([]),
-  lastTask: z.string().optional(),
-  lastPlan: z.array(z.string()).optional(),
-  verbosity: z.enum(['compact', 'normal', 'detailed']).default('normal'),
-});
-export type AgentSessionState = z.infer<typeof AgentSessionStateSchema>;

@@ -85,3 +85,6 @@ export {
 
 // Application Services - planners and helpers
 export { LayoutPlannerService, PortPlannerService, LinkFeasibilityService } from "./application/services/index.js";
+
+// Agent workflow - task-scoped context building and rendering
+export * from "./agent/index.js";

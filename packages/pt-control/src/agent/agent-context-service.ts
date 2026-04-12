@@ -105,9 +105,7 @@ export class AgentContextService {
       ...inferredZones,
       ...(session.selectedZone ? [session.selectedZone] : []),
     ]);
-    const derivedZoneIds = scopeZoneIds.length > 0
-      ? scopeZoneIds
-      : this.getZonesForDevices(twin, focusDevices);
+    const derivedZoneIds = scopeZoneIds;
     const zoneDeviceNames = derivedZoneIds.flatMap((zoneId) =>
       getDevicesInZone(twin, zoneId).map((device) => device.name),
     );

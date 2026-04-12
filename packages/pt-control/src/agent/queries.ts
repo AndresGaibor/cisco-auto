@@ -144,9 +144,9 @@ export function getTaskRisks(
   const deviceScope = Array.from(new Set(deviceNames));
 
   if (/connect|link/i.test(task)) {
-    risks.push('Validar ambos extremos antes de mutar la conectividad.');
+    risks.push('connect/link: validar ambos extremos antes de mutar la conectividad.');
     if (deviceScope.length < 2) {
-      risks.push('La tarea de conexión necesita al menos dos dispositivos en alcance.');
+      risks.push('connect/link: la tarea necesita al menos dos dispositivos en alcance.');
     }
   }
 
