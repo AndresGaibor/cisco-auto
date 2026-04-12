@@ -196,3 +196,30 @@ Estos resultados provienen de la sesión QA previa y sirven como referencia hist
 | 2026-04-12 | TC-036 | `bun run pt link remove R1 GigabitEthernet0/0` | PASS | Conexión removida exitosamente. | - | salida CLI |
 | 2026-04-12 | TC-020 | `bun run pt device get PC1` | PASS | Error claro `Dispositivo 'PC1' no encontrado`. | Validación correcta post-eliminación | salida CLI |
 | 2026-04-12 | TC-010 | `bun run pt device list` | PASS | Tras eliminar PC1, la lista queda en 2 dispositivos (R1, S1). | - | salida CLI |
+
+### Sesión ejecutada 2026-04-12 — tercera tanda
+
+| Fecha | ID | Comando | Estado | Observado | Causa probable | Evidencia |
+|---|---|---|---|---|---|---|
+| 2026-04-12 | TC-060 | `bun run pt vlan apply --device S1 --vlans 10,20,30` | PASS | Genera 9 comandos VLAN correctamente. | - | salida CLI |
+| 2026-04-12 | TC-061 | `bun run pt vlan trunk --device S1 --interface GigabitEthernet0/1 --allowed 10,20` | FAIL | Falla con `IOS configuration failed`. | Runtime/bridge parcial al aplicar trunk | salida CLI |
+| 2026-04-12 | TC-062 | `bun run pt vlan ensure S1 --vlan 10,ADMIN --vlan 20,USERS` | PASS | Crea VLANs 10 y 20 correctamente. | - | salida CLI |
+| 2026-04-12 | TC-063 | `bun run pt vlan config-interfaces S1 --interface 10,192.168.10.1,255.255.255.0 --interface 20,192.168.20.1,255.255.255.0` | PASS | Genera SVIs correctas para VLAN 10/20. | - | salida CLI |
+| 2026-04-12 | TC-063 | `bun run pt etherchannel create S1 --group-id 1 --interfaces Gi0/1,Gi0/2 --protocol lacp --mode active --trunk --allowed-vlans 10,20 --dry-run` | PASS | Genera comandos EtherChannel dry-run correctos. | - | salida CLI |
+| 2026-04-12 | TC-064 | `bun run pt etherchannel list S1` | PASS | Devuelve salida vacía pero sin error. | No hay bundles definidos | salida CLI |
+| 2026-04-12 | TC-065 | `bun run pt etherchannel remove S1 --group-id 1 --dry-run` | PASS | Genera comandos de remoción correctos. | - | salida CLI |
+| 2026-04-12 | TC-068 | `bun run pt stp configure --device S1 --mode rapid-pvst --dry-run` | PASS | Genera comando `spanning-tree mode rapid-pvst`. | - | salida CLI |
+| 2026-04-12 | TC-069 | `bun run pt stp set-root --device S1 --vlan 1` | PASS | Genera plan de root bridge para VLAN 1. | - | salida CLI |
+| 2026-04-12 | TC-070 | `bun run pt routing static add --device R1 --network 192.168.10.0/24 --next-hop 10.0.0.1` | PASS | Genera `ip route 192.168.10.0 255.255.255.0 10.0.0.1`. | - | salida CLI |
+| 2026-04-12 | TC-071 | `bun run pt routing ospf enable --device R1 --process-id 1` | PASS | Genera `router ospf 1`. | - | salida CLI |
+| 2026-04-12 | TC-072 | `bun run pt routing ospf add-network --device R1 --network 192.168.10.0/24 --area 0` | FAIL | Error: `El área debe ser un número entero válido`. | Parser/validation del área OSPF | salida CLI |
+| 2026-04-12 | TC-073 | `bun run pt routing eigrp enable --device R1 --as 100` | PASS | Genera `router eigrp 100` y `no auto-summary`. | - | salida CLI |
+| 2026-04-12 | TC-077 | `bun run pt services dhcp create --device R1 --pool LAN10 --network 192.168.10.0/24` | PASS | Genera 4 comandos DHCP. | - | salida CLI |
+| 2026-04-12 | TC-078 | `bun run pt services ntp add-server --device R1 --server 192.168.1.100` | PASS | Genera 2 comandos NTP. | - | salida CLI |
+| 2026-04-12 | TC-079 | `bun run pt services syslog add-server --device R1 --server 192.168.1.200` | PASS | Genera 2 comandos Syslog. | - | salida CLI |
+| 2026-04-12 | TC-083 | `bun run pt topology analyze` | PASS | Reporta 3 dispositivos y 8 conexiones; densidad 266.7%. | - | salida CLI |
+| 2026-04-12 | TC-084 | `bun run pt topology export` | PASS | Exporta un grafo Mermaid/graph TD correcto. | - | salida CLI |
+| 2026-04-12 | TC-085 | `bun run pt topology visualize` | PASS | Stub correcto: indica que la visualización del canvas aún no está implementada. | Funcionalidad pendiente, pero mensaje claro | salida CLI |
+| 2026-04-12 | TC-091 | `bun run pt logs errors` | PASS | 0 errores recientes. | - | salida CLI |
+| 2026-04-12 | TC-088 | `bun run pt history list` | PASS | Lista las últimas ejecuciones con duración y estado. | - | salida CLI |
+| 2026-04-12 | TC-093 | `bun run pt device list` | PASS | Actualmente quedan R1 y S1; PC1 fue removido. | - | salida CLI |
