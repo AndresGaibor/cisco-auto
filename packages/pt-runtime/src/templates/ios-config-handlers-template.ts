@@ -474,7 +474,7 @@ function handleConfigIos(payload) {
       }
     }
 
-    // Execute commands
+    // Execute commands using engine state machine
     var commands = payload.commands || [];
     dprint('[handleConfigIos] Executing ' + commands.length + ' commands');
 
@@ -482,33 +482,55 @@ function handleConfigIos(payload) {
       var cmd = commands[i];
       dprint('[handleConfigIos] Command ' + i + ': ' + cmd);
 
+      engine.reset();
+      engine.processEvent({ type: 'commandStarted', command: cmd });
+
       preLen = term.getOutput ? term.getOutput().length : 0;
       term.enterCommand(cmd);
 
-      var maxAttempts = 30;
+      var maxAttempts = 100;
       var attempt = 0;
       var output = "";
 
-      while (attempt < maxAttempts) {
+      while (attempt < maxAttempts && !engine.isComplete()) {
         var fullOutput = term.getOutput ? term.getOutput() : "";
         var newData = fullOutput.slice(preLen);
 
         if (newData.length > 0) {
+          engine.processEvent({ type: 'outputWritten', data: newData });
           preLen = fullOutput.length;
           output = fullOutput;
         }
 
-        if (fullOutput.indexOf("(config") >= 0) {
-          break;
+        if (engine.getState().paging) {
+          engine.advancePaging();
+          term.enterCommand(" ");
         }
-        if (fullOutput.indexOf("#") >= 0 && fullOutput.length > 20) {
-          break;
+
+        syncEngineModeFromTerminal(engine, term);
+
+        var prompt = term.getPrompt ? term.getPrompt() : "";
+        if (prompt && (prompt.indexOf("(config") >= 0 || prompt.indexOf("#") >= 0)) {
+          if (engine.getState().state === "awaiting-output" || engine.getState().state === "idle") {
+            engine.processEvent({ type: 'commandEnded' });
+            break;
+          }
         }
 
         attempt++;
       }
 
-      var ok = output.indexOf("% Invalid") < 0 && output.indexOf("% Incomplete") < 0;
+      if (!engine.isComplete()) {
+        if (engine.hasInteractivePending()) {
+          engine.processEvent({ type: 'timeout' });
+        } else {
+          engine.processEvent({ type: 'commandEnded' });
+        }
+      }
+
+      var state = engine.getExecutionState();
+      var engineState = engine.getState();
+      var ok = state === "completed" && !engineState.awaitingConfirm && !engineState.awaitingPassword;
 
       results.push({
         index: i,
@@ -517,10 +539,12 @@ function handleConfigIos(payload) {
         output: output.slice(0, 500),
         diagnostics: {
           source: 'terminal',
-          completionReason: ok ? 'command-ended' : 'command-error',
-          errors: ok ? [] : ['Command failed']
+          completionReason: ok ? 'command-ended' : 'timeout',
+          errors: ok ? [] : ['Command failed or incomplete']
         }
       });
+
+      dprint('[handleConfigIos] Command ' + i + ' result: ok=' + ok + ' state=' + state + ' outputLen=' + output.length);
 
       if (!ok) {
         failedIndex = i;

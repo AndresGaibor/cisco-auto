@@ -69,7 +69,6 @@ var isRunning = false;
 
 var activeCommand = null;
 var activeCommandFilename = null;
-var runtimeDirty = false;
 var runtimeLastMtime = 0;
 
 // ============================================================================
@@ -277,7 +276,6 @@ function loadRuntime() {
 
     runtimeFn = new Function("payload", "api", code);
     runtimeLastMtime = mtime;
-    runtimeDirty = false;
     dprint("[PT] Runtime loaded OK (mtime=" + mtime + ")");
 
   } catch (e) {
@@ -295,11 +293,8 @@ function getFileMtime(path) {
 }
 
 function reloadRuntimeIfNeeded() {
-  if (!runtimeDirty) return;
-
   var currentMtime = getFileMtime(RUNTIME_FILE);
   if (currentMtime === runtimeLastMtime) {
-    runtimeDirty = false;
     return;
   }
 
@@ -312,11 +307,11 @@ function reloadRuntimeIfNeeded() {
   }
 
   if (hasActiveJobs) {
-    dprint("[PT] Runtime dirty but jobs active, deferring reload");
+    dprint("[PT] Runtime changed but jobs active, deferring reload");
     return;
   }
 
-  dprint("[PT] Reloading runtime (no active jobs)...");
+  dprint("[PT] Reloading runtime (mtime changed)...");
   loadRuntime();
 }
 
