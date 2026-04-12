@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 /**
  * Inspector de contexto de ejecución para comandos de la CLI.
  * Recolecta el estado operativo del controller/bridge/topología
@@ -24,6 +25,7 @@ export interface CommandRuntimeContext {
     warnings?: string[];
   };
   warnings: string[];
+  notes: string[];
 }
 
 /**
@@ -37,13 +39,16 @@ export async function inspectCommandContext(
   const heartbeat = controller.getHeartbeatHealth();
   const bridge = controller.getBridgeStatus();
   const warnings: string[] = [];
+  const notes: string[] = [];
 
   if (!summary.bridgeReady) {
     warnings.push('Bridge no está listo; el comando puede operar con contexto parcial.');
+    notes.push('El bridge todavía no está listo para una ejecución totalmente confiable.');
   }
 
   if (!summary.topologyMaterialized) {
     warnings.push('Topología virtual aún no materializada; la verificación de estado puede ser incompleta.');
+    notes.push(`Topología en calentamiento: ${summary.deviceCount} dispositivos / ${summary.linkCount} enlaces.`);
   }
 
   if (heartbeat.state === 'stale') {
@@ -55,6 +60,8 @@ export async function inspectCommandContext(
   if (bridge.warnings && bridge.warnings.length > 0) {
     warnings.push(...bridge.warnings);
   }
+
+  notes.push(`Bridge: ${bridge.ready ? 'ready' : 'not ready'}; heartbeat: ${heartbeat.state}`);
 
   return {
     bridgeReady: summary.bridgeReady,
@@ -70,5 +77,6 @@ export async function inspectCommandContext(
       warnings: bridge.warnings ?? [],
     },
     warnings,
+    notes,
   };
 }

@@ -1,0 +1,18 @@
+#!/usr/bin/env bun
+import { Command } from 'commander';
+import { createInspectTopologyCommand } from './topology.js';
+import { createInspectNeighborsCommand } from './neighbors.js';
+import { createInspectFreePortsCommand } from './free-ports.js';
+import { createInspectDriftCommand } from './drift.js';
+
+export function createInspectCommand(): Command {
+  const command = new Command('inspect')
+    .description('Inspección canónica del estado del laboratorio y del twin');
+
+  command.addCommand(createInspectTopologyCommand());
+  command.addCommand(createInspectNeighborsCommand());
+  command.addCommand(createInspectFreePortsCommand());
+  command.addCommand(createInspectDriftCommand());
+
+  return command;
+}

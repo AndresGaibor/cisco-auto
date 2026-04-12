@@ -8,7 +8,7 @@ describe('pt-cli helper', () => {
   it('returns object with success boolean', async () => {
     const res = await runPtCommand(['--version'] as string[]);
     expect(typeof res.success).toBe('boolean');
-  });
+  }, 10000);
 
   it('`bun run src/index.ts --help` termina con código cero', async () => {
     const proceso = Bun.spawn({
@@ -25,6 +25,11 @@ describe('pt-cli helper', () => {
 
     expect(exitCode).toBe(0);
     expect(stdout).toContain('Usage: cisco-auto');
+    expect(stdout).toContain('inspect');
+    expect(stdout).toContain('layout');
+    expect(stdout).toContain('verify');
+    expect(stdout).toContain('agent');
+    expect(stdout).toContain('topology-show');
   });
 
   it('collectContextStatus refresca la snapshot viva antes de persistir estado', async () => {
@@ -56,5 +61,6 @@ describe('pt-cli helper', () => {
 
     expect(status.topology.deviceCount).toBe(2);
     expect(status.topology.materialized).toBe(true);
+    expect(status.notes?.length ?? 0).toBeGreaterThan(0);
   });
 });

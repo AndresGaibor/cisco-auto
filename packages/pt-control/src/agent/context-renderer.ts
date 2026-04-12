@@ -9,6 +9,32 @@ export interface RenderedContext {
   structured: AgentBaseContext;
 }
 
+function appendTaskLines(lines: string[], context: AgentBaseContext): void {
+  if (!context.task) return;
+
+  lines.push(`- Tarea actual: ${context.task.goal}`);
+
+  if (context.task.scope) {
+    lines.push(`- Alcance de tarea: ${context.task.scope}`);
+  }
+
+  if (context.task.affectedDevices.length > 0) {
+    lines.push(`- Dispositivos foco: ${context.task.affectedDevices.join(", ")}`);
+  }
+
+  if (context.task.affectedZones.length > 0) {
+    lines.push(`- Zonas foco: ${context.task.affectedZones.join(", ")}`);
+  }
+
+  if (context.task.suggestedCommands.length > 0) {
+    lines.push(`- Sugerencias: ${context.task.suggestedCommands.join(" | ")}`);
+  }
+
+  if (context.task.notes.length > 0) {
+    lines.push(`- Notas de tarea: ${context.task.notes.join("; ")}`);
+  }
+}
+
 export function renderBaseContext(context: AgentBaseContext): string {
   const lines: string[] = [];
 
@@ -45,6 +71,11 @@ export function renderBaseContext(context: AgentBaseContext): string {
   if (context.selection?.selectedZone) {
     lines.push(`- Zona seleccionada: ${context.selection.selectedZone}`);
   }
+  if (context.selection?.focusDevices.length) {
+    lines.push(`- Dispositivos foco: ${context.selection.focusDevices.join(", ")}`);
+  }
+
+  appendTaskLines(lines, context);
 
   // Alerts
   if (context.alerts.length > 0) {
@@ -82,6 +113,10 @@ export function renderCompactContext(context: AgentBaseContext): string {
 
   if (context.selection?.selectedDevice) {
     lines.push(`Device: ${context.selection.selectedDevice}`);
+  }
+
+  if (context.task) {
+    lines.push(`Task: ${context.task.goal}`);
   }
 
   if (context.alerts.length > 0) {
@@ -124,10 +159,30 @@ export function renderDetailedContext(context: AgentBaseContext): string {
     lines.push(zoneInfo);
   }
 
-  if (context.selection?.selectedDevice) {
+  if (context.selection?.selectedDevice || context.selection?.selectedZone || context.task) {
     lines.push("");
     lines.push(`--- Selección ---`);
-    lines.push(`Device: ${context.selection.selectedDevice}`);
+    if (context.selection?.selectedDevice) {
+      lines.push(`Device: ${context.selection.selectedDevice}`);
+    }
+    if (context.selection?.selectedZone) {
+      lines.push(`Zone: ${context.selection.selectedZone}`);
+    }
+    if (context.selection?.focusDevices.length) {
+      lines.push(`Focus: ${context.selection.focusDevices.join(", ")}`);
+    }
+    if (context.task) {
+      lines.push(`Task: ${context.task.goal}`);
+      if (context.task.affectedDevices.length) {
+        lines.push(`Affected devices: ${context.task.affectedDevices.join(", ")}`);
+      }
+      if (context.task.affectedZones.length) {
+        lines.push(`Affected zones: ${context.task.affectedZones.join(", ")}`);
+      }
+      if (context.task.suggestedCommands.length) {
+        lines.push(`Suggestions: ${context.task.suggestedCommands.join(" | ")}`);
+      }
+    }
   }
 
   if (context.alerts.length > 0) {

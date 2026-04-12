@@ -33,13 +33,32 @@ export interface DeviceContextResult {
   config?: ConfigTwin;
 }
 
+function getDeviceZoneMemberships(twin: NetworkTwin, device: DeviceTwin): DeviceSpatialContext['zones'] {
+  const memberships: DeviceSpatialContext['zones'] = [];
+  const { centerX, centerY } = device.logicalPosition;
+
+  for (const zone of Object.values(twin.zones)) {
+    const { x1, y1, x2, y2 } = zone.geometry;
+    const inside = centerX >= x1 && centerX <= x2 && centerY >= y1 && centerY <= y2;
+    if (inside) {
+      memberships.push({
+        zoneId: zone.id,
+        relation: 'inside',
+        confidence: 1,
+      });
+    }
+  }
+
+  return memberships;
+}
+
 export function getDeviceContext(twin: NetworkTwin, deviceName: string): DeviceContextResult | null {
   const device = selectDeviceByName(twin, deviceName);
   if (!device) return null;
 
   const spatial: DeviceSpatialContext = {
     logicalPosition: device.logicalPosition,
-    zones: [], // TODO: compute from zone membership
+    zones: getDeviceZoneMemberships(twin, device),
     inferred: undefined,
   };
 

@@ -23,6 +23,9 @@ export * from "./pt/terminal";
 export { MAIN_JS_TEMPLATE } from "./templates/main-kernel";
 export { RUNTIME_JS_TEMPLATE } from "./templates/runtime";
 
+// Runtime artifacts (snapshots)
+export { listRuntimeSnapshots, restoreRuntimeSnapshot } from "./runtime-artifacts";
+
 // Build system exports
 export { validatePtSafe, formatValidationResult } from "./build/validate-pt-safe";
 export { transformToPtSafe, wrapRuntimeBootstrap, wrapMainBootstrap } from "./build/pt-safe-transforms";
