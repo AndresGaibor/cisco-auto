@@ -4,25 +4,30 @@
 
 import type { IosMode } from "@cisco-auto/types";
 
+export type { IosMode };
+
 /**
  * Mode hierarchy (lower = less privileged)
  */
 const MODE_HIERARCHY: Record<IosMode, number> = {
-  'unknown': 0,
-  'rommon': 1,
-  'user-exec': 2,
-  'privileged-exec': 3,
-  'config': 4,
-  'config-if': 5,
-  'config-line': 5,
-  'config-router': 5,
-  'config-vlan': 5,
-  'config-subif': 5,
+  unknown: 0,
+  rommon: 1,
+  "user-exec": 2,
+  "privileged-exec": 3,
+  config: 4,
+  "config-if": 5,
+  "config-line": 5,
+  "config-router": 5,
+  "config-vlan": 5,
+  "config-subif": 5,
+  paging: 6,
+  "awaiting-confirm": 6,
+  "awaiting-password": 6,
 };
 
 /**
  * Represents a validated IOS session mode
- * 
+ *
  * Used for tracking CLI session state across commands.
  * Essential for proper command execution in PT runtime.
  */
@@ -31,18 +36,24 @@ export class SessionMode {
 
   constructor(value: IosMode) {
     const validModes: IosMode[] = [
-      'user-exec', 'privileged-exec', 'config', 'config-if', 
-      'config-line', 'config-router', 'config-vlan', 
-      'config-subif', 'rommon', 'unknown'
+      "user-exec",
+      "privileged-exec",
+      "config",
+      "config-if",
+      "config-line",
+      "config-router",
+      "config-vlan",
+      "config-subif",
+      "rommon",
+      "unknown",
     ];
-    
+
     if (!validModes.includes(value)) {
       throw new Error(
-        `Invalid session mode: "${value}". ` +
-        `Valid modes: ${validModes.join(', ')}`
+        `Invalid session mode: "${value}". ` + `Valid modes: ${validModes.join(", ")}`,
       );
     }
-    
+
     this.value = value;
   }
 
@@ -62,42 +73,42 @@ export class SessionMode {
    * Check if this mode is in ROMMON
    */
   get isRommon(): boolean {
-    return this.value === 'rommon';
+    return this.value === "rommon";
   }
 
   /**
    * Check if this mode is unknown
    */
   get isUnknown(): boolean {
-    return this.value === 'unknown';
+    return this.value === "unknown";
   }
 
   /**
    * Check if this is an exec mode (user or privileged)
    */
   get isExecMode(): boolean {
-    return this.value === 'user-exec' || this.value === 'privileged-exec';
+    return this.value === "user-exec" || this.value === "privileged-exec";
   }
 
   /**
    * Check if this is a config mode (any configuration submode)
    */
   get isConfigMode(): boolean {
-    return this.value.startsWith('config');
+    return this.value.startsWith("config");
   }
 
   /**
    * Check if this is privileged exec mode
    */
   get isPrivileged(): boolean {
-    return this.value === 'privileged-exec';
+    return this.value === "privileged-exec";
   }
 
   /**
    * Check if this is user exec mode (unprivileged)
    */
   get isUserExec(): boolean {
-    return this.value === 'user-exec';
+    return this.value === "user-exec";
   }
 
   /**
@@ -126,16 +137,34 @@ export class SessionMode {
    */
   get promptSuffix(): string {
     switch (this.value) {
-      case 'user-exec': return '>';
-      case 'privileged-exec': return '#';
-      case 'config': return '(config)#';
-      case 'config-if': return '(config-if)#';
-      case 'config-line': return '(config-line)#';
-      case 'config-router': return '(config-router)#';
-      case 'config-vlan': return '(config-vlan)#';
-      case 'config-subif': return '(config-subif)#';
-      case 'rommon': return '>';
-      case 'unknown': return '';
+      case "user-exec":
+        return ">";
+      case "privileged-exec":
+        return "#";
+      case "config":
+        return "(config)#";
+      case "config-if":
+        return "(config-if)#";
+      case "config-line":
+        return "(config-line)#";
+      case "config-router":
+        return "(config-router)#";
+      case "config-vlan":
+        return "(config-vlan)#";
+      case "config-subif":
+        return "(config-subif)#";
+      case "rommon":
+        return ">";
+      case "unknown":
+        return "";
+      case "paging":
+        return "--More--";
+      case "awaiting-confirm":
+        return "[confirm]";
+      case "awaiting-password":
+        return "";
+      default:
+        return "";
     }
   }
 
@@ -155,13 +184,13 @@ export class SessionMode {
 
     // Going to user-exec from anywhere
     if (this.isUserExec) {
-      return from.isPrivileged ? 'disable' : null;
+      return from.isPrivileged ? "disable" : null;
     }
 
     // Going to priv-exec
     if (this.isPrivileged) {
-      if (from.isUserExec) return 'enable';
-      if (from.isConfigMode) return 'end';
+      if (from.isUserExec) return "enable";
+      if (from.isConfigMode) return "end";
       return null;
     }
 
@@ -171,18 +200,18 @@ export class SessionMode {
         // Need to go through enable first
         return null; // Can't do in one step
       }
-      
-      if (from.value === 'privileged-exec') {
-        return 'configure terminal';
+
+      if (from.value === "privileged-exec") {
+        return "configure terminal";
       }
-      
+
       // Already in config, need to navigate
-      if (this.value === 'config') {
-        return 'exit';
+      if (this.value === "config") {
+        return "exit";
       }
-      
+
       // Different config submodes - go back to config first
-      return 'exit';
+      return "exit";
     }
 
     return null;
@@ -214,25 +243,25 @@ export class SessionMode {
    */
   static fromPrompt(prompt: string): SessionMode {
     const trimmed = prompt.trim();
-    
+
     // ROMMON
     if (/^rommon\s+\d+\s*>$/i.test(trimmed)) {
-      return new SessionMode('rommon');
+      return new SessionMode("rommon");
     }
-    
+
     // Config submodes
-    if (trimmed.endsWith('(config-if)#')) return new SessionMode('config-if');
-    if (trimmed.endsWith('(config-line)#')) return new SessionMode('config-line');
-    if (trimmed.endsWith('(config-router)#')) return new SessionMode('config-router');
-    if (trimmed.endsWith('(config-vlan)#')) return new SessionMode('config-vlan');
-    if (trimmed.endsWith('(config-subif)#')) return new SessionMode('config-subif');
-    if (trimmed.endsWith('(config)#')) return new SessionMode('config');
-    
+    if (trimmed.endsWith("(config-if)#")) return new SessionMode("config-if");
+    if (trimmed.endsWith("(config-line)#")) return new SessionMode("config-line");
+    if (trimmed.endsWith("(config-router)#")) return new SessionMode("config-router");
+    if (trimmed.endsWith("(config-vlan)#")) return new SessionMode("config-vlan");
+    if (trimmed.endsWith("(config-subif)#")) return new SessionMode("config-subif");
+    if (trimmed.endsWith("(config)#")) return new SessionMode("config");
+
     // Exec modes
-    if (trimmed.endsWith('#')) return new SessionMode('privileged-exec');
-    if (trimmed.endsWith('>')) return new SessionMode('user-exec');
-    
-    return new SessionMode('unknown');
+    if (trimmed.endsWith("#")) return new SessionMode("privileged-exec");
+    if (trimmed.endsWith(">")) return new SessionMode("user-exec");
+
+    return new SessionMode("unknown");
   }
 
   equals(other: SessionMode): boolean {

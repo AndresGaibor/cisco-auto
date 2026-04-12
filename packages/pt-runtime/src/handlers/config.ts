@@ -15,11 +15,7 @@
 // ============================================================================
 
 import type { HandlerDeps, HandlerResult, PTCommandLine, PTDevice } from "../utils/helpers";
-import type {
-  ConfigHostPayload,
-  ConfigIosPayload,
-  ExecIosPayload,
-} from "./config-types";
+import type { ConfigHostPayload, ConfigIosPayload, ExecIosPayload } from "./config-types";
 
 // ============================================================================
 // Global Scope Access (shared with main.js in PT's Qt Script Engine)
@@ -114,10 +110,7 @@ interface DeferredPollDoneError extends RuntimeErrorResult {
   done: true;
 }
 
-type DeferredPollResult =
-  | DeferredPollInProgress
-  | DeferredPollDoneSuccess
-  | DeferredPollDoneError;
+type DeferredPollResult = DeferredPollInProgress | DeferredPollDoneSuccess | DeferredPollDoneError;
 
 // ============================================================================
 // Result Factories
@@ -162,8 +155,15 @@ type ParserFn = (output: string) => Record<string, unknown>;
 
 const PARSERS: Record<string, ParserFn> = {
   "show ip interface brief": (output: string) => {
-    const interfaces: Array<{interface: string; ipAddress: string; ok: string; method: string; status: string; protocol: string}> = [];
-    const lines = output.split("\n").filter(l => l.trim().length > 0);
+    const interfaces: Array<{
+      interface: string;
+      ipAddress: string;
+      ok: string;
+      method: string;
+      status: string;
+      protocol: string;
+    }> = [];
+    const lines = output.split("\n").filter((l) => l.trim().length > 0);
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i].trim();
       if (line.includes("---")) continue;
@@ -175,15 +175,15 @@ const PARSERS: Record<string, ParserFn> = {
           ok: match[3],
           method: match[4],
           status: match[5],
-          protocol: match[6]
+          protocol: match[6],
         });
       }
     }
     return { entries: interfaces };
   },
   "show vlan brief": (output: string) => {
-    const vlans: Array<{id: number; name: string; status: string; ports: string[]}> = [];
-    const lines = output.split("\n").filter(l => l.trim().length > 0);
+    const vlans: Array<{ id: number; name: string; status: string; ports: string[] }> = [];
+    const lines = output.split("\n").filter((l) => l.trim().length > 0);
     for (const line of lines) {
       if (line.includes("---")) continue;
       const match = line.match(/^(\d+)\s+(\S+)\s+(\S+)\s*(.*)$/);
@@ -192,7 +192,12 @@ const PARSERS: Record<string, ParserFn> = {
           id: parseInt(match[1]),
           name: match[2],
           status: match[3],
-          ports: match[4] ? match[4].split(",").map(p => p.trim()).filter(p => p) : []
+          ports: match[4]
+            ? match[4]
+                .split(",")
+                .map((p) => p.trim())
+                .filter((p) => p)
+            : [],
         });
       }
     }
@@ -295,9 +300,15 @@ export function handleConfigHost(payload: ConfigHostPayload, deps: HandlerDeps):
     }
 
     // Leer IP adicional asignada por DHCP
-    try { actualIp = String(port.getIpAddress()); } catch {}
-    try { actualMask = String(port.getSubnetMask()); } catch {}
-    try { actualGateway = String(port.getDefaultGateway()); } catch {}
+    try {
+      actualIp = String(port.getIpAddress());
+    } catch {}
+    try {
+      actualMask = String(port.getSubnetMask());
+    } catch {}
+    try {
+      actualGateway = String(port.getDefaultGateway());
+    } catch {}
 
     return {
       ok: true,
@@ -332,17 +343,29 @@ export function handleConfigHost(payload: ConfigHostPayload, deps: HandlerDeps):
 
   // Desactivar DHCP si estaba activo
   if (typeof (device as any).setDhcpFlag === "function") {
-    try { (device as any).setDhcpFlag(false); } catch {}
+    try {
+      (device as any).setDhcpFlag(false);
+    } catch {}
   } else if (typeof (port as any).setDhcpClientFlag === "function") {
-    try { (port as any).setDhcpClientFlag(false); } catch {}
+    try {
+      (port as any).setDhcpClientFlag(false);
+    } catch {}
   } else if (typeof (port as any).setDhcpEnabled === "function") {
-    try { (port as any).setDhcpEnabled(false); } catch {}
+    try {
+      (port as any).setDhcpEnabled(false);
+    } catch {}
   }
 
   // Leer valores actuales
-  try { actualIp = String(port.getIpAddress()); } catch {}
-  try { actualMask = String(port.getSubnetMask()); } catch {}
-  try { actualGateway = String(port.getDefaultGateway()); } catch {}
+  try {
+    actualIp = String(port.getIpAddress());
+  } catch {}
+  try {
+    actualMask = String(port.getSubnetMask());
+  } catch {}
+  try {
+    actualGateway = String(port.getDefaultGateway());
+  } catch {}
   try {
     if (typeof (device as any).getDhcpFlag === "function") {
       dhcpEnabled = !!(device as any).getDhcpFlag();
@@ -366,17 +389,26 @@ export function handleConfigHost(payload: ConfigHostPayload, deps: HandlerDeps):
 // IOS Handlers — create deferred jobs only
 // ============================================================================
 
-export function handleConfigIos(payload: ConfigIosPayload, deps: HandlerDeps): HandlerResult | DeferredResult {
+export function handleConfigIos(
+  payload: ConfigIosPayload,
+  deps: HandlerDeps,
+): HandlerResult | DeferredResult {
   const { getNet, dprint } = deps;
 
   const device = getNet().getDevice(payload.device);
   if (!device) {
-    return createRuntimeError(`Device not found: ${payload.device}`, "DEVICE_NOT_FOUND");
+    return createRuntimeError(
+      `Device not found: ${payload.device}`,
+      "DEVICE_NOT_FOUND",
+    ) as HandlerResult;
   }
 
   const term = ensureIosTerm(device);
   if (!term) {
-    return createRuntimeError(`Device does not support CLI: ${payload.device}`, "NO_TERMINAL");
+    return createRuntimeError(
+      `Device does not support CLI: ${payload.device}`,
+      "NO_TERMINAL",
+    ) as HandlerResult;
   }
 
   if (!payload.commands?.length) {
@@ -399,20 +431,26 @@ export function handleConfigIos(payload: ConfigIosPayload, deps: HandlerDeps): H
   return { deferred: true, ticket, kind: "ios" };
 }
 
-export function handleExecIos(payload: ExecIosPayload, deps: HandlerDeps): HandlerResult | DeferredResult {
+export function handleExecIos(
+  payload: ExecIosPayload,
+  deps: HandlerDeps,
+): HandlerResult | DeferredResult {
   const { getNet, dprint } = deps;
 
   const device = getNet().getDevice(payload.device);
   if (!device) {
-    return createRuntimeError(`Device not found: ${payload.device}`, "DEVICE_NOT_FOUND");
+    return createRuntimeError(
+      `Device not found: ${payload.device}`,
+      "DEVICE_NOT_FOUND",
+    ) as HandlerResult;
   }
 
   const term = ensureIosTerm(device);
   if (!term) {
     return createRuntimeError(
       `Device not ready: ${payload.device} is still booting or in ROMMON`,
-      "NO_TERMINAL"
-    );
+      "NO_TERMINAL",
+    ) as HandlerResult;
   }
 
   const ticket = createIosJob("execIos", {
@@ -425,7 +463,9 @@ export function handleExecIos(payload: ExecIosPayload, deps: HandlerDeps): Handl
     stallTimeoutMs: payload.stallTimeoutMs ?? 15000,
   });
 
-  dprint(`[execIos] Created job ${ticket} for device ${payload.device} command="${payload.command}"`);
+  dprint(
+    `[execIos] Created job ${ticket} for device ${payload.device} command="${payload.command}"`,
+  );
 
   return { deferred: true, ticket, kind: "ios" };
 }
@@ -436,7 +476,7 @@ export function handleExecIos(payload: ExecIosPayload, deps: HandlerDeps): Handl
 
 export function handleDeferredPoll(
   pollPayload: PollDeferredPayload,
-  deps: HandlerDeps
+  deps: HandlerDeps,
 ): DeferredPollResult {
   const { dprint } = deps;
   const { ticket } = pollPayload;
@@ -470,15 +510,11 @@ export function handleDeferredPoll(
     dprint(`[pollDeferred] Job ${ticket} completed with error`);
     return {
       done: true,
-      ...createRuntimeError(
-        job.error || "Job failed",
-        job.errorCode || "IOS_JOB_FAILED",
-        {
-          raw: job.output || "",
-          source: "terminal",
-          session,
-        }
-      ),
+      ...createRuntimeError(job.error || "Job failed", job.errorCode || "IOS_JOB_FAILED", {
+        raw: job.output || "",
+        source: "terminal",
+        session,
+      }),
     };
   }
 

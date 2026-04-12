@@ -15,6 +15,8 @@ import type {
   DeferredStepType,
   DeferredJobOptions,
   DeviceRef,
+  RuntimeResult,
+  RuntimeApi,
 } from "../runtime/contracts";
 import type { PtResult } from "../pt-api/pt-results.js";
 import type { PtRuntimeApi } from "../pt-api/pt-deps.js";
@@ -89,27 +91,20 @@ interface PollStateDone {
 // Result Factories
 // ============================================================================
 
-function createErrorResult(
-  error: string,
-  code?: string,
-  extra: Partial<PtResult> = {}
-): PtResult {
+function createErrorResult(error: string, code?: string, extra: Partial<PtResult> = {}): PtResult {
   return {
     ok: false,
     error,
     code,
-    ...extra
+    ...extra,
   } as PtResult;
 }
 
-function createSuccessResult(
-  value?: unknown,
-  extra: Partial<PtResult> = {}
-): PtResult {
+function createSuccessResult(value?: unknown, extra: Partial<PtResult> = {}): PtResult {
   return {
     ok: true,
     ...(value !== undefined ? { value } : {}),
-    ...extra
+    ...extra,
   } as PtResult;
 }
 
@@ -118,7 +113,7 @@ function createDeferredResult(ticket: string, plan: DeferredJobPlan): PtResult {
     ok: true,
     deferred: true,
     ticket,
-    job: plan
+    job: plan,
   };
 }
 
@@ -130,8 +125,15 @@ type ParserFn = (output: string) => Record<string, unknown>;
 
 const PARSERS: Record<string, ParserFn> = {
   "show ip interface brief": (output: string) => {
-    const interfaces: Array<{interface: string; ipAddress: string; ok: string; method: string; status: string; protocol: string}> = [];
-    const lines = output.split("\n").filter(l => l.trim().length > 0);
+    const interfaces: Array<{
+      interface: string;
+      ipAddress: string;
+      ok: string;
+      method: string;
+      status: string;
+      protocol: string;
+    }> = [];
+    const lines = output.split("\n").filter((l) => l.trim().length > 0);
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i].trim();
       if (line.includes("---")) continue;
@@ -143,15 +145,15 @@ const PARSERS: Record<string, ParserFn> = {
           ok: match[3],
           method: match[4],
           status: match[5],
-          protocol: match[6]
+          protocol: match[6],
         });
       }
     }
     return { entries: interfaces };
   },
   "show vlan brief": (output: string) => {
-    const vlans: Array<{id: number; name: string; status: string; ports: string[]}> = [];
-    const lines = output.split("\n").filter(l => l.trim().length > 0);
+    const vlans: Array<{ id: number; name: string; status: string; ports: string[] }> = [];
+    const lines = output.split("\n").filter((l) => l.trim().length > 0);
     for (const line of lines) {
       if (line.includes("---")) continue;
       const match = line.match(/^(\d+)\s+(\S+)\s+(\S+)\s*(.*)$/);
@@ -160,7 +162,12 @@ const PARSERS: Record<string, ParserFn> = {
           id: parseInt(match[1]),
           name: match[2],
           status: match[3],
-          ports: match[4] ? match[4].split(",").map(p => p.trim()).filter(p => p) : []
+          ports: match[4]
+            ? match[4]
+                .split(",")
+                .map((p) => p.trim())
+                .filter((p) => p)
+            : [],
         });
       }
     }
@@ -215,7 +222,7 @@ function buildConfigIosPlan(
     dismissInitialDialog: boolean;
     commandTimeoutMs: number;
     stallTimeoutMs: number;
-  }
+  },
 ): DeferredJobPlan {
   const plan: DeferredStep[] = [];
 
@@ -236,8 +243,8 @@ function buildConfigIosPlan(
       value: cmd,
       options: {
         stopOnError: options.stopOnError,
-        timeoutMs: options.commandTimeoutMs
-      }
+        timeoutMs: options.commandTimeoutMs,
+      },
     });
   }
 
@@ -256,9 +263,9 @@ function buildConfigIosPlan(
     options: {
       stopOnError: options.stopOnError,
       commandTimeoutMs: options.commandTimeoutMs,
-      stallTimeoutMs: options.stallTimeoutMs
+      stallTimeoutMs: options.stallTimeoutMs,
     },
-    payload: { commands, save: options.save }
+    payload: { commands, save: options.save },
   };
 }
 
@@ -269,7 +276,7 @@ function buildExecIosPlan(
     ensurePrivileged: boolean;
     commandTimeoutMs: number;
     stallTimeoutMs: number;
-  }
+  },
 ): DeferredJobPlan {
   const plan: DeferredStep[] = [];
 
@@ -282,8 +289,8 @@ function buildExecIosPlan(
     value: command,
     options: {
       stopOnError: false,
-      timeoutMs: options.commandTimeoutMs
-    }
+      timeoutMs: options.commandTimeoutMs,
+    },
   });
 
   plan.push({ type: "close-session" });
@@ -297,9 +304,9 @@ function buildExecIosPlan(
     options: {
       stopOnError: false,
       commandTimeoutMs: options.commandTimeoutMs,
-      stallTimeoutMs: options.stallTimeoutMs
+      stallTimeoutMs: options.stallTimeoutMs,
     },
-    payload: { command }
+    payload: { command },
   };
 }
 
@@ -328,7 +335,9 @@ export function handleConfigHost(payload: ConfigHostPayload, api: PtRuntimeApi):
     }
 
     if (payload.dhcp === true) {
-      try { (port as any).setDhcpEnabled(true); } catch {}
+      try {
+        (port as any).setDhcpEnabled(true);
+      } catch {}
     } else {
       if (payload.ip && payload.mask) {
         (port as any).setIpSubnetMask(payload.ip, payload.mask);
@@ -345,7 +354,7 @@ export function handleConfigHost(payload: ConfigHostPayload, api: PtRuntimeApi):
       device: payload.device,
       ip: payload.ip,
       mask: payload.mask,
-      gateway: payload.gateway
+      gateway: payload.gateway,
     });
   }
 
@@ -378,7 +387,9 @@ export function handleConfigIos(payload: ConfigIosPayload, api: PtRuntimeApi): P
   const ticket = "job_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
   plan.id = ticket;
 
-  api.dprint(`[configIos] Created plan ${ticket} for device ${payload.device} with ${plan.plan.length} steps`);
+  api.dprint(
+    `[configIos] Created plan ${ticket} for device ${payload.device} with ${plan.plan.length} steps`,
+  );
 
   return createDeferredResult(ticket, plan);
 }
@@ -392,7 +403,7 @@ export function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi): PtRes
   if (!device.hasTerminal) {
     return createErrorResult(
       `Device not ready: ${payload.device} is still booting or in ROMMON`,
-      "NO_TERMINAL"
+      "NO_TERMINAL",
     );
   }
 
@@ -405,7 +416,9 @@ export function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi): PtRes
   const ticket = "job_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
   plan.id = ticket;
 
-  api.dprint(`[execIos] Created plan ${ticket} for device ${payload.device} command="${payload.command}"`);
+  api.dprint(
+    `[execIos] Created plan ${ticket} for device ${payload.device} command="${payload.command}"`,
+  );
 
   return createDeferredResult(ticket, plan);
 }
@@ -423,24 +436,22 @@ export function handleDeferredPoll(pollPayload: PollDeferredPayload, api: PtRunt
       ok: true,
       deferred: true,
       ticket,
-      job: undefined as unknown as import("../runtime/contracts").DeferredJobPlan
+      job: undefined as unknown as import("../runtime/contracts").DeferredJobPlan,
     };
     (pollResult as any).pollState = {
       done: false,
       state: jobState.state,
       currentStep: jobState.currentStep,
       totalSteps: jobState.totalSteps,
-      outputTail: jobState.outputTail
+      outputTail: jobState.outputTail,
     };
     return pollResult;
   }
 
   if (jobState.error) {
-    return createErrorResult(
-      jobState.error,
-      jobState.errorCode || "IOS_JOB_FAILED",
-      { raw: jobState.output }
-    );
+    return createErrorResult(jobState.error, jobState.errorCode || "IOS_JOB_FAILED", {
+      raw: jobState.output,
+    });
   }
 
   const session = api.querySessionState(pollPayload.ticket.split("_")[1] || "");
@@ -450,7 +461,7 @@ export function handleDeferredPoll(pollPayload: PollDeferredPayload, api: PtRunt
   const result: PtResult = {
     ok: true,
     raw: sanitizedOutput || rawOutput,
-    source: "terminal"
+    source: "terminal",
   };
 
   const payload = (api as any).jobPayload?.(ticket);
@@ -489,7 +500,10 @@ export function handleExecPc(payload: ExecPcPayload, api: PtRuntimeApi): PtResul
   }
 
   if (typeof dev.getCommandPrompt !== "function") {
-    return createErrorResult(`Device ${device} does not support getCommandPrompt() - not a PC/Server?`, "NOT_A_PC");
+    return createErrorResult(
+      `Device ${device} does not support getCommandPrompt() - not a PC/Server?`,
+      "NOT_A_PC",
+    );
   }
 
   const term = dev.getCommandPrompt() as any;
@@ -508,7 +522,7 @@ export function handleExecPc(payload: ExecPcPayload, api: PtRuntimeApi): PtResul
     finished: false,
     status: undefined,
     startedAt: Date.now(),
-    timeoutId: null
+    timeoutId: null,
   };
 
   if (typeof (api as any).registerPcJob === "function") {
@@ -521,22 +535,27 @@ export function handleExecPc(payload: ExecPcPayload, api: PtRuntimeApi): PtResul
       jobState.status = 1;
       jobState.output += "\n[timeout after " + timeout + "ms]";
       if (typeof (api as any).completePcJob === "function") {
-        (api as any).completePcJob(ticket, { ok: false, status: 1, output: jobState.output, timedOut: true });
+        (api as any).completePcJob(ticket, {
+          ok: false,
+          status: 1,
+          output: jobState.output,
+          timedOut: true,
+        });
       }
     }
   }, timeout);
 
-  term.registerEvent("outputWritten", jobState, function(_src: any, args: any) {
+  term.registerEvent("outputWritten", jobState, function (_src: any, args: any) {
     if (!args.isDebug) {
       jobState.output += args.newOutput;
     }
   });
 
-  term.registerEvent("moreDisplayed", jobState, function(_src: any, _args: any) {
+  term.registerEvent("moreDisplayed", jobState, function (_src: any, _args: any) {
     term.enterChar(32, 0);
   });
 
-  term.registerEvent("commandEnded", jobState, function(_src: any, args: any) {
+  term.registerEvent("commandEnded", jobState, function (_src: any, args: any) {
     if (jobState.finished) return;
     jobState.finished = true;
     jobState.status = args.status;
@@ -552,7 +571,7 @@ export function handleExecPc(payload: ExecPcPayload, api: PtRuntimeApi): PtResul
         status: args.status,
         output: jobState.output,
         prompt: term.getPrompt ? term.getPrompt() : "",
-        mode: term.getMode ? term.getMode() : ""
+        mode: term.getMode ? term.getMode() : "",
       });
     }
   });
@@ -570,8 +589,8 @@ export function handleExecPc(payload: ExecPcPayload, api: PtRuntimeApi): PtResul
       device,
       plan: [{ type: "pc-command" as any, value: command }],
       options: { stopOnError: false, commandTimeoutMs: timeout, stallTimeoutMs: timeout },
-      payload: { device, command }
-    }
+      payload: { device, command },
+    },
   } as unknown as PtResult;
 }
 
@@ -598,24 +617,27 @@ registerHandler("execPc", handleExecPc as HandlerFn);
 // Dispatcher - Punto de entrada del runtime
 // ============================================================================
 
-export function runtimeDispatcher(payload: Record<string, unknown>, api: PtRuntimeApi): PtResult {
+export function runtimeDispatcher(
+  payload: Record<string, unknown>,
+  api: RuntimeApi,
+): RuntimeResult {
   const type = payload.type as string;
 
   api.dprint("[RUNTIME] Dispatching: " + type);
 
   if (!type || typeof type !== "string") {
-    return createErrorResult("Missing payload.type", "INVALID_PAYLOAD");
+    return createErrorResult("Missing payload.type", "INVALID_PAYLOAD") as RuntimeResult;
   }
 
   const handler = HANDLER_MAP.get(type);
   if (!handler) {
-    return createErrorResult(`Unknown command type: ${type}`, "UNKNOWN_COMMAND");
+    return createErrorResult(`Unknown command type: ${type}`, "UNKNOWN_COMMAND") as RuntimeResult;
   }
 
   try {
-    return handler(payload, api);
+    return handler(payload, api as any) as RuntimeResult;
   } catch (e) {
-    return createErrorResult(String(e), "DISPATCH_ERROR");
+    return createErrorResult(String(e), "DISPATCH_ERROR") as RuntimeResult;
   }
 }
 

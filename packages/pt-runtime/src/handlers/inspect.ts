@@ -2,7 +2,7 @@
 // Inspect Handlers - Pure functions for device inspection and snapshots
 // ============================================================================
 
-import type { HandlerDeps, HandlerResult, PTDevice, PTPort } from "../utils/helpers";
+import type { HandlerDeps, HandlerResult } from "../utils/helpers";
 import { getCableTypeName } from "../utils/constants";
 
 // ============================================================================
@@ -57,7 +57,9 @@ export function handleInspect(payload: InspectPayload, deps: HandlerDeps): Handl
   if (typeof (device as any).getDhcpFlag === "function") {
     try {
       dhcp = !!(device as any).getDhcpFlag();
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   for (let i = 0; i < portCount; i++) {
@@ -69,19 +71,27 @@ export function handleInspect(payload: InspectPayload, deps: HandlerDeps): Handl
 
       try {
         portInfo.ipAddress = String(port.getIpAddress());
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       try {
         portInfo.subnetMask = String(port.getSubnetMask());
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       try {
-        portInfo.macAddress = String(port.getMacAddress());
-      } catch { /* ignore */ }
+        portInfo.macAddress = String((port as any).getMacAddress?.() ?? "");
+      } catch {
+        /* ignore */
+      }
 
       try {
         portInfo.defaultGateway = String(port.getDefaultGateway());
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       // Leer DHCP status del puerto si no está a nivel dispositivo
       if (!dhcp && typeof (port as any).isDhcpClientOn === "function") {
@@ -90,7 +100,9 @@ export function handleInspect(payload: InspectPayload, deps: HandlerDeps): Handl
             portInfo.dhcp = true;
             dhcp = true;
           }
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       }
 
       ports.push(portInfo);
@@ -111,9 +123,15 @@ export function handleInspect(payload: InspectPayload, deps: HandlerDeps): Handl
 
   // Poblar campos de IP a nivel dispositivo si están disponibles
   if (ports.length > 0) {
-    try { result.ip = ports[0].ipAddress; } catch {}
-    try { result.mask = ports[0].subnetMask; } catch {}
-    try { result.gateway = ports[0].defaultGateway; } catch {}
+    try {
+      result.ip = ports[0].ipAddress;
+    } catch {}
+    try {
+      result.mask = ports[0].subnetMask;
+    } catch {}
+    try {
+      result.gateway = ports[0].defaultGateway;
+    } catch {}
   }
 
   const serializeToXml = device as unknown as { serializeToXml?: () => string };
@@ -161,47 +179,9 @@ export function handleSnapshot(_payload: SnapshotPayload, deps: HandlerDeps): Ha
         try {
           portInfo.ipAddress = port.getIpAddress();
           portInfo.subnetMask = port.getSubnetMask();
-        } catch { /* ignore */ }
-
-        // Try to get link info
-        try {
-          const link = port.getLink();
-          if (link) {
-            // Find the other end of the link
-            for (let j = 0; j < count; j++) {
-              const otherDevice = net.getDeviceAt(j);
-              if (!otherDevice || otherDevice.getName() === name) continue;
-
-              const otherPortCount = otherDevice.getPortCount();
-              for (let op = 0; op < otherPortCount; op++) {
-                try {
-                  const otherPort = otherDevice.getPortAt(op);
-                  if (!otherPort) continue;
-
-                  const otherLink = otherPort.getLink();
-                  if (otherLink && otherLink === link) {
-                    // Found connection
-                    const linkId = `${name}:${portName}-${otherDevice.getName()}:${otherPort.getName()}`;
-                    
-                    // Normalize order for consistent IDs
-                    const [dev1, pt1, dev2, pt2] = name < otherDevice.getName()
-                      ? [name, portName, otherDevice.getName(), otherPort.getName()]
-                      : [otherDevice.getName(), otherPort.getName(), name, portName];
-
-                    links[linkId] = {
-                      id: linkId,
-                      device1: dev1,
-                      port1: pt1,
-                      device2: dev2,
-                      port2: pt2,
-                      cableType: getCableTypeNameFromLink(link),
-                    };
-                  }
-                } catch { /* ignore */ }
-              }
-            }
-          }
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
 
         ports.push(portInfo);
       } catch {
@@ -232,25 +212,12 @@ export function handleSnapshot(_payload: SnapshotPayload, deps: HandlerDeps): Ha
 }
 
 /**
- * Extract cable type from link object (best effort)
- */
-function getCableTypeNameFromLink(link: unknown): string {
-  if (!link || typeof link !== "object") return "auto";
-  
-  try {
-    const l = link as Record<string, unknown>;
-    if (typeof l.connType === "number") {
-      return getCableTypeName(l.connType);
-    }
-  } catch { /* ignore */ }
-  
-  return "auto";
-}
-
-/**
  * Get hardware factory information
  */
-export function handleHardwareInfo(_payload: HardwareInfoPayload, deps: HandlerDeps): HandlerResult {
+export function handleHardwareInfo(
+  _payload: HardwareInfoPayload,
+  deps: HandlerDeps,
+): HandlerResult {
   // Note: This requires ipc access which isn't in deps
   // The compose function will handle this specially
   return {
@@ -263,7 +230,10 @@ export function handleHardwareInfo(_payload: HardwareInfoPayload, deps: HandlerD
 /**
  * Get hardware catalog from factory
  */
-export function handleHardwareCatalog(payload: HardwareCatalogPayload, deps: HandlerDeps): HandlerResult {
+export function handleHardwareCatalog(
+  payload: HardwareCatalogPayload,
+  deps: HandlerDeps,
+): HandlerResult {
   // Note: This requires ipc access which isn't in deps
   return {
     ok: true,

@@ -1,9 +1,9 @@
 /**
  * PT Control V2 - Runtime Entry Point
- * 
+ *
  * This is the main runtime function called from PT main.js
  * Usage: var result = runtime(payload, api);
- * 
+ *
  * NOTE: This file is compiled to ES5 for Packet Tracer.
  * No imports/exports - all code is global scope compatible.
  */
@@ -12,7 +12,13 @@ import { runtimeDispatcher } from "../handlers/runtime-handlers";
 import { initializeLogger, getLogger } from "./logger";
 import { getMetrics } from "./metrics";
 import { validatePayload } from "./payload-validator";
-import { errorRecoveryMiddleware, rateLimitMiddleware, loggingMiddleware, metricsMiddleware, validationMiddleware } from "../core/built-in-middleware";
+import {
+  errorRecoveryMiddleware,
+  rateLimitMiddleware,
+  loggingMiddleware,
+  metricsMiddleware,
+  validationMiddleware,
+} from "../core/built-in-middleware";
 import { MiddlewarePipeline } from "../core/middleware";
 import type { MiddlewareContext } from "../core/middleware";
 
@@ -37,7 +43,7 @@ function initializeRuntime(api: any): void {
 
   initializeLogger({
     level: api.dprint ? "info" : "debug",
-    transport: function(entry) {
+    transport: function (entry) {
       if (api.dprint) {
         api.dprint(JSON.stringify(entry));
       }
@@ -53,7 +59,7 @@ function initializeRuntime(api: any): void {
 /**
  * Main runtime dispatcher
  * Called by PT Script Engine with: runtime(payload, api)
- * 
+ *
  * @param payload - Command payload with type and parameters
  * @param api - RuntimeApi object injected by main.js kernel
  */
@@ -82,14 +88,15 @@ function runtime(payload: any, api: any): any {
     };
 
     var pipeline = getPipeline();
-    var result = pipeline.execute(ctx, function() {
+    var result = pipeline.execute(ctx, function () {
       return runtimeDispatcher(ctx.mutablePayload, api);
     });
 
-    if (result && result.deferred && result.ticket && result.job) {
-      var jobId = api.createJob ? api.createJob(result.job) : undefined;
+    var r = result as any;
+    if (r && r.deferred && r.ticket && r.job) {
+      var jobId = api.createJob ? api.createJob(r.job) : undefined;
       if (jobId) {
-        result.ticket = jobId;
+        r.ticket = jobId;
         log.info("Job created", { ticket: jobId });
       }
     }
@@ -129,7 +136,7 @@ function handlePollDeferred(payload: any, api: any): any {
       state: jobState.state,
       currentStep: jobState.currentStep,
       totalSteps: jobState.totalSteps,
-      outputTail: jobState.outputTail
+      outputTail: jobState.outputTail,
     };
   }
 
@@ -139,7 +146,7 @@ function handlePollDeferred(payload: any, api: any): any {
     result: jobState.result,
     error: jobState.error,
     errorCode: jobState.errorCode,
-    output: jobState.output
+    output: jobState.output,
   };
 }
 
@@ -151,7 +158,7 @@ function handleHasPendingDeferred(api: any): any {
 
   const jobs = getActiveJobs();
   const hasPending = jobs && jobs.some((job: any) => !job.finished);
-  
+
   return { pending: hasPending };
 }
 

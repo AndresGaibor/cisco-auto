@@ -8,6 +8,8 @@
 // - Must be lightweight (QtScript has limited memory)
 // - Must use dprint() as transport in QtScript, console.error in Node.js
 
+declare function dprint(msg: string): void;
+
 export type LogLevel = "debug" | "info" | "warn" | "error" | "silent";
 
 export interface LogEntry {
@@ -34,9 +36,14 @@ var DEFAULT_CONFIG: PtLoggerConfig = {
   level: "info",
   includeData: true,
   enableTracing: true,
-  transport: typeof dprint === "function"
-    ? function(entry: LogEntry) { dprint(JSON.stringify(entry)); }
-    : function(entry: LogEntry) { console.error(JSON.stringify(entry)); },
+  transport:
+    typeof dprint === "function"
+      ? function (entry: LogEntry) {
+          dprint(JSON.stringify(entry));
+        }
+      : function (entry: LogEntry) {
+          console.error(JSON.stringify(entry));
+        },
   maxDataSize: 2048,
 };
 
@@ -58,10 +65,7 @@ export class PtLogger {
   }
 
   child(extraContext: Partial<LogEntry>): PtLogger {
-    var childLogger = new PtLogger(
-      this.context.logger || "unknown",
-      this.config
-    );
+    var childLogger = new PtLogger(this.context.logger || "unknown", this.config);
     childLogger.context = { ...this.context, ...extraContext };
     return childLogger;
   }
@@ -138,7 +142,7 @@ export class PtLogger {
     } catch (e) {
       // QtScript may not support Date.now()
     }
-    return "pt-tick-" + (++PtLogger._tickCounter);
+    return "pt-tick-" + ++PtLogger._tickCounter;
   }
 
   private static _tickCounter = 0;

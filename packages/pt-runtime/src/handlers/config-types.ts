@@ -46,8 +46,8 @@ export interface ExecIosPayload {
 // Result Types
 // ============================================================================
 
-export interface ExecIosSuccessResult extends HandlerResult {
-  ok: boolean;
+export type ExecIosSuccessResult = HandlerResult & {
+  ok: true;
   raw: string;
   status?: number;
   parsed?: Record<string, unknown>;
@@ -55,12 +55,12 @@ export interface ExecIosSuccessResult extends HandlerResult {
   classification?: string;
   session?: { mode: string; paging?: boolean; awaitingConfirm?: boolean };
   source?: "terminal" | "synthetic" | "hybrid";
-}
+};
 
-export interface ExecIosErrorResult extends HandlerResult {
+export type ExecIosErrorResult = HandlerResult & {
   ok: false;
   raw: "";
   error: string;
-}
+};
 
 export type ExecIosResult = ExecIosSuccessResult | ExecIosErrorResult;
