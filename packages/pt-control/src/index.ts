@@ -34,7 +34,13 @@ export {
 
 // Logging - NDJSON logging with session tracking
 export { LogManager, getLogManager, resetLogManager } from "./logging/index.js";
-export type { LogEntry, LogSession, LogConfig, LogQueryOptions, LogStats } from "./logging/index.js";
+export type {
+  LogEntry,
+  LogSession,
+  LogConfig,
+  LogQueryOptions,
+  LogStats,
+} from "./logging/index.js";
 export { redactSensitive } from "./logging/index.js";
 export type { CommandTraceEntry } from "./controller/index.js";
 
@@ -47,11 +53,7 @@ export {
   type CliSessionState,
 } from "@cisco-auto/ios-domain";
 
-export {
-  inferPromptState,
-  type IosMode,
-  type PromptState,
-} from "@cisco-auto/ios-domain";
+export { inferPromptState, type IosMode, type PromptState } from "@cisco-auto/ios-domain";
 
 export {
   type CommandResult,
@@ -72,19 +74,17 @@ export {
   type DeviceCapabilities,
 } from "./domain/ios/capabilities/pt-capability-resolver.js";
 
-export {
-  IOSFamily,
-  type IosDeviceModel,
-} from "@cisco-auto/ios-domain";
+export { IOSFamily, type IosDeviceModel } from "@cisco-auto/ios-domain";
 
 // Device Validation - Validate devices against core catalog
-export {
-  validatePTModel,
-  resolveModel,
-} from "./shared/utils/helpers.js";
+export { validatePTModel, resolveModel } from "./shared/utils/helpers.js";
 
 // Application Services - planners and helpers
-export { LayoutPlannerService, PortPlannerService, LinkFeasibilityService } from "./application/services/index.js";
+export {
+  LayoutPlannerService,
+  PortPlannerService,
+  LinkFeasibilityService,
+} from "./application/services/index.js";
 
 // PT feature modules - canonical stack
 export * from "./pt/terminal/index.js";
@@ -95,7 +95,7 @@ export * from "./pt/ledger/index.js";
 export * from "./pt/diagnosis/index.js";
 
 // Capability Matrix (kernel)
-export * from "../../kernel/src/domain/ios/capability-matrix/index.js";
+export * from "@cisco-auto/kernel/domain/ios/capability-matrix/index.js";
 
 // Agent workflow - task-scoped context building and rendering
 export * from "./agent/index.js";

@@ -10,6 +10,7 @@
   "dependencies": {
     "@cisco-auto/file-bridge": "workspace:*",
     "@cisco-auto/ios-domain": "workspace:*",
+    "@cisco-auto/kernel": "workspace:*",
     "@cisco-auto/pt-runtime": "workspace:*",
     "@cisco-auto/types": "workspace:*",
     "zod": "^4.3.6"

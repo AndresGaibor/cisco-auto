@@ -10,6 +10,8 @@
     "./domain/ios": "./src/domain/ios/index.ts",
     "./domain/ios/value-objects": "./src/domain/ios/value-objects/index.ts",
     "./domain/ios/schemas": "./src/domain/ios/schemas/index.ts",
+    "./domain/ios/capability-matrix": "./src/domain/ios/capability-matrix/index.ts",
+    "./domain/ios/capability-matrix/*": "./src/domain/ios/capability-matrix/*.ts",
     "./domain/topology": "./src/domain/topology/index.ts",
     "./domain/lab": "./src/domain/lab/index.ts",
     "./application": "./src/application/index.ts",
@@ -41,7 +43,6 @@
     "build": "echo no build needed"
   },
   "dependencies": {
-    "@cisco-auto/pt-control": "workspace:*",
     "zod": "^4.3.6"
   },
   "devDependencies": {

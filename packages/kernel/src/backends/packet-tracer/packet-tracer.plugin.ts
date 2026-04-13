@@ -1,8 +1,12 @@
-import type { BackendPlugin } from '../../plugin-api/backend.plugin.js';
-import type { PluginValidationResult } from '../../plugin-api/plugin.types.js';
-import { createPacketTracerAdapter, type PacketTracerBackendAdapter } from './packet-tracer.adapter.js';
+import type { BackendPlugin } from "../../plugin-api/backend.plugin.js";
+import type { PluginValidationResult } from "../../plugin-api/plugin.types.js";
+import {
+  createPacketTracerAdapter,
+  type PacketTracerBackendAdapter,
+  type PacketTracerAdapterDependencies,
+} from "./packet-tracer.adapter.js";
 
-function createValidationResult(errors: PluginValidationResult['errors']): PluginValidationResult {
+function createValidationResult(errors: PluginValidationResult["errors"]): PluginValidationResult {
   return {
     ok: errors.length === 0,
     errors,
@@ -10,15 +14,19 @@ function createValidationResult(errors: PluginValidationResult['errors']): Plugi
 }
 
 function validateConfig(config: unknown): PluginValidationResult {
-  if (typeof config !== 'object' || config === null) {
+  if (typeof config !== "object" || config === null) {
     return createValidationResult([
-      { path: 'config', message: 'Configuration must be an object', code: 'invalid_type' },
+      { path: "config", message: "Configuration must be an object", code: "invalid_type" },
     ]);
   }
 
-  if (!('devDir' in config) || typeof (config as { devDir?: unknown }).devDir !== 'string' || (config as { devDir?: string }).devDir.trim() === '') {
+  if (
+    !("devDir" in config) ||
+    typeof (config as { devDir?: unknown }).devDir !== "string" ||
+    (config as { devDir?: string }).devDir.trim() === ""
+  ) {
     return createValidationResult([
-      { path: 'devDir', message: 'devDir is required', code: 'missing_dev_dir' },
+      { path: "devDir", message: "devDir is required", code: "missing_dev_dir" },
     ]);
   }
 
@@ -26,7 +34,7 @@ function validateConfig(config: unknown): PluginValidationResult {
 }
 
 export interface PacketTracerBackendPlugin extends BackendPlugin {
-  id: 'packet-tracer';
+  id: "packet-tracer";
   description: string;
   addDevice(name: string, model: string, options?: { x?: number; y?: number }): Promise<unknown>;
   removeDevice(name: string): Promise<void>;
@@ -38,14 +46,14 @@ export interface PacketTracerBackendPlugin extends BackendPlugin {
 }
 
 export function createPacketTracerBackendPlugin(
-  adapter: PacketTracerBackendAdapter = createPacketTracerAdapter(),
+  adapter: PacketTracerBackendAdapter,
 ): PacketTracerBackendPlugin {
   return {
-    id: 'packet-tracer',
-    category: 'backend',
-    name: 'Cisco Packet Tracer',
-    version: '1.0.0',
-    description: 'Packet Tracer backend plugin for the kernel.',
+    id: "packet-tracer",
+    category: "backend",
+    name: "Cisco Packet Tracer",
+    version: "1.0.0",
+    description: "Packet Tracer backend plugin for the kernel.",
     validate: validateConfig,
     connect: (config: unknown) => adapter.connect(config),
     disconnect: () => adapter.disconnect(),
@@ -60,4 +68,10 @@ export function createPacketTracerBackendPlugin(
   };
 }
 
-export const packetTracerBackendPlugin = createPacketTracerBackendPlugin();
+export { createPacketTracerAdapter };
+export type {
+  PacketTracerAdapterDependencies,
+  PacketTracerBackendAdapter,
+  PacketTracerControllerLike,
+  PacketTracerBackendConfig,
+} from "./packet-tracer.adapter.js";

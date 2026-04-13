@@ -17,7 +17,10 @@ export { PortPlannerService } from "./port-planner-service.js";
 export { LinkFeasibilityService } from "./link-feasibility-service.js";
 
 // PT Terminal Policy Engine
-export { TerminalPolicyEngine, createTerminalPolicyEngine } from "../../pt/terminal/terminal-policy-engine.js";
+export {
+  TerminalPolicyEngine,
+  createTerminalPolicyEngine,
+} from "../../pt/terminal/terminal-policy-engine.js";
 export { PolicyManager } from "../../pt/terminal/policy-manager.js";
 export { DialogResolver } from "../../pt/terminal/dialog-resolver.js";
 export { SessionArbiter } from "../../pt/terminal/session-arbiter.js";
@@ -34,7 +37,10 @@ export type {
 } from "../../pt/terminal/policy-types.js";
 
 // PT Topology Lint Service
-export { TopologyLintService, createTopologyLintService } from "../../pt/topology/topology-lint-service.js";
+export {
+  TopologyLintService,
+  createTopologyLintService,
+} from "../../pt/topology/topology-lint-service.js";
 export { BlueprintStore } from "../../pt/topology/blueprint-store.js";
 export { LintRuleEngine } from "../../pt/topology/lint-rule-engine.js";
 export { DriftDetector } from "../../pt/topology/drift-detector.js";
@@ -49,7 +55,10 @@ export type {
 } from "../../pt/topology/topology-lint-types.js";
 
 // PT DHCP Appliance Service
-export { DhcpApplianceService, createDhcpApplianceService } from "../../pt/server/dhcp-appliance-service.js";
+export {
+  DhcpApplianceService,
+  createDhcpApplianceService,
+} from "../../pt/server/dhcp-appliance-service.js";
 export { SubnetValidator } from "../../pt/server/subnet-validator.js";
 export { DhcpPoolManager } from "../../pt/server/dhcp-pool-manager.js";
 export type {
@@ -61,8 +70,15 @@ export type {
 } from "../../pt/server/dhcp-appliance-types.js";
 
 // Capability Matrix Service (kernel)
-export { CapabilityMatrixService, createCapabilityMatrixService } from "../../../../kernel/src/domain/ios/capability-matrix/capability-matrix-service.js";
-export { getCapabilitiesForModel, getModelInfo, getAllModels } from "../../../../kernel/src/domain/ios/capability-matrix/model-capabilities.js";
+export {
+  CapabilityMatrixService,
+  createCapabilityMatrixService,
+} from "@cisco-auto/kernel/domain/ios/capability-matrix/capability-matrix-service.js";
+export {
+  getCapabilitiesForModel,
+  getModelInfo,
+  getAllModels,
+} from "@cisco-auto/kernel/domain/ios/capability-matrix/model-capabilities.js";
 export type {
   ICapabilityMatrixService,
   DeviceCapabilities,
@@ -71,10 +87,13 @@ export type {
   ParserType,
   ModelInfo,
   CapabilityLookupResult,
-} from "../../../../kernel/src/domain/ios/capability-matrix/capability-types.js";
+} from "@cisco-auto/kernel/domain/ios/capability-matrix/capability-types.js";
 
 // PT Change Planner Service
-export { ChangePlannerService, createChangePlannerService } from "../../pt/planner/change-planner-service.js";
+export {
+  ChangePlannerService,
+  createChangePlannerService,
+} from "../../pt/planner/change-planner-service.js";
 export { OperationCompiler } from "../../pt/planner/operation-compiler.js";
 export { CheckpointExecutor } from "../../pt/planner/checkpoint-executor.js";
 export type {
@@ -91,7 +110,10 @@ export type {
 } from "../../pt/planner/change-planner-types.js";
 
 // PT Evidence Ledger Service
-export { EvidenceLedgerService, createEvidenceLedgerService } from "../../pt/ledger/evidence-ledger-service.js";
+export {
+  EvidenceLedgerService,
+  createEvidenceLedgerService,
+} from "../../pt/ledger/evidence-ledger-service.js";
 export type {
   IEvidenceLedgerService,
   OperationRecord,

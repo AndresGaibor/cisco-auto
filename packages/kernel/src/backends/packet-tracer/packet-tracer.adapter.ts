@@ -1,4 +1,27 @@
-import { PTController } from '@cisco-auto/pt-control';
+export interface DeviceInfo {
+  name: string;
+  model: string;
+  type: string;
+  power: boolean;
+  ports: Array<Record<string, unknown>>;
+}
+
+export interface LinkInfo {
+  id: string;
+  device1: string;
+  port1: string;
+  device2: string;
+  port2: string;
+  cableType: string;
+}
+
+export interface SnapshotResult {
+  version: string;
+  timestamp: number;
+  devices: Record<string, DeviceInfo>;
+  links: Record<string, LinkInfo>;
+  metadata?: { deviceCount: number; linkCount: number };
+}
 
 export interface PacketTracerBackendConfig {
   devDir: string;
@@ -7,14 +30,24 @@ export interface PacketTracerBackendConfig {
 export interface PacketTracerControllerLike {
   start(): Promise<void>;
   stop(): Promise<void>;
-  addDevice: PTController['addDevice'];
-  removeDevice: PTController['removeDevice'];
-  configIosWithResult: PTController['configIosWithResult'];
-  show: PTController['show'];
-  showVlan: PTController['showVlan'];
-  addLink: PTController['addLink'];
-  removeLink: PTController['removeLink'];
-  snapshot: PTController['snapshot'];
+  addDevice(name: string, model: string, options?: { x?: number; y?: number }): Promise<DeviceInfo>;
+  removeDevice(name: string): Promise<void>;
+  configIosWithResult(
+    name: string,
+    commands: string[],
+    options?: { save?: boolean },
+  ): Promise<Record<string, unknown>>;
+  show(name: string, command: string): Promise<string>;
+  showVlan(name: string): Promise<Record<string, unknown>>;
+  addLink(
+    device1: string,
+    port1: string,
+    device2: string,
+    port2: string,
+    cableType?: string,
+  ): Promise<LinkInfo>;
+  removeLink(device: string, port: string): Promise<void>;
+  snapshot(): Promise<SnapshotResult>;
 }
 
 export interface PacketTracerBackendAdapter {
@@ -35,28 +68,35 @@ export interface PacketTracerAdapterDependencies {
 }
 
 function isPacketTracerBackendConfig(config: unknown): config is PacketTracerBackendConfig {
-  return typeof config === 'object' && config !== null && 'devDir' in config && typeof (config as { devDir?: unknown }).devDir === 'string';
+  return (
+    typeof config === "object" &&
+    config !== null &&
+    "devDir" in config &&
+    typeof (config as { devDir?: unknown }).devDir === "string"
+  );
 }
 
-function resolveController(controller: PacketTracerControllerLike | null): PacketTracerControllerLike {
+function resolveController(
+  controller: PacketTracerControllerLike | null,
+): PacketTracerControllerLike {
   if (!controller) {
-    throw new Error('Packet Tracer backend is not connected');
+    throw new Error("Packet Tracer backend is not connected");
   }
 
   return controller;
 }
 
 export function createPacketTracerAdapter(
-  dependencies: Partial<PacketTracerAdapterDependencies> = {},
+  dependencies: PacketTracerAdapterDependencies,
 ): PacketTracerBackendAdapter {
-  const createController = dependencies.createController ?? ((config: PacketTracerBackendConfig) => new PTController(config));
+  const { createController } = dependencies;
 
   let controller: PacketTracerControllerLike | null = null;
 
   return {
     async connect(config: unknown) {
       if (!isPacketTracerBackendConfig(config)) {
-        throw new TypeError('devDir is required to connect the Packet Tracer backend');
+        throw new TypeError("devDir is required to connect the Packet Tracer backend");
       }
 
       const instance = createController(config);
@@ -92,7 +132,7 @@ export function createPacketTracerAdapter(
       const controllerInstance = resolveController(controller);
       const normalizedCommand = command.trim().toLowerCase();
 
-      if (normalizedCommand === 'show vlan' || normalizedCommand === 'show vlan brief') {
+      if (normalizedCommand === "show vlan" || normalizedCommand === "show vlan brief") {
         return controllerInstance.showVlan(name);
       }
 
