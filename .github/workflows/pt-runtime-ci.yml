@@ -24,25 +24,23 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: "1.2.12"
 
       - name: Install dependencies
         run: bun install
 
       - name: Typecheck packages/types
-        run: cd packages/types && bun run typecheck || true
+        run: cd packages/types && bun run typecheck
 
       - name: Typecheck packages/pt-runtime
         run: |
           cd packages/pt-runtime
-          bun run typecheck 2>&1 || true
-        continue-on-error: true
+          bun run typecheck
 
       - name: Build pt-runtime
         run: |
           cd packages/pt-runtime
-          bun run build:runtime 2>&1 || true
-        continue-on-error: true
+          bun run build:runtime
 
       - name: Validate PT-safe output
         run: |
@@ -68,7 +66,6 @@ jobs:
             console.log('PT-safe validation PASSED');
             console.log('Runtime size:', runtime.length, 'chars');
           "
-        continue-on-error: true
 
   lint:
     runs-on: ubuntu-latest
@@ -77,7 +74,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: "1.2.12"
 
       - name: Install dependencies
         run: bun install
@@ -85,8 +82,7 @@ jobs:
       - name: Check formatting
         run: |
           cd packages/pt-runtime
-          bun run lint 2>&1 || true
-        continue-on-error: true
+          bun run lint
 
   integration:
     runs-on: ubuntu-latest
@@ -96,7 +92,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: "1.2.12"
 
       - name: Install dependencies
         run: bun install
