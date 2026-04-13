@@ -25,7 +25,6 @@ export { listRuntimeSnapshots, restoreRuntimeSnapshot } from "./runtime-artifact
 
 // Build system exports
 export { validatePtSafe, formatValidationResult } from "./build/validate-pt-safe";
-export { transformToPtSafe, wrapRuntimeBootstrap, wrapMainBootstrap } from "./build/pt-safe-transforms";
 export { renderRuntimeV2, renderRuntimeV2Sync } from "./build/render-runtime-v2";
 export { renderMainV2 } from "./build/render-main-v2";
 export * from "./build";
@@ -40,7 +39,6 @@ import * as path from "path";
 export interface RuntimeGeneratorConfig {
   outputDir: string;
   devDir: string;
-  useV2Pipeline?: boolean;
 }
 
 export interface RuntimeArtifactManifest {
@@ -55,7 +53,7 @@ function computeChecksum(content: string): string {
   let hash = 0;
   for (let i = 0; i < content.length; i++) {
     const char = content.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
+    hash = (hash << 5) - hash + char;
     hash = hash & hash;
   }
   return Math.abs(hash).toString(16);
@@ -104,13 +102,17 @@ export class RuntimeGenerator {
     }
   }
 
-  async writeManifest(main: string, runtime: string, outputDir: string): Promise<RuntimeArtifactManifest> {
+  async writeManifest(
+    main: string,
+    runtime: string,
+    outputDir: string,
+  ): Promise<RuntimeArtifactManifest> {
     const manifest: RuntimeArtifactManifest = {
       cliVersion: "0.2.0",
       protocolVersion: 2,
       mainChecksum: computeChecksum(main),
       runtimeChecksum: computeChecksum(runtime),
-      generatedAt: Date.now()
+      generatedAt: Date.now(),
     };
 
     await fs.promises.mkdir(outputDir, { recursive: true });

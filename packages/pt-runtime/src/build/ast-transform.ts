@@ -390,6 +390,18 @@ function stripModuleSyntax(source: string): string {
   return result.join("\n");
 }
 
+/**
+ * Post-procesamiento de código ES5 (regex-based).
+ *
+ * KNOWN LIMITATION: Los reemplazos de `??` y `?.` son semánticamente incorrectos.
+ * `??` se reemplaza por `||` - esto falla para valores falsy válidos como `0`, `""`, `false`.
+ * `?.` se reemplaza por `&&` - esto falla para objetos que pueden ser null/undefined
+ * en contextos donde el short-circuit behavior difiere.
+ *
+ * Esta limitación existe porque un parser AST completo sería necesario para hacer
+ * la transformación correcta. Para código que usa estos operadores con valores falsy
+ * válidos, el output puede comportarse incorrectamente.
+ */
 function postProcessES5(code: string): string {
   let result = code;
 

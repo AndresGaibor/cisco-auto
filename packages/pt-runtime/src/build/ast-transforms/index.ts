@@ -878,28 +878,3 @@ function applySingleTransform(sourceFile: SourceFile, tf: AstTransform): SourceF
   
   return ts.visitNode(sourceFile, visitor) as SourceFile;
 }
-
-export function transformToPtSafe(
-  sourceCode: string,
-  options?: { target?: ts.ScriptTarget }
-): string {
-  const sourceFile = createSourceFile(
-    "input.ts",
-    sourceCode,
-    options?.target || ScriptTarget.ES2020,
-    true,
-    ScriptKind.TS
-  );
-  
-  let result = sourceFile;
-  for (const tf of ALL_AST_TRANSFORMS) {
-    result = applySingleTransform(result, tf);
-  }
-  
-  const printer = ts.createPrinter({
-    newLine: ts.NewLineKind.LineFeed,
-    removeComments: false,
-  });
-  
-  return printer.printFile(result);
-}

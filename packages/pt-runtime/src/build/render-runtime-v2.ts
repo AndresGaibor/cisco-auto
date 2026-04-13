@@ -13,39 +13,8 @@ export interface RenderRuntimeV2Options {
 
 const RUNTIME_SOURCE_FILES = getAllRuntimeFiles();
 
-export async function renderRuntimeV2(options: RenderRuntimeV2Options): Promise<string> {
-  const sourceFiles = new Map<string, string>();
-
-  for (const relPath of RUNTIME_SOURCE_FILES) {
-    const filePath = path.join(options.srcDir, relPath);
-    if (fs.existsSync(filePath)) {
-      const content = await fs.promises.readFile(filePath, "utf-8");
-      sourceFiles.set(relPath, content);
-    }
-  }
-
-  const { code, validation } = transformToPtSafeAst(sourceFiles, {
-    target: undefined,
-    replaceConsoleWithDprint: true,
-    wrapIIFE: false,
-    minify: options.minify ?? false,
-  });
-
-  if (!validation.valid) {
-    console.error("[render-runtime-v2] Validation FAILED:");
-    for (const issue of validation.errors) {
-      console.error(`  ${issue.line}:${issue.column}: ${issue.message}`);
-    }
-    throw new Error("runtime.js generation failed PT-safe validation");
-  }
-
-  const devDirLiteral = options.injectDevDir ? JSON.stringify(options.injectDevDir) : 'DEV_DIR + "/pt-dev"';
-
-  let output = `
-// PT Runtime - Generated from TypeScript via AST pipeline V2
-// Do not edit directly - regenerate with: bun run build:runtime-v2
-// Generated at: ${new Date().toISOString()}
-
+function assembleRuntimeOutput(code: string, devDirLiteral: string): string {
+  return `
 var RUNTIME_EXPORTS = {};
 
 (function() {
@@ -66,6 +35,45 @@ ${code}
 
 var dispatch = RUNTIME_EXPORTS.dispatch;
 `;
+}
+
+function validateAndTransform(srcDir: string, minify: boolean): { code: string; validation: ValidationResult } {
+  const sourceFiles = new Map<string, string>();
+
+  for (const relPath of RUNTIME_SOURCE_FILES) {
+    const filePath = path.join(srcDir, relPath);
+    if (fs.existsSync(filePath)) {
+      sourceFiles.set(relPath, fs.readFileSync(filePath, "utf-8"));
+    }
+  }
+
+  const { code, validation } = transformToPtSafeAst(sourceFiles, {
+    target: undefined,
+    replaceConsoleWithDprint: true,
+    wrapIIFE: false,
+    minify,
+  });
+
+  return { code, validation };
+}
+
+export async function renderRuntimeV2(options: RenderRuntimeV2Options): Promise<string> {
+  const { code, validation } = validateAndTransform(options.srcDir, options.minify ?? false);
+
+  if (!validation.valid) {
+    console.error("[render-runtime-v2] Validation FAILED:");
+    for (const issue of validation.errors) {
+      console.error(`  ${issue.line}:${issue.column}: ${issue.message}`);
+    }
+    throw new Error("runtime.js generation failed PT-safe validation");
+  }
+
+  const devDirLiteral = options.injectDevDir ? JSON.stringify(options.injectDevDir) : 'DEV_DIR + "/pt-dev"';
+  const output = `
+// PT Runtime - Generated from TypeScript via AST pipeline V2
+// Do not edit directly - regenerate with: bun run build:runtime-v2
+// Generated at: ${new Date().toISOString()}
+${assembleRuntimeOutput(code, devDirLiteral)}`;
 
   if (options.outputPath) {
     await fs.promises.mkdir(path.dirname(options.outputPath), { recursive: true });
@@ -76,21 +84,7 @@ var dispatch = RUNTIME_EXPORTS.dispatch;
 }
 
 export function renderRuntimeV2Sync(options: RenderRuntimeV2Options): string {
-  const sourceFiles = new Map<string, string>();
-
-  for (const relPath of RUNTIME_SOURCE_FILES) {
-    const filePath = path.join(options.srcDir, relPath);
-    if (fs.existsSync(filePath)) {
-      sourceFiles.set(relPath, fs.readFileSync(filePath, "utf-8"));
-    }
-  }
-
-  const { code, validation } = transformToPtSafeAst(sourceFiles, {
-    target: undefined,
-    replaceConsoleWithDprint: true,
-    wrapIIFE: false,
-    minify: options.minify ?? false,
-  });
+  const { code, validation } = validateAndTransform(options.srcDir, options.minify ?? false);
 
   if (!validation.valid) {
     console.error("[render-runtime-v2] Validation FAILED:");
@@ -101,32 +95,11 @@ export function renderRuntimeV2Sync(options: RenderRuntimeV2Options): string {
   }
 
   const devDirLiteral = options.injectDevDir ? JSON.stringify(options.injectDevDir) : 'DEV_DIR + "/pt-dev"';
-
-  let output = `
+  const output = `
 // PT Runtime - Generated from TypeScript via AST pipeline V2
 // Do not edit directly - regenerate with: bun run build:runtime-v2
 // Generated at: ${new Date().toISOString()}
-
-var RUNTIME_EXPORTS = {};
-
-(function() {
-  var ipc = (typeof ipc !== "undefined") ? ipc : null;
-  var dprint = (typeof dprint !== "undefined") ? dprint : function() {};
-  var DEV_DIR = (typeof DEV_DIR !== "undefined") ? DEV_DIR : ${devDirLiteral};
-  var fm = ipc ? ipc.systemFileManager() : null;
-
-${code}
-
-  var deps = createPtDepsFromGlobals({ ipc: ipc, fm: fm, dprint: dprint, DEV_DIR: DEV_DIR });
-
-  RUNTIME_EXPORTS.dispatch = function(payload) {
-    return runtimeDispatcher(payload, deps);
-  };
-
-})();
-
-var dispatch = RUNTIME_EXPORTS.dispatch;
-`;
+${assembleRuntimeOutput(code, devDirLiteral)}`;
 
   if (options.outputPath) {
     fs.mkdirSync(path.dirname(options.outputPath), { recursive: true });
