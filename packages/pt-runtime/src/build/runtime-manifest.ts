@@ -14,6 +14,8 @@ export const RUNTIME_MANIFEST = {
     "pt-api/pt-helpers.ts",
     "pt-api/pt-call-inventory.ts",
     "pt-api/pt-types.ts",
+    "pt-api/pt-processes.ts",
+    "pt-api/pt-events.ts",
     "pt-api/index.ts",
   ],
 
@@ -38,23 +40,20 @@ export const RUNTIME_MANIFEST = {
   ],
 
   handlers: [
-    // Handler factories (implementaciones)
-    "handlers/device.handler.ts",
-    "handlers/link.handler.ts",
-    "handlers/config.handler.ts",
-    "handlers/inspect.handler.ts",
-    "handlers/module.handler.ts",
-    "handlers/canvas.handler.ts",
-    "handlers/vlan.handler.ts",
-    "handlers/dhcp.handler.ts",
-    "handlers/host.handler.ts",
+    // Handler implementations
+    "handlers/device.ts",
+    "handlers/link.ts",
+    "handlers/inspect.ts",
+    "handlers/module.ts",
+    "handlers/canvas.ts",
+    "handlers/vlan.ts",
+    "handlers/dhcp.ts",
+    "handlers/host.ts",
     // IOS engine y dispatcher
     "handlers/ios-engine.ts",
     "handlers/ios-session.ts",
     "handlers/ios-output-classifier.ts",
     "handlers/runtime-handlers.ts",
-    // Helpers de config
-    "handlers/config-types.ts",
   ],
 
   kernel: [

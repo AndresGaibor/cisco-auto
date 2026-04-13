@@ -21,6 +21,20 @@ import type {
 import type { PtResult } from "../pt-api/pt-results.js";
 import type { PtRuntimeApi } from "../pt-api/pt-deps.js";
 
+// Import actual handlers from handler modules
+import {
+  handleEnsureVlans,
+  handleConfigVlanInterfaces,
+  type ConfigVlanInterfacesPayload,
+} from "./vlan.js";
+import {
+  handleConfigDhcpServer,
+  handleInspectDhcpServer,
+  type ConfigDhcpServerPayload,
+  type InspectDhcpServerPayload,
+} from "./dhcp.js";
+import { handleInspectHost, type InspectHostPayload } from "./host.js";
+
 // ============================================================================
 // Payload Types
 // ============================================================================
@@ -612,6 +626,13 @@ registerHandler("execIos", handleExecIos as HandlerFn);
 registerHandler("__pollDeferred", handleDeferredPoll as HandlerFn);
 registerHandler("__ping", handlePing as HandlerFn);
 registerHandler("execPc", handleExecPc as HandlerFn);
+
+// Register VLAN and DHCP handlers
+registerHandler("ensureVlans", handleEnsureVlans as HandlerFn);
+registerHandler("configVlanInterfaces", handleConfigVlanInterfaces as HandlerFn);
+registerHandler("configDhcpServer", handleConfigDhcpServer as HandlerFn);
+registerHandler("inspectDhcpServer", handleInspectDhcpServer as HandlerFn);
+registerHandler("inspectHost", handleInspectHost as HandlerFn);
 
 // ============================================================================
 // Dispatcher - Punto de entrada del runtime

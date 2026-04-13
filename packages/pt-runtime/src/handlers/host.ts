@@ -1,7 +1,6 @@
 import type { PtDeps } from "../pt-api/pt-deps.js";
 import { ptError, ptSuccess, PtErrorCode, type PtResult } from "../pt-api/pt-results.js";
 import type { PTDevice, PTPort } from "../pt-api/pt-api-registry.js";
-export { handleConfigHost } from "./config.js";
 
 export interface InspectHostPayload {
   type: "inspectHost";

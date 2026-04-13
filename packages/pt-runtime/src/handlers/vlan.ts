@@ -1,6 +1,7 @@
 import type { PtDeps } from "../pt-api/pt-deps.js";
 import { ptError, ptSuccess, PtErrorCode, type PtResult } from "../pt-api/pt-results.js";
-import type { PTVlanManager, PTDeviceWithProcesses, PTHostPort } from "../utils/helpers.js";
+import type { PTVlanManager, PTDeviceWithProcesses, PTHostPort } from "../pt-api/pt-processes.js";
+import { getVlanManager } from "../pt-api/pt-processes.js";
 
 export interface EnsureVlansPayload {
   type: "ensureVlans";
@@ -11,7 +12,13 @@ export interface EnsureVlansPayload {
 export interface ConfigVlanInterfacesPayload {
   type: "configVlanInterfaces";
   device: string;
-  interfaces: Array<{ interface: string; vlanId: number; mode?: "access" | "trunk"; ip?: string; mask?: string }>;
+  interfaces: Array<{
+    interface: string;
+    vlanId: number;
+    mode?: "access" | "trunk";
+    ip?: string;
+    mask?: string;
+  }>;
 }
 
 function getDeviceWithProcesses(deps: PtDeps, name: string): PTDeviceWithProcesses | null {
@@ -19,12 +26,9 @@ function getDeviceWithProcesses(deps: PtDeps, name: string): PTDeviceWithProcess
   return device ? (device as unknown as PTDeviceWithProcesses) : null;
 }
 
-function getVlanManager(device: PTDeviceWithProcesses): PTVlanManager | null {
-  try {
-    return (device.getProcess("VlanManager") as PTVlanManager) ?? null;
-  } catch {
-    return null;
-  }
+function getVlanMgr(device: PTDeviceWithProcesses): PTVlanManager | null {
+  const { process } = getVlanManager(device);
+  return process;
 }
 
 function vlanExists(vlanMgr: PTVlanManager, vlanId: number): boolean {
@@ -48,8 +52,12 @@ export function handleEnsureVlans(payload: EnsureVlansPayload, deps: PtDeps): Pt
   const device = getDeviceWithProcesses(deps, payload.device);
   if (!device) return ptError(`Device not found: ${payload.device}`, PtErrorCode.DEVICE_NOT_FOUND);
 
-  const vlanMgr = getVlanManager(device);
-  if (!vlanMgr) return ptError(`VlanManager not available on device: ${payload.device}`, PtErrorCode.UNSUPPORTED_OPERATION);
+  const vlanMgr = getVlanMgr(device);
+  if (!vlanMgr)
+    return ptError(
+      `VlanManager not available on device: ${payload.device}`,
+      PtErrorCode.UNSUPPORTED_OPERATION,
+    );
 
   const results: Array<{ id: number; name: string; created: boolean; error?: string }> = [];
 
@@ -65,35 +73,58 @@ export function handleEnsureVlans(payload: EnsureVlansPayload, deps: PtDeps): Pt
         results.push({ id: vlanId, name: vlanName, created: false });
       }
     } catch (error) {
-      results.push({ id: vlanId, name: vlanName, created: false, error: error instanceof Error ? error.message : String(error) });
+      results.push({
+        id: vlanId,
+        name: vlanName,
+        created: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
   return ptSuccess({ device: payload.device, vlans: results });
 }
 
-export function handleConfigVlanInterfaces(payload: ConfigVlanInterfacesPayload, deps: PtDeps): PtResult {
+export function handleConfigVlanInterfaces(
+  payload: ConfigVlanInterfacesPayload,
+  deps: PtDeps,
+): PtResult {
   const device = getDeviceWithProcesses(deps, payload.device);
   if (!device) return ptError(`Device not found: ${payload.device}`, PtErrorCode.DEVICE_NOT_FOUND);
 
-  const vlanMgr = getVlanManager(device);
-  if (!vlanMgr) return ptError(`VlanManager not available on device: ${payload.device}`, PtErrorCode.UNSUPPORTED_OPERATION);
+  const vlanMgr = getVlanMgr(device);
+  if (!vlanMgr)
+    return ptError(
+      `VlanManager not available on device: ${payload.device}`,
+      PtErrorCode.UNSUPPORTED_OPERATION,
+    );
 
-  const results: Array<{ interface: string; vlanId: number; success: boolean; error?: string }> = [];
+  const results: Array<{ interface: string; vlanId: number; success: boolean; error?: string }> =
+    [];
 
   for (const iface of payload.interfaces || []) {
     try {
       if (!vlanExists(vlanMgr, iface.vlanId)) {
         const created = vlanMgr.addVlan(iface.vlanId, `VLAN${iface.vlanId}`);
         if (!created) {
-          results.push({ interface: iface.interface, vlanId: iface.vlanId, success: false, error: "Failed to create VLAN" });
+          results.push({
+            interface: iface.interface,
+            vlanId: iface.vlanId,
+            success: false,
+            error: "Failed to create VLAN",
+          });
           continue;
         }
       }
 
       const svi = ensureVlanInt(vlanMgr, iface.vlanId);
       if (!svi) {
-        results.push({ interface: iface.interface, vlanId: iface.vlanId, success: false, error: "Failed to get or create SVI interface" });
+        results.push({
+          interface: iface.interface,
+          vlanId: iface.vlanId,
+          success: false,
+          error: "Failed to get or create SVI interface",
+        });
         continue;
       }
 
@@ -103,7 +134,12 @@ export function handleConfigVlanInterfaces(payload: ConfigVlanInterfacesPayload,
 
       results.push({ interface: iface.interface, vlanId: iface.vlanId, success: true });
     } catch (error) {
-      results.push({ interface: iface.interface, vlanId: iface.vlanId, success: false, error: error instanceof Error ? error.message : String(error) });
+      results.push({
+        interface: iface.interface,
+        vlanId: iface.vlanId,
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

@@ -1,6 +1,12 @@
 import type { PtDeps } from "../pt-api/pt-deps.js";
 import { ptError, ptSuccess, PtErrorCode, type PtResult } from "../pt-api/pt-results.js";
-import type { PTDhcpServerMainProcess, PTDhcpServerProcess, PTDhcpPool } from "../utils/helpers.js";
+import type {
+  PTDhcpServerMainProcess,
+  PTDhcpServerProcess,
+  PTDhcpPoolProcess,
+  PTDeviceWithProcesses,
+} from "../pt-api/pt-processes.js";
+import { getDhcpServerMainProcess, ptHasMethod, ptSafeGet } from "../pt-api/pt-processes.js";
 
 export interface ConfigDhcpServerPayload {
   type: "configDhcpServer";
@@ -26,23 +32,21 @@ export interface InspectDhcpServerPayload {
   port?: string;
 }
 
-function getDhcpMainProcess(device: any): PTDhcpServerMainProcess | null {
-  try {
-    const candidates = ["DhcpServerMainProcess", "DHCPServerMainProcess", "DhcpServerMain"];
-    for (const name of candidates) {
-      const dhcpProcess = device.getProcess(name);
-      if (dhcpProcess) return dhcpProcess as PTDhcpServerMainProcess;
-    }
-  } catch {
-    return null;
-  }
-  return null;
+function getDhcpMainProcess(device: PTDeviceWithProcesses): PTDhcpServerMainProcess | null {
+  const { process } = getDhcpServerMainProcess(device);
+  return process;
 }
 
-function getDhcpServerProcess(main: PTDhcpServerMainProcess, portName: string): PTDhcpServerProcess | null {
+function getDhcpServerProcess(
+  main: PTDhcpServerMainProcess,
+  portName: string,
+): PTDhcpServerProcess | null {
   try {
     const maybeProcess = main as unknown as PTDhcpServerProcess;
-    if (typeof maybeProcess.setEnable === "function" && typeof maybeProcess.getPoolCount === "function") {
+    if (
+      typeof maybeProcess.setEnable === "function" &&
+      typeof maybeProcess.getPoolCount === "function"
+    ) {
       return maybeProcess;
     }
     return main.getDhcpServerProcessByPortName(portName);
@@ -51,12 +55,12 @@ function getDhcpServerProcess(main: PTDhcpServerMainProcess, portName: string): 
   }
 }
 
-function getPoolByName(dhcpProcess: PTDhcpServerProcess, name: string): PTDhcpPool | null {
-  return (dhcpProcess.getPoolByName(name) as PTDhcpPool | null) ?? null;
+function getPoolByName(dhcpProcess: PTDhcpServerProcess, name: string): PTDhcpPoolProcess | null {
+  return dhcpProcess.getPoolByName(name) as PTDhcpPoolProcess | null;
 }
 
 export function handleConfigDhcpServer(payload: ConfigDhcpServerPayload, deps: PtDeps): PtResult {
-  const device = deps.getDeviceByName(payload.device) as any;
+  const device = deps.getDeviceByName(payload.device) as PTDeviceWithProcesses | null;
   if (!device) return ptError(`Device not found: ${payload.device}`, PtErrorCode.DEVICE_NOT_FOUND);
 
   const portName = payload.port || "FastEthernet0";
@@ -64,20 +68,23 @@ export function handleConfigDhcpServer(payload: ConfigDhcpServerPayload, deps: P
   if (!dhcpMain) return ptError("DHCP server not available", PtErrorCode.UNSUPPORTED_OPERATION);
 
   const dhcpServerProcess = getDhcpServerProcess(dhcpMain, portName);
-  if (!dhcpServerProcess) return ptError(`DHCP server not found for port ${portName}`, PtErrorCode.UNSUPPORTED_OPERATION);
+  if (!dhcpServerProcess)
+    return ptError(`DHCP server not found for port ${portName}`, PtErrorCode.UNSUPPORTED_OPERATION);
 
   try {
     dhcpServerProcess.setEnable(!!payload.enabled);
   } catch (error) {
-    return ptError(`Failed to set DHCP enabled state: ${error instanceof Error ? error.message : String(error)}`);
+    return ptError(
+      `Failed to set DHCP enabled state: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
   const configuredPools: Array<{ name: string; network: string; mask: string }> = [];
   for (const poolConfig of payload.pools || []) {
     try {
-      if (typeof (dhcpServerProcess as any).addNewPool === "function") {
-        (dhcpServerProcess as any).addNewPool(poolConfig.name);
-      } else if (typeof (dhcpServerProcess as any).addPool === "function") {
+      if (ptHasMethod(dhcpServerProcess, "addNewPool")) {
+        dhcpServerProcess.addNewPool(poolConfig.name);
+      } else if (ptHasMethod(dhcpServerProcess, "addPool")) {
         (dhcpServerProcess as any).addPool(poolConfig.name);
       }
       const pool = getPoolByName(dhcpServerProcess, poolConfig.name);
@@ -91,9 +98,15 @@ export function handleConfigDhcpServer(payload: ConfigDhcpServerPayload, deps: P
       if (poolConfig.endIp) pool.setEndIp(poolConfig.endIp);
       if (poolConfig.maxUsers !== undefined) pool.setMaxUsers(poolConfig.maxUsers);
 
-      configuredPools.push({ name: poolConfig.name, network: poolConfig.network || "", mask: poolConfig.mask || "" });
+      configuredPools.push({
+        name: poolConfig.name,
+        network: poolConfig.network || "",
+        mask: poolConfig.mask || "",
+      });
     } catch (error) {
-      deps.dprint(`[handleConfigDhcpServer] Failed to configure pool ${poolConfig.name}: ${error instanceof Error ? error.message : String(error)}`);
+      deps.dprint(
+        `[handleConfigDhcpServer] Failed to configure pool ${poolConfig.name}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -102,7 +115,9 @@ export function handleConfigDhcpServer(payload: ConfigDhcpServerPayload, deps: P
     try {
       dhcpServerProcess.addExcludedAddress(exc.start, exc.end);
     } catch (error) {
-      deps.dprint(`[handleConfigDhcpServer] Failed to add excluded range ${exc.start}-${exc.end}: ${error instanceof Error ? error.message : String(error)}`);
+      deps.dprint(
+        `[handleConfigDhcpServer] Failed to add excluded range ${exc.start}-${exc.end}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -110,7 +125,7 @@ export function handleConfigDhcpServer(payload: ConfigDhcpServerPayload, deps: P
 }
 
 export function handleInspectDhcpServer(payload: InspectDhcpServerPayload, deps: PtDeps): PtResult {
-  const device = deps.getDeviceByName(payload.device) as any;
+  const device = deps.getDeviceByName(payload.device) as PTDeviceWithProcesses | null;
   if (!device) return ptError(`Device not found: ${payload.device}`, PtErrorCode.DEVICE_NOT_FOUND);
 
   const portName = payload.port || "FastEthernet0";
@@ -118,37 +133,44 @@ export function handleInspectDhcpServer(payload: InspectDhcpServerPayload, deps:
   if (!dhcpMain) return ptError("DHCP server not available", PtErrorCode.UNSUPPORTED_OPERATION);
 
   const dhcpServerProcess = getDhcpServerProcess(dhcpMain, portName);
-  if (!dhcpServerProcess) return ptError(`DHCP server not found for port ${portName}`, PtErrorCode.UNSUPPORTED_OPERATION);
+  if (!dhcpServerProcess)
+    return ptError(`DHCP server not found for port ${portName}`, PtErrorCode.UNSUPPORTED_OPERATION);
 
   const enabled = !!dhcpServerProcess.isEnabled();
 
   const pools: Array<Record<string, unknown>> = [];
   const poolCount = dhcpServerProcess.getPoolCount();
   for (let i = 0; i < poolCount; i++) {
-    const pool = dhcpServerProcess.getPoolAt(i) as any;
+    const pool = dhcpServerProcess.getPoolAt(i);
     if (!pool) continue;
 
     const leases: Array<Record<string, unknown>> = [];
-    const leaseCount = pool.getLeaseCount ? pool.getLeaseCount() : 0;
+    const leaseCount = ptSafeGet(pool, (p) => p.getLeaseCount?.()) ?? 0;
     for (let j = 0; j < leaseCount; j++) {
-      const lease = pool.getLeaseAt ? pool.getLeaseAt(j) : null;
+      const lease = ptSafeGet(pool, (p) => p.getLeaseAt?.(j) ?? null);
       if (!lease) continue;
       leases.push({
-        mac: lease.getMac ? lease.getMac() : "",
-        ip: lease.getIp ? lease.getIp() : "",
-        expires: lease.getExpires ? lease.getExpires() : 0,
+        mac: ptSafeGet(lease, (l) => l.getMac?.()) ?? "",
+        ip: ptSafeGet(lease, (l) => l.getIp?.()) ?? "",
+        expires: ptSafeGet(lease, (l) => l.getExpires?.()) ?? "",
       });
     }
 
     pools.push({
-      name: pool.getDhcpPoolName ? pool.getDhcpPoolName() : pool.getPoolName ? pool.getPoolName() : "",
-      network: pool.getNetworkAddress ? pool.getNetworkAddress() : "",
-      mask: pool.getSubnetMask ? pool.getSubnetMask() : pool.getNetworkMask ? pool.getNetworkMask() : "",
-      defaultRouter: pool.getDefaultRouter ? pool.getDefaultRouter() : "",
-      dns: pool.getDnsServerIp ? pool.getDnsServerIp() : "",
-      startIp: pool.getStartIp ? pool.getStartIp() : "",
-      endIp: pool.getEndIp ? pool.getEndIp() : "",
-      maxUsers: pool.getMaxUsers ? pool.getMaxUsers() : 0,
+      name:
+        ptSafeGet(pool, (p) => p.getDhcpPoolName?.()) ??
+        ptSafeGet(pool, (p) => p.getPoolName?.()) ??
+        "",
+      network: ptSafeGet(pool, (p) => p.getNetworkAddress?.()) ?? "",
+      mask:
+        ptSafeGet(pool, (p) => p.getSubnetMask?.()) ??
+        ptSafeGet(pool, (p) => p.getNetworkMask?.()) ??
+        "",
+      defaultRouter: ptSafeGet(pool, (p) => p.getDefaultRouter?.()) ?? "",
+      dns: ptSafeGet(pool, (p) => p.getDnsServerIp?.()) ?? "",
+      startIp: ptSafeGet(pool, (p) => p.getStartIp?.()) ?? "",
+      endIp: ptSafeGet(pool, (p) => p.getEndIp?.()) ?? "",
+      maxUsers: ptSafeGet(pool, (p) => p.getMaxUsers?.()) ?? 0,
       leaseCount,
       leases,
     });
@@ -157,11 +179,11 @@ export function handleInspectDhcpServer(payload: InspectDhcpServerPayload, deps:
   const excludedAddresses: Array<Record<string, unknown>> = [];
   const excCount = dhcpServerProcess.getExcludedAddressCount();
   for (let i = 0; i < excCount; i++) {
-    const exc = dhcpServerProcess.getExcludedAddressAt(i) as any;
+    const exc = dhcpServerProcess.getExcludedAddressAt(i);
     if (!exc) continue;
     excludedAddresses.push({
-      start: exc.getStart ? exc.getStart() : exc.start || "",
-      end: exc.getEnd ? exc.getEnd() : exc.end || "",
+      start: ptSafeGet(exc, (e) => e.start) ?? "",
+      end: ptSafeGet(exc, (e) => e.end) ?? "",
     });
   }
 
