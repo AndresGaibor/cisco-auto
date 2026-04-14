@@ -88,21 +88,46 @@ const PT_FORBIDDEN_PATTERNS: PatternRule[] = [
     category: "forbidden-global",
     suggestion: "Use dprint() instead - it is automatically injected",
   },
+  // ES6+ syntax forbidden patterns for PT Script Engine compatibility
+  {
+    pattern: /\bconst\s+/g,
+    message: "const is not supported in PT Script Engine (use var)",
+    category: "operator-pattern",
+    suggestion: "Replace 'const' with 'var'",
+  },
+  {
+    pattern: /(?<!\.)\blet\s+/g,
+    message: "let is not supported in PT Script Engine (use var)",
+    category: "operator-pattern",
+    suggestion: "Replace 'let' with 'var'",
+  },
+  {
+    pattern: /(?:^|[^:])=>/g,
+    message: "Arrow functions may not be fully supported in PT Script Engine",
+    category: "operator-pattern",
+    suggestion: "Use 'function' expressions instead of arrow functions",
+  },
+  {
+    pattern: /\?\.(\w|\[)/g,
+    message: "Optional chaining (?.) may not be supported in PT Script Engine",
+    category: "operator-pattern",
+    suggestion: "Use explicit null/undefined checks",
+  },
+  {
+    pattern: /\bclass\s+\w+(?:\s+\w+\s*)?\{/,
+    message: "class declarations may not be supported in PT Script Engine",
+    category: "class-pattern",
+    suggestion: "Use constructor functions and prototypes",
+  },
+  {
+    pattern: /\basync\s+(?:function|\()/g,
+    message: "async functions may not be supported in older PT Script Engine",
+    category: "async-pattern",
+    suggestion: "Test on target PT versions or use Promise patterns",
+  },
 ];
 
 const PT_WARNING_PATTERNS: PatternRule[] = [
-  {
-    pattern: /\basync\s+(?:function|\()/g,
-    message: "async functions - ensure PT version supports ES6+",
-    category: "async-pattern",
-    suggestion: "Test on target PT versions",
-  },
-  {
-    pattern: /\bawait\s+(?!\()/g,
-    message: "await expressions - ensure PT version supports ES6+",
-    category: "async-pattern",
-    suggestion: "Test on target PT versions",
-  },
   {
     pattern: /\bPromise\b/g,
     message: "Promise - ensure PT version supports ES6+",
@@ -116,21 +141,9 @@ const PT_WARNING_PATTERNS: PatternRule[] = [
     suggestion: "Test thoroughly on target PT versions",
   },
   {
-    pattern: /\.\.\.(\w+)/g,
-    message: "spread operator may not be fully supported in older PT",
-    category: "operator-pattern",
-    suggestion: "Use explicit iteration or Object.assign()",
-  },
-  {
     pattern: /\|\|\s*null/g,
     message: "null coalescing with || may be redundant",
     category: "operator-pattern",
-  },
-  {
-    pattern: /\$\{[^}]+\}/g,
-    message: "template literal with expressions - ensure ES5 compatibility",
-    category: "operator-pattern",
-    suggestion: "Test on target PT versions",
   },
 ];
 

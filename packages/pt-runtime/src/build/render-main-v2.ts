@@ -65,6 +65,31 @@ export function renderMainV2(options: RenderMainV2Options): string {
 
 ${code}
 
+  // Hold kernel instance for cleanUp() to reach
+  var _kernelInstance = null;
+
+  // Expose kernel functions to global scope so main()/cleanUp() can reach them
+  // Use self/globalThis for PT compatibility (PT uses 'self' as global object)
+  var _global = typeof self !== "undefined" ? self : (typeof globalThis !== "undefined" ? globalThis : this);
+  if (typeof createKernel === "function") {
+    _global.createKernel = function(cfg) {
+      _kernelInstance = createKernel(cfg);
+      return _kernelInstance;
+    };
+  }
+  if (typeof shutdownKernel === "function") {
+    _global.shutdownKernel = shutdownKernel;
+  } else {
+    _global.shutdownKernel = function() {
+      if (_kernelInstance && typeof _kernelInstance.shutdown === "function") {
+        _kernelInstance.shutdown();
+      }
+    };
+  }
+  // Also expose dprint and fm for debugging from console
+  if (typeof _global.dprint !== "function") {
+    _global.dprint = dprint;
+  }
 })();
 
 // PT Script Module entry points

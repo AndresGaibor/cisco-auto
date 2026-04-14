@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * PT Control V2 - Build Script
- * 
+ *
  * Usage:
  *   bun run scripts/build.ts          # Full build (compile + generate + deploy)
  *   bun run scripts/build.ts --watch  # Watch mode
@@ -13,6 +13,7 @@ import { resolve } from "node:path";
 import { existsSync, mkdirSync, writeFileSync, copyFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { RuntimeGenerator } from "../../pt-runtime/src/index";
+import { validatePtSafe, formatValidationResult } from "../../pt-runtime/src/build/validate-pt-safe";
 
 // ============================================================================
 // Configuration
@@ -33,56 +34,84 @@ async function compileTypeScript(): Promise<boolean> {
   return true;
 }
 
-async function generateRuntime(): Promise<boolean> {
+async function generateRuntime(): Promise<{ main: string; runtime: string } | null> {
   console.log("\n🔧 Generating runtime files...");
-  
+
   try {
     // Ensure generated directory exists
     if (!existsSync(GENERATED_DIR)) {
       mkdirSync(GENERATED_DIR, { recursive: true });
     }
-    
+
     const generator = new RuntimeGenerator({
       outputDir: GENERATED_DIR,
       devDir: DEV_DIR,
     });
-    
+
     const { main, runtime } = await generator.generate();
-    
+
     console.log("✅ Runtime files generated:");
     console.log(`   - ${resolve(GENERATED_DIR, "main.js")}`);
     console.log(`   - ${resolve(GENERATED_DIR, "runtime.js")}`);
-    return true;
+    return { main, runtime };
   } catch (error) {
     console.error("❌ Runtime generation error:", error);
+    return null;
+  }
+}
+
+/**
+ * Validate generated artifacts are PT-safe.
+ * Returns true if both main.js and runtime.js pass validation.
+ */
+function validateArtifacts(main: string, runtime: string): boolean {
+  console.log("\n🔍 Validating PT-safe artifacts...");
+
+  const mainResult = validatePtSafe(main);
+  const runtimeResult = validatePtSafe(runtime);
+
+  if (!mainResult.valid) {
+    console.error("❌ main.js PT-safe validation FAILED:");
+    console.error(formatValidationResult(mainResult));
     return false;
   }
+  console.log("✅ main.js PT-safe validation PASSED");
+
+  if (!runtimeResult.valid) {
+    console.error("❌ runtime.js PT-safe validation FAILED:");
+    console.error(formatValidationResult(runtimeResult));
+    return false;
+  }
+  console.log("✅ runtime.js PT-safe validation PASSED");
+
+  return true;
 }
 
 async function deployToDev(): Promise<boolean> {
   console.log(`\n🚀 Deploying to ${DEV_DIR}...`);
-  
+
   try {
     // Ensure dev directory exists
     if (!existsSync(DEV_DIR)) {
       mkdirSync(DEV_DIR, { recursive: true });
     }
-    
+
     // Copy generated files to dev directory
-    const files = ["main.js", "runtime.js", "index.html"];
-    
+    const files = ["main.js", "runtime.js"];
+
     for (const file of files) {
       const src = resolve(GENERATED_DIR, file);
       const dest = resolve(DEV_DIR, file);
-      
+
       if (existsSync(src)) {
         copyFileSync(src, dest);
         console.log(`   ✓ ${dest}`);
       } else {
-        console.warn(`   ⚠ ${src} not found, skipping`);
+        console.error(`   ✗ ${src} not found, aborting deploy`);
+        return false;
       }
     }
-    
+
     console.log("✅ Deployment complete");
     return true;
   } catch (error) {
@@ -93,24 +122,24 @@ async function deployToDev(): Promise<boolean> {
 
 async function watchMode(): Promise<void> {
   console.log("\n👀 Watch mode enabled - monitoring for changes...\n");
-  
+
   const { watch } = await import("node:fs");
-  
+
   // Initial build
   await build(false);
-  
+
   // Watch for changes
   const srcDir = resolve(ROOT_DIR, "src");
-  
+
   watch(srcDir, { recursive: true }, async (event, filename) => {
     if (filename?.endsWith(".ts")) {
       console.log(`\n📝 Change detected: ${filename}`);
       await build(false);
     }
   });
-  
+
   console.log("Watching for changes in:", srcDir);
-  
+
   // Keep process alive
   process.stdin.resume();
 }
@@ -123,31 +152,41 @@ async function build(deploy: boolean = true): Promise<boolean> {
   console.log("═══════════════════════════════════════════");
   console.log("       PT Control V2 - Build");
   console.log("═══════════════════════════════════════════");
-  
+
   // Step 1: Compile TypeScript
   const tsOk = await compileTypeScript();
   if (!tsOk) {
+    console.error("\n❌ TypeScript compilation failed");
     process.exit(1);
   }
-  
+
   // Step 2: Generate runtime files
-  const genOk = await generateRuntime();
-  if (!genOk) {
+  const generated = await generateRuntime();
+  if (!generated) {
+    console.error("\n❌ Runtime generation failed");
     process.exit(1);
   }
-  
-  // Step 3: Deploy (optional)
+
+  // Step 3: Validate PT-safe (MANDATORY - aborts deploy if fails)
+  const valid = validateArtifacts(generated.main, generated.runtime);
+  if (!valid) {
+    console.error("\n❌ PT-safe validation failed - artifacts will NOT be deployed");
+    process.exit(1);
+  }
+
+  // Step 4: Deploy (optional)
   if (deploy) {
     const deployOk = await deployToDev();
     if (!deployOk) {
+      console.error("\n❌ Deployment failed");
       process.exit(1);
     }
   }
-  
+
   console.log("\n═══════════════════════════════════════════");
   console.log("✅ Build completed successfully!");
   console.log("═══════════════════════════════════════════\n");
-  
+
   return true;
 }
 

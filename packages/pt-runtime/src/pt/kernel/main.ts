@@ -69,11 +69,11 @@ export function createKernel(config: KernelConfig) {
         if (!net) return null as any;
         const dev = (net as { getDevice: (n: string) => unknown }).getDevice(name);
         if (!dev) return null;
-        const terminal = (dev as { getCommandLine: () => unknown }).getCommandLine();
+        const term = (dev as { getCommandLine: () => unknown }).getCommandLine();
         return {
           name: (dev as { getName: () => string }).getName(),
-          hasTerminal: !!terminal,
-          getTerminal: () => terminal as any,
+          hasTerminal: !!term,
+          getTerminal: () => term as any,
           getNetwork: () => net as any,
         } as any;
       },
@@ -87,8 +87,9 @@ export function createKernel(config: KernelConfig) {
         }
         return names;
       },
-      querySessionState() {
-        return null;
+      querySessionState(deviceName: string) {
+        // Read actual state from TerminalEngine, not null
+        return terminal.getSession(deviceName);
       },
       getWorkspace() {
         const ipc = (globalThis as unknown as { ipc: unknown }).ipc;
@@ -102,7 +103,48 @@ export function createKernel(config: KernelConfig) {
       normalizePortName(name: string) {
         return String(name || "").replace(/\s+/g, "").toLowerCase();
       },
+      // Job management methods
+      createJob(plan: DeferredJobPlan): string {
+        const job = jobExecutor.startJob(plan);
+        return job.id;
+      },
+      getJobState(ticket: string) {
+        const job = jobExecutor.getJob(ticket);
+        if (!job) return null;
+        const ctx = job.context;
+        return {
+          id: ctx.plan.id,
+          device: ctx.plan.device,
+          state: ctx.phase,
+          currentStep: ctx.currentStep,
+          totalSteps: ctx.plan.plan.length,
+          outputTail: ctx.outputBuffer ? ctx.outputBuffer.slice(-500) : "",
+          output: ctx.outputBuffer,
+          finished: ctx.finished,
+          result: ctx.error ? null : { raw: ctx.outputBuffer },
+          error: ctx.error,
+          errorCode: ctx.errorCode,
+          done: ctx.finished,
+        };
+      },
+      getActiveJobs() {
+        return jobExecutor.getActiveJobs().map(j => ({
+          id: j.id,
+          device: j.device,
+          finished: isJobContextFinished(j.context),
+          state: j.context.phase,
+        }));
+      },
+      jobPayload(ticket: string) {
+        const job = jobExecutor.getJob(ticket);
+        return job ? job.context.plan.payload : null;
+      },
     };
+  }
+
+  // Helper to check if job context is finished
+  function isJobContextFinished(ctx: any): boolean {
+    return ctx.finished || ctx.phase === "completed" || ctx.phase === "error";
   }
 
   // Write result envelope
@@ -133,13 +175,44 @@ export function createKernel(config: KernelConfig) {
         result = fn(cmd.payload, createRuntimeApi());
       }
     } catch (e) {
-      result = { ok: false, error: String(e) };
+      result = { ok: false, error: "Runtime fatal: " + String(e) };
     }
 
-    // Write result
-    const isDeferred = (result as { deferred?: boolean })?.deferred;
+    // Determine result type
+    const isDeferred = (result as { deferred?: boolean })?.deferred === true;
     const isOk = (result as { ok?: boolean })?.ok !== false;
-    const status = isDeferred ? "pending" : isOk ? "completed" : "failed";
+
+    if (isDeferred) {
+      // Deferred result: command NOT finished, job will run asynchronously
+      const ticket = (result as { ticket?: string })?.ticket;
+      dprint("[kernel] DEFERRED ticket=" + (ticket || "none"));
+
+      writeResultEnvelope(cmd.id, {
+        protocolVersion: 3,
+        id: cmd.id,
+        seq: cmd.seq || 0,
+        startedAt,
+        completedAt: Date.now(),
+        status: "pending",
+        ok: true,
+        value: result as ResultEnvelope["value"],
+        jobId: ticket,
+        device: (cmd.payload as { device?: string })?.device,
+      });
+
+      // Don't clear activeCommand - it stays deferred until jobs complete
+      // But do cleanup the file from queue
+      if (activeCommandFilename) {
+        queue.cleanup(activeCommandFilename);
+      }
+      activeCommand = null;
+      activeCommandFilename = null;
+      heartbeat.setActiveCommand(null);
+      return;
+    }
+
+    // Immediate result: completed or failed
+    const status = isOk ? "completed" : "failed";
 
     writeResultEnvelope(cmd.id, {
       protocolVersion: 3,
@@ -150,7 +223,7 @@ export function createKernel(config: KernelConfig) {
       status,
       ok: isOk,
       value: result as ResultEnvelope["value"],
-      jobId: (result as { ticket?: string })?.ticket,
+      jobId: undefined,
       device: (cmd.payload as { device?: string })?.device,
     });
 
@@ -159,11 +232,8 @@ export function createKernel(config: KernelConfig) {
       queue.cleanup(activeCommandFilename);
     }
 
-    if (!isDeferred) {
-      activeCommand = null;
-      activeCommandFilename = null;
-    }
-
+    activeCommand = null;
+    activeCommandFilename = null;
     heartbeat.setActiveCommand(null);
   }
 
@@ -172,7 +242,15 @@ export function createKernel(config: KernelConfig) {
     if (!isRunning || isShuttingDown) return;
     if (activeCommand !== null) return;
 
-    runtimeLoader.reloadIfNeeded(() => activeCommand !== null);
+    // Comprehensive busy check: active command OR active deferred jobs OR busy terminals
+    function isSystemBusy(): boolean {
+      if (activeCommand !== null) return true;
+      const activeJobs = jobExecutor.getActiveJobs();
+      if (activeJobs.length > 0) return true;
+      return false;
+    }
+
+    runtimeLoader.reloadIfNeeded(isSystemBusy);
 
     const claimed = queue.poll();
     if (!claimed) return;
@@ -229,8 +307,13 @@ export function createKernel(config: KernelConfig) {
     dprint("[kernel] Ready");
   }
 
-  // Shutdown kernel
+  // Shutdown kernel (idempotent)
   function shutdown(): void {
+    if (isShuttingDown || !isRunning) {
+      dprint("[kernel] Shutdown already in progress or not running");
+      return;
+    }
+
     dprint("[kernel] Shutting down...");
 
     isShuttingDown = true;
@@ -241,9 +324,20 @@ export function createKernel(config: KernelConfig) {
       commandPollInterval = null;
     }
 
+    // Clean up active jobs
+    const activeJobs = jobExecutor.getActiveJobs();
+    for (const job of activeJobs) {
+      try {
+        terminal.detach(job.device);
+      } catch (e) {
+        dprint("[kernel] Error detaching terminal for " + job.device + ": " + String(e));
+      }
+    }
+
     heartbeat.stop();
     lease.stop();
 
+    isShuttingDown = false;
     dprint("[kernel] Done");
   }
 

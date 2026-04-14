@@ -125,6 +125,18 @@ export interface RuntimeApi {
 
   /** IPC reference */
   ipc: unknown;
+
+  /** Create a deferred job and start execution */
+  createJob(plan: DeferredJobPlan): string;
+
+  /** Get state of a job by ticket */
+  getJobState(ticket: string): KernelJobState | null;
+
+  /** Get list of active jobs */
+  getActiveJobs(): Array<{ id: string; device: string; finished: boolean; state: string }>;
+
+  /** Get original payload for a job by ticket */
+  jobPayload(ticket: string): Record<string, unknown> | null;
 }
 
 // ============================================================================

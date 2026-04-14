@@ -59,7 +59,14 @@ export interface PTDevice {
 }
 
 export interface PTCommandLine {
-  enterCommand(cmd: string, prompt?: string): [number, string];
+  /**
+   * Enter a command in the IOS terminal.
+   * NOTE: Returns void per PT TerminalLine API. Actual command state
+   * is delivered via events: commandStarted, outputWritten, commandEnded,
+   * modeChanged, promptChanged, moreDisplayed.
+   * @see https://tutorials.ptnetacad.net/help/default/IpcAPI/class_terminal_line.html
+   */
+  enterCommand(cmd: string): void;
   getPrompt(): string;
   getMode(): string;
   getCommandInput(): string;
@@ -110,6 +117,10 @@ export interface PTModeChangedArgs {
 
 export interface PTPromptChangedArgs {
   newPrompt: string;
+}
+
+export interface PTMoreDisplayedArgs {
+  active: boolean;
 }
 
 export interface PTPort {

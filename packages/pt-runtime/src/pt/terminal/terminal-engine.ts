@@ -65,18 +65,39 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
     terminals.set(device, term);
     sessions.set(device, createTerminalSession(device));
 
-    const session = sessions.get(device)!;
-
-    term.registerEvent("promptChanged", null, (src, args) => {
+    term.registerEvent("promptChanged", null, (_src, args) => {
+      const current = sessions.get(device);
+      if (!current) return;
       const prompt = (args as { prompt?: string })?.prompt || "";
       const parsed = parsePrompt(prompt);
-      sessions.set(device, updatePrompt(session, parsed.hostname));
-      sessions.set(device, updateMode(session, parsed.mode));
+      let updated = updatePrompt(current, parsed.hostname);
+      updated = updateMode(updated, parsed.mode);
+      sessions.set(device, updated);
     });
 
-    term.registerEvent("moreDisplayed", null, (src, args) => {
+    term.registerEvent("moreDisplayed", null, (_src, args) => {
+      const current = sessions.get(device);
+      if (!current) return;
       const active = (args as { active?: boolean })?.active || false;
-      sessions.set(device, setPaging(session, active));
+      sessions.set(device, setPaging(current, active));
+    });
+
+    term.registerEvent("modeChanged", null, (_src, args) => {
+      const current = sessions.get(device);
+      if (!current) return;
+      const newMode = (args as { newMode?: string })?.newMode || "";
+      if (newMode) {
+        sessions.set(device, updateMode(current, newMode));
+      }
+    });
+
+    term.registerEvent("commandStarted", null, (_src, args) => {
+      const current = sessions.get(device);
+      if (!current) return;
+      const inputMode = (args as { inputMode?: string })?.inputMode || "";
+      if (inputMode) {
+        sessions.set(device, updateMode(current, inputMode as IosMode));
+      }
     });
   }
 
@@ -112,46 +133,55 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
     const terminal = term;
 
     const timeout = options?.timeout ?? config.commandTimeoutMs;
-    const session = sessions.get(device)!;
+
+    // Helper to read current session state (avoids stale closure references)
+    function currentSession(): TerminalSessionState {
+      const s = sessions.get(device);
+      if (!s) throw new Error(`Session lost for ${device} during executeCommand`);
+      return s;
+    }
 
     return new Promise((resolve, reject) => {
       const buffer: string[] = [];
       let settled = false;
+      let moreListener: ((src: unknown, args: unknown) => void) | null = null;
 
-      sessions.set(device, setBusy(session, `cmd-${Date.now()}`));
+      sessions.set(device, setBusy(currentSession(), `cmd-${Date.now()}`));
 
       const timeoutHandle = setTimeout(() => {
         if (!settled) {
           settled = true;
-          // Limpiar event listeners para evitar memory leaks
           try {
             terminal.unregisterEvent("outputWritten", null, onOutput);
-          } catch {
-            // PT API puede fallar en unregister, ignorar silenciosamente
-          }
+          } catch {}
           try {
             terminal.unregisterEvent("commandEnded", null, onEnded);
-          } catch {
-            // PT API puede fallar en unregister, ignorar silenciosamente
+          } catch {}
+          if (moreListener) {
+            try {
+              terminal.unregisterEvent("moreDisplayed", null, moreListener);
+            } catch {}
           }
-          sessions.set(device, setBusy(session, null));
+          sessions.set(device, setBusy(currentSession(), null));
           reject(new Error(`Command timed out after ${timeout}ms: ${command}`));
         }
       }, timeout);
 
-      function onOutput(src: unknown, args: unknown) {
+      function onOutput(_src: unknown, args: unknown) {
         const a = args as { newOutput?: string; data?: string; output?: string };
         const data = a?.newOutput ?? a?.data ?? a?.output ?? "";
         if (data) {
           buffer.push(String(data));
         }
-
-        if (buffer.join("").includes("--More--")) {
-          sessions.set(device, setPaging(session, true));
-        }
       }
 
-      function onEnded(src: unknown, args: unknown) {
+      function onMore(_src: unknown, _args: unknown) {
+        const cs = currentSession();
+        sessions.set(device, setPaging(cs, true));
+      }
+      moreListener = onMore;
+
+      function onEnded(_src: unknown, args: unknown) {
         if (settled) return;
 
         const a = args as { status?: number };
@@ -162,38 +192,39 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
 
         try {
           terminal.unregisterEvent("outputWritten", null, onOutput);
-        } catch {
-          // PT API puede fallar en unregister, ignorar silenciosamente
-        }
+        } catch {}
         try {
           terminal.unregisterEvent("commandEnded", null, onEnded);
-        } catch {
-          // PT API puede fallar en unregister, ignorar silenciosamente
-        }
+        } catch {}
+        try {
+          terminal.unregisterEvent("moreDisplayed", null, moreListener as any);
+        } catch {}
 
-        sessions.set(device, setBusy(session, null));
+        // Read the LATEST session state - prompt/mode/paging from events
+        const finalSession = currentSession();
+        sessions.set(device, setBusy(finalSession, null));
 
         const output = buffer.join("");
         resolve({
           ok: isStatusOk(status),
           output,
           status,
-          session: toSnapshot(session),
-          mode: session.mode as IosMode,
+          session: toSnapshot(finalSession),
+          mode: finalSession.mode as IosMode,
         });
       }
 
       try {
         terminal.registerEvent("outputWritten", null, onOutput);
-      } catch {
-        // PT API puede fallar en register, ignorar silenciosamente
-      }
+      } catch {}
       try {
         terminal.registerEvent("commandEnded", null, onEnded);
-      } catch {
-        // PT API puede fallar en register, ignorar silenciosamente
-      }
+      } catch {}
+      try {
+        terminal.registerEvent("moreDisplayed", null, moreListener as any);
+      } catch {}
 
+      // Send the command - returns void, state comes via events
       terminal.enterCommand(command);
     });
   }
