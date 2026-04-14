@@ -9,7 +9,7 @@
  *   bun run smoke-test.ts
  */
 
-import { PTController } from "./packages/pt-control/src/index.ts";
+import { PTController } from "./packages/pt-control/src/index";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 

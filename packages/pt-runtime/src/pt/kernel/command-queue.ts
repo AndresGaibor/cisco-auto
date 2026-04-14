@@ -27,7 +27,9 @@ export function createCommandQueue(config: {
           }
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      dprint("[queue] Error listing commands dir: " + String(e));
+    }
 
     // IN_FLIGHT_DIR (FileBridge V2)
     try {
@@ -39,7 +41,9 @@ export function createCommandQueue(config: {
           }
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      dprint("[queue] Error listing in-flight dir: " + String(e));
+    }
 
     jsonFiles.sort();
     return jsonFiles;
@@ -49,10 +53,14 @@ export function createCommandQueue(config: {
     let c = 0;
     try {
       c += fm.getFilesInDirectory(config.commandsDir)?.length || 0;
-    } catch (e) {}
+    } catch (e) {
+      dprint("[queue] Error counting commands: " + String(e));
+    }
     try {
       c += fm.getFilesInDirectory(config.inFlightDir)?.length || 0;
-    } catch (e) {}
+    } catch (e) {
+      dprint("[queue] Error counting in-flight: " + String(e));
+    }
     return c;
   }
 
@@ -94,7 +102,11 @@ export function createCommandQueue(config: {
               fm.moveSrcFileToDestFile(readPath, writePath, false);
               dprint("[queue] Moved to in-flight: " + filename);
             } catch (e) {
-              try { fm.removeFile(readPath); } catch(e2) {}
+              try {
+                fm.removeFile(readPath);
+              } catch (e2) {
+                dprint("[queue] Failed to cleanup stale file: " + String(e2));
+              }
             }
           }
 
@@ -117,11 +129,14 @@ export function createCommandQueue(config: {
       const dlPath = config.deadLetterDir + "/" + timestamp + "-" + basename;
 
       fm.moveSrcFileToDestFile(filePath, dlPath, false);
-      fm.writePlainTextToFile(dlPath + ".error.json", JSON.stringify({
-        originalFile: basename,
-        error: String(error),
-        movedAt: Date.now()
-      }));
+      fm.writePlainTextToFile(
+        dlPath + ".error.json",
+        JSON.stringify({
+          originalFile: basename,
+          error: String(error),
+          movedAt: Date.now(),
+        }),
+      );
 
       dprint("[queue] Moved to dead-letter: " + basename);
     } catch (e) {

@@ -11,7 +11,7 @@ export {
   type IPCidr,
   type IPAddress,
   type MACAddress,
-} from "./common.ts";
+} from "./common";
 
 // Device schemas (Device, Interface, VLAN)
 export {
@@ -25,7 +25,7 @@ export {
   type VLAN,
   type Interface,
   type Device,
-} from "./device.ts";
+} from "./device";
 
 // Protocol schemas (OSPF, EIGRP, VTP)
 export {
@@ -35,10 +35,10 @@ export {
   type OSPF,
   type EIGRP,
   type VTP,
-} from "./protocols.ts";
+} from "./protocols";
 
 // Security schemas (ACL, NAT)
-export { ACLSchema, NATSchema, type ACL, type NAT } from "./security.ts";
+export { ACLSchema, NATSchema, type ACL, type NAT } from "./security";
 
 // Lab schemas (Lab topology, connections, validation)
 export {
@@ -50,7 +50,7 @@ export {
   type Connection,
   type Validation,
   type Lab,
-} from "./lab.ts";
+} from "./lab";
 
 // PT Control - Topology
 export {
@@ -75,7 +75,7 @@ export {
   type DeviceDelta,
   type LinkDelta,
   type TopologyDelta,
-} from "./pt-topology.ts";
+} from "./pt-topology";
 
 // PT Control - Parsed Output
 export {
@@ -135,7 +135,7 @@ export {
   type ParsedOutput,
   type ParserFunction,
   type ParserRegistry,
-} from "./pt-parsed-output.ts";
+} from "./pt-parsed-output";
 
 // PT Control - Commands
 export {
@@ -176,7 +176,7 @@ export {
   type CommandPayloadTypeMap,
   type CommandType,
   type CommandFile,
-} from "./pt-commands.ts";
+} from "./pt-commands";
 
 // PT Control - Events
 export {
@@ -201,7 +201,7 @@ export {
   type PTEvent,
   type PTEventTypeMap,
   type PTEventType,
-} from "./pt-events.ts";
+} from "./pt-events";
 
 // File Bridge
 export {
@@ -220,7 +220,7 @@ export {
   type Snapshot,
   generateBridgeCommandId,
   calculatePayloadChecksum,
-} from "./bridge.ts";
+} from "./bridge";
 
 // IOS Results - IosMode exported from pt-api/ios-mode.ts (Single Source of Truth)
 export {
@@ -241,7 +241,7 @@ export {
   type ExecInteractiveResult,
   type IosErrorCode,
   type IosError,
-} from "./ios-results.ts";
+} from "./ios-results";
 
 // IOS Interactive Result (Fase 6 - Real Interactive Terminal)
 export {
@@ -260,19 +260,19 @@ export {
   type Diagnostics,
   type TranscriptEntry,
   type IosInteractiveResult,
-} from "./ios-interactive-result.ts";
+} from "./ios-interactive-result";
 
 // Context Status
-export { ContextStatusSchema, type ContextStatus } from "./context-status.ts";
+export { ContextStatusSchema, type ContextStatus } from "./context-status";
 
 // History entry
-export { HistoryEntrySchema, type HistoryEntry } from "./history-entry.ts";
+export { HistoryEntrySchema, type HistoryEntry } from "./history-entry";
 
 // Session log events
-export { SessionLogEventSchema, type SessionLogEvent } from "./session-log-event.ts";
+export { SessionLogEventSchema, type SessionLogEvent } from "./session-log-event";
 
 // Lock info
-export { LockInfoSchema, type LockInfo } from "./lock-info.ts";
+export { LockInfoSchema, type LockInfo } from "./lock-info";
 
 // Command Catalog - Single Source of Truth
 export {
@@ -292,4 +292,4 @@ export {
   type CommandCatalogEntry,
   type CommandVisibility,
   type ExecutionModel,
-} from "../command-catalog.ts";
+} from "../command-catalog";

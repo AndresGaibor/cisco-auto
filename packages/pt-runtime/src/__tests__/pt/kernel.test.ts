@@ -16,7 +16,7 @@ const mockFm = {
 const mockDprint = vi.fn();
 
 (globalThis as typeof globalThis & { fm: typeof mockFm; dprint: typeof mockDprint }).fm = mockFm;
-(globalThis as typeof globalThis & { fm: typeof mockFm; dprint: typeof mockDPrint }).dprint = mockDprint;
+(globalThis as typeof globalThis & { fm: typeof mockFm; dprint: typeof mockDprint }).dprint = mockDprint;
 
 import { createLeaseManager } from "../../pt/kernel/lease";
 import { createDirectoryManager } from "../../pt/kernel/directories";

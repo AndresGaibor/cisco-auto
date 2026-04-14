@@ -14,7 +14,6 @@ const INTERFACE_NAME_PATTERN = /^[A-Za-z]+\d+(\/\d+)*(\.\d+)?$/;
  */
 export class InterfaceName extends ValueObject<string> {
   constructor(value: string) {
-    super(value);
     const normalized = value.trim();
     if (!normalized) {
       throw DomainError.invalidValue('Interface name', value, 'cannot be empty');
@@ -26,7 +25,7 @@ export class InterfaceName extends ValueObject<string> {
         'expected format: GigabitEthernet0/0, FastEthernet0/1, VLAN100, etc.'
       );
     }
-    this._value = normalized;
+    super(normalized);
   }
 
   /**

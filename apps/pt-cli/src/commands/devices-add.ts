@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
-import { Command } from 'commander';
-import chalk from 'chalk';
-import { randomUUID } from 'node:crypto';
-import { Database } from 'bun:sqlite';
+import { Command } from "commander";
+import chalk from "chalk";
+import { randomUUID } from "node:crypto";
+import { Database } from "bun:sqlite";
 
 function initializeSchema(db: Database): void {
   db.exec(`
@@ -34,28 +34,33 @@ function initializeSchema(db: Database): void {
 }
 
 function getMemoryDb(): Database {
-  const home = process.env.HOME || process.env.USERPROFILE || '.';
+  const home = process.env.HOME || process.env.USERPROFILE || ".";
   const dbPath = `${home}/.cisco-auto/memory.db`;
-  const dir = dbPath.substring(0, dbPath.lastIndexOf('/'));
-  try { require('node:fs').mkdirSync(dir, { recursive: true }); } catch { }
+  const dir = dbPath.substring(0, dbPath.lastIndexOf("/"));
+  try {
+    require("node:fs").mkdirSync(dir, { recursive: true });
+  } catch {
+    // Directorio ya existe o no se puede crear, continuar
+  }
   const db = new Database(dbPath);
   initializeSchema(db);
   return db;
 }
 
 export function createDevicesAddCommand(): Command {
-  return new Command('add')
-    .description('Agregar dispositivo a la memoria')
-    .argument('<hostname>', 'Nombre del dispositivo')
-    .option('--ip <ip>', 'Direccion IP')
-    .option('--model <model>', 'Modelo del dispositivo')
-    .option('--type <type>', 'Tipo: router, switch, pc', 'router')
+  return new Command("add")
+    .description("Agregar dispositivo a la memoria")
+    .argument("<hostname>", "Nombre del dispositivo")
+    .option("--ip <ip>", "Direccion IP")
+    .option("--model <model>", "Modelo del dispositivo")
+    .option("--type <type>", "Tipo: router, switch, pc", "router")
     .action((hostname, options) => {
       const db = getMemoryDb();
       const id = randomUUID().slice(0, 8);
       const now = Math.floor(Date.now() / 1000);
-      
-      db.run(`
+
+      db.run(
+        `
         INSERT INTO devices (id, hostname, ip_address, device_type, os_version, last_connected, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
@@ -65,8 +70,10 @@ export function createDevicesAddCommand(): Command {
           os_version = excluded.os_version,
           last_connected = excluded.last_connected,
           updated_at = excluded.updated_at
-      `, [id, hostname, options.ip || null, options.type || null, options.model || null, now, now]);
-      
+      `,
+        [id, hostname, options.ip || null, options.type || null, options.model || null, now, now],
+      );
+
       console.log(chalk.green(`\n✓ Dispositivo "${chalk.cyan(hostname)}" registrado\n`));
       db.close();
     });

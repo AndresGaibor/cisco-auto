@@ -3,6 +3,7 @@ import type {
   ShowVlan,
   ShowIpRoute,
   ShowRunningConfig,
+  RunningConfigSection,
   ShowInterfaces,
   ShowIpArp,
   ShowMacAddressTable,
@@ -165,8 +166,8 @@ export function parseShowIpRoute(output: string): ShowIpRoute {
  */
 export function parseShowRunningConfig(output: string): ShowRunningConfig {
   const lines = output.split("\n");
-  const sections: ShowRunningConfig["sections"] = [];
-  const interfaces: ShowRunningConfig["interfaces"] = {};
+  const sections: RunningConfigSection[] = [];
+  const interfaces: Record<string, string> = {};
   const configLines: string[] = [];
   
   let hostname: string | undefined;

@@ -72,25 +72,25 @@ export function handleInspect(payload: InspectPayload, deps: HandlerDeps): Handl
       try {
         portInfo.ipAddress = String(port.getIpAddress());
       } catch {
-        /* ignore */
+        // PT API puede no soportar esta propiedad en el puerto
       }
 
       try {
         portInfo.subnetMask = String(port.getSubnetMask());
       } catch {
-        /* ignore */
+        // PT API puede no soportar esta propiedad en el puerto
       }
 
       try {
         portInfo.macAddress = String((port as any).getMacAddress?.() ?? "");
       } catch {
-        /* ignore */
+        // PT API puede no soportar esta propiedad en el puerto
       }
 
       try {
         portInfo.defaultGateway = String(port.getDefaultGateway());
       } catch {
-        /* ignore */
+        // PT API puede no soportar esta propiedad en el puerto
       }
 
       // Leer DHCP status del puerto si no está a nivel dispositivo
@@ -101,13 +101,13 @@ export function handleInspect(payload: InspectPayload, deps: HandlerDeps): Handl
             dhcp = true;
           }
         } catch {
-          /* ignore */
+          // PT API puede no soportar isDhcpClientOn
         }
       }
 
       ports.push(portInfo);
     } catch {
-      // Skip inaccessible ports
+      // Puerto inaccesible, continuar con el siguiente
     }
   }
 
@@ -125,13 +125,19 @@ export function handleInspect(payload: InspectPayload, deps: HandlerDeps): Handl
   if (ports.length > 0) {
     try {
       result.ip = ports[0].ipAddress;
-    } catch {}
+    } catch {
+      // Propiedad no disponible
+    }
     try {
       result.mask = ports[0].subnetMask;
-    } catch {}
+    } catch {
+      // Propiedad no disponible
+    }
     try {
       result.gateway = ports[0].defaultGateway;
-    } catch {}
+    } catch {
+      // Propiedad no disponible
+    }
   }
 
   const serializeToXml = device as unknown as { serializeToXml?: () => string };
@@ -180,11 +186,12 @@ export function handleSnapshot(_payload: SnapshotPayload, deps: HandlerDeps): Ha
           portInfo.ipAddress = port.getIpAddress();
           portInfo.subnetMask = port.getSubnetMask();
         } catch {
-          /* ignore */
+          // PT API puede no soportar estas propiedades
         }
 
         ports.push(portInfo);
       } catch {
+        // Puerto inaccesible, usar placeholder
         ports.push({ name: `port${p}` });
       }
     }

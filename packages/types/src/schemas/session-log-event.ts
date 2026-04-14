@@ -9,6 +9,6 @@ export const SessionLogEventSchema = z.object({
   sessionId: z.string(),
   timestamp: z.string(),
   eventType: z.enum(['command', 'output', 'error', 'info', 'debug']),
-  payload: z.record(z.unknown()),
+  payload: z.record(z.string(), z.unknown()),
 });
 export type SessionLogEvent = z.infer<typeof SessionLogEventSchema>;

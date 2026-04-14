@@ -3,7 +3,12 @@
 // ============================================================================
 
 import type { HandlerDeps, HandlerResult, PTDevice } from "../utils/helpers";
-import { resolveModel, getDeviceTypeCandidates, createDeviceWithFallback, getDeviceTypeString } from "../utils/helpers";
+import {
+  resolveModel,
+  getDeviceTypeCandidates,
+  createDeviceWithFallback,
+  getDeviceTypeString,
+} from "../utils/helpers";
 
 // ============================================================================
 // Payload Types
@@ -61,20 +66,23 @@ export function handleAddDevice(payload: AddDevicePayload, deps: HandlerDeps): H
     const msg = error instanceof Error ? error.message : String(error);
     return { ok: false, error: msg, code: "INVALID_INPUT" };
   }
-  
+
   const name = payload.name || model;
   const x = payload.x ?? 100;
   const y = payload.y ?? 100;
 
   // Use provided deviceType or get candidates for fallback
-  const typeList = payload.deviceType !== undefined
-    ? [payload.deviceType]
-    : getDeviceTypeCandidates(model);
+  const typeList =
+    payload.deviceType !== undefined ? [payload.deviceType] : getDeviceTypeCandidates(model);
 
   // Use fallback mechanism for robust device creation
   const created = createDeviceWithFallback(model, x, y, typeList, lw, net);
   if (!created) {
-    return { ok: false, error: `Failed to add device for model: ${model}`, code: "DEVICE_CREATION_FAILED" };
+    return {
+      ok: false,
+      error: `Failed to add device for model: ${model}`,
+      code: "DEVICE_CREATION_FAILED",
+    };
   }
 
   const { autoName, device, typeId } = created;
@@ -110,12 +118,20 @@ export function handleRemoveDevice(payload: RemoveDevicePayload, deps: HandlerDe
   for (const metodo of candidatos) {
     const fnLw = lwAny[metodo];
     if (typeof fnLw === "function") {
-      try { (fnLw as (name: string) => void).call(lwAny, payload.name); } catch {}
+      try {
+        (fnLw as (name: string) => void).call(lwAny, payload.name);
+      } catch {
+        // PT API puede rechazar la operación, continuar con siguiente método
+      }
     }
 
     const fnNet = netAny[metodo];
     if (typeof fnNet === "function") {
-      try { (fnNet as (name: string) => void).call(netAny, payload.name); } catch {}
+      try {
+        (fnNet as (name: string) => void).call(netAny, payload.name);
+      } catch {
+        // PT API puede rechazar la operación, continuar con siguiente método
+      }
     }
   }
 
@@ -201,7 +217,12 @@ export function handleMoveDevice(payload: MoveDevicePayload, deps: HandlerDeps):
   }
 
   if (!moved) {
-    return { ok: false, error: "Packet Tracer rejected move", code: "INTERNAL_ERROR", details: { name: payload.name, x, y } };
+    return {
+      ok: false,
+      error: "Packet Tracer rejected move",
+      code: "INTERNAL_ERROR",
+      details: { name: payload.name, x, y },
+    };
   }
 
   return { ok: true, name: payload.name, x, y, method };

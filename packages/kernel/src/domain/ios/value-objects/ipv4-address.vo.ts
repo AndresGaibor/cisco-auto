@@ -9,10 +9,9 @@ export class Ipv4Address extends ValueObject<string> {
   private readonly _octets: readonly [number, number, number, number];
 
   constructor(value: string) {
-    super(value);
     const normalized = value.trim();
+    super(normalized);
     const octets = this.parseAndValidate(normalized);
-    this._value = normalized;
     this._octets = octets;
   }
 
@@ -180,12 +179,11 @@ export class SubnetMask extends ValueObject<string> {
   private readonly _cidrPrefix: CidrPrefix;
 
   constructor(value: string) {
-    super(value);
     const normalized = value.trim();
     if (!VALID_MASKS.includes(normalized as typeof VALID_MASKS[number])) {
       throw DomainError.invalidValue('subnet mask', value, 'must be a valid mask like 255.255.255.0');
     }
-    this._value = normalized;
+    super(normalized);
     this._cidrPrefix = new CidrPrefix(this.calculateCidr(normalized));
   }
 

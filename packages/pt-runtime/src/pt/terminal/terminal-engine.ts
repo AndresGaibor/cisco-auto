@@ -126,10 +126,14 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
           // Limpiar event listeners para evitar memory leaks
           try {
             terminal.unregisterEvent("outputWritten", null, onOutput);
-          } catch {}
+          } catch {
+            // PT API puede fallar en unregister, ignorar silenciosamente
+          }
           try {
             terminal.unregisterEvent("commandEnded", null, onEnded);
-          } catch {}
+          } catch {
+            // PT API puede fallar en unregister, ignorar silenciosamente
+          }
           sessions.set(device, setBusy(session, null));
           reject(new Error(`Command timed out after ${timeout}ms: ${command}`));
         }
@@ -158,10 +162,14 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
 
         try {
           terminal.unregisterEvent("outputWritten", null, onOutput);
-        } catch (e) {}
+        } catch {
+          // PT API puede fallar en unregister, ignorar silenciosamente
+        }
         try {
           terminal.unregisterEvent("commandEnded", null, onEnded);
-        } catch (e) {}
+        } catch {
+          // PT API puede fallar en unregister, ignorar silenciosamente
+        }
 
         sessions.set(device, setBusy(session, null));
 
@@ -177,10 +185,14 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
 
       try {
         terminal.registerEvent("outputWritten", null, onOutput);
-      } catch (e) {}
+      } catch {
+        // PT API puede fallar en register, ignorar silenciosamente
+      }
       try {
         terminal.registerEvent("commandEnded", null, onEnded);
-      } catch (e) {}
+      } catch {
+        // PT API puede fallar en register, ignorar silenciosamente
+      }
 
       terminal.enterCommand(command);
     });

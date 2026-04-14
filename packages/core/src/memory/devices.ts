@@ -42,7 +42,7 @@ export class DeviceMemory {
    * Obtiene un dispositivo por su ID
    */
   getDevice(id: string): any {
-    return this.db.get('SELECT * FROM devices WHERE id = ?', [id]);
+    return this.db.query('SELECT * FROM devices WHERE id = ?').get(id);
   }
 
   /**

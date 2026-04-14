@@ -7,9 +7,9 @@ import {
   needsResponse,
 } from "@cisco-auto/ios-domain";
 
-const promptCases: Array<[string, string]> = [
+const promptCases: Array<[string, IosMode]> = [
   ["Switch>", "user-exec"],
-  ["R1#", "priv-exec"],
+  ["R1#", "privileged-exec"],
   ["R1(config)#", "config"],
   ["R1(config-if)#", "config-if"],
   ["R1(config-line)#", "config-line"],
@@ -54,7 +54,7 @@ describe("IOS prompt-state contract", () => {
     expect(isInteractiveDialog("copy-destination")).toBe(true);
     expect(isInteractiveDialog("reload-confirm")).toBe(true);
     expect(isInteractiveDialog("erase-confirm")).toBe(true);
-    expect(isInteractiveDialog("priv-exec")).toBe(false);
+    expect(isInteractiveDialog("privileged-exec")).toBe(false);
   });
 
   test("keeps recoverable states and prompt regexes available", () => {
@@ -62,7 +62,7 @@ describe("IOS prompt-state contract", () => {
     expect(isRecoverableState("desynced")).toBe(true);
     expect(isRecoverableState("resolving-hostname")).toBe(true);
     expect(isRecoverableState("paging")).toBe(true);
-    expect(isRecoverableState("priv-exec")).toBe(false);
+    expect(isRecoverableState("privileged-exec")).toBe(false);
 
     expect(IOS_PROMPT_PATTERNS.resolvingHostname.test('Translating "shwo"....domain server')).toBe(true);
     expect(IOS_PROMPT_PATTERNS.copyDestination.test("Destination filename [startup-config]?")) .toBe(true);

@@ -20,7 +20,7 @@ describe("SessionMode", () => {
 
     it("should accept all valid modes", () => {
       const validModes: IosMode[] = [
-        'user-exec', 'priv-exec', 'config', 'config-if',
+        'user-exec', 'privileged-exec', 'config', 'config-if',
         'config-line', 'config-router', 'config-vlan', 'config-subif',
         'rommon', 'unknown'
       ];
@@ -47,7 +47,7 @@ describe("SessionMode", () => {
 
     it("should identify exec modes", () => {
       expect(new SessionMode('user-exec').isExecMode).toBe(true);
-      expect(new SessionMode('priv-exec').isExecMode).toBe(true);
+      expect(new SessionMode('privileged-exec').isExecMode).toBe(true);
       expect(new SessionMode('config').isExecMode).toBe(false);
     });
 
@@ -59,13 +59,13 @@ describe("SessionMode", () => {
     });
 
     it("should identify privileged mode", () => {
-      expect(new SessionMode('priv-exec').isPrivileged).toBe(true);
+      expect(new SessionMode('privileged-exec').isPrivileged).toBe(true);
       expect(new SessionMode('user-exec').isPrivileged).toBe(false);
     });
 
     it("should identify user exec mode", () => {
       expect(new SessionMode('user-exec').isUserExec).toBe(true);
-      expect(new SessionMode('priv-exec').isUserExec).toBe(false);
+      expect(new SessionMode('privileged-exec').isUserExec).toBe(false);
     });
   });
 
@@ -73,11 +73,11 @@ describe("SessionMode", () => {
     it("should check if can configure", () => {
       expect(new SessionMode('config').canConfigure).toBe(true);
       expect(new SessionMode('config-if').canConfigure).toBe(true);
-      expect(new SessionMode('priv-exec').canConfigure).toBe(false);
+      expect(new SessionMode('privileged-exec').canConfigure).toBe(false);
     });
 
     it("should check if can execute privileged commands", () => {
-      expect(new SessionMode('priv-exec').canExecutePrivileged).toBe(true);
+      expect(new SessionMode('privileged-exec').canExecutePrivileged).toBe(true);
       expect(new SessionMode('config').canExecutePrivileged).toBe(true);
       expect(new SessionMode('user-exec').canExecutePrivileged).toBe(false);
     });
@@ -86,7 +86,7 @@ describe("SessionMode", () => {
   describe("promptSuffix", () => {
     it("should return correct prompt suffix", () => {
       expect(new SessionMode('user-exec').promptSuffix).toBe('>');
-      expect(new SessionMode('priv-exec').promptSuffix).toBe('#');
+      expect(new SessionMode('privileged-exec').promptSuffix).toBe('#');
       expect(new SessionMode('config').promptSuffix).toBe('(config)#');
       expect(new SessionMode('config-if').promptSuffix).toBe('(config-if)#');
       expect(new SessionMode('config-router').promptSuffix).toBe('(config-router)#');
@@ -95,44 +95,44 @@ describe("SessionMode", () => {
 
   describe("getTransitionCommand", () => {
     it("should return null for same mode", () => {
-      const mode = new SessionMode('priv-exec');
+      const mode = new SessionMode('privileged-exec');
       expect(mode.getTransitionCommand(mode)).toBeNull();
     });
 
     it("should return disable for priv-exec to user-exec", () => {
-      const from = new SessionMode('priv-exec');
+      const from = new SessionMode('privileged-exec');
       const to = new SessionMode('user-exec');
       expect(to.getTransitionCommand(from)).toBe('disable');
     });
 
     it("should return enable for user-exec to priv-exec", () => {
       const from = new SessionMode('user-exec');
-      const to = new SessionMode('priv-exec');
+      const to = new SessionMode('privileged-exec');
       expect(to.getTransitionCommand(from)).toBe('enable');
     });
 
     it("should return configure terminal for priv-exec to config", () => {
-      const from = new SessionMode('priv-exec');
+      const from = new SessionMode('privileged-exec');
       const to = new SessionMode('config');
       expect(to.getTransitionCommand(from)).toBe('configure terminal');
     });
 
     it("should return end for config to priv-exec", () => {
       const from = new SessionMode('config');
-      const to = new SessionMode('priv-exec');
+      const to = new SessionMode('privileged-exec');
       expect(to.getTransitionCommand(from)).toBe('end');
     });
 
     it("should return null for unknown mode", () => {
       const from = new SessionMode('unknown');
-      const to = new SessionMode('priv-exec');
+      const to = new SessionMode('privileged-exec');
       expect(to.getTransitionCommand(from)).toBeNull();
     });
   });
 
   describe("hierarchy comparison", () => {
     it("should check if mode is higher than another", () => {
-      const priv = new SessionMode('priv-exec');
+      const priv = new SessionMode('privileged-exec');
       const user = new SessionMode('user-exec');
       
       expect(priv.isHigherThan(user)).toBe(true);
@@ -141,15 +141,15 @@ describe("SessionMode", () => {
 
     it("should check if mode is lower than another", () => {
       const config = new SessionMode('config');
-      const priv = new SessionMode('priv-exec');
+      const priv = new SessionMode('privileged-exec');
       
       expect(config.isLowerThan(priv)).toBe(false);
       expect(priv.isLowerThan(config)).toBe(true);
     });
 
     it("should check if mode is equal or higher", () => {
-      const mode1 = new SessionMode('priv-exec');
-      const mode2 = new SessionMode('priv-exec');
+      const mode1 = new SessionMode('privileged-exec');
+      const mode2 = new SessionMode('privileged-exec');
       const mode3 = new SessionMode('user-exec');
       
       expect(mode1.isEqualOrHigherThan(mode2)).toBe(true);
@@ -165,7 +165,7 @@ describe("SessionMode", () => {
 
     it("should infer priv-exec mode", () => {
       const mode = SessionMode.fromPrompt("Router#");
-      expect(mode.value).toBe("priv-exec");
+      expect(mode.value).toBe("privileged-exec");
     });
 
     it("should infer config mode", () => {
@@ -196,8 +196,8 @@ describe("SessionMode", () => {
 
   describe("equals", () => {
     it("should compare equality", () => {
-      const mode1 = new SessionMode("priv-exec");
-      const mode2 = new SessionMode("priv-exec");
+      const mode1 = new SessionMode("privileged-exec");
+      const mode2 = new SessionMode("privileged-exec");
       const mode3 = new SessionMode("user-exec");
 
       expect(mode1.equals(mode2)).toBe(true);
@@ -219,8 +219,8 @@ describe("SessionMode", () => {
 
 describe("parseSessionMode", () => {
   it("should parse valid modes", () => {
-    const mode = parseSessionMode("priv-exec");
-    expect(mode.value).toBe("priv-exec");
+    const mode = parseSessionMode("privileged-exec");
+    expect(mode.value).toBe("privileged-exec");
   });
 
   it("should throw for invalid modes", () => {
@@ -230,7 +230,7 @@ describe("parseSessionMode", () => {
 
 describe("inferSessionMode", () => {
   it("should infer mode from prompt", () => {
-    expect(inferSessionMode("Router#").value).toBe("priv-exec");
+    expect(inferSessionMode("Router#").value).toBe("privileged-exec");
     expect(inferSessionMode("Switch(config)#").value).toBe("config");
   });
 });
@@ -238,7 +238,7 @@ describe("inferSessionMode", () => {
 describe("isValidSessionMode", () => {
   it("should return true for valid modes", () => {
     expect(isValidSessionMode("user-exec")).toBe(true);
-    expect(isValidSessionMode("priv-exec")).toBe(true);
+    expect(isValidSessionMode("privileged-exec")).toBe(true);
     expect(isValidSessionMode("config-if")).toBe(true);
   });
 

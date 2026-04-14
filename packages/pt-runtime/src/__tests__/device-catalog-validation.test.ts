@@ -36,9 +36,11 @@ class MockDevice {
   skipBoot() { /* noop */ }
   getCommandLine() { return null; }
   getPortCount() { return 0; }
-  getPortAt() { return null; }
-  addModule() { return false; }
-  removeModule() { return false; }
+  getPort() { return null; }
+  setDhcpFlag() { /* noop */ }
+  getDhcpFlag() { return false; }
+  moveToLocation() { /* noop */ }
+  moveToLocationCentered() { /* noop */ }
 }
 
 class MockWorkspace {
@@ -52,12 +54,20 @@ class MockWorkspace {
     return autoName;
   }
   
-  removeDevice(name: string): void {
-    this.devices.delete(name);
+  deleteDevice(name: string): boolean {
+    return this.devices.delete(name);
   }
   
-  createLink() { return false; }
-  deleteLink() { /* noop */ }
+  removeObject(name: string): boolean {
+    return this.devices.delete(name);
+  }
+  
+  deleteObject(name: string): boolean {
+    return this.devices.delete(name);
+  }
+  
+  createLink() { return null; }
+  deleteLink() { return false; }
   
   getDevices() { return this.devices; }
 }
@@ -88,12 +98,18 @@ describe('Device Management - Catalog Validation', () => {
     workspace = new MockWorkspace();
     network = new MockNetwork(workspace);
     deps = {
-      getLW: () => workspace,
-      getNet: () => network,
+      getLW: () => workspace as any,
+      getNet: () => network as any,
+      getFM: () => ({}) as any,
+      getDeviceByName: (name: string) => network.getDevice(name) as any,
+      getLogicalWorkspace: () => workspace as any,
+      getNetwork: () => network as any,
+      ipc: {} as any,
+      DEV_DIR: '/tmp',
       dprint: (msg: string) => {
         if (process.env.DEBUG) console.log('[DBG]', msg);
       }
-    };
+    } as any;
   };
 
   describe('ADD - Dispositivos válidos', () => {
@@ -107,8 +123,8 @@ describe('Device Management - Catalog Validation', () => {
         y: 100
       }, deps);
       
-      expect(result.ok).toBe(true);
-      expect(result.name).toBe('R1');
+      expect((result as any).ok).toBe(true);
+      expect((result as any).name).toBe('R1');
       expect(network.getDeviceCount()).toBe(1);
     });
 
@@ -122,8 +138,8 @@ describe('Device Management - Catalog Validation', () => {
         y: 100
       }, deps);
       
-      expect(result.ok).toBe(true);
-      expect(result.name).toBe('SW1');
+      expect((result as any).ok).toBe(true);
+      expect((result as any).name).toBe('SW1');
       expect(network.getDeviceCount()).toBe(1);
     });
 
@@ -137,8 +153,8 @@ describe('Device Management - Catalog Validation', () => {
         y: 100
       }, deps);
       
-      expect(result.ok).toBe(true);
-      expect(result.name).toBe('PC1');
+      expect((result as any).ok).toBe(true);
+      expect((result as any).name).toBe('PC1');
     });
 
     test('Agregar Server', () => {
@@ -151,8 +167,8 @@ describe('Device Management - Catalog Validation', () => {
         y: 100
       }, deps);
       
-      expect(result.ok).toBe(true);
-      expect(result.name).toBe('SRV1');
+      expect((result as any).ok).toBe(true);
+      expect((result as any).name).toBe('SRV1');
     });
 
     test('Agregar Cloud', () => {
@@ -165,8 +181,8 @@ describe('Device Management - Catalog Validation', () => {
         y: 100
       }, deps);
       
-      expect(result.ok).toBe(true);
-      expect(result.name).toBe('CLOUD1');
+      expect((result as any).ok).toBe(true);
+      expect((result as any).name).toBe('CLOUD1');
     });
 
     test('Agregar modelo exacto del catálogo', () => {
@@ -179,7 +195,7 @@ describe('Device Management - Catalog Validation', () => {
         y: 200
       }, deps);
       
-      expect(result.ok).toBe(true);
+      expect((result as any).ok).toBe(true);
     });
   });
 
@@ -192,8 +208,8 @@ describe('Device Management - Catalog Validation', () => {
         name: 'BAD1'
       }, deps);
       
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('Invalid device model');
+      expect((result as any).ok).toBe(false);
+      expect((result as any).error).toContain('Invalid device model');
       expect(network.getDeviceCount()).toBe(0);
     });
 
@@ -205,8 +221,8 @@ describe('Device Management - Catalog Validation', () => {
         name: 'BAD2'
       }, deps);
       
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('Invalid device model');
+      expect((result as any).ok).toBe(false);
+      expect((result as any).error).toContain('Invalid device model');
     });
 
     test('Rechazar modelo vacío', () => {
@@ -218,7 +234,7 @@ describe('Device Management - Catalog Validation', () => {
       }, deps);
       
       // Debería usar default 1941
-      expect(result.ok).toBe(true);
+      expect((result as any).ok).toBe(true);
     });
 
     test('Rechazar modelo undefined', () => {
@@ -230,7 +246,7 @@ describe('Device Management - Catalog Validation', () => {
       }, deps);
       
       // Debería usar default 1941
-      expect(result.ok).toBe(true);
+      expect((result as any).ok).toBe(true);
     });
   });
 
@@ -261,9 +277,9 @@ describe('Device Management - Catalog Validation', () => {
         type: 'listDevices'
       }, deps);
       
-      expect(result.ok).toBe(true);
-      expect(result.devices).toHaveLength(3);
-      expect(result.count).toBe(3);
+      expect((result as any).ok).toBe(true);
+      expect((result as any).devices).toHaveLength(3);
+      expect((result as any).count).toBe(3);
     });
 
     test('Listar dispositivos vacío', () => {
@@ -273,9 +289,9 @@ describe('Device Management - Catalog Validation', () => {
         type: 'listDevices'
       }, deps);
       
-      expect(result.ok).toBe(true);
-      expect(result.devices).toHaveLength(0);
-      expect(result.count).toBe(0);
+      expect((result as any).ok).toBe(true);
+      expect((result as any).devices).toHaveLength(0);
+      expect((result as any).count).toBe(0);
     });
   });
 
@@ -340,7 +356,7 @@ describe('Device Management - Catalog Validation', () => {
         name: 'Device1'
       }, deps);
       
-      expect(result.ok).toBe(true);
+      expect((result as any).ok).toBe(true);
       expect(network.getDeviceCount()).toBe(0);
     });
 
@@ -352,7 +368,7 @@ describe('Device Management - Catalog Validation', () => {
         name: 'NONEXISTENT'
       }, deps);
       
-      expect(result.ok).toBe(true);  // No error, idempotent
+      expect((result as any).ok).toBe(true);  // No error, idempotent
     });
 
     test('Ciclo completo: ADD + LIST + REMOVE', () => {
@@ -405,7 +421,7 @@ describe('Device Management - Catalog Validation', () => {
         newName: 'RouterPrincipal'
       }, deps);
       
-      expect(result.ok).toBe(true);
+      expect((result as any).ok).toBe(true);
       
       const device = network.getDevice('Device1');  // autoName no cambia
       expect(device?.getName()).toBe('RouterPrincipal');  // Pero el display name sí
@@ -430,7 +446,7 @@ describe('Catalog Integration', () => {
       name: 'TestRouter'
     }, deps);
     
-    expect(result.ok).toBe(true);
+    expect((result as any).ok).toBe(true);
   });
   
   test('Rechazo de modelos inválidos rompe el código', () => {
@@ -448,8 +464,8 @@ describe('Catalog Integration', () => {
       name: 'BadDevice'
     }, deps);
     
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain('Invalid device model');
-    expect(result.code).toBe('INVALID_INPUT');
+    expect((result as any).ok).toBe(false);
+    expect((result as any).error).toContain('Invalid device model');
+    expect((result as any).code).toBe('INVALID_INPUT');
   });
 });

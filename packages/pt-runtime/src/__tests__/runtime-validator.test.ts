@@ -821,12 +821,12 @@ function handleConfigIos(payload) {}
     test("formatea errores y warnings", () => {
       const result: ValidationResult = {
         ok: false,
-        errors: [{ line: 1, column: 1, message: "Bad", severity: "error" }],
-        warnings: [{ line: 2, column: 1, message: "Warn", severity: "warning" }],
+        errors: ["Bad"],
+        warnings: ["Warn"],
       };
       const formatted = formatValidationErrors(result);
-      expect(formatted).toContain("ERROR:");
-      expect(formatted).toContain("WARNING:");
+      expect(formatted).toContain("ERROR: Bad");
+      expect(formatted).toContain("WARNING: Warn");
     });
   });
 });

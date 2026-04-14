@@ -3,10 +3,7 @@ import { inferPromptState, isPrivilegedMode, isConfigMode } from "./prompt-state
 import { createErrorResult } from "./command-result";
 import type { CommandResult } from "./command-result";
 import type { CommandHandler } from "./command-handler";
-import type {
-  SessionTranscript,
-  CommandTranscriptEntry,
-} from "./session-transcript";
+import type { SessionTranscript, CommandTranscriptEntry } from "./session-transcript";
 import {
   type CliSessionState,
   type CommandHistoryEntry,
@@ -17,11 +14,7 @@ import {
   calculateSessionHealth,
   isInteractivePrompt,
 } from "./cli-session-state";
-import {
-  processCommandOutput,
-  updateStateFromResult,
-  maintainHistory,
-} from "./cli-session-utils";
+import { processCommandOutput, updateStateFromResult, maintainHistory } from "./cli-session-utils";
 import { InteractiveStateHandler } from "./cli-session-handlers";
 
 export type { CommandHandler };
@@ -246,21 +239,27 @@ export class CliSession {
       try {
         await this.handler.enterCommand("end");
         await this.resyncPrompt();
-      } catch {}
+      } catch {
+        // Comando de recuperación falló, intentar siguiente estrategia
+      }
     }
 
     if (this.state.mode === "unknown") {
       try {
         await this.handler.enterCommand("disable");
         await this.resyncPrompt();
-      } catch {}
+      } catch {
+        // Comando de recuperación falló, intentar siguiente estrategia
+      }
     }
 
     if (this.state.mode === "unknown") {
       try {
         await this.handler.enterCommand("\x03");
         await this.resyncPrompt();
-      } catch {}
+      } catch {
+        // Comando de recuperación falló, sesión puede estar irrecuperable
+      }
     }
 
     return this.state.mode !== "unknown" && !this.state.desynced;
@@ -311,8 +310,16 @@ export class CliSession {
   }
 
   reset(): void {
-    try { this.handler.enterCommand("end"); } catch {}
-    try { this.handler.enterCommand("disable"); } catch {}
+    try {
+      this.handler.enterCommand("end");
+    } catch {
+      // Sesión puede estar cerrada, ignorar
+    }
+    try {
+      this.handler.enterCommand("disable");
+    } catch {
+      // Sesión puede estar en modo usuario, ignorar
+    }
 
     this.state = createInitialState(this.state.deviceName ?? "unknown");
     this.desyncReason = undefined;
@@ -357,7 +364,7 @@ export class CliSession {
 export function createCliSession(
   deviceName: string,
   handler: CommandHandler,
-  options?: CliSessionOptions
+  options?: CliSessionOptions,
 ): CliSession {
   return new CliSession(deviceName, handler, options);
 }

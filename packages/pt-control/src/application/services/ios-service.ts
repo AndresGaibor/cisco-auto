@@ -9,6 +9,7 @@ import type {
   ShowVlan,
   ShowIpRoute,
   ShowRunningConfig,
+  ShowMacAddressTable,
   ShowCdpNeighbors,
   DeviceState,
 } from "../../contracts/index.js";
@@ -43,19 +44,36 @@ export class IosService {
     this.execution.clearSession(device);
   }
 
-  execIos<T = ParsedOutput>(device: string, command: string, parse = true, timeout = 5000): Promise<IosExecutionSuccess<T>> {
+  execIos<T = ParsedOutput>(
+    device: string,
+    command: string,
+    parse = true,
+    timeout = 5000,
+  ): Promise<IosExecutionSuccess<T>> {
     return this.execution.execIos<T>(device, command, parse, timeout);
   }
 
-  execInteractive(device: string, command: string, options?: { timeout?: number; parse?: boolean; ensurePrivileged?: boolean }): Promise<IosExecutionSuccess<ParsedOutput>> {
+  execInteractive(
+    device: string,
+    command: string,
+    options?: { timeout?: number; parse?: boolean; ensurePrivileged?: boolean },
+  ): Promise<IosExecutionSuccess<ParsedOutput>> {
     return this.execution.execInteractive(device, command, options);
   }
 
-  configIos(device: string, commands: string[], options?: { save?: boolean }): Promise<IosConfigApplyResult> {
+  configIos(
+    device: string,
+    commands: string[],
+    options?: { save?: boolean },
+  ): Promise<IosConfigApplyResult> {
     return this.execution.configIos(device, commands, options);
   }
 
-  showParsed<T = ParsedOutput>(device: string, command: string, options?: { ensurePrivileged?: boolean; timeout?: number }): Promise<IosExecutionSuccess<T>> {
+  showParsed<T = ParsedOutput>(
+    device: string,
+    command: string,
+    options?: { ensurePrivileged?: boolean; timeout?: number },
+  ): Promise<IosExecutionSuccess<T>> {
     return this.execution.showParsed<T>(device, command, options);
   }
 
@@ -83,47 +101,123 @@ export class IosService {
     return this.execution.showCdpNeighbors(device);
   }
 
-  configureSvi(device: string, vlan: number, ip: string, mask: string, options?: { description?: string; enableRouting?: boolean; save?: boolean }): Promise<void> {
+  showMacAddressTable(device: string): Promise<ShowMacAddressTable> {
+    return this.execution.show(device, "show mac address-table") as Promise<ShowMacAddressTable>;
+  }
+
+  configureSvi(
+    device: string,
+    vlan: number,
+    ip: string,
+    mask: string,
+    options?: { description?: string; enableRouting?: boolean; save?: boolean },
+  ): Promise<void> {
     return this.semantic.configureSvi(device, vlan, ip, mask, options);
   }
 
-  configureAccessPort(device: string, portName: string, vlan: number, options?: { description?: string; portfast?: boolean; bpduguard?: boolean; save?: boolean }): Promise<void> {
+  configureAccessPort(
+    device: string,
+    portName: string,
+    vlan: number,
+    options?: { description?: string; portfast?: boolean; bpduguard?: boolean; save?: boolean },
+  ): Promise<void> {
     return this.semantic.configureAccessPort(device, portName, vlan, options);
   }
 
-  configureTrunkPort(device: string, portName: string, vlans: number[], options?: { nativeVlan?: number; description?: string; save?: boolean }): Promise<void> {
+  configureTrunkPort(
+    device: string,
+    portName: string,
+    vlans: number[],
+    options?: { nativeVlan?: number; description?: string; save?: boolean },
+  ): Promise<void> {
     return this.semantic.configureTrunkPort(device, portName, vlans, options);
   }
 
-  configureSubinterface(device: string, subinterfaceName: string, ip: string, mask: string, vlan: number, options?: { description?: string; save?: boolean }): Promise<void> {
+  configureSubinterface(
+    device: string,
+    subinterfaceName: string,
+    ip: string,
+    mask: string,
+    vlan: number,
+    options?: { description?: string; save?: boolean },
+  ): Promise<void> {
     return this.semantic.configureSubinterface(device, subinterfaceName, ip, mask, vlan, options);
   }
 
-  configureStaticRoute(device: string, network: string, mask: string, nextHop: string, options?: { description?: string; save?: boolean }): Promise<void> {
+  configureStaticRoute(
+    device: string,
+    network: string,
+    mask: string,
+    nextHop: string,
+    options?: { description?: string; save?: boolean },
+  ): Promise<void> {
     return this.semantic.configureStaticRoute(device, network, mask, nextHop, options);
   }
 
-  configureDhcpRelay(device: string, interfaceName: string, helperAddress: string, options?: { save?: boolean }): Promise<void> {
+  configureDhcpRelay(
+    device: string,
+    interfaceName: string,
+    helperAddress: string,
+    options?: { save?: boolean },
+  ): Promise<void> {
     return this.semantic.configureDhcpRelay(device, interfaceName, helperAddress, options);
   }
 
-  configureDhcpPool(device: string, poolName: string, network: string, mask: string, defaultRouter: string, dnsServer?: string, options?: { save?: boolean }): Promise<void> {
-    return this.semantic.configureDhcpPool(device, poolName, network, mask, defaultRouter, dnsServer, options);
+  configureDhcpPool(
+    device: string,
+    poolName: string,
+    network: string,
+    mask: string,
+    defaultRouter: string,
+    dnsServer?: string,
+    options?: { save?: boolean },
+  ): Promise<void> {
+    return this.semantic.configureDhcpPool(
+      device,
+      poolName,
+      network,
+      mask,
+      defaultRouter,
+      dnsServer,
+      options,
+    );
   }
 
-  configureOspfNetwork(device: string, processId: number, network: string, wildcard: string, area: number, options?: { save?: boolean }): Promise<void> {
+  configureOspfNetwork(
+    device: string,
+    processId: number,
+    network: string,
+    wildcard: string,
+    area: number,
+    options?: { save?: boolean },
+  ): Promise<void> {
     return this.semantic.configureOspfNetwork(device, processId, network, wildcard, area, options);
   }
 
-  configureSshAccess(device: string, domainName: string, username: string, password: string, options?: { save?: boolean }): Promise<void> {
+  configureSshAccess(
+    device: string,
+    domainName: string,
+    username: string,
+    password: string,
+    options?: { save?: boolean },
+  ): Promise<void> {
     return this.semantic.configureSshAccess(device, domainName, username, password, options);
   }
 
-  configureAccessListStandard(device: string, aclNumber: number, entries: string[], options?: { save?: boolean }): Promise<void> {
+  configureAccessListStandard(
+    device: string,
+    aclNumber: number,
+    entries: string[],
+    options?: { save?: boolean },
+  ): Promise<void> {
     return this.semantic.configureAccessListStandard(device, aclNumber, entries, options);
   }
 
-  getConfidence(device: string, evidence: IosExecutionEvidence, verificationCheck?: string): Promise<IosConfidence> {
+  getConfidence(
+    device: string,
+    evidence: IosExecutionEvidence,
+    verificationCheck?: string,
+  ): Promise<IosConfidence> {
     return this.semantic.getConfidence(device, evidence, verificationCheck);
   }
 

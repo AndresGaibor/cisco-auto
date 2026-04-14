@@ -56,7 +56,7 @@ class MockNetwork {
 describe("handleAddLink", () => {
   test("reintenta con cable auto cuando el cable explícito falla", () => {
     const workspace = new MockWorkspace();
-    const deps: HandlerDeps = {
+    const deps: any = {
       getLW: () => workspace as never,
       getNet: () => new MockNetwork(workspace) as never,
       dprint: () => {},

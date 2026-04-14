@@ -31,4 +31,4 @@ export interface DispatcherPort {
   getSupportedTypes(): string[];
 }
 
-export type { PtDeps, PtResult };
+export type { PtDeps, PtResult, PtDeps as HandlerDeps, PtResult as HandlerResult };

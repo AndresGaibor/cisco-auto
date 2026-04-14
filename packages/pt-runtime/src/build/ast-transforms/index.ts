@@ -106,8 +106,8 @@ const removeTypeAnnotationsTransform: AstTransform = {
       if (!param.type) return param;
       return ts.factory.updateParameterDeclaration(
         param,
-        param.decorators,
         param.modifiers,
+        param.dotDotDotToken,
         param.name,
         param.questionToken,
         undefined,
@@ -130,7 +130,6 @@ const removeTypeAnnotationsTransform: AstTransform = {
       if (!prop.type) return prop;
       return ts.factory.updatePropertyDeclaration(
         prop,
-        prop.decorators,
         prop.modifiers,
         prop.name,
         prop.questionToken,
@@ -158,7 +157,7 @@ const removeTypeAnnotationsTransform: AstTransform = {
       return ts.factory.updateArrowFunction(
         arrow,
         arrow.modifiers,
-        arrow.asteriskToken,
+        arrow.typeParameters,
         arrow.parameters,
         undefined,
         arrow.equalsGreaterThanToken,
@@ -170,7 +169,6 @@ const removeTypeAnnotationsTransform: AstTransform = {
       if (!method.type) return method;
       return ts.factory.updateMethodDeclaration(
         method,
-        method.decorators,
         method.modifiers,
         method.asteriskToken,
         method.name,
@@ -186,7 +184,6 @@ const removeTypeAnnotationsTransform: AstTransform = {
       if (!accessor.type) return accessor;
       return ts.factory.updateGetAccessorDeclaration(
         accessor,
-        accessor.decorators,
         accessor.modifiers,
         accessor.name,
         accessor.parameters,
@@ -199,11 +196,9 @@ const removeTypeAnnotationsTransform: AstTransform = {
       if (!accessor.type) return accessor;
       return ts.factory.updateSetAccessorDeclaration(
         accessor,
-        accessor.decorators,
         accessor.modifiers,
         accessor.name,
         accessor.parameters,
-        undefined,
         accessor.body
       );
     },
@@ -224,13 +219,11 @@ const letConstToVarTransform: AstTransform = {
       
       if (
         (flags & ts.NodeFlags.Let) ||
-        (flags & ts.NodeFlags.Const) ||
-        list.declarationKind === ts.SyntaxKind.ConstKeyword ||
-        list.declarationKind === ts.SyntaxKind.LetKeyword
+        (flags & ts.NodeFlags.Const)
       ) {
         return ts.factory.createVariableDeclarationList(
           list.declarations,
-          ts.NodeFlags.VarExistingVar | (list.flags & ts.NodeFlags.NumericLiteral)
+          ts.NodeFlags.None
         );
       }
       return list;
@@ -255,7 +248,7 @@ const arrowToFunctionTransform: AstTransform = {
         undefined,
         arrow.parameters,
         undefined,
-        arrow.body
+        ts.isBlock(arrow.body) ? arrow.body : ts.factory.createBlock([ts.factory.createReturnStatement(arrow.body)])
       );
     },
   },
@@ -274,12 +267,12 @@ function templateToString(node: ts.TemplateExpression | ts.NoSubstitutionTemplat
     let result: ts.Expression = ts.factory.createStringLiteral(node.head.text);
     
     for (const span of node.templateSpans) {
-      result = ts.factory.createBinary(
+      result = ts.factory.createBinaryExpression(
         result,
         ts.SyntaxKind.PlusToken,
         span.expression
       );
-      result = ts.factory.createBinary(
+      result = ts.factory.createBinaryExpression(
         result,
         ts.SyntaxKind.PlusToken,
         ts.factory.createStringLiteral(span.literal.text)
@@ -346,16 +339,16 @@ const forOfToForLoopTransform: AstTransform = {
         ])
       );
       
-      const condition = ts.factory.createBinary(
+      const condition = ts.factory.createBinaryExpression(
         ts.factory.createIdentifier(indexName),
         ts.SyntaxKind.LessThanToken,
-        ts.factory.createPropertyAccess(
+        ts.factory.createPropertyAccessExpression(
           ts.factory.createIdentifier(arrayName),
           "length"
         )
       );
       
-      const increment = ts.factory.createPrefix(
+      const increment = ts.factory.createPrefixUnaryExpression(
         ts.SyntaxKind.PlusPlusToken,
         ts.factory.createIdentifier(indexName)
       );
@@ -367,7 +360,7 @@ const forOfToForLoopTransform: AstTransform = {
             forOf.initializer as ts.BindingName,
             undefined,
             undefined,
-            ts.factory.createElementAccess(
+            ts.factory.createElementAccessExpression(
               ts.factory.createIdentifier(arrayName),
               ts.factory.createIdentifier(indexName)
             )
@@ -375,11 +368,11 @@ const forOfToForLoopTransform: AstTransform = {
         ])
       );
       
-      const bodyStatements = ts.isBlock(forOf.body)
-        ? [...forOf.body.statements, varDecl]
-        : [varDecl, ts.factory.createExpressionStatement(forOf.body as ts.Expression)];
+      const bodyStatements = ts.isBlock(forOf.statement)
+        ? [...forOf.statement.statements, varDecl]
+        : [varDecl, ts.factory.createExpressionStatement(forOf.statement as ts.Expression)];
       
-      const body = ts.factory.createBlock([varDecl, ...(ts.isBlock(forOf.body) ? forOf.body.statements : [])]);
+      const body = ts.factory.createBlock([varDecl, ...(ts.isBlock(forOf.statement) ? forOf.statement.statements : [])]);
       
       const forLoop = ts.factory.createForStatement(
         indexDecl.declarationList,
@@ -388,7 +381,7 @@ const forOfToForLoopTransform: AstTransform = {
         body
       );
       
-      return ts.factory.createStatement([arrayDecl, forLoop] as any);
+      return [arrayDecl, forLoop] as any;
     },
   },
 };
@@ -412,18 +405,18 @@ function processBinding(
     let accessExpr: ts.Expression;
     if (propName && ts.isIdentifier(propName)) {
       if (ts.isIdentifier(varName)) {
-        accessExpr = ts.factory.createPropertyAccess(
+        accessExpr = ts.factory.createPropertyAccessExpression(
           ts.factory.createIdentifier(source),
           propName
         );
       } else {
-        accessExpr = ts.factory.createElementAccess(
+        accessExpr = ts.factory.createElementAccessExpression(
           ts.factory.createIdentifier(source),
           ts.factory.createStringLiteral(propName.text)
         );
       }
     } else if (ts.isIdentifier(varName)) {
-      accessExpr = ts.factory.createElementAccess(
+      accessExpr = ts.factory.createElementAccessExpression(
         ts.factory.createIdentifier(source),
         varName
       );
@@ -507,7 +500,7 @@ const destructuringToAssignmentTransform: AstTransform = {
         );
       }
       
-      return ts.factory.createStatement(extraStatements as any);
+      return extraStatements as any;
     },
   },
 };
@@ -524,7 +517,7 @@ const optionalChainingToLogicalAndTransform: AstTransform = {
       const elem = node as ts.ElementAccessExpression;
       if (!elem.questionDotToken) return elem;
       
-      return ts.factory.createBinary(
+      return ts.factory.createBinaryExpression(
         elem.expression,
         ts.SyntaxKind.AmpersandAmpersandToken,
         ts.factory.createElementAccessExpression(
@@ -537,7 +530,7 @@ const optionalChainingToLogicalAndTransform: AstTransform = {
       const prop = node as ts.PropertyAccessExpression;
       if (!prop.questionDotToken) return prop;
       
-      return ts.factory.createBinary(
+      return ts.factory.createBinaryExpression(
         prop.expression,
         ts.SyntaxKind.AmpersandAmpersandToken,
         ts.factory.createPropertyAccessExpression(
@@ -550,7 +543,7 @@ const optionalChainingToLogicalAndTransform: AstTransform = {
       const call = node as ts.CallExpression;
       if (!call.questionDotToken) return call;
       
-      return ts.factory.createBinary(
+      return ts.factory.createBinaryExpression(
         call.expression,
         ts.SyntaxKind.AmpersandAmpersandToken,
         ts.factory.createCallExpression(
@@ -577,13 +570,15 @@ const nullishCoalescingToLogicalOrTransform: AstTransform = {
         return bin;
       }
       
-      return ts.factory.createConditional(
-        ts.factory.createBinary(
+      return ts.factory.createConditionalExpression(
+        ts.factory.createBinaryExpression(
           bin.left,
           ts.SyntaxKind.ExclamationEqualsEqualsToken,
           ts.factory.createNull()
         ),
+        undefined,
         bin.right,
+        undefined,
         bin.left
       );
     },
@@ -613,8 +608,8 @@ const spreadToObjectAssignTransform: AstTransform = {
       let result: ts.Expression = spreadProps[0].expression;
       
       for (let i = 1; i < spreadProps.length; i++) {
-        result = ts.factory.createCall(
-          ts.factory.createPropertyAccess("Object", "assign"),
+        result = ts.factory.createCallExpression(
+          ts.factory.createPropertyAccessExpression(ts.factory.createIdentifier("Object"), "assign"),
           undefined,
           [result, spreadProps[i].expression]
         );
@@ -625,8 +620,8 @@ const spreadToObjectAssignTransform: AstTransform = {
           nonSpreadProps as any,
           true
         );
-        result = ts.factory.createCall(
-          ts.factory.createPropertyAccess("Object", "assign"),
+        result = ts.factory.createCallExpression(
+          ts.factory.createPropertyAccessExpression(ts.factory.createIdentifier("Object"), "assign"),
           undefined,
           [result, newObj]
         );
@@ -649,8 +644,8 @@ const spreadToObjectAssignTransform: AstTransform = {
       let result: ts.Expression = ts.factory.createArrayLiteralExpression(nonSpreadElements, true);
       
       for (const sp of spreadElements.reverse()) {
-        result = ts.factory.createCall(
-          ts.factory.createPropertyAccess(result, "concat"),
+        result = ts.factory.createCallExpression(
+          ts.factory.createPropertyAccessExpression(result, "concat"),
           undefined,
           [sp.expression as ts.Expression]
         );
@@ -683,8 +678,7 @@ const classToFunctionConstructorTransform: AstTransform = {
       const ctorParams = constructor?.parameters.map(
         (p) =>
           ts.factory.createParameterDeclaration(
-            p.decorators,
-            p.modifiers,
+            [...(ts.getModifiers(p) ?? []), ...(ts.getDecorators(p) ?? [])],
             p.dotDotDotToken,
             p.name,
             p.questionToken,
@@ -696,7 +690,6 @@ const classToFunctionConstructorTransform: AstTransform = {
       const ctorBody = constructor?.body || ts.factory.createBlock([]);
       
       const funcExpr = ts.factory.createFunctionExpression(
-        undefined,
         undefined,
         undefined,
         cls.name,
@@ -713,9 +706,9 @@ const classToFunctionConstructorTransform: AstTransform = {
           const init = member.initializer || ts.factory.createVoidZero();
           stmts.push(
             ts.factory.createExpressionStatement(
-              ts.factory.createBinary(
-                ts.factory.createPropertyAccess(
-                  ts.factory.createPropertyAccess(cls.name, "prototype"),
+              ts.factory.createBinaryExpression(
+                ts.factory.createPropertyAccessExpression(
+                  ts.factory.createPropertyAccessExpression(cls.name, "prototype"),
                   member.name.text
                 ),
                 ts.SyntaxKind.EqualsToken,
@@ -726,7 +719,7 @@ const classToFunctionConstructorTransform: AstTransform = {
         }
       }
       
-      return ts.factory.createStatement(stmts as any);
+      return stmts as any;
     },
   },
 };
@@ -749,7 +742,6 @@ const defaultParamsToChecksTransform: AstTransform = {
           : `_param_${Math.random().toString(36).substr(2, 8)}`;
         
         return ts.factory.createParameterDeclaration(
-          param.decorators,
           param.modifiers,
           param.dotDotDotToken,
           param.name,
@@ -762,7 +754,7 @@ const defaultParamsToChecksTransform: AstTransform = {
       return ts.factory.updateArrowFunction(
         arrow,
         arrow.modifiers,
-        arrow.asteriskToken,
+        undefined,
         newParams,
         undefined,
         arrow.equalsGreaterThanToken,
@@ -775,7 +767,6 @@ const defaultParamsToChecksTransform: AstTransform = {
         if (!param.initializer) return param;
         
         return ts.factory.createParameterDeclaration(
-          param.decorators,
           param.modifiers,
           param.dotDotDotToken,
           param.name,
@@ -790,6 +781,7 @@ const defaultParamsToChecksTransform: AstTransform = {
         func.modifiers,
         func.asteriskToken,
         func.name,
+        undefined,
         newParams,
         func.type,
         func.body
@@ -801,7 +793,6 @@ const defaultParamsToChecksTransform: AstTransform = {
         if (!param.initializer) return param;
         
         return ts.factory.createParameterDeclaration(
-          param.decorators,
           param.modifiers,
           param.dotDotDotToken,
           param.name,
@@ -859,12 +850,12 @@ export function applyTransforms(sourceFile: SourceFile, transforms: AstTransform
 }
 
 function applySingleTransform(sourceFile: SourceFile, tf: AstTransform): SourceFile {
-  const visitor: Visitor = (node: Node): VisitResult<Node> => {
+  const visitor: any = (node: Node): any => {
     const visitorFn = tf.visitors[node.kind];
-    let result: Node;
+    let result: any;
     
     if (visitorFn) {
-      result = visitorFn(node, {} as TransformationContext);
+      result = visitorFn(node, {} as any);
     } else {
       result = node;
     }
@@ -873,7 +864,7 @@ function applySingleTransform(sourceFile: SourceFile, tf: AstTransform): SourceF
       return undefined;
     }
     
-    return ts.visitEachChild(result, visitor, {});
+    return ts.visitEachChild(result, visitor, {} as any);
   };
   
   return ts.visitNode(sourceFile, visitor) as SourceFile;

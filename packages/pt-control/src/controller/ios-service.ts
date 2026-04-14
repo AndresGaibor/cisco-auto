@@ -1,7 +1,20 @@
 import type { DeviceService } from "../application/services/device-service.js";
 import type { IosService } from "../application/services/ios-service.js";
-import type { ParsedOutput, ShowCdpNeighbors, ShowIpInterfaceBrief, ShowIpRoute, ShowRunningConfig, ShowVlan, DeviceState } from "../contracts/index.js";
-import type { IosExecutionSuccess, IosConfigApplyResult, IosConfidence } from "../contracts/ios-execution-evidence.js";
+import type {
+  ParsedOutput,
+  ShowCdpNeighbors,
+  ShowIpInterfaceBrief,
+  ShowIpRoute,
+  ShowRunningConfig,
+  ShowVlan,
+  ShowMacAddressTable,
+  DeviceState,
+} from "../contracts/index.js";
+import type {
+  IosExecutionSuccess,
+  IosConfigApplyResult,
+  IosConfidence,
+} from "../contracts/ios-execution-evidence.js";
 import type { DeviceCapabilities } from "../domain/ios/capabilities/pt-capability-resolver.js";
 
 export class ControllerIosService {
@@ -14,7 +27,12 @@ export class ControllerIosService {
     return this.iosService.configIos(device, commands, options).then(() => undefined);
   }
 
-  execIos<T = ParsedOutput>(device: string, command: string, parse = true, timeout = 5000): Promise<{ raw: string; parsed?: T }> {
+  execIos<T = ParsedOutput>(
+    device: string,
+    command: string,
+    parse = true,
+    timeout = 5000,
+  ): Promise<{ raw: string; parsed?: T }> {
     return this.iosService.execIos<T>(device, command, parse, timeout);
   }
 
@@ -38,19 +56,36 @@ export class ControllerIosService {
     return this.iosService.showRunningConfig(device);
   }
 
+  showMacAddressTable(device: string): Promise<ShowMacAddressTable> {
+    return this.iosService.show(device, "show mac address-table") as Promise<ShowMacAddressTable>;
+  }
+
   showCdpNeighbors(device: string): Promise<ShowCdpNeighbors> {
     return this.iosService.showCdpNeighbors(device);
   }
 
-  execInteractive(device: string, command: string, options?: { timeout?: number; parse?: boolean; ensurePrivileged?: boolean }): Promise<{ raw: string; parsed?: ParsedOutput; session?: { mode: string } }> {
+  execInteractive(
+    device: string,
+    command: string,
+    options?: { timeout?: number; parse?: boolean; ensurePrivileged?: boolean },
+  ): Promise<{ raw: string; parsed?: ParsedOutput; session?: { mode: string } }> {
     return this.iosService.execInteractive(device, command, options);
   }
 
-  execIosWithEvidence<T = ParsedOutput>(device: string, command: string, parse = true, timeout = 5000): Promise<IosExecutionSuccess<T>> {
+  execIosWithEvidence<T = ParsedOutput>(
+    device: string,
+    command: string,
+    parse = true,
+    timeout = 5000,
+  ): Promise<IosExecutionSuccess<T>> {
     return this.iosService.execIos<T>(device, command, parse, timeout);
   }
 
-  configIosWithResult(device: string, commands: string[], options?: { save?: boolean } | undefined): Promise<IosConfigApplyResult> {
+  configIosWithResult(
+    device: string,
+    commands: string[],
+    options?: { save?: boolean } | undefined,
+  ): Promise<IosConfigApplyResult> {
     return this.iosService.configIos(device, commands, options);
   }
 
@@ -65,7 +100,7 @@ export class ControllerIosService {
       excludedAddresses?: string[];
       leaseTime?: number;
       domainName?: string;
-    }
+    },
   ): Promise<void> {
     return this.deviceService.configureDhcpServer(device, options);
   }
@@ -89,11 +124,19 @@ export class ControllerIosService {
     return this.deviceService.inspectDhcpServer(device);
   }
 
-  showParsed<T = ParsedOutput>(device: string, command: string, options?: { ensurePrivileged?: boolean; timeout?: number }): Promise<IosExecutionSuccess<T>> {
+  showParsed<T = ParsedOutput>(
+    device: string,
+    command: string,
+    options?: { ensurePrivileged?: boolean; timeout?: number },
+  ): Promise<IosExecutionSuccess<T>> {
     return this.iosService.showParsed<T>(device, command, options);
   }
 
-  getIosConfidence(device: string, evidence: { source: string; status?: number; mode?: string }, verificationCheck?: string): Promise<IosConfidence> {
+  getIosConfidence(
+    device: string,
+    evidence: { source: string; status?: number; mode?: string },
+    verificationCheck?: string,
+  ): Promise<IosConfidence> {
     return this.iosService.getConfidence(device, evidence as any, verificationCheck);
   }
 
@@ -104,9 +147,17 @@ export class ControllerIosService {
     mask: string,
     defaultRouter: string,
     dnsServer?: string,
-    options?: { save?: boolean }
+    options?: { save?: boolean },
   ): Promise<void> {
-    return this.iosService.configureDhcpPool(device, poolName, network, mask, defaultRouter, dnsServer, options);
+    return this.iosService.configureDhcpPool(
+      device,
+      poolName,
+      network,
+      mask,
+      defaultRouter,
+      dnsServer,
+      options,
+    );
   }
 
   configureOspfNetwork(
@@ -115,9 +166,16 @@ export class ControllerIosService {
     network: string,
     wildcard: string,
     area: number,
-    options?: { save?: boolean }
+    options?: { save?: boolean },
   ): Promise<void> {
-    return this.iosService.configureOspfNetwork(device, processId, network, wildcard, area, options);
+    return this.iosService.configureOspfNetwork(
+      device,
+      processId,
+      network,
+      wildcard,
+      area,
+      options,
+    );
   }
 
   configureSshAccess(
@@ -125,7 +183,7 @@ export class ControllerIosService {
     domainName: string,
     username: string,
     password: string,
-    options?: { save?: boolean }
+    options?: { save?: boolean },
   ): Promise<void> {
     return this.iosService.configureSshAccess(device, domainName, username, password, options);
   }
@@ -134,7 +192,7 @@ export class ControllerIosService {
     device: string,
     aclNumber: number,
     entries: string[],
-    options?: { save?: boolean }
+    options?: { save?: boolean },
   ): Promise<void> {
     return this.iosService.configureAccessListStandard(device, aclNumber, entries, options);
   }

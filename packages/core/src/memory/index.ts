@@ -54,7 +54,7 @@ export class MemoryStore {
    * Ejecuta una consulta SQL personalizada
    */
   query(sql: string, params: any[] = []): any[] {
-    return this.db.all(sql, params);
+    return this.db.query(sql).all(...params);
   }
 
   /**

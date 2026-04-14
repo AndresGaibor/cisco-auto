@@ -351,7 +351,9 @@ export function handleConfigHost(payload: ConfigHostPayload, api: PtRuntimeApi):
     if (payload.dhcp === true) {
       try {
         (port as any).setDhcpEnabled(true);
-      } catch {}
+      } catch {
+        // PT API puede no soportar setDhcpEnabled en este dispositivo
+      }
     } else {
       if (payload.ip && payload.mask) {
         (port as any).setIpSubnetMask(payload.ip, payload.mask);

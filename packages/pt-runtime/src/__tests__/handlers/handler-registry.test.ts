@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { DeviceHandler } from "../../handlers/device.handler";
-import { LinkHandler } from "../../handlers/link.handler";
+import { DeviceHandler } from "../../handlers/device";
+import { LinkHandler } from "../../handlers/link";
 import type { HandlerDeps } from "../../ports";
 
 const deps = {
   getLW: () => ({}) as any,
   getNet: () => ({ getDevice: () => null, getDeviceCount: () => 0, getDeviceAt: () => null }) as any,
   dprint: () => {},
-} as HandlerDeps;
+} as any;
 
 describe("Handler wrappers", () => {
   test("DeviceHandler expone tipos soportados", () => {

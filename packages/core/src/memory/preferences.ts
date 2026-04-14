@@ -31,7 +31,7 @@ export class PreferencesStore {
    */
   get(key: string): string | null {
     const row = this.db.query('SELECT value FROM preferences WHERE key = ?').get(key) as { value?: string } | null;
-    return row ? row.value : null;
+    return row ? (row.value ?? null) : null;
   }
 
   /**

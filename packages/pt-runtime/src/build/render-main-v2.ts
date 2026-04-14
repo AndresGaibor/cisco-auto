@@ -35,10 +35,9 @@ export function renderMainV2(options: RenderMainV2Options): string {
     for (const issue of validation.errors) {
       console.error(`  ${issue.line}:${issue.column}: ${issue.message}`);
     }
-    // Debug: log first 500 chars of code around Promise
     const lines = code.split('\n');
     for (const issue of validation.errors) {
-      if (issue.message.includes('Promise')) {
+      if (issue.message.includes('Promise') || issue.message.includes('async')) {
         const lineIdx = issue.line - 1;
         console.error(`  Context around line ${issue.line}:`);
         console.error(`    ${lines[Math.max(0, lineIdx-2)]}`);
@@ -46,7 +45,7 @@ export function renderMainV2(options: RenderMainV2Options): string {
         console.error(`    ${lines[Math.min(lines.length-1, lineIdx+2)]}`);
       }
     }
-    // throw new Error("main.js generation failed PT-safe validation");
+    throw new Error("main.js generation failed PT-safe validation");
   }
 
   const devDirLiteral = options.injectDevDir

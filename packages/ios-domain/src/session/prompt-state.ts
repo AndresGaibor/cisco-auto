@@ -2,15 +2,10 @@
 // Prompt State Machine - Infer IOS prompt states
 // ============================================================================
 
+import type { IosMode as BaseIosMode } from "@cisco-auto/types";
+
 export type IosMode =
-  | "user-exec"
-  | "priv-exec"
-  | "config"
-  | "config-if"
-  | "config-line"
-  | "config-router"
-  | "config-subif"
-  | "config-vlan"
+  | BaseIosMode
   | "config-router-af"
   | "config-route-map"
   | "config-class-map"
@@ -20,8 +15,6 @@ export type IosMode =
   | "config-keychain"
   | "config-std-nacl"
   | "config-ext-nacl"
-  | "awaiting-password"
-  | "awaiting-confirm"
   | "resolving-hostname"
   | "copy-destination"
   | "copy-progress"
@@ -29,9 +22,7 @@ export type IosMode =
   | "erase-confirm"
   | "username-prompt"
   | "login-prompt"
-  | "desynced"
-  | "paging"
-  | "unknown";
+  | "desynced";
 
 export interface PromptState {
   mode: IosMode;
@@ -189,7 +180,7 @@ export function inferPromptState(prompt: string): PromptState {
 
   if (IOS_PROMPT_PATTERNS.privExec.test(trimmed)) {
     const deviceName = extractDeviceName(trimmed, "#");
-    return { mode: "priv-exec", deviceName };
+    return { mode: "privileged-exec", deviceName };
   }
 
   if (IOS_PROMPT_PATTERNS.userExec.test(trimmed)) {
@@ -213,7 +204,7 @@ function extractDeviceName(prompt: string, suffix: string): string {
 }
 
 export function isPrivilegedMode(mode: IosMode): boolean {
-  return mode === "priv-exec" || mode.startsWith("config");
+  return mode === "privileged-exec" || mode.startsWith("config");
 }
 
 export function isConfigMode(mode: IosMode): boolean {

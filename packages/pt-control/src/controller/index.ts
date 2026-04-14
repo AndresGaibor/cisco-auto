@@ -14,6 +14,7 @@ import type {
   ShowVlan,
   ShowIpRoute,
   ShowRunningConfig,
+  ShowMacAddressTable,
   ShowCdpNeighbors,
   ParsedOutput,
   AddLinkPayload,
@@ -91,11 +92,7 @@ export class PTController {
     this.snapshotService = new SnapshotService(this.topologyService, this.topologyCache);
     this.commandTraceService = new CommandTraceService(this.bridge);
 
-    this.iosService = new IosService(
-      this.bridge,
-      generateId,
-      (d) => this.deviceService.inspect(d),
-    );
+    this.iosService = new IosService(this.bridge, generateId, (d) => this.deviceService.inspect(d));
 
     this.controllerIosService = new ControllerIosService(this.iosService, this.deviceService);
     this.bridgeService = new BridgeService(this.bridge, this.topologyCache);
@@ -126,7 +123,7 @@ export class PTController {
   async addDevice(
     name: string,
     model: string,
-    options?: { x?: number; y?: number }
+    options?: { x?: number; y?: number },
   ): Promise<DeviceState> {
     return this.topologyFacade.addDevice(name, model, options);
   }
@@ -142,8 +139,10 @@ export class PTController {
   async moveDevice(
     name: string,
     x: number,
-    y: number
-  ): Promise<{ ok: true; name: string; x: number; y: number } | { ok: false; error: string; code: string }> {
+    y: number,
+  ): Promise<
+    { ok: true; name: string; x: number; y: number } | { ok: false; error: string; code: string }
+  > {
     return this.topologyFacade.moveDevice(name, x, y);
   }
 
@@ -168,7 +167,7 @@ export class PTController {
     port1: string,
     device2: string,
     port2: string,
-    linkType: AddLinkPayload["linkType"] = "auto"
+    linkType: AddLinkPayload["linkType"] = "auto",
   ): Promise<LinkState> {
     return this.topologyFacade.addLink(device1, port1, device2, port2, linkType);
   }
@@ -177,7 +176,12 @@ export class PTController {
     await this.topologyFacade.removeLink(device, port);
   }
 
-  async clearTopology(): Promise<{ removedDevices: number; removedLinks: number; remainingDevices: number; remainingLinks: number }> {
+  async clearTopology(): Promise<{
+    removedDevices: number;
+    removedLinks: number;
+    remainingDevices: number;
+    remainingLinks: number;
+  }> {
     return this.topologyFacade.clearTopology();
   }
 
@@ -189,24 +193,22 @@ export class PTController {
       gateway?: string;
       dns?: string;
       dhcp?: boolean;
-    }
+    },
   ): Promise<void> {
     await this.topologyFacade.configHost(device, options);
   }
 
   async inspectHost(device: string): Promise<DeviceState> {
     const deviceState = await this.deviceService.inspect(device);
-    if (deviceState.type !== 'pc' && deviceState.type !== 'server') {
-      throw new Error(`Dispositivo '${device}' no es un host (PC/Server-PT). Tipo: ${deviceState.type}`);
+    if (deviceState.type !== "pc" && deviceState.type !== "server") {
+      throw new Error(
+        `Dispositivo '${device}' no es un host (PC/Server-PT). Tipo: ${deviceState.type}`,
+      );
     }
     return deviceState;
   }
 
-  async configIos(
-    device: string,
-    commands: string[],
-    options?: { save?: boolean }
-  ): Promise<void> {
+  async configIos(device: string, commands: string[], options?: { save?: boolean }): Promise<void> {
     await this.controllerIosService.configIos(device, commands, options);
   }
 
@@ -214,7 +216,7 @@ export class PTController {
     device: string,
     command: string,
     parse = true,
-    timeout = 5000
+    timeout = 5000,
   ): Promise<{ raw: string; parsed?: T }> {
     return this.controllerIosService.execIos<T>(device, command, parse, timeout);
   }
@@ -239,6 +241,10 @@ export class PTController {
     return this.controllerIosService.showRunningConfig(device);
   }
 
+  async showMacAddressTable(device: string): Promise<ShowMacAddressTable> {
+    return this.controllerIosService.showMacAddressTable(device);
+  }
+
   async showCdpNeighbors(device: string): Promise<ShowCdpNeighbors> {
     return this.controllerIosService.showCdpNeighbors(device);
   }
@@ -250,7 +256,7 @@ export class PTController {
       timeout?: number;
       parse?: boolean;
       ensurePrivileged?: boolean;
-    }
+    },
   ): Promise<{ raw: string; parsed?: ParsedOutput; session?: { mode: string } }> {
     return this.controllerIosService.execInteractive(device, command, options);
   }
@@ -259,7 +265,7 @@ export class PTController {
     device: string,
     command: string,
     parse = true,
-    timeout = 5000
+    timeout = 5000,
   ): Promise<IosExecutionSuccess<T>> {
     return this.controllerIosService.execIosWithEvidence<T>(device, command, parse, timeout);
   }
@@ -267,7 +273,7 @@ export class PTController {
   async configIosWithResult(
     device: string,
     commands: string[],
-    options?: { save?: boolean } | undefined
+    options?: { save?: boolean } | undefined,
   ): Promise<IosConfigApplyResult> {
     return this.controllerIosService.configIosWithResult(device, commands, options);
   }
@@ -283,14 +289,12 @@ export class PTController {
       excludedAddresses?: string[];
       leaseTime?: number;
       domainName?: string;
-    }
+    },
   ): Promise<void> {
     await this.controllerIosService.configureDhcpServer(device, options);
   }
 
-  async inspectDhcpServer(
-    device: string
-  ): Promise<{
+  async inspectDhcpServer(device: string): Promise<{
     ok: boolean;
     device: string;
     pools: Array<{
@@ -312,7 +316,7 @@ export class PTController {
   async showParsed<T = ParsedOutput>(
     device: string,
     command: string,
-    options?: { ensurePrivileged?: boolean; timeout?: number }
+    options?: { ensurePrivileged?: boolean; timeout?: number },
   ): Promise<IosExecutionSuccess<T>> {
     return this.controllerIosService.showParsed<T>(device, command, options);
   }
@@ -320,7 +324,7 @@ export class PTController {
   async getIosConfidence(
     device: string,
     evidence: { source: string; status?: number; mode?: string },
-    verificationCheck?: string
+    verificationCheck?: string,
   ): Promise<IosConfidence> {
     return this.controllerIosService.getIosConfidence(device, evidence, verificationCheck);
   }
@@ -332,9 +336,17 @@ export class PTController {
     mask: string,
     defaultRouter: string,
     dnsServer?: string,
-    options?: { save?: boolean }
+    options?: { save?: boolean },
   ): Promise<void> {
-    await this.controllerIosService.configureDhcpPool(device, poolName, network, mask, defaultRouter, dnsServer, options);
+    await this.controllerIosService.configureDhcpPool(
+      device,
+      poolName,
+      network,
+      mask,
+      defaultRouter,
+      dnsServer,
+      options,
+    );
   }
 
   async configureOspfNetwork(
@@ -343,9 +355,16 @@ export class PTController {
     network: string,
     wildcard: string,
     area: number,
-    options?: { save?: boolean }
+    options?: { save?: boolean },
   ): Promise<void> {
-    await this.controllerIosService.configureOspfNetwork(device, processId, network, wildcard, area, options);
+    await this.controllerIosService.configureOspfNetwork(
+      device,
+      processId,
+      network,
+      wildcard,
+      area,
+      options,
+    );
   }
 
   async configureSshAccess(
@@ -353,18 +372,29 @@ export class PTController {
     domainName: string,
     username: string,
     password: string,
-    options?: { save?: boolean }
+    options?: { save?: boolean },
   ): Promise<void> {
-    await this.controllerIosService.configureSshAccess(device, domainName, username, password, options);
+    await this.controllerIosService.configureSshAccess(
+      device,
+      domainName,
+      username,
+      password,
+      options,
+    );
   }
 
   async configureAccessListStandard(
     device: string,
     aclNumber: number,
     entries: string[],
-    options?: { save?: boolean }
+    options?: { save?: boolean },
   ): Promise<void> {
-    await this.controllerIosService.configureAccessListStandard(device, aclNumber, entries, options);
+    await this.controllerIosService.configureAccessListStandard(
+      device,
+      aclNumber,
+      entries,
+      options,
+    );
   }
 
   async resolveCapabilities(device: string): Promise<DeviceCapabilities> {
@@ -379,10 +409,7 @@ export class PTController {
     return this.canvasFacade.getRect(rectId);
   }
 
-  async devicesInRect(
-    rectId: string,
-    includeClusters = false
-  ): Promise<DevicesInRectResult> {
+  async devicesInRect(rectId: string, includeClusters = false): Promise<DevicesInRectResult> {
     return this.canvasFacade.devicesInRect(rectId, includeClusters);
   }
 
@@ -448,7 +475,7 @@ export class PTController {
   async getHealthSummary(): Promise<{
     bridgeReady: boolean;
     topologyHealth: string;
-    heartbeatState: 'ok' | 'stale' | 'missing' | 'unknown';
+    heartbeatState: "ok" | "stale" | "missing" | "unknown";
     warnings: string[];
   }> {
     return this.contextService.getHealthSummary();
@@ -506,10 +533,10 @@ function getDefaultDevDir(): string {
     return process.env.PT_DEV_DIR;
   }
   const home = homedir();
-  if (platform() === 'win32') {
-    return resolve(process.env.USERPROFILE || home, 'pt-dev');
+  if (platform() === "win32") {
+    return resolve(process.env.USERPROFILE || home, "pt-dev");
   }
-  return resolve(home, 'pt-dev');
+  return resolve(home, "pt-dev");
 }
 
 const DEFAULT_DEV_DIR = getDefaultDevDir();

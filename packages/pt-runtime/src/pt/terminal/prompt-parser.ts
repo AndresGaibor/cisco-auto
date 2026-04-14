@@ -2,6 +2,7 @@
 // Parse IOS prompts to extract mode and command context
 
 import type { IosMode } from "@cisco-auto/types";
+export type { IosMode };
 
 export interface ParsedPrompt {
   mode: IosMode;

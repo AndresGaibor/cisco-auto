@@ -56,9 +56,9 @@ describe("handleAddDevice contract", () => {
       dprint: () => {},
     });
 
-    expect(result).toHaveProperty("ok");
-    expect(typeof result.ok).toBe("boolean");
-    expect(result).not.toHaveProperty("autoName");
+    expect((result as any)).toHaveProperty("ok");
+    expect(typeof (result as any).ok).toBe("boolean");
+    expect((result as any)).not.toHaveProperty("autoName");
   });
 
   test("el tipo de retorno no depende de deviceType para ser string", () => {
@@ -79,7 +79,7 @@ describe("handleAddDevice contract", () => {
 
 describe("handleAddLink contract", () => {
   test("retorna LinkState-compatible payload con id, device1, port1, device2, port2, cableType", () => {
-    const deps: HandlerDeps = {
+    const deps: any = {
       getLW: createMockLW(),
       getNet: createMockNet({
         "R1": createMockDevice("R1", "2911", DEVICE_TYPES.router, ["GigabitEthernet0/0"]),
@@ -97,25 +97,25 @@ describe("handleAddLink contract", () => {
       linkType: "straight",
     }, deps);
 
-    expect(result.ok).toBe(true);
-    expect(result).toHaveProperty("id");
-    expect(typeof result.id).toBe("string");
-    expect(result.id).toContain("R1");
-    expect(result.id).toContain("S1");
-    expect(result).toHaveProperty("device1");
-    expect(result.device1).toBe("R1");
-    expect(result).toHaveProperty("port1");
-    expect(result.port1).toBe("GigabitEthernet0/0");
-    expect(result).toHaveProperty("device2");
-    expect(result.device2).toBe("S1");
-    expect(result).toHaveProperty("port2");
-    expect(result.port2).toBe("FastEthernet0/1");
-    expect(result).toHaveProperty("cableType");
-    expect(result.cableType).toBe("straight");
+    expect((result as any).ok).toBe(true);
+    expect((result as any)).toHaveProperty("id");
+    expect(typeof (result as any).id).toBe("string");
+    expect((result as any).id).toContain("R1");
+    expect((result as any).id).toContain("S1");
+    expect((result as any)).toHaveProperty("device1");
+    expect((result as any).device1).toBe("R1");
+    expect((result as any)).toHaveProperty("port1");
+    expect((result as any).port1).toBe("GigabitEthernet0/0");
+    expect((result as any)).toHaveProperty("device2");
+    expect((result as any).device2).toBe("S1");
+    expect((result as any)).toHaveProperty("port2");
+    expect((result as any).port2).toBe("FastEthernet0/1");
+    expect((result as any)).toHaveProperty("cableType");
+    expect((result as any).cableType).toBe("straight");
   });
 
   test("usa 'auto' cuando linkType no se especifica", () => {
-    const deps: HandlerDeps = {
+    const deps: any = {
       getLW: createMockLW(),
       getNet: createMockNet({
         "R1": createMockDevice("R1", "2911", DEVICE_TYPES.router, ["Serial0/0/0"]),
@@ -132,12 +132,12 @@ describe("handleAddLink contract", () => {
       port2: "Serial0/0/0",
     }, deps);
 
-    expect(result.ok).toBe(true);
-    expect(result.cableType).toBe("auto");
+    expect((result as any).ok).toBe(true);
+    expect((result as any).cableType).toBe("auto");
   });
 
   test("retorna error cuando createLink falla", () => {
-    const deps: HandlerDeps = {
+    const deps: any = {
       getLW: () => ({
         addDevice: () => null,
         removeDevice: () => {},
@@ -159,14 +159,14 @@ describe("handleAddLink contract", () => {
       port2: "FastEthernet0/1",
     }, deps);
 
-    expect(result.ok).toBe(false);
-    expect(result.error).toBeDefined();
+    expect((result as any).ok).toBe(false);
+    expect((result as any).error).toBeDefined();
   });
 });
 
 describe("handleListDevices contract", () => {
   test("retorna array de devices con type como string", () => {
-    const deps: HandlerDeps = {
+    const deps: any = {
       getLW: createMockLW(),
       getNet: createMockNet({
         "Router1": createMockDevice("Router1", "2911", DEVICE_TYPES.router),
@@ -178,12 +178,12 @@ describe("handleListDevices contract", () => {
 
     const result = handleListDevices({ type: "listDevices" }, deps) as { ok: boolean; devices: { name: string; model: string; type: string; power: boolean }[]; count: number };
 
-    expect(result.ok).toBe(true);
-    expect(result).toHaveProperty("devices");
-    expect(Array.isArray(result.devices)).toBe(true);
-    expect(result.devices.length).toBe(3);
+    expect((result as any).ok).toBe(true);
+    expect((result as any)).toHaveProperty("devices");
+    expect(Array.isArray((result as any).devices)).toBe(true);
+    expect((result as any).devices.length).toBe(3);
 
-    for (const device of result.devices) {
+    for (const device of (result as any).devices) {
       expect(typeof device.name).toBe("string");
       expect(typeof device.model).toBe("string");
       expect(typeof device.type).toBe("string");
@@ -193,7 +193,7 @@ describe("handleListDevices contract", () => {
   });
 
   test("cada device tiene type como string, no número", () => {
-    const deps: HandlerDeps = {
+    const deps: any = {
       getLW: createMockLW(),
       getNet: createMockNet({
         "R1": createMockDevice("R1", "2911", 0),
@@ -205,7 +205,7 @@ describe("handleListDevices contract", () => {
 
     const result = handleListDevices({ type: "listDevices" }, deps) as { ok: boolean; devices: { type: string }[]; count: number };
 
-    for (const device of result.devices) {
+    for (const device of (result as any).devices) {
       expect(typeof device.type).toBe("string");
       expect(typeof device.type === "number").toBe(false);
     }
@@ -214,7 +214,7 @@ describe("handleListDevices contract", () => {
 
 describe("handleRemoveDevice contract", () => {
   test("retorna ok y name en éxito", () => {
-    const deps: HandlerDeps = {
+    const deps: any = {
       getLW: createMockLW(),
       getNet: createMockNet({}),
       dprint: () => {},
@@ -222,14 +222,14 @@ describe("handleRemoveDevice contract", () => {
 
     const result = handleRemoveDevice({ type: "removeDevice", name: "R1" }, deps);
 
-    expect(result.ok).toBe(true);
-    expect(result.name).toBe("R1");
+    expect((result as any).ok).toBe(true);
+    expect((result as any).name).toBe("R1");
   });
 });
 
 describe("handleRemoveLink contract", () => {
   test("retorna ok en éxito", () => {
-    const deps: HandlerDeps = {
+    const deps: any = {
       getLW: createMockLW(),
       getNet: createMockNet({}),
       dprint: () => {},
@@ -237,6 +237,6 @@ describe("handleRemoveLink contract", () => {
 
     const result = handleRemoveLink({ device: "R1", port: "GigabitEthernet0/0" }, deps);
 
-    expect(result.ok).toBe(true);
+    expect((result as any).ok).toBe(true);
   });
 });

@@ -32,10 +32,9 @@ export enum DeviceType {
  */
 export class DeviceId extends ValueObject<string> {
   constructor(value: string) {
-    super(value);
     const normalized = value.trim();
+    super(normalized);
     this.validate(normalized);
-    this._value = normalized;
   }
 
   /**

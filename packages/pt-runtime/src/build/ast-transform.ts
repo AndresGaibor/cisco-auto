@@ -383,10 +383,25 @@ function stripModuleSyntax(source: string): string {
   const result: string[] = [];
   let inImportMultiLine = false;
   let inExportMultiLine = false;
+  let inJSDocComment = false;
   let braceCount = 0;
 
   for (const line of lines) {
     const trimmed = line.trimStart();
+
+    if (inJSDocComment) {
+      result.push(line);
+      if (line.includes("*/")) {
+        inJSDocComment = false;
+      }
+      continue;
+    }
+
+    if (trimmed.startsWith("/**")) {
+      inJSDocComment = true;
+      result.push(line);
+      continue;
+    }
 
     if (inImportMultiLine) {
       if (/from\s+["']/.test(trimmed)) {
@@ -428,65 +443,75 @@ function stripModuleSyntax(source: string): string {
   return result.join("\n");
 }
 
-/**
- * Post-procesamiento de código ES5 (regex-based).
- *
- * KNOWN LIMITATION: Los reemplazos de `??` y `?.` son semánticamente incorrectos.
- * `??` se reemplaza por `||` - esto falla para valores falsy válidos como `0`, `""`, `false`.
- * `?.` se reemplaza por `&&` - esto falla para objetos que pueden ser null/undefined
- * en contextos donde el short-circuit behavior difiere.
- *
- * Esta limitación existe porque un parser AST completo sería necesario para hacer
- * la transformación correcta. Para código que usa estos operadores con valores falsy
- * válidos, el output puede comportarse incorrectamente.
- */
+function removeJSDocFromLine(line: string): string {
+  if (line.includes("/*") && line.includes("*/")) {
+    return line.replace(/\/\*.*?\*\//g, "");
+  }
+  return line;
+}
+
 function postProcessES5(code: string): string {
-  let result = code;
+  const lines = code.split("\n");
+  const result: string[] = [];
+  let inJSDoc = false;
 
-  result = result.replace(/\bconst\s+/g, "var ");
-  result = result.replace(/\blet\s+/g, "var ");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
 
-  result = result.replace(/for\s*\(\s*const\s+/g, "for (var ");
-  result = result.replace(/for\s*\(\s*let\s+/g, "for (var ");
-
-  result = result.replace(/\?\?/g, " || ");
-
-  result = result.replace(/\?\./g, " && ");
-
-  result = result.replace(/\bPromise\s*<[^>]+>/g, "void");
-
-  result = result.replace(/`([^`]*)`/g, (match, content) => {
-    if (!content.includes("${")) {
-      return `"${content}"`;
+    if (line.includes("/**")) {
+      inJSDoc = true;
+      result.push(line);
+      continue;
     }
-    return match;
-  });
+    if (inJSDoc) {
+      result.push(line);
+      if (line.includes("*/")) {
+        inJSDoc = false;
+      }
+      continue;
+    }
 
-  result = result.replace(/^\s*\|\s*"[^"]+";?\s*$/gm, "");
+    let modified = line;
 
-  result = result.replace(/^\s*\|\s*'[^']+';?\s*$/gm, "");
+    modified = modified.replace(/\bconst\s+/g, "var ");
+    modified = modified.replace(/\blet\s+/g, "var ");
+    modified = modified.replace(/for\s*\(\s*const\s+/g, "for (var ");
+    modified = modified.replace(/for\s*\(\s*let\s+/g, "for (var ");
+    modified = modified.replace(/\?\?/g, " || ");
+    modified = modified.replace(/\?\./g, " && ");
+    modified = modified.replace(/\bPromise\s*<[^>]+>/g, "void");
 
-  result = result.replace(/^\s*\|\s*\w+\s*;?\s*$/gm, "");
+    modified = modified.replace(/`([^`]*)`/g, (match, content) => {
+      if (!content.includes("${")) {
+        return `"${content}"`;
+      }
+      return match;
+    });
 
-  result = result.replace(/^\s*;\s*$/gm, "");
+    modified = modified.replace(/^\s*\|\s*"[^"]+";?\s*$/gm, "");
+    modified = modified.replace(/^\s*\|\s*'[^']+';?\s*$/gm, "");
+    modified = modified.replace(/^\s*\|\s*\w+\s*;?\s*$/gm, "");
+    modified = modified.replace(/^\s*;\s*$/gm, "");
 
-  result = result.replace(/^\s*\}\s*;?\s*$/gm, (match) => {
-    if (match.trim() === "};") return "};";
-    if (match.trim() === "}") return "}";
-    return match;
-  });
+    modified = modified.replace(/^\s*\}\s*;?\s*$/gm, (match) => {
+      if (match.trim() === "};") return "};";
+      if (match.trim() === "}") return "}";
+      return match;
+    });
 
-  result = result.replace(/^\s*\{[^}]*\}\s*;?\s*$/gm, "");
+    modified = modified.replace(/^\s*\{[^}]*\}\s*;?\s*$/gm, "");
+    modified = modified.replace(/^\s*type\s*;?\s*$/gm, "");
+    modified = modified.replace(/^\s*interface\s*;?\s*$/gm, "");
 
-  result = result.replace(/^\s*type\s*;?\s*$/gm, "");
+    if (!modified.match(/^\s*\*\s*from\s*;?\s*$/)) {
+      modified = modified.replace(/^\s*\*\s*from\s*;?\s*$/gm, "");
+    }
+    modified = modified.replace(/^\s*\*\s*/gm, "");
 
-  result = result.replace(/^\s*interface\s*;?\s*$/gm, "");
+    result.push(modified);
+  }
 
-  result = result.replace(/^\s*\*\s*from\s*;?\s*$/gm, "");
-
-  result = result.replace(/^\s*\*\s*/gm, "");
-
-  return result;
+  return result.join("\n");
 }
 
 function createConsoleReplacementTransformer(): ts.TransformerFactory<ts.SourceFile> {

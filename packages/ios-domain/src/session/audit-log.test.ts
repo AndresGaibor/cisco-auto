@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
-import { AuditLogger, type AuditLogEntry } from "./audit-log.ts";
-import { Transaction } from "./transaction.ts";
+import { AuditLogger, type AuditLogEntry } from "./audit-log";
+import { Transaction } from "./transaction";
 import type { CommandHandler } from "./command-handler.js";
 
 describe("AuditLogger", () => {

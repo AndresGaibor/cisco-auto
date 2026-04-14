@@ -88,27 +88,27 @@ const PT_FORBIDDEN_PATTERNS: PatternRule[] = [
     category: "forbidden-global",
     suggestion: "Use dprint() instead - it is automatically injected",
   },
-  {
-    pattern: /\basync\s+(?:function|\()/g,
-    message: "async functions may not work correctly in PT",
-    category: "async-pattern",
-    suggestion: "Use synchronous code with callbacks instead",
-  },
-  {
-    pattern: /\bawait\s+(?!\()/g,
-    message: "await expressions may not work in PT",
-    category: "async-pattern",
-    suggestion: "Use callback-based async patterns instead",
-  },
-  {
-    pattern: /\bPromise\b/g,
-    message: "Promise is not fully supported in older PT versions",
-    category: "async-pattern",
-    suggestion: "Use callback-based patterns for compatibility",
-  },
 ];
 
 const PT_WARNING_PATTERNS: PatternRule[] = [
+  {
+    pattern: /\basync\s+(?:function|\()/g,
+    message: "async functions - ensure PT version supports ES6+",
+    category: "async-pattern",
+    suggestion: "Test on target PT versions",
+  },
+  {
+    pattern: /\bawait\s+(?!\()/g,
+    message: "await expressions - ensure PT version supports ES6+",
+    category: "async-pattern",
+    suggestion: "Test on target PT versions",
+  },
+  {
+    pattern: /\bPromise\b/g,
+    message: "Promise - ensure PT version supports ES6+",
+    category: "async-pattern",
+    suggestion: "Test on target PT versions",
+  },
   {
     pattern: /\bclass\s+\w+\s+extends\s+\w+/g,
     message: "class extends pattern may have compatibility issues in older PT",

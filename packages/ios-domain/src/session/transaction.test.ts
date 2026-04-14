@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { Transaction, type TransactionCommand, type TransactionLogEntry } from "./transaction.ts";
+import { Transaction, type TransactionCommand, type TransactionLogEntry } from "./transaction";
 import type { CommandHandler } from "./command-handler.js";
 
 function createMockHandler(responses: Record<string, [number, string]> = {}): CommandHandler {

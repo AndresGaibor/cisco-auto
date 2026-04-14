@@ -5,7 +5,7 @@
 /**
  * IOS CLI modes
  */
-export type IosMode = "user-exec" | "priv-exec" | "config" | "config-if" | "config-subif" | "config-line" | "config-router";
+export type IosMode = "user-exec" | "privileged-exec" | "config" | "config-if" | "config-subif" | "config-line" | "config-router";
 
 /**
  * A single command step in a plan
@@ -110,7 +110,7 @@ export class CommandPlanBuilder {
    * Add an enable mode command
    */
   enable(command: string, description: string): this {
-    return this.step(command, "priv-exec", description);
+    return this.step(command, "privileged-exec", description);
   }
 
   /**
@@ -150,7 +150,7 @@ export class CommandPlanBuilder {
 export function getModePrompt(mode: IosMode): string {
   switch (mode) {
     case "user-exec": return ">";
-    case "priv-exec": return "#";
+    case "privileged-exec": return "#";
     case "config": return "(config)#";
     case "config-if": return "(config-if)#";
     case "config-subif": return "(config-subif)#";
@@ -163,7 +163,7 @@ export function getModePrompt(mode: IosMode): string {
  * Check if a mode is privileged
  */
 export function isPrivilegedMode(mode: IosMode): boolean {
-  return mode === "priv-exec" || mode.startsWith("config");
+  return mode === "privileged-exec" || mode.startsWith("config");
 }
 
 /**

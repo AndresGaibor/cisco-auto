@@ -1,5 +1,5 @@
 import { getMemory } from '@cisco-auto/core/memory';
-import { Transaction, type TransactionResult } from './transaction.ts';
+import { Transaction, type TransactionResult } from './transaction';
 import type { CommandHandler } from './command-handler.js';
 
 export interface TransactionMemoryResult {
@@ -25,7 +25,7 @@ export async function executeTransactionWithMemory(
     memory.history.logCommand(
       command.deviceId ?? sessionId,
       entry.command,
-      entry.output,
+      entry.output ?? "",
       entry.status,
       sessionId,
     );

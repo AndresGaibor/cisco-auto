@@ -5,8 +5,12 @@ import type {
   ShowVlan,
   ShowIpRoute,
   ShowRunningConfig,
+  ShowMacAddressTable,
 } from "../../contracts/index.js";
-import { resolveCapabilities, type DeviceCapabilities } from "../../domain/ios/capabilities/pt-capability-resolver.js";
+import {
+  resolveCapabilities,
+  type DeviceCapabilities,
+} from "../../domain/ios/capabilities/pt-capability-resolver.js";
 import type { CapabilitySet } from "@cisco-auto/ios-domain";
 
 export class IosQueryOperations {
@@ -22,10 +26,7 @@ export class IosQueryOperations {
   }
 
   async showIpInterfaceBrief(device: string): Promise<ShowIpInterfaceBrief> {
-    const result = await this.execIos<ShowIpInterfaceBrief>(
-      device,
-      "show ip interface brief",
-    );
+    const result = await this.execIos<ShowIpInterfaceBrief>(device, "show ip interface brief");
     return result;
   }
 
@@ -41,10 +42,14 @@ export class IosQueryOperations {
 
   async showRunningConfig(device: string): Promise<ShowRunningConfig> {
     const result = await this.execIos<ShowRunningConfig>(device, "show running-config");
-    // Cap output to avoid memory issues
     if (result?.raw && result.raw.length > 10_000_000) {
       result.raw = result.raw.substring(0, 10_000_000) + "\n... [TRUNCATED] ...\n";
     }
+    return result;
+  }
+
+  async showMacAddressTable(device: string): Promise<ShowMacAddressTable> {
+    const result = await this.execIos<ShowMacAddressTable>(device, "show mac address-table");
     return result;
   }
 

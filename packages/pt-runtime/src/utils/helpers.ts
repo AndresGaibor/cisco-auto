@@ -288,7 +288,9 @@ export function createDeviceWithFallback(
     let deviceModel = "";
     try {
       deviceModel = (device.getModel && device.getModel()) || "";
-    } catch {}
+    } catch {
+      // PT API puede fallar en getModel, continuar sin modelo
+    }
 
     if (deviceModel && deviceModel.toLowerCase() === model.toLowerCase()) {
       return { autoName, device, typeId };

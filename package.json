@@ -21,10 +21,10 @@
     "build": "turbo run build",
     "clean": "turbo run clean",
     "pt": "bun run --cwd apps/pt-cli start",
-    "pt:build": "cd packages/pt-runtime && bun src/index.ts deploy",
-    "pt:generate": "cd packages/pt-runtime && bun src/index.ts generate",
+    "pt:build": "bun run --cwd packages/pt-control scripts/build.ts",
+    "pt:generate": "bun run --cwd packages/pt-control scripts/build.ts --no-deploy",
     "pt:validate": "cd packages/pt-runtime && bun src/index.ts validate",
-    "pt:deploy": "cd packages/pt-runtime && bun src/index.ts deploy"
+    "pt:deploy": "bun run --cwd packages/pt-control scripts/build.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

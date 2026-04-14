@@ -1,6 +1,6 @@
 import { getMemory } from '@cisco-auto/core/memory';
-import { AuditLogger, type AuditLogEntry } from './audit-log.ts';
-import { Transaction } from './transaction.ts';
+import { AuditLogger, type AuditLogEntry } from './audit-log';
+import { Transaction } from './transaction';
 
 /**
  * Sincroniza un audit logger en memoria local con SQLite

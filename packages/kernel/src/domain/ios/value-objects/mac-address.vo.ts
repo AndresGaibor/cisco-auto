@@ -39,10 +39,30 @@ export class MacAddress extends ValueObject<string> {
       );
     }
 
-    super(trimmed);
+    const formatted = MacAddress.formatAsStatic(trimmed, parsed.detectedFormat);
+    super(formatted);
     this._octets = parsed.octets;
     this._format = format;
-    this._value = this.formatAs(trimmed, parsed.detectedFormat);
+  }
+
+  /**
+   * Formatea según el formato especificado (Static for use in constructor)
+   */
+  private static formatAsStatic(value: string, format: MacFormat): string {
+    const hex = value.replace(/[^0-9A-F]/g, '');
+    
+    switch (format) {
+      case 'cisco':
+        return `${hex.substring(0, 4)}.${hex.substring(4, 8)}.${hex.substring(8, 12)}`;
+      case 'colon':
+        return hex.match(/.{2}/g)?.join(':') ?? '';
+      case 'hyphen':
+        return hex.match(/.{2}/g)?.join('-') ?? '';
+      case 'bare':
+        return hex;
+      default:
+        return value;
+    }
   }
 
   /**
@@ -129,20 +149,7 @@ export class MacAddress extends ValueObject<string> {
    * Formatea según el formato especificado
    */
   private formatAs(value: string, format: MacFormat): string {
-    const hex = value.replace(/[^0-9A-F]/g, '');
-    
-    switch (format) {
-      case 'cisco':
-        return `${hex.substring(0, 4)}.${hex.substring(4, 8)}.${hex.substring(8, 12)}`;
-      case 'colon':
-        return hex.match(/.{2}/g)?.join(':') ?? '';
-      case 'hyphen':
-        return hex.match(/.{2}/g)?.join('-') ?? '';
-      case 'bare':
-        return hex;
-      default:
-        return value;
-    }
+    return MacAddress.formatAsStatic(value, format);
   }
 
   /**
