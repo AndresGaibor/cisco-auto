@@ -46,6 +46,7 @@ export interface LineMappingEntry {
   generatedLine: number;
   sourceFile: string;
   sourceLine: number;
+  sourceColumn: number;
   isComment: boolean;
 }
 
@@ -121,6 +122,8 @@ export function transformToPtSafeAst(
       downlevelIteration: true,
       suppressExcessPropertyErrors: true,
       suppressImplicitAnyIndexErrors: true,
+      isolatedModules: true,
+      verbatimModuleSyntax: false,
     },
     transformers: {
       before: opts.replaceConsoleWithDprint ? [createConsoleReplacementTransformer()] : [],
@@ -378,12 +381,47 @@ export function getSourceContext(
 function stripModuleSyntax(source: string): string {
   const lines = source.split("\n");
   const result: string[] = [];
+  let inImportMultiLine = false;
+  let inExportMultiLine = false;
+  let braceCount = 0;
 
   for (const line of lines) {
     const trimmed = line.trimStart();
-    if (/^import\s+(type\s+)?/.test(trimmed)) continue;
+
+    if (inImportMultiLine) {
+      if (/from\s+["']/.test(trimmed)) {
+        inImportMultiLine = false;
+      }
+      continue;
+    }
+
+    if (inExportMultiLine) {
+      braceCount += (line.match(/\{/g) || []).length;
+      braceCount -= (line.match(/\}/g) || []).length;
+      if (braceCount === 0) {
+        inExportMultiLine = false;
+      }
+      continue;
+    }
+
+    if (/^import\s+(?:type\s+)?/.test(trimmed)) {
+      if (!/from\s+["']/.test(trimmed)) {
+        inImportMultiLine = true;
+      }
+      continue;
+    }
+
     if (/^export\s+default\s+/.test(trimmed)) continue;
+    if (/^export\s+type\s+/.test(trimmed)) continue;
+    if (/^export\s+\*\s+from/.test(trimmed)) continue;
     if (/^export\s+\{[^}]+\};?\s*$/.test(trimmed)) continue;
+
+    if (/^export\s+\{/.test(trimmed)) {
+      inExportMultiLine = true;
+      braceCount = 1;
+      continue;
+    }
+
     result.push(line.replace(/^export\s+(default\s+)?/, ""));
   }
 
@@ -415,12 +453,38 @@ function postProcessES5(code: string): string {
 
   result = result.replace(/\?\./g, " && ");
 
+  result = result.replace(/\bPromise\s*<[^>]+>/g, "void");
+
   result = result.replace(/`([^`]*)`/g, (match, content) => {
     if (!content.includes("${")) {
       return `"${content}"`;
     }
     return match;
   });
+
+  result = result.replace(/^\s*\|\s*"[^"]+";?\s*$/gm, "");
+
+  result = result.replace(/^\s*\|\s*'[^']+';?\s*$/gm, "");
+
+  result = result.replace(/^\s*\|\s*\w+\s*;?\s*$/gm, "");
+
+  result = result.replace(/^\s*;\s*$/gm, "");
+
+  result = result.replace(/^\s*\}\s*;?\s*$/gm, (match) => {
+    if (match.trim() === "};") return "};";
+    if (match.trim() === "}") return "}";
+    return match;
+  });
+
+  result = result.replace(/^\s*\{[^}]*\}\s*;?\s*$/gm, "");
+
+  result = result.replace(/^\s*type\s*;?\s*$/gm, "");
+
+  result = result.replace(/^\s*interface\s*;?\s*$/gm, "");
+
+  result = result.replace(/^\s*\*\s*from\s*;?\s*$/gm, "");
+
+  result = result.replace(/^\s*\*\s*/gm, "");
 
   return result;
 }
