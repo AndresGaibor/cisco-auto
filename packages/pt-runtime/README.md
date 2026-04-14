@@ -1,147 +1,107 @@
-# PT Runtime - Packet Tracer Script Engine Kernel
+# PT Runtime — Packet Tracer Script Engine
 
-Kernel and runtime system for executing configuration commands on Cisco devices in Packet Tracer.
+> Generates PT-safe ES5 artifacts (`main.js`, `runtime.js`, `catalog.js`) that run inside Cisco Packet Tracer 9.x's QTScript engine.
 
-## Architecture
+## What This Package Does
 
-### Separation of Concerns
+PT Runtime is the bridge between the PT CLI (`pt`) and Cisco Packet Tracer. It transforms TypeScript source into artifacts that PT's scripting engine can execute. The CLI sends commands to the kernel via a queue directory; the kernel dispatches to handlers; handlers return `DeferredJobPlan` objects; the kernel executes them asynchronously via PT's TerminalLine API.
 
-The system is split into two files with clear ownership:
+## Artifacts
 
-| File | Role | Owns |
-|------|------|------|
-| `main.js` | **Lifecycle owner** | Queue polling, job scheduling, terminal sessions, heartbeat, runtime hot-reload, shutdown |
-| `runtime.js` | **Pure business logic** | Payload validation, handler dispatch, plan generation, job state queries |
-
-**Key rule**: `runtime.js` never touches the filesystem, queue, or lifecycle. `main.js` never knows about business logic.
-
-### main.js (Kernel)
-
-Generated from TypeScript source via `renderMainV2`. Contains:
-
-- **Command queue**: Polls `commands/` directory, atomically claims files to `in-flight/`, writes results to `results/`, moves corrupt files to `dead-letter/`
-- **Terminal engine**: Manages IOS sessions via PT `TerminalLine` events
-- **Job executor**: Runs deferred `DeferredJobPlan` steps (mode changes, commands, saves)
-- **Runtime loader**: Hot-reloads `runtime.js` on mtime change, blocks reload during active work
-- **Heartbeat**: Writes heartbeat file for bridge health monitoring
-- **Shutdown**: Idempotent cleanup of intervals, jobs, and terminals
-
-**Entry points**: `function main()` and `function cleanUp()` — called by PT Script Engine lifecycle. **No auto-invocation** of `main()` — PT calls it.
-
-### runtime.js (Logic)
-
-Generated from TypeScript handlers via `renderRuntimeV2`. Contains:
-
-- **Middleware pipeline**: Error recovery, rate limiting, logging, metrics, validation
-- **Handler dispatcher**: Routes payload types to handlers (`configIos`, `execIos`, `configHost`, etc.)
-- **Plan builders**: Creates declarative `DeferredJobPlan` objects for IOS sessions
-- **Job state polling**: Queries kernel for deferred job progress via `api.getJobState()`
-
-**Entry point**: `runtime(payload, api)` function called by `main.js`. No filesystem, no queue, no lifecycle.
-
-## IOS Terminal Behavior
-
-**Critical**: PT's `TerminalLine.enterCommand()` returns `void`. It does NOT return `[status, output]`.
-
-Command state is delivered asynchronously via events:
-- `commandStarted` — command began execution
-- `outputWritten` — output data accumulated
-- `commandEnded` — command finished with `{ status: number }`
-- `modeChanged` — IOS mode changed (exec → config → etc.)
-- `promptChanged` — prompt text updated
-- `moreDisplayed` — `--More--` pager activated
-
-The `TerminalEngine` manages session state by listening to these events. Commands resolve only when `commandEnded` fires, returning the latest snapshot of prompt/mode/paging from the event stream.
-
-## Queue Protocol
-
-### Directory Structure
-
-```
-pt-dev/
-├── commands/        # Pending commands (source of truth)
-├── in-flight/       # Claimed commands (being processed)
-├── results/         # Completed command results
-├── dead-letter/     # Corrupt/unparseable files
-└── runtime.js       # Business logic (hot-reloadable)
-```
-
-### Claim Flow
-
-1. Kernel lists `commands/*.json` (sorted ascending)
-2. For each file: atomically move to `in-flight/`
-3. If move fails (already claimed), skip
-4. Parse JSON from `in-flight/`
-5. If corrupt: move to `dead-letter/` + write error metadata
-6. Execute via `runtime(payload, api)`
-7. Write result to `results/{id}.json`
-8. Cleanup `in-flight/{filename}`
+| Artifact | Size | Source | Purpose |
+|---|---|---|---|
+| `main.js` | ~45 KB | `src/pt/kernel/` | Kernel bootstrap: queue polling, terminal lifecycle, job execution, hot-reload, heartbeat, lease |
+| `runtime.js` | ~15 KB | `src/handlers/` | Business logic: dispatch, validation, plan building |
+| `catalog.js` | ~2.5 KB | `src/pt-api/pt-constants.ts` | Static constants: device types, cable types, module catalog |
 
 ## Build
 
 ```bash
-# From project root
+# Generate all artifacts → dist-qtscript/
+bun run generate
+
+# Generate + validate
+bun run validate
+
+# Deploy to ~/pt-dev/
+bun run deploy
+
+# From monorepo root (generate + validate + deploy)
 bun run pt:build
+
+# No-deploy mode (generate + validate only)
+bun run pt:build --no-deploy
 ```
 
-This generates:
-- `main.js` — Kernel bootstrap (PT Script Module entry points)
-- `runtime.js` — Handler dispatcher (pure logic)
+Output location: `~/pt-dev/` (macOS/Linux). Override with `PT_DEV_DIR` env var.
 
-Both files are validated against PT-safe rules before deployment.
+## PT-Safe Validation
 
-### PT-Safe Validation
+The build **fails** if generated artifacts contain any of:
 
-The build fails if generated artifacts contain:
-- `import` / `export` statements
-- `const` / `let` (must use `var`)
-- Arrow functions (must use `function`)
-- Optional chaining `?.`
-- `class` declarations
-- `console.*` (must use `dprint`)
-- `require()`, `process`, `Buffer`
+| Forbidden | Must Use Instead |
+|---|---|
+| `import` / `export` | (stripped by AST transform) |
+| `const` / `let` | `var` |
+| Arrow functions (`=>`) | `function() {}` |
+| `class` declarations | Prototype-based functions |
+| `async` / `await` | (not supported in QTScript) |
+| `?.` optional chaining | (not ES5) |
+| `` `${...}` `` template literals | `"str" + var` |
+| `...spread` on identifiers | (not ES5) |
+| `globalThis` | `self` (PT's global object) |
+| `console.*` | `dprint()` (PT's logging API) |
+| `require()`, `process`, `Buffer` | Not available in PT sandbox |
 
-## Development
+## Documentation
 
-### Kernel changes (main.js)
+| Doc | Content |
+|---|---|
+| `docs/ARCHITECTURE.md` | Two-file design, kernel vs runtime boundary, data flow, directory structure |
+| `docs/BUILD.md` | Build pipeline, PT-safe rules, source manifests, commands |
+| `docs/PT-API.md` | PT IPC API reference (PTDevice, PTPort, PTCommandLine, events) |
+| `docs/pt-runtime-migration-diff.md` | Migration baseline comparison, behavioral changes |
+| `src/README.md` | Model management: verified-models.ts, adding new PT device models |
 
-Edit files in `packages/pt-runtime/src/pt/kernel/`:
-- `main.ts` — Kernel boot, runtime API factory, command execution
-- `command-queue.ts` — Queue polling and claim
-- `runtime-loader.ts` — Hot-reload with busy protection
-- `job-executor.ts` — Deferred job step execution
+## Architecture
 
-### Runtime changes (runtime.js)
-
-Edit files in `packages/pt-runtime/src/handlers/`:
-- `runtime-handlers.ts` — Handler implementations
-- `ios-engine.ts` — IOS session plan builders
-
-### Terminal changes
-
-Edit files in `packages/pt-runtime/src/pt/terminal/`:
-- `terminal-engine.ts` — PT TerminalLine event handling
-- `terminal-session.ts` — Session state management
-
-### Build & deploy
-
-```bash
-bun run pt:build          # Generate + validate + deploy to ~/pt-dev/
-bun run pt:build --no-deploy  # Generate + validate only
+```
+pt-dev/
+├── commands/     → bridge writes JSON command files here
+├── in-flight/    → kernel atomically claims files here
+├── results/      → kernel writes completed results here
+├── dead-letter/  → corrupt files moved here
+├── logs/         → heartbeat for bridge monitoring
+├── main.js       → kernel entry: main(), cleanUp()
+├── runtime.js    → runtime entry: dispatch(payload, api)
+└── catalog.js    → static constants (device/cable types)
 ```
 
-## Environment
+**Key rule**: `main.js` owns lifecycle (queue, terminal, events). `runtime.js` owns business logic (validation, handlers, plan building). They never cross.
 
-Default PT dev directory: `$HOME/pt-dev`
+## Deprecated / Not in Build Path
 
-Override with:
-```bash
-export PT_DEV_DIR=/custom/path
-bun run pt:build
-```
+| File | Status | Replacement |
+|---|---|---|
+| `src/handlers/ios-engine.ts` | Deprecated | `src/pt/terminal/terminal-engine.ts` + `src/pt/kernel/job-executor.ts` |
+| `src/handlers/ios-session.ts` | Deprecated | `src/pt/terminal/prompt-parser.ts` |
+| `src/core/dispatcher.ts` | @legacy | Map-based dispatcher in `handlers/runtime-handlers.ts` |
+| `src/core/registry.ts` | @deprecated | Not used in active build |
+| `src/ports.ts` | @deprecated | Not used in active build |
+
+## Model Verification
+
+`src/verified-models.ts` is the single source of truth for PT device models (19 verified).
+
+To add a new PT device model:
+1. Add to `src/verified-models.ts`
+2. Run `bun run generate-models`
+3. `src/validated-models.ts` auto-regenerates `PT_MODEL_MAP`
+4. Build → new model available in `catalog.js`
 
 ## Related Documentation
 
-- `DOCUMENTATION_INDEX.md` — Project-wide documentation index
-- `packages/pt-runtime/src/pt-api/` — PT IPC API type definitions
-- `packages/pt-runtime/src/runtime/contracts.ts` — main/runtime boundary types
+- `packages/pt-cli/` — PT CLI (`pt` command)
+- `packages/pt-control/` — PT Control library (device operations, IOS service)
+- `src/pt-api/` — PT IPC API type definitions
+- `src/runtime/contracts.ts` — main/runtime boundary types (`DeferredJobPlan`, `RuntimeResult`, etc.)

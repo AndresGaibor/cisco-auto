@@ -1,5 +1,19 @@
+/**
+ * @legacy RuntimeDispatcher — not used in the compiled runtime.js build path.
+ *
+ * The ACTIVE dispatcher compiled into runtime.js is `runtimeDispatcher()` in
+ * `handlers/runtime-handlers.ts`, which uses a simple Map-based HANDLER_MAP.
+ *
+ * This class implements a HandlerPort/HandlerRegistry plugin system that was designed
+ * for extensibility but is currently disconnected from the AST build pipeline.
+ * It is retained for future use or as a reference pattern.
+ *
+ * If you want to add a handler to the compiled runtime, register it in
+ * `handlers/runtime-handlers.ts` via `registerHandler()`.
+ */
 import type { DispatcherPort, HandlerDeps, HandlerPayload, HandlerResult, HandlerPort } from "../ports";
 import { HandlerRegistry, globalRegistry } from "./registry";
+
 
 function crearError(code: string, error: string): HandlerResult {
   return { ok: false, error, code };

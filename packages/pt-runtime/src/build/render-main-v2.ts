@@ -1,7 +1,18 @@
+// packages/pt-runtime/src/build/render-main-v2.ts
+// Genera main.js — el bootloader de PT Script Module.
+//
+// Responsabilidades de main.js (SOLO estas):
+//   1. Declarar DEV_DIR (inyectado en tiempo de build)
+//   2. Contener el kernel compilado en un IIFE
+//   3. Exponer main() y cleanUp() para el ciclo de vida de PT Script Module
+//
+// main.js NO contiene lógica de handlers ni catálogos.
+// Delega toda la lógica al runtime cargado dinámicamente desde runtime.js.
+
 import * as fs from "fs";
 import * as path from "path";
-import { transformToPtSafeAst, type AstTransformOptions } from "./ast-transform.js";
-import { validatePtSafe, formatValidationResult, type ValidationResult } from "./validate-pt-safe.js";
+import { transformToPtSafeAst } from "./ast-transform.js";
+import { formatValidationResult } from "./validate-pt-safe.js";
 import { getAllMainFiles } from "./main-manifest.js";
 
 export interface RenderMainV2Options {
@@ -32,84 +43,133 @@ export function renderMainV2(options: RenderMainV2Options): string {
 
   if (!validation.valid) {
     console.error("[render-main-v2] Validation FAILED:");
+    console.error(formatValidationResult(validation));
     for (const issue of validation.errors) {
-      console.error(`  ${issue.line}:${issue.column}: ${issue.message}`);
+      console.error(`  ${issue.line}:${issue.column}: [${issue.category}] ${issue.message}`);
+      if (issue.suggestion) console.error(`    → ${issue.suggestion}`);
     }
-    const lines = code.split('\n');
-    for (const issue of validation.errors) {
-      if (issue.message.includes('Promise') || issue.message.includes('async')) {
-        const lineIdx = issue.line - 1;
-        console.error(`  Context around line ${issue.line}:`);
-        console.error(`    ${lines[Math.max(0, lineIdx-2)]}`);
-        console.error(`    ${lines[lineIdx]}`);
-        console.error(`    ${lines[Math.min(lines.length-1, lineIdx+2)]}`);
-      }
+    throw new Error(`main.js generation failed PT-safe validation (${validation.errors.length} error(s))`);
+  }
+
+  if (validation.warnings.length > 0) {
+    console.warn(`[render-main-v2] ${validation.warnings.length} warning(s):`);
+    for (const w of validation.warnings) {
+      console.warn(`  ${w.line}:${w.column}: ${w.message}`);
     }
-    throw new Error("main.js generation failed PT-safe validation");
   }
 
   const devDirLiteral = options.injectDevDir
     ? JSON.stringify(options.injectDevDir)
-    : 'DEV_DIR + "/pt-dev"';
+    : '"/pt-dev"';
 
-  let output = `
-// PT Main Kernel - Generated from TypeScript via AST pipeline V2
-// Do not edit directly - regenerate with: bun run build:main-v2
-// Generated at: ${new Date().toISOString()}
-
+  // El wrapper IIFE del kernel:
+  // - ipc y fm se inyectan SOLO desde el scope seguro de PT (sin globalThis)
+  // - _global usa self (disponible en QTScript) o this como fallback
+  const kernelIife = `
 (function() {
   var ipc = (typeof ipc !== "undefined") ? ipc : null;
-  var dprint = (typeof dprint !== "undefined") ? dprint : function() {};
+  var dprint = (typeof dprint !== "undefined") ? dprint : function(msg) { if (typeof print === "function") print(msg); };
   var DEV_DIR = (typeof DEV_DIR !== "undefined") ? DEV_DIR : ${devDirLiteral};
-  var fm = ipc ? ipc.systemFileManager() : null;
+  var fm = (ipc && typeof ipc.systemFileManager === "function") ? ipc.systemFileManager() : null;
+
+  // PT QTScript does NOT have globalThis — use self or this as fallback
+  var _global = (typeof self !== "undefined") ? self : this;
+
+  // Expose fm and dprint globally so the runtime and kernel can access them
+  if (fm && !_global.fm) _global.fm = fm;
+  if (!_global.dprint) _global.dprint = dprint;
+  if (!_global.DEV_DIR) _global.DEV_DIR = DEV_DIR;
 
 ${code}
 
-  // Hold kernel instance for cleanUp() to reach
+  // Hold kernel instance so cleanUp() can reach it
   var _kernelInstance = null;
 
-  // Expose kernel functions to global scope so main()/cleanUp() can reach them
-  // Use self/globalThis for PT compatibility (PT uses 'self' as global object)
-  var _global = typeof self !== "undefined" ? self : (typeof globalThis !== "undefined" ? globalThis : this);
+  // Expose kernel factory to global scope (main() calls createKernel)
   if (typeof createKernel === "function") {
     _global.createKernel = function(cfg) {
       _kernelInstance = createKernel(cfg);
       return _kernelInstance;
     };
   }
-  if (typeof shutdownKernel === "function") {
-    _global.shutdownKernel = shutdownKernel;
-  } else {
-    _global.shutdownKernel = function() {
-      if (_kernelInstance && typeof _kernelInstance.shutdown === "function") {
-        _kernelInstance.shutdown();
-      }
-    };
-  }
-  // Also expose dprint and fm for debugging from console
-  if (typeof _global.dprint !== "function") {
-    _global.dprint = dprint;
-  }
-})();
 
-// PT Script Module entry points
+  // Expose shutdown function
+  _global.shutdownKernel = function() {
+    if (_kernelInstance && typeof _kernelInstance.shutdown === "function") {
+      _kernelInstance.shutdown();
+    }
+  };
+
+})();
+`;
+
+  // -------------------------------------------------------------------------
+  // loadModule: helper inlined into main.js to load catalog.js / runtime.js
+  // Packet Tracer Script Module puede cargar solo UN archivo .js.
+  // Los módulos adicionales se cargan usando fm.getFileContents + new Function().
+  // -------------------------------------------------------------------------
+  const loaderHelper = `
+function _ptLoadModule(modulePath, label) {
+  try {
+    var _g = (typeof self !== "undefined") ? self : this;
+    var _fm = _g.fm || (typeof fm !== "undefined" ? fm : null);
+    if (!_fm) {
+      if (typeof dprint === "function") dprint("[main] fm not available — cannot load " + label);
+      return false;
+    }
+    if (!_fm.fileExists(modulePath)) {
+      if (typeof dprint === "function") dprint("[main] Module not found: " + modulePath + " (" + label + ")");
+      return false;
+    }
+    var code = _fm.getFileContents(modulePath);
+    if (!code || code.length < 10) {
+      if (typeof dprint === "function") dprint("[main] Module empty: " + label);
+      return false;
+    }
+    new Function(code)();
+    if (typeof dprint === "function") dprint("[main] Loaded: " + label);
+    return true;
+  } catch (e) {
+    if (typeof dprint === "function") dprint("[main] Error loading " + label + ": " + String(e));
+    return false;
+  }
+}
+`;
+
+  // -------------------------------------------------------------------------
+  // main() y cleanUp() — ciclo de vida de PT Script Module
+  // -------------------------------------------------------------------------
+  const entryPoints = `
+// PT Script Module entry points — called by Packet Tracer lifecycle
+
 function main() {
-  if (typeof bootKernel === "function") {
-    bootKernel({ devDir: DEV_DIR });
-  } else if (typeof createKernel === "function") {
+  var _g = (typeof self !== "undefined") ? self : this;
+  var devDir = (typeof DEV_DIR !== "undefined") ? DEV_DIR : _g.DEV_DIR || ${devDirLiteral};
+
+  // Paso 1: Cargar catalog.js (constantes estáticas — rara vez cambia)
+  _ptLoadModule(devDir + "/catalog.js", "catalog");
+
+  // Paso 2: Cargar runtime.js (lógica de handlers — cambia con cada deploy)
+  // Si runtime.js no existe, el kernel arranca sin runtime (degraded mode)
+  _ptLoadModule(devDir + "/runtime.js", "runtime");
+
+  // Paso 3: Boot del kernel
+  if (typeof createKernel === "function") {
     var kernel = createKernel({
-      devDir: DEV_DIR,
-      commandsDir: DEV_DIR + "/commands",
-      inFlightDir: DEV_DIR + "/in-flight",
-      resultsDir: DEV_DIR + "/results",
-      deadLetterDir: DEV_DIR + "/dead-letter",
-      logsDir: DEV_DIR + "/logs",
-      commandsTraceDir: DEV_DIR + "/logs/commands",
+      devDir: devDir,
+      commandsDir: devDir + "/commands",
+      inFlightDir: devDir + "/in-flight",
+      resultsDir: devDir + "/results",
+      deadLetterDir: devDir + "/dead-letter",
+      logsDir: devDir + "/logs",
+      commandsTraceDir: devDir + "/logs/commands",
       pollIntervalMs: 1000,
       deferredPollIntervalMs: 500,
       heartbeatIntervalMs: 5000,
     });
     kernel.boot();
+  } else {
+    if (typeof dprint === "function") dprint("[main] ERROR: createKernel not defined — kernel not loaded");
   }
 }
 
@@ -119,6 +179,16 @@ function cleanUp() {
   }
 }
 `;
+
+  const header = `// PT Main Kernel - Generated from TypeScript via AST pipeline V2
+// Do not edit directly - regenerate with: bun run build:main-v2
+// Generated at: ${new Date().toISOString()}
+//
+// Responsibilities: Boot kernel, load catalog.js + runtime.js, expose main()/cleanUp()
+// NOTE: globalThis is NOT available in PT QTScript — this file uses self/this instead.
+`;
+
+  const output = header + kernelIife + loaderHelper + entryPoints;
 
   if (options.outputPath) {
     fs.mkdirSync(path.dirname(options.outputPath), { recursive: true });

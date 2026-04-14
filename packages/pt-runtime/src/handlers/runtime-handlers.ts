@@ -21,7 +21,6 @@ import type {
 import type { PtResult } from "../pt-api/pt-results.js";
 import type { PtRuntimeApi } from "../pt-api/pt-deps.js";
 
-// Import actual handlers from handler modules
 import {
   handleEnsureVlans,
   handleConfigVlanInterfaces,
@@ -34,6 +33,7 @@ import {
   type InspectDhcpServerPayload,
 } from "./dhcp.js";
 import { handleInspectHost, type InspectHostPayload } from "./host.js";
+import { getParser } from "./parsers/ios-parsers.js";
 
 // ============================================================================
 // Payload Types
@@ -129,73 +129,6 @@ function createDeferredResult(ticket: string, plan: DeferredJobPlan): PtResult {
     ticket,
     job: plan,
   };
-}
-
-// ============================================================================
-// Parsers para show commands
-// ============================================================================
-
-type ParserFn = (output: string) => Record<string, unknown>;
-
-const PARSERS: Record<string, ParserFn> = {
-  "show ip interface brief": (output: string) => {
-    const interfaces: Array<{
-      interface: string;
-      ipAddress: string;
-      ok: string;
-      method: string;
-      status: string;
-      protocol: string;
-    }> = [];
-    const lines = output.split("\n").filter((l) => l.trim().length > 0);
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (line.includes("---")) continue;
-      const match = line.match(/^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)$/);
-      if (match) {
-        interfaces.push({
-          interface: match[1],
-          ipAddress: match[2],
-          ok: match[3],
-          method: match[4],
-          status: match[5],
-          protocol: match[6],
-        });
-      }
-    }
-    return { entries: interfaces };
-  },
-  "show vlan brief": (output: string) => {
-    const vlans: Array<{ id: number; name: string; status: string; ports: string[] }> = [];
-    const lines = output.split("\n").filter((l) => l.trim().length > 0);
-    for (const line of lines) {
-      if (line.includes("---")) continue;
-      const match = line.match(/^(\d+)\s+(\S+)\s+(\S+)\s*(.*)$/);
-      if (match) {
-        vlans.push({
-          id: parseInt(match[1]),
-          name: match[2],
-          status: match[3],
-          ports: match[4]
-            ? match[4]
-                .split(",")
-                .map((p) => p.trim())
-                .filter((p) => p)
-            : [],
-        });
-      }
-    }
-    return { entries: vlans };
-  },
-};
-
-function getParser(command: string): ParserFn | null {
-  const cmd = command.toLowerCase().trim();
-  if (PARSERS[cmd]) return PARSERS[cmd];
-  for (const key in PARSERS) {
-    if (cmd.startsWith(key)) return PARSERS[key];
-  }
-  return null;
 }
 
 // ============================================================================
@@ -509,106 +442,33 @@ export function handleExecPc(payload: ExecPcPayload, api: PtRuntimeApi): PtResul
     return createErrorResult(`Device not found: ${device}`, "DEVICE_NOT_FOUND");
   }
 
-  const net = deviceRef.getNetwork();
-  const dev = net.getDevice(device) as any;
-  if (!dev) {
-    return createErrorResult(`Device not found in network: ${device}`, "DEVICE_NOT_FOUND");
-  }
-
-  if (typeof dev.getCommandPrompt !== "function") {
-    return createErrorResult(
-      `Device ${device} does not support getCommandPrompt() - not a PC/Server?`,
-      "NOT_A_PC",
-    );
-  }
-
-  const term = dev.getCommandPrompt() as any;
-  if (!term) {
-    return createErrorResult(`Device ${device} command prompt is null`, "NO_COMMAND_PROMPT");
-  }
-
+  // PC/Server devices use a command prompt, not a CLI terminal.
+  // Build a simple one-step deferred plan — the kernel will execute it
+  // via the terminal engine, which handles events correctly.
   const ticket = "pc_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
-  const timeout = timeoutMs;
 
-  const jobState: any = {
-    ticket,
+  const plan: DeferredJobPlan = {
+    id: ticket,
+    kind: "ios-session", // reuse ios-session kind; kernel handles generic execution
+    version: 1,
     device,
-    command,
-    output: "",
-    finished: false,
-    status: undefined,
-    startedAt: Date.now(),
-    timeoutId: null,
+    plan: [
+      { type: "command", value: command, options: { stopOnError: false, timeoutMs } },
+      { type: "close-session" },
+    ],
+    options: {
+      stopOnError: false,
+      commandTimeoutMs: timeoutMs,
+      stallTimeoutMs: timeoutMs,
+    },
+    payload: { device, command },
   };
 
-  if (typeof (api as any).registerPcJob === "function") {
-    (api as any).registerPcJob(ticket, jobState);
-  }
+  api.dprint(`[execPc] Created plan ${ticket} for device=${device} command="${command}"`);
 
-  jobState.timeoutId = setTimeout(() => {
-    if (!jobState.finished) {
-      jobState.finished = true;
-      jobState.status = 1;
-      jobState.output += "\n[timeout after " + timeout + "ms]";
-      if (typeof (api as any).completePcJob === "function") {
-        (api as any).completePcJob(ticket, {
-          ok: false,
-          status: 1,
-          output: jobState.output,
-          timedOut: true,
-        });
-      }
-    }
-  }, timeout);
-
-  term.registerEvent("outputWritten", jobState, function (_src: any, args: any) {
-    if (!args.isDebug) {
-      jobState.output += args.newOutput;
-    }
-  });
-
-  term.registerEvent("moreDisplayed", jobState, function (_src: any, _args: any) {
-    term.enterChar(32, 0);
-  });
-
-  term.registerEvent("commandEnded", jobState, function (_src: any, args: any) {
-    if (jobState.finished) return;
-    jobState.finished = true;
-    jobState.status = args.status;
-
-    if (jobState.timeoutId) {
-      clearTimeout(jobState.timeoutId);
-      jobState.timeoutId = null;
-    }
-
-    if (typeof (api as any).completePcJob === "function") {
-      (api as any).completePcJob(ticket, {
-        ok: args.status === 0,
-        status: args.status,
-        output: jobState.output,
-        prompt: term.getPrompt ? term.getPrompt() : "",
-        mode: term.getMode ? term.getMode() : "",
-      });
-    }
-  });
-
-  term.enterCommand(command);
-
-  return {
-    ok: true,
-    deferred: true,
-    ticket,
-    job: {
-      id: ticket,
-      kind: "pc-session",
-      version: 1,
-      device,
-      plan: [{ type: "pc-command" as any, value: command }],
-      options: { stopOnError: false, commandTimeoutMs: timeout, stallTimeoutMs: timeout },
-      payload: { device, command },
-    },
-  } as unknown as PtResult;
+  return createDeferredResult(ticket, plan);
 }
+
 
 // ============================================================================
 // Handler Map - Registro centralizado de handlers

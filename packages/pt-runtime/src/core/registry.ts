@@ -1,6 +1,11 @@
 // packages/pt-runtime/src/core/registry.ts
-// Registro global de handlers
-// TODO: Completar con registro real de handlers
+/**
+ * HandlerRegistry — provides handler registration and lookup.
+ *
+ * @deprecated Not used by the compiled runtime.js output.
+ * The compiled runtime uses a simpler Map-based dispatcher in handlers/runtime-handlers.ts.
+ * This registry is retained for future extensibility or alternative build paths.
+ */
 
 import type { HandlerPort, HandlerRegistryPort } from "../ports";
 

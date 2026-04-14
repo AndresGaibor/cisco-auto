@@ -59,8 +59,9 @@ export function createKernel(config: KernelConfig) {
 
   // Runtime API factory
   function createRuntimeApi() {
-    const ipc = (globalThis as unknown as { ipc: unknown }).ipc;
-    const net = (ipc as { getNetwork?: () => unknown })?.getNetwork?.();
+    // PT QTScript uses 'self' as global object — declared in pt-globals.d.ts
+    const ipc = self.ipc as any;
+    const net = ipc?.getNetwork?.() ?? ipc?.network?.();
 
     return {
       ipc: ipc as any,
@@ -92,8 +93,8 @@ export function createKernel(config: KernelConfig) {
         return terminal.getSession(deviceName);
       },
       getWorkspace() {
-        const ipc = (globalThis as unknown as { ipc: unknown }).ipc;
-        return (ipc as { getLogicalWorkspace?: () => unknown })?.getLogicalWorkspace?.();
+        const ipc = self.ipc as any;
+        return ipc?.getLogicalWorkspace?.();
       },
       now() { return Date.now(); },
       safeJsonClone<T>(data: T): T {
@@ -271,10 +272,11 @@ export function createKernel(config: KernelConfig) {
       isShuttingDown = false;
       isRunning = true;
 
-      const ipc = (globalThis as unknown as { ipc: unknown }).ipc;
-      const fmFromIpc = (ipc as { systemFileManager?: () => unknown })?.systemFileManager?.();
+      // PT QTScript uses 'self' as global object — self.ipc and self.fm are provided by PT
+      const ipc = self.ipc as any;
+      const fmFromIpc = ipc?.systemFileManager?.();
       if (fmFromIpc) {
-        (globalThis as unknown as { fm: unknown }).fm = fmFromIpc;
+        self.fm = fmFromIpc;
       }
 
       dirs.ensureDirectories();

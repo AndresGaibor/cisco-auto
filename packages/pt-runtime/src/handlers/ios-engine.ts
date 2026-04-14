@@ -1,12 +1,19 @@
-import type {
-  PTCommandEndedArgs,
-  PTCommandLine,
-  PTModeChangedArgs,
-  PTPromptChangedArgs,
-  PTOutputWrittenArgs,
-} from "../pt-api/pt-api-registry.js";
-import type { PtDeferredDeps, JobStateSnapshot } from "../pt-api/pt-deps.js";
-import type { DeferredJobPlan, DeferredStep } from "../runtime/contracts.js";
+/**
+ * @deprecated IosSessionEngine — NOT included in runtime.js build (removed from runtime-manifest.ts)
+ *
+ * Reason: This class duplicates responsibilities already covered by:
+ *   - `pt/terminal/terminal-engine.ts`  → single authority for PT event handling & session state
+ *   - `pt/kernel/job-executor.ts`       → single authority for job phase tracking & step execution
+ *
+ * IosSessionEngine attached its own listeners to PT TerminalLine events (outputWritten, commandEnded,
+ * modeChanged, promptChanged), creating two independent event handlers for the same terminal.
+ * That was the "blurry boundary" the architecture review identified.
+ *
+ * This file is kept for reference and unit tests. Do NOT re-add to runtime-manifest.ts.
+ * If you need phase-level job tracking in the runtime, use the DeferredJobPlan / KernelJobState
+ * contracts defined in `runtime/contracts.ts`.
+ */
+
 
 export type IosJobPhase =
   | "queued"

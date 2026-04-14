@@ -125,6 +125,29 @@ const PT_FORBIDDEN_PATTERNS: PatternRule[] = [
     category: "async-pattern",
     suggestion: "Test on target PT versions or use Promise patterns",
   },
+  // PT QTScript engine missing globals
+  {
+    pattern: /\bglobalThis\b/g,
+    message: "globalThis is not available in PT QTScript engine",
+    category: "forbidden-global",
+    suggestion: "Use 'typeof self !== undefined ? self : this' as a safe global accessor",
+  },
+  // Template literals with expressions — not supported in older QTScript
+  {
+    pattern: /`[^`]*\$\{[^`]*`/g,
+    message: "Template literal expressions (${...}) may not be supported in PT QTScript",
+    category: "operator-pattern",
+    suggestion: "Use string concatenation with '+' instead of template literals",
+  },
+  // Spread operator in calls/arrays/objects — only match syntactic spread
+  // Real spread: ...identifier, ...[, not ellipsis in string literals like "..."
+  {
+    pattern: /\.\.\.[a-zA-Z_$\[]/g,
+    message: "Spread operator (...) is not supported in PT QTScript (ES5)",
+    category: "operator-pattern",
+    suggestion: "Use Array.prototype.concat or manual loops instead",
+  },
+
 ];
 
 const PT_WARNING_PATTERNS: PatternRule[] = [
@@ -171,6 +194,12 @@ export function validatePtSafe(code: string): ValidationResult {
   for (let lineNum = 0; lineNum < lines.length; lineNum++) {
     const line = lines[lineNum];
 
+    // Skip comment-only lines to avoid false positives from documentation
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) {
+      continue;
+    }
+
     for (const rule of PT_FORBIDDEN_PATTERNS) {
       let match;
       rule.pattern.lastIndex = 0;
@@ -190,6 +219,7 @@ export function validatePtSafe(code: string): ValidationResult {
     for (const rule of PT_WARNING_PATTERNS) {
       let match;
       rule.pattern.lastIndex = 0;
+
       while ((match = rule.pattern.exec(line)) !== null) {
         warnings.push({
           line: lineNum + 1,

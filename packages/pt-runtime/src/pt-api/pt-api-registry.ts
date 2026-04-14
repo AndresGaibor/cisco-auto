@@ -30,6 +30,16 @@ export interface PTLogicalWorkspace {
     cableType: number,
   ): PTLink | null;
   deleteLink(deviceName: string, portName: string): boolean;
+  /** Get all canvas rectangle (zone) IDs — may not be available in all PT versions */
+  getCanvasRectIds?(): string[];
+  /**
+   * Get data for a rect item (x, y, width, height, label, etc.)
+   * Variant names: getRectItemData / getRectData depending on PT version
+   */
+  getRectItemData?(rectId: string): Record<string, unknown> | null;
+  getRectData?(rectId: string): Record<string, unknown> | null;
+  /** Find devices within a canvas area */
+  devicesAt?(x: number, y: number, width: number, height: number, includeClusters: boolean): unknown[];
 }
 
 export interface PTNetwork {
@@ -56,6 +66,17 @@ export interface PTDevice {
   getDhcpFlag(): boolean;
   moveToLocation(x: number, y: number): boolean;
   moveToLocationCentered(x: number, y: number): boolean;
+  /** Canvas position — may not be available in all PT versions */
+  getX?(): number;
+  getY?(): number;
+  /** Serialize device config to XML string */
+  serializeToXml?(): string;
+  /**
+   * Get a named process attached to this device.
+   * Use `getProcessByCandidates()` from pt-processes.ts to handle name variants.
+   * @example device.getProcess("DhcpServerMainProcess")
+   */
+  getProcess?<T = unknown>(name: string): T | null;
 }
 
 export interface PTCommandLine {
@@ -166,6 +187,12 @@ export interface PTFileManager {
   getFileContents(path: string): string;
   writePlainTextToFile(path: string, content: string): void;
   fileExists(path: string): string | boolean;
+  directoryExists?(path: string): boolean;
+  makeDirectory?(path: string): boolean;
+  getFileModificationTime?(path: string): number;
+  getFilesInDirectory?(path: string): string[];
+  removeFile?(path: string): boolean;
+  moveSrcFileToDestFile?(src: string, dest: string): boolean;
 }
 
 export interface PTGlobalScope {

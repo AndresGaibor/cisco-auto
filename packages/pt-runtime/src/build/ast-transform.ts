@@ -93,6 +93,7 @@ export function transformToPtSafeAst(
       generatedLine: combined.split("\n").length - 1,
       sourceFile: filePath,
       sourceLine: 1,
+      sourceColumn: 0,
       isComment: true,
     });
     const stripped = stripModuleSyntax(content);
@@ -102,6 +103,7 @@ export function transformToPtSafeAst(
         generatedLine: combined.split("\n").length - 1 + i + 1,
         sourceFile: filePath,
         sourceLine: i + 1,
+        sourceColumn: 0,
         isComment: false,
       });
     }

@@ -3,12 +3,18 @@
 // Usado por render-runtime-v2.ts para generar runtime.js
 
 export const RUNTIME_MANIFEST = {
-  version: 2,
-  description: "Lista completa de archivos TypeScript para generar runtime.js via AST pipeline V2",
+  version: 3,
+  description: "Lista completa de archivos TypeScript para generar los módulos PT via AST pipeline V2",
+
+  // catalog: constantes estáticas de PT — raramente cambian.
+  // Se genera como catalog.js separado, cargado primero por main.js.
+  catalog: [
+    "pt-api/pt-constants.ts",
+  ],
 
   ptApi: [
     "pt-api/pt-api-registry.ts",
-    "pt-api/pt-constants.ts",
+    // pt-constants.ts ya está en catalog — no duplicar en runtime
     "pt-api/pt-results.ts",
     "pt-api/pt-deps.ts",
     "pt-api/pt-helpers.ts",
@@ -49,11 +55,14 @@ export const RUNTIME_MANIFEST = {
     "handlers/vlan.ts",
     "handlers/dhcp.ts",
     "handlers/host.ts",
-    // IOS engine y dispatcher
-    "handlers/ios-engine.ts",
-    "handlers/ios-session.ts",
+    // IOS show command parsers (pure functions, no PT dependencies)
+    "handlers/parsers/ios-parsers.ts",
+    // IOS output classification (pure functions, no event handling)
     "handlers/ios-output-classifier.ts",
+    // Main dispatcher
     "handlers/runtime-handlers.ts",
+    // NOTE: ios-engine.ts removed — IosSessionEngine duplicated terminal-engine.ts + job-executor.ts
+    // NOTE: ios-session.ts removed — inferModeFromPrompt duplicated prompt-parser.ts
   ],
 
   kernel: [
@@ -82,11 +91,17 @@ export const RUNTIME_MANIFEST = {
 
 export type RuntimeManifestSection = keyof typeof RUNTIME_MANIFEST;
 
+export function getCatalogFiles(): string[] {
+  return [...RUNTIME_MANIFEST.catalog];
+}
+
 export function getAllRuntimeFiles(): string[] {
   const files: string[] = [];
+  // Exclude "catalog" section — it goes to catalog.js, not runtime.js
+  const excluded = new Set<string>(["version", "description", "catalog"]);
   for (const section of Object.keys(RUNTIME_MANIFEST) as RuntimeManifestSection[]) {
-    if (section === "version" || section === "description") continue;
-    files.push(...RUNTIME_MANIFEST[section]);
+    if (excluded.has(section)) continue;
+    files.push(...(RUNTIME_MANIFEST[section] as readonly string[]));
   }
   return files;
 }
@@ -94,3 +109,4 @@ export function getAllRuntimeFiles(): string[] {
 export function getRuntimeManifestSize(): number {
   return getAllRuntimeFiles().length;
 }
+

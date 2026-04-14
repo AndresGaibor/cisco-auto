@@ -4,19 +4,6 @@
 
 import type { HandlerDeps, HandlerResult, PTLogicalWorkspace, PTDevice } from "../utils/helpers";
 
-// PT API extended type (methods not in official typings but exist in PT)
-interface PTLogicalWorkspaceExtended extends PTLogicalWorkspace {
-  getCanvasRectIds?: () => string[];
-  getRectItemData?: (id: string) => Record<string, unknown> | null;
-  getRectData?: (id: string) => Record<string, unknown> | null;
-  devicesAt?: (x: number, y: number, width: number, height: number, includeClusters: boolean) => unknown[];
-}
-
-interface PTDeviceExtended extends PTDevice {
-  getX?: () => number;
-  getY?: () => number;
-}
-
 // ============================================================================
 // Payload Types
 // ============================================================================
@@ -49,7 +36,7 @@ export function handleListCanvasRects(_payload: ListCanvasRectsPayload, deps: Ha
   let rectIds: string[] = [];
 
   try {
-    const lw = getLW() as PTLogicalWorkspaceExtended;
+    const lw = getLW();
 
     if (lw.getCanvasRectIds) {
       rectIds = lw.getCanvasRectIds() || [];
@@ -79,7 +66,7 @@ export function handleGetRect(payload: GetRectPayload, deps: HandlerDeps): Handl
   let rectData: Record<string, unknown> | null = null;
 
   try {
-    const lw = getLW() as PTLogicalWorkspaceExtended;
+    const lw = getLW();
 
     if (lw.getRectItemData) {
       rectData = lw.getRectItemData(payload.rectId) || null;
@@ -118,7 +105,7 @@ export function handleDevicesInRect(payload: DevicesInRectPayload, deps: Handler
   const clusters: string[] = [];
 
   try {
-    const lw = getLW() as PTLogicalWorkspaceExtended;
+    const lw = getLW();
     const net = getNet();
 
     if (lw.devicesAt && lw.getRectItemData) {
@@ -143,7 +130,7 @@ export function handleDevicesInRect(payload: DevicesInRectPayload, deps: Handler
 
     // Fallback: enumerate devices and check if they fall within rect bounds
     if (devices.length === 0 && payload.rectId) {
-      const lw = getLW() as PTLogicalWorkspaceExtended;
+      const lw = getLW();
       const rectData = lw.getRectItemData ? lw.getRectItemData(payload.rectId) : null;
 
       if (rectData && typeof rectData === "object") {
@@ -154,7 +141,7 @@ export function handleDevicesInRect(payload: DevicesInRectPayload, deps: Handler
 
         const deviceCount = net.getDeviceCount();
         for (let i = 0; i < deviceCount; i++) {
-          const device = net.getDeviceAt(i) as PTDeviceExtended | null;
+          const device = net.getDeviceAt(i);
           if (!device) continue;
 
           const deviceX = device.getX ? device.getX() : 0;

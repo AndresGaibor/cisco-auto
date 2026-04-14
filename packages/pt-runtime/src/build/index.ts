@@ -6,3 +6,6 @@ export * from "./ast-transform";
 export * from "./render-from-handlers";
 export * from "./runtime-manifest";
 export * from "./main-manifest";
+export * from "./render-catalog";
+export * from "./render-main-v2";
+export * from "./render-runtime-v2";

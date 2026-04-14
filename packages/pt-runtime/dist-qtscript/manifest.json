@@ -1,0 +1,13 @@
+{
+  "cliVersion": "0.3.0",
+  "protocolVersion": 3,
+  "mainChecksum": "75d44ff5",
+  "catalogChecksum": "612ac4f6",
+  "runtimeChecksum": "608d27bf",
+  "generatedAt": 1776206977636,
+  "modules": {
+    "main": "main.js",
+    "catalog": "catalog.js",
+    "runtime": "runtime.js"
+  }
+}

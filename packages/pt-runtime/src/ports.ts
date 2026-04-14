@@ -1,6 +1,16 @@
 // packages/pt-runtime/src/ports.ts
-// Puertos interfaces - definir contracts entre capas
-// TODO: Completar implementación según arquitectura definida
+/**
+ * Port interfaces — contracts between application layers.
+ *
+ * Used by core/dispatcher.ts and handlers/module.ts for dependency inversion.
+ *
+ * Note: These ports are NOT used by the compiled runtime.js build path.
+ * The compiled runtime uses a Map-based dispatcher in handlers/runtime-handlers.ts
+ * which bypasses these interfaces. Ports are retained for future extensibility
+ * and alternative build paths.
+ *
+ * @deprecated Not used in active build path. See handlers/runtime-handlers.ts.
+ */
 
 import type { PtDeps } from "./pt-api/pt-deps.js";
 import type { PtResult } from "./pt-api/pt-results.js";

@@ -9,9 +9,6 @@
     ".": "./src/index.ts",
     "./value-objects": "./src/value-objects/index.ts"
   },
-  "bin": {
-    "pt-runtime": "./bin/run.js"
-  },
   "scripts": {
     "build": "echo runtime built via deploy",
     "build:watch": "tsc -p tsconfig.runtime.json --watch",

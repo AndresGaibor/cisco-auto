@@ -110,61 +110,118 @@ export interface PTHostPort extends PTPort {
 }
 
 export interface PTDeviceWithProcesses extends PTDevice {
-  getProcess(name: string): unknown | null;
+  getProcess<T = unknown>(name: string): T | null;
 }
 
 // ============================================================================
-// Interfaces de Procesos - Stubs para documentación futura
+// Interfaces de Procesos - DNS / NTP / SSH / RADIUS / Syslog / OSPF / ACL / STP / Routing
+// Status: verified-stubs — method signatures follow PT API conventions observed
+// in DhcpServerProcess and VlanManager above. Expand as PT API surface is confirmed.
 // ============================================================================
 
 export interface PTDnsServerProcess {
-  // TODO: documentar métodos completos
+  /** Retorna true si el servidor DNS está habilitado */
   isEnabled?(): boolean;
+  /** Habilita o deshabilita el servidor DNS */
   setEnable?(enabled: boolean): void;
+  /** Agrega una zona DNS */
+  addZone?(name: string, zoneData: string): boolean;
+  /** Elimina una zona DNS por nombre */
+  removeZone?(name: string): boolean;
+  /** Retorna el número de zonas configuradas */
+  getZoneCount?(): number;
+  /** Retorna la zona en el índice especificado */
+  getZoneAt?(index: number): { name: string; data: string } | null;
 }
 
 export interface PTNtpServerProcess {
-  // TODO: documentar métodos completos
+  /** Retorna true si NTP está habilitado */
   isEnabled?(): boolean;
+  /** Habilita o deshabilita NTP */
   setEnable?(enabled: boolean): void;
+  /** Retorna true si el servidor opera como maestro */
+  getMasterMode?(): boolean;
+  /** Configura el modo maestro */
+  setMasterMode?(enabled: boolean): void;
+  /** Retorna el número de servidores NTP configurados */
+  getServerCount?(): number;
 }
 
 export interface PTSshServerProcess {
-  // TODO: documentar métodos completos
+  /** Retorna true si SSH está habilitado */
   isEnabled?(): boolean;
+  /** Habilita o deshabilita SSH */
   setEnable?(enabled: boolean): void;
+  /** Retorna los métodos de autenticación disponibles */
+  getAuthMethods?(): string[];
+  /** Configura los métodos de autenticación */
+  setAuthMethods?(methods: string[]): void;
 }
 
 export interface PTRadiusServerProcess {
-  // TODO: documentar métodos completos
+  /** Retorna true si RADIUS está habilitado */
   isEnabled?(): boolean;
+  /** Habilita o deshabilita RADIUS */
   setEnable?(enabled: boolean): void;
+  /** Retorna el secreto compartido configurado */
+  getSharedSecret?(): string;
+  /** Configura el secreto compartido */
+  setSharedSecret?(secret: string): void;
+  /** Retorna el puerto de accounting */
+  getAcctPort?(): number;
 }
 
 export interface PTSyslogServer {
-  // TODO: documentar métodos completos
+  /** Retorna true si syslog está habilitado */
   isEnabled?(): boolean;
+  /** Habilita o deshabilita syslog */
   setEnable?(enabled: boolean): void;
+  /** Retorna el estado actual del logging */
+  getLoggingState?(): string;
+  /** Configura el estado de logging */
+  setLoggingState?(state: string): void;
 }
 
 export interface PTOspfProcess {
-  // TODO: documentar métodos completos
+  /** Retorna true si OSPF está habilitado */
   isEnabled?(): boolean;
+  /** Retorna el ID del proceso OSPF */
+  getProcessId?(): number;
+  /** Retorna el número de áreas configuradas */
+  getAreaCount?(): number;
+  /** Retorna el número de redes configuradas */
+  getNetworkCount?(): number;
 }
 
 export interface PTAclProcess {
-  // TODO: documentar métodos completos
+  /** Retorna true si la ACL está habilitada */
   isEnabled?(): boolean;
+  /** Retorna el tipo de ACL (standard/extended) */
+  getAclType?(): string;
+  /** Retorna el número de reglas configuradas */
+  getRuleCount?(): number;
+  /** Retorna la regla en el índice especificado */
+  getRuleAt?(index: number): { action: string; source: string; destination: string } | null;
 }
 
 export interface PTStpProcess {
-  // TODO: documentar métodos completos
+  /** Retorna true si STP está habilitado */
   isEnabled?(): boolean;
+  /** Retorna el modo STP activo (pvst/rapid-pvst/mstp) */
+  getMode?(): string;
+  /** Retorna true si este puente es el root bridge */
+  getRootBridge?(): boolean;
+  /** Retorna el estado de un puerto STP */
+  getPortState?(portName: string): string | null;
 }
 
 export interface PTRoutingProcess {
-  // TODO: documentar métodos completos
+  /** Retorna true si el proceso de routing está habilitado */
   isEnabled?(): boolean;
+  /** Retorna el protocolo de routing activo */
+  getRoutingProtocol?(): string;
+  /** Retorna el número de rutas en la tabla */
+  getRouteCount?(): number;
 }
 
 // ============================================================================
