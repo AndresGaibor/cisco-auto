@@ -3,12 +3,101 @@
 // ============================================================================
 
 import type { HandlerDeps, HandlerResult, PTDevice } from "../utils/helpers";
+import type { PTFileManager } from "../utils/helpers";
 import {
   resolveModel,
   getDeviceTypeCandidates,
   createDeviceWithFallback,
   getDeviceTypeString,
 } from "../utils/helpers";
+
+const LINK_REGISTRY = "link-registry.json";
+
+interface LinkRegistryEntry {
+  device1: string;
+  port1: string;
+  device2: string;
+  port2: string;
+  source: string;
+  createdAt: number;
+}
+
+type LinkRegistry = Record<string, LinkRegistryEntry>;
+
+function loadLinksJson(dir: string, fm: PTFileManager): LinkRegistry {
+  const legacyPath = dir + "/links.json";
+  try {
+    if (!fm.fileExists(legacyPath)) return {};
+    const content = fm.getFileContents(legacyPath);
+    const raw = JSON.parse(content);
+    const result: LinkRegistry = {};
+    for (const [key, val] of Object.entries(raw)) {
+      const entry = val as Record<string, unknown>;
+      result[key] = {
+        device1: String(entry.device1 ?? entry.dev1 ?? ""),
+        port1: String(entry.port1 ?? entry.p1 ?? ""),
+        device2: String(entry.device2 ?? entry.dev2 ?? ""),
+        port2: String(entry.port2 ?? entry.p2 ?? ""),
+        source: String(entry.source ?? entry.linkType ?? "legacy-links-json"),
+        createdAt: typeof entry.createdAt === "number" ? entry.createdAt : Date.now(),
+      };
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+function getLinkRegistry(dir: string, fm: PTFileManager): LinkRegistry {
+  const regPath = dir + "/" + LINK_REGISTRY;
+  try {
+    if (!fm.fileExists(regPath)) return {};
+    const content = fm.getFileContents(regPath);
+    return JSON.parse(content) as LinkRegistry;
+  } catch {
+    return {};
+  }
+}
+
+function mergeRegistries(primary: LinkRegistry, legacy: LinkRegistry): LinkRegistry {
+  const merged = { ...primary };
+  for (const [key, entry] of Object.entries(legacy)) {
+    if (!merged[key]) {
+      merged[key] = entry;
+    }
+  }
+  return merged;
+}
+
+export type ConnectionInfo = {
+  localPort: string | null;
+  remoteDevice: string | null;
+  remotePort: string | null;
+  confidence: "exact" | "registry" | "ambiguous" | "unknown";
+  evidence?: {
+    localCandidates?: string[];
+    remoteCandidates?: string[];
+    source?: string;
+  };
+};
+
+export type ListDevicesResult = HandlerResult & {
+  devices: Array<{ name: string; model: string; type: string; power: boolean; ports: unknown[] }>;
+  count: number;
+  connectionsByDevice: Record<string, ConnectionInfo[]>;
+  unresolvedLinks: Array<{
+    port1Name: string;
+    port2Name: string;
+    candidates1: string[];
+    candidates2: string[];
+  }>;
+  ptLinkDebug: {
+    getLinkCountResult: number;
+    getLinkAtExists: boolean;
+    ptLinksFound: number;
+    registryEntries: number;
+  };
+};
 
 // ============================================================================
 // Payload Types
@@ -141,8 +230,11 @@ export function handleRemoveDevice(payload: RemoveDevicePayload, deps: HandlerDe
 /**
  * List all devices in the network
  */
-export function handleListDevices(payload: ListDevicesPayload, deps: HandlerDeps): HandlerResult {
-  const { getNet } = deps;
+export function handleListDevices(
+  payload: ListDevicesPayload,
+  deps: HandlerDeps,
+): ListDevicesResult {
+  const { getNet, DEV_DIR, getFM } = deps;
   const net = getNet();
   const count = net.getDeviceCount();
   const devices: Array<{
@@ -153,12 +245,34 @@ export function handleListDevices(payload: ListDevicesPayload, deps: HandlerDeps
     ports: unknown[];
   }> = [];
 
-  const deviceLinks: Record<string, string[]> = {};
+  const fm = getFM();
+  const registry = mergeRegistries(getLinkRegistry(DEV_DIR, fm), loadLinksJson(DEV_DIR, fm));
+
+  const connectionsByDevice: Record<string, ConnectionInfo[]> = {};
+  const unresolvedLinks: Array<{
+    port1Name: string;
+    port2Name: string;
+    candidates1: string[];
+    candidates2: string[];
+  }> = [];
 
   const linkCount = typeof net.getLinkCount === "function" ? net.getLinkCount() : 0;
-  for (let li = 0; li < linkCount; li++) {
-    const link = net.getLinkAt ? net.getLinkAt(li) : null;
-    if (!link) continue;
+  const mergedRegistry = mergeRegistries(getLinkRegistry(DEV_DIR, fm), loadLinksJson(DEV_DIR, fm));
+  const ptLinkDebug = {
+    getLinkCountResult: linkCount,
+    getLinkAtExists: typeof net.getLinkAt === "function",
+    ptLinksFound: 0,
+    registryEntries: Object.keys(mergedRegistry).length,
+  };
+
+  for (let li = 0; linkCount > 0 && li < linkCount; li++) {
+    const link = typeof net.getLinkAt === "function" ? net.getLinkAt(li) : null;
+    if (!link) {
+      ptLinkDebug.ptLinksFound = li;
+      break;
+    }
+    ptLinkDebug.ptLinksFound++;
+
     const port1 = link.getPort1 ? link.getPort1() : null;
     const port2 = link.getPort2 ? link.getPort2() : null;
     if (!port1 || !port2 || !port1.getName || !port2.getName) continue;
@@ -168,6 +282,8 @@ export function handleListDevices(payload: ListDevicesPayload, deps: HandlerDeps
 
     let dn1: string | null = null;
     let dn2: string | null = null;
+    const candidates1: string[] = [];
+    const candidates2: string[] = [];
 
     outer: for (let di = 0; di < count; di++) {
       const dev = net.getDeviceAt(di);
@@ -177,8 +293,9 @@ export function handleListDevices(payload: ListDevicesPayload, deps: HandlerDeps
       for (let pi = 0; pi < portCount; pi++) {
         const port = dev.getPortAt ? dev.getPortAt(pi) : null;
         if (port && port.getName && port.getName() === p1Name) {
-          dn1 = devName;
-          break outer;
+          candidates1.push(devName);
+          if (!dn1) dn1 = devName;
+          break;
         }
       }
     }
@@ -191,16 +308,63 @@ export function handleListDevices(payload: ListDevicesPayload, deps: HandlerDeps
       for (let pi = 0; pi < portCount; pi++) {
         const port = dev.getPortAt ? dev.getPortAt(pi) : null;
         if (port && port.getName && port.getName() === p2Name) {
-          dn2 = devName;
-          break outer;
+          candidates2.push(devName);
+          if (!dn2) dn2 = devName;
+          break;
         }
       }
     }
 
     if (dn1 && dn2 && dn1 !== dn2) {
-      if (!deviceLinks[dn1]) deviceLinks[dn1] = [];
-      if (deviceLinks[dn1].indexOf(dn2) === -1) deviceLinks[dn1].push(dn2);
+      const confidence: ConnectionInfo["confidence"] =
+        candidates1.length === 1 && candidates2.length === 1 ? "ambiguous" : "unknown";
+      if (!connectionsByDevice[dn1]) connectionsByDevice[dn1] = [];
+      connectionsByDevice[dn1].push({
+        localPort: p1Name,
+        remoteDevice: dn2,
+        remotePort: p2Name,
+        confidence,
+        evidence: { localCandidates: candidates1, remoteCandidates: candidates2 },
+      });
+    } else {
+      unresolvedLinks.push({
+        port1Name: p1Name,
+        port2Name: p2Name,
+        candidates1,
+        candidates2,
+      });
     }
+  }
+
+  if (ptLinkDebug.getLinkCountResult === 0) {
+    deps.dprint?.(
+      `[handleListDevices] getLinkCount()=0 — no PT links detected. Registry: ${ptLinkDebug.registryEntries} entries.`,
+    );
+  } else if (ptLinkDebug.ptLinksFound === 0 && linkCount > 0) {
+    deps.dprint?.(
+      `[handleListDevices] getLinkCount()=${linkCount} but getLinkAt(0)=null — PT link API unavailable. Using registry only.`,
+    );
+  }
+
+  for (const [_key, entry] of Object.entries(mergedRegistry)) {
+    const d1 = entry.device1;
+    const d2 = entry.device2;
+    if (!connectionsByDevice[d1]) connectionsByDevice[d1] = [];
+    connectionsByDevice[d1].push({
+      localPort: entry.port1,
+      remoteDevice: d2,
+      remotePort: entry.port2,
+      confidence: "registry",
+      evidence: { source: entry.source },
+    });
+    if (!connectionsByDevice[d2]) connectionsByDevice[d2] = [];
+    connectionsByDevice[d2].push({
+      localPort: entry.port2,
+      remoteDevice: d1,
+      remotePort: entry.port1,
+      confidence: "registry",
+      evidence: { source: entry.source },
+    });
   }
 
   for (let i = 0; i < count; i++) {
@@ -216,7 +380,7 @@ export function handleListDevices(payload: ListDevicesPayload, deps: HandlerDeps
     }
   }
 
-  return { ok: true, devices, count, deviceLinks };
+  return { ok: true, devices, count, connectionsByDevice, unresolvedLinks, ptLinkDebug };
 }
 
 /**

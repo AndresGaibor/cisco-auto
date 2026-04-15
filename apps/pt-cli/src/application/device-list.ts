@@ -23,6 +23,14 @@ interface LiveDeviceListController {
   };
 }
 
+export interface ConnectionInfo {
+  localPort: string | null;
+  remoteDevice: string | null;
+  remotePort: string | null;
+  confidence: "exact" | "registry" | "ambiguous" | "unknown";
+  evidence?: { localCandidates?: string[]; remoteCandidates?: string[] };
+}
+
 export interface TopologyDeviceLike {
   name: string;
   model: string;
@@ -51,10 +59,18 @@ export interface ListedDevice {
   mask?: string;
 }
 
+export interface UnresolvedLink {
+  port1Name: string;
+  port2Name: string;
+  candidates1: string[];
+  candidates2: string[];
+}
+
 export interface DeviceListResult {
   devices: ListedDevice[];
   count: number;
-  deviceLinks: Record<string, string[]>;
+  connectionsByDevice: Record<string, ConnectionInfo[]>;
+  unresolvedLinks: UnresolvedLink[];
 }
 
 export function isEmptyTopologySnapshot(
@@ -99,18 +115,23 @@ export function buildDeviceListFromSnapshot(snapshot: {
     mask: device.mask,
   }));
 
-  const deviceLinks: Record<string, string[]> = {};
+  const connectionsByDevice: Record<string, ConnectionInfo[]> = {};
   for (const link of Object.values(snapshot.links ?? {})) {
-    if (!deviceLinks[link.device1]) deviceLinks[link.device1] = [];
-    if (!deviceLinks[link.device2]) deviceLinks[link.device2] = [];
-    deviceLinks[link.device1].push(`${link.device2}:${link.port2}`);
-    deviceLinks[link.device2].push(`${link.device1}:${link.port1}`);
+    const arr = connectionsByDevice[link.device1] ?? [];
+    arr.push({
+      localPort: link.port1,
+      remoteDevice: link.device2,
+      remotePort: link.port2,
+      confidence: "registry",
+    });
+    connectionsByDevice[link.device1] = arr;
   }
 
   return {
     devices,
     count: devices.length,
-    deviceLinks,
+    connectionsByDevice,
+    unresolvedLinks: [],
   };
 }
 
@@ -144,6 +165,7 @@ export async function loadLiveDeviceListFromController(
   controller: LiveDeviceListController,
   type?: string,
   timeoutMs = 15000,
+  options?: { refreshCache?: boolean },
 ): Promise<DeviceListResult> {
   console.log(`[pt-cli] listDevices() type=${String(type ?? "none")} timeoutMs=${timeoutMs}`);
   try {
@@ -164,7 +186,7 @@ export async function loadLiveDeviceListFromController(
       .getBridge()
       .sendCommandAndWait<unknown>(
         "listDevices",
-        { id: `ctrl_${Date.now()}`, filter: type },
+        { id: `ctrl_${Date.now()}`, filter: type, refreshCache: options?.refreshCache },
         timeoutMs,
       ),
     timeout,
@@ -174,18 +196,27 @@ export async function loadLiveDeviceListFromController(
   const devices = mapLiveDevices(value);
   console.log(`[pt-cli] devices mapped count=${devices.length}`);
 
-  const deviceLinks = value && typeof value === "object" ? value.deviceLinks || {} : {};
+  const connectionsByDevice =
+    value && typeof value === "object"
+      ? (value.connectionsByDevice as Record<string, ConnectionInfo[]>) || {}
+      : {};
+  const unresolvedLinks =
+    value && typeof value === "object" ? (value.unresolvedLinks as UnresolvedLink[]) || [] : [];
   const totalCount =
     value && typeof value === "object" ? value.count || devices.length : devices.length;
 
   return {
     devices,
     count: totalCount,
-    deviceLinks,
+    connectionsByDevice,
+    unresolvedLinks,
   };
 }
 
-export async function loadLiveDeviceList(type?: string): Promise<DeviceListResult> {
+export async function loadLiveDeviceList(
+  type?: string,
+  options?: { refreshCache?: boolean },
+): Promise<DeviceListResult> {
   let controller: LiveDeviceListController;
   try {
     controller = createDefaultPTController() as unknown as LiveDeviceListController;
@@ -198,7 +229,7 @@ export async function loadLiveDeviceList(type?: string): Promise<DeviceListResul
 
   try {
     await controller.start();
-    return await loadLiveDeviceListFromController(controller, type);
+    return await loadLiveDeviceListFromController(controller, type, 15000, options);
   } catch (err) {
     if (err instanceof Error && err.message.includes("no respondió a tiempo")) {
       throw new Error("Packet Tracer no respondió. Verifica que esté abierto y el script cargado.");

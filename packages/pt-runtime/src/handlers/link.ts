@@ -3,9 +3,39 @@
 // ============================================================================
 
 import type { HandlerDeps, HandlerResult, PTDevice } from "../utils/helpers";
+import type { PTFileManager } from "../utils/helpers";
 import { resolveDevicePortName, getDevicePortNames } from "../utils/helpers";
 import { DEVICE_TYPES } from "../utils/constants";
 import { CABLE_TYPES, getCableTypeId } from "../utils/constants";
+
+const LINK_REGISTRY = "link-registry.json";
+
+interface LinkRegistryEntry {
+  device1: string;
+  port1: string;
+  device2: string;
+  port2: string;
+  source: string;
+  createdAt: number;
+}
+
+type LinkRegistry = Record<string, LinkRegistryEntry>;
+
+function getLinkRegistry(dir: string, fm: PTFileManager): LinkRegistry {
+  const regPath = dir + "/" + LINK_REGISTRY;
+  try {
+    if (!fm.fileExists(regPath)) return {};
+    const content = fm.getFileContents(regPath);
+    return JSON.parse(content) as LinkRegistry;
+  } catch {
+    return {};
+  }
+}
+
+function saveLinkRegistry(dir: string, fm: PTFileManager, registry: LinkRegistry): void {
+  const regPath = dir + "/" + LINK_REGISTRY;
+  fm.writePlainTextToFile(regPath, JSON.stringify(registry, null, 2));
+}
 
 export interface AddLinkPayload {
   type: "addLink";
@@ -67,8 +97,10 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
   const device1 = net.getDevice(payload.device1);
   const device2 = net.getDevice(payload.device2);
 
-  if (!device1) return { ok: false, error: `Device not found: ${payload.device1}`, code: "DEVICE_NOT_FOUND" };
-  if (!device2) return { ok: false, error: `Device not found: ${payload.device2}`, code: "DEVICE_NOT_FOUND" };
+  if (!device1)
+    return { ok: false, error: `Device not found: ${payload.device1}`, code: "DEVICE_NOT_FOUND" };
+  if (!device2)
+    return { ok: false, error: `Device not found: ${payload.device2}`, code: "DEVICE_NOT_FOUND" };
 
   if (device1?.skipBoot) device1.skipBoot();
   if (device2?.skipBoot) device2.skipBoot();
@@ -94,9 +126,8 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
     };
   }
 
-  const cableTypeName = payload.linkType === "auto"
-    ? recommendCableType(device1, device2)
-    : (payload.linkType || "auto");
+  const cableTypeName =
+    payload.linkType === "auto" ? recommendCableType(device1, device2) : payload.linkType || "auto";
   const cableType = getCableTypeId(cableTypeName);
 
   interface LinkAttempt {
@@ -123,8 +154,7 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
   const isEnd1 = isEndDevice(device1);
   const isEnd2 = isEndDevice(device2);
 
-  const attempts: LinkAttempt[] =
-    isEnd1 && !isEnd2 ? [swapped, original] : [original, swapped];
+  const attempts: LinkAttempt[] = isEnd1 && !isEnd2 ? [swapped, original] : [original, swapped];
 
   let lastError: string | null = null;
   let usedAttempt: LinkAttempt | null = null;
@@ -182,13 +212,23 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
         cableType,
         isEnd1,
         isEnd2,
-        attemptedOrders: attempts.map(
-          (a) => `${a.devName1}:${a.port1} → ${a.devName2}:${a.port2}`,
-        ),
+        attemptedOrders: attempts.map((a) => `${a.devName1}:${a.port1} → ${a.devName2}:${a.port2}`),
         lastError,
       },
     };
   }
+
+  const key = `${payload.device1}:${resolvedPort1}--${payload.device2}:${resolvedPort2}`;
+  const registry = getLinkRegistry(deps.DEV_DIR, deps.getFM());
+  registry[key] = {
+    device1: payload.device1,
+    port1: resolvedPort1,
+    device2: payload.device2,
+    port2: resolvedPort2,
+    source: "runtime",
+    createdAt: Date.now(),
+  };
+  saveLinkRegistry(deps.DEV_DIR, deps.getFM(), registry);
 
   const linkId = `${payload.device1}:${payload.port1}--${payload.device2}:${payload.port2}`;
 
@@ -204,8 +244,21 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
   };
 }
 
-export function handleRemoveLink(payload: { device: string; port: string }, deps: HandlerDeps): HandlerResult {
+export function handleRemoveLink(
+  payload: { device: string; port: string },
+  deps: HandlerDeps,
+): HandlerResult {
   const { getLW } = deps;
+  const registry = getLinkRegistry(deps.DEV_DIR, deps.getFM());
+  const key = Object.keys(registry).find(
+    (k) =>
+      k.startsWith(`${payload.device}:${payload.port}--`) ||
+      k.endsWith(`--${payload.device}:${payload.port}`),
+  );
+  if (key) {
+    delete registry[key];
+    saveLinkRegistry(deps.DEV_DIR, deps.getFM(), registry);
+  }
   getLW().deleteLink(payload.device, payload.port);
   return { ok: true };
 }
