@@ -25,16 +25,53 @@ export function createRuntimeLoader(config: {
   let lastGoodRuntimeFn: ((payload: Record<string, unknown>, api: unknown) => unknown) | null = null;
   let pendingReload = false;
 
+  // Determine file access method
+  // fm = ipc.systemFileManager() when available
+  // _ScriptModule = fallback for PT versions without fm
+  const useFm = typeof fm !== "undefined" && fm !== null;
+  const useScriptModule = typeof _ScriptModule !== "undefined" && _ScriptModule !== null;
+
   function getFileMtime(path: string): number {
     try {
-      return fm.getFileModificationTime ? fm.getFileModificationTime(path) : 0;
+      if (useFm && fm.getFileModificationTime) {
+        return fm.getFileModificationTime(path);
+      }
+      if (useScriptModule) {
+        return _ScriptModule.getFileModificationTime(path);
+      }
+      return 0;
     } catch (e) {
       return 0;
     }
   }
 
+  function fileExists(path: string): boolean {
+    try {
+      if (useFm) {
+        return !!fm.fileExists(path);
+      }
+      if (useScriptModule) {
+        var sz = _ScriptModule.getFileSize(path);
+        return sz >= 0;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function getFileContents(path: string): string {
+    if (useFm) {
+      return fm.getFileContents(path);
+    }
+    if (useScriptModule) {
+      return _ScriptModule.getFileContents(path);
+    }
+    throw new Error("No file access method available");
+  }
+
   function load(): void {
-    if (!fm.fileExists(config.runtimeFile)) {
+    if (!fileExists(config.runtimeFile)) {
       dprint("[runtime] No runtime.js found");
       return;
     }
@@ -68,7 +105,7 @@ export function createRuntimeLoader(config: {
   }
 
   function reloadIfNeeded(isBusyCheck: () => boolean): void {
-    if (!fm.fileExists(config.runtimeFile)) {
+    if (!fileExists(config.runtimeFile)) {
       return;
     }
 

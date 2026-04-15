@@ -411,6 +411,17 @@ export interface PTNetwork {
   getTotalDeviceAttributeValue?(attribute: string): number;
 }
 
+export interface PTModule {
+  getSlotCount(): number;
+  getSlotTypeAt(index: number): number;
+  getModuleCount(): number;
+  getModuleAt(index: number): PTModule | null;
+  addModuleAt(moduleId: string, slotIndex: number): boolean;
+  getModuleNameAsString?(): string;
+  getSlotPath?(): string;
+  getModuleType?(): number;
+}
+
 export interface PTDevice {
   getName(): string;
   setName(name: string): void;
@@ -440,6 +451,8 @@ export interface PTDevice {
    * @example device.getProcess("DhcpServerMainProcess")
    */
   getProcess?<T = unknown>(name: string): T | null;
+  /** Get the root module of this device's module tree (for modular routers) */
+  getRootModule?(): PTModule | null;
 }
 
 export interface PTCommandLine {

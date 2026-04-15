@@ -1,6 +1,6 @@
 # Packet Tracer IPC API - Documentación Completa
 
-> **Última actualización:** 14 Abril 2026
+> **Última actualización:** 15 Abril 2026
 > **Estado:** 🎉 **FUNCIONAL** - API para topología funciona, CLI para lectura funciona
 
 ---
@@ -28,6 +28,114 @@
 | Cloud-PT | type=7 retorna null | No usar con addDevice() |
 | Laptop-PT | type=12 retorna null | No usar con addDevice() |
 
+## 🔎 DEEP DIVE REAL (47 DISPOSITIVOS)
+
+Se ejecutó un barrido real sobre 47 tipos de dispositivo. Hallazgos clave:
+
+| Familia | Hallazgo |
+|---------|----------|
+| **Router / MLS** | `Router`, `WirelessRouter` y `ASA` exponen `getProcess()`, `getRootModule()`, CLI y puertos con superficie amplia. |
+| **Switches** | `CiscoDevice` y `Router` muestran mezcla de puertos `RouterPort`, `SwitchPort` y `RoutedSwitchPort`. |
+| **Hosts** | `Pc` agrupa PC, laptop, tablet, smartphone, end devices y varias variantes IoT con CLI/ports propios. |
+| **Servers** | `Server` añade procesos como DHCP, HTTP, DNS, SSH, RADIUS y TACACS. |
+| **Industrial / IoT** | `MCU`, `SBC` y `MCUComponent` tienen la mayor superficie de automatización (`analogWrite`, `digitalWrite`, GoosE/SV/IEC61850, slots). |
+
+### Mapa real de `typeId`
+
+| typeId | Modelo | Clase |
+|-------:|--------|-------|
+| 0 | `2911` | `Router` |
+| 1 | `2960-24TT` | `CiscoDevice` |
+| 2 | `Cloud-PT` | `Cloud` |
+| 3 | `Bridge-PT` | `CiscoDevice` |
+| 4 | `Hub-PT` | `Device` |
+| 5 | `Repeater-PT` | `Device` |
+| 6 | `CoAxialSplitter-PT` | `Device` |
+| 7 | `AccessPoint-PT` | `Device` |
+| 8 | `PC-PT` | `Pc` |
+| 9 | `Server-PT` | `Server` |
+| 10 | `Printer-PT` | `Pc` |
+| 11 | `Linksys-WRT300N` | `WirelessRouter` |
+| 12 | `IPPhone-7960` | `CiscoDevice` |
+| 13 | `DSL-Modem-PT` | `Device` |
+| 14 | `Cable-Modem-PT` | `Device` |
+| 16 | `MLS-3650` | `Router` |
+| 18 | `Laptop-PT` | `Pc` |
+| 19 | `TabletPC-PT` | `Pc` |
+| 20 | `SMARTPHONE-PT` | `Pc` |
+| 21 | `WirelessEndDevice-PT` | `Pc` |
+| 22 | `WiredEndDevice-PT` | `Pc` |
+| 23 | `TV-PT` | `Device` |
+| 24 | `Home-VoIP-PT` | `Pc` |
+| 25 | `Analog-Phone-PT` | `Device` |
+| 27 | `ASA-5505` | `ASA` |
+| 29 | `DLC100` | `WirelessRouter` |
+| 30 | `HomeRouter-PT-AC` | `WirelessRouter` |
+| 32 | `Central-Office-Server` | `WirelessRouter` |
+| 35 | `Sniffer` | `Device` |
+| 36 | `MCU-PT` | `MCU` |
+| 37 | `SBC-PT` | `SBC` |
+| 39 | `IoT-*` | `MCUComponent` |
+| 41 | `WLC-PT` | `CiscoDevice` |
+| 44 | `LAP-PT` | `CiscoDevice` |
+| 45 | `Power Distribution Device` | `Device` |
+| 46 | `Copper Patch Panel` | `Device` |
+| 47 | `Copper Wall Mount` | `Device` |
+| 48 | `Meraki-MX65W` | `WirelessRouter` |
+| 49 | `Meraki-Server` | `Server` |
+| 50 | `NetworkController` | `Pc` |
+| 51 | `PLC-PT` | `MCUComponent` |
+| 54 | `CyberObserver` | `Pc` |
+| 55 | `DataHistorianServer` | `Pc` |
+
+### Procesos encontrados
+
+- `DhcpServerProcess`
+- `DhcpServerMainProcess`
+- `VlanManager`
+- `RoutingProcess`
+- `StpMainProcess`
+- `AclProcess`
+- `Aclv6Process`
+- `NtpPTProcess`
+- `SshServerProcess`
+- `HttpServer`
+- `DnsServerProcess`
+- `RadiusClientProcess`
+- `RadiusServerProcess`
+- `TacacsClientProcess`
+- `TacacsServerProcess`
+
+### Eventos y superficies útiles
+
+- Terminal/CLI: `commandStarted`, `outputWritten`, `commandEnded`, `modeChanged`, `promptChanged`, `moreDisplayed`
+- Puerto: `ipChanged`, `powerChanged`, `linkStatusChanged`, `protocolStatusChanged`, `mtuChanged`
+- Workspace: `deviceAdded`, `deviceRemoved`, `deviceMoved`, `linkCreated`, `linkDeleted`, `clusterAdded`, `canvasNoteAdded`, `canvasNoteDeleted`
+- Proceso: `poolAdded`, `poolRemoved`, `leaseAcquired`, `leaseExpired`, `vlanCreated`, `vlanDeleted`, `stpTopologyChanged`
+
+### Observaciones importantes
+
+- `registerEvent()` real usa 3 argumentos: `eventName, context, handler`.
+- `registerDelegate()` y `registerObjectEvent()` existen, pero en runtime suelen comportarse igual que el registro base o no exponen eventos más ricos.
+- `getDeviceType()` no resolvió bien modelos en el barrido; el mapa útil provino de `addDevice()`.
+- `Object.getPrototypeOf()` puede disparar errores IPC en ciertos objetos; usar `try/catch`.
+- Para PT QTScript, usar ES5 puro: sin `let`, `const`, arrow functions ni template literals.
+
+### Módulos y serialización
+
+- `getRootModule()` aparece en routers modulares, wireless routers, servers, PCs y varias familias IoT.
+- `addModule()` / `removeModule()` están presentes en la mayoría de dispositivos con chasis expandible.
+- `getSupportedModule()` permite consultar qué módulos acepta un dispositivo.
+- `serializeToXml()` existe en la mayoría de familias grandes (`Router`, `WirelessRouter`, `Server`, `ASA`, `Pc`, `MCU`, `SBC`) y sirve para volcar el estado observado del objeto.
+- En los módulos `MCU` / `SBC`, la superficie es más rica: `getSlotsCount()`, `getAnalogSlotsCount()`, `getDigitalSlotsCount()`, `getComponentAtSlot()`, `getComponentByName()`, `getSubComponentIndex()` y `setSubComponentIndex()`.
+- En la práctica, `getRootModule()` es la mejor entrada para explorar jerarquías de hardware cuando `getProcess()` no expone suficiente detalle.
+
+### Árbol de módulos verificado
+
+- En routers modulares como `2911`, `2811` y `1941`, `getRootModule()` devuelve un árbol con slots y módulos hijo navegables.
+- El helper de `pt-boot-and-module.js` usa `getSlotCount()`, `getSlotTypeAt()`, `getModuleCount()` y `getModuleAt()` para recorrer el árbol antes de llamar `addModuleAt()`.
+- Los slots para inserción real se detectan de forma recursiva y el flujo espera a que IOS termine de bootear antes de insertar hardware.
+
 ---
 
 ## 🔧 API DE TOPOLOGÍA (COMPLETA)
@@ -38,9 +146,9 @@
 var lws = ipc.appWindow().getActiveWorkspace().getLogicalWorkspace();
 
 // Crear
-var r1 = lws.addDevice(0, "Router-PT", 100, 200);  // type=0 router
-var s1 = lws.addDevice(1, "Switch-PT", 300, 200);  // type=1 switch
-var pc1 = lws.addDevice(8, "PC-PT", 500, 200);      // type=8 pc
+var r1 = lws.addDevice(0, "2911", 100, 200);      // type=0 router
+var s1 = lws.addDevice(1, "2960-24TT", 300, 200); // type=1 switch (solo este modelo)
+var pc1 = lws.addDevice(4, "PC", 500, 200);       // ⚠️ NO funciona - retorna ""
 
 // Eliminar
 lws.removeDevice(r1);
@@ -243,31 +351,79 @@ function configureRouter(router, hostname, interfaces) {
 }
 ```
 
-### ✅ FUNCIONA - addDevice (NUEVO)
+### ✅ addDevice - MAPA COMPLETO (16 Abril 2026)
+
 ```javascript
 var lws = ipc.appWindow().getActiveWorkspace().getLogicalWorkspace();
-var deviceName = lws.addDevice(0, "Router-PT", 500, 300);
-// Retorna: "Router1" (nombre asignado automáticamente)
+var deviceName = lws.addDevice(typeId, "Model", x, y);
+// Retorna: "Router0", "PC0", etc. o "" si falla
 ```
 
-**Modelos verificados que funcionan (14 Abril 2026):**
-| typeId | Modelo | Retorna | ClassName |
-|--------|--------|---------|-----------|
-| 0 | `Router-PT` | ✅ "Router5" | Router |
-| 0 | `2811` | ✅ "Router6" | Router |
-| 0 | `2911` | ✅ "Router7" | Router |
-| 0 | `1941` | ✅ "Router8" | Router |
-| 1 | `Switch-PT` | ✅ "Switch1" | CiscoDevice |
-| 1 | `2960-24TT` | ✅ "Switch2" | CiscoDevice |
-| 8 | `PC-PT` | ✅ "PC1" | Pc |
-| 9 | `Server-PT` | ✅ "Server0" | Server |
-| 12 | `Laptop-PT` | ❌ null | - |
-| 7 | `Cloud-PT` | ❌ null | - |
+**149 combinaciones typeId+modelo verificadas como creatibles:**
 
-**Parámetros:**
-- `typeId`: Ver PT_DEVICE_TYPE_CONSTANTS (0=router, 1=switch, 8=pc, 9=server)
-- `model`: String del catálogo ("Router-PT", "2811", "2960-24TT", etc.)
-- `x`, `y`: Coordenadas en canvas
+| typeId | ClassName | Modelos |
+|--------|-----------|---------|
+| 0 | Router | 1841, 1941, 2811, 2901, 2911, Router-PT, 2621XM, 2620XM, ISR4321, ISR4331 |
+| 1 | CiscoDevice | Switch-PT, 2960-24TT, 2950-24, 2950T-24, Switch-PT-Empty |
+| 2 | Cloud | Cloud-PT, Cloud-PT-Empty |
+| 3 | CiscoDevice | Bridge-PT |
+| 4 | Device | Hub-PT |
+| 5 | Device | Repeater-PT |
+| 6 | Device | CoAxialSplitter-PT |
+| 7 | Device | AccessPoint-PT, AccessPoint-PT-A, AccessPoint-PT-AC, AccessPoint-PT-N |
+| 8 | Pc | PC-PT |
+| 9 | Server | Server-PT |
+| 10 | Pc | Printer-PT |
+| 11 | WirelessRouter | Linksys-WRT300N |
+| 12 | CiscoDevice | 7960 (IP Phone) |
+| 13 | Device | DSL-Modem-PT |
+| 14 | Device | Cable-Modem-PT |
+| 16 | Router | 3650-24PS, 3560-24PS, IE-2000, IE-3400, IE-9320 |
+| 18 | Pc | Laptop-PT |
+| 19 | Pc | TabletPC-PT |
+| 20 | Pc | SMARTPHONE-PT |
+| 21 | Pc | WirelessEndDevice-PT |
+| 22 | Pc | WiredEndDevice-PT |
+| 23 | Device | TV-PT |
+| 24 | Pc | Home-VoIP-PT |
+| 25 | Device | Analog-Phone-PT |
+| 27 | ASA | 5505, 5506-X, ISA-3000 |
+| 29 | WirelessRouter | DLC100 |
+| 30 | WirelessRouter | HomeRouter-PT-AC |
+| 31 | Device | Cell-Tower |
+| 32 | WirelessRouter | Central-Office-Server |
+| 35 | Device | Sniffer |
+| 36 | MCU | MCU-PT |
+| 37 | SBC | SBC-PT |
+| 39 | MCUComponent | 78 dispositivos IoT (Air Conditioner, LED, Motion Sensor, etc.) |
+| 41 | CiscoDevice | WLC-2504, WLC-3504, WLC-PT |
+| 44 | CiscoDevice | 3702i, LAP-PT |
+| 45 | Device | Power Distribution Device |
+| 46 | Device | Copper Patch Panel, Fiber Patch Panel |
+| 47 | Device | Copper Wall Mount, Fiber Wall Mount |
+| 48 | WirelessRouter | Meraki-MX65W |
+| 49 | Server | Meraki-Server |
+| 50 | Pc | NetworkController |
+| 51 | MCUComponent | PLC-PT |
+| 54 | Pc | CyberObserver |
+| 55 | Pc | DataHistorianServer |
+
+**Key findings (16 Abril 2026):**
+- `getDeviceType("PC-PT")` retorna 0 (NO funciona como resolver de typeId)
+- `getAvailableDeviceCount()` retorna 170 (catalogo interno existe)
+- `addDevice(8, "PC-PT", x, y)` ✅ SÍ funciona - el nombre exacto es "PC-PT"
+- `addDevice(9, "Server-PT", x, y)` ✅ SÍ funciona - el nombre exacto es "Server-PT"
+- `className="CiscoDevice"` puede ser Switch, Bridge, IP Phone, WLC o LAP segun modelo
+- `className="Device"` es generico para Hub, Repeater, CoaxialSplitter, DSL, Cable, TV, etc.
+- 78 dispositivos IoT con className=MUCComponent (typeId=39)
+- ASA tiene className propia (ASA) no Router ni Device
+- **149 combinaciones typeId+modelo** confirmadas creatibles
+
+**Parametros addDevice(typeId, model, x, y):**
+- `typeId`: entero 0-100 segun DEVICE_TYPE_MAP
+- `model`: nombre exacto del catalogo (ej: "PC-PT", "Server-PT", "2960-24TT")
+- `x`, `y`: coordenadas en canvas
+- Retorna: nombre creado (ej "Router0") o "" si falla
 
 ### ✅ autoConnectDevices - CREA ENLACES (14 Abril 2026) 🎉
 
@@ -508,35 +664,58 @@ PT_CABLE_TYPE_CONSTANTS = {
 }
 ```
 
-### Device Types (PT_DEVICE_TYPE_CONSTANTS)
+### Device Types (typeId -> className REALES)
 ```javascript
-PT_DEVICE_TYPE_CONSTANTS = {
-  router: 0,
-  switch: 1,
-  hub: 2,
-  repeater: 3,
-  bridge: 4,
-  wireless: 5,
-  wanEmulator: 6,
-  cloud: 7,
-  pc: 8,
-  server: 9,
-  printer: 10,
-  ipPhone: 11,
-  laptop: 12,
-  tablet: 13,
-  smartphone: 14,
-  multilayerSwitch: 16,
-  wiredEndDevice: 17,
-  tv: 18,
-  homeVoip: 19,
-  analogPhone: 20,
-  iot: 21,
-  sniffer: 22,
-  mcu: 23,
-  sbc: 24
+// VERIFICADO 16 Abril 2026 - 149 combinaciones confirmadas con addDevice()
+DEVICE_TYPE_ID_MAP = {
+  0:  "Router",         // 10 modelos: 1841,1941,2811,2901,2911,Router-PT,2621XM,2620XM,ISR4321,ISR4331
+  1:  "CiscoDevice",     // 5 modelos: Switch-PT, 2960-24TT, 2950-24, 2950T-24, Switch-PT-Empty
+  2:  "Cloud",           // 2 modelos: Cloud-PT, Cloud-PT-Empty
+  3:  "CiscoDevice",     // Bridge-PT
+  4:  "Device",          // Hub-PT
+  5:  "Device",          // Repeater-PT
+  6:  "Device",          // CoAxialSplitter-PT
+  7:  "Device",          // 4 APs: AccessPoint-PT, -A, -AC, -N
+  8:  "Pc",              // PC-PT
+  9:  "Server",          // Server-PT
+  10: "Pc",              // Printer-PT
+  11: "WirelessRouter",  // Linksys-WRT300N
+  12: "CiscoDevice",      // 7960 (IP Phone)
+  13: "Device",          // DSL-Modem-PT
+  14: "Device",          // Cable-Modem-PT
+  16: "Router",          // 5 modelos multilayer: 3650-24PS, 3560-24PS, IE-2000, IE-3400, IE-9320
+  18: "Pc",              // Laptop-PT
+  19: "Pc",              // TabletPC-PT
+  20: "Pc",              // SMARTPHONE-PT
+  21: "Pc",              // WirelessEndDevice-PT
+  22: "Pc",              // WiredEndDevice-PT
+  23: "Device",          // TV-PT
+  24: "Pc",              // Home-VoIP-PT
+  25: "Device",          // Analog-Phone-PT
+  27: "ASA",             // 3 modelos: 5505, 5506-X, ISA-3000
+  29: "WirelessRouter",  // DLC100
+  30: "WirelessRouter",  // HomeRouter-PT-AC
+  31: "Device",          // Cell-Tower
+  32: "WirelessRouter",  // Central-Office-Server
+  35: "Device",          // Sniffer
+  36: "MCU",             // MCU-PT
+  37: "SBC",             // SBC-PT
+  39: "MCUComponent",    // 78 dispositivos IoT (Light, Sensor, Motor, etc.)
+  41: "CiscoDevice",      // WLC-2504, WLC-3504, WLC-PT
+  44: "CiscoDevice",      // 3702i, LAP-PT (Light Weight Access Point)
+  45: "Device",          // Power Distribution Device
+  46: "Device",          // Copper/Fiber Patch Panel
+  47: "Device",          // Copper/Fiber Wall Mount
+  48: "WirelessRouter",  // Meraki-MX65W
+  49: "Server",          // Meraki-Server
+  50: "Pc",              // NetworkController
+  51: "MCUComponent",    // PLC-PT
+  54: "Pc",              // CyberObserver
+  55: "Pc"               // DataHistorianServer
 }
 ```
+
+**NOTA:** Las constantes old-style (PT_DEVICE_TYPE_CONSTANTS) de docs anteriores son IMPRECISAS. El typeId NO corresponde directamente al className. Siempre verificar con `device.getClassName()`.
 
 ---
 
@@ -1103,7 +1282,7 @@ device.getYCoordinate();  // Y actual
 device.skipBoot();  // ⚠️ Por probar en lab nuevo
 
 // Modulos
-device.addModule(slot, module);   // ⚠️ Por probar
+device.addModule(slot, module);   // ⚠️Funciona pero requiere slot STRING y power OFF. Devuelve false para TODOS los modulos en PT 8.x (ver seccion HALLAZGOS addModule)
 device.removeModule(slot);        // ⚠️ Por probar
 ```
 
@@ -1142,64 +1321,306 @@ lws.addDevice(12, "Laptop-PT", 1000, 200);  // null
 
 ---
 
-## HALLAZGOS BOOT TEST (15 Abril 2026)
+## MAPA DE FAMILIAS REALES (16 Abril 2026)
 
-### ✅ addDevice() funciona - Los 3 modelos arrancan IOS
+### Router
+- `className`: `Router`
+- `typeId`: `0`, `16`
+- Puertos: 4 a 29 según modelo
+- CLI: sí
+- Procesos típicos: `VlanManager`, `RoutingProcess`, `StpMainProcess`, `AclProcess`, `Aclv6Process`, `NtpServerProcess`, `SshServerProcess`
 
-| Modelo | Nombre | Puerto count | Boot Status |
-|--------|--------|-------------|-------------|
-| 2911 | Router25 | 4 | Boot en progreso ✅ |
-| 2811 | Router26 | 3 | Boot en progreso ✅ |
-| 1941 | Router27 | 3 | Boot en progreso ✅ |
+### CiscoDevice
+- `className`: `CiscoDevice`
+- `typeId`: `1`, `3`, `12`, `41`, `44`
+- Ejemplos reales: switches, bridges, IP phones, WLC, LAP
+- Puertos: muy variables
+- CLI: sí en switches, IP phone, WLC y LAP
 
-**Output capturado (2911 y 1941):**
-```
-System Bootstrap, Version 15.1(4)M4, RELEASE SOFTWARE
-CISCO2911/K9 platform with 524288 Kbytes of main memory
-IOS Image Load Test
-Digitally Signed Release Software
-Self decompressing the image : ##
-```
+### Cloud
+- `className`: `Cloud`
+- `typeId`: `2`
+- Puertos: serial, modem, ethernet y coaxial
+- CLI: no
+- Métodos únicos: `addPhoneConnection()`, `addPortConnection()`, `addSubLinkConnection()`, `removePortConnection()`
 
-**Output capturado (2811):**
-```
-System Bootstrap, Version 12.1(3r)T2
-cisco 2811 (MPC860) processor
-Readonly ROMMON initialized
-Self decompressing the image : ##
-```
+### Device
+- `className`: `Device`
+- `typeId`: `4`, `5`, `6`, `13`, `14`, `23`, `25`, `31`, `35`, `45`, `46`, `47`
+- Ejemplos reales: hub, repeater, splitter coaxial, modem, TV, sniffer, patch panels
+- CLI: no
 
-### 🔍 CONCLUSIÓN BOOT
-- Los routers SÍ arrancan IOS cuando se crean con `addDevice()` ✅
-- El CLI funciona desde el inicio (output capturado)
-- El problema del script anterior: solo esperó 1 ciclo de polling
-- Los routers necesitan ~30-60 segundos para llegar a `Router>`
+### Pc
+- `className`: `Pc`
+- `typeId`: `8`, `10`, `18`, `19`, `20`, `21`, `22`, `24`, `50`, `54`, `55`
+- Ejemplos reales: PC, printer, laptop, tablet, smartphone, controllers
+- CLI: sí
+- Procesos frecuentes: `NtpServerProcess`, `AclProcess`, `Aclv6Process`
 
-### Script nuevo: `pt-boot-and-module.js`
-- Limpia lab y crea 2911, 2811, 1941
-- Espera hasta 60s a que IOS bootee (polling real)
-- Detecta prompt `Router>` o `Router#`
-- Si detecta dialog inicial (`Would you like`), responde `no`
-- Luego prueba `addModule()` en el primer router estable
-- **En PT vacío, cargar `~/pt-dev/pt-boot-and-module.js`**
+### Server
+- `className`: `Server`
+- `typeId`: `9`, `49`
+- Ejemplos reales: server genérico, Meraki-Server
+- CLI: sí
+- Procesos comunes: `DhcpServerMainProcess`, `DnsServerProcess`, `HttpServerProcess`
 
-### Plan de ejecución
+### WirelessRouter
+- `className`: `WirelessRouter`
+- `typeId`: `11`, `29`, `30`, `32`, `48`
+- Ejemplos reales: WRT300N, Home Gateway, Home Router, Central Office Server, Meraki MX
+- CLI: sí
+- Métodos únicos: `addNatEntry()`, `removeNatEntry()`, `setDMZEntry()`, `setDefaultGateway()`, `isRemoteManagementEnable()`
 
-**Paso 1:** Abrir PT con lab vacío (sin `.pkt`)
-**Paso 2:** Cargar `~/pt-dev/pt-boot-and-module.js`
-**Paso 3:** Esperar hasta 60s - el script reporta cuando un router llega a IOS
-**Paso 4:** Documentar resultados
+### ASA
+- `className`: `ASA`
+- `typeId`: `27`
+- Puertos: VLAN + ethernet
+- CLI: no
+- Métodos únicos: `addBookmark()`, `removeBookmark()`, `getBookmarkCount()`, `getWebvpnUserManager()`
 
-### Resultados esperados
+### MCU / SBC / MCUComponent
+- `className`: `MCU`, `SBC`, `MCUComponent`
+- `typeId`: `36`, `37`, `39`, `51`
+- MCU/SBC: programación y componentes IoT
+- `MCUComponent` es la clase real de los dispositivos IoT y PLC
+- Métodos únicos: `analogWrite()`, `digitalWrite()`, `enableGoosePublisherOnPort()`, `getComponentAtSlot()`, `setSubComponentIndex()`
 
-| Pregunta | Esperado |
-|----------|----------|
-| ¿`addDevice(2911)` crea router? | ✅ Sí |
-| ¿Router arranca IOS? | ✅ Sí (30-60s) |
-| ¿CLI responde desde ROMMON? | ✅ Sí |
-| ¿`addModule("WIC-1T")` funciona? | 🔜 Por probar |
-| ¿`addModule()` rechaza slot inválido? | 🔜 Por probar |
+### Regla crítica
+- `typeId` **no** define la clase por sí solo.
+- El modelo exacto determina la clase real, los puertos y los procesos disponibles.
+- Siempre validar con `device.getClassName()`, `device.getPortCount()` y `device.getProcess()`.
 
 ---
 
-*Documentado: 15 Abril 2026*
+## addModule() - IMPLEMENTADO (15 Abril 2026)
+
+### Arquitectura descubierta
+
+PT usa un **árbol de módulos** jerárquico. No se inserta directamente en `root`.
+
+```
+2911 tree:
+  root (type=18)
+    child[0] (type=18) ← HWIC/WIC van aqui
+      slot[0-3] type=2 (eInterfaceCard) ← estos son los slots WIC/HWIC
+
+2811 tree:
+  root (type=18)
+    child[0] (type=18)
+      slot[0-3] type=2 (eInterfaceCard)
+    child[1] (type=1) ← aparece DESPUES de insertar NM-2W
+      slot[0-1] type=2
+
+1941 tree:
+  root (type=18)
+    child[0] (type=18) ← HWIC/WIC van aqui
+      slot[0-1] type=2 (eInterfaceCard)
+```
+
+### Slot types
+
+| Valor | Constante | Descripcion |
+|-------|-----------|-------------|
+| 0 | eLineCard | - |
+| 1 | eNetworkModule | Slots NM (2811 root slot 1) |
+| 2 | eInterfaceCard | Slots WIC/HWIC |
+| 18 | eNonRemovableModule | Slot raiz - no insertar |
+| 32 | eNonRemovableInterfaceCard | - |
+
+### Estrategia por modelo
+
+**2911 y 1941:**
+1. Insertar HWIC/WIC en `root/child[0]` slot type 2
+2. Puerto count aumenta (ej: 4→6 con HWIC-2T)
+
+**2811 (two-step):**
+1. Primero: insertar `NM-2W` en `root` slot 1 (type=1)
+2. Esto crea `child[1]` con slots tipo 2
+3. Segundo: insertar HWIC/WIC en `child[1]` slot type 2
+
+### API del módulo árbol
+
+```javascript
+var root = dev.getRootModule();
+root.addModuleAt("HWIC-2T", slotIndex);  // Retorna boolean
+root.getSlotCount();   // Numero de slots
+root.getSlotTypeAt(i); // Tipo de slot
+root.getModuleCount();  // Numero de child modules
+root.getModuleAt(i);    // Child module
+```
+
+### Evento post-insercion
+
+Cuando un modulo se inserta exitosamente, PT emite:
+```javascript
+dev.registerEvent("moduleAdded", callback);
+// args = { model: "HWIC-2T", slotPath: "0/0", type: 2 }
+
+dev.registerEvent("portAdded", callback);
+// args = { portName: "Serial0/0/0" }
+```
+
+### Implementacion en runtime.js
+
+`handleAddModule` ahora:
+1. Obtiene `root` via `device.getRootModule()`
+2. Recolecta todos los candidatos (modules con slots) recursivamente
+3. Encuentra el mejor slot segun tipo de modulo (HWIC→type 2, NM→type 1)
+4. Para 2811+HWIC: inserta NM-2W primero si no existe container
+5. Inserta modulo con `parent.addModuleAt(moduleId, slotIndex)`
+6. Restore power con `device.setPower(true)` + `device.skipBoot()`
+
+---
+
+## HALLAZGOS BOOT TEST (15 Abril 2026)
+
+### ✅ addDevice() + Boot Detection Funciona (event-based)
+
+| Modelo | Nombre | Puerto count | Boot Status |
+|--------|--------|-------------|-------------|
+| 2911 | Router40 | 4 | Boot completo + IOS listo ✅ |
+| 2811 | Router41 | 3 | Boot completo + IOS listo ✅ |
+| 1941 | Router42 | 3 | Boot completo + IOS listo ✅ |
+
+### Modelo de deteccion correcto (NO polling de cli.getOutput)
+
+El scraping de `cli.getOutput()` para detectar "Self decompressing the image" NO funciona porque PT caches el output buffer. El metodo correcto es:
+
+**1. Event-based boot detection:**
+```javascript
+dev.registerEvent("doneBooting", state, function(src, args) {
+  state.bootDone = true;
+});
+```
+
+**2. Polling de respaldo con isBooting():**
+```javascript
+if (!dev.isBooting()) { /* boot completo */ }
+```
+
+**3. Validacion IOS con dev.enterCommand():**
+```javascript
+var res = dev.enterCommand("show version", "user");
+// res = { first: 0, second: "Cisco IOS Software..." }
+// first=0 significa exito
+```
+
+### Dialog inicial (Would you like...)
+
+```javascript
+cli.enterChar(13, 0);  // Enter para despertar
+cli.enterCommand("no");  // Responder dialog inicial
+```
+
+### Script: pt-boot-and-module.js
+
+- Limpia lab y crea 2911, 2811, 1941
+- Usa state machine con setInterval (no while bloqueante)
+- Boot detection: doneBooting event + isBooting() polling
+- IOS ready: dev.enterCommand("show version", "user")
+- Dialog dismiss: enterChar(13) + enterCommand("no")
+- Power cycle para module changes
+
+**En PT vacío, cargar `~/pt-dev/pt-boot-and-module.js`**
+
+---
+
+## QT SCRIPT COMPATIBILITY (16 Abril 2026)
+
+PT usa QtScript (pre-ES6). Reglas estrictas:
+
+### NO usar
+```javascript
+// ❌ Arrow functions
+var fn = () => {}
+
+// ❌ Template literals
+var s = `hello ${name}`
+
+// ❌ forEach/map/filter en arrays
+arr.forEach(function(x) {})
+
+// ❌ let, const
+let x = 1; const y = 2;
+
+// ❌ Spread operator
+var x = [...arr]
+
+// ❌ Destructuring
+var {a, b} = obj;
+```
+
+### SÍ usar
+```javascript
+// ✅ Function declaration
+function foo() {}
+
+// ✅ Funciones anonimas
+var fn = function() {}
+
+// ✅ Concatenacion
+var s = "hello " + name
+
+// ✅ for loop
+for (var i = 0; i < arr.length; i++) {}
+
+// ✅ for...in para enumerar
+for (var k in obj) { if (obj.hasOwnProperty(k)) {} }
+
+// ✅ var
+var x = 1;
+```
+
+### Object.getPrototypeOf() - PUEDE FALLAR
+En dispositivos como Router, `Object.getPrototypeOf(dev)` internamente hace llamadas IPC que pueden lanzar excepciones.
+
+**SIEMPRE envolver en try/catch:**
+```javascript
+function safeProto(obj) {
+  try { return Object.getPrototypeOf(obj); }
+  catch(e) { return null; }
+}
+```
+
+### sp() vs si() - INVOCAR METODOS
+```javascript
+var fn = obj["methodName"];  // Obtiene la referencia de la funcion
+fn();                          // La invoca
+
+// ⚠️ sp() solo obtiene la referencia, no invoca:
+var x = sp(obj, "getName");    // x es la funcion, NO el nombre
+
+// ✅ si() invoca con try/catch:
+function si(obj, name, args) {
+  var fn = obj[name];
+  if (typeof fn !== "function") return null;
+  try { return fn.apply(obj, args || []); }
+  catch(e) { return null; }
+}
+var name = si(obj, "getName");  // name es el string "Router0"
+```
+
+### Helpers ES5 para scripts PT
+```javascript
+function safe(fn, def) {
+  try { return fn(); } catch(e) { return def !== undefined ? def : null; }
+}
+function si(obj, name, args) {
+  var fn = safe(function() { return obj[name]; }, null);
+  if (typeof fn !== "function") return null;
+  return safe(function() { return fn.apply(obj, args || []); }, null);
+}
+function sp(obj, name) {
+  return safe(function() { return obj[name]; }, null);
+}
+function sProto(obj) {
+  return safe(function() { return Object.getPrototypeOf(obj); }, null);
+}
+function forIn(obj, fn) {
+  try { for (var k in obj) { fn(k); } } catch(e) {}
+}
+```
+
+---
+
+*Documentado: 15 Abril 2026 | Actualizado: 16 Abril 2026 (149 addDevice + QtScript fixes)*

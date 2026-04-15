@@ -95,6 +95,83 @@ interface BackendPort {
 
 ---
 
+## 📦 pt-runtime (Packet Tracer Runtime Generator)
+
+Genera `main.js`, `runtime.js` y `catalog.js` — artefactos ES5 seguros para el motor de scripting QTScript de Packet Tracer 9.x.
+
+### Build Commands
+
+```bash
+cd packages/pt-runtime
+
+bun run generate         # Genera artefactos → dist-qtscript/
+bun run validate         # Valida patrones PT-safe en los artefactos
+bun run deploy           # Deploy a ~/pt-dev/ (copia main.js, runtime.js, catalog.js)
+bun run build            # Alias para deploy (runtime built via deploy)
+bun run build:watch      # Watch mode para rebuild automático
+bun run typecheck        # Verificación TypeScript (solo lectura)
+bun run validate:api     # Valida superficie PT API
+bun run generate-models  # Regenera mapa de modelos verificados
+```
+
+### Deploy
+
+Archivos desplegados a `~/pt-dev/` (macOS/Linux) o `%USERPROFILE%\pt-dev\` (Windows):
+
+| Artefacto | Tamaño | Responsabilidad |
+|---|---|---|
+| `main.js` | ~45 KB | Kernel: queue, terminal lifecycle, job execution, hot-reload, heartbeat, lease, shutdown |
+| `runtime.js` | ~15 KB | Negocio: dispatch, validation, plan building |
+| `catalog.js` | ~2.5 KB | Constantes: device types, cable types, module catalog |
+
+Para cargar en PT: **File → Open →** selecciona `~/pt-dev/main.js`
+
+### PT-Safe Validation Rules
+
+Build **falla** si el código generado contiene:
+
+| Pattern | Forbidden Because |
+|---|---|
+| `import` / `export` | QTScript no soporta ES modules |
+| `const` / `let` | Solo `var` soportado |
+| Arrow functions (`=>`) | No ES5-compatible |
+| `class` declarations | Usar prototype-based |
+| `async` / `await` | No soportado |
+| `?.` optional chaining | No ES5 |
+| `` `${...}` `` template literals | Usar `"str" + var` |
+| `globalThis` | No definido en QTScript |
+| `console.*` | Usar `dprint()` |
+| `require()` | No disponible en sandbox |
+
+### Arquitectura
+
+```
+TypeScript source
+      ↓
+AST Collection (per manifest)
+      ↓
+AST Transform → ES5 (strip modules, const→var, minify)
+      ↓
+PT-Safe Validation (regex scan)
+      ↓
+Assembly (wrap IIFE, inject globals)
+      ↓
+dist-qtscript/ (main.js, runtime.js, catalog.js)
+```
+
+### Documentación
+
+| Documento | Descripción |
+|---|---|
+| [PT-API-COMPLETE.md](packages/pt-runtime/docs/PT-API-COMPLETE.md) | API PT completa — 1348 líneas, verificada contra PT 9.0.0.0810 |
+| [PT-API.md](packages/pt-runtime/docs/PT-API.md) | Referencia rápida de interfaces PT |
+| [ARCHITECTURE.md](packages/pt-runtime/docs/ARCHITECTURE.md) | main.js vs runtime.js, data flow |
+| [BUILD.md](packages/pt-runtime/docs/BUILD.md) | Pipeline, PT-safe rules, manifests |
+| [PT9-Debugging.md](packages/pt-runtime/docs/PT9-Debugging.md) | Cómo depurar en PT (pegar código en consola) |
+| [pt-runtime-migration-diff.md](packages/pt-runtime/docs/pt-runtime-migration-diff.md) | Histórico de cambios de build |
+
+---
+
 ## ✨ Características Principales
 
 - **🎮 Control en Tiempo Real de Packet Tracer**: CLI para controlar PT desde TypeScript/Bun sin dependencias externas.
