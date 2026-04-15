@@ -35,6 +35,7 @@ export function createKernel(config: KernelConfig) {
   let isShuttingDown = false;
   let activeCommand: CommandEnvelope | null = null;
   let activeCommandFilename: string | null = null;
+  let lastQueueSummaryLogAt = 0;
 
   // Components
   const dirs = createDirectoryManager(config);
@@ -298,33 +299,62 @@ export function createKernel(config: KernelConfig) {
     }
 
     const fmState = safeFM();
+    const now = Date.now();
+    const shouldLogSummary = now - lastQueueSummaryLogAt >= 10_000;
     try {
       const fm = fmState.fm;
-      if (fmState.available && fm) {
-        kernelLog("[kernel] queue-dir=" + String(config.commandsDir) + " inFlight-dir=" + String(config.inFlightDir));
-        kernelLog("[kernel] queue-dir exists=" + String(fm.directoryExists(config.commandsDir)) + " inFlight-dir exists=" + String(fm.directoryExists(config.inFlightDir)));
-        const rawQueueFiles = fm.getFilesInDirectory(config.commandsDir);
-        kernelLog("[kernel] queue raw files=" + String(rawQueueFiles ? rawQueueFiles.length : 0) + " sample=" + String(rawQueueFiles && rawQueueFiles.length ? rawQueueFiles.slice(0, 5).join(",") : "none"));
-        try {
-          const appWindow = (typeof ipc !== "undefined" && ipc !== null) ? ipc.appWindow?.() : null;
-          const appWindowFiles = appWindow && typeof appWindow.listDirectory === "function"
-            ? appWindow.listDirectory(config.commandsDir)
-            : [];
-          kernelLog("[kernel] queue appWindow files=" + String(appWindowFiles ? appWindowFiles.length : 0) + " sample=" + String(appWindowFiles && appWindowFiles.length ? appWindowFiles.slice(0, 5).join(",") : "none"));
-        } catch (appWindowErr) {
-          kernelLog("[kernel] queue appWindow diagnostic error: " + String(appWindowErr));
+      if (shouldLogSummary) {
+        lastQueueSummaryLogAt = now;
+        if (fmState.available && fm) {
+          kernelLog("[kernel] queue-dir=" + String(config.commandsDir) + " inFlight-dir=" + String(config.inFlightDir));
+          kernelLog("[kernel] queue-dir exists=" + String(fm.directoryExists(config.commandsDir)) + " inFlight-dir exists=" + String(fm.directoryExists(config.inFlightDir)));
+          const rawQueueFiles = fm.getFilesInDirectory(config.commandsDir);
+          kernelLog("[kernel] queue raw files=" + String(rawQueueFiles ? rawQueueFiles.length : 0) + " sample=" + String(rawQueueFiles && rawQueueFiles.length ? rawQueueFiles.slice(0, 5).join(",") : "none"));
+          if (rawQueueFiles && rawQueueFiles.length > 0) {
+            for (let i = 0; i < Math.min(rawQueueFiles.length, 3); i++) {
+              const fileName = String(rawQueueFiles[i]);
+              const probePath = config.commandsDir + "/" + fileName;
+              kernelLog("[kernel] rawFiles[" + i + "] type=" + String(typeof rawQueueFiles[i]) + " value='" + fileName + "'");
+              kernelLog("[kernel] PROBE fileExists(" + probePath + ")=" + String(fm.fileExists(probePath)));
+              try {
+                const content = fm.getFileContents(probePath);
+                kernelLog("[kernel] PROBE getFileContents(" + fileName + ") len=" + String(content ? content.length : 0));
+              } catch (probeErr) {
+                kernelLog("[kernel] PROBE getFileContents(" + fileName + ") error=" + String(probeErr));
+              }
+            }
+          }
+          try {
+            const appWindow = (typeof ipc !== "undefined" && ipc !== null) ? ipc.appWindow?.() : null;
+            const appWindowFiles = appWindow && typeof appWindow.listDirectory === "function"
+              ? appWindow.listDirectory(config.commandsDir)
+              : [];
+            kernelLog("[kernel] queue appWindow files=" + String(appWindowFiles ? appWindowFiles.length : 0) + " sample=" + String(appWindowFiles && appWindowFiles.length ? appWindowFiles.slice(0, 5).join(",") : "none"));
+          } catch (appWindowErr) {
+            kernelLog("[kernel] queue appWindow diagnostic error: " + String(appWindowErr));
+          }
+          try {
+            if (typeof _ScriptModule !== "undefined" && _ScriptModule !== null && typeof _ScriptModule.getFilesInDirectory === "function") {
+              const scriptModuleFiles = _ScriptModule.getFilesInDirectory(config.commandsDir);
+              kernelLog("[kernel] _ScriptModule.getFilesInDirectory count=" + String(scriptModuleFiles ? scriptModuleFiles.length : 0) + " sample=" + String(scriptModuleFiles && scriptModuleFiles.length ? scriptModuleFiles.slice(0, 5).join(",") : "none"));
+            }
+          } catch (smErr) {
+            kernelLog("[kernel] _ScriptModule diagnostic error: " + String(smErr));
+          }
+        } else {
+          kernelLog("[kernel] queue-dir diagnostic skipped — fm unavailable");
         }
-      } else {
-        kernelLog("[kernel] queue-dir diagnostic skipped — fm unavailable");
       }
     } catch (diagErr) {
       kernelLog("[kernel] queue-dir diagnostic error: " + String(diagErr));
     }
-    kernelLog(
-      "[kernel] poll tick — fm=" + String(!!fmState.available && !!fmState.fm) +
-      " queued=" + String(queue.count()) +
-      " active=" + String(activeCommand ? activeCommand.id : "none")
-    );
+    if (shouldLogSummary) {
+      kernelLog(
+        "[kernel] poll tick — fm=" + String(!!fmState.available && !!fmState.fm) +
+        " queued=" + String(queue.count()) +
+        " active=" + String(activeCommand ? activeCommand.id : "none")
+      );
+    }
 
     // Comprehensive busy check: active command OR active deferred jobs OR busy terminals
     function isSystemBusy(): boolean {
@@ -338,7 +368,6 @@ export function createKernel(config: KernelConfig) {
 
     const claimed = queue.poll();
     if (!claimed) {
-      kernelLog("[kernel] poll tick — no claim");
       return;
     }
 

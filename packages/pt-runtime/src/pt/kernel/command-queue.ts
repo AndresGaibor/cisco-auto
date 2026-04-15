@@ -52,6 +52,19 @@ export function createCommandQueue(config: {
           dprint("[queue] appWindow listDirectory fallback failed: " + String(fallbackErr));
         }
       }
+      if ((!files || files.length === 0) && typeof _ScriptModule !== "undefined" && _ScriptModule !== null && typeof _ScriptModule.getFilesInDirectory === "function") {
+        try {
+          const scriptModuleFiles = _ScriptModule.getFilesInDirectory(config.commandsDir);
+          dprint("[queue] _ScriptModule.getFilesInDirectory -> " + String(scriptModuleFiles ? scriptModuleFiles.length : 0));
+          if (scriptModuleFiles && scriptModuleFiles.length > 0) {
+            dprint("[queue] _ScriptModule files sample -> " + scriptModuleFiles.slice(0, 5).join(","));
+            dprint("[queue] Using _ScriptModule.getFilesInDirectory fallback for commands");
+            files = scriptModuleFiles;
+          }
+        } catch (scriptModuleErr) {
+          dprint("[queue] _ScriptModule listDirectory fallback failed: " + String(scriptModuleErr));
+        }
+      }
       if (files) {
         for (const file of files) {
           if (file.indexOf(".json") !== -1) {

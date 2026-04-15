@@ -12,6 +12,8 @@ import { resolve } from "node:path";
 import { getDefaultDevDir } from "../system/paths.js";
 
 interface LiveDeviceListController {
+  start(): Promise<void> | void;
+  stop(): Promise<void> | void;
   getBridge(): {
     sendCommandAndWait<T = unknown>(
       type: string,
@@ -173,11 +175,18 @@ export async function loadLiveDeviceList(type?: string): Promise<DeviceListResul
   }
 
   try {
+    await controller.start();
     return await loadLiveDeviceListFromController(controller, type);
   } catch (err) {
     if (err instanceof Error && err.message.includes("no respondió a tiempo")) {
       throw new Error("Packet Tracer no respondió. Verifica que esté abierto y el script cargado.");
     }
     throw err;
+  } finally {
+    try {
+      await controller.stop();
+    } catch {
+      // Ignorar fallos de cierre: ya tenemos el resultado o el error principal.
+    }
   }
 }

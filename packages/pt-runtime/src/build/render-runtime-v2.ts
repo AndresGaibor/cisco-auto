@@ -41,8 +41,9 @@ var dprint = __dprint;
 var DEV_DIR = __DEV_DIR;
 var fm = __fm;
 
-var _g = (typeof _global !== "undefined") ? _global
-       : ((typeof self !== "undefined") ? self : (function() { return this; })());
+var _g = (typeof self !== "undefined") ? self
+       : (typeof _global !== "undefined") ? _global
+       : (function() { return this; })();
 
 var __assign = function() {
   __assign = Object.assign || function(t) {

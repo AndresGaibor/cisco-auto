@@ -18,9 +18,29 @@ const mockIpc = {
   appWindow: vi.fn().mockReturnValue({ listDirectory: vi.fn().mockReturnValue([]) }),
 };
 
+const mockScriptModule = {
+  getFilesInDirectory: vi.fn().mockReturnValue([]),
+  getFileContents: vi.fn().mockReturnValue(""),
+  getFileSize: vi.fn().mockReturnValue(0),
+  writeTextToFile: vi.fn(),
+  getFileModificationTime: vi.fn().mockReturnValue(Date.now()),
+  removeFile: vi.fn(),
+  ipcCall: vi.fn(),
+  ipcObjectCall: vi.fn(),
+  getIpcApi: vi.fn(),
+  registerIpcEventByID: vi.fn(),
+  unregisterIpcEventByID: vi.fn(),
+  unregisterAllIpcEvents: vi.fn(),
+  setTimeout: setTimeout,
+  setInterval: setInterval,
+  clearTimeout: clearTimeout,
+  clearInterval: clearInterval,
+};
+
 (globalThis as typeof globalThis & { fm: typeof mockFm; dprint: typeof mockDprint }).fm = mockFm;
 (globalThis as typeof globalThis & { fm: typeof mockFm; dprint: typeof mockDprint }).dprint = mockDprint;
 (globalThis as typeof globalThis & { ipc: typeof mockIpc }).ipc = mockIpc;
+(globalThis as typeof globalThis & { _ScriptModule: typeof mockScriptModule })._ScriptModule = mockScriptModule;
 
 import { createLeaseManager } from "../../pt/kernel/lease";
 import { createDirectoryManager } from "../../pt/kernel/directories";
@@ -143,5 +163,31 @@ describe("createCommandQueue", () => {
 
     expect(claimed?.id).toBe("cmd_000000000001");
     expect(mockDprint).toHaveBeenCalledWith("[queue] Using appWindow.listDirectory fallback for commands");
+  });
+
+  test("poll uses _ScriptModule fallback when fm and appWindow return nothing", () => {
+    mockFm.getFilesInDirectory.mockReturnValue([]);
+    mockIpc.appWindow.mockReturnValue({
+      listDirectory: vi.fn().mockReturnValue([]),
+    });
+    mockScriptModule.getFilesInDirectory.mockReturnValue(["000000000002-listDevices.json"]);
+    mockFm.fileExists.mockImplementation((p: string) => p.includes("commands") && !p.includes("in-flight"));
+    mockFm.getFileContents.mockReturnValue(JSON.stringify({
+      protocolVersion: 2,
+      id: "cmd_000000000002",
+      seq: 2,
+      type: "listDevices",
+      payload: { type: "listDevices" },
+    }));
+
+    const queue = createCommandQueue({
+      commandsDir: "/tmp/commands",
+      inFlightDir: "/tmp/in-flight",
+      deadLetterDir: "/tmp/dead-letter",
+    });
+
+    const claimed = queue.poll();
+
+    expect(claimed?.id).toBe("cmd_000000000002");
   });
 });
