@@ -30,6 +30,13 @@ export { renderMainV2 } from "./build/render-main-v2";
 export { renderCatalog } from "./build/render-catalog";
 export * from "./build";
 
+// Modular runtime generator (hot reload capable)
+export {
+  ModularRuntimeGenerator,
+  type ModularGeneratorConfig,
+  type ModularManifest,
+} from "./build/render-runtime-modular";
+
 // Build utilities
 import { validatePtSafe } from "./build/validate-pt-safe";
 import { renderRuntimeV2Sync } from "./build/render-runtime-v2";
@@ -74,33 +81,22 @@ export class RuntimeGenerator {
     this.config = config;
   }
 
-  /**
-   * Generate main.js — the PT Script Module bootloader.
-   * Responsibilities: declare DEV_DIR, load catalog.js + runtime.js, expose main()/cleanUp().
-   * PT calls main() by lifecycle — we must NOT auto-execute it.
-   */
-  generateMain(): string {
+  generateMain(embeddedCatalog?: string, embeddedRuntime?: string): string {
     return renderMainV2({
       srcDir: path.resolve(__dirname),
-      outputPath: '',
+      outputPath: "",
       injectDevDir: this.config.devDir,
+      embeddedCatalog,
+      embeddedRuntime,
     });
   }
 
-  /**
-   * Generate catalog.js — static PT constants (device types, cable types).
-   * This file changes rarely and can be kept cached on disk.
-   */
   generateCatalog(): string {
     return renderCatalog({
       srcDir: path.resolve(__dirname),
     });
   }
 
-  /**
-   * Generate runtime.js — all handler logic and dispatch.
-   * This file changes with each feature update.
-   */
   generateRuntime(): string {
     return renderRuntimeV2Sync({
       srcDir: path.resolve(__dirname),
@@ -109,10 +105,14 @@ export class RuntimeGenerator {
     });
   }
 
+  /**
+   * generate() — writes 3 files to outputDir (catalog.js, runtime.js, main.js)
+   * Uses separate files (for PT versions that have fm/filesystem).
+   */
   async generate(): Promise<{ main: string; catalog: string; runtime: string }> {
-    const main = this.generateMain();
     const catalog = this.generateCatalog();
     const runtime = this.generateRuntime();
+    const main = this.generateMain(catalog, runtime);
 
     await fs.promises.mkdir(this.config.outputDir, { recursive: true });
     await fs.promises.writeFile(path.join(this.config.outputDir, "main.js"), main, "utf-8");
@@ -131,8 +131,10 @@ export class RuntimeGenerator {
     if (!allValid) {
       const errors: string[] = [];
       if (!mainValidation.valid) errors.push(`main.js: ${mainValidation.errors.length} error(s)`);
-      if (!catalogValidation.valid) errors.push(`catalog.js: ${catalogValidation.errors.length} error(s)`);
-      if (!runtimeValidation.valid) errors.push(`runtime.js: ${runtimeValidation.errors.length} error(s)`);
+      if (!catalogValidation.valid)
+        errors.push(`catalog.js: ${catalogValidation.errors.length} error(s)`);
+      if (!runtimeValidation.valid)
+        errors.push(`runtime.js: ${runtimeValidation.errors.length} error(s)`);
       throw new Error("Generated code validation failed: " + errors.join(", "));
     }
   }
@@ -163,25 +165,88 @@ export class RuntimeGenerator {
     return manifest;
   }
 
+  /**
+   * deploy() — PT 9.0 embedded mode.
+   * Generates a SINGLE main.js with catalog + runtime embedded inline.
+   * catalog.js and runtime.js are NOT written (PT 9.0 has no fm/filesystem).
+   */
   async deploy(): Promise<void> {
-    const { main, catalog, runtime } = await this.generate();
-    const devDir = this.config.devDir;
+    const catalog = this.generateCatalog();
+    const runtime = this.generateRuntime();
+    const main = this.generateMain(catalog, runtime);
 
-    await fs.promises.mkdir(devDir, { recursive: true });
-    await fs.promises.writeFile(path.join(devDir, "main.js"), main, "utf-8");
-    await fs.promises.writeFile(path.join(devDir, "catalog.js"), catalog, "utf-8");
-    await fs.promises.writeFile(path.join(devDir, "runtime.js"), runtime, "utf-8");
-    await this.writeManifest(main, catalog, runtime, devDir);
+    await fs.promises.mkdir(this.config.devDir, { recursive: true });
+    await fs.promises.writeFile(path.join(this.config.devDir, "main.js"), main, "utf-8");
+    await this.writeManifest(main, catalog, runtime, this.config.devDir);
   }
 
+  /**
+   * build() — writes to outputDir (dist-qtscript/) for testing.
+   * Uses embedded mode: single main.js with catalog + runtime inline.
+   */
   async build(): Promise<void> {
-    const { main, catalog, runtime } = await this.generate();
-    const outputDir = this.config.outputDir;
+    const catalog = this.generateCatalog();
+    const runtime = this.generateRuntime();
+    const main = this.generateMain(catalog, runtime);
 
-    await fs.promises.mkdir(outputDir, { recursive: true });
-    await fs.promises.writeFile(path.join(outputDir, "main.js"), main, "utf-8");
-    await fs.promises.writeFile(path.join(outputDir, "catalog.js"), catalog, "utf-8");
-    await fs.promises.writeFile(path.join(outputDir, "runtime.js"), runtime, "utf-8");
-    await this.writeManifest(main, catalog, runtime, outputDir);
+    await fs.promises.mkdir(this.config.outputDir, { recursive: true });
+    await fs.promises.writeFile(path.join(this.config.outputDir, "main.js"), main, "utf-8");
+    await this.writeManifest(main, catalog, runtime, this.config.outputDir);
   }
+}
+
+// ============================================================================
+// CLI entry point — bun run src/index.ts <command>
+// ============================================================================
+if (typeof Bun !== "undefined" && Bun.argv.includes("generate")) {
+  const generator = new RuntimeGenerator({
+    outputDir: path.join(path.resolve(__dirname), "../dist-qtscript"),
+    devDir: process.env.PT_DEV_DIR || "/Users/andresgaibor/pt-dev",
+  });
+  generator
+    .generate()
+    .then(() => {
+      console.log("Generated: dist-qtscript/");
+    })
+    .catch((e) => {
+      console.error("Error:", e);
+      process.exit(1);
+    });
+}
+
+if (typeof Bun !== "undefined" && Bun.argv.includes("deploy")) {
+  const generator = new RuntimeGenerator({
+    outputDir: path.join(path.resolve(__dirname), "../dist-qtscript"),
+    devDir: process.env.PT_DEV_DIR || "/Users/andresgaibor/pt-dev",
+  });
+  generator
+    .deploy()
+    .then(() => {
+      console.log("Deployed to: " + generator.config.devDir);
+    })
+    .catch((e) => {
+      console.error("Error:", e);
+      process.exit(1);
+    });
+}
+
+if (typeof Bun !== "undefined" && Bun.argv.includes("modular")) {
+  const { ModularRuntimeGenerator } = require("./build/render-runtime-modular");
+  const generator = new ModularRuntimeGenerator({
+    outputDir: path.join(path.resolve(__dirname), "../dist-modular"),
+    devDir: process.env.PT_DEV_DIR || "/Users/andresgaibor/pt-dev",
+    splitModules: true,
+  });
+  generator
+    .generate()
+    .then(({ modules, manifest }) => {
+      console.log("✅ Modular generation complete!");
+      console.log(`   Modules: ${modules.size}`);
+      console.log(`   Path: ${path.join(path.resolve(__dirname), "../dist-modular")}`);
+      console.log(`   Manifest: ${JSON.stringify(manifest.modulePaths)}`);
+    })
+    .catch((e) => {
+      console.error("Error:", e);
+      process.exit(1);
+    });
 }

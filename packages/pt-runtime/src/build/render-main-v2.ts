@@ -6,8 +6,8 @@
 //   2. Contener el kernel compilado en un IIFE
 //   3. Exponer main() y cleanUp() para el ciclo de vida de PT Script Module
 //
-// main.js NO contiene lógica de handlers ni catálogos.
-// Delega toda la lógica al runtime cargado dinámicamente desde runtime.js.
+// Para PT 9.0+ (sin fm/filesystem): embebe catalog y runtime inline.
+// Para versiones con fm: carga desde archivos externos via _ptLoadModule.
 
 import * as fs from "fs";
 import * as path from "path";
@@ -19,6 +19,10 @@ export interface RenderMainV2Options {
   srcDir: string;
   outputPath: string;
   injectDevDir?: string;
+  /** Embedded catalog code string. If set, catalog is embedded inline (PT 9.0 no fm). */
+  embeddedCatalog?: string;
+  /** Embedded runtime code string. If set, runtime is embedded inline (PT 9.0 no fm). */
+  embeddedRuntime?: string;
 }
 
 const KERNEL_SOURCE_FILES = getAllMainFiles();
@@ -62,30 +66,23 @@ export function renderMainV2(options: RenderMainV2Options): string {
     ? JSON.stringify(options.injectDevDir)
     : '"/pt-dev"';
 
-  // El wrapper IIFE del kernel:
-  // - ipc y fm se inyectan SOLO desde el scope seguro de PT (sin globalThis)
-  // - _global usa self (disponible en QTScript) o this como fallback
+  const useEmbedded = !!(options.embeddedCatalog || options.embeddedRuntime);
+
+  // Kernel IIFE: Contains all kernel source code, exposes createKernel/shutdownKernel
   const kernelIife = `
 (function() {
   var ipc = (typeof ipc !== "undefined") ? ipc : null;
   var dprint = (typeof dprint !== "undefined") ? dprint : function(msg) { if (typeof print === "function") print(msg); };
   var DEV_DIR = (typeof DEV_DIR !== "undefined") ? DEV_DIR : ${devDirLiteral};
-  var fm = (ipc && typeof ipc.systemFileManager === "function") ? ipc.systemFileManager() : null;
 
-  // PT QTScript does NOT have globalThis — use self or this as fallback
   var _global = (typeof self !== "undefined") ? self : this;
-
-  // Expose fm and dprint globally so the runtime and kernel can access them
-  if (fm && !_global.fm) _global.fm = fm;
   if (!_global.dprint) _global.dprint = dprint;
   if (!_global.DEV_DIR) _global.DEV_DIR = DEV_DIR;
 
 ${code}
 
-  // Hold kernel instance so cleanUp() can reach it
   var _kernelInstance = null;
 
-  // Expose kernel factory to global scope (main() calls createKernel)
   if (typeof createKernel === "function") {
     _global.createKernel = function(cfg) {
       _kernelInstance = createKernel(cfg);
@@ -93,7 +90,6 @@ ${code}
     };
   }
 
-  // Expose shutdown function
   _global.shutdownKernel = function() {
     if (_kernelInstance && typeof _kernelInstance.shutdown === "function") {
       _kernelInstance.shutdown();
@@ -103,16 +99,30 @@ ${code}
 })();
 `;
 
-  // -------------------------------------------------------------------------
-  // loadModule: helper inlined into main.js to load catalog.js / runtime.js
-  // Packet Tracer Script Module puede cargar solo UN archivo .js.
-  // Los módulos adicionales se cargan usando fm.getFileContents + new Function().
-  // -------------------------------------------------------------------------
-  const loaderHelper = `
+  // Embedded loader (PT 9.0, no fm)
+  // Evaluates inline catalog/runtime code instead of reading from disk
+  const embeddedLoader = useEmbedded ? `
+function _ptEmbedModule(code, label) {
+  if (!code || code.length < 10) {
+    if (typeof dprint === "function") dprint("[main] Embedded module empty: " + label);
+    return false;
+  }
+  try {
+    new Function(code)();
+    if (typeof dprint === "function") dprint("[main] Embedded OK: " + label);
+    return true;
+  } catch (e) {
+    if (typeof dprint === "function") dprint("[main] Embedded error " + label + ": " + String(e));
+    return false;
+  }
+}
+` : "";
+
+  // File-based loader (PT versions with fm)
+  const fileLoader = !useEmbedded ? `
 function _ptLoadModule(modulePath, label) {
   try {
-    var _g = (typeof self !== "undefined") ? self : this;
-    var _fm = _g.fm || (typeof fm !== "undefined" ? fm : null);
+    var _fm = (typeof fm !== "undefined") ? fm : null;
     if (!_fm) {
       if (typeof dprint === "function") dprint("[main] fm not available — cannot load " + label);
       return false;
@@ -134,26 +144,73 @@ function _ptLoadModule(modulePath, label) {
     return false;
   }
 }
-`;
+` : "";
 
-  // -------------------------------------------------------------------------
-  // main() y cleanUp() — ciclo de vida de PT Script Module
-  // -------------------------------------------------------------------------
+  // main() — boots kernel, loads modules, starts polling
+  const catalogArg = options.embeddedCatalog
+    ? JSON.stringify(options.embeddedCatalog)
+    : "null";
+  const runtimeArg = options.embeddedRuntime
+    ? JSON.stringify(options.embeddedRuntime)
+    : "null";
+
+  // Hot reload configuration
+  const hotReloadEnabled = true;
+  const hotReloadInterval = 5000; // Check every 5 seconds
+
   const entryPoints = `
 // PT Script Module entry points — called by Packet Tracer lifecycle
+
+// Hot reload state
+var _hotReloadTimer = null;
+
+function _startHotReload() {
+  if (!${hotReloadEnabled}) return;
+  if (typeof _runtimeLoader === "undefined") return;
+  
+  if (typeof dprint === "function") dprint("[main] Hot reload enabled — checking every ${hotReloadInterval}ms");
+  
+  _hotReloadTimer = setInterval(function() {
+    if (typeof _runtimeLoader !== "undefined" && typeof _runtimeLoader.reloadChanged === "function") {
+      var reloaded = _runtimeLoader.reloadChanged();
+      if (reloaded) {
+        if (typeof dprint === "function") dprint("[main] Modules reloaded — refreshing dispatcher");
+      }
+    }
+  }, ${hotReloadInterval});
+}
+
+function _stopHotReload() {
+  if (_hotReloadTimer) {
+    clearInterval(_hotReloadTimer);
+    _hotReloadTimer = null;
+    if (typeof dprint === "function") dprint("[main] Hot reload stopped");
+  }
+}
 
 function main() {
   var _g = (typeof self !== "undefined") ? self : this;
   var devDir = (typeof DEV_DIR !== "undefined") ? DEV_DIR : _g.DEV_DIR || ${devDirLiteral};
 
-  // Paso 1: Cargar catalog.js (constantes estáticas — rara vez cambia)
+  ${useEmbedded ? `
+  // Embedded mode (PT 9.0 no fm) — evaluate modules inline
+  if (typeof _ptEmbedModule === "function") {
+    _ptEmbedModule(${catalogArg}, "catalog");
+    _ptEmbedModule(${runtimeArg}, "runtime");
+  }
+  ` : `
+  // File mode (PT with fm) — load modules from disk
   _ptLoadModule(devDir + "/catalog.js", "catalog");
+  
+  // Try modular loader first (hot reload capable)
+  var modularLoaded = _ptLoadModule(devDir + "/runtime-loader.js", "runtime-loader");
+  
+  // Fallback to monolithic runtime.js if modular not available
+  if (!modularLoaded) {
+    _ptLoadModule(devDir + "/runtime.js", "runtime (monolithic fallback)");
+  }
+  `}
 
-  // Paso 2: Cargar runtime.js (lógica de handlers — cambia con cada deploy)
-  // Si runtime.js no existe, el kernel arranca sin runtime (degraded mode)
-  _ptLoadModule(devDir + "/runtime.js", "runtime");
-
-  // Paso 3: Boot del kernel
   if (typeof createKernel === "function") {
     var kernel = createKernel({
       devDir: devDir,
@@ -171,9 +228,13 @@ function main() {
   } else {
     if (typeof dprint === "function") dprint("[main] ERROR: createKernel not defined — kernel not loaded");
   }
+  
+  // Start hot reload after kernel boots
+  _startHotReload();
 }
 
 function cleanUp() {
+  _stopHotReload();
   if (typeof shutdownKernel === "function") {
     shutdownKernel();
   }
@@ -184,11 +245,12 @@ function cleanUp() {
 // Do not edit directly - regenerate with: bun run build:main-v2
 // Generated at: ${new Date().toISOString()}
 //
-// Responsibilities: Boot kernel, load catalog.js + runtime.js, expose main()/cleanUp()
-// NOTE: globalThis is NOT available in PT QTScript — this file uses self/this instead.
+// Responsibilities: Boot kernel, expose main()/cleanUp()
+// Mode: ${useEmbedded ? "EMBEDDED (PT 9.0 no fm — catalog + runtime inline)" : "FILE-BASED (fm available — loads from disk)"}
+// NOTE: globalThis is NOT available in PT QTScript — uses self/this instead.
 `;
 
-  const output = header + kernelIife + loaderHelper + entryPoints;
+  const output = header + kernelIife + embeddedLoader + fileLoader + entryPoints;
 
   if (options.outputPath) {
     fs.mkdirSync(path.dirname(options.outputPath), { recursive: true });
