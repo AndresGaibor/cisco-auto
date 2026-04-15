@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { buildDeviceListFromSnapshot, isEmptyTopologySnapshot } from "../src/application/device-list.js";
+import {
+  buildDeviceListFromSnapshot,
+  isEmptyTopologySnapshot,
+  loadLiveDeviceListFromController,
+} from "../src/application/device-list.js";
 import type { TopologySnapshot } from "@cisco-auto/pt-control";
 
 describe("device list helpers", () => {
@@ -56,5 +60,17 @@ describe("device list helpers", () => {
     expect(result.devices.map((device) => device.name)).toEqual(["R1", "S1"]);
     expect(result.deviceLinks.R1).toEqual(["S1:Fa0/1"]);
     expect(result.deviceLinks.S1).toEqual(["R1:Gig0/0"]);
+  });
+
+  test("falla rápido si el bridge no queda listo", async () => {
+    const controller = {
+      getBridge: () => ({
+        sendCommandAndWait: async () => new Promise(() => {}),
+      }),
+    };
+
+    await expect(
+      loadLiveDeviceListFromController(controller as never, undefined, 10),
+    ).rejects.toThrow(/Bridge no respondió a tiempo/);
   });
 });

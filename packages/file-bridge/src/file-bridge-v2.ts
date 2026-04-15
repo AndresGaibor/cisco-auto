@@ -101,7 +101,22 @@ export class FileBridgeV2 extends EventEmitter {
   }
 
   start(): void {
-    if (this.running) return;
+    if (this.running) {
+      if (!this.leaseManager.hasValidLease()) {
+        const reacquired = this.leaseManager.acquireLease();
+        if (!reacquired) {
+          try {
+            this.leaseManager.renewLease();
+          } catch {
+            this.appendEvent({
+              type: "bridge-startup-failed",
+              note: "Unable to reacquire lease",
+            });
+          }
+        }
+      }
+      return;
+    }
     this.running = true;
 
     // FASE 8: Ensure directories first

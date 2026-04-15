@@ -178,6 +178,31 @@ describe("Lease Management", () => {
     }
   });
 
+  test("bridge reacquires stale lease when already running", async () => {
+    bridge1 = new FileBridgeV2({ root: tempDir, leaseTtlMs: 500 });
+    await bridge1.start();
+
+    const leasePath = join(tempDir, "bridge-lease.json");
+    const originalLease: BridgeLease = JSON.parse(readFileSync(leasePath, "utf-8"));
+
+    const staleLease: BridgeLease = {
+      ...originalLease,
+      ownerId: "stale-owner",
+      pid: 99999,
+      startedAt: Date.now() - 10_000,
+      updatedAt: Date.now() - 10_000,
+      expiresAt: Date.now() - 5_000,
+    };
+    writeFileSync(leasePath, JSON.stringify(staleLease, null, 2));
+
+    await bridge1.start();
+
+    const recoveredLease: BridgeLease = JSON.parse(readFileSync(leasePath, "utf-8"));
+    expect(recoveredLease.ownerId).toBe(originalLease.ownerId);
+    expect(recoveredLease.pid).toBe(process.pid);
+    expect(recoveredLease.expiresAt).toBeGreaterThan(Date.now());
+  });
+
   test("multiple start calls use same lease", async () => {
     bridge1 = new FileBridgeV2({ root: tempDir });
     await bridge1.start();

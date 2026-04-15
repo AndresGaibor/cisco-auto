@@ -52,6 +52,17 @@ export function createStatusCommand(): Command {
         status.bridge.ready = true;
       }
 
+      if (status && supervisorStatus.contextStatus?.bridge) {
+        const supervisorBridge = supervisorStatus.contextStatus.bridge;
+        if (status.bridge.leaseValid === false && supervisorBridge.leaseValid !== false) {
+          status.bridge.ready = supervisorBridge.ready;
+          status.bridge.leaseValid = supervisorBridge.leaseValid;
+          status.bridge.queuedCount = supervisorBridge.queuedCount;
+          status.bridge.inFlightCount = supervisorBridge.inFlightCount;
+          status.bridge.warnings = supervisorBridge.warnings;
+        }
+      }
+
       if (!status) {
         console.log(
           "No hay estado de contexto disponible. Ejecuta un comando para inicializar el contexto o usa pt doctor.",

@@ -282,8 +282,21 @@ export function createKernel(config: KernelConfig) {
 
   // Poll command queue
   function pollCommandQueue(): void {
-    if (!isRunning || isShuttingDown) return;
-    if (activeCommand !== null) return;
+    if (!isRunning || isShuttingDown) {
+      kernelLog("[kernel] poll skipped — running=" + String(isRunning) + " shuttingDown=" + String(isShuttingDown));
+      return;
+    }
+    if (activeCommand !== null) {
+      kernelLog("[kernel] poll skipped — active command=" + String(activeCommand.id));
+      return;
+    }
+
+    const fmState = safeFM();
+    kernelLog(
+      "[kernel] poll tick — fm=" + String(!!fmState.available && !!fmState.fm) +
+      " queued=" + String(queue.count()) +
+      " active=" + String(activeCommand ? activeCommand.id : "none")
+    );
 
     // Comprehensive busy check: active command OR active deferred jobs OR busy terminals
     function isSystemBusy(): boolean {
@@ -296,12 +309,17 @@ export function createKernel(config: KernelConfig) {
     runtimeLoader.reloadIfNeeded(isSystemBusy);
 
     const claimed = queue.poll();
-    if (!claimed) return;
+    if (!claimed) {
+      kernelLog("[kernel] poll tick — no claim");
+      return;
+    }
 
     activeCommand = claimed;
     activeCommandFilename = (claimed as CommandEnvelope & { filename?: string }).filename ?? null;
     heartbeat.setActiveCommand(claimed.id);
     heartbeat.setQueuedCount(queue.count());
+
+    kernelLog("[kernel] claimed command id=" + String(claimed.id) + " type=" + String((claimed.payload as { type?: string }).type || "unknown"));
 
     executeActiveCommand();
   }
@@ -310,6 +328,7 @@ export function createKernel(config: KernelConfig) {
   function boot(): void {
     try { (typeof self !== "undefined" ? self : Function("return this")()).__ptKernelBootEntered = true; } catch {}
     kernelLog("[kernel] Starting...");
+    kernelLog("[kernel] boot() entered — demoRuntime=" + String(!!config.demoRuntime));
 
     try {
       isShuttingDown = false;
@@ -318,16 +337,29 @@ export function createKernel(config: KernelConfig) {
       // fm is now initialized in the Kernel IIFE before boot() runs (Fase 1 fix)
       // No late assignment needed — safeFM() handles it in each module
 
-      dirs.ensureDirectories();
+      // Arrancar el runtime de inmediato para no bloquear el consumer de cola.
+      kernelLog("[kernel] boot() -> activateRuntime()");
+      activateRuntime();
+      kernelLog("[kernel] boot() -> activateRuntime() returned");
 
-      if (config.demoRuntime) {
-        try { (typeof self !== "undefined" ? self : Function("return this")()).__ptKernelLeaseBypass = true; } catch {}
-        kernelLog("[kernel-debug] Lease bypass enabled — loading runtime immediately");
-        activateRuntime();
-      } else if (lease.validate()) {
-        activateRuntime();
-      } else {
+      // Crear directorios fuera del camino crítico para no bloquear el bootstrap.
+      kernelLog("[kernel] boot() -> schedule ensureDirectories()");
+      setTimeout(function() {
+        try {
+          kernelLog("[kernel] ensureDirectories() start");
+          dirs.ensureDirectories();
+          kernelLog("[kernel] ensureDirectories() done");
+        } catch (e) {
+          kernelLog("[kernel] ensureDirectories() failed: " + String(e));
+        }
+      }, 0);
+
+      // La lease sigue validándose en segundo plano, pero ya no bloquea el arranque.
+      if (!lease.validate()) {
+        kernelLog("[kernel] boot() -> lease invalid, waiting in background");
         lease.waitForLease(() => activateRuntime());
+      } else {
+        kernelLog("[kernel] boot() -> lease valid");
       }
     } catch (e) {
       dprint("[kernel] FATAL: " + String(e));
@@ -339,6 +371,7 @@ export function createKernel(config: KernelConfig) {
   var LOAD_RETRY_DELAY_MS = 2000;
 
   function startKernelServices(): void {
+    kernelLog("[kernel] Starting services — pollIntervalMs=" + String(config.pollIntervalMs));
     commandPollInterval = setInterval(pollCommandQueue, config.pollIntervalMs);
     heartbeat.start();
     isRunning = true;
@@ -353,8 +386,10 @@ export function createKernel(config: KernelConfig) {
       return;
     }
 
+    kernelLog("[kernel] activateRuntime() start — attempt=" + String(attempt));
     runtimeLoader.load();
     const runtimeLoaded = runtimeLoader.getRuntimeFn() !== null;
+    kernelLog("[kernel] activateRuntime() load done — runtimeLoaded=" + String(runtimeLoaded));
 
     if (runtimeLoaded) {
       const mtime = runtimeLoader.getLastMtime();

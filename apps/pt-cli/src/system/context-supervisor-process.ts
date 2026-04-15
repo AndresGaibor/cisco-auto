@@ -307,7 +307,7 @@ async function cycle() {
         state.consecutiveHeartbeatFailures = 0;
       }
 
-      if (!bridge.ready) {
+      if (!bridge.ready || bridge.leaseValid === false) {
         state.consecutiveBridgeFailures++;
       } else {
         state.consecutiveBridgeFailures = 0;
@@ -355,7 +355,15 @@ async function cycle() {
       }
     } else {
       // Fuera del grace period: comportamiento normal
-      if (state.consecutiveBridgeFailures >= FAILURE_THRESHOLD) {
+      if (bridge.leaseValid === false) {
+        console.log("[supervisor] Lease inválida, reiniciando controller...");
+        try {
+          await restartController("lease-invalid");
+        } catch (e) {
+          console.error("[supervisor] No se pudo reiniciar el controller:", e);
+          running = false;
+        }
+      } else if (state.consecutiveBridgeFailures >= FAILURE_THRESHOLD) {
         console.log(
           `[supervisor] Bridge inestable, reiniciando controller (failures: ${state.consecutiveBridgeFailures})`
         );
