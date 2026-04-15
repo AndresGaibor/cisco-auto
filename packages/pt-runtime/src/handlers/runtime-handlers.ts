@@ -33,6 +33,24 @@ import {
   type InspectDhcpServerPayload,
 } from "./dhcp.js";
 import { handleInspectHost, type InspectHostPayload } from "./host.js";
+import {
+  handleListDevices,
+  handleAddDevice,
+  handleRemoveDevice,
+  handleRenameDevice,
+  handleMoveDevice,
+  type ListDevicesPayload,
+} from "./device.js";
+import { handleAddLink, handleRemoveLink } from "./link.js";
+import { handleListCanvasRects, handleGetRect, handleDevicesInRect } from "./canvas.js";
+import { handleAddModule, handleRemoveModule } from "./module.js";
+import {
+  handleInspect,
+  handleSnapshot,
+  handleHardwareInfo,
+  handleHardwareCatalog,
+  handleCommandLog,
+} from "./inspect.js";
 import { getParser } from "./parsers/ios-parsers.js";
 
 // ============================================================================
@@ -283,19 +301,19 @@ export function handleConfigHost(payload: ConfigHostPayload, api: PtRuntimeApi):
 
     if (payload.dhcp === true) {
       try {
-        (port as any).setDhcpEnabled(true);
+        port.setDhcpEnabled(true);
       } catch {
         // PT API puede no soportar setDhcpEnabled en este dispositivo
       }
     } else {
       if (payload.ip && payload.mask) {
-        (port as any).setIpSubnetMask(payload.ip, payload.mask);
+        port.setIpSubnetMask(payload.ip, payload.mask);
       }
       if (payload.gateway) {
-        (port as any).setDefaultGateway(payload.gateway);
+        port.setDefaultGateway(payload.gateway);
       }
       if (payload.dns) {
-        (port as any).setDnsServerIp(payload.dns);
+        port.setDnsServerIp(payload.dns);
       }
     }
 
@@ -469,7 +487,6 @@ export function handleExecPc(payload: ExecPcPayload, api: PtRuntimeApi): PtResul
   return createDeferredResult(ticket, plan);
 }
 
-
 // ============================================================================
 // Handler Map - Registro centralizado de handlers
 // ============================================================================
@@ -495,6 +512,33 @@ registerHandler("configVlanInterfaces", handleConfigVlanInterfaces as HandlerFn)
 registerHandler("configDhcpServer", handleConfigDhcpServer as HandlerFn);
 registerHandler("inspectDhcpServer", handleInspectDhcpServer as HandlerFn);
 registerHandler("inspectHost", handleInspectHost as HandlerFn);
+
+// Device handlers
+registerHandler("listDevices", handleListDevices as HandlerFn);
+registerHandler("addDevice", handleAddDevice as HandlerFn);
+registerHandler("removeDevice", handleRemoveDevice as HandlerFn);
+registerHandler("renameDevice", handleRenameDevice as HandlerFn);
+registerHandler("moveDevice", handleMoveDevice as HandlerFn);
+
+// Link handlers
+registerHandler("addLink", handleAddLink as HandlerFn);
+registerHandler("removeLink", handleRemoveLink as HandlerFn);
+
+// Canvas handlers
+registerHandler("listCanvasRects", handleListCanvasRects as HandlerFn);
+registerHandler("getRect", handleGetRect as HandlerFn);
+registerHandler("devicesInRect", handleDevicesInRect as HandlerFn);
+
+// Module handlers
+registerHandler("addModule", handleAddModule as HandlerFn);
+registerHandler("removeModule", handleRemoveModule as HandlerFn);
+
+// Inspect handlers
+registerHandler("inspect", handleInspect as HandlerFn);
+registerHandler("snapshot", handleSnapshot as HandlerFn);
+registerHandler("hardwareInfo", handleHardwareInfo as HandlerFn);
+registerHandler("hardwareCatalog", handleHardwareCatalog as HandlerFn);
+registerHandler("commandLog", handleCommandLog as HandlerFn);
 
 // ============================================================================
 // Dispatcher - Punto de entrada del runtime

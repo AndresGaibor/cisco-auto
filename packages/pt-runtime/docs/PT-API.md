@@ -1,8 +1,10 @@
 # PT IPC API Reference
 
+> **Fuente de verdad:** `docs/pt-script-result.json` (generado 2026-04-15 con 12 dispositivos seed)
+> **Dump script:** `packages/pt-runtime/scripts/pt-full-api-dump.js`
+
 > Documented: 2026-04-15
-> Source: `src/pt-api/pt-api-registry.ts`, `docs/PT-API-COMPLETE.md`
-> Status: ✅ Complete — all interfaces verified against PT 9.0.0.0810
+> Status: ⚠️ Parcial — verificada vs dump. Sections marked "⚠️ NO verificado" no están en dump.
 
 ---
 
@@ -25,25 +27,27 @@ var self;      // PTGlobalScope — Global object (use instead of globalThis)
 
 ## IPC Access
 
+> **Fuente de verdad:** `docs/pt-script-result.json` — generado el 2026-04-15 con 12 dispositivos seed.
+
 ```javascript
-ipc.network()              // → PTNetwork
-ipc.appWindow()            // → PTAppWindow
-ipc.systemFileManager()    // → PTFileManager (may be undefined in PT 9.0)
-ipc.simulation()           // → PTSimulation (optional)
-ipc.hardwareFactory()      // → PTHardwareFactory (optional)
-ipc.ipcManager()           // → PTIpcManager (optional)
-ipc.multiUserManager()     // → PTMultiUserManager (optional)
-ipc.userAppManager()       // → PTUserAppManager (optional)
-ipc.commandLog()            // → unknown (optional)
-ipc.options()              // → unknown (optional)
-ipc.getObjectByUuid(uuid)  // → unknown | null
-ipc.getObjectUuid(obj)     // → string | null
-ipc.registerEvent(event, context, handler)        // void
-ipc.unregisterEvent(event, context, handler)     // void
-ipc.registerDelegate(event, context, handler)     // void
-ipc.unregisterDelegate(event, context, handler)  // void
-ipc.registerObjectEvent(event, context, handler)  // void
-ipc.unregisterObjectEvent(event, context, handler) // void
+ipc.network()              // → PTNetwork ✅
+ipc.appWindow()            // → PTAppWindow ✅
+ipc.systemFileManager()    // → PTFileManager (may be undefined in PT 9.0) ✅
+ipc.simulation()           // → PTSimulation (existe key en ipc, superficie no verificada)
+ipc.hardwareFactory()       // ⚠️ NO verificado en dump — existe como key pero sin clase dedicada
+ipc.ipcManager()           // ⚠️ NO verificado — existe como key pero sin métodos documentados
+ipc.multiUserManager()     // ⚠️ NO verificado — existe como key pero sin métodos
+ipc.userAppManager()       // ⚠️ NO verificado — existe como key pero sin métodos
+ipc.commandLog()            // ⚠️ NO verificado — existe como key pero sin métodos
+ipc.options()              // ⚠️ NO verificado — existe como key pero superficie no accesible
+ipc.getObjectByUuid(uuid)  // → unknown | null ✅
+ipc.getObjectUuid(obj)     // → string | null ✅
+ipc.registerEvent(event, context, handler)        // void ✅
+ipc.unregisterEvent(event, context, handler)     // void ✅
+ipc.registerDelegate(event, context, handler)     // void ✅
+ipc.unregisterDelegate(event, context, handler)  // void ✅
+ipc.registerObjectEvent(event, context, handler)  // void ✅
+ipc.unregisterObjectEvent(event, context, handler) // void ✅
 ```
 
 ### Runtime findings
@@ -54,13 +58,12 @@ ipc.unregisterObjectEvent(event, context, handler) // void
 - `getRootModule()` is the main entry point for modular devices; use it before traversing module trees.
 - `serializeToXml()` is available on most large device families and can be used to snapshot object state for offline inspection.
 
-### Alternative IPC Access
+### Alternative IPC Access (NO verificado en dump)
 
 ```javascript
-$ipc()                    // Function — same as ipc when called
-$ipc.network()           // → PTNetwork
-$ipcObject               // unknown — raw IPC object
-_ScriptModule = {
+$ipc()                    // ⚠️ NO verificado
+$ipcObject               // ⚠️ NO verificado
+_ScriptModule = {        // ⚠️ NO aparece en globals del dump
   ipcCall(className, method, args),   // low-level IPC call
   ipcObjectCall(className, method, args),
   getIpcApi(),                        // → PTIpc (same as ipc)
@@ -69,6 +72,8 @@ _ScriptModule = {
   unregisterAllIpcEvents()
 }
 ```
+
+> **Nota:** El dump de `docs/pt-script-result.json` muestra que `ipc` tiene estas keys: `appWindow`, `commandLog`, `getClassName`, `getObjectByUuid`, `getObjectUuid`, `hardwareFactory`, `ipcManager`, `multiUserManager`, `network`, `options`, `registerObjectEvent`, `simulation`, `systemFileManager`, `unregisterObjectEvent`, `userAppManager`, `registerEvent`, `registerDelegate`, `unregisterEvent`, `unregisterDelegate`.
 
 ---
 

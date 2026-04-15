@@ -1,8 +1,9 @@
 # Packet Tracer IPC API - Referencia Completa
 
+> **Fuente de verdad:** `docs/pt-script-result.json` (generado 2026-04-15)
 > **Última actualización:** Abril 2026
 > **PT Version:** 9.0.0.0810
-> **Estado:** ✅ API descubierta y probada
+> **Estado:** ✅ Métodos verificados en dump — otros marcados con ⚠️
 
 ---
 

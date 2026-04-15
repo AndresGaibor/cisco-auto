@@ -30,7 +30,7 @@ export const RUNTIME_MANIFEST = {
     "runtime/constants.ts",
     "runtime/types.ts",
     "runtime/helpers.ts",
-    "runtime/index.ts",
+    // NOTE: runtime/index.ts excluded — only TS re-exports + has globalThis reference
   ],
 
   utils: [
@@ -65,28 +65,9 @@ export const RUNTIME_MANIFEST = {
     // NOTE: ios-session.ts removed — inferModeFromPrompt duplicated prompt-parser.ts
   ],
 
-  kernel: [
-    "pt/kernel/main.ts",
-    "pt/kernel/types.ts",
-    "pt/kernel/directories.ts",
-    "pt/kernel/lease.ts",
-    "pt/kernel/command-queue.ts",
-    "pt/kernel/runtime-loader.ts",
-    "pt/kernel/heartbeat.ts",
-    "pt/kernel/cleanup.ts",
-    "pt/kernel/job-state.ts",
-    "pt/kernel/step-handlers.ts",
-    "pt/kernel/job-executor.ts",
-    "pt/kernel/index.ts",
-  ],
-
-  terminal: [
-    "pt/terminal/terminal-engine.ts",
-    "pt/terminal/terminal-session.ts",
-    "pt/terminal/terminal-events.ts",
-    "pt/terminal/prompt-parser.ts",
-    "pt/terminal/index.ts",
-  ],
+  // NOTE: kernel and terminal are NOT included in runtime.js.
+  // They belong exclusively to main.js (MAIN_MANIFEST).
+  // runtime.js only contains: ptApi, runtime contracts, utils, core, and handlers.
 } as const;
 
 export type RuntimeManifestSection = keyof typeof RUNTIME_MANIFEST;

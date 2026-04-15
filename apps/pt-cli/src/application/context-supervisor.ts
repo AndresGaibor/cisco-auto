@@ -13,13 +13,10 @@ import { dirname } from 'node:path';
 import { promises as fs } from 'node:fs';
 
 export async function collectContextStatus(controller: PTController): Promise<ContextStatus> {
-  // Refrescar el estado vivo antes de consolidar el contexto persistido
-  let liveSnapshot: Awaited<ReturnType<PTController['snapshot']>> | null = null;
-  try {
-    liveSnapshot = await controller.snapshot();
-  } catch {
-    // Si la snapshot viva falla, seguimos con el contexto disponible
-  }
+  // Use the cached snapshot only — never send a new command to PT here.
+  // This runs in the finally block of runCommand(), after execute() already queried PT.
+  // Calling controller.snapshot() again would add another 30s timeout when PT is offline.
+  const liveSnapshot = controller.getCachedSnapshot();
 
   // Prefer the consolidated system context exposed by PTController (Phase 5)
   const sys = controller.getSystemContext();

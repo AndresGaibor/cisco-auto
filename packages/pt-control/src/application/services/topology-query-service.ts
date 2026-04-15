@@ -26,6 +26,43 @@ export class TopologyQueryService {
   ) {}
 
   async snapshot(): Promise<TopologySnapshot | null> {
+    // Fast path: return cache immediately if already materialized.
+    // This avoids a 30s PT round-trip when PT is not connected.
+    if (this.cache.isMaterialized()) {
+      // Still try a live refresh, but with a very short timeout (3s)
+      // so we get fresh data when PT is active without blocking when it's not.
+      try {
+        const result = await this.bridge.sendCommandAndWait<TopologySnapshot>(
+          "snapshot",
+          { id: this.generateId() },
+          3000    // 3s fast timeout — fall back to cache if PT doesn't respond
+        );
+        const value = result.value;
+        if (value && typeof value === "object" && "devices" in value && "links" in value) {
+          this.cache.applySnapshot(value);
+          return value;
+        }
+      } catch {
+        // PT not responding — use cached data, no blocking
+      }
+      return this.cache.getSnapshot();
+    }
+
+    // Cold path: no cache yet, try PT with full 30s timeout
+    // First check if there's any state written to disk (fast, no PT needed)
+    const diskState = this.bridge.readState<TopologySnapshot>();
+    if (diskState && typeof diskState === "object" && "devices" in diskState && "links" in diskState) {
+      this.cache.applySnapshot(diskState);
+      return diskState;
+    }
+
+    // Only send a command to PT if the bridge has a valid lease (PT is actively running)
+    // isReady() = bridge running AND holding a valid lease from PT's kernel
+    if (!this.bridge.isReady()) {
+      // PT script is not running or lease expired — no point waiting 30s
+      return null;
+    }
+
     try {
       const result = await this.bridge.sendCommandAndWait<TopologySnapshot>("snapshot", { id: this.generateId() }, 30000);
       const value = result.value;
@@ -33,18 +70,8 @@ export class TopologyQueryService {
         this.cache.applySnapshot(value);
         return value;
       }
-
-      const freshSnapshot = this.bridge.readState<TopologySnapshot>();
-      if (freshSnapshot) {
-        this.cache.applySnapshot(freshSnapshot);
-        return freshSnapshot;
-      }
     } catch {
-      // PT no responde; usar caché si está materializada
-    }
-
-    if (this.cache.isMaterialized()) {
-      return this.cache.getSnapshot();
+      // PT no responde; no hay cache
     }
 
     return null;

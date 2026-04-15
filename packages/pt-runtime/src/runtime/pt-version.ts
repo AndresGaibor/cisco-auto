@@ -1,5 +1,9 @@
 // packages/pt-runtime/src/runtime/pt-version.ts
 // PT Version Detection — Probe PT's runtime to determine version
+//
+// NOTE: This file re-exports canonical types from pt-api-registry.
+// Local interface overrides were removed because they diverged from the real API.
+// If you need to extend types, do it in pt-api-registry.ts instead.
 
 export interface PtVersion {
   major: number;
@@ -15,61 +19,18 @@ export interface PtCapability {
   fallback: string;
 }
 
-export interface PtIpc {
-  network(): PtNetwork | null;
-  systemFileManager(): PtFileManager | null;
-  appWindow(): PtAppWindow | null;
-}
-
-export interface PtNetwork {
-  getDeviceCount(): number;
-  getDeviceAt(index: number): PtDevice | null;
-}
-
-export interface PtDevice {
-  getPortAt(index: number): PtPort | null;
-  getPort(name: string): PtPort | null;
-  getPortCount(): number;
-  moveToLocation(x: number, y: number): void;
-  moveToLocationCentered(x: number, y: number): void;
-  setDhcpFlag(enabled: boolean): void;
-  getDhcpFlag(): boolean;
-  skipBoot(): void;
-  getProcess(name: string): PtProcess | null;
-}
-
-export interface PtPort {
-  setDhcpClientFlag(enabled: boolean): void;
-  isDhcpClientOn(): boolean;
-  setIpv6Enabled(enabled: boolean): void;
-  getInboundFirewallServiceStatus(): string;
-}
-
-export interface PtProcess {
-  getDhcpServerProcessByPortName(portName: string): PtDhcpServerProcess | null;
-  getVlanCount(): number;
-}
-
-export interface PtDhcpServerProcess {
-  // DHCP server specific methods
-}
-
-export interface PtFileManager {
-  // File manager methods
-}
-
-export interface PtAppWindow {
-  getActiveWorkspace(): PtWorkspace | null;
-}
-
-export interface PtWorkspace {
-  getLogicalWorkspace(): PtLogicalWorkspace | null;
-}
-
-export interface PtLogicalWorkspace {
-  deleteDevice(name: string): void;
-  deleteObject(id: string): void;
-}
+// Re-export canonical types for backwards compatibility
+export type PtIpc = import("../pt-api/pt-api-registry.js").PTIpc;
+export type PtNetwork = import("../pt-api/pt-api-registry.js").PTNetwork;
+export type PtDevice = import("../pt-api/pt-api-registry.js").PTDevice;
+export type PtPort = import("../pt-api/pt-api-registry.js").PTPort;
+export type PtAppWindow = import("../pt-api/pt-api-registry.js").PTAppWindow;
+export type PtWorkspace = import("../pt-api/pt-api-registry.js").PTWorkspace;
+export type PtLogicalWorkspace = import("../pt-api/pt-api-registry.js").PTLogicalWorkspace;
+export type PtFileManager = import("../pt-api/pt-api-registry.js").PTFileManager;
+export type PtCommandLine = import("../pt-api/pt-api-registry.js").PTCommandLine;
+export type PtLink = import("../pt-api/pt-api-registry.js").PTLink;
+export type PtModule = import("../pt-api/pt-api-registry.js").PTModule;
 
 var KNOWN_CAPABILITIES: Record<string, { sinceVersion: string; fallback: string }> = {
   "PTDevice.getPort": { sinceVersion: "8.0", fallback: "Use getPortAt() for name match" },

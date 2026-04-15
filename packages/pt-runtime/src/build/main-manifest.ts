@@ -11,13 +11,12 @@ export const MAIN_MANIFEST = {
     "pt/kernel/directories.ts",
     "pt/kernel/command-queue.ts",
     "pt/kernel/job-state.ts",
-    "pt/kernel/job-executor.ts",
     "pt/kernel/step-handlers.ts",
+    "pt/kernel/job-executor.ts",
     "pt/kernel/lease.ts",
     "pt/kernel/heartbeat.ts",
     "pt/kernel/cleanup.ts",
     "pt/kernel/runtime-loader.ts",
-    "pt/kernel/main.ts",
   ],
 
   terminal: [
@@ -26,12 +25,19 @@ export const MAIN_MANIFEST = {
     "pt/terminal/terminal-session.ts",
     "pt/terminal/terminal-events.ts",
   ],
+
+  // main.ts MUST be last — it depends on createTerminalEngine (terminal) and all kernel modules
+  entry: [
+    "pt/kernel/main.ts",
+  ],
 } as const;
+
 
 export function getAllMainFiles(): string[] {
   const files: string[] = [];
   files.push(...MAIN_MANIFEST.kernel);
   files.push(...MAIN_MANIFEST.terminal);
+  files.push(...MAIN_MANIFEST.entry);
   return files;
 }
 

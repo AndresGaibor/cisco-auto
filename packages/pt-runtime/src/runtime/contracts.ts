@@ -10,12 +10,7 @@
 // Tipos PT compartidos
 // ============================================================================
 
-import type {
-  PTNetwork,
-  PTDevice,
-  PTCommandLine,
-  PTPort,
-} from "../pt-api/pt-api-registry.js";
+import type { PTNetwork, PTDevice, PTCommandLine, PTPort } from "../pt-api/pt-api-registry.js";
 
 export type {
   PTNetwork,
@@ -89,9 +84,8 @@ export interface SessionStateSnapshot {
   awaitingConfirm: boolean;
 }
 
-/** Device reference for runtime */
-export interface DeviceRef {
-  name: string;
+/** Device reference for runtime — extends PTDevice to include all device methods */
+export interface DeviceRef extends PTDevice {
   hasTerminal: boolean;
   getTerminal(): PTCommandLine | null;
   getNetwork(): PTNetwork;
@@ -173,10 +167,7 @@ export interface RuntimeDeferredResult {
 }
 
 /** Combined runtime result type */
-export type RuntimeResult =
-  | RuntimeErrorResult
-  | RuntimeSuccessResult
-  | RuntimeDeferredResult;
+export type RuntimeResult = RuntimeErrorResult | RuntimeSuccessResult | RuntimeDeferredResult;
 
 // ============================================================================
 // Kernel Job State - State maintained by main for active jobs
@@ -209,9 +200,13 @@ export interface KernelJobState {
   paged: boolean;
   waitingForCommandEnd: boolean;
   finished: boolean;
-  result: RuntimeSuccessResult | RuntimeErrorResult | null;
+  result: RuntimeErrorResult | RuntimeSuccessResult | null;
   error: string | null;
   errorCode: string | null;
+  totalSteps?: number;
+  outputTail?: string;
+  output?: string;
+  done?: boolean;
 }
 
 /** Job state phases */
@@ -282,10 +277,7 @@ export interface ResultEnvelope {
 // ============================================================================
 
 /** The main runtime function signature */
-export type RuntimeFunction = (
-  payload: Record<string, unknown>,
-  api: RuntimeApi
-) => RuntimeResult;
+export type RuntimeFunction = (payload: Record<string, unknown>, api: RuntimeApi) => RuntimeResult;
 
 // ============================================================================
 // Special Payload Types for System Operations

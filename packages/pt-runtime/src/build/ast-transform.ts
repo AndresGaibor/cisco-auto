@@ -295,20 +295,28 @@ function buildDependencyGraph(sourceFiles: Map<string, string>): DependencyGraph
 function resolveImportPath(from: string, importPath: string, filePaths: string[]): string | null {
   if (importPath.startsWith(".")) {
     const baseDir = from.split("/").slice(0, -1).join("/");
-    const resolved = (baseDir ? baseDir + "/" : "") + importPath;
+    const joined = (baseDir ? baseDir + "/" : "") + importPath;
+
+    // Normalize: remove /. segments and leading ./
+    // e.g. "handlers/./vlan.js" → "handlers/vlan.js"
+    const normalized = joined
+      .replace(/\/\.\//g, "/")   // handlers/./vlan.js → handlers/vlan.js
+      .replace(/^\.\//,  "");    // ./vlan.js → vlan.js (top-level imports)
+
+    // TypeScript source files use .js imports that map to .ts on disk.
+    const noExt = normalized.replace(/\.js$/, "");
 
     const candidates = [
-      resolved,
-      resolved + ".ts",
-      resolved + "/index.ts",
-      resolved.replace(/^\.\/pt\//, "./"),
-      resolved.replace(/^\.\/handlers\//, "./"),
+      noExt + ".ts",          // handlers/vlan.js → handlers/vlan.ts  ← most common
+      noExt + "/index.ts",    // handlers/vlan.js → handlers/vlan/index.ts
+      normalized + ".ts",     // handlers/vlan    → handlers/vlan.ts
+      normalized + "/index.ts",
+      normalized,             // exact match (already .ts)
     ];
 
     for (const candidate of candidates) {
-      const normalized = candidate.replace(/\/index\.ts$/, "");
-      if (filePaths.includes(normalized)) {
-        return normalized;
+      if (filePaths.includes(candidate)) {
+        return candidate;
       }
     }
   }
@@ -386,59 +394,66 @@ function stripModuleSyntax(source: string): string {
   let inImportMultiLine = false;
   let inExportMultiLine = false;
   let inJSDocComment = false;
-  let braceCount = 0;
+  let braceDepth = 0;
 
   for (const line of lines) {
     const trimmed = line.trimStart();
 
+    // Preserve JSDoc comments
     if (inJSDocComment) {
       result.push(line);
-      if (line.includes("*/")) {
-        inJSDocComment = false;
-      }
+      if (line.includes("*/")) inJSDocComment = false;
       continue;
     }
-
     if (trimmed.startsWith("/**")) {
       inJSDocComment = true;
       result.push(line);
       continue;
     }
 
+    // Inside a multi-line import block: skip until we see `from "..."`
     if (inImportMultiLine) {
-      if (/from\s+["']/.test(trimmed)) {
-        inImportMultiLine = false;
-      }
+      if (/from\s+["']/.test(trimmed)) inImportMultiLine = false;
       continue;
     }
 
+    // Inside a multi-line export { ... } block: skip until braces balance
     if (inExportMultiLine) {
-      braceCount += (line.match(/\{/g) || []).length;
-      braceCount -= (line.match(/\}/g) || []).length;
-      if (braceCount === 0) {
-        inExportMultiLine = false;
-      }
+      braceDepth += (line.match(/\{/g) || []).length;
+      braceDepth -= (line.match(/\}/g) || []).length;
+      if (braceDepth <= 0) inExportMultiLine = false;
       continue;
     }
 
+    // ── Import stripping ──────────────────────────────────────────────
     if (/^import\s+(?:type\s+)?/.test(trimmed)) {
-      if (!/from\s+["']/.test(trimmed)) {
-        inImportMultiLine = true;
-      }
-      continue;
+      // Check if it ends on this line (has `from "..."`)
+      if (!/from\s+["']/.test(trimmed)) inImportMultiLine = true;
+      continue; // always skip import lines
     }
 
+    // ── Export stripping ─────────────────────────────────────────────
     if (/^export\s+default\s+/.test(trimmed)) continue;
-    if (/^export\s+type\s+/.test(trimmed)) continue;
-    if (/^export\s+\*\s+from/.test(trimmed)) continue;
+    if (/^export\s+type\s+/.test(trimmed)) continue;      // export type Foo = ...
+    if (/^export\s+\*\s+from/.test(trimmed)) continue;   // export * from "..."
+
+    // Re-export: export { X, Y } from "..."  (has 'from' = single-line re-export)
+    if (/^export\s+\{/.test(trimmed) && /from\s+["']/.test(trimmed)) {
+      continue; // strip whole line — it's a single-line module re-export
+    }
+
+    // Named export block (no 'from'): export { X, Y };
     if (/^export\s+\{[^}]+\};?\s*$/.test(trimmed)) continue;
 
-    if (/^export\s+\{/.test(trimmed)) {
+    // Multi-line export { (no closing } or 'from' on same line)
+    if (/^export\s+\{/.test(trimmed) && !trimmed.includes("}")) {
       inExportMultiLine = true;
-      braceCount = 1;
+      braceDepth = 1;
       continue;
     }
 
+    // For all other exports (export function, export class, export const, export interface)
+    // strip only the 'export' keyword and keep the declaration
     result.push(line.replace(/^export\s+(default\s+)?/, ""));
   }
 

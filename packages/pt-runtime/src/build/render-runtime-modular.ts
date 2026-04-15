@@ -77,7 +77,6 @@ const MODULE_GROUPS = {
     files: [
       "handlers/ios-output-classifier.ts",
       "handlers/parsers/ios-parsers.ts",
-      ...RUNTIME_MANIFEST.terminal,
     ],
     description: "IOS CLI execution and terminal",
   },
@@ -93,10 +92,7 @@ const MODULE_GROUPS = {
     files: ["handlers/module.ts"],
     description: "Module management",
   },
-  kernel: {
-    files: [...RUNTIME_MANIFEST.kernel],
-    description: "Kernel boot and job execution",
-  },
+  // NOTE: kernel is NOT a runtime module — it lives exclusively in main.js (MAIN_MANIFEST).
 } as const;
 
 type ModuleGroup = keyof typeof MODULE_GROUPS;
@@ -215,7 +211,7 @@ export class ModularRuntimeGenerator {
         
         const { code, validation } = compileFilesToModule(
           path.resolve(__dirname, ".."),
-          group.files,
+          [...group.files],
           moduleName
         );
 

@@ -64,7 +64,7 @@ async function launchSupervisor(): Promise<number> {
 
     const child = spawn("bun", ["run", supervisorPath], {
       detached: true,
-      stdio: "ignore", // No heredar stdio para que pueda morir independientemente
+      stdio: "ignore", // No heredar stdio — supervisor corre 100% en background
       cwd: process.cwd(),
     });
 
@@ -74,13 +74,12 @@ async function launchSupervisor(): Promise<number> {
       return;
     }
 
-    // Desacoplar proceso - permitir que el parent muera sin matar el child
+    // Desacoplar proceso — el parent puede terminar sin matar el child
     child.unref();
 
-    // Dar tiempo para que el supervisor adquiera el lock y el lease
-    setTimeout(() => {
-      resolve(pid);
-    }, 2000);
+    // Resolvemos inmediatamente — el supervisor adquiere su lock de forma independiente.
+    // No hay razón para bloquear la CLI esperando que el supervisor se inicialice.
+    resolve(pid);
   });
 }
 
@@ -90,21 +89,17 @@ async function launchSupervisor(): Promise<number> {
  * - Si no corre, lo arranca
  */
 export async function ensureSupervisorRunning(): Promise<void> {
-  // Verificar si ya está corriendo
   if (isSupervisorRunning()) {
-    console.debug("[bootstrap] Supervisor ya está corriendo");
+    // Already running — silently return
     return;
   }
 
-  console.debug("[bootstrap] Arrancando supervisor...");
-
   try {
-    const pid = await launchSupervisor();
-    console.debug(`[bootstrap] Supervisor arrancado con PID ${pid}`);
+    await launchSupervisor();
+    // No logs here — the CLI should be silent on normal operation
   } catch (e) {
-    console.warn("[bootstrap] Error arrancando supervisor:", e);
-    // No fallar completamente, la CLI puede funcionar sin supervisor
-    // aunque el contexto no sea persistente
+    // Don't fail the command if the supervisor can't start
+    // The CLI works without it, just without persistent context
   }
 }
 

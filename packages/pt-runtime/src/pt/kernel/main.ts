@@ -2,7 +2,8 @@
 // Kernel boot implementation
 
 import type { KernelConfig, CommandEnvelope, ResultEnvelope } from "./types";
-import type { DeviceRef, DeferredJobPlan } from "../../runtime/contracts";
+import type { DeviceRef, DeferredJobPlan, KernelJobState } from "../../runtime/contracts";
+import type { PTNetwork, PTDevice, PTCommandLine, PTIpc } from "../../pt-api/pt-api-registry.js";
 import { createDirectoryManager } from "./directories";
 import { createLeaseManager } from "./lease";
 import { createCommandQueue } from "./command-queue";
@@ -43,9 +44,12 @@ export function createKernel(config: KernelConfig) {
     deadLetterDir: config.deadLetterDir,
   });
   const runtimeLoader = createRuntimeLoader({ runtimeFile: config.devDir + "/runtime.js" });
-  const heartbeat = createHeartbeat({ devDir: config.devDir, intervalMs: config.heartbeatIntervalMs });
+  const heartbeat = createHeartbeat({
+    devDir: config.devDir,
+    intervalMs: config.heartbeatIntervalMs,
+  });
   const cleanup = createCleanupManager();
-  
+
   const terminal = createTerminalEngine({
     commandTimeoutMs: 8000,
     stallTimeoutMs: 15000,
@@ -59,8 +63,7 @@ export function createKernel(config: KernelConfig) {
 
   // Runtime API factory
   function createRuntimeApi() {
-    // PT QTScript uses 'self' as global object — declared in pt-globals.d.ts
-    const ipc = self.ipc as any;
+    const ipc = typeof self !== "undefined" ? self.ipc : (null as any);
     const net = ipc?.getNetwork?.() ?? ipc?.network?.();
 
     return {
@@ -93,43 +96,61 @@ export function createKernel(config: KernelConfig) {
         return terminal.getSession(deviceName);
       },
       getWorkspace() {
-        const ipc = self.ipc as any;
+        const ipc = typeof self !== "undefined" ? self.ipc : (null as any);
         return ipc?.getLogicalWorkspace?.();
       },
-      now() { return Date.now(); },
+      now() {
+        return Date.now();
+      },
       safeJsonClone<T>(data: T): T {
-        try { return JSON.parse(JSON.stringify(data)); }
-        catch (e) { return data; }
+        try {
+          return JSON.parse(JSON.stringify(data));
+        } catch (e) {
+          return data;
+        }
       },
       normalizePortName(name: string) {
-        return String(name || "").replace(/\s+/g, "").toLowerCase();
+        return String(name || "")
+          .replace(/\s+/g, "")
+          .toLowerCase();
       },
       // Job management methods
       createJob(plan: DeferredJobPlan): string {
         const job = jobExecutor.startJob(plan);
         return job.id;
       },
-      getJobState(ticket: string) {
+      getJobState(ticket: string): KernelJobState | null {
         const job = jobExecutor.getJob(ticket);
         if (!job) return null;
         const ctx = job.context;
         return {
           id: ctx.plan.id,
           device: ctx.plan.device,
+          plan: ctx.plan,
           state: ctx.phase,
           currentStep: ctx.currentStep,
           totalSteps: ctx.plan.plan.length,
           outputTail: ctx.outputBuffer ? ctx.outputBuffer.slice(-500) : "",
           output: ctx.outputBuffer,
+          outputBuffer: ctx.outputBuffer,
+          startedAt: ctx.startedAt,
+          updatedAt: ctx.updatedAt,
+          stepResults: ctx.stepResults,
+          lastMode: ctx.lastMode,
+          lastPrompt: ctx.lastPrompt,
+          paged: ctx.paged,
+          waitingForCommandEnd: ctx.waitingForCommandEnd,
           finished: ctx.finished,
-          result: ctx.error ? null : { raw: ctx.outputBuffer },
+          result: ctx.error
+            ? null
+            : { raw: ctx.outputBuffer, ok: true, status: undefined, session: undefined },
           error: ctx.error,
           errorCode: ctx.errorCode,
           done: ctx.finished,
         };
       },
       getActiveJobs() {
-        return jobExecutor.getActiveJobs().map(j => ({
+        return jobExecutor.getActiveJobs().map((j) => ({
           id: j.id,
           device: j.device,
           finished: isJobContextFinished(j.context),
@@ -272,14 +293,20 @@ export function createKernel(config: KernelConfig) {
       isShuttingDown = false;
       isRunning = true;
 
-      // PT QTScript uses 'self' as global object — self.ipc and self.fm are provided by PT
-      const ipc = self.ipc as any;
+      // ipc is a global provided by PT Script Module
+      const ipc = typeof self !== "undefined" ? self.ipc : (null as any);
       const fmFromIpc = ipc?.systemFileManager?.();
       if (fmFromIpc) {
-        self.fm = fmFromIpc;
+        (self as any).fm = fmFromIpc;
       }
 
       dirs.ensureDirectories();
+
+      if (config.demoRuntime) {
+        dprint("[kernel-demo] Demo runtime enabled — skipping lease wait");
+        activateRuntime();
+        return;
+      }
 
       if (lease.validate()) {
         activateRuntime();
@@ -300,7 +327,19 @@ export function createKernel(config: KernelConfig) {
 
     dprint("[kernel] Activating...");
 
-    runtimeLoader.load();
+    if (config.demoRuntime) {
+      runtimeLoader.loadDemo();
+    } else {
+      runtimeLoader.load();
+    }
+
+    const runtimeLoaded = runtimeLoader.getRuntimeFn() !== null;
+    if (runtimeLoaded) {
+      const mtime = runtimeLoader.getLastMtime();
+      dprint("[kernel] Runtime ready at mtime=" + mtime);
+    } else {
+      dprint("[kernel] WARNING: runtime not loaded — runtime.js may be missing or failed to parse");
+    }
 
     commandPollInterval = setInterval(pollCommandQueue, config.pollIntervalMs);
     heartbeat.start();

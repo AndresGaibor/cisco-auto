@@ -8,19 +8,7 @@ import type {
   PTNetwork,
   PTDevice,
 } from "./pt-api-registry.js";
-
-export interface SessionStateSnapshot {
-  mode: string;
-  prompt: string;
-  paging: boolean;
-  awaitingConfirm: boolean;
-}
-
-export interface RuntimeDeviceRef extends PTDevice {
-  hasTerminal: boolean;
-  getTerminal(): PTCommandLine | null;
-  getNetwork(): PTNetwork;
-}
+import type { RuntimeApi, DeviceRef, SessionStateSnapshot } from "../runtime/contracts.js";
 
 export interface PtDeps {
   readonly ipc: PTIpc;
@@ -55,12 +43,15 @@ export interface PtDeferredDeps extends PtDeps {
   getActiveJobs(): JobStateSnapshot[];
 }
 
-export interface PtRuntimeApi extends PtDeferredDeps {
-  getDeviceByName(name: string): RuntimeDeviceRef | null;
-  listDevices(): string[];
-  getWorkspace(): unknown;
-  safeJsonClone<T>(data: T): T;
-  normalizePortName(name: string): string;
+export interface PtRuntimeApi extends RuntimeApi {
+  getDeviceByName(name: string): DeviceRef | null;
+  getLW(): import("./pt-api-registry.js").PTLogicalWorkspace;
+  getNet(): import("./pt-api-registry.js").PTNetwork;
+  getFM(): import("./pt-api-registry.js").PTFileManager;
+  readonly DEV_DIR: string;
+  getCommandLine(deviceName: string): import("./pt-api-registry.js").PTCommandLine | null;
+  listDeviceNames(): string[];
+  readonly ipc: import("./pt-api-registry.js").PTIpc;
 }
 
 export function createPtDepsFromGlobals(scope: PTGlobalScope): PtDeps {
@@ -72,7 +63,8 @@ export function createPtDepsFromGlobals(scope: PTGlobalScope): PtDeps {
     dprint: scope.dprint,
     DEV_DIR: scope.DEV_DIR,
     getDeviceByName: (name) => scope.ipc.network().getDevice(name),
-    getCommandLine: (deviceName) => scope.ipc.network().getDevice(deviceName)?.getCommandLine?.() ?? null,
+    getCommandLine: (deviceName) =>
+      scope.ipc.network().getDevice(deviceName)?.getCommandLine?.() ?? null,
     listDeviceNames: () => {
       const net = scope.ipc.network();
       const names: string[] = [];

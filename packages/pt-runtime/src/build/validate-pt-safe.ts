@@ -71,10 +71,19 @@ const PT_FORBIDDEN_PATTERNS: PatternRule[] = [
     suggestion: "Use static imports at build time",
   },
   {
-    pattern: /\bprocess\b(?!\s*\.)/g,
+    // Matches bare `process` global — but NOT:
+    //   process.something  (property access on process — e.g. process.env)... wait, that IS banned
+    //   _a.process         (property named process on an object)
+    //   process =          (local variable assignment)
+    //   var process        (local variable declaration — from TS destructuring)
+    //   { process,         (destructuring target)
+    //   { process }        (destructuring target)
+    // The actual Node.js global 'process' is only dangerous when used standalone
+    // (e.g. process.env, process.exit), not as a property or local variable name.
+    pattern: /(?<![.\w])process(?:\s*\.(?!\s))/g,
     message: "process global is not available in PT",
     category: "forbidden-global",
-    suggestion: "Use environment variables or IPC instead",
+    suggestion: "Use environment variables injected at build time instead of process.env",
   },
   {
     pattern: /\bBuffer\b/g,

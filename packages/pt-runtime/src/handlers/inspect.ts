@@ -54,12 +54,10 @@ export function handleInspect(payload: InspectPayload, deps: HandlerDeps): Handl
   let dhcp = false;
 
   // Intentar leer DHCP flag a nivel dispositivo
-  if (typeof (device as any).getDhcpFlag === "function") {
-    try {
-      dhcp = !!(device as any).getDhcpFlag();
-    } catch {
-      /* ignore */
-    }
+  try {
+    dhcp = !!device.getDhcpFlag();
+  } catch {
+    /* ignore */
   }
 
   for (let i = 0; i < portCount; i++) {
@@ -82,7 +80,7 @@ export function handleInspect(payload: InspectPayload, deps: HandlerDeps): Handl
       }
 
       try {
-        portInfo.macAddress = String((port as any).getMacAddress?.() ?? "");
+        portInfo.macAddress = String(port.getMacAddress());
       } catch {
         // PT API puede no soportar esta propiedad en el puerto
       }
@@ -94,9 +92,9 @@ export function handleInspect(payload: InspectPayload, deps: HandlerDeps): Handl
       }
 
       // Leer DHCP status del puerto si no está a nivel dispositivo
-      if (!dhcp && typeof (port as any).isDhcpClientOn === "function") {
+      if (!dhcp) {
         try {
-          if ((port as any).isDhcpClientOn()) {
+          if (port.isDhcpClientOn()) {
             portInfo.dhcp = true;
             dhcp = true;
           }

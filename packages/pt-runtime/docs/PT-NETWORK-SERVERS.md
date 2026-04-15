@@ -26,17 +26,17 @@ Full HTTP server in PT scripting.
 
 ### Methods
 
-| Method | Description |
-|---|---|
-| `start()` | Start HTTP server |
-| `stop()` | Stop HTTP server |
-| `isListening()` | → boolean |
-| `addRouteHandler(method, path, handler)` | Add HTTP route |
-| `addWebSocketRouteHandler(path, handler)` | Add WebSocket route |
-| `cleanUp()` | Cleanup resources |
-| `setWsMaxAllowedIncomingFrameSize(size)` | Set max frame size |
-| `setWsMaxAllowedIncomingMessageSize(size)` | Set max message size |
-| `objectNameChanged` | Event |
+| Method | Signature | Description |
+|---|---|---|
+| `start()` | `(): void` | Start HTTP server |
+| `stop()` | `(): void` | Stop HTTP server |
+| `isListening()` | `(): boolean` | Check if server is listening |
+| `addRouteHandler(method, path, handler)` | `(method: string, path: string, handler: function): void` | Add HTTP route |
+| `addWebSocketRouteHandler(path, handler)` | `(path: string, handler: function): void` | Add WebSocket route |
+| `cleanUp()` | `(): void` | Cleanup resources |
+| `setWsMaxAllowedIncomingFrameSize(size)` | `(size: number): void` | Set max WebSocket frame size |
+| `setWsMaxAllowedIncomingMessageSize(size)` | `(size: number): void` | Set max WebSocket message size |
+| `objectNameChanged` | `(handler: function): void` | Event — fired when object name changes |
 
 ### Events
 
@@ -52,27 +52,20 @@ TCP server for accepting connections.
 
 ### Methods
 
-| Method | Description |
-|---|---|
-| `listen(port, ip?)` | Start listening on port (default all interfaces) |
-| `close()` | Close server |
-| `isListening()` | → boolean |
-| `hasPendingConnections()` | → boolean |
-| `nextPendingConnection()` | → TCP Socket (client) |
-| `getServerIP()` | → string IP |
-| `getServerPort()` | → number port |
-| `getError()` | → number error code |
-| `getErrorString()` | → string |
-| `cleanUp()` | Cleanup |
-| `objectNameChanged` | Event |
-| `newConnection` | Event fired when client connects |
-
-### Events
-
-```javascript
-tcpServer.newConnection(handler)  // (socket) => {}
-tcpServer.objectNameChanged(handler)
-```
+| Method | Signature | Description |
+|---|---|---|
+| `listen(port, ip?)` | `(port: number, ip?: string): void` | Start listening on port |
+| `close()` | `(): void` | Close server |
+| `isListening()` | `(): boolean` | Check if listening |
+| `hasPendingConnections()` | `(): boolean` | Check for pending connections |
+| `nextPendingConnection()` | `(): TcpSocket` | Get next pending client socket |
+| `getServerIP()` | `(): string` | Get server IP address |
+| `getServerPort()` | `(): number` | Get server port |
+| `getError()` | `(): number` | Get error code |
+| `getErrorString()` | `(): string` | Get error string |
+| `cleanUp()` | `(): void` | Cleanup resources |
+| `objectNameChanged` | `(handler: function): void` | Event |
+| `newConnection` | `(handler: function): void` | Event — fired when client connects |
 
 ### Example
 
@@ -95,31 +88,23 @@ TCP client socket (also returned by `tcpServer.nextPendingConnection()`).
 
 ### Methods
 
-| Method | Description |
-|---|---|
-| `connect(host, port)` | Connect to remote host |
-| `disconnect()` | Disconnect |
-| `sendData(data)` | Send string data |
-| `getState()` | → "CONNECTED" / "DISCONNECTED" / "CONNECTING" |
-| `getLocalIP()` | → string |
-| `getLocalPort()` | → number |
-| `getRemoteIP()` | → string |
-| `getRemoteHost()` | → string hostname |
-| `getRemotePort()` | → number |
-| `getError()` | → number |
-| `getErrorString()` | → string |
-| `cleanUp()` | Cleanup |
-| `objectNameChanged` | Event |
-| `dataReceived` | Event (data: string) |
-| `stateChanged` | Event (state: string) |
-
-### Events
-
-```javascript
-socket.dataReceived(function(data) { ... })
-socket.stateChanged(function(state) { ... })
-socket.objectNameChanged(handler)
-```
+| Method | Signature | Description |
+|---|---|---|
+| `connect(host, port)` | `(host: string, port: number): void` | Connect to remote host |
+| `disconnect()` | `(): void` | Disconnect |
+| `sendData(data)` | `(data: string): void` | Send string data |
+| `getState()` | `(): string` | → "CONNECTED" / "DISCONNECTED" / "CONNECTING" |
+| `getLocalIP()` | `(): string` | Local IP address |
+| `getLocalPort()` | `(): number` | Local port |
+| `getRemoteIP()` | `(): string` | Remote IP address |
+| `getRemoteHost()` | `(): string` | Remote hostname |
+| `getRemotePort()` | `(): number` | Remote port |
+| `getError()` | `(): number` | Error code |
+| `getErrorString()` | `(): string` | Error string |
+| `cleanUp()` | `(): void` | Cleanup resources |
+| `objectNameChanged` | `(handler: function): void` | Event |
+| `dataReceived` | `(handler: function): void` | Event — data: string |
+| `stateChanged` | `(handler: function): void` | Event — state: string |
 
 ---
 
@@ -129,21 +114,20 @@ UDP socket for datagram communication.
 
 ### Methods
 
-| Method | Description |
-|---|---|
-| `begin(port)` | Start UDP on port |
-| `stop()` | Stop UDP |
-| `sendData(data, host, port)` | Send datagram |
-| `getLocalIP()` | → string |
-| `getLocalPort()` | → number |
-| `getError()` | → number |
-| `getErrorString()` | → string |
-| `joinMulticastGroup(mcastAddr)` | Join multicast group |
-| `leaveMulticastGroup(mcastAddr)` | Leave multicast group |
-| `cleanUp()` | Cleanup |
-| `objectNameChanged` | Event |
-| `dataReceived` | Event |
-
+| Method | Signature | Description |
+|---|---|---|
+| `begin(port)` | `(port: number): void` | Start UDP on port |
+| `stop()` | `(): void` | Stop UDP |
+| `sendData(data, host, port)` | `(data: string, host: string, port: number): void` | Send datagram |
+| `getLocalIP()` | `(): string` | Local IP address |
+| `getLocalPort()` | `(): number` | Local port |
+| `getError()` | `(): number` | Error code |
+| `getErrorString()` | `(): string` | Error string |
+| `joinMulticastGroup(mcastAddr)` | `(addr: string): void` | Join multicast group |
+| `leaveMulticastGroup(mcastAddr)` | `(addr: string): void` | Leave multicast group |
+| `cleanUp()` | `(): void` | Cleanup resources |
+| `objectNameChanged` | `(handler: function): void` | Event |
+| `dataReceived` | `(handler: (data: string, host: string, port: number) => void): void` | Event — UDP datagram received |
 ### Events
 
 ```javascript
@@ -158,35 +142,27 @@ WebSocket client.
 
 ### Methods
 
-| Method | Description |
-|---|---|
-| `connect(url)` | Connect to WebSocket URL |
-| `disconnect()` | Disconnect |
-| `sendData(data)` | Send string data |
-| `sendBinaryData(data)` | Send binary data |
-| `getState()` | → "CONNECTED" / "DISCONNECTED" / "CONNECTING" |
-| `getLocalIP()` | → string |
-| `getLocalPort()` | → number |
-| `getRemoteIP()` | → string |
-| `getRemoteHost()` | → string |
-| `getRemotePort()` | → number |
-| `getError()` | → number |
-| `getErrorString()` | → string |
-| `setWsMaxAllowedIncomingFrameSize(size)` | Set max frame |
-| `setWsMaxAllowedIncomingMessageSize(size)` | Set max message |
-| `cleanUp()` | Cleanup |
-| `objectNameChanged` | Event |
-| `dataReceived` | Event (string) |
-| `binaryDataReceived` | Event (binary) |
-| `stateChanged` | Event |
-
-### Events
-
-```javascript
-ws.dataReceived(function(data) { ... })
-ws.binaryDataReceived(function(data) { ... })
-ws.stateChanged(function(state) { ... })
-```
+| Method | Signature | Description |
+|---|---|---|
+| `connect(url)` | `(url: string): void` | Connect to WebSocket URL |
+| `disconnect()` | `(): void` | Disconnect |
+| `sendData(data)` | `(data: string): void` | Send string data |
+| `sendBinaryData(data)` | `(data: ArrayBuffer): void` | Send binary data |
+| `getState()` | `(): string` | → "CONNECTED" / "DISCONNECTED" / "CONNECTING" |
+| `getLocalIP()` | `(): string` | Local IP address |
+| `getLocalPort()` | `(): number` | Local port |
+| `getRemoteIP()` | `(): string` | Remote IP address |
+| `getRemoteHost()` | `(): string` | Remote hostname |
+| `getRemotePort()` | `(): number` | Remote port |
+| `getError()` | `(): number` | Error code |
+| `getErrorString()` | `(): string` | Error string |
+| `setWsMaxAllowedIncomingFrameSize(size)` | `(size: number): void` | Set max WebSocket frame size |
+| `setWsMaxAllowedIncomingMessageSize(size)` | `(size: number): void` | Set max WebSocket message size |
+| `cleanUp()` | `(): void` | Cleanup resources |
+| `objectNameChanged` | `(handler: function): void` | Event |
+| `dataReceived` | `(handler: function): void` | Event — data: string |
+| `binaryDataReceived` | `(handler: function): void` | Event — data: binary |
+| `stateChanged` | `(handler: function): void` | Event |
 
 ---
 

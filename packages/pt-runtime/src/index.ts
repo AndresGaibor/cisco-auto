@@ -81,13 +81,11 @@ export class RuntimeGenerator {
     this.config = config;
   }
 
-  generateMain(embeddedCatalog?: string, embeddedRuntime?: string): string {
+  generateMain(): string {
     return renderMainV2({
       srcDir: path.resolve(__dirname),
       outputPath: "",
       injectDevDir: this.config.devDir,
-      embeddedCatalog,
-      embeddedRuntime,
     });
   }
 
@@ -107,12 +105,12 @@ export class RuntimeGenerator {
 
   /**
    * generate() — writes 3 files to outputDir (catalog.js, runtime.js, main.js)
-   * Uses separate files (for PT versions that have fm/filesystem).
+   * Always file-based: main.js loads catalog.js + hot-reloads runtime.js from disk.
    */
   async generate(): Promise<{ main: string; catalog: string; runtime: string }> {
     const catalog = this.generateCatalog();
     const runtime = this.generateRuntime();
-    const main = this.generateMain(catalog, runtime);
+    const main = this.generateMain();
 
     await fs.promises.mkdir(this.config.outputDir, { recursive: true });
     await fs.promises.writeFile(path.join(this.config.outputDir, "main.js"), main, "utf-8");
@@ -166,31 +164,34 @@ export class RuntimeGenerator {
   }
 
   /**
-   * deploy() — PT 9.0 embedded mode.
-   * Generates a SINGLE main.js with catalog + runtime embedded inline.
-   * catalog.js and runtime.js are NOT written (PT 9.0 has no fm/filesystem).
+   * deploy() — writes 3 files to devDir (~/pt-dev/ by default).
+   * main.js loads catalog.js once, then runtime.js is hot-reloaded by kernel.
    */
   async deploy(): Promise<void> {
     const catalog = this.generateCatalog();
     const runtime = this.generateRuntime();
-    const main = this.generateMain(catalog, runtime);
+    const main = this.generateMain();
 
     await fs.promises.mkdir(this.config.devDir, { recursive: true });
     await fs.promises.writeFile(path.join(this.config.devDir, "main.js"), main, "utf-8");
+    await fs.promises.writeFile(path.join(this.config.devDir, "catalog.js"), catalog, "utf-8");
+    await fs.promises.writeFile(path.join(this.config.devDir, "runtime.js"), runtime, "utf-8");
     await this.writeManifest(main, catalog, runtime, this.config.devDir);
   }
 
   /**
-   * build() — writes to outputDir (dist-qtscript/) for testing.
-   * Uses embedded mode: single main.js with catalog + runtime inline.
+   * build() — writes to outputDir (dist-qtscript/) for testing/CI.
+   * Same architecture as deploy(): 3 separate files, always file-based.
    */
   async build(): Promise<void> {
     const catalog = this.generateCatalog();
     const runtime = this.generateRuntime();
-    const main = this.generateMain(catalog, runtime);
+    const main = this.generateMain();
 
     await fs.promises.mkdir(this.config.outputDir, { recursive: true });
     await fs.promises.writeFile(path.join(this.config.outputDir, "main.js"), main, "utf-8");
+    await fs.promises.writeFile(path.join(this.config.outputDir, "catalog.js"), catalog, "utf-8");
+    await fs.promises.writeFile(path.join(this.config.outputDir, "runtime.js"), runtime, "utf-8");
     await this.writeManifest(main, catalog, runtime, this.config.outputDir);
   }
 }

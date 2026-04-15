@@ -1,7 +1,10 @@
 # Packet Tracer IPC API - Documentación Completa
 
+> **Fuente de verdad:** `docs/pt-script-result.json` (generado 2026-04-15 con 12 dispositivos seed)
+> Este extractor produce JSON y TXT con la API real inspeccionada en PT.
+
 > **Última actualización:** 15 Abril 2026
-> **Estado:** 🎉 **FUNCIONAL** - API para topología funciona, CLI para lectura funciona
+> **Estado:** ⚠️ **Parcial** — secciones con ⚠️ no verificadas vs dump
 
 ---
 
@@ -215,26 +218,26 @@ var port = switchDev.getPortAt(1); // FastEthernet0/1
 
 ### Métodos ÚNICOS de SwitchPort
 
-| Método | Descripción | Estado |
-|--------|-------------|--------|
-| **VLAN** | | |
-| `getAccessVlan()` | VLAN de acceso | ✅ 1 |
-| `setAccessVlan(id)` | Set VLAN acceso | ❌ Invalid |
-| `getNativeVlanId()` | VLAN nativa | ✅ 1 |
-| `setNativeVlanId(id)` | Set VLAN nativa | ❌ Invalid |
-| **Mode** | | |
-| `isAccessPort()` | ¿Modo access? | ✅ true |
-| `isNonegotiate()` | ¿Sin negociación? | ✅ false |
-| `setNonegotiateFlag(bool)` | Set negociation | ❌ Invalid |
-| `isAdminModeSet()` | ¿Admin mode? | ✅ false |
-| **Port Security** | | |
-| `getPortSecurity()` | Seguridad | ✅ null |
-| **Trunk** | | |
-| `addTrunkVlans(vlans)` | Agregar VLANs | ❌ Invalid |
-| `removeTrunkVlans(vlans)` | Remover VLANs | ❌ Invalid |
-| **VoIP** | | |
-| `getVoipVlanId()` | VLAN VoIP | ✅ 0 |
-| `setVoipVlanId(id)` | Set VLAN VoIP | ❌ Invalid |
+| Método | Tipo | Descripción | Estado |
+|--------|------|-------------|--------|
+| **VLAN** | | | |
+| `getAccessVlan()` | `(): number` | VLAN de acceso | ✅ 1 |
+| `setAccessVlan(id)` | `(id: number): void` | Set VLAN acceso | ❌ Invalid |
+| `getNativeVlanId()` | `(): number` | VLAN nativa | ✅ 1 |
+| `setNativeVlanId(id)` | `(id: number): void` | Set VLAN nativa | ❌ Invalid |
+| **Mode** | | | |
+| `isAccessPort()` | `(): boolean` | ¿Modo access? | ✅ true |
+| `isNonegotiate()` | `(): boolean` | ¿Sin negociación? | ✅ false |
+| `setNonegotiateFlag(bool)` | `(flag: boolean): void` | Set negociation | ❌ Invalid |
+| `isAdminModeSet()` | `(): boolean` | ¿Admin mode? | ✅ false |
+| **Port Security** | | | |
+| `getPortSecurity()` | `(): object | null` | Seguridad | ✅ null |
+| **Trunk** | | | |
+| `addTrunkVlans(vlans)` | `(vlans: Array): void` | Agregar VLANs | ❌ Invalid |
+| `removeTrunkVlans(vlans)` | `(vlans: Array): void` | Remover VLANs | ❌ Invalid |
+| **VoIP** | | | |
+| `getVoipVlanId()` | `(): number` | VLAN VoIP | ✅ 0 |
+| `setVoipVlanId(id)` | `(id: number): void` | Set VLAN VoIP | ❌ Invalid |
 
 ### Comparación: RouterPort vs SwitchPort
 
@@ -1623,4 +1626,52 @@ function forIn(obj, fn) {
 
 ---
 
+## 🔍 API NO DOCUMENTADA EN PT-API.md (del dump)
+
+Métodos encontrados en `docs/pt-script-result.json` que NO aparecen en `PT-API.md`:
+
+### PTLogicalWorkspace (adicional)
+- `addCluster(x, y, label: string)` - Crear cluster visual
+- `addNote(x, y, scale: number, text: string)` - Agregar nota al canvas
+- `addTextPopup(x, y, scale: number, type: number, text: string)` - Text popup
+- `centerOn(x, y)` - Centrar vista
+- `centerOnComponentByName(name: string)` - Centrar en dispositivo
+- `changeNoteText(noteId, text)` - Cambiar texto de nota
+- `clearLayer(layerId)` - Limpiar capa
+- `getCanvasEllipseIds()` - Obtener IDs de elipses
+- `getCanvasRectIds()` - Obtener IDs de rectángulos
+- `deleteObject(obj)` - Eliminar objeto
+
+### PTAppWindow (adicional verificada)
+- `getVersion()` ✅ - Retorna versión PT (ej: "9.0.0.0810")
+- `getUserFolder()` - Ruta del usuario
+- `getDefaultFileSaveLocation()` - Directorio de guardado por defecto
+
+### PTDevice (adicional)
+- `getRootModule()` - Entry point para dispositivos modulares
+- `getProcess(processName: string)` - Obtener proceso (DHCP, VLAN, routing, etc.)
+- `serializeToXml()` - Serializar estado a XML
+- `skipBoot()` - Saltar boot
+- `getXCoordinate()`, `getYCoordinate()` - Coordenadas canvas
+- `addModule(slot, module)` - Agregar módulo
+- `removeModule(slot)` - Remover módulo
+
+### PTPort/HostPort (adicional no documentado en PT-API.md)
+- `setZoneMemberName(name)` - Configurar zona de seguridad
+- `getZoneMemberName()` - Obtener zona
+- `setNatMode(mode: number)` - Configurar NAT (0-5)
+- `getNatMode()` - Obtener modo NAT
+
+### Globals NO verificados (existen como keys en ipc pero sin clase dedicada)
+- `ipc.hardwareFactory` - Existe key, sin métodos verificados
+- `ipc.ipcManager` - Existe key, sin métodos verificados
+- `ipc.multiUserManager` - Existe key, sin métodos verificados
+- `ipc.userAppManager` - Existe key, sin métodos verificados
+- `ipc.commandLog` - Existe key, sin métodos verificados
+- `ipc.options` - Existe key, sin métodos verificados
+- `ipc.simulation` - Existe key, superficie no verificada
+
+---
+
 *Documentado: 15 Abril 2026 | Actualizado: 16 Abril 2026 (149 addDevice + QtScript fixes)*
+*Verificado contra: docs/pt-script-result.json (dump 2026-04-15)*

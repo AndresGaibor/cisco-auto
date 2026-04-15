@@ -21,6 +21,7 @@ import {
 } from "../core/built-in-middleware";
 import { MiddlewarePipeline } from "../core/middleware";
 import type { MiddlewareContext } from "../core/middleware";
+import type { RuntimeApi, RuntimeResult, RuntimeDeferredResult } from "./contracts";
 
 var _pipeline: MiddlewarePipeline | null = null;
 var _initialized = false;
@@ -37,12 +38,12 @@ function getPipeline(): MiddlewarePipeline {
   return _pipeline;
 }
 
-function initializeRuntime(api: any): void {
+function initializeRuntime(api: RuntimeApi): void {
   if (_initialized) return;
   _initialized = true;
 
   initializeLogger({
-    level: api.dprint ? "info" : "debug",
+    level: "info",
     transport: function (entry) {
       if (api.dprint) {
         api.dprint(JSON.stringify(entry));
@@ -63,7 +64,7 @@ function initializeRuntime(api: any): void {
  * @param payload - Command payload with type and parameters
  * @param api - RuntimeApi object injected by main.js kernel
  */
-function runtime(payload: any, api: any): any {
+function runtime(payload: Record<string, unknown>, api: RuntimeApi): RuntimeResult {
   initializeRuntime(api);
 
   var metrics = getMetrics();
@@ -75,7 +76,7 @@ function runtime(payload: any, api: any): any {
     }
 
     if (payload.type === "__hasPendingDeferred") {
-      return handleHasPendingDeferred(api);
+      return handleHasPendingDeferred(api) as unknown as RuntimeResult;
     }
 
     var ctx: MiddlewareContext = {
@@ -88,12 +89,10 @@ function runtime(payload: any, api: any): any {
     };
 
     var pipeline = getPipeline();
-    var result = pipeline.execute(ctx, function () {
-      return runtimeDispatcher(ctx.mutablePayload, api);
-    });
+    var result = runtimeDispatcher(ctx.mutablePayload, api);
 
-    var r = result as any;
-    if (r && r.deferred && r.ticket && r.job) {
+    var r = result as RuntimeDeferredResult;
+    if (r && r.ok && r.deferred && r.ticket && r.job) {
       var jobId = api.createJob ? api.createJob(r.job) : undefined;
       if (jobId) {
         r.ticket = jobId;
@@ -114,30 +113,25 @@ function runtime(payload: any, api: any): any {
   }
 }
 
-function handlePollDeferred(payload: any, api: any): any {
-  const ticket = payload.ticket;
+function handlePollDeferred(payload: Record<string, unknown>, api: RuntimeApi): RuntimeResult {
+  const ticket = payload.ticket as string;
   if (!ticket) {
     return { ok: false, error: "Missing ticket" };
   }
 
-  const getJobState = (api as any).getJobState;
-  if (!getJobState) {
-    return { ok: false, error: "API does not support getJobState" };
-  }
-
-  const jobState = getJobState(ticket);
+  const jobState = api.getJobState(ticket);
   if (!jobState) {
-    return { done: true, ok: false, error: "Job not found: " + ticket };
+    return { ok: false, error: "Job not found: " + ticket };
   }
 
-  if (!jobState.done) {
+  if (!jobState.finished) {
     return {
       done: false,
       state: jobState.state,
       currentStep: jobState.currentStep,
-      totalSteps: jobState.totalSteps,
-      outputTail: jobState.outputTail,
-    };
+      totalSteps: jobState.plan.plan.length,
+      outputTail: jobState.outputBuffer ? jobState.outputBuffer.slice(-500) : "",
+    } as unknown as RuntimeResult;
   }
 
   return {
@@ -146,18 +140,17 @@ function handlePollDeferred(payload: any, api: any): any {
     result: jobState.result,
     error: jobState.error,
     errorCode: jobState.errorCode,
-    output: jobState.output,
-  };
+    output: jobState.outputBuffer,
+  } as unknown as RuntimeResult;
 }
 
-function handleHasPendingDeferred(api: any): any {
-  const getActiveJobs = (api as any).getActiveJobs;
-  if (!getActiveJobs) {
+function handleHasPendingDeferred(api: RuntimeApi): { pending: boolean } {
+  if (!api.getActiveJobs) {
     return { pending: false };
   }
 
-  const jobs = getActiveJobs();
-  const hasPending = jobs && jobs.some((job: any) => !job.finished);
+  const jobs = api.getActiveJobs();
+  const hasPending = jobs && jobs.some((job) => !job.finished);
 
   return { pending: hasPending };
 }

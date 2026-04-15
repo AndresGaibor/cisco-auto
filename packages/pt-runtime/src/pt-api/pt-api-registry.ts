@@ -4,6 +4,8 @@
 
 export interface PTIpc {
   network(): PTNetwork;
+  // getNetwork() is an alias present in some PT versions — prefer network()
+  getNetwork?(): PTNetwork;
   appWindow(): PTAppWindow;
   systemFileManager(): PTFileManager;
   simulation?(): PTSimulation;
@@ -224,15 +226,29 @@ declare var $ipc: {
 declare var $ipcObject: any;
 
 /**
- * Script module instance
+ * Script module instance — always available in PT Script Module context (49 methods confirmed).
+ * Used as file-access fallback when ipc.systemFileManager() is unavailable (main.js context quirk).
  */
 declare var _ScriptModule: {
-  ipcCall: (className: string, method: string, args: any[]) => any;
-  ipcObjectCall: (className: string, method: string, args: any[]) => any;
-  getIpcApi: () => PTIpc;
-  registerIpcEventByID: (eventId: string, handler: Function) => void;
-  unregisterIpcEventByID: (eventId: string) => void;
-  unregisterAllIpcEvents: () => void;
+  // File operations (confirmed working — used as fm fallback in runtime-loader)
+  getFileContents(path: string): string;
+  writeTextToFile(path: string, content: string): void;
+  getFileModificationTime(path: string): number;
+  getFileSize(path: string): number;
+  getFileCheckSum(path: string): string;
+  addScriptFile(path: string, label: string): void;
+  // IPC
+  ipcCall(className: string, method: string, args: any[]): any;
+  ipcObjectCall(className: string, method: string, args: any[]): any;
+  getIpcApi(): PTIpc;
+  registerIpcEventByID(eventId: string, handler: Function): void;
+  unregisterIpcEventByID(eventId: string): void;
+  unregisterAllIpcEvents(): void;
+  // Timing
+  setTimeout(fn: Function, ms: number): number;
+  setInterval(fn: Function, ms: number): number;
+  clearTimeout(id: number): void;
+  clearInterval(id: number): void;
 };
 
 export interface PTAppWindow {
@@ -275,7 +291,7 @@ export interface PTAppWindow {
   getPhysicalToolbar?(): unknown;
   getCommonToolbar?(): unknown;
   getToolBar?(): unknown;
-  getSecondaryToolBar?(): unknown;
+  getSecondaryToolbar?(): unknown;
   getPhysicalLocationDialog?(): unknown;
   getEnvironmentDialog?(): unknown;
   getInstructionDlg?(): unknown;
@@ -371,11 +387,13 @@ export interface PTWorkspace {
 }
 
 export interface PTLogicalWorkspace {
+  // Devices
   addDevice(typeId: number, model: string, x: number, y: number): string | null;
   removeDevice(name: string): boolean;
-  deleteDevice(name: string): boolean;
   removeObject(name: string): boolean;
   deleteObject(name: string): boolean;
+
+  // Links
   createLink(
     device1Name: string,
     port1Name: string,
@@ -383,16 +401,44 @@ export interface PTLogicalWorkspace {
     port2Name: string,
     cableType: number,
   ): PTLink | null;
+  autoConnectDevices(device1Name: string, device2Name: string): void;
   deleteLink(deviceName: string, portName: string): boolean;
-  /** Get all canvas rectangle (zone) IDs — may not be available in all PT versions */
+
+  // Canvas items
   getCanvasRectIds?(): string[];
-  /**
-   * Get data for a rect item (x, y, width, height, label, etc.)
-   * Variant names: getRectItemData / getRectData depending on PT version
-   */
+  getCanvasEllipseIds?(): string[];
+  getCanvasItemIds?(): string[];
+  getCanvasLineIds?(): string[];
+  getCanvasNoteIds?(): string[];
+  getCanvasPolygonIds?(): string[];
   getRectItemData?(rectId: string): Record<string, unknown> | null;
   getRectData?(rectId: string): Record<string, unknown> | null;
-  /** Find devices within a canvas area */
+  getCluster?(clusterId: string): unknown | null;
+  getWorkspaceImage?(): string | null;
+
+  // Canvas manipulation
+  addCluster?(x: number, y: number, label: string): unknown | null;
+  addNote?(x: number, y: number, scale: number, text: string): unknown | null;
+  addTextPopup?(x: number, y: number, scale: number, type: number, text: string): unknown | null;
+  addRemoteNetwork?(x: number, y: number, network: string, mask: string): unknown | null;
+  removeCluster?(clusterId: string): boolean;
+  removeCanvasItem?(itemId: string): boolean;
+  removeTextPopup?(popupId: string): boolean;
+  removeRemoteNetwork?(networkId: string): boolean;
+  changeNoteText?(noteId: string, text: string): boolean;
+  setCanvasItemRealPos?(itemId: string, x: number, y: number): boolean;
+  setDeviceCustomImage?(deviceName: string, imagePath: string): boolean;
+  showClusterContents?(clusterId: string): void;
+  unCluster?(clusterId: string): void;
+  clearLayer?(layerId: number): void;
+  drawCircle?(x: number, y: number, radius: number, color: string): unknown | null;
+  drawLine?(x1: number, y1: number, x2: number, y2: number, color: string): unknown | null;
+
+  // View
+  centerOn?(x: number, y: number): void;
+  centerOnComponentByName?(deviceName: string): void;
+
+  // Find devices in area
   devicesAt?(
     x: number,
     y: number,
@@ -427,6 +473,8 @@ export interface PTDevice {
   setName(name: string): void;
   getModel(): string;
   getType(): number;
+  getClassName?(): string;
+  getObjectUuid?(): string;
   getPower(): boolean;
   setPower(on: boolean): void;
   skipBoot(): void;
@@ -453,6 +501,13 @@ export interface PTDevice {
   getProcess?<T = unknown>(name: string): T | null;
   /** Get the root module of this device's module tree (for modular routers) */
   getRootModule?(): PTModule | null;
+  /**
+   * Device events — confirmed working in PT 9.0:
+   *   "moduleAdded"  args: { model, slotPath, type }
+   *   "portAdded"    args: { portName }
+   */
+  registerEvent?(event: string, context: any, handler: Function): void;
+  unregisterEvent?(event: string, context: any, handler: Function): void;
 }
 
 export interface PTCommandLine {
@@ -524,6 +579,7 @@ export interface PTPort {
   getName(): string;
   getIpAddress(): string;
   getSubnetMask(): string;
+  getMacAddress(): string;
   setIpSubnetMask(ip: string, mask: string): void;
   getDefaultGateway(): string;
   setDefaultGateway(gateway: string): void;
@@ -560,6 +616,12 @@ export interface PTPort {
 export interface PTLink {
   getClassName?(): string;
   getObjectUuid?(): string;
+  /** Cable type integer (e.g. 8100 = ethernet-straight) */
+  getConnectionType?(): number;
+  /** First port of the link (RouterPort or SwitchPort) */
+  getPort1?(): PTPort | null;
+  /** Second port of the link */
+  getPort2?(): PTPort | null;
 }
 
 export interface PTHardwareFactory {
@@ -771,32 +833,44 @@ export const PT_API_METHOD_INDEX: Record<string, string[]> = {
   "ipc.systemFileManager()": ["getFileContents", "writePlainTextToFile", "fileExists"],
 };
 
+/**
+ * Verified PT 9.0 device typeId constants.
+ * Source: PT-API-COMPLETE.md live-extracted map (authoritative).
+ * NOTE: addDevice(typeId, model, x, y) — some typeIds return null (broken in PT 9.0):
+ *   - cloud (7): addDevice returns null — use PT UI to add clouds
+ *   - laptop (18): use model "Laptop-PT"
+ *   - ipPhone (12): use model "7960"
+ * Use pt-constants.ts PT_HELPER_MAPS.DEVICE_TYPES for the full runtime map.
+ */
 export const PT_DEVICE_TYPE_CONSTANTS: Record<string, number> = {
   router: 0,
   switch: 1,
   hub: 2,
-  repeater: 3,
-  bridge: 4,
-  wireless: 5,
-  wanEmulator: 6,
-  multilayerSwitch: 16,
-  cloud: 7,
+  bridge: 3,
+  repeater: 4,
+  coaxialSplitter: 5,
+  wireless: 7,
   pc: 8,
   server: 9,
   printer: 10,
-  ipPhone: 11,
-  laptop: 12,
-  tablet: 13,
-  smartphone: 14,
-  wirelessEndDevice: 15,
-  wiredEndDevice: 17,
-  tv: 18,
-  homeVoip: 19,
-  analogPhone: 20,
-  iot: 21,
-  sniffer: 22,
-  mcu: 23,
-  sbc: 24,
+  wirelessRouter: 11,
+  ipPhone: 12,
+  dslModem: 13,
+  cableModem: 14,
+  multilayerSwitch: 16,
+  laptop: 18,
+  tablet: 19,
+  smartphone: 20,
+  wirelessEndDevice: 21,
+  wiredEndDevice: 22,
+  tv: 23,
+  homeVoip: 24,
+  analogPhone: 25,
+  firewall: 27, // ASA
+  iot: 34,
+  sniffer: 35,
+  mcu: 36,
+  sbc: 37,
 };
 
 export const PT_CABLE_TYPE_CONSTANTS: Record<string, number> = {
