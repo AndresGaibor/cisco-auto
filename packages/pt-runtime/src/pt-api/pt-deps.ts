@@ -63,8 +63,14 @@ export function createPtDepsFromGlobals(scope: PTGlobalScope): PtDeps {
     dprint: scope.dprint,
     DEV_DIR: scope.DEV_DIR,
     getDeviceByName: (name) => scope.ipc.network().getDevice(name),
-    getCommandLine: (deviceName) =>
-      scope.ipc.network().getDevice(deviceName)?.getCommandLine?.() ?? null,
+    getCommandLine: (deviceName) => {
+      const device = scope.ipc.network().getDevice(deviceName);
+      if (!device) return null;
+      const cmd = device.getCommandLine;
+      if (!cmd) return null;
+      const result = cmd.call(device);
+      return result ?? null;
+    },
     listDeviceNames: () => {
       const net = scope.ipc.network();
       const names: string[] = [];

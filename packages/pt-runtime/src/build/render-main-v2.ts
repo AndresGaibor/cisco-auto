@@ -380,7 +380,7 @@ function main() {
         pollIntervalMs:         1000,
         deferredPollIntervalMs: 500,
         heartbeatIntervalMs:    5000,
-        demoRuntime:            true,
+        demoRuntime:            false,
       });
       _g._kernelInstance = kernel;
       try {

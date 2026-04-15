@@ -365,6 +365,76 @@ bun run pt agent verify
 - **Windows**: `%USERPROFILE%\pt-dev\`
 - Override: `PT_DEV_DIR` environment variable
 
+### PT API Reference
+
+**Fuente única:** `packages/pt-runtime/src/pt-api/pt-api-registry.ts`
+
+#### Global Classes (instantiate with `new`)
+
+| Class | Uso | Métodos clave |
+|-------|-----|---------------|
+| `_Network` | `new _Network()` | `getDevice(name)`, `getDeviceAt(idx)`, `getDeviceCount()`, `getLinkAt(idx)`, `getLinkCount()` |
+| `_SystemFileManager` | `new _SystemFileManager()` | `getFileContents(path)`, `writePlainTextToFile(path, content)`, `fileExists(path)`, `directoryExists(path)`, `makeDirectory(path)`, `getFilesInDirectory(path)`, `removeFile(path)`, `moveSrcFileToDestFile(src, dest)` |
+| `_AppWindow` | `new _AppWindow()` | `getVersion()`, `getActiveWorkspace()`, `fileOpen(path)`, `fileSave()`, `exit()`, `showMessageBox(msg)`, `listDirectory(path)`, `writeToPT(data)` |
+| `_Workspace` | desde `AppWindow` | `getLogicalWorkspace()` |
+| `_Parser` | static methods | `ipcCall(class, method, args)`, `createObject(class, ...args)` |
+| `_ScriptModule` | fallback fm | `getFileContents(path)`, `writeTextToFile(path, content)`, `getFileSize(path)`, `ipcCall()`, `getIpcApi()`, `setTimeout(fn, ms)` |
+
+#### Interfaces PT
+
+| Interface | Desde `ipc.network()` | Métodos clave |
+|-----------|----------------------|---------------|
+| `PTNetwork` | `ipc.network()` | `getDevice(name)`, `getDeviceAt(idx)`, `getDeviceCount()` |
+| `PTDevice` | `net.getDevice(name)` | `getName()`, `setName(n)`, `getModel()`, `getPower()`, `setPower(bool)`, `getCommandLine()`, `getPortCount()`, `getPortAt(idx)`, `getPort(name)`, `addModule(slot, mod)` |
+| `PTCommandLine` | `device.getCommandLine()` | `enterCommand(cmd)`, `getPrompt()`, `getMode()`, `registerEvent(event, null, handler)` |
+| `PTPort` | `device.getPort(name)` | `getName()`, `getIpAddress()`, `getSubnetMask()`, `setIpSubnetMask(ip, mask)`, `isPortUp()`, `isProtocolUp()`, `getMacAddress()` |
+| `PTLink` | `net.getLinkAt(idx)` | `getConnectionType()`, `getPort1()`, `getPort2()` |
+| `PTLogicalWorkspace` | `appWindow.getActiveWorkspace().getLogicalWorkspace()` | `addDevice(typeId, model, x, y)`, `removeDevice(name)`, `createLink(d1, p1, d2, p2, cableType)`, `deleteLink(d, port)` |
+| `PTFileManager` | `ipc.systemFileManager()` | `getFileContents`, `writePlainTextToFile`, `fileExists`, `directoryExists`, `makeDirectory`, `getFilesInDirectory`, `removeFile`, `moveSrcFileToDestFile`, `getFileSize`, `encrypt/decrypt`, `zip/unzip` |
+
+#### Terminal Events (registerEvent on PTCommandLine)
+
+```
+commandStarted, outputWritten, commandEnded, modeChanged,
+promptChanged, moreDisplayed, directiveSent,
+commandSelectedFromHistory, commandAutoCompleted, cursorPositionChanged
+```
+
+#### Device Type Constants (`PT_DEVICE_TYPE_CONSTANTS`)
+
+```
+router=0, switch=1, hub=2, pc=8, server=9,
+multilayerSwitch=16, firewall=27, iot=34
+```
+
+#### Cable Type Constants (`PT_CABLE_TYPE_CONSTANTS`)
+
+```
+auto=-1, straight=0, cross=1, fiber=2, serial=3,
+console=4, phone=5, wireless=8, coaxial=9
+```
+
+#### Acceso IPC
+
+```javascript
+// Kernel (main.js) — ipc es global
+var net = ipc.network();
+var fm = ipc.systemFileManager();
+var app = ipc.appWindow();
+
+// Runtime (runtime.js) — ipc viene como parámetro
+var net = ipc.network();
+var fm = ipc.systemFileManager();
+
+// Terminal
+var dev = net.getDevice("R1");
+var term = dev.getCommandLine();
+term.enterCommand("show ip int brief");
+term.registerEvent("commandEnded", null, function(s, args) {
+  // args.status === 0 means success
+});
+```
+
 ### Requisitos
 - Packet Tracer debe estar corriendo
 - Módulo de scripting cargado en PT

@@ -125,19 +125,9 @@ export function createRuntimeLoader(config: { runtimeFile: string }) {
 
       // Strip only the strict-mode prelude. Keep CommonJS exports intact and
       // provide `exports/module` explicitly to the function wrapper.
-      code = code
-        .replace(/^\s*"use strict";\s*/gm, "")
-        .replace(/^\s*var\s+(ipc|dprint|fm|DEV_DIR)\s*=\s*[^;]+;\s*/gm, "")
-        .replace(/^\s*export\s*\{[\s\S]*?from\s+["'][^"']+["'];\s*$/gm, "")
-        .replace(/^\s*import\s+.*$/gm, "")
-        .replace(/^\s*[A-Z][A-Za-z0-9_]*,\s*$/gm, "")
-        .replace(/^\s*\|\s*"[^"]+";?\s*$/gm, "")
-        .replace(/^\s*[a-zA-Z_][A-Za-z0-9_]*:\s*[A-Z][A-Za-z0-9_<>|\[\]\s,]*,\s*$/gm, "")
-        .replace(/^\s*[A-Z][A-Za-z0-9_<>|\[\]\s,]*;\s*$/gm, "")
-        .replace(/^\s*from;\s*$/gm, "")
-        .replace(/^\s*["'][^"']+["'];\s*$/gm, "")
-        .replace(/^\s*;\s*$/gm, "")
-        .replace(/^\s*Object\.defineProperty\s*\(\s*exports\s*,\s*"__esModule"\s*,.*$/gm, "");
+      code = code.replace(/^\s*"use strict";\s*/gm, "");
+      // Minimal cleanup — code is pre-processed by render-runtime-v2.ts which already
+      // handles imports/exports correctly.
 
       // Inject kernel globals as var declarations so the compiled code
       // can reference ipc/fm/dprint without getting undefined.

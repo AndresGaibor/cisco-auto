@@ -10,6 +10,7 @@
     "./value-objects": "./src/value-objects/index.ts"
   },
   "scripts": {
+    "assemble": "bun run scripts/assemble.js",
     "build": "echo runtime built via deploy",
     "build:watch": "tsc -p tsconfig.runtime.json --watch",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.runtime.json --noEmit",

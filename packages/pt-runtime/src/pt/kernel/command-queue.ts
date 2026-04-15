@@ -1,10 +1,10 @@
 // packages/pt-runtime/src/pt/kernel/command-queue.ts
 // Command queue polling and atomic claim
 //
-// Flow: poll() lists only commands/*.json → sorts ascending → attempts atomic
-// claim by moving to in-flight/ → parses envelope → returns claimed command.
-// Corrupt files go to dead-letter/. cleanup() removes in-flight/ file and
-// optionally commands/ residue.
+// PT's getFilesInDirectory() does not reliably discover files created by the
+// external CLI, so the CLI writes commands/_queue.json as the primary index.
+// The kernel reads that index, claims files atomically, and keeps the index
+// clean by removing stale or consumed entries.
 
 import type { CommandEnvelope } from "./types";
 import { safeFM } from "./safe-fm";
@@ -15,74 +15,135 @@ export interface CommandQueue {
   count(): number;
 }
 
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const values: string[] = [];
+  for (const item of value) {
+    values.push(String(item));
+  }
+  return values;
+}
+
 export function createCommandQueue(config: {
   commandsDir: string;
   inFlightDir: string;
   deadLetterDir: string;
 }) {
-  function listQueuedFiles(): string[] {
-    const jsonFiles: string[] = [];
+  function readQueueIndex(): string[] {
     const s = safeFM();
-    if (!s.available || !s.fm) {
-      dprint("[queue] fm unavailable — cannot list commands");
-      return jsonFiles;
-    }
+    if (!s.available || !s.fm) return [];
+
     try {
-      dprint("[queue] scanning commands dir: " + config.commandsDir);
-      let files = s.fm.getFilesInDirectory(config.commandsDir);
-      dprint("[queue] fm.getFilesInDirectory -> " + String(files ? files.length : 0));
-      if (files && files.length > 0) {
-        dprint("[queue] fm files sample -> " + files.slice(0, 5).join(","));
-      }
-      if (!files || files.length === 0) {
-        try {
-          const appWindow = (typeof ipc !== "undefined" && ipc !== null) ? ipc.appWindow?.() : null;
-          const fallbackFiles = appWindow && typeof appWindow.listDirectory === "function"
-            ? appWindow.listDirectory(config.commandsDir)
-            : [];
-          dprint("[queue] appWindow.listDirectory -> " + String(fallbackFiles ? fallbackFiles.length : 0));
-          if (fallbackFiles && fallbackFiles.length > 0) {
-            dprint("[queue] appWindow files sample -> " + fallbackFiles.slice(0, 5).join(","));
-          }
-          if (fallbackFiles && fallbackFiles.length > 0) {
-            dprint("[queue] Using appWindow.listDirectory fallback for commands");
-            files = fallbackFiles;
-          }
-        } catch (fallbackErr) {
-          dprint("[queue] appWindow listDirectory fallback failed: " + String(fallbackErr));
+      const queuePath = config.commandsDir + "/_queue.json";
+      if (!s.fm.fileExists(queuePath)) return [];
+
+      const content = s.fm.getFileContents(queuePath);
+      if (!content || content.trim().length === 0) return [];
+
+      const parsed = JSON.parse(content);
+      return toStringArray(parsed).filter((file) => file.indexOf(".json") !== -1 && file.indexOf("_queue.json") === -1);
+    } catch (e) {
+      dprint("[queue] _queue.json read error: " + String(e));
+      return [];
+    }
+  }
+
+  function removeFromQueueIndex(filename: string): void {
+    const s = safeFM();
+    if (!s.available || !s.fm) return;
+
+    try {
+      const queuePath = config.commandsDir + "/_queue.json";
+      if (!s.fm.fileExists(queuePath)) return;
+
+      const content = s.fm.getFileContents(queuePath);
+      if (!content || content.trim().length === 0) return;
+
+      const parsed = JSON.parse(content);
+      const queue = toStringArray(parsed);
+      let changed = false;
+      const filtered: string[] = [];
+
+      for (const entry of queue) {
+        if (entry === filename) {
+          changed = true;
+          continue;
         }
+        filtered.push(entry);
       }
-      if ((!files || files.length === 0) && typeof _ScriptModule !== "undefined" && _ScriptModule !== null && typeof _ScriptModule.getFilesInDirectory === "function") {
-        try {
-          const scriptModuleFiles = _ScriptModule.getFilesInDirectory(config.commandsDir);
-          dprint("[queue] _ScriptModule.getFilesInDirectory -> " + String(scriptModuleFiles ? scriptModuleFiles.length : 0));
-          if (scriptModuleFiles && scriptModuleFiles.length > 0) {
-            dprint("[queue] _ScriptModule files sample -> " + scriptModuleFiles.slice(0, 5).join(","));
-            dprint("[queue] Using _ScriptModule.getFilesInDirectory fallback for commands");
-            files = scriptModuleFiles;
-          }
-        } catch (scriptModuleErr) {
-          dprint("[queue] _ScriptModule listDirectory fallback failed: " + String(scriptModuleErr));
-        }
-      }
-      if (files) {
-        for (const file of files) {
-          if (file.indexOf(".json") !== -1) {
-            jsonFiles.push(file);
-          }
-        }
+
+      if (changed) {
+        s.fm.writePlainTextToFile(queuePath, JSON.stringify(filtered));
+        dprint("[queue] Removed from _queue.json: " + filename);
       }
     } catch (e) {
-      dprint("[queue] Error listing commands dir: " + String(e));
+      dprint("[queue] removeFromQueueIndex error: " + String(e));
     }
-    jsonFiles.sort();
+  }
+
+  function listFromDirectory(): string[] {
+    const s = safeFM();
+    if (!s.available || !s.fm) return [];
+
+    const jsonFiles: string[] = [];
+
+    try {
+      const files = s.fm.getFilesInDirectory(config.commandsDir);
+      if (files && files.length > 0) {
+        for (const file of files) {
+          const name = String(file);
+          if (name.indexOf(".json") !== -1 && name.indexOf("_queue.json") === -1) {
+            jsonFiles.push(name);
+          }
+        }
+      }
+    } catch {
+      // Fallback best-effort.
+    }
+
+    if (jsonFiles.length > 0) return jsonFiles;
+
+    try {
+      const appWindow = (typeof ipc !== "undefined" && ipc !== null) ? ipc.appWindow?.() : null;
+      const fallbackFiles = appWindow && typeof appWindow.listDirectory === "function"
+        ? appWindow.listDirectory(config.commandsDir)
+        : [];
+
+      for (const file of fallbackFiles ?? []) {
+        const name = String(file);
+        if (name.indexOf(".json") !== -1 && name.indexOf("_queue.json") === -1) {
+          jsonFiles.push(name);
+        }
+      }
+    } catch {
+      // Fallback best-effort.
+    }
+
     return jsonFiles;
   }
 
+  function listQueuedFiles(): string[] {
+    const seen: Record<string, boolean> = {};
+    const files: string[] = [];
+
+    for (const file of readQueueIndex()) {
+      if (seen[file]) continue;
+      seen[file] = true;
+      files.push(file);
+    }
+
+    for (const file of listFromDirectory()) {
+      if (seen[file]) continue;
+      seen[file] = true;
+      files.push(file);
+    }
+
+    files.sort();
+    return files;
+  }
+
   function count(): number {
-    const files = listQueuedFiles();
-    dprint("[queue] count -> " + String(files.length));
-    return files.length;
+    return listQueuedFiles().length;
   }
 
   function poll(): CommandEnvelope | null {
@@ -91,17 +152,25 @@ export function createCommandQueue(config: {
     const _fm = s.fm;
 
     const files = listQueuedFiles();
-    dprint("[queue] poll files -> " + String(files.length));
+    dprint("[queue] poll -> " + String(files.length) + " candidates");
 
     for (const filename of files) {
-      dprint("[queue] poll trying -> " + filename);
       const srcPath = config.commandsDir + "/" + filename;
       const dstPath = config.inFlightDir + "/" + filename;
 
       try {
-        if (_fm.fileExists(dstPath)) { continue; }
-        if (!_fm.fileExists(srcPath)) { continue; }
+        if (_fm.fileExists(dstPath)) {
+          removeFromQueueIndex(filename);
+          continue;
+        }
+
+        if (!_fm.fileExists(srcPath)) {
+          removeFromQueueIndex(filename);
+          continue;
+        }
+
         _fm.moveSrcFileToDestFile(srcPath, dstPath, false);
+        removeFromQueueIndex(filename);
         dprint("[queue] Claimed: " + filename);
       } catch (e) {
         dprint("[queue] Claim failed for " + filename + ": " + String(e));
@@ -136,6 +205,7 @@ export function createCommandQueue(config: {
     const s = safeFM();
     if (!s.available || !s.fm) return;
     const _fm = s.fm;
+
     try {
       const basename = filePath.split("/").pop() || "unknown";
       const timestamp = String(Date.now());
@@ -166,6 +236,7 @@ export function createCommandQueue(config: {
     const s = safeFM();
     if (!s.available || !s.fm) return;
     const _fm = s.fm;
+
     try {
       const inFlightPath = config.inFlightDir + "/" + filename;
       if (_fm.fileExists(inFlightPath)) {
@@ -185,6 +256,8 @@ export function createCommandQueue(config: {
     } catch (e) {
       dprint("[queue] Cleanup commands error: " + String(e));
     }
+
+    removeFromQueueIndex(filename);
   }
 
   return { poll, cleanup, count };

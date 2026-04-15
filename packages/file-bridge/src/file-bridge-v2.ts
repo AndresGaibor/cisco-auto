@@ -222,10 +222,15 @@ export class FileBridgeV2 extends EventEmitter {
 
     ensureDir(this.paths.commandsDir());
     atomicWriteFile(commandFile, JSON.stringify(envelope, null, 2));
+    try {
+      this.appendQueueIndex(this.paths.commandFileName(seq, type));
+    } catch (queueErr) {
+      console.warn(`[bridge] failed to update queue index: ${String(queueErr)}`);
+    }
     console.log(`[bridge] wrote command id=${id} seq=${seq}`);
 
-    // NUEVO: escribir a commands/ en lugar de command.json (Fase 5)
-    // Nota: timeoutMs se usa para logging pero el timeout real está en expiresAtMs
+    // Nuevo: escribir a commands/ en lugar de command.json (Fase 5)
+    // Nota: timeoutMs se usa para logging, pero el timeout real está en expiresAtMs
     this.eventWriter.append({
       seq,
       ts: Date.now(),
@@ -237,6 +242,54 @@ export class FileBridgeV2 extends EventEmitter {
     });
 
     return envelope;
+  }
+
+  /**
+   * Agrega un archivo de comando al índice de cola.
+   * PT usa este archivo porque no puede enumerar confiablemente la carpeta commands.
+   */
+  private appendQueueIndex(filename: string): void {
+    const queueFilePath = join(this.paths.commandsDir(), "_queue.json");
+    let queue: string[] = [];
+
+    try {
+      const existing = readFileSync(queueFilePath, "utf8");
+      if (existing.trim()) {
+        const parsed = JSON.parse(existing);
+        if (Array.isArray(parsed)) {
+          queue = parsed.map((entry) => String(entry));
+        }
+      }
+    } catch {
+      queue = [];
+    }
+
+    if (!queue.includes(filename)) {
+      queue.push(filename);
+    }
+
+    atomicWriteFile(queueFilePath, JSON.stringify(queue));
+  }
+
+  /**
+   * Remueve una entrada del índice de cola.
+   * Se usa para mantenimiento y depuración.
+   */
+  static removeQueueEntry(root: string, filename: string): void {
+    const queueFilePath = join(root, "commands", "_queue.json");
+
+    try {
+      const existing = readFileSync(queueFilePath, "utf8");
+      if (!existing.trim()) return;
+
+      const parsed = JSON.parse(existing);
+      if (!Array.isArray(parsed)) return;
+
+      const filtered = parsed.map((entry) => String(entry)).filter((entry) => entry !== filename);
+      atomicWriteFile(queueFilePath, JSON.stringify(filtered));
+    } catch {
+      // Índice best-effort.
+    }
   }
 
   async sendCommandAndWait<TPayload = unknown, TResult = unknown>(

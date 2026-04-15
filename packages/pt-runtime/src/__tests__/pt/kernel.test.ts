@@ -162,23 +162,26 @@ describe("createCommandQueue", () => {
     const claimed = queue.poll();
 
     expect(claimed?.id).toBe("cmd_000000000001");
-    expect(mockDprint).toHaveBeenCalledWith("[queue] Using appWindow.listDirectory fallback for commands");
   });
 
-  test("poll uses _ScriptModule fallback when fm and appWindow return nothing", () => {
+  test("poll usa _queue.json como indice primario", () => {
     mockFm.getFilesInDirectory.mockReturnValue([]);
     mockIpc.appWindow.mockReturnValue({
       listDirectory: vi.fn().mockReturnValue([]),
     });
-    mockScriptModule.getFilesInDirectory.mockReturnValue(["000000000002-listDevices.json"]);
-    mockFm.fileExists.mockImplementation((p: string) => p.includes("commands") && !p.includes("in-flight"));
-    mockFm.getFileContents.mockReturnValue(JSON.stringify({
-      protocolVersion: 2,
-      id: "cmd_000000000002",
-      seq: 2,
-      type: "listDevices",
-      payload: { type: "listDevices" },
-    }));
+    mockFm.fileExists.mockImplementation((p: string) => p.endsWith("_queue.json") || (p.includes("commands") && !p.includes("in-flight")));
+    mockFm.getFileContents.mockImplementation((p: string) => {
+      if (p.endsWith("_queue.json")) {
+        return JSON.stringify(["000000000003-listDevices.json"]);
+      }
+      return JSON.stringify({
+        protocolVersion: 2,
+        id: "cmd_000000000003",
+        seq: 3,
+        type: "listDevices",
+        payload: { type: "listDevices" },
+      });
+    });
 
     const queue = createCommandQueue({
       commandsDir: "/tmp/commands",
@@ -188,6 +191,34 @@ describe("createCommandQueue", () => {
 
     const claimed = queue.poll();
 
-    expect(claimed?.id).toBe("cmd_000000000002");
+    expect(claimed?.id).toBe("cmd_000000000003");
+  });
+
+  test("poll usa _queue.json aun si getFilesInDirectory falla", () => {
+    mockFm.getFilesInDirectory.mockReturnValue([]);
+    mockIpc.appWindow.mockReturnValue({
+      listDirectory: vi.fn().mockReturnValue([]),
+    });
+    mockFm.fileExists.mockImplementation((p: string) => p.endsWith("_queue.json") || p.includes("commands") && !p.includes("in-flight"));
+    mockFm.getFileContents.mockImplementation((p: string) => {
+      if (p.endsWith("_queue.json")) {
+        return JSON.stringify(["000000000002-listDevices.json"]);
+      }
+      return JSON.stringify({
+        protocolVersion: 2,
+        id: "cmd_000000000002",
+        seq: 2,
+        type: "listDevices",
+        payload: { type: "listDevices" },
+      });
+    });
+
+    const queue = createCommandQueue({
+      commandsDir: "/tmp/commands",
+      inFlightDir: "/tmp/in-flight",
+      deadLetterDir: "/tmp/dead-letter",
+    });
+
+    expect(queue.poll()?.id).toBe("cmd_000000000002");
   });
 });
