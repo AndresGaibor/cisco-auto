@@ -303,12 +303,9 @@ export function createKernel(config: KernelConfig) {
       dirs.ensureDirectories();
 
       if (config.demoRuntime) {
-        dprint("[kernel-demo] Demo runtime enabled — skipping lease wait");
+        dprint("[kernel-debug] Lease bypass enabled — loading runtime immediately");
         activateRuntime();
-        return;
-      }
-
-      if (lease.validate()) {
+      } else if (lease.validate()) {
         activateRuntime();
       } else {
         lease.waitForLease(() => activateRuntime());
@@ -327,11 +324,7 @@ export function createKernel(config: KernelConfig) {
 
     dprint("[kernel] Activating...");
 
-    if (config.demoRuntime) {
-      runtimeLoader.loadDemo();
-    } else {
-      runtimeLoader.load();
-    }
+    runtimeLoader.load();
 
     const runtimeLoaded = runtimeLoader.getRuntimeFn() !== null;
     if (runtimeLoaded) {

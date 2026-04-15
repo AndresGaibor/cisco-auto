@@ -318,9 +318,6 @@ function main() {
       } catch(e) {
         if (typeof dprint === "function") dprint("[main] FATAL: " + String(e));
       }
-      if (_g.__ptRuntimeDemoLoaded && typeof dprint === "function") {
-        dprint("[main] DEMO runtime loaded");
-      }
       if (typeof dprint === "function") dprint("[main] kernel booted — runtime hot-reload active");
     } else {
       if (typeof dprint === "function") dprint("[main] ERROR: createKernel not found");
