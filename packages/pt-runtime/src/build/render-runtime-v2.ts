@@ -15,14 +15,34 @@ const RUNTIME_SOURCE_FILES = getAllRuntimeFiles();
 
 function assembleRuntimeOutput(code: string, devDirLiteral: string): string {
   return `
-var __ipc = ipc || null;
-var __dprint = dprint || function() {};
-var __DEV_DIR = DEV_DIR || ${devDirLiteral};
-var __fm = fm || (__ipc ? __ipc.systemFileManager() : null);
+var __ipc = (typeof ipc !== "undefined") ? ipc : null;
+var __dprint = (typeof dprint !== "undefined") ? dprint : function() {};
+var __DEV_DIR = (typeof DEV_DIR !== "undefined") ? DEV_DIR : ${devDirLiteral};
+var __fm = (typeof fm !== "undefined") ? fm : null;
+if (!__fm && __ipc && typeof __ipc.systemFileManager === "function") {
+  try { __fm = __ipc.systemFileManager(); } catch(e) {}
+}
+if (!__fm && typeof _ScriptModule !== "undefined" && _ScriptModule) {
+  __fm = {
+    fileExists: function(p) { try { var sz = _ScriptModule.getFileSize(p); return sz >= 0; } catch(e) { return false; } },
+    directoryExists: function(p) { try { return _ScriptModule.getFileSize(p) >= 0; } catch(e) { return false; } },
+    getFileContents: function(p) { return _ScriptModule.getFileContents(p); },
+    writePlainTextToFile: function(p, c) { _ScriptModule.writeTextToFile(p, c); },
+    makeDirectory: function(p) { try { _ScriptModule.writeTextToFile(p + "/.keep", ""); } catch(e) {} return true; },
+    getFilesInDirectory: function(p) { try { return _ScriptModule.getFilesInDirectory ? _ScriptModule.getFilesInDirectory(p) : []; } catch(e) { return []; } },
+    removeFile: function(p) { try { _ScriptModule.removeFile ? _ScriptModule.removeFile(p) : void 0; } catch(e) {} },
+    moveSrcFileToDestFile: function(s, d, o) { try { var c = _ScriptModule.getFileContents(s); _ScriptModule.writeTextToFile(d, c); } catch(e) {} },
+    getFileModificationTime: function(p) { try { return _ScriptModule.getFileModificationTime(p); } catch(e) { return 0; } },
+    getFileSize: function(p) { try { return _ScriptModule.getFileSize(p); } catch(e) { return -1; } },
+  };
+}
 var ipc = __ipc;
 var dprint = __dprint;
 var DEV_DIR = __DEV_DIR;
 var fm = __fm;
+
+var _g = (typeof _global !== "undefined") ? _global
+       : ((typeof self !== "undefined") ? self : (function() { return this; })());
 
 var __assign = function() {
   __assign = Object.assign || function(t) {
@@ -87,11 +107,10 @@ ${code}
 
 try {
   var deps = createPtDepsFromGlobals({ ipc: ipc, fm: fm, dprint: dprint, DEV_DIR: DEV_DIR });
-  var _g = (typeof self !== "undefined") ? self : this;
   _g._ptDispatch = function(payload) {
     return runtimeDispatcher(payload, deps);
   };
-  if (typeof dprint === "function") dprint("[runtime] dispatch ready");
+  if (typeof dprint === "function") dprint("[runtime] dispatch ready (global=" + (typeof _g !== "undefined" ? "OK" : "FAIL") + ")");
 } catch (e) {
   if (typeof dprint === "function") dprint("[runtime] INIT ERROR: " + String(e));
 }

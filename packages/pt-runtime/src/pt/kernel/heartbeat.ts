@@ -2,6 +2,7 @@
 // Heartbeat writing for PT monitoring
 
 import type { Heartbeat } from "./types";
+import { safeFM } from "./safe-fm";
 
 export interface HeartbeatManager {
   write(): void;
@@ -30,6 +31,11 @@ export function createHeartbeat(config: {
 
   function write(): void {
     try {
+      const s = safeFM();
+      if (!s.available || !s.fm) {
+        dprint("[heartbeat] fm unavailable — skipping write");
+        return;
+      }
       const hbPath = config.devDir + "/heartbeat.json";
       const hb: Heartbeat = {
         ts: Date.now(),
@@ -37,7 +43,7 @@ export function createHeartbeat(config: {
         activeCommand,
         queued: queuedCount,
       };
-      fm.writePlainTextToFile(hbPath, JSON.stringify(hb));
+      s.fm.writePlainTextToFile(hbPath, JSON.stringify(hb));
     } catch (e) {
       dprint("[heartbeat] Error: " + String(e));
     }

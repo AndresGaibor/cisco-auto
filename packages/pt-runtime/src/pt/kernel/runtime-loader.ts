@@ -99,7 +99,19 @@ export function createRuntimeLoader(config: { runtimeFile: string }) {
     }
 
     try {
-      dprint("[runtime-loader] Loading runtime.js...");
+      try { (typeof self !== "undefined" ? self : Function("return this")()).__ptRuntimeLoadAttempted = true; } catch {}
+      const visibleLog = (message: string) => {
+        try {
+          const appWindow = (typeof self !== "undefined" ? self.ipc : null)?.appWindow?.();
+          if (appWindow && typeof appWindow.writeToPT === "function") {
+            appWindow.writeToPT(String(message) + "\n");
+          }
+        } catch {}
+        try { dprint(message); } catch {}
+        try { if (typeof print === "function") print(String(message)); } catch {}
+      };
+
+      visibleLog("[runtime-loader] Loading runtime.js...");
       const mtime = getFileMtime(config.runtimeFile);
       if (!force && mtime === lastMtime && runtimeFn) {
         return; // No change, already loaded
@@ -111,16 +123,21 @@ export function createRuntimeLoader(config: { runtimeFile: string }) {
         return;
       }
 
-      // Strip "use strict" and top-level `var ipc/dprint/fm/DEV_DIR` declarations
-      // from the compiled code — the kernel IIFE already provides these as `var`
-      // in the enclosing scope, and passing them as `new Function(arguments[0])`
-      // causes duplicate `var` declarations or undefined references.
-      // We inject the actual values as `var` declarations inside the code.
+      // Strip only the strict-mode prelude. Keep CommonJS exports intact and
+      // provide `exports/module` explicitly to the function wrapper.
       code = code
         .replace(/^\s*"use strict";\s*/gm, "")
         .replace(/^\s*var\s+(ipc|dprint|fm|DEV_DIR)\s*=\s*[^;]+;\s*/gm, "")
-        .replace(/^\s*Object\.defineProperty\s*\(\s*exports\s*,\s*"__esModule"\s*,.*$/gm, "")
-        .replace(/^exports\.\w+\s*=/gm, "// exports.");
+        .replace(/^\s*export\s*\{[\s\S]*?from\s+["'][^"']+["'];\s*$/gm, "")
+        .replace(/^\s*import\s+.*$/gm, "")
+        .replace(/^\s*[A-Z][A-Za-z0-9_]*,\s*$/gm, "")
+        .replace(/^\s*\|\s*"[^"]+";?\s*$/gm, "")
+        .replace(/^\s*[a-zA-Z_][A-Za-z0-9_]*:\s*[A-Z][A-Za-z0-9_<>|\[\]\s,]*,\s*$/gm, "")
+        .replace(/^\s*[A-Z][A-Za-z0-9_<>|\[\]\s,]*;\s*$/gm, "")
+        .replace(/^\s*from;\s*$/gm, "")
+        .replace(/^\s*["'][^"']+["'];\s*$/gm, "")
+        .replace(/^\s*;\s*$/gm, "")
+        .replace(/^\s*Object\.defineProperty\s*\(\s*exports\s*,\s*"__esModule"\s*,.*$/gm, "");
 
       // Inject kernel globals as var declarations so the compiled code
       // can reference ipc/fm/dprint without getting undefined.
@@ -129,9 +146,25 @@ export function createRuntimeLoader(config: { runtimeFile: string }) {
       const _dprint = typeof dprint !== "undefined" ? dprint : function (msg: string) {};
       const _DEV_DIR = typeof DEV_DIR !== "undefined" ? DEV_DIR : "/pt-dev";
       const _g: any = typeof self !== "undefined" ? self : Function("return this")();
+      const _exports: Record<string, unknown> = {};
+      const _module = { exports: _exports };
+      const shim = `
+if (typeof Object.fromEntries !== "function") {
+  Object.fromEntries = function(entries) {
+    var obj = {};
+    for (var i = 0; i < entries.length; i++) {
+      var entry = entries[i];
+      if (entry && entry.length >= 2) {
+        obj[entry[0]] = entry[1];
+      }
+    }
+    return obj;
+  };
+}
+`;
 
-      const fn = new Function("ipc", "fm", "dprint", "DEV_DIR", code);
-      fn(_ipc, _fm, _dprint, _DEV_DIR);
+      const fn = new Function("ipc", "fm", "dprint", "DEV_DIR", "exports", "module", "_global", shim + code);
+      fn(_ipc, _fm, _dprint, _DEV_DIR, _exports, _module, _g);
 
       const dispatch = _g._ptDispatch;
       if (typeof dispatch !== "function") {
@@ -142,10 +175,22 @@ export function createRuntimeLoader(config: { runtimeFile: string }) {
       lastGoodRuntimeFn = dispatch;
       lastMtime = mtime;
       pendingReload = false;
-      dprint("[runtime] Loaded OK (mtime=" + mtime + ")");
-      dprint("[runtime-loader] runtime.js ready for dispatch");
+      _g.__ptRuntimeLoaded = true;
+      try { (typeof self !== "undefined" ? self : Function("return this")()).__ptRuntimeLoadSucceeded = true; } catch {}
+      visibleLog("[runtime] Loaded OK (mtime=" + mtime + ")");
+      visibleLog("[runtime-loader] runtime.js ready for dispatch");
     } catch (e) {
-      dprint("[runtime] Load error (keeping previous): " + String(e));
+      try { (typeof self !== "undefined" ? self : Function("return this")()).__ptRuntimeLoaded = false; } catch {}
+      try { (typeof self !== "undefined" ? self : Function("return this")()).__ptRuntimeLoadSucceeded = false; } catch {}
+      try { (typeof self !== "undefined" ? self : Function("return this")()).__ptRuntimeLoadError = String(e); } catch {}
+      try {
+        const appWindow = (typeof self !== "undefined" ? self.ipc : null)?.appWindow?.();
+        if (appWindow && typeof appWindow.writeToPT === "function") {
+          appWindow.writeToPT("[runtime] Load error (keeping previous): " + String(e) + "\n");
+        }
+      } catch {}
+      try { dprint("[runtime] Load error (keeping previous): " + String(e)); } catch {}
+      try { if (typeof print === "function") print("[runtime] Load error (keeping previous): " + String(e)); } catch {}
       if (!runtimeFn && lastGoodRuntimeFn) {
         runtimeFn = lastGoodRuntimeFn;
       }
@@ -155,7 +200,18 @@ export function createRuntimeLoader(config: { runtimeFile: string }) {
   function loadDemo(): void {
     try {
       const _g: any = typeof self !== "undefined" ? self : Function("return this")();
-      dprint("[runtime-demo] Loading lightweight demo runtime...");
+      const visibleLog = (message: string) => {
+        try {
+          const appWindow = (typeof self !== "undefined" ? self.ipc : null)?.appWindow?.();
+          if (appWindow && typeof appWindow.writeToPT === "function") {
+            appWindow.writeToPT(String(message) + "\n");
+          }
+        } catch {}
+        try { dprint(message); } catch {}
+        try { if (typeof print === "function") print(String(message)); } catch {}
+      };
+
+      visibleLog("[runtime-demo] Loading lightweight demo runtime...");
 
       runtimeFn = function(payload: Record<string, unknown>, api: RuntimeApi) {
         const type = String((payload as { type?: unknown })?.type ?? "unknown");
@@ -174,14 +230,22 @@ export function createRuntimeLoader(config: { runtimeFile: string }) {
       lastMtime = Date.now();
       pendingReload = false;
       _g.__ptRuntimeDemoLoaded = true;
-      dprint("[runtime-demo] Demo runtime loaded");
+      visibleLog("[runtime-demo] Demo runtime loaded");
     } catch (e) {
-      dprint("[runtime-demo] Demo load error: " + String(e));
+      try { dprint("[runtime-demo] Demo load error: " + String(e)); } catch {}
+      try { if (typeof print === "function") print("[runtime-demo] Demo load error: " + String(e)); } catch {}
     }
   }
 
   function reloadIfNeeded(isBusyCheck: () => boolean): void {
     if (!fileExists(config.runtimeFile)) {
+      return;
+    }
+
+    const currentMtime = getFileMtime(config.runtimeFile);
+
+    // Sin cambios y sin recarga pendiente: no hacer nada.
+    if (currentMtime === lastMtime && !pendingReload) {
       return;
     }
 

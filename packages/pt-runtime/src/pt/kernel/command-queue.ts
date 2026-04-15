@@ -7,6 +7,7 @@
 // optionally commands/ residue.
 
 import type { CommandEnvelope } from "./types";
+import { safeFM } from "./safe-fm";
 
 export interface CommandQueue {
   poll(): CommandEnvelope | null;
@@ -21,10 +22,13 @@ export function createCommandQueue(config: {
 }) {
   function listQueuedFiles(): string[] {
     const jsonFiles: string[] = [];
-
-    // Only list from commands/ directory (source of truth for pending work)
+    const s = safeFM();
+    if (!s.available || !s.fm) {
+      dprint("[queue] fm unavailable — cannot list commands");
+      return jsonFiles;
+    }
     try {
-      const files = fm.getFilesInDirectory(config.commandsDir);
+      const files = s.fm.getFilesInDirectory(config.commandsDir);
       if (files) {
         for (const file of files) {
           if (file.indexOf(".json") !== -1) {
@@ -35,15 +39,16 @@ export function createCommandQueue(config: {
     } catch (e) {
       dprint("[queue] Error listing commands dir: " + String(e));
     }
-
     jsonFiles.sort();
     return jsonFiles;
   }
 
   function count(): number {
     let c = 0;
+    const s = safeFM();
+    if (!s.available || !s.fm) return c;
     try {
-      c += fm.getFilesInDirectory(config.commandsDir)?.length || 0;
+      c += s.fm.getFilesInDirectory(config.commandsDir)?.length || 0;
     } catch (e) {
       dprint("[queue] Error counting commands: " + String(e));
     }
@@ -51,37 +56,28 @@ export function createCommandQueue(config: {
   }
 
   function poll(): CommandEnvelope | null {
+    const s = safeFM();
+    if (!s.available || !s.fm) return null;
+    const _fm = s.fm;
+
     const files = listQueuedFiles();
 
     for (const filename of files) {
       const srcPath = config.commandsDir + "/" + filename;
       const dstPath = config.inFlightDir + "/" + filename;
 
-      // ATOMIC CLAIM: try to move from commands/ to in-flight/
-      // If already in in-flight/, skip (being processed by another tick)
       try {
-        if (fm.fileExists(dstPath)) {
-          // Already claimed, skip
-          continue;
-        }
-
-        if (!fm.fileExists(srcPath)) {
-          // Source gone, skip
-          continue;
-        }
-
-        // Attempt atomic move
-        fm.moveSrcFileToDestFile(srcPath, dstPath, false);
+        if (_fm.fileExists(dstPath)) { continue; }
+        if (!_fm.fileExists(srcPath)) { continue; }
+        _fm.moveSrcFileToDestFile(srcPath, dstPath, false);
         dprint("[queue] Claimed: " + filename);
       } catch (e) {
-        // Claim failed (race or lock), skip to next
         dprint("[queue] Claim failed for " + filename + ": " + String(e));
         continue;
       }
 
-      // Read from in-flight/ (we claimed it)
       try {
-        const content = fm.getFileContents(dstPath);
+        const content = _fm.getFileContents(dstPath);
         if (!content || content.length < 10) {
           dprint("[queue] Empty file: " + filename);
           moveToDeadLetter(dstPath, "Empty file");
@@ -94,10 +90,8 @@ export function createCommandQueue(config: {
           return { ...cmd, filename } as CommandEnvelope;
         }
 
-        // Invalid envelope structure
         moveToDeadLetter(dstPath, "Invalid envelope: missing id");
       } catch (e) {
-        // Corrupt JSON or read error
         dprint("[queue] Invalid command file: " + filename + " - " + String(e));
         moveToDeadLetter(dstPath, e);
       }
@@ -107,21 +101,21 @@ export function createCommandQueue(config: {
   }
 
   function moveToDeadLetter(filePath: string, error: unknown): void {
+    const s = safeFM();
+    if (!s.available || !s.fm) return;
+    const _fm = s.fm;
     try {
       const basename = filePath.split("/").pop() || "unknown";
       const timestamp = String(Date.now());
       const dlPath = config.deadLetterDir + "/" + timestamp + "-" + basename;
 
-      // Move the corrupt file to dead-letter
       try {
-        fm.moveSrcFileToDestFile(filePath, dlPath, false);
+        _fm.moveSrcFileToDestFile(filePath, dlPath, false);
       } catch (e) {
-        // If move fails, file is already gone - just write error log
         dprint("[queue] Could not move to dead-letter: " + String(e));
       }
 
-      // Write error metadata
-      fm.writePlainTextToFile(
+      _fm.writePlainTextToFile(
         dlPath + ".error.json",
         JSON.stringify({
           originalFile: basename,
@@ -137,22 +131,23 @@ export function createCommandQueue(config: {
   }
 
   function cleanup(filename: string): void {
-    // Primary: remove from in-flight/ (we claimed it from there)
+    const s = safeFM();
+    if (!s.available || !s.fm) return;
+    const _fm = s.fm;
     try {
       const inFlightPath = config.inFlightDir + "/" + filename;
-      if (fm.fileExists(inFlightPath)) {
-        fm.removeFile(inFlightPath);
+      if (_fm.fileExists(inFlightPath)) {
+        _fm.removeFile(inFlightPath);
         dprint("[queue] Cleanup in-flight: " + filename);
       }
     } catch (e) {
       dprint("[queue] Cleanup in-flight error: " + String(e));
     }
 
-    // Compatibility: clean residue from commands/ if it somehow still exists
     try {
       const commandsPath = config.commandsDir + "/" + filename;
-      if (fm.fileExists(commandsPath)) {
-        fm.removeFile(commandsPath);
+      if (_fm.fileExists(commandsPath)) {
+        _fm.removeFile(commandsPath);
         dprint("[queue] Cleanup commands residue: " + filename);
       }
     } catch (e) {

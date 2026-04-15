@@ -194,9 +194,40 @@ var __rest = function(s, e) {
              : function(msg) { if (typeof print === "function") print(String(msg)); };
   var DEV_DIR = (typeof DEV_DIR !== "undefined") ? DEV_DIR : ${devDirLiteral};
 
+  // fm initialization with dual-path fallback (BUG-01 fix)
+  // PT 9.0: fm is NOT a global — must use ipc.systemFileManager() or _ScriptModule shim
+  var fm = null;
+  try {
+    if (typeof ipc !== "undefined" && ipc !== null && typeof ipc.systemFileManager === "function") {
+      fm = ipc.systemFileManager();
+    }
+  } catch (_fmErr) {}
+  if (!fm) {
+    try {
+      if (typeof _ScriptModule !== "undefined" && _ScriptModule !== null) {
+        fm = {
+          fileExists: function(p) { try { var sz = _ScriptModule.getFileSize(p); return sz >= 0; } catch(e) { return false; } },
+          directoryExists: function(p) { try { return _ScriptModule.getFileSize(p) >= 0; } catch(e) { return false; } },
+          getFileContents: function(p) { return _ScriptModule.getFileContents(p); },
+          writePlainTextToFile: function(p, c) { _ScriptModule.writeTextToFile(p, c); },
+          makeDirectory: function(p) { try { _ScriptModule.writeTextToFile(p + "/.keep", ""); } catch(e) {} return true; },
+          getFilesInDirectory: function(p) { try { return _ScriptModule.getFilesInDirectory ? _ScriptModule.getFilesInDirectory(p) : []; } catch(e) { return []; } },
+          removeFile: function(p) { try { _ScriptModule.removeFile ? _ScriptModule.removeFile(p) : void 0; } catch(e) {} },
+          moveSrcFileToDestFile: function(s, d, o) { try { var c = _ScriptModule.getFileContents(s); _ScriptModule.writeTextToFile(d, c); } catch(e) {} },
+          getFileModificationTime: function(p) { try { return _ScriptModule.getFileModificationTime(p); } catch(e) { return 0; } },
+          getFileSize: function(p) { try { return _ScriptModule.getFileSize(p); } catch(e) { return -1; } },
+        };
+      }
+    } catch (_smErr) {}
+  }
+  if (!fm) {
+    if (typeof dprint === "function") dprint("[KERNEL-IIFE] WARNING: fm not available — file ops disabled");
+  }
+
   // Publish bootstrap globals so modules loaded later can use them
   if (!_g.dprint)  _g.dprint  = dprint;
   if (!_g.DEV_DIR) _g.DEV_DIR = DEV_DIR;
+  if (!_g.fm) _g.fm = fm;
 
   // SANITY CHECK: if this doesn't print, the IIFE itself is crashing
   if (typeof dprint === "function") dprint("[KERNEL-IIFE] running, ipc=" + (ipc ? "OK" : "NULL"));
@@ -257,7 +288,14 @@ function _ptLoadModule(modulePath, label) {
       if (typeof dprint === "function") dprint("[main] Empty: " + label);
       return false;
     }
-    new Function(code)();
+    // Pass globals explicitly so catalog.js can use them (Fase 7 fix)
+    new Function("ipc", "fm", "dprint", "DEV_DIR", "_ScriptModule", code)(
+      (typeof ipc !== "undefined") ? ipc : null,
+      (typeof fm !== "undefined") ? fm : null,
+      (typeof dprint !== "undefined") ? dprint : function() {},
+      (typeof DEV_DIR !== "undefined") ? DEV_DIR : devDir,
+      (typeof _ScriptModule !== "undefined") ? _ScriptModule : null
+    );
     if (typeof dprint === "function") dprint("[main] Loaded: " + label);
     return true;
   } catch (e) {
@@ -317,6 +355,21 @@ function main() {
         kernel.boot();
       } catch(e) {
         if (typeof dprint === "function") dprint("[main] FATAL: " + String(e));
+      }
+      if (typeof dprint === "function") {
+        dprint(
+          "[main] kernel-flags boot=" + String(!!_g.__ptKernelBootEntered) +
+          " leaseBypass=" + String(!!_g.__ptKernelLeaseBypass) +
+          " activate=" + String(!!_g.__ptKernelActivateEntered) +
+          " runtimeAttempt=" + String(!!_g.__ptRuntimeLoadAttempted) +
+          " runtimeOK=" + String(!!_g.__ptRuntimeLoadSucceeded)
+        );
+      }
+      if (_g.__ptRuntimeLoadError && typeof dprint === "function") {
+        dprint("[main] runtime-error=" + String(_g.__ptRuntimeLoadError));
+      }
+      if (_g.__ptRuntimeLoaded === true && typeof dprint === "function") {
+        dprint("[main] runtime-loaded flag = true");
       }
       if (typeof dprint === "function") dprint("[main] kernel booted — runtime hot-reload active");
     } else {

@@ -1,5 +1,7 @@
 // Directory management for PT file system
 
+import { safeFM } from "./safe-fm";
+
 export interface DirectoryManager {
   ensureDirectories(): void;
   directories: {
@@ -33,11 +35,16 @@ export function createDirectoryManager(config: {
   };
 
   function ensureDirectories(): void {
-    // Uses PT fm global
+    const s = safeFM();
+    if (!s.available || !s.fm) {
+      dprint("[dir] fm unavailable — skipping directory creation");
+      return;
+    }
+    const _fm = s.fm;
     for (const dir of Object.values(dirs)) {
       try {
-        if (!fm.directoryExists(dir)) {
-          fm.makeDirectory(dir);
+        if (!_fm.directoryExists(dir)) {
+          _fm.makeDirectory(dir);
         }
       } catch (e) {
         dprint("[dir] Error creating " + dir + ": " + String(e));

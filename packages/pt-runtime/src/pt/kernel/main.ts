@@ -12,6 +12,7 @@ import { createHeartbeat } from "./heartbeat";
 import { createCleanupManager } from "./cleanup";
 import { createTerminalEngine } from "../terminal/terminal-engine";
 import { createJobExecutor, type ActiveJob } from "./job-executor";
+import { safeFM } from "./safe-fm";
 
 export { createDirectoryManager } from "./directories";
 export { createLeaseManager } from "./lease";
@@ -60,6 +61,21 @@ export function createKernel(config: KernelConfig) {
   // Intervals
   let commandPollInterval: ReturnType<typeof setInterval> | null = null;
   let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+
+  function kernelLog(message: string): void {
+    try {
+      const appWindow = (typeof self !== "undefined" ? self.ipc : null)?.appWindow?.();
+      if (appWindow && typeof appWindow.writeToPT === "function") {
+        appWindow.writeToPT(String(message) + "\n");
+      }
+    } catch {}
+    try {
+      dprint(message);
+    } catch {}
+    try {
+      if (typeof print === "function") print(String(message));
+    } catch {}
+  }
 
   // Runtime API factory
   function createRuntimeApi() {
@@ -172,8 +188,13 @@ export function createKernel(config: KernelConfig) {
   // Write result envelope
   function writeResultEnvelope(cmdId: string, result: ResultEnvelope): void {
     try {
+      const s = safeFM();
+      if (!s.available || !s.fm) {
+        dprint("[kernel] fm unavailable — cannot write result");
+        return;
+      }
       const path = config.resultsDir + "/" + cmdId + ".json";
-      fm.writePlainTextToFile(path, JSON.stringify(result));
+      s.fm.writePlainTextToFile(path, JSON.stringify(result));
     } catch (e) {
       dprint("[kernel] Result write error: " + String(e));
     }
@@ -287,23 +308,21 @@ export function createKernel(config: KernelConfig) {
 
   // Boot kernel
   function boot(): void {
-    dprint("[kernel] Starting...");
+    try { (typeof self !== "undefined" ? self : Function("return this")()).__ptKernelBootEntered = true; } catch {}
+    kernelLog("[kernel] Starting...");
 
     try {
       isShuttingDown = false;
       isRunning = true;
 
-      // ipc is a global provided by PT Script Module
-      const ipc = typeof self !== "undefined" ? self.ipc : (null as any);
-      const fmFromIpc = ipc?.systemFileManager?.();
-      if (fmFromIpc) {
-        (self as any).fm = fmFromIpc;
-      }
+      // fm is now initialized in the Kernel IIFE before boot() runs (Fase 1 fix)
+      // No late assignment needed — safeFM() handles it in each module
 
       dirs.ensureDirectories();
 
       if (config.demoRuntime) {
-        dprint("[kernel-debug] Lease bypass enabled — loading runtime immediately");
+        try { (typeof self !== "undefined" ? self : Function("return this")()).__ptKernelLeaseBypass = true; } catch {}
+        kernelLog("[kernel-debug] Lease bypass enabled — loading runtime immediately");
         activateRuntime();
       } else if (lease.validate()) {
         activateRuntime();
@@ -316,29 +335,40 @@ export function createKernel(config: KernelConfig) {
   }
 
   // Activate runtime after lease
-  function activateRuntime(): void {
+  var MAX_LOAD_ATTEMPTS = 5;
+  var LOAD_RETRY_DELAY_MS = 2000;
+
+  function startKernelServices(): void {
+    commandPollInterval = setInterval(pollCommandQueue, config.pollIntervalMs);
+    heartbeat.start();
+    isRunning = true;
+    kernelLog("[kernel] Ready");
+  }
+
+  function activateRuntime(attempt?: number): void {
+    attempt = attempt || 0;
+    try { (typeof self !== "undefined" ? self : Function("return this")()).__ptKernelActivateEntered = true; } catch {}
     if (commandPollInterval || heartbeatInterval) {
-      dprint("[kernel] Already active");
+      kernelLog("[kernel] Already active");
       return;
     }
 
-    dprint("[kernel] Activating...");
-
     runtimeLoader.load();
-
     const runtimeLoaded = runtimeLoader.getRuntimeFn() !== null;
+
     if (runtimeLoaded) {
       const mtime = runtimeLoader.getLastMtime();
-      dprint("[kernel] Runtime ready at mtime=" + mtime);
+      kernelLog("[kernel] Runtime ready at mtime=" + mtime + " (attempt " + attempt + ")");
+      startKernelServices();
+    } else if (attempt < MAX_LOAD_ATTEMPTS) {
+      const delay = LOAD_RETRY_DELAY_MS * Math.pow(1.5, attempt);
+      kernelLog("[kernel] Runtime not loaded, retry in " + delay + "ms (attempt " + (attempt + 1) + "/" + MAX_LOAD_ATTEMPTS + ")");
+      setTimeout(function() { activateRuntime(attempt + 1); }, delay);
     } else {
-      dprint("[kernel] WARNING: runtime not loaded — runtime.js may be missing or failed to parse");
+      kernelLog("[kernel] WARNING: Runtime failed after " + MAX_LOAD_ATTEMPTS + " attempts, falling back to demo runtime");
+      runtimeLoader.loadDemo();
+      startKernelServices();
     }
-
-    commandPollInterval = setInterval(pollCommandQueue, config.pollIntervalMs);
-    heartbeat.start();
-
-    isRunning = true;
-    dprint("[kernel] Ready");
   }
 
   // Shutdown kernel (idempotent)

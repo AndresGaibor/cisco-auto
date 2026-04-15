@@ -2,6 +2,7 @@
 // Lease validation and management
 
 import type { Lease } from "./types";
+import { safeFM } from "./safe-fm";
 
 export interface LeaseManager {
   validate(): boolean;
@@ -18,14 +19,20 @@ export function createLeaseManager(config: {
 
   function validate(): boolean {
     try {
+      const s = safeFM();
+      if (!s.available || !s.fm) {
+        dprint("[LEASE] fm unavailable — cannot validate lease");
+        return false;
+      }
+      const _fm = s.fm;
       const leaseFile = config.devDir + "/bridge-lease.json";
-      
-      if (!fm.fileExists(leaseFile)) {
+
+      if (!_fm.fileExists(leaseFile)) {
         dprint("[LEASE] No lease file found");
         return false;
       }
 
-      const content = fm.getFileContents(leaseFile);
+      const content = _fm.getFileContents(leaseFile);
       if (!content || content.trim().length === 0) {
         dprint("[LEASE] Lease file empty");
         return false;
@@ -59,20 +66,35 @@ export function createLeaseManager(config: {
   }
 
   function waitForLease(onValid: () => void): void {
+    var LEASE_TIMEOUT_MS = 30000;
+    var startTime = Date.now();
+    var attempts = 0;
+
     function check() {
       if (stopped) return;
-      
+      attempts++;
+
       if (validate()) {
-        dprint("[LEASE] Valid lease detected");
-        if (interval) {
-          clearInterval(interval);
-          interval = null;
-        }
+        dprint("[LEASE] Valid lease detected (after " + attempts + " checks)");
+        if (interval) { clearInterval(interval); interval = null; }
         onValid();
+        return;
+      }
+
+      var elapsed = Date.now() - startTime;
+      if (elapsed > LEASE_TIMEOUT_MS) {
+        dprint("[LEASE] TIMEOUT after " + elapsed + "ms — proceeding without lease");
+        if (interval) { clearInterval(interval); interval = null; }
+        onValid();
+        return;
+      }
+
+      if (attempts % 10 === 0) {
+        dprint("[LEASE] Still waiting... (" + Math.round(elapsed / 1000) + "s elapsed)");
       }
     }
 
-    dprint("[LEASE] Waiting for bridge lease...");
+    dprint("[LEASE] Waiting for bridge lease (timeout: " + LEASE_TIMEOUT_MS + "ms)...");
     check();
     interval = setInterval(check, config.checkIntervalMs);
   }

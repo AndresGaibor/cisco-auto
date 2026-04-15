@@ -58,66 +58,67 @@ interface PTCommandLine {
  * TerminalEngine - manages IOS sessions using PT TerminalLine API
  */
 export function createTerminalEngine(config: TerminalEngineConfig) {
-  const sessions = new Map<string, TerminalSessionState>();
-  const terminals = new Map<string, PTCommandLine>();
+  // Using plain objects instead of Map for QTScript compatibility (Fase 5)
+  const sessions: Record<string, TerminalSessionState> = {};
+  const terminals: Record<string, PTCommandLine> = {};
 
   function attach(device: string, term: PTCommandLine): void {
-    terminals.set(device, term);
-    sessions.set(device, createTerminalSession(device));
+    terminals[device] = term;
+    sessions[device] = createTerminalSession(device);
 
     term.registerEvent("promptChanged", null, (_src, args) => {
-      const current = sessions.get(device);
+      const current = sessions[device];
       if (!current) return;
       const prompt = (args as { prompt?: string })?.prompt || "";
       const parsed = parsePrompt(prompt);
       let updated = updatePrompt(current, parsed.hostname);
       updated = updateMode(updated, parsed.mode);
-      sessions.set(device, updated);
+      sessions[device] = updated;
     });
 
     term.registerEvent("moreDisplayed", null, (_src, args) => {
-      const current = sessions.get(device);
+      const current = sessions[device];
       if (!current) return;
       const active = (args as { active?: boolean })?.active || false;
-      sessions.set(device, setPaging(current, active));
+      sessions[device] = setPaging(current, active);
     });
 
     term.registerEvent("modeChanged", null, (_src, args) => {
-      const current = sessions.get(device);
+      const current = sessions[device];
       if (!current) return;
       const newMode = (args as { newMode?: string })?.newMode || "";
       if (newMode) {
-        sessions.set(device, updateMode(current, newMode));
+        sessions[device] = updateMode(current, newMode);
       }
     });
 
     term.registerEvent("commandStarted", null, (_src, args) => {
-      const current = sessions.get(device);
+      const current = sessions[device];
       if (!current) return;
       const inputMode = (args as { inputMode?: string })?.inputMode || "";
       if (inputMode) {
-        sessions.set(device, updateMode(current, inputMode as IosMode));
+        sessions[device] = updateMode(current, inputMode as IosMode);
       }
     });
   }
 
   function detach(device: string): void {
-    terminals.delete(device);
-    sessions.delete(device);
+    delete terminals[device];
+    delete sessions[device];
   }
 
   function getSession(device: string): SessionStateSnapshot | null {
-    const state = sessions.get(device);
+    const state = sessions[device];
     return state ? toSnapshot(state) : null;
   }
 
   function getMode(device: string): IosMode {
-    const state = sessions.get(device);
+    const state = sessions[device];
     return state ? (state.mode as IosMode) : "unknown";
   }
 
   function isBusy(device: string): boolean {
-    const state = sessions.get(device);
+    const state = sessions[device];
     return state ? state.busyJobId !== null : false;
   }
 
@@ -126,7 +127,7 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
     command: string,
     options?: ExecuteOptions,
   ): Promise<TerminalResult> {
-    const term = terminals.get(device);
+    const term = terminals[device];
     if (!term) {
       return Promise.reject(new Error(`No terminal attached to ${device}`));
     }
@@ -134,9 +135,8 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
 
     const timeout = options?.timeout ?? config.commandTimeoutMs;
 
-    // Helper to read current session state (avoids stale closure references)
     function currentSession(): TerminalSessionState {
-      const s = sessions.get(device);
+      const s = sessions[device];
       if (!s) throw new Error(`Session lost for ${device} during executeCommand`);
       return s;
     }
@@ -146,7 +146,7 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
       let settled = false;
       let moreListener: ((src: unknown, args: unknown) => void) | null = null;
 
-      sessions.set(device, setBusy(currentSession(), `cmd-${Date.now()}`));
+      sessions[device] = setBusy(currentSession(), `cmd-${Date.now()}`);
 
       const timeoutHandle = setTimeout(() => {
         if (!settled) {
@@ -162,7 +162,7 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
               terminal.unregisterEvent("moreDisplayed", null, moreListener);
             } catch {}
           }
-          sessions.set(device, setBusy(currentSession(), null));
+          sessions[device] = setBusy(currentSession(), null);
           reject(new Error(`Command timed out after ${timeout}ms: ${command}`));
         }
       }, timeout);
@@ -177,7 +177,7 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
 
       function onMore(_src: unknown, _args: unknown) {
         const cs = currentSession();
-        sessions.set(device, setPaging(cs, true));
+        sessions[device] = setPaging(cs, true);
       }
       moreListener = onMore;
 
@@ -200,9 +200,8 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
           terminal.unregisterEvent("moreDisplayed", null, moreListener as any);
         } catch {}
 
-        // Read the LATEST session state - prompt/mode/paging from events
         const finalSession = currentSession();
-        sessions.set(device, setBusy(finalSession, null));
+        sessions[device] = setBusy(finalSession, null);
 
         const output = buffer.join("");
         resolve({
@@ -224,20 +223,19 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
         terminal.registerEvent("moreDisplayed", null, moreListener as any);
       } catch {}
 
-      // Send the command - returns void, state comes via events
       terminal.enterCommand(command);
     });
   }
 
   function continuePager(device: string): void {
-    const term = terminals.get(device);
+    const term = terminals[device];
     if (term) {
       term.enterChar(32, 0);
     }
   }
 
   function confirmPrompt(device: string): void {
-    const term = terminals.get(device);
+    const term = terminals[device];
     if (term) {
       term.enterChar(13, 0);
     }

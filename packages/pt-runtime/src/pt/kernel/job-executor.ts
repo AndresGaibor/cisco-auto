@@ -28,7 +28,8 @@ export interface JobExecutor {
 }
 
 export function createJobExecutor(terminal: TerminalEngine) {
-  const jobs = new Map<string, ActiveJob>();
+  // Using plain object instead of Map for QTScript compatibility (Fase 5)
+  const jobs: Record<string, ActiveJob> = {};
   
   function startJob(plan: DeferredJobPlan): ActiveJob {
     const context = createJobContext(plan);
@@ -39,7 +40,7 @@ export function createJobExecutor(terminal: TerminalEngine) {
       pendingCommand: null,
     };
     
-    jobs.set(plan.id, job);
+    jobs[plan.id] = job;
     advanceJob(plan.id);
     
     return job;
@@ -260,7 +261,7 @@ export function createJobExecutor(terminal: TerminalEngine) {
   }
   
   function advanceJob(jobId: string): void {
-    const job = jobs.get(jobId);
+    const job = jobs[jobId];
     if (!job) return;
 
     if (isContextFinished(job.context)) {
@@ -298,11 +299,11 @@ export function createJobExecutor(terminal: TerminalEngine) {
   }
   
   function getActiveJobs(): ActiveJob[] {
-    return Array.from(jobs.values()).filter(j => !isContextFinished(j.context));
+    return Object.values(jobs).filter(j => !isContextFinished(j.context));
   }
   
   function isJobFinished(jobId: string): boolean {
-    const job = jobs.get(jobId);
+    const job = jobs[jobId];
     return job ? isContextFinished(job.context) : true;
   }
   

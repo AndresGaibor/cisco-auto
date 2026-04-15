@@ -7,7 +7,6 @@
  */
 
 import { createDefaultPTController } from "@cisco-auto/pt-control";
-import { getDefaultDevDir } from "../system/paths.js";
 
 export interface ListedDevice {
   name: string;
@@ -15,6 +14,12 @@ export interface ListedDevice {
   type: string;
   power: boolean;
   ports?: Array<unknown>;
+  displayName?: string;
+  x?: number;
+  y?: number;
+  hostname?: string;
+  ip?: string;
+  mask?: string;
 }
 
 export interface DeviceListResult {
@@ -27,21 +32,22 @@ export async function loadLiveDeviceList(type?: string): Promise<DeviceListResul
   const controller = createDefaultPTController();
 
   try {
+    console.log("[pt-cli] start()...");
     await controller.start();
-    await controller.loadRuntimeFromFile(`${getDefaultDevDir()}/runtime.js`);
-
-    const snapshot = await controller.snapshot();
-    const devicesSource = Object.values(snapshot?.devices ?? {});
-
-    const devices = devicesSource
-      .map((device: any) => ({
-        name: String(device?.name ?? "unknown"),
-        model: String(device?.model ?? device?.type ?? "unknown"),
-        type: String(device?.type ?? device?.family ?? "unknown"),
-        power: Boolean(device?.power),
-        ports: Array.isArray(device?.ports) ? device.ports : [],
-      }))
-      .filter((device) => (type ? device.type === type : true));
+    console.log("[pt-cli] listDevices()...");
+    const devices = (await controller.listDevices(type)).map((device) => ({
+      name: String(device.name ?? "unknown"),
+      model: String(device.model ?? device.type ?? "unknown"),
+      type: String(device.type ?? "unknown"),
+      power: Boolean(device.power),
+      ports: Array.isArray(device.ports) ? device.ports : [],
+      displayName: (device as any).displayName,
+      x: (device as any).x,
+      y: (device as any).y,
+      hostname: (device as any).hostname,
+      ip: (device as any).ip,
+      mask: (device as any).mask,
+    }));
 
     return {
       devices,
@@ -50,6 +56,7 @@ export async function loadLiveDeviceList(type?: string): Promise<DeviceListResul
     };
   } finally {
     try {
+      console.log("[pt-cli] stop()...");
       await controller.stop();
     } catch {
       // Silenciar el cierre; solo limpiamos recursos.
