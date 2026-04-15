@@ -57,11 +57,16 @@ export interface DeviceListResult {
   deviceLinks: Record<string, string[]>;
 }
 
-export function isEmptyTopologySnapshot(snapshot: {
-  devices?: Record<string, unknown>;
-  links?: Record<string, unknown>;
-  metadata?: { deviceCount?: number; linkCount?: number };
-} | null | undefined): boolean {
+export function isEmptyTopologySnapshot(
+  snapshot:
+    | {
+        devices?: Record<string, unknown>;
+        links?: Record<string, unknown>;
+        metadata?: { deviceCount?: number; linkCount?: number };
+      }
+    | null
+    | undefined,
+): boolean {
   if (!snapshot) return true;
   const deviceCount = Object.keys(snapshot.devices ?? {}).length;
   const linkCount = Object.keys(snapshot.links ?? {}).length;
@@ -70,12 +75,15 @@ export function isEmptyTopologySnapshot(snapshot: {
 
 export function buildDeviceListFromSnapshot(snapshot: {
   devices?: Record<string, TopologyDeviceLike>;
-  links?: Record<string, {
-    device1: string;
-    port1: string;
-    device2: string;
-    port2: string;
-  }>;
+  links?: Record<
+    string,
+    {
+      device1: string;
+      port1: string;
+      device2: string;
+      port2: string;
+    }
+  >;
 }): DeviceListResult {
   const devices = Object.values(snapshot.devices ?? {}).map((device) => ({
     name: String(device.name ?? "unknown"),
@@ -115,10 +123,14 @@ function mapLiveDevices(value: unknown): ListedDevice[] {
 
   return rawDevices.map((device) => ({
     name: String((device as { name?: unknown }).name ?? "unknown"),
-    model: String((device as { model?: unknown }).model ?? (device as { type?: unknown }).type ?? "unknown"),
+    model: String(
+      (device as { model?: unknown }).model ?? (device as { type?: unknown }).type ?? "unknown",
+    ),
     type: String((device as { type?: unknown }).type ?? "unknown"),
     power: Boolean((device as { power?: unknown }).power),
-    ports: Array.isArray((device as { ports?: unknown }).ports) ? (device as { ports: unknown[] }).ports : [],
+    ports: Array.isArray((device as { ports?: unknown }).ports)
+      ? (device as { ports: unknown[] }).ports
+      : [],
     displayName: (device as { displayName?: string }).displayName,
     x: (device as { x?: number }).x,
     y: (device as { y?: number }).y,
@@ -148,21 +160,28 @@ export async function loadLiveDeviceListFromController(
 
   console.log("[pt-cli] sendCommandAndWait start...");
   const result = await Promise.race([
-    controller.getBridge().sendCommandAndWait<unknown>(
-      "listDevices",
-      { id: `ctrl_${Date.now()}`, filter: type },
-      timeoutMs,
-    ),
+    controller
+      .getBridge()
+      .sendCommandAndWait<unknown>(
+        "listDevices",
+        { id: `ctrl_${Date.now()}`, filter: type },
+        timeoutMs,
+      ),
     timeout,
   ]);
   console.log("[pt-cli] sendCommandAndWait done");
-  const devices = mapLiveDevices(result.value);
+  const value = result.value as any;
+  const devices = mapLiveDevices(value);
   console.log(`[pt-cli] devices mapped count=${devices.length}`);
+
+  const deviceLinks = value && typeof value === "object" ? value.deviceLinks || {} : {};
+  const totalCount =
+    value && typeof value === "object" ? value.count || devices.length : devices.length;
 
   return {
     devices,
-    count: devices.length,
-    deviceLinks: {},
+    count: totalCount,
+    deviceLinks,
   };
 }
 
@@ -171,7 +190,10 @@ export async function loadLiveDeviceList(type?: string): Promise<DeviceListResul
   try {
     controller = createDefaultPTController() as unknown as LiveDeviceListController;
   } catch (err) {
-    throw new Error("No se pudo crear el controller PT. Asegurate de que Packet Tracer esté abierto: " + String(err));
+    throw new Error(
+      "No se pudo crear el controller PT. Asegurate de que Packet Tracer esté abierto: " +
+        String(err),
+    );
   }
 
   try {

@@ -35,7 +35,7 @@ export class TopologyQueryService {
         const result = await this.bridge.sendCommandAndWait<TopologySnapshot>(
           "snapshot",
           { id: this.generateId() },
-          3000    // 3s fast timeout — fall back to cache if PT doesn't respond
+          3000, // 3s fast timeout — fall back to cache if PT doesn't respond
         );
         const value = result.value;
         if (value && typeof value === "object" && "devices" in value && "links" in value) {
@@ -51,7 +51,12 @@ export class TopologyQueryService {
     // Cold path: no cache yet, try PT with full 30s timeout
     // First check if there's any state written to disk (fast, no PT needed)
     const diskState = this.bridge.readState<TopologySnapshot>();
-    if (diskState && typeof diskState === "object" && "devices" in diskState && "links" in diskState) {
+    if (
+      diskState &&
+      typeof diskState === "object" &&
+      "devices" in diskState &&
+      "links" in diskState
+    ) {
       this.cache.applySnapshot(diskState);
       return diskState;
     }
@@ -64,7 +69,11 @@ export class TopologyQueryService {
     }
 
     try {
-      const result = await this.bridge.sendCommandAndWait<TopologySnapshot>("snapshot", { id: this.generateId() }, 30000);
+      const result = await this.bridge.sendCommandAndWait<TopologySnapshot>(
+        "snapshot",
+        { id: this.generateId() },
+        30000,
+      );
       const value = result.value;
       if (value && typeof value === "object" && "devices" in value && "links" in value) {
         this.cache.applySnapshot(value);
@@ -77,7 +86,11 @@ export class TopologyQueryService {
     return null;
   }
 
-  async listDevices(filter?: string | number | string[]): Promise<DeviceState[]> {
+  async listDevices(filter?: string | number | string[]): Promise<{
+    devices: DeviceState[];
+    deviceLinks?: Record<string, string[]>;
+    count?: number;
+  }> {
     const cachedDevices = this.cache.getDevices().filter((device) => {
       const model = String(device.model || "").toLowerCase();
       return !PT_NON_CREATABLE_MODELS.some((item: string) => item.toLowerCase() === model);
@@ -90,32 +103,51 @@ export class TopologyQueryService {
       });
 
     if (cachedDevices.length > 0) {
-      if (typeof filter === "undefined") return cachedDevices;
+      if (typeof filter === "undefined") return { devices: cachedDevices };
 
       if (typeof filter === "number") {
         const targetType = ptDeviceTypeToString(filter);
-        return cachedDevices.filter((device) => device.type === targetType);
+        return { devices: cachedDevices.filter((device) => device.type === targetType) };
       }
 
       const normalizedFilter = String(filter).toLowerCase();
-      return cachedDevices.filter((device) => {
-        return (
-          device.name.toLowerCase().includes(normalizedFilter) ||
-          device.model.toLowerCase().includes(normalizedFilter) ||
-          device.type.toLowerCase().includes(normalizedFilter)
-        );
-      });
+      return {
+        devices: cachedDevices.filter((device) => {
+          return (
+            device.name.toLowerCase().includes(normalizedFilter) ||
+            device.model.toLowerCase().includes(normalizedFilter) ||
+            device.type.toLowerCase().includes(normalizedFilter)
+          );
+        }),
+      };
     }
 
-    const result = await this.bridge.sendCommandAndWait<DeviceState[] | { devices?: DeviceState[]; data?: unknown }>("listDevices", {
+    const result = await this.bridge.sendCommandAndWait<
+      | DeviceState[]
+      | {
+          devices?: DeviceState[];
+          deviceLinks?: Record<string, string[]>;
+          count?: number;
+          data?: unknown;
+        }
+    >("listDevices", {
       id: this.generateId(),
       filter,
     });
     const value = result.value;
 
-    if (Array.isArray(value)) return filterAutoCreated(value);
-    if (value && typeof value === "object" && Array.isArray(value.devices)) return filterAutoCreated(value.devices);
-    return [];
+    if (Array.isArray(value)) {
+      return { devices: filterAutoCreated(value), count: value.length };
+    }
+    if (value && typeof value === "object") {
+      const devices = Array.isArray(value.devices) ? filterAutoCreated(value.devices) : [];
+      return {
+        devices,
+        deviceLinks: value.deviceLinks || {},
+        count: value.count || devices.length,
+      };
+    }
+    return { devices: [] };
   }
 
   getCachedSnapshot(): TopologySnapshot | null {

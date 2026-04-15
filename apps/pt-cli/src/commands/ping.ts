@@ -211,7 +211,7 @@ async function performPing(
   timeout: number,
 ): Promise<PingResult> {
   try {
-    const devices = await controller.listDevices();
+    const { devices } = await controller.listDevices();
     const fromDeviceInfo = devices.find((d: any) => d.name === fromDevice);
     const deviceType = fromDeviceInfo?.type;
     const isIosDevice =

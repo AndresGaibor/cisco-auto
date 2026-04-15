@@ -2,6 +2,58 @@
 
 > Guía de desarrollo para agentes de IA que trabajan en este proyecto.
 
+## Regla General: Usar Subagentes Siempre
+
+**Priorizar el uso de subagentes para CUALQUIER actividad que no sea trivial.**
+
+Cuando enfrentes una tarea, delegala a un subagente en vez de resolverla directamente:
+
+- Investigar código, bugs, o arquitectura → delegar
+- Implementar features o refactors → delegar
+- Escribir tests → delegar
+- Reviews de código → delegar
+- Buscar archivos o patrones → delegar
+- Documentación → delegar
+- Cualquier tarea que no sea "unas líneas de cambio obvias" → delegar
+
+**Patrón:**
+1. Analizá la tarea → ¿es más que "cambio obvious de unas líneas"?
+2. Si sí → usá `Agent` con el subagente apropiado
+3. Si no → resolvela directo
+
+**No significa** plan formal para cada cosa. Significa: no hagas trabajo pesado manual cuando podés delegar.
+
+Delegar es más rápido, produce mejor contexto, y evita que se agote el contexto principal.
+
+**Revisar documentación primero:** Antes de actuar, buscar en `docs/` si ya hay respuesta. La documentación de PT (`packages/pt-runtime/docs/`) es fuente de verdad para la API de Packet Tracer.
+
+### Selección Rápida
+
+| Tarea | Subagente |
+|-------|-----------|
+| Feature nuevo, multi-archivo | `ecc:planner` → `ecc:code-reviewer` |
+| Bug sin root cause claro | `ecc:debugger` |
+| Refactor arquitectónico | `ecc:architect` |
+| Código nuevo/modificado | `ecc:code-reviewer` |
+| Changes de seguridad | `ecc:security-reviewer` |
+| Tests nuevos | `ecc:tdd` |
+| Performance problem | `ecc:performance-optimizer` |
+| DB/migration | `ecc:database-reviewer` |
+| Limpieza dead code | `ecc:refactor-cleaner` |
+| TypeScript específico | `ecc:typescript-reviewer` |
+
+### Cómo Invocar
+
+```typescript
+Agent({
+  description: "Breve descripción",
+  prompt: "Contexto: qué hacés, por qué. Archivos: paths. Pregunta específica.",
+  subagent_type: "ecc:code-reviewer"
+})
+```
+
+---
+
 ## Identidad del Proyecto
 
 **cisco-auto** — Automatización de laboratorio Cisco Packet Tracer mediante una CLI profesional (`bun run pt`) y un runtime generado que se ejecuta dentro de PT.
@@ -13,6 +65,45 @@
 - **Workspace:** npm workspaces con 7 paquetes en `packages/`
 - **Testing:** `bun test`
 - **Linting:** `bun run lint` (eslint)
+
+## Arquitectura main.js / runtime.js
+
+**main.js (kernel):** Solo carga `runtime.js`. Maneja lifecycle, command queue, lease, heartbeat, job execution. **No se modifica más.** Su único trabajo: bootstrap → load runtime → poll commands → delegate to runtime.
+
+**runtime.js:** Toda la lógica de negocio. Command handlers (`handleListDevices`, `handleSnapshot`, `handleConfigIos`, etc.). Se itera y mejora constantemente.
+
+```
+main.js (kernel, casi estático)
+  └─ load runtime.js
+  └─ poll commands/
+  └─ write results/
+  └─ deferred jobs (job-executor)
+
+runtime.js (lógica, iterativo)
+  └─ _ptDispatch(payload, api)
+      ├─ handleListDevices
+      ├─ handleSnapshot
+      ├─ handleConfigIos
+      ├─ handleExecIos
+      └─ ...todos los command handlers
+```
+
+**Flujo:**
+1. CLI escribe `commands/<id>-<type>.json`
+2. `main.js` polls → claims → pasa payload a `runtime.js` via `_ptDispatch()`
+3. `runtime.js` ejecuta handler → retorna `RuntimeResult`
+4. `main.js` escribe `results/<id>.json`
+5. CLI lee resultado
+
+**Build:** `bun run pt:build` genera ambos desde `packages/pt-runtime/src/`. `main.js` se genera de `src/pt/kernel/` (kernel + terminal + entry). `runtime.js` se genera de `src/runtime/`.
+
+**Hot reload:** Si solo se cambia `runtime.js` (lógica), NO hace falta recargar `main.js` en PT. El kernel tiene reload automático de `runtime.js` cuando detecta que cambió el archivo `mtime`. Solo recargar `main.js` si se modificó el kernel (`src/pt/kernel/`) o hay un error de bootstrap.
+
+**Reglas de kernel vs runtime:**
+- NO agregar lógica de negocio en el kernel (`src/pt/kernel/`)
+- Si el usuario pide algo en el kernel y es lógica → hacerlo en runtime (`src/runtime/`) en vez
+- Si se necesita testear lógica del kernel → probar primero en runtime si es posible (es el entorno real de ejecución)
+- Tests para kernel son temporales, solo para verificar que algo no se rompió
 
 ## Paquetes
 
@@ -117,3 +208,4 @@ bun run deploy                 # Genera main.js, runtime.js, catalog.js → ~/pt
 - `packages/pt-runtime/docs/` — Documentación extraída de PT (API source of truth)
 - `packages/kernel/src/plugin-api/` — Plugin API del kernel
 - `packages/pt-runtime/src/pt-api/pt-api-registry.ts` — Definiciones de tipos para la API PT
+- `packages/pt-runtime/AGENTS.md` — Detalle completo de la API PT (interfaces, globals, constants, patrones de uso)

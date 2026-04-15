@@ -1,3 +1,28 @@
+## Regla General: Usar Subagentes Siempre
+
+**Priorizar el uso de subagentes para CUALQUIER actividad.**
+
+Cuando enfrentes una tarea, delegala a un subagente en vez de resolverla directamente. Esto incluye:
+
+- Investigar código, bugs, o arquitectura
+- Implementar features o refactors
+- Escribir tests
+- Hacer reviews de código
+- Buscar archivos o patrones en el codebase
+- Crear o actualizar documentación
+- Cualquier tarea técnica que no sea trivially simple
+
+**Patrón:**
+1. Analizá la tarea → determiná si es más que "unas líneas de cambio obvious"
+2. Si sí → usá `Agent` con el subagente apropiado
+3. Si no → resolvela directo
+
+**No significa** que cada tarea necesita un plan formal. Significa: no hagas trabajo pesado manual cuando podés delegar.
+
+Delegar es más rápido, produce mejor contexto, y evita que se agote el contexto principal.
+
+---
+
 Default to using Bun instead of Node.js.
 
 - Use `bun <file>` instead of `node <file>` or `ts-node <file>`

@@ -3,33 +3,33 @@
  * Handles device enumeration, validation, and interactive selection
  */
 
-import type { PTController, DeviceState } from '@cisco-auto/pt-control';
-import chalk from 'chalk';
+import type { PTController, DeviceState } from "@cisco-auto/pt-control";
+import chalk from "chalk";
 
 /**
  * Device model catalog for interactive selection
  */
 export const DEVICE_MODELS: Record<string, { name: string; type: string }[]> = {
   router: [
-    { name: '2911', type: 'router' },
-    { name: '4321', type: 'router' },
-    { name: '1941', type: 'router' },
-    { name: '2901', type: 'router' },
-    { name: '2951', type: 'router' },
+    { name: "2911", type: "router" },
+    { name: "4321", type: "router" },
+    { name: "1941", type: "router" },
+    { name: "2901", type: "router" },
+    { name: "2951", type: "router" },
   ],
   switch: [
-    { name: '2960', type: 'switch' },
-    { name: '2960-24TT', type: 'switch' },
-    { name: '3560', type: 'switch' },
-    { name: '3650', type: 'switch' },
+    { name: "2960", type: "switch" },
+    { name: "2960-24TT", type: "switch" },
+    { name: "3560", type: "switch" },
+    { name: "3650", type: "switch" },
   ],
   pc: [
-    { name: 'PC', type: 'pc' },
-    { name: 'Laptop', type: 'pc' },
+    { name: "PC", type: "pc" },
+    { name: "Laptop", type: "pc" },
   ],
   server: [
-    { name: 'Server', type: 'server' },
-    { name: 'Server-PT', type: 'server' },
+    { name: "Server", type: "server" },
+    { name: "Server-PT", type: "server" },
   ],
 };
 
@@ -41,10 +41,12 @@ export const DEVICE_MODELS: Record<string, { name: string; type: string }[]> = {
  */
 export async function fetchDeviceList(controller: PTController): Promise<DeviceState[]> {
   try {
-    const devices = await controller.listDevices();
+    const { devices } = await controller.listDevices();
     return (Array.isArray(devices) ? devices : []) as DeviceState[];
   } catch (error) {
-    throw new Error(`Failed to fetch devices: ${error instanceof Error ? error.message : 'unknown error'}`);
+    throw new Error(
+      `Failed to fetch devices: ${error instanceof Error ? error.message : "unknown error"}`,
+    );
   }
 }
 
@@ -56,7 +58,7 @@ export async function fetchDeviceList(controller: PTController): Promise<DeviceS
  */
 export async function getDeviceByName(
   controller: PTController,
-  name: string
+  name: string,
 ): Promise<DeviceState | undefined> {
   try {
     const devices = await fetchDeviceList(controller);
@@ -85,7 +87,7 @@ export async function deviceExists(controller: PTController, name: string): Prom
  */
 export async function validateDeviceNameNotExists(
   controller: PTController,
-  name: string
+  name: string,
 ): Promise<void> {
   const exists = await deviceExists(controller, name);
   if (exists) {
@@ -112,11 +114,11 @@ export function getIOSCapableDevices(devices: DeviceState[]): DeviceState[] {
   return devices.filter((d) => {
     const type = d.type;
     // Handle both string and number types (PT returns number type IDs)
-    if (typeof type === 'number') {
+    if (typeof type === "number") {
       // Device type IDs: 0=router, 1=switch, 16=multilayer-switch
       return type === 0 || type === 1 || type === 16;
     }
-    return type === 'router' || type === 'switch' || type === 'switch_layer3';
+    return type === "router" || type === "switch" || type === "switch_layer3";
   });
 }
 
@@ -141,14 +143,14 @@ export function formatDevice(device: DeviceState): string {
   }
 
   if (device.power !== undefined) {
-    parts.push(`Power: ${device.power ? 'ON' : 'OFF'}`);
+    parts.push(`Power: ${device.power ? "ON" : "OFF"}`);
   }
 
   if (device.ports && device.ports.length > 0) {
     parts.push(`Ports: ${device.ports.length}`);
   }
 
-  return parts.join(' • ');
+  return parts.join(" • ");
 }
 
 /**
@@ -158,10 +160,10 @@ export function formatDevice(device: DeviceState): string {
  */
 export function formatDeviceType(type: string): string {
   const typeMap: Record<string, string> = {
-    router: 'Router',
-    switch: 'Switch',
-    pc: 'PC',
-    server: 'Server',
+    router: "Router",
+    switch: "Switch",
+    pc: "PC",
+    server: "Server",
   };
 
   return typeMap[type] || type.charAt(0).toUpperCase() + type.slice(1);

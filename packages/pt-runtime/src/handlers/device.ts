@@ -153,6 +153,56 @@ export function handleListDevices(payload: ListDevicesPayload, deps: HandlerDeps
     ports: unknown[];
   }> = [];
 
+  const deviceLinks: Record<string, string[]> = {};
+
+  const linkCount = typeof net.getLinkCount === "function" ? net.getLinkCount() : 0;
+  for (let li = 0; li < linkCount; li++) {
+    const link = net.getLinkAt ? net.getLinkAt(li) : null;
+    if (!link) continue;
+    const port1 = link.getPort1 ? link.getPort1() : null;
+    const port2 = link.getPort2 ? link.getPort2() : null;
+    if (!port1 || !port2 || !port1.getName || !port2.getName) continue;
+
+    const p1Name = port1.getName();
+    const p2Name = port2.getName();
+
+    let dn1: string | null = null;
+    let dn2: string | null = null;
+
+    outer: for (let di = 0; di < count; di++) {
+      const dev = net.getDeviceAt(di);
+      if (!dev) continue;
+      const devName = dev.getName();
+      const portCount = typeof dev.getPortCount === "function" ? dev.getPortCount() : 0;
+      for (let pi = 0; pi < portCount; pi++) {
+        const port = dev.getPortAt ? dev.getPortAt(pi) : null;
+        if (port && port.getName && port.getName() === p1Name) {
+          dn1 = devName;
+          break outer;
+        }
+      }
+    }
+
+    outer: for (let di = 0; di < count; di++) {
+      const dev = net.getDeviceAt(di);
+      if (!dev) continue;
+      const devName = dev.getName();
+      const portCount = typeof dev.getPortCount === "function" ? dev.getPortCount() : 0;
+      for (let pi = 0; pi < portCount; pi++) {
+        const port = dev.getPortAt ? dev.getPortAt(pi) : null;
+        if (port && port.getName && port.getName() === p2Name) {
+          dn2 = devName;
+          break outer;
+        }
+      }
+    }
+
+    if (dn1 && dn2 && dn1 !== dn2) {
+      if (!deviceLinks[dn1]) deviceLinks[dn1] = [];
+      if (deviceLinks[dn1].indexOf(dn2) === -1) deviceLinks[dn1].push(dn2);
+    }
+  }
+
   for (let i = 0; i < count; i++) {
     const device = net.getDeviceAt(i);
     if (device) {
@@ -166,7 +216,7 @@ export function handleListDevices(payload: ListDevicesPayload, deps: HandlerDeps
     }
   }
 
-  return { ok: true, devices, count };
+  return { ok: true, devices, count, deviceLinks };
 }
 
 /**
