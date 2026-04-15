@@ -224,10 +224,42 @@ var __rest = function(s, e) {
     if (typeof dprint === "function") dprint("[KERNEL-IIFE] WARNING: fm not available — file ops disabled");
   }
 
+  function safeFM() {
+    try {
+      if (typeof fm !== "undefined" && fm !== null) {
+        return { available: true, fm: fm };
+      }
+      if (typeof ipc !== "undefined" && ipc !== null && typeof ipc.systemFileManager === "function") {
+        var _fm2 = ipc.systemFileManager();
+        if (_fm2) {
+          _g.fm = _fm2;
+          return { available: true, fm: _fm2 };
+        }
+      }
+      if (typeof _ScriptModule !== "undefined" && _ScriptModule !== null) {
+        var shim = {
+          fileExists: function(p) { try { var sz = _ScriptModule.getFileSize(p); return sz >= 0; } catch(e) { return false; } },
+          directoryExists: function(p) { try { return _ScriptModule.getFileSize(p) >= 0; } catch(e) { return false; } },
+          getFileContents: function(p) { return _ScriptModule.getFileContents(p); },
+          writePlainTextToFile: function(p, c) { _ScriptModule.writeTextToFile(p, c); },
+          makeDirectory: function(p) { try { _ScriptModule.writeTextToFile(p + "/.keep", ""); } catch(e) {} return true; },
+          getFilesInDirectory: function(p) { try { return _ScriptModule.getFilesInDirectory ? _ScriptModule.getFilesInDirectory(p) : []; } catch(e) { return []; } },
+          removeFile: function(p) { try { _ScriptModule.removeFile ? _ScriptModule.removeFile(p) : void 0; } catch(e) {} },
+          moveSrcFileToDestFile: function(s, d, o) { try { var c = _ScriptModule.getFileContents(s); _ScriptModule.writeTextToFile(d, c); } catch(e) {} },
+          getFileModificationTime: function(p) { try { return _ScriptModule.getFileModificationTime(p); } catch(e) { return 0; } },
+          getFileSize: function(p) { try { return _ScriptModule.getFileSize(p); } catch(e) { return -1; } },
+        };
+        return { available: true, fm: shim };
+      }
+    } catch (_safeFmErr) {}
+    return { available: false, fm: null };
+  }
+
   // Publish bootstrap globals so modules loaded later can use them
   if (!_g.dprint)  _g.dprint  = dprint;
   if (!_g.DEV_DIR) _g.DEV_DIR = DEV_DIR;
   if (!_g.fm) _g.fm = fm;
+  if (!_g.safeFM) _g.safeFM = safeFM;
 
   // SANITY CHECK: if this doesn't print, the IIFE itself is crashing
   if (typeof dprint === "function") dprint("[KERNEL-IIFE] running, ipc=" + (ipc ? "OK" : "NULL"));

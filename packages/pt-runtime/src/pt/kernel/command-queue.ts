@@ -28,7 +28,30 @@ export function createCommandQueue(config: {
       return jsonFiles;
     }
     try {
-      const files = s.fm.getFilesInDirectory(config.commandsDir);
+      dprint("[queue] scanning commands dir: " + config.commandsDir);
+      let files = s.fm.getFilesInDirectory(config.commandsDir);
+      dprint("[queue] fm.getFilesInDirectory -> " + String(files ? files.length : 0));
+      if (files && files.length > 0) {
+        dprint("[queue] fm files sample -> " + files.slice(0, 5).join(","));
+      }
+      if (!files || files.length === 0) {
+        try {
+          const appWindow = (typeof ipc !== "undefined" && ipc !== null) ? ipc.appWindow?.() : null;
+          const fallbackFiles = appWindow && typeof appWindow.listDirectory === "function"
+            ? appWindow.listDirectory(config.commandsDir)
+            : [];
+          dprint("[queue] appWindow.listDirectory -> " + String(fallbackFiles ? fallbackFiles.length : 0));
+          if (fallbackFiles && fallbackFiles.length > 0) {
+            dprint("[queue] appWindow files sample -> " + fallbackFiles.slice(0, 5).join(","));
+          }
+          if (fallbackFiles && fallbackFiles.length > 0) {
+            dprint("[queue] Using appWindow.listDirectory fallback for commands");
+            files = fallbackFiles;
+          }
+        } catch (fallbackErr) {
+          dprint("[queue] appWindow listDirectory fallback failed: " + String(fallbackErr));
+        }
+      }
       if (files) {
         for (const file of files) {
           if (file.indexOf(".json") !== -1) {
@@ -44,15 +67,9 @@ export function createCommandQueue(config: {
   }
 
   function count(): number {
-    let c = 0;
-    const s = safeFM();
-    if (!s.available || !s.fm) return c;
-    try {
-      c += s.fm.getFilesInDirectory(config.commandsDir)?.length || 0;
-    } catch (e) {
-      dprint("[queue] Error counting commands: " + String(e));
-    }
-    return c;
+    const files = listQueuedFiles();
+    dprint("[queue] count -> " + String(files.length));
+    return files.length;
   }
 
   function poll(): CommandEnvelope | null {
@@ -61,8 +78,10 @@ export function createCommandQueue(config: {
     const _fm = s.fm;
 
     const files = listQueuedFiles();
+    dprint("[queue] poll files -> " + String(files.length));
 
     for (const filename of files) {
+      dprint("[queue] poll trying -> " + filename);
       const srcPath = config.commandsDir + "/" + filename;
       const dstPath = config.inFlightDir + "/" + filename;
 

@@ -8,6 +8,7 @@ export const MAIN_MANIFEST = {
 
   kernel: [
     "pt/kernel/types.ts",
+    "pt/kernel/safe-fm.ts",
     "pt/kernel/directories.ts",
     "pt/kernel/command-queue.ts",
     "pt/kernel/job-state.ts",

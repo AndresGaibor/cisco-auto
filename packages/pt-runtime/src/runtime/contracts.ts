@@ -245,8 +245,13 @@ export interface DeviceSessionState {
 export interface CommandEnvelope {
   id: string;
   seq: number;
+  type?: string;
   payload: Record<string, unknown>;
   createdAt: number;
+  attempt?: number;
+  expiresAt?: number;
+  checksum?: string;
+  protocolVersion?: number;
 }
 
 // ============================================================================

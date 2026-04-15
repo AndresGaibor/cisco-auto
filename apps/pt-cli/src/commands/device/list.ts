@@ -16,7 +16,19 @@ export function createDeviceListCommand(): Command {
       const globalFlags = rootCmd ? getGlobalFlags(rootCmd) : ({ json: false } as const);
       const useJson = globalFlags.json || (options.json ?? false);
 
-      const result = await loadLiveDeviceList(options.type);
+      let result;
+      try {
+        result = await loadLiveDeviceList(options.type);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("no respondió") || msg.includes("no conectado")) {
+          console.log(chalk.red("✗ Packet Tracer no responde."));
+          console.log(chalk.gray("  Verifica que PT esté abierto y ~/pt-dev/main.js cargado."));
+        } else {
+          console.log(chalk.red("✗ Error: " + msg));
+        }
+        return;
+      }
 
       if (result.count === 0) {
         if (useJson) {

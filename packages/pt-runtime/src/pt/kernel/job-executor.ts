@@ -46,7 +46,7 @@ export function createJobExecutor(terminal: TerminalEngine) {
     return job;
   }
   
-  async function executeCurrentStep(job: ActiveJob): Promise<void> {
+  function executeCurrentStep(job: ActiveJob): void {
     const ctx = job.context;
     const step = getCurrentStep(ctx);
     
@@ -87,50 +87,51 @@ export function createJobExecutor(terminal: TerminalEngine) {
         timeout: getStepTimeout(ctx),
       });
 
-      try {
-        const result = await job.pendingCommand;
-        job.pendingCommand = null;
-        ctx.waitingForCommandEnd = false;
-        ctx.outputBuffer += result.output;
-        ctx.lastPrompt = result.session.prompt;
-        ctx.lastMode = result.session.mode;
-        ctx.paged = result.session.paging;
+      job.pendingCommand
+        .then(function(result) {
+          job.pendingCommand = null;
+          ctx.waitingForCommandEnd = false;
+          ctx.outputBuffer += result.output;
+          ctx.lastPrompt = result.session.prompt;
+          ctx.lastMode = result.session.mode;
+          ctx.paged = result.session.paging;
 
-        ctx.stepResults.push({
-          stepIndex: ctx.currentStep,
-          stepType,
-          command,
-          raw: result.output,
-          status: result.status,
-          completedAt: Date.now(),
-        });
+          ctx.stepResults.push({
+            stepIndex: ctx.currentStep,
+            stepType: stepType,
+            command: command,
+            raw: result.output,
+            status: result.status,
+            completedAt: Date.now(),
+          });
 
-        if (result.status !== 0 && isStepStopOnError(ctx)) {
+          if (result.status !== 0 && isStepStopOnError(ctx)) {
+            ctx.phase = "error";
+            ctx.error = "Command failed with status " + result.status + ": " + command;
+            ctx.errorCode = "CMD_FAILED";
+            ctx.finished = true;
+            return;
+          }
+
+          ctx.currentStep++;
+          ctx.phase = "pending";
+          ctx.updatedAt = Date.now();
+
+          if (ctx.currentStep >= ctx.plan.plan.length) {
+            ctx.phase = "completed";
+            ctx.finished = true;
+          } else {
+            advanceJob(job.id);
+          }
+        })
+        .catch(function(err) {
+          job.pendingCommand = null;
+          ctx.waitingForCommandEnd = false;
           ctx.phase = "error";
-          ctx.error = "Command failed with status " + result.status + ": " + command;
-          ctx.errorCode = "CMD_FAILED";
+          ctx.error = String(err);
+          ctx.errorCode = "EXEC_ERROR";
           ctx.finished = true;
-          return;
-        }
-
-        ctx.currentStep++;
-        ctx.phase = "pending";
-        ctx.updatedAt = Date.now();
-
-        if (ctx.currentStep >= ctx.plan.plan.length) {
-          ctx.phase = "completed";
-          ctx.finished = true;
-        } else {
-          advanceJob(job.id);
-        }
-      } catch (err) {
-        job.pendingCommand = null;
-        ctx.waitingForCommandEnd = false;
-        ctx.phase = "error";
-        ctx.error = String(err);
-        ctx.errorCode = "EXEC_ERROR";
-        ctx.finished = true;
-      }
+        });
 
       return;
     }
@@ -274,7 +275,7 @@ export function createJobExecutor(terminal: TerminalEngine) {
     }
 
     // Don't advance if device is busy in another job
-    const allJobs = Array.from(jobs.values());
+    const allJobs = Object.values(jobs);
     for (const otherJob of allJobs) {
       if (otherJob.id !== job.id && !isContextFinished(otherJob.context)) {
         if (otherJob.pendingCommand !== null) {
@@ -295,7 +296,7 @@ export function createJobExecutor(terminal: TerminalEngine) {
   }
   
   function getJob(jobId: string): ActiveJob | null {
-    return jobs.get(jobId) || null;
+    return jobs[jobId] || null;
   }
   
   function getActiveJobs(): ActiveJob[] {

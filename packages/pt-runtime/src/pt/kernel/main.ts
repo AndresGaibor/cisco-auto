@@ -207,7 +207,8 @@ export function createKernel(config: KernelConfig) {
     const startedAt = Date.now();
     const cmd = activeCommand;
 
-    dprint("[kernel] EXEC payload=" + JSON.stringify(cmd.payload).substring(0, 200));
+    const dispatchPayload = { ...cmd.payload, type: cmd.type || (cmd.payload as { type?: string }).type };
+    dprint("[kernel] EXEC type=" + String(cmd.type || "none") + " payload=" + JSON.stringify(dispatchPayload).substring(0, 200));
 
     let result: unknown = null;
     try {
@@ -215,7 +216,7 @@ export function createKernel(config: KernelConfig) {
       if (!fn) {
         result = { ok: false, error: "Runtime not loaded" };
       } else {
-        result = fn(cmd.payload, createRuntimeApi());
+        result = fn(dispatchPayload, createRuntimeApi());
       }
     } catch (e) {
       result = { ok: false, error: "Runtime fatal: " + String(e) };
@@ -231,7 +232,7 @@ export function createKernel(config: KernelConfig) {
       dprint("[kernel] DEFERRED ticket=" + (ticket || "none"));
 
       writeResultEnvelope(cmd.id, {
-        protocolVersion: 3,
+        protocolVersion: 2,
         id: cmd.id,
         seq: cmd.seq || 0,
         startedAt,
@@ -257,17 +258,22 @@ export function createKernel(config: KernelConfig) {
     // Immediate result: completed or failed
     const status = isOk ? "completed" : "failed";
 
+    const _r = result as Record<string, unknown>;
+    const unwrappedValue = (_r && typeof _r === "object" && "value" in _r) ? _r.value : result;
+    const unwrappedError = (_r && typeof _r === "object" && "error" in _r) ? _r.error : undefined;
+
     writeResultEnvelope(cmd.id, {
-      protocolVersion: 3,
+      protocolVersion: 2,
       id: cmd.id,
       seq: cmd.seq || 0,
       startedAt,
       completedAt: Date.now(),
       status,
       ok: isOk,
-      value: result as ResultEnvelope["value"],
+      value: unwrappedValue as ResultEnvelope["value"],
       jobId: undefined,
       device: (cmd.payload as { device?: string })?.device,
+      errorCode: unwrappedError as string | undefined,
     });
 
     // Cleanup
@@ -292,6 +298,28 @@ export function createKernel(config: KernelConfig) {
     }
 
     const fmState = safeFM();
+    try {
+      const fm = fmState.fm;
+      if (fmState.available && fm) {
+        kernelLog("[kernel] queue-dir=" + String(config.commandsDir) + " inFlight-dir=" + String(config.inFlightDir));
+        kernelLog("[kernel] queue-dir exists=" + String(fm.directoryExists(config.commandsDir)) + " inFlight-dir exists=" + String(fm.directoryExists(config.inFlightDir)));
+        const rawQueueFiles = fm.getFilesInDirectory(config.commandsDir);
+        kernelLog("[kernel] queue raw files=" + String(rawQueueFiles ? rawQueueFiles.length : 0) + " sample=" + String(rawQueueFiles && rawQueueFiles.length ? rawQueueFiles.slice(0, 5).join(",") : "none"));
+        try {
+          const appWindow = (typeof ipc !== "undefined" && ipc !== null) ? ipc.appWindow?.() : null;
+          const appWindowFiles = appWindow && typeof appWindow.listDirectory === "function"
+            ? appWindow.listDirectory(config.commandsDir)
+            : [];
+          kernelLog("[kernel] queue appWindow files=" + String(appWindowFiles ? appWindowFiles.length : 0) + " sample=" + String(appWindowFiles && appWindowFiles.length ? appWindowFiles.slice(0, 5).join(",") : "none"));
+        } catch (appWindowErr) {
+          kernelLog("[kernel] queue appWindow diagnostic error: " + String(appWindowErr));
+        }
+      } else {
+        kernelLog("[kernel] queue-dir diagnostic skipped — fm unavailable");
+      }
+    } catch (diagErr) {
+      kernelLog("[kernel] queue-dir diagnostic error: " + String(diagErr));
+    }
     kernelLog(
       "[kernel] poll tick — fm=" + String(!!fmState.available && !!fmState.fm) +
       " queued=" + String(queue.count()) +
@@ -319,7 +347,7 @@ export function createKernel(config: KernelConfig) {
     heartbeat.setActiveCommand(claimed.id);
     heartbeat.setQueuedCount(queue.count());
 
-    kernelLog("[kernel] claimed command id=" + String(claimed.id) + " type=" + String((claimed.payload as { type?: string }).type || "unknown"));
+    kernelLog("[kernel] claimed command id=" + String(claimed.id) + " type=" + String(claimed.type || (claimed.payload as { type?: string }).type || "unknown"));
 
     executeActiveCommand();
   }
@@ -337,22 +365,19 @@ export function createKernel(config: KernelConfig) {
       // fm is now initialized in the Kernel IIFE before boot() runs (Fase 1 fix)
       // No late assignment needed — safeFM() handles it in each module
 
+      // Crear directorios ANTES de arrancar servicios para evitar race conditions.
+      kernelLog("[kernel] boot() -> ensureDirectories()");
+      try {
+        dirs.ensureDirectories();
+        kernelLog("[kernel] boot() -> ensureDirectories() done");
+      } catch (e) {
+        kernelLog("[kernel] ensureDirectories() failed: " + String(e));
+      }
+
       // Arrancar el runtime de inmediato para no bloquear el consumer de cola.
       kernelLog("[kernel] boot() -> activateRuntime()");
       activateRuntime();
       kernelLog("[kernel] boot() -> activateRuntime() returned");
-
-      // Crear directorios fuera del camino crítico para no bloquear el bootstrap.
-      kernelLog("[kernel] boot() -> schedule ensureDirectories()");
-      setTimeout(function() {
-        try {
-          kernelLog("[kernel] ensureDirectories() start");
-          dirs.ensureDirectories();
-          kernelLog("[kernel] ensureDirectories() done");
-        } catch (e) {
-          kernelLog("[kernel] ensureDirectories() failed: " + String(e));
-        }
-      }, 0);
 
       // La lease sigue validándose en segundo plano, pero ya no bloquea el arranque.
       if (!lease.validate()) {

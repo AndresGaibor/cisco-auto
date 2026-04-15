@@ -52,7 +52,7 @@ export function createLeaseManager(config: {
       }
 
       const ageMs = now - lease.updatedAt;
-      if (ageMs > lease.ttlMs * 2) {
+      if (ageMs > (lease.ttlMs || 30000) * 2) {
         dprint("[LEASE] Lease stale (age=" + ageMs + "ms, ttl=" + lease.ttlMs + "ms)");
         return false;
       }

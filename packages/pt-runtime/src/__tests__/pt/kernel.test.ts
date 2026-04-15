@@ -14,9 +14,13 @@ const mockFm = {
 };
 
 const mockDprint = vi.fn();
+const mockIpc = {
+  appWindow: vi.fn().mockReturnValue({ listDirectory: vi.fn().mockReturnValue([]) }),
+};
 
 (globalThis as typeof globalThis & { fm: typeof mockFm; dprint: typeof mockDprint }).fm = mockFm;
 (globalThis as typeof globalThis & { fm: typeof mockFm; dprint: typeof mockDprint }).dprint = mockDprint;
+(globalThis as typeof globalThis & { ipc: typeof mockIpc }).ipc = mockIpc;
 
 import { createLeaseManager } from "../../pt/kernel/lease";
 import { createDirectoryManager } from "../../pt/kernel/directories";
@@ -92,6 +96,7 @@ describe("createCommandQueue", () => {
     mockFm.moveSrcFileToDestFile.mockClear();
     mockFm.removeFile.mockClear();
     mockDprint.mockClear();
+    mockIpc.appWindow.mockReturnValue({ listDirectory: vi.fn().mockReturnValue([]) });
   });
 
   test("poll returns null when no files", () => {
@@ -112,5 +117,31 @@ describe("createCommandQueue", () => {
     });
 
     expect(queue.count()).toBe(0);
+  });
+
+  test("poll uses appWindow listDirectory fallback when fm returns no files", () => {
+    mockFm.getFilesInDirectory.mockReturnValue([]);
+    mockIpc.appWindow.mockReturnValue({
+      listDirectory: vi.fn().mockReturnValue(["000000000001-listDevices.json"]),
+    });
+    mockFm.fileExists.mockImplementation((p: string) => p.includes("commands") && !p.includes("in-flight"));
+    mockFm.getFileContents.mockReturnValue(JSON.stringify({
+      protocolVersion: 2,
+      id: "cmd_000000000001",
+      seq: 1,
+      type: "listDevices",
+      payload: { type: "listDevices" },
+    }));
+
+    const queue = createCommandQueue({
+      commandsDir: "/tmp/commands",
+      inFlightDir: "/tmp/in-flight",
+      deadLetterDir: "/tmp/dead-letter",
+    });
+
+    const claimed = queue.poll();
+
+    expect(claimed?.id).toBe("cmd_000000000001");
+    expect(mockDprint).toHaveBeenCalledWith("[queue] Using appWindow.listDirectory fallback for commands");
   });
 });

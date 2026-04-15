@@ -191,6 +191,7 @@ export class FileBridgeV2 extends EventEmitter {
     payload: TPayload,
     expiresAtMs?: number,
   ): BridgeCommandEnvelope<TPayload> {
+    console.log(`[bridge] sendCommand type=${type} expiresAtMs=${String(expiresAtMs ?? "none")}`);
     if (this.options.enableBackpressure ?? true) {
       this.backpressure.checkCapacity();
     }
@@ -217,9 +218,11 @@ export class FileBridgeV2 extends EventEmitter {
     };
 
     const commandFile = this.paths.commandFilePath(seq, type);
+    console.log(`[bridge] commandFile=${commandFile}`);
 
     ensureDir(this.paths.commandsDir());
     atomicWriteFile(commandFile, JSON.stringify(envelope, null, 2));
+    console.log(`[bridge] wrote command id=${id} seq=${seq}`);
 
     // NUEVO: escribir a commands/ en lugar de command.json (Fase 5)
     // Nota: timeoutMs se usa para logging pero el timeout real está en expiresAtMs
@@ -241,8 +244,11 @@ export class FileBridgeV2 extends EventEmitter {
     payload: TPayload,
     timeoutMs?: number,
   ): Promise<BridgeResultEnvelope<TResult>> {
+    console.log(`[bridge] sendCommandAndWait type=${type} timeoutMs=${String(timeoutMs ?? this.options.resultTimeoutMs ?? 120_000)}`);
     if (this.options.enableBackpressure ?? true) {
+      console.log(`[bridge] waitForCapacity start type=${type}`);
       await this.backpressure.waitForCapacity();
+      console.log(`[bridge] waitForCapacity done type=${type}`);
     }
 
     // NUEVO: escribir a commands/ (Fase 5) - ya no hay slot único
@@ -255,6 +261,7 @@ export class FileBridgeV2 extends EventEmitter {
     const timeout = timeoutMs ?? this.options.resultTimeoutMs ?? 120_000;
     const started = Date.now();
     let pollMs = 25;
+    console.log(`[bridge] waiting result id=${envelope.id} path=${resultPath}`);
 
     return new Promise((resolve, reject) => {
       let resolved = false;
@@ -281,6 +288,7 @@ export class FileBridgeV2 extends EventEmitter {
 
       const checkResult = async () => {
         if (Date.now() - started > timeout) {
+          console.log(`[bridge] result timeout id=${envelope.id}`);
           rejectOnce(new Error(`Timeout waiting for result for ${envelope.id} after ${timeout}ms`));
           return;
         }
@@ -291,6 +299,7 @@ export class FileBridgeV2 extends EventEmitter {
           resolveOnce(result);
         } catch (err) {
           const error = err as NodeJS.ErrnoException;
+          console.log(`[bridge] result not ready id=${envelope.id} code=${String(error.code ?? "unknown")}`);
           if (error.code === "ENOENT") {
             pollMs = Math.min(pollMs * 1.5, 500);
             timer = setTimeout(checkResult, pollMs);

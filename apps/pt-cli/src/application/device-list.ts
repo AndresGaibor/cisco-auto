@@ -7,6 +7,9 @@
  */
 
 import { createDefaultPTController } from "@cisco-auto/pt-control";
+import { readdirSync } from "node:fs";
+import { resolve } from "node:path";
+import { getDefaultDevDir } from "../system/paths.js";
 
 interface LiveDeviceListController {
   getBridge(): {
@@ -128,11 +131,20 @@ export async function loadLiveDeviceListFromController(
   type?: string,
   timeoutMs = 15000,
 ): Promise<DeviceListResult> {
-  console.log("[pt-cli] listDevices()...");
+  console.log(`[pt-cli] listDevices() type=${String(type ?? "none")} timeoutMs=${timeoutMs}`);
+  try {
+    const commandsDir = resolve(getDefaultDevDir(), "commands");
+    const files = readdirSync(commandsDir).filter((name) => name.endsWith(".json"));
+    console.log(`[pt-cli] host commandsDir=${commandsDir} files=${files.length}`);
+    console.log(`[pt-cli] host commands sample=${files.slice(0, 5).join(",") || "none"}`);
+  } catch (e) {
+    console.log(`[pt-cli] host commandsDir check failed=${String(e)}`);
+  }
   const timeout = new Promise<never>((_, reject) => {
     setTimeout(() => reject(new Error("Bridge no respondió a tiempo")), timeoutMs);
   });
 
+  console.log("[pt-cli] sendCommandAndWait start...");
   const result = await Promise.race([
     controller.getBridge().sendCommandAndWait<unknown>(
       "listDevices",
@@ -141,7 +153,9 @@ export async function loadLiveDeviceListFromController(
     ),
     timeout,
   ]);
+  console.log("[pt-cli] sendCommandAndWait done");
   const devices = mapLiveDevices(result.value);
+  console.log(`[pt-cli] devices mapped count=${devices.length}`);
 
   return {
     devices,
@@ -151,7 +165,19 @@ export async function loadLiveDeviceListFromController(
 }
 
 export async function loadLiveDeviceList(type?: string): Promise<DeviceListResult> {
-  const controller = createDefaultPTController() as unknown as LiveDeviceListController;
+  let controller: LiveDeviceListController;
+  try {
+    controller = createDefaultPTController() as unknown as LiveDeviceListController;
+  } catch (err) {
+    throw new Error("No se pudo crear el controller PT. Asegurate de que Packet Tracer esté abierto: " + String(err));
+  }
 
-  return loadLiveDeviceListFromController(controller, type);
+  try {
+    return await loadLiveDeviceListFromController(controller, type);
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("no respondió a tiempo")) {
+      throw new Error("Packet Tracer no respondió. Verifica que esté abierto y el script cargado.");
+    }
+    throw err;
+  }
 }

@@ -19,19 +19,34 @@ export interface SafeFM {
 
 export function safeFM(): SafeFM {
   try {
+    try { dprint("[safeFM] enter"); } catch {}
+    try {
+      dprint(
+        "[safeFM] state fm=" + String(typeof fm !== "undefined" && fm !== null) +
+        " ipc=" + String(typeof ipc !== "undefined" && ipc !== null) +
+        " _ScriptModule=" + String(typeof _ScriptModule !== "undefined" && _ScriptModule !== null)
+      );
+    } catch {}
     if (typeof fm !== "undefined" && fm !== null) {
+      try { dprint("[safeFM] using global fm"); } catch {}
       return { available: true, fm: fm };
     }
     // Retry from ipc
     if (typeof ipc !== "undefined" && ipc !== null && typeof ipc.systemFileManager === "function") {
+      try { dprint("[safeFM] ipc.systemFileManager available"); } catch {}
       var _fm = ipc.systemFileManager();
       if (_fm) {
+        try { dprint("[safeFM] using ipc.systemFileManager"); } catch {}
+        try {
+          dprint("[safeFM] ipc.appWindow available=" + String(typeof ipc.appWindow === "function"));
+        } catch {}
         try { (typeof self !== "undefined" ? self : Function("return this")()).fm = _fm; } catch {}
         return { available: true, fm: _fm };
       }
     }
     // Fallback to _ScriptModule shim
     if (typeof _ScriptModule !== "undefined" && _ScriptModule !== null) {
+      try { dprint("[safeFM] using _ScriptModule shim"); } catch {}
       var shim = {
         fileExists: function(p: string) { try { var sz = _ScriptModule.getFileSize(p); return sz >= 0; } catch(e) { return false; } },
         directoryExists: function(p: string) { try { return _ScriptModule.getFileSize(p) >= 0; } catch(e) { return false; } },
@@ -47,5 +62,6 @@ export function safeFM(): SafeFM {
       return { available: true, fm: shim };
     }
   } catch (e) {}
+  try { dprint("[safeFM] unavailable"); } catch {}
   return { available: false, fm: null };
 }
