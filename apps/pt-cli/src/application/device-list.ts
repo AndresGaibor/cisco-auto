@@ -2,33 +2,47 @@
 /**
  * Helpers para `pt device list`.
  *
- * Siempre consulta directamente a PT via PTController.
- * NO usa cache, estado persistido ni histórico.
+ * USA controller.listDevices() como unica fuente de verdad.
+ * NO llama al bridge directamente.
  */
 
-import { createDefaultPTController } from "@cisco-auto/pt-control";
-import { readdirSync } from "node:fs";
-import { resolve } from "node:path";
-import { getDefaultDevDir } from "../system/paths.js";
+import { createDefaultPTController, type PTController } from "@cisco-auto/pt-control";
+import type { DeviceListResult as ControllerDeviceListResult } from "@cisco-auto/pt-control";
 
-interface LiveDeviceListController {
-  start(): Promise<void> | void;
-  stop(): Promise<void> | void;
-  getBridge(): {
-    sendCommandAndWait<T = unknown>(
-      type: string,
-      payload: unknown,
-      timeoutMs?: number,
-    ): Promise<{ value: T }>;
-  };
-}
+const DEBUG = process.env.PT_DEBUG === "1";
+
+const log = (...args: unknown[]) => {
+  if (DEBUG) console.log("[device-list]", ...args);
+};
 
 export interface ConnectionInfo {
   localPort: string | null;
   remoteDevice: string | null;
   remotePort: string | null;
-  confidence: "exact" | "registry" | "ambiguous" | "unknown";
+  confidence: "exact" | "merged" | "registry" | "ambiguous" | "unknown";
   evidence?: { localCandidates?: string[]; remoteCandidates?: string[] };
+}
+
+export interface PortConnection {
+  remoteDevice: string;
+  remotePort: string;
+  confidence: ConnectionInfo["confidence"];
+}
+
+export interface ListedPort {
+  name: string;
+  type?: string;
+  status?: "up" | "down" | "administratively down";
+  protocol?: "up" | "down";
+  ipAddress?: string;
+  subnetMask?: string;
+  macAddress?: string;
+  speed?: string;
+  duplex?: "auto" | "full" | "half";
+  vlan?: number;
+  mode?: "unknown" | "trunk" | "access" | "dynamic";
+  link?: string;
+  connection?: PortConnection;
 }
 
 export interface TopologyDeviceLike {
@@ -50,7 +64,7 @@ export interface ListedDevice {
   model: string;
   type: string;
   power: boolean;
-  ports?: Array<unknown>;
+  ports?: ListedPort[];
   displayName?: string;
   x?: number;
   y?: number;
@@ -64,6 +78,8 @@ export interface UnresolvedLink {
   port2Name: string;
   candidates1: string[];
   candidates2: string[];
+  confidence: ConnectionInfo["confidence"];
+  evidence: string[];
 }
 
 export interface DeviceListResult {
@@ -101,21 +117,9 @@ export function buildDeviceListFromSnapshot(snapshot: {
     }
   >;
 }): DeviceListResult {
-  const devices = Object.values(snapshot.devices ?? {}).map((device) => ({
-    name: String(device.name ?? "unknown"),
-    model: String(device.model ?? device.type ?? "unknown"),
-    type: String(device.type ?? "unknown"),
-    power: Boolean(device.power),
-    ports: Array.isArray(device.ports) ? device.ports : [],
-    displayName: device.displayName,
-    x: device.x,
-    y: device.y,
-    hostname: device.hostname,
-    ip: device.ip,
-    mask: device.mask,
-  }));
-
   const connectionsByDevice: Record<string, ConnectionInfo[]> = {};
+  const unresolvedLinks: UnresolvedLink[] = [];
+
   for (const link of Object.values(snapshot.links ?? {})) {
     const arr = connectionsByDevice[link.device1] ?? [];
     arr.push({
@@ -127,99 +131,173 @@ export function buildDeviceListFromSnapshot(snapshot: {
     connectionsByDevice[link.device1] = arr;
   }
 
+  const devices = Object.values(snapshot.devices ?? {}).map((device) => {
+    const ports = Array.isArray(device.ports)
+      ? (device.ports as ListedPort[]).map((port) => ({
+          ...port,
+          connection: undefined as PortConnection | undefined,
+        }))
+      : [];
+
+    for (const conn of connectionsByDevice[device.name ?? ""] ?? []) {
+      if (conn.localPort) {
+        const port = ports.find((p) => p.name === conn.localPort);
+        if (port) {
+          port.connection = {
+            remoteDevice: conn.remoteDevice ?? "",
+            remotePort: conn.remotePort ?? "",
+            confidence: conn.confidence,
+          };
+        }
+      }
+    }
+
+    return {
+      name: String(device.name ?? "unknown"),
+      model: String(device.model ?? device.type ?? "unknown"),
+      type: String(device.type ?? "unknown"),
+      power: Boolean(device.power),
+      ports,
+      displayName: device.displayName,
+      x: device.x,
+      y: device.y,
+      hostname: device.hostname,
+      ip: device.ip,
+      mask: device.mask,
+    };
+  });
+
   return {
     devices,
     count: devices.length,
     connectionsByDevice,
-    unresolvedLinks: [],
+    unresolvedLinks,
   };
 }
 
-function mapLiveDevices(value: unknown): ListedDevice[] {
-  const rawDevices = Array.isArray(value)
-    ? value
-    : value && typeof value === "object" && Array.isArray((value as { devices?: unknown }).devices)
-      ? (value as { devices: unknown[] }).devices
-      : [];
+const CERTAIN_CONFIDENCES: ConnectionInfo["confidence"][] = ["exact", "merged", "registry"];
+const UNCERTAIN_CONFIDENCES: ConnectionInfo["confidence"][] = ["ambiguous", "unknown"];
 
-  return rawDevices.map((device) => ({
-    name: String((device as { name?: unknown }).name ?? "unknown"),
-    model: String(
-      (device as { model?: unknown }).model ?? (device as { type?: unknown }).type ?? "unknown",
-    ),
-    type: String((device as { type?: unknown }).type ?? "unknown"),
-    power: Boolean((device as { power?: unknown }).power),
-    ports: Array.isArray((device as { ports?: unknown }).ports)
-      ? (device as { ports: unknown[] }).ports
-      : [],
-    displayName: (device as { displayName?: string }).displayName,
-    x: (device as { x?: number }).x,
-    y: (device as { y?: number }).y,
-    hostname: (device as { hostname?: string }).hostname,
-    ip: (device as { ip?: string }).ip,
-    mask: (device as { mask?: string }).mask,
-  }));
+function mapControllerResult(result: ControllerDeviceListResult): DeviceListResult {
+  const connectionsByDevice: Record<string, ConnectionInfo[]> = {};
+  const unresolvedLinks: UnresolvedLink[] = [];
+
+  for (const [deviceName, connections] of Object.entries(result.connectionsByDevice)) {
+    const certainConns: ConnectionInfo[] = [];
+
+    for (const conn of connections) {
+      if (CERTAIN_CONFIDENCES.includes(conn.confidence)) {
+        certainConns.push(conn);
+      } else if (UNCERTAIN_CONFIDENCES.includes(conn.confidence)) {
+        unresolvedLinks.push({
+          port1Name: conn.localPort ?? "",
+          port2Name: conn.remotePort ?? "",
+          candidates1: conn.evidence?.localCandidates ?? [],
+          candidates2: conn.evidence?.remoteCandidates ?? [],
+          confidence: conn.confidence,
+          evidence: [conn.evidence?.source ?? ""].filter(Boolean),
+        });
+      }
+    }
+
+    if (certainConns.length > 0) {
+      connectionsByDevice[deviceName] = certainConns;
+    }
+  }
+
+  const devices: ListedDevice[] = result.devices.map((device) => {
+    const ports: ListedPort[] = (device.ports ?? []).map((port) => ({
+      ...port,
+      connection: undefined as PortConnection | undefined,
+    }));
+
+    const conns = connectionsByDevice[device.name] ?? [];
+    for (const conn of conns) {
+      if (conn.localPort) {
+        const port = ports.find((p) => p.name === conn.localPort);
+        if (port && conn.remoteDevice && conn.remotePort) {
+          port.connection = {
+            remoteDevice: conn.remoteDevice,
+            remotePort: conn.remotePort,
+            confidence: conn.confidence,
+          };
+        }
+      }
+    }
+
+    return {
+      ...device,
+      ports,
+    };
+  });
+
+  return {
+    devices,
+    count: result.count,
+    connectionsByDevice,
+    unresolvedLinks,
+  };
 }
 
 export async function loadLiveDeviceListFromController(
-  controller: LiveDeviceListController,
+  controller: PTController,
   type?: string,
   timeoutMs = 15000,
   options?: { refreshCache?: boolean },
 ): Promise<DeviceListResult> {
-  console.log(`[pt-cli] listDevices() type=${String(type ?? "none")} timeoutMs=${timeoutMs}`);
+  log(`listDevices() type=${String(type ?? "none")} timeoutMs=${timeoutMs}`);
+
+  let result: ControllerDeviceListResult;
   try {
-    const commandsDir = resolve(getDefaultDevDir(), "commands");
-    const files = readdirSync(commandsDir).filter((name) => name.endsWith(".json"));
-    console.log(`[pt-cli] host commandsDir=${commandsDir} files=${files.length}`);
-    console.log(`[pt-cli] host commands sample=${files.slice(0, 5).join(",") || "none"}`);
-  } catch (e) {
-    console.log(`[pt-cli] host commandsDir check failed=${String(e)}`);
+    // La ruta viva manda: el estado del bridge solo influye en el fallback.
+    result = await controller.listDevices(type);
+    log(`controller.listDevices() ok, devices=${result.devices.length}`);
+  } catch (err) {
+    const bridgeStatus = controller.getBridgeStatus?.();
+    const cachedSnapshot = controller.getCachedSnapshot?.();
+    if (cachedSnapshot) {
+      log(
+        `controller.listDevices() failed${bridgeStatus?.ready === false ? " (bridge not ready)" : ""}, returning cached snapshot`,
+      );
+      return buildDeviceListFromSnapshot(cachedSnapshot);
+    }
+
+    const stateSnapshot = controller.readState?.();
+    if (
+      stateSnapshot &&
+      typeof stateSnapshot === "object" &&
+      "devices" in stateSnapshot &&
+      "links" in stateSnapshot
+    ) {
+      log("controller.listDevices() failed, returning state snapshot");
+      return buildDeviceListFromSnapshot(
+        stateSnapshot as Parameters<typeof buildDeviceListFromSnapshot>[0],
+      );
+    }
+
+    if (bridgeStatus && bridgeStatus.ready === false) {
+      log("controller.listDevices() failed and bridge not ready, returning empty list");
+      return {
+        devices: [],
+        count: 0,
+        connectionsByDevice: {},
+        unresolvedLinks: [],
+      };
+    }
+
+    throw new Error("Packet Tracer no respondió. Verifica que esté abierto y el script cargado.");
   }
-  const timeout = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error("Bridge no respondió a tiempo")), timeoutMs);
-  });
 
-  console.log("[pt-cli] sendCommandAndWait start...");
-  const result = await Promise.race([
-    controller
-      .getBridge()
-      .sendCommandAndWait<unknown>(
-        "listDevices",
-        { id: `ctrl_${Date.now()}`, filter: type, refreshCache: options?.refreshCache },
-        timeoutMs,
-      ),
-    timeout,
-  ]);
-  console.log("[pt-cli] sendCommandAndWait done");
-  const value = result.value as any;
-  const devices = mapLiveDevices(value);
-  console.log(`[pt-cli] devices mapped count=${devices.length}`);
-
-  const connectionsByDevice =
-    value && typeof value === "object"
-      ? (value.connectionsByDevice as Record<string, ConnectionInfo[]>) || {}
-      : {};
-  const unresolvedLinks =
-    value && typeof value === "object" ? (value.unresolvedLinks as UnresolvedLink[]) || [] : [];
-  const totalCount =
-    value && typeof value === "object" ? value.count || devices.length : devices.length;
-
-  return {
-    devices,
-    count: totalCount,
-    connectionsByDevice,
-    unresolvedLinks,
-  };
+  return mapControllerResult(result);
 }
 
 export async function loadLiveDeviceList(
   type?: string,
   options?: { refreshCache?: boolean },
 ): Promise<DeviceListResult> {
-  let controller: LiveDeviceListController;
+  let controller: PTController;
   try {
-    controller = createDefaultPTController() as unknown as LiveDeviceListController;
+    controller = createDefaultPTController();
   } catch (err) {
     throw new Error(
       "No se pudo crear el controller PT. Asegurate de que Packet Tracer esté abierto: " +
