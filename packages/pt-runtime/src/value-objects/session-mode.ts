@@ -187,7 +187,7 @@ export class SessionMode {
       return from.isPrivileged ? "disable" : null;
     }
 
-    // Going to priv-exec
+    // Going to privileged-exec
     if (this.isPrivileged) {
       if (from.isUserExec) return "enable";
       if (from.isConfigMode) return "end";

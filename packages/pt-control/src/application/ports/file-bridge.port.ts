@@ -5,14 +5,12 @@
 // Infrastructure implementations (e.g., FileBridge, FileBridgeV2) must satisfy this interface.
 
 import type { PTEvent, PTEventType } from "../../contracts/index.js";
-import type { BridgeResultEnvelope } from "@cisco-auto/file-bridge";
+import type { BridgeResultEnvelope } from "@cisco-auto/types";
 
 /**
  * Event handler signature for PT events
  */
-export type EventHandler<E extends PTEventType = PTEventType> = (
-  event: PTEvent
-) => void;
+export type EventHandler<E extends PTEventType = PTEventType> = (event: PTEvent) => void;
 
 /**
  * FileBridge Port - Abstraction for PT communication bridge
@@ -34,7 +32,11 @@ export interface FileBridgePort {
   /**
    * Send a command to PT and wait for its result
    */
-  sendCommandAndWait<T = unknown>(type: string, payload: unknown, timeoutMs?: number): Promise<BridgeResultEnvelope<T>>;
+  sendCommandAndWait<T = unknown>(
+    type: string,
+    payload: unknown,
+    timeoutMs?: number,
+  ): Promise<BridgeResultEnvelope<T>>;
 
   /**
    * Read current state from PT
@@ -66,7 +68,6 @@ export interface FileBridgePort {
    */
   getBridgeStatus(): {
     ready: boolean;
-    leaseValid?: boolean;
     queuedCount?: number;
     inFlightCount?: number;
     warnings?: string[];

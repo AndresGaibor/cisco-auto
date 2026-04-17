@@ -27,7 +27,7 @@ export interface CliError {
  * Todos los comandos deben retornar esta estructura.
  */
 export interface CliResult<T = unknown> {
-  schemaVersion: '1.0';
+  schemaVersion: "1.0";
   ok: boolean;
   action: string;
   entityType?: string;
@@ -49,20 +49,19 @@ export interface CliResult<T = unknown> {
     correlationId?: string;
     commandIds?: string[];
     interactionSummary?: string;
-    confidence?: 'executed' | 'verified' | 'partially_verified' | 'unverified' | 'non_terminal';
+    confidence?: "executed" | "verified" | "partially_verified" | "unverified" | "non_terminal";
     context?: {
       bridgeReady: boolean;
       topologyMaterialized: boolean;
       deviceCount: number;
       linkCount: number;
       heartbeat?: {
-        state: 'ok' | 'stale' | 'missing' | 'unknown';
+        state: "ok" | "stale" | "missing" | "unknown";
         ageMs?: number;
         lastSeenTs?: number;
       };
       bridge?: {
         ready: boolean;
-        leaseValid?: boolean;
         queuedCount?: number;
         inFlightCount?: number;
         warnings?: string[];
@@ -87,11 +86,11 @@ export function createSuccessResult<T>(
     warnings?: string[];
     advice?: string[];
     examples?: string[];
-    meta?: CliResult['meta'];
-  }
+    meta?: CliResult["meta"];
+  },
 ): CliResult<T> {
   return {
-    schemaVersion: '1.0',
+    schemaVersion: "1.0",
     ok: true,
     action,
     entityType: options?.entityType,
@@ -109,12 +108,9 @@ export function createSuccessResult<T>(
  * @param error - Error ocurrido
  * @returns Resultado de CLI con error
  */
-export function createErrorResult<T = never>(
-  action: string,
-  error: CliError
-): CliResult<T> {
+export function createErrorResult<T = never>(action: string, error: CliError): CliResult<T> {
   return {
-    schemaVersion: '1.0',
+    schemaVersion: "1.0",
     ok: false,
     action,
     error,
@@ -128,9 +124,13 @@ export function createErrorResult<T = never>(
  * @param verification - Resultado de verificación
  * @returns Resultado de CLI con verificación
  */
-export function createVerifiedResult<T>(action: string, data: T, verification: CliResult['verification']): CliResult<T> {
+export function createVerifiedResult<T>(
+  action: string,
+  data: T,
+  verification: CliResult["verification"],
+): CliResult<T> {
   return {
-    schemaVersion: '1.0',
+    schemaVersion: "1.0",
     ok: true,
     action,
     data,

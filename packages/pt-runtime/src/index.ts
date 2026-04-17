@@ -2,6 +2,9 @@
 // PT Runtime - Main exports
 // ============================================================================
 
+// PT Compatibility Contract — público para pt-control
+export * from "./contracts/pt-compatibility.js";
+
 // Domain layer
 export * from "./domain";
 
@@ -25,8 +28,12 @@ export { listRuntimeSnapshots, restoreRuntimeSnapshot } from "./runtime-artifact
 
 // Build system exports
 export { validatePtSafe, formatValidationResult } from "./build/validate-pt-safe";
-export { renderRuntimeV2, renderRuntimeV2Sync } from "./build/render-runtime-v2";
-export { renderMainV2 } from "./build/render-main-v2";
+export {
+  renderRuntimeV2,
+  renderRuntimeV2Sync,
+  renderRuntimeV2Sync as renderRuntimeSource,
+} from "./build/render-runtime-v2";
+export { renderMainV2, renderMainV2 as renderMainSource } from "./build/render-main-v2";
 export { renderCatalog } from "./build/render-catalog";
 export * from "./build";
 
@@ -39,6 +46,11 @@ export {
 
 // Build utilities
 import { validatePtSafe } from "./build/validate-pt-safe";
+import {
+  validateBalancedSyntax,
+  validateMainBootstrapContract,
+  validateRuntimeBootstrapContract,
+} from "./build/syntax-preflight";
 import { renderRuntimeV2Sync } from "./build/render-runtime-v2";
 import { renderMainV2 } from "./build/render-main-v2";
 import { renderCatalog } from "./build/render-catalog";
@@ -56,22 +68,8 @@ function computeChecksum(content: string): string {
 }
 
 export interface RuntimeGeneratorConfig {
-  outputDir: string;
+  outputDir?: string;
   devDir: string;
-}
-
-export interface RuntimeArtifactManifest {
-  cliVersion: string;
-  protocolVersion: number;
-  mainChecksum: string;
-  runtimeChecksum: string;
-  catalogChecksum: string;
-  generatedAt: number;
-  modules: {
-    main: string;
-    catalog: string;
-    runtime: string;
-  };
 }
 
 export class RuntimeGenerator {
@@ -79,6 +77,10 @@ export class RuntimeGenerator {
 
   constructor(config: RuntimeGeneratorConfig) {
     this.config = config;
+  }
+
+  private resolveOutputDir(): string {
+    return this.config.outputDir ?? this.config.devDir;
   }
 
   generateMain(): string {
@@ -103,31 +105,45 @@ export class RuntimeGenerator {
     });
   }
 
-  /**
-   * generate() — writes 3 files to outputDir (catalog.js, runtime.js, main.js)
-   * Always file-based: main.js loads catalog.js + hot-reloads runtime.js from disk.
-   */
-  async generate(): Promise<{ main: string; catalog: string; runtime: string }> {
-    const catalog = this.generateCatalog();
-    const runtime = this.generateRuntime();
-    const main = this.generateMain();
-
-    await fs.promises.mkdir(this.config.outputDir, { recursive: true });
-    await fs.promises.writeFile(path.join(this.config.outputDir, "main.js"), main, "utf-8");
-    await fs.promises.writeFile(path.join(this.config.outputDir, "catalog.js"), catalog, "utf-8");
-    await fs.promises.writeFile(path.join(this.config.outputDir, "runtime.js"), runtime, "utf-8");
-
-    return { main, catalog, runtime };
-  }
-
-  async validateGenerated(): Promise<void> {
-    const { main, catalog, runtime } = await this.generate();
+  private validateArtifacts(main: string, catalog: string, runtime: string): void {
+    const mainSyntax = validateBalancedSyntax(main);
+    const catalogSyntax = validateBalancedSyntax(catalog);
+    const runtimeSyntax = validateBalancedSyntax(runtime);
+    const mainContract = validateMainBootstrapContract(main);
+    const runtimeContract = validateRuntimeBootstrapContract(runtime);
     const mainValidation = validatePtSafe(main);
     const catalogValidation = validatePtSafe(catalog);
     const runtimeValidation = validatePtSafe(runtime);
-    const allValid = mainValidation.valid && catalogValidation.valid && runtimeValidation.valid;
+
+    const allValid =
+      mainSyntax.valid &&
+      catalogSyntax.valid &&
+      runtimeSyntax.valid &&
+      mainContract.valid &&
+      runtimeContract.valid &&
+      mainValidation.valid &&
+      catalogValidation.valid &&
+      runtimeValidation.valid;
+
     if (!allValid) {
       const errors: string[] = [];
+      if (!mainSyntax.valid) {
+        errors.push(`main.js syntax: ${mainSyntax.errors.length} error(s)`);
+        console.error("main.js syntax errors:", JSON.stringify(mainSyntax.errors, null, 2));
+      }
+      if (!catalogSyntax.valid)
+        errors.push(`catalog.js syntax: ${catalogSyntax.errors.length} error(s)`);
+      if (!runtimeSyntax.valid) {
+        errors.push(`runtime.js syntax: ${runtimeSyntax.errors.length} error(s)`);
+        console.error(
+          "runtime.js syntax errors:",
+          JSON.stringify(runtimeValidation.errors, null, 2),
+        );
+      }
+      if (!mainContract.valid)
+        errors.push(`main.js contract: ${mainContract.errors.length} error(s)`);
+      if (!runtimeContract.valid)
+        errors.push(`runtime.js contract: ${runtimeContract.errors.length} error(s)`);
       if (!mainValidation.valid) errors.push(`main.js: ${mainValidation.errors.length} error(s)`);
       if (!catalogValidation.valid)
         errors.push(`catalog.js: ${catalogValidation.errors.length} error(s)`);
@@ -135,6 +151,56 @@ export class RuntimeGenerator {
         errors.push(`runtime.js: ${runtimeValidation.errors.length} error(s)`);
       throw new Error("Generated code validation failed: " + errors.join(", "));
     }
+  }
+
+  async generate(): Promise<{ main: string; catalog: string; runtime: string }> {
+    const catalog = this.generateCatalog();
+    const runtime = this.generateRuntime();
+    const main = this.generateMain();
+
+    const outDir = this.resolveOutputDir();
+    await fs.promises.mkdir(outDir, { recursive: true });
+    await fs.promises.writeFile(path.join(outDir, "main.js"), main, "utf-8");
+    await fs.promises.writeFile(path.join(outDir, "catalog.js"), catalog, "utf-8");
+    await fs.promises.writeFile(path.join(outDir, "runtime.js"), runtime, "utf-8");
+
+    this.validateArtifacts(main, catalog, runtime);
+
+    return { main, catalog, runtime };
+  }
+
+  async validateGenerated(): Promise<void> {
+    const { main, catalog, runtime } = await this.generate();
+    this.validateArtifacts(main, catalog, runtime);
+  }
+
+  async deploy(): Promise<void> {
+    const catalog = this.generateCatalog();
+    const runtime = this.generateRuntime();
+    const main = this.generateMain();
+
+    this.validateArtifacts(main, catalog, runtime);
+
+    await fs.promises.mkdir(this.config.devDir, { recursive: true });
+    await fs.promises.writeFile(path.join(this.config.devDir, "main.js"), main, "utf-8");
+    await fs.promises.writeFile(path.join(this.config.devDir, "catalog.js"), catalog, "utf-8");
+    await fs.promises.writeFile(path.join(this.config.devDir, "runtime.js"), runtime, "utf-8");
+    await this.writeManifest(main, catalog, runtime, this.config.devDir);
+  }
+
+  async build(): Promise<void> {
+    const catalog = this.generateCatalog();
+    const runtime = this.generateRuntime();
+    const main = this.generateMain();
+
+    this.validateArtifacts(main, catalog, runtime);
+
+    const outDir = this.resolveOutputDir();
+    await fs.promises.mkdir(outDir, { recursive: true });
+    await fs.promises.writeFile(path.join(outDir, "main.js"), main, "utf-8");
+    await fs.promises.writeFile(path.join(outDir, "catalog.js"), catalog, "utf-8");
+    await fs.promises.writeFile(path.join(outDir, "runtime.js"), runtime, "utf-8");
+    await this.writeManifest(main, catalog, runtime, outDir);
   }
 
   async writeManifest(
@@ -162,38 +228,20 @@ export class RuntimeGenerator {
     await fs.promises.writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf-8");
     return manifest;
   }
+}
 
-  /**
-   * deploy() — writes 3 files to devDir (~/pt-dev/ by default).
-   * main.js loads catalog.js once, then runtime.js is hot-reloaded by kernel.
-   */
-  async deploy(): Promise<void> {
-    const catalog = this.generateCatalog();
-    const runtime = this.generateRuntime();
-    const main = this.generateMain();
-
-    await fs.promises.mkdir(this.config.devDir, { recursive: true });
-    await fs.promises.writeFile(path.join(this.config.devDir, "main.js"), main, "utf-8");
-    await fs.promises.writeFile(path.join(this.config.devDir, "catalog.js"), catalog, "utf-8");
-    await fs.promises.writeFile(path.join(this.config.devDir, "runtime.js"), runtime, "utf-8");
-    await this.writeManifest(main, catalog, runtime, this.config.devDir);
-  }
-
-  /**
-   * build() — writes to outputDir (dist-qtscript/) for testing/CI.
-   * Same architecture as deploy(): 3 separate files, always file-based.
-   */
-  async build(): Promise<void> {
-    const catalog = this.generateCatalog();
-    const runtime = this.generateRuntime();
-    const main = this.generateMain();
-
-    await fs.promises.mkdir(this.config.outputDir, { recursive: true });
-    await fs.promises.writeFile(path.join(this.config.outputDir, "main.js"), main, "utf-8");
-    await fs.promises.writeFile(path.join(this.config.outputDir, "catalog.js"), catalog, "utf-8");
-    await fs.promises.writeFile(path.join(this.config.outputDir, "runtime.js"), runtime, "utf-8");
-    await this.writeManifest(main, catalog, runtime, this.config.outputDir);
-  }
+export interface RuntimeArtifactManifest {
+  cliVersion: string;
+  protocolVersion: number;
+  mainChecksum: string;
+  runtimeChecksum: string;
+  catalogChecksum: string;
+  generatedAt: number;
+  modules: {
+    main: string;
+    catalog: string;
+    runtime: string;
+  };
 }
 
 // ============================================================================
@@ -240,13 +288,13 @@ if (typeof Bun !== "undefined" && Bun.argv.includes("modular")) {
   });
   generator
     .generate()
-    .then(({ modules, manifest }) => {
+    .then(({ modules, manifest }: any) => {
       console.log("✅ Modular generation complete!");
       console.log(`   Modules: ${modules.size}`);
       console.log(`   Path: ${path.join(path.resolve(__dirname), "../dist-modular")}`);
       console.log(`   Manifest: ${JSON.stringify(manifest.modulePaths)}`);
     })
-    .catch((e) => {
+    .catch((e: any) => {
       console.error("Error:", e);
       process.exit(1);
     });

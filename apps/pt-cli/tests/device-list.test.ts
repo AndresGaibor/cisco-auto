@@ -7,6 +7,7 @@ import {
   loadLiveDeviceListFromController,
 } from "../src/application/device-list.js";
 import type { TopologySnapshot } from "@cisco-auto/pt-control";
+import { selectPortsForDisplay } from "../src/commands/device/list.js";
 
 vi.mock("@cisco-auto/pt-control", () => ({
   createDefaultPTController: vi.fn(),
@@ -107,6 +108,85 @@ describe("device list helpers", () => {
     expect(listDevices).toHaveBeenCalledTimes(1);
     expect(result.count).toBe(1);
     expect(result.devices[0]?.name).toBe("R1");
+  });
+
+  test("enriquece macAddress desde el snapshot cacheado", async () => {
+    const listDevices = vi.fn().mockResolvedValue({
+      devices: [
+        {
+          name: "PC1",
+          model: "PC-PT",
+          type: "pc",
+          power: true,
+          ports: [{ name: "FastEthernet0" }],
+        },
+      ],
+      connectionsByDevice: {},
+      unresolvedLinks: [],
+      count: 1,
+    });
+
+    const getCachedSnapshot = vi.fn().mockReturnValue({
+      version: "1.0",
+      timestamp: 789,
+      devices: {
+        PC1: {
+          name: "PC1",
+          model: "PC-PT",
+          type: "pc",
+          power: true,
+          ports: [
+            {
+              name: "FastEthernet0",
+              macAddress: "0060.7087.3535",
+            },
+          ],
+        },
+      },
+      links: {},
+      metadata: { deviceCount: 1, linkCount: 0 },
+    });
+
+    const controller = {
+      listDevices,
+      getBridgeStatus: () => ({ ready: true, warnings: [] }),
+      getCachedSnapshot,
+      readState: () => null,
+    };
+
+    const result = await loadLiveDeviceListFromController(controller as never, undefined, 10);
+
+    expect(result.devices[0]?.ports?.[0]?.macAddress).toBe("0060.7087.3535");
+  });
+
+  test("conserva mac del runtime en el resultado mapeado", async () => {
+    const listDevices = vi.fn().mockResolvedValue({
+      devices: [
+        {
+          name: "PC1",
+          model: "PC-PT",
+          type: "pc",
+          power: true,
+          mac: "0060.7087.3535",
+          ports: [{ name: "FastEthernet0", mac: "0060.7087.3535" }],
+        },
+      ],
+      connectionsByDevice: {},
+      unresolvedLinks: [],
+      count: 1,
+    });
+
+    const controller = {
+      listDevices,
+      getBridgeStatus: () => ({ ready: true, warnings: [] }),
+      getCachedSnapshot: () => null,
+      readState: () => null,
+    };
+
+    const result = await loadLiveDeviceListFromController(controller as never, undefined, 10);
+
+    expect(result.devices[0]?.mac).toBe("0060.7087.3535");
+    expect(result.devices[0]?.ports?.[0]?.macAddress).toBe("0060.7087.3535");
   });
 
   test("usa el resultado vivo aunque la cola esté llena", async () => {

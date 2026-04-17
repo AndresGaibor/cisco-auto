@@ -5,6 +5,14 @@
 
 import type { CliSession } from "@cisco-auto/ios-domain";
 
+export type SessionMode =
+  | "user-exec"
+  | "privileged-exec"
+  | "config"
+  | "config-if"
+  | "config-line"
+  | "unknown";
+
 export interface SessionInfo {
   sessionId: string;
   deviceId: string;
@@ -16,7 +24,7 @@ export interface SessionInfo {
 }
 
 export interface SessionState {
-  mode: 'user-exec' | 'privileged-exec' | 'config' | 'config-if' | 'config-line' | 'unknown';
+  mode: SessionMode;
   paging: boolean;
   authenticated: boolean;
   configMode: boolean;
@@ -33,14 +41,14 @@ export class IOSSessionManager {
       deviceId,
       startTime: Date.now(),
       lastActivity: Date.now(),
-      mode: 'user-exec',
+      mode: "user-exec",
       paging: false,
       commands: 0,
     };
 
     this.sessions.set(sessionId, session);
     this.sessionStates.set(sessionId, {
-      mode: 'user-exec',
+      mode: "user-exec",
       paging: false,
       authenticated: false,
       configMode: false,
@@ -65,7 +73,7 @@ export class IOSSessionManager {
     }
   }
 
-  updateSessionMode(sessionId: string, mode: string): void {
+  updateSessionMode(sessionId: string, mode: SessionMode): void {
     const session = this.sessions.get(sessionId);
     if (session) {
       session.mode = mode;
@@ -73,8 +81,8 @@ export class IOSSessionManager {
 
     const state = this.sessionStates.get(sessionId);
     if (state) {
-      state.mode = mode as any;
-      state.configMode = mode.startsWith('config');
+      state.mode = mode;
+      state.configMode = mode.startsWith("config");
     }
   }
 
@@ -107,7 +115,7 @@ export class IOSSessionManager {
   }
 
   getDeviceSessions(deviceId: string): SessionInfo[] {
-    return Array.from(this.sessions.values()).filter(s => s.deviceId === deviceId);
+    return Array.from(this.sessions.values()).filter((s) => s.deviceId === deviceId);
   }
 
   clearExpiredSessions(): number {
@@ -131,7 +139,7 @@ export class IOSSessionManager {
     totalCommands: number;
   } {
     const sessions = Array.from(this.sessions.values());
-    const devices = new Set(sessions.map(s => s.deviceId));
+    const devices = new Set(sessions.map((s) => s.deviceId));
 
     return {
       totalSessions: sessions.length,

@@ -1,66 +1,28 @@
 // ============================================================================
 // Runtime Validator - PT-safe validation (Fase 3)
 // ============================================================================
-// Valida que el código generado sea compatible con Qt Script Engine de PT
+// Valida que el código generado para Packet Tracer sea "seguro" (PT-safe).
+// Packet Tracer 9.0 usa un motor QTScript muy antiguo que:
+// 1. No soporta ES6+ (no const, no let, no arrow functions, no template literals)
+// 2. No soporta módulos (no import, no export)
+// 3. No soporta APIs web modernas (no fetch, no Promise, no Map/Set)
+// 4. No soporta 'globalThis'
 
 export interface ValidationResult {
   ok: boolean;
   errors: string[];
   warnings: string[];
-  metadata?: {
-    target: "main" | "runtime" | "both";
-    hasMain: boolean;
-    hasCleanUp: boolean;
-    hasDeferredPolling: boolean;
-    hasIosJobs: boolean;
-  };
 }
 
-export interface QtScriptValidationResult extends ValidationResult {
-  metadata?: ValidationResult["metadata"] & {
-    hasHostTick?: boolean;
-    hasWatcher?: boolean;
-    hasCleanupHook?: boolean;
-  };
-}
-
-// ============================================================================
-// Blacklist de sintaxis PT-unsafe
-// ============================================================================
-
-const FORBIDDEN_TOKENS = [
-  { token: "import ", reason: "ES modules are not PT-safe in Script Module files" },
-  { token: "export ", reason: "ES modules are not PT-safe in Script Module files" },
-  { token: "class ", reason: "Use function constructors or plain objects only" },
-  { token: "let ", reason: "Use var only" },
-  { token: "const ", reason: "Use var only" },
-  { token: "=>", reason: "Arrow functions are disallowed" },
-  { token: "?.", reason: "Optional chaining is disallowed" },
-  { token: "??", reason: "Nullish coalescing is disallowed" },
-  { token: "async ", reason: "Async functions are disallowed" },
-  { token: "await ", reason: "Await is disallowed" },
-  { token: "for (const ", reason: "Use var in for loops" },
-  { token: "for (let ", reason: "Use var in for loops" },
-  { token: "`", reason: "Template literals are disallowed" },
+const FORBIDDEN_SYNTAX = [
+  "import ",
+  "async ",
+  "await ",
+  "const ",
+  "let ",
+  "=>",
+  "`", // Template literals
 ];
-
-const FORBIDDEN_PATTERNS = [
-  { pattern: /Object\.assign\(/, reason: "Object.assign may not be supported" },
-  { pattern: /new\s+Map\(/, reason: "Map may not be supported" },
-  { pattern: /new\s+Set\(/, reason: "Set may not be supported" },
-  { pattern: /new\s+WeakMap\(/, reason: "WeakMap may not be supported" },
-  { pattern: /new\s+WeakSet\(/, reason: "WeakSet may not be supported" },
-  { pattern: /Symbol\(/, reason: "Symbol may not be supported" },
-  { pattern: /Proxy\(/, reason: "Proxy may not be supported" },
-  { pattern: /Reflect\./, reason: "Reflect may not be supported" },
-  // Patterns de lifecycle inseguro (Fase 5 crash fix)
-  { pattern: /function\s+onWatchedFileChanged\s*\(\s*src\s*,\s*path\s*\)/, reason: "Use function(src, args) not function(src, path)" },
-  { pattern: /function\s+onWatchedDirChanged\s*\(\s*src\s*,\s*path\s*\)/, reason: "Use function(src, args) not function(src, path)" },
-];
-
-// ============================================================================
-// Blacklist de globals host-env incorrectos
-// ============================================================================
 
 const FORBIDDEN_GLOBALS = [
   "window",
@@ -69,586 +31,132 @@ const FORBIDDEN_GLOBALS = [
   "XMLHttpRequest",
   "localStorage",
   "sessionStorage",
-  "require",
-  "exports",
   "process",
   "Buffer",
-  "global",
-  "globalThis",
   "setImmediate",
 ];
 
-// ============================================================================
-// Required symbols para main.js - Fase 5: cola real
-// ============================================================================
-
-const REQUIRED_MAIN_SYMBOLS_V2 = [
-  "function main()",
-  "function cleanUp()",
-  "function loadRuntime(",
-  "function writeHeartbeat(",
-  // Aceptar cualquier modo de polling: pollCommandQueue (V2) o pollCommandSlot (legacy)
-  // El patrón de cola se detecta por COMMANDS_DIR en lugar de COMMAND_FILE
-  "function pollDeferredCommands(",
-  "function recoverInFlightOnStartup(",  // V2: recovery de in-flight
-  "function savePendingCommands(",
+const FORBIDDEN_PATTERNS = [
+  { pattern: "Map", message: "Map may not be supported" },
+  { pattern: "Set", message: "Set may not be supported" },
 ];
 
 // ============================================================================
-// Required symbols para main.js V2 - cola real (Fase 5) + lifecycle safe
+// Required symbols para main.js - Consolidated Kernel
 // ============================================================================
 
-const REQUIRED_MAIN_SYMBOLS_QUEUE = [
-  "COMMANDS_DIR",
-  "IN_FLIGHT_DIR",
-  "RESULTS_DIR",
-  "DEAD_LETTER_DIR",
-  "LOGS_DIR",
-  "function listQueuedCommandFiles(",
-  "function claimNextCommand(",
-  "function recoverInFlightOnStartup(",
-  "function teardownFileWatcher(", // REQUERIDO para lifecycle seguro
-  // NOTA: invokeRuntimeCleanupHook ya NO es requerido - ahora es un no-op de seguridad
-];
+const REQUIRED_MAIN_SYMBOLS_V2 = ["function main()", "function cleanUp()", "createKernel("];
+
+const REQUIRED_MAIN_SYMBOLS_QUEUE = ["COMMANDS_DIR", "IN_FLIGHT_DIR", "RESULTS_DIR"];
 
 // ============================================================================
 // Required symbols para runtime.js
 // ============================================================================
 
-const REQUIRED_RUNTIME_SYMBOLS = [
-  "IOS_JOBS",
-  "IOS_SESSIONS",
-  "function handleConfigIos(",
-  "function handleExecIos(",
-  "function handlePollDeferred(",
-  "commandEnded",
-  "outputWritten",
-  "modeChanged",
-  "moreDisplayed",
-];
+const REQUIRED_RUNTIME_SYMBOLS = ["runtimeDispatcher", "_ptDispatch"];
+
+const REQUIRED_RUNTIME_HANDLERS = ["handleConfigIos", "handleDeferredPoll"];
 
 // ============================================================================
-// Forbidden IOS patterns (old buggy pattern)
+// Validation Logic
 // ============================================================================
 
-const FORBIDDEN_IOS_PATTERNS = [
-  { pattern: /var\s+response\s*=\s*term\.enterCommand\(/, reason: "enterCommand returns void, not response" },
-  { pattern: /term\.enterCommand\([^)]*\)\s*\[\s*\d+\s*\]/, reason: "enterCommand returns void, not array" },
-  { pattern: /if\s*\(\s*!response\s*\)/, reason: "Old enterCommand return pattern - API is void" },
-  { pattern: /return\s*\[\s*status\s*,\s*output\s*\]/, reason: "Old return pattern for enterCommand" },
-];
-
-// ============================================================================
-// FASE 5 CRASH FIX: Lifecycle-safe patterns (CRITICAL - Build Breakers)
-// ============================================================================
-// Estas reglas detectan el bug del Stop que causaba crash por re-ejecución
-// de runtime.js durante cleanup mediante new Function(...)
-
-// Regla A: cleanUp() NO debe invocar invokeRuntimeCleanupHook
-// Busca específicamente la LLAMADA (con paréntesis) no la definición
-const LIFECYCLE_RULE_A = {
-  pattern: /function\s+cleanUp\s*\([^)]*\)\s*\{[^}]*invokeRuntimeCleanupHook\s*\(/,
-  reason: "FATAL: cleanUp() must NOT call invokeRuntimeCleanupHook() - causes re-execution during shutdown",
-};
-
-// Regla B: invokeRuntimeCleanupHook() NO debe contener runtimeFn(
-const LIFECYCLE_RULE_B = {
-  pattern: /function\s+invokeRuntimeCleanupHook\s*\([^)]*\)\s*\{[^}]*runtimeFn\s*\(/,
-  reason: "FATAL: invokeRuntimeCleanupHook() must NOT call runtimeFn() - causes re-execution during shutdown",
-};
-
-// Regla C: main.js NO debe tener runtimeFn({ type: "__cleanup__" } dentro de cleanUp
-const LIFECYCLE_RULE_C = {
-  pattern: /function\s+cleanUp[\s\S]{0,500}runtimeFn\s*\(\s*\{\s*type\s*:\s*["']__cleanup__["']/,
-  reason: "FATAL: main.js must NOT call runtimeFn({ type: '__cleanup__' }) in cleanUp() - causes re-execution",
-};
-
-// Regla D: runtime.js no debe tener jobs + listeners + polling síncrono mezclados
-// En la nueva arquitectura, IOS_JOBS puede estar en runtime, pero no con listeners + sync polling
-const LIFECYCLE_RULE_D = {
-  pattern: /IOS_JOBS[\s\S]{0,200}attachTerminalListeners[\s\S]{0,200}while\s*\(\s*attempt\s*<\s*maxAttempts/,
-  reason: "ARCHITECTURE VIOLATION: runtime.js mixes IOS_JOBS + attachTerminalListeners + sync polling",
-};
-
-// ============================================================================
-// Helper: check for forbidden tokens
-// ============================================================================
-
-function findForbiddenTokens(code: string): string[] {
+export function validatePtSafe(code: string, type: "main" | "runtime" | "any"): ValidationResult {
   const errors: string[] = [];
-  
-  for (const { token, reason } of FORBIDDEN_TOKENS) {
-    if (code.indexOf(token) !== -1) {
-      errors.push(`Forbidden syntax '${token}': ${reason}`);
+  const warnings: string[] = [];
+
+  if (!code || code.trim().length === 0) {
+    errors.push("Code is too short or empty");
+    return { ok: false, errors, warnings };
+  }
+
+  // 1. Check forbidden syntax
+  for (const syntax of FORBIDDEN_SYNTAX) {
+    if (code.indexOf(syntax) !== -1) {
+      errors.push(
+        `Forbidden syntax '${syntax}': ES modules and modern ES6 features are not PT-safe`,
+      );
     }
   }
-  
-  for (const { pattern, reason } of FORBIDDEN_PATTERNS) {
-    if (pattern.test(code)) {
-      errors.push(`Forbidden pattern: ${reason}`);
-    }
-  }
-  
-  return errors;
-}
 
-// ============================================================================
-// Helper: check for forbidden globals
-// ============================================================================
-
-function findForbiddenGlobals(code: string): string[] {
-  const errors: string[] = [];
-  
+  // 2. Check forbidden globals
   for (const global of FORBIDDEN_GLOBALS) {
-    const regex = new RegExp(`\\b${global}\\b`);
+    // Check for exact word to avoid false positives with variables like 'processing'
+    const regex = new RegExp(`\\b${global}\\b`, "g");
     if (regex.test(code)) {
       errors.push(`Forbidden global '${global}': Not available in PT Script Engine`);
     }
   }
-  
-  return errors;
+
+  // 3. Check forbidden patterns (warnings)
+  for (const { pattern, message } of FORBIDDEN_PATTERNS) {
+    const regex = new RegExp(`\\b${pattern}\\b`, "g");
+    if (regex.test(code)) {
+      warnings.push(`Forbidden pattern: ${message}`);
+    }
+  }
+
+  // 4. Check required symbols
+  if (type === "main" || type === "any") {
+    for (const symbol of REQUIRED_MAIN_SYMBOLS_V2) {
+      if (code.indexOf(symbol) === -1) {
+        errors.push(`Missing required symbol: ${symbol}`);
+      }
+    }
+
+    // Check for queue protocol V2
+    const hasQueue = REQUIRED_MAIN_SYMBOLS_QUEUE.every((s) => code.indexOf(s) !== -1);
+    if (!hasQueue) {
+      warnings.push("main.js does not seem to use the latest queue-based command protocol");
+    }
+  }
+
+  if (type === "runtime" || type === "any") {
+    for (const symbol of REQUIRED_RUNTIME_SYMBOLS) {
+      if (code.indexOf(symbol) === -1) {
+        errors.push(`Missing required symbol: ${symbol}`);
+      }
+    }
+
+    for (const handler of REQUIRED_RUNTIME_HANDLERS) {
+      if (code.indexOf(handler) === -1) {
+        warnings.push(`Missing standard handler: ${handler}`);
+      }
+    }
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+  };
 }
-
-// ============================================================================
-// Helper: check for required symbols
-// ============================================================================
-
-function findMissingSymbols(code: string, required: string[]): string[] {
-  const errors: string[] = [];
-  
-  for (const symbol of required) {
-    if (code.indexOf(symbol) === -1) {
-      errors.push(`Missing required symbol: ${symbol}`);
-    }
-  }
-  
-  return errors;
-}
-
-// ============================================================================
-// Helper: check for forbidden IOS patterns
-// ============================================================================
-
-function findForbiddenIosPatterns(code: string): string[] {
-  const errors: string[] = [];
-  
-  for (const { pattern, reason } of FORBIDDEN_IOS_PATTERNS) {
-    if (pattern.test(code)) {
-      errors.push(`Forbidden IOS pattern: ${reason}`);
-    }
-  }
-  
-  return errors;
-}
-
-// ============================================================================
-// Helper: check for lifecycle-safe patterns (CRITICAL - Build Breakers)
-// ============================================================================
-
-function findLifecycleViolations(code: string, target: "main" | "runtime"): string[] {
-  const errors: string[] = [];
-  
-  // Regla A: Solo aplica a main.js
-  if (target === "main") {
-    if (LIFECYCLE_RULE_A.pattern.test(code)) {
-      errors.push(`LIFECYCLE VIOLATION: ${LIFECYCLE_RULE_A.reason}`);
-    }
-    if (LIFECYCLE_RULE_C.pattern.test(code)) {
-      errors.push(`LIFECYCLE VIOLATION: ${LIFECYCLE_RULE_C.reason}`);
-    }
-  }
-  
-  // Regla B: Solo aplica a main.js (donde está define invokeRuntimeCleanupHook)
-  if (target === "main") {
-    if (LIFECYCLE_RULE_B.pattern.test(code)) {
-      errors.push(`LIFECYCLE VIOLATION: ${LIFECYCLE_RULE_B.reason}`);
-    }
-  }
-  
-  // Regla D: Solo aplica a runtime.js - ADVERTENCIA (no error en validateMainJs)
-  if (target === "runtime") {
-    if (LIFECYCLE_RULE_D.pattern.test(code)) {
-      errors.push(`ARCHITECTURE VIOLATION: ${LIFECYCLE_RULE_D.reason}`);
-    }
-  }
-  
-  return errors;
-}
-
-function findQtScriptMainViolations(code: string): string[] {
-  const errors: string[] = [];
-  const required = [
-    "function main()",
-    "function cleanup()",
-    "function loadRuntime()",
-    "function hostTick()",
-    "function setupFileWatcher()",
-    "function teardownFileWatcher()",
-  ];
-
-  const missing = findMissingSymbols(code, required);
-  errors.push(...missing);
-
-  if (!code.includes("hostTickInterval")) {
-    errors.push("Missing hostTickInterval state");
-  }
-
-  if (!code.includes("runtimeDirty")) {
-    errors.push("Missing runtimeDirty state");
-  }
-
-  if (!code.includes("watcherArmed")) {
-    errors.push("Missing watcherArmed state");
-  }
-
-  if (code.includes("runtimeFn(")) {
-    errors.push("QtScript main must not re-enter runtimeFn during cleanup");
-  }
-
-  return errors;
-}
-
-// ============================================================================
-// Validate main.js (Script Engine infrastructure)
-// ============================================================================
 
 export function validateMainJs(code: string): ValidationResult {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-  
-  // 1. Syntax blacklist
-  const syntaxErrors = findForbiddenTokens(code);
-  errors.push(...syntaxErrors);
-  
-  // 2. Globals blacklist
-  const globalErrors = findForbiddenGlobals(code);
-  errors.push(...globalErrors);
-  
-  // 2b. LIFECYCLE RULES (CRITICAL - Build Breakers)
-  const lifecycleErrors = findLifecycleViolations(code, "main");
-  errors.push(...lifecycleErrors);
-  
-  // 3. Required symbols - queue protocol is the only supported contract
-  const missingSymbolsLegacy = findMissingSymbols(code, REQUIRED_MAIN_SYMBOLS_V2);
-  const missingSymbolsQueue = findMissingSymbols(code, REQUIRED_MAIN_SYMBOLS_QUEUE);
-
-  // Legacy single-file command contract is no longer supported.
-  const usesQueue = code.includes("COMMANDS_DIR") && code.includes("IN_FLIGHT_DIR");
-  const usesLegacy = code.includes("COMMAND_FILE") || code.includes("CURRENT_COMMAND_FILE") || code.includes("command.json");
-  if (usesLegacy) {
-    errors.push("Legacy command.json bridge contract is no longer supported; use commands/ and in-flight/ queue files.");
-  }
-
-  if (missingSymbolsLegacy.length > 0 && missingSymbolsQueue.length > 0 && !usesQueue && !usesLegacy) {
-    // Ningún modo detectado - error
-    errors.push(...missingSymbolsLegacy.slice(0, 3));
-    errors.push(...missingSymbolsQueue.slice(0, 3));
-  } else if (usesQueue && missingSymbolsQueue.length > 0) {
-    // Modo cola pero faltan symbols - warning
-    warnings.push("Queue mode: missing " + missingSymbolsQueue.slice(0, 3).join(", "));
-  } else if (usesLegacy && missingSymbolsLegacy.length > 0) {
-    // Modo legacy no soportado, pero mantenemos detalle para diagnóstico
-    warnings.push("Legacy mode: missing " + missingSymbolsLegacy.slice(0, 3).join(", "));
-  }
-  
-  // 4. Check for journal-before-clear pattern O queue pattern
-  const journalPattern = /journalCommand[\s\S]{0,200}writePlainTextToFile\(COMMAND_FILE/;
-  const queuePattern = /listQueuedCommandFiles[\s\S]{0,200}claimNextCommand/;
-  const pollQueuePattern = /pollCommandQueue[\s\S]{0,200}claimNextCommand/;
-  
-  if (!journalPattern.test(code) && !queuePattern.test(code) && !pollQueuePattern.test(code)) {
-    // Permitir si usa uno de los patrones de queue
-    if (!usesQueue && !usesLegacy) {
-      errors.push("main.js must use queue-based command protocol or journal pattern");
-    }
-  }
-  
-  // 5. Check hot reload gating
-  const hotReloadGated = /hasPendingDeferredCommands[\s\S]{0,150}loadRuntime/;
-  if (!hotReloadGated.test(code)) {
-    warnings.push("main.js should gate runtime hot reload by pending commands");
-  }
-  
-  // 6. Check cleanup clears all intervals
-  const cleanupClearsAll = /clearInterval\(commandPollInterval\)[\s\S]{0,200}clearInterval\(deferredPollInterval\)[\s\S]{0,200}clearInterval\(heartbeatInterval\)/;
-  if (!cleanupClearsAll.test(code)) {
-    errors.push("main.js cleanUp() must clear all three intervals");
-  }
-  
-  // Warnings
-  if (!code.includes("setInterval")) {
-    warnings.push("main.js does not use setInterval - may not have polling");
-  }
-  
-  const metadata = {
-    target: "main" as const,
-    hasMain: code.includes("function main()"),
-    hasCleanUp: code.includes("function cleanUp()"),
-    hasDeferredPolling: code.includes("pollDeferredCommands"),
-    hasIosJobs: false,
-  };
-  
-  return {
-    ok: errors.length === 0,
-    errors,
-    warnings,
-    metadata,
-  };
+  return validatePtSafe(code, "main");
 }
-
-// ============================================================================
-// Validate runtime.js (reloadable logic)
-// ============================================================================
 
 export function validateRuntimeJs(code: string): ValidationResult {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-  
-  // 1. Syntax blacklist - CRITICAL: fail immediately
-  const syntaxErrors = findForbiddenTokens(code);
-  errors.push(...syntaxErrors);
-  
-  // 2. Globals blacklist - CRITICAL: fail immediately  
-  const globalErrors = findForbiddenGlobals(code);
-  errors.push(...globalErrors);
-  
-  // If we have syntax/globals errors, don't continue
-  if (errors.length > 0) {
-    return {
-      ok: false,
-      errors,
-      warnings,
-      metadata: { target: "runtime", hasMain: false, hasCleanUp: false, hasDeferredPolling: false, hasIosJobs: false },
-    };
-  }
-  
-  // 6. Check for old buggy IOS patterns - CRITICAL: fail immediately
-  const iosPatternErrors = findForbiddenIosPatterns(code);
-  errors.push(...iosPatternErrors);
-  
-  // If we have syntax/globals/IOS pattern errors, don't continue
-  if (errors.length > 0) {
-    return {
-      ok: false,
-      errors,
-      warnings,
-      metadata: { target: "runtime", hasMain: false, hasCleanUp: false, hasDeferredPolling: false, hasIosJobs: false },
-    };
-  }
-  
-  // 3. Required symbols - warnings only (code may work without some)
-  const missingSymbols = findMissingSymbols(code, REQUIRED_RUNTIME_SYMBOLS);
-  warnings.push(...missingSymbols);
-  
-  // 4. Check size
-  if (code.length < 500) {
-    errors.push(`runtime.js is too small (${code.length} bytes)`);
-  }
-  
-  // 5. Check essential handlers - warnings only
-  const essentialHandlers = [
-    "handleAddDevice",
-    "handleSnapshot",
-    "handleExecIos",
-    "handleListDevices",
-  ];
-  
-  for (const handler of essentialHandlers) {
-    if (code.indexOf(`function ${handler}(`) === -1) {
-      warnings.push(`Missing handler: ${handler}`);
-    }
-  }
-  
-  // 3. Check deferred support - warning
-  if (!code.includes("deferred")) {
-    warnings.push("runtime.js should support deferred commands");
-  }
-
-  // 4. Check poll handler - warning
-  if (!code.includes("handlePollDeferred")) {
-    warnings.push("runtime.js should have handlePollDeferred");
-  }
-
-  // 5. Lifecycle violations - Regla D aplica a runtime.js
-  const lifecycleErrors = findLifecycleViolations(code, "runtime");
-  errors.push(...lifecycleErrors);
-  
-  // Warnings
-  if (!code.includes("IOS_JOBS")) {
-    warnings.push("runtime.js does not define IOS_JOBS - job system may not work");
-  }
-  
-  const metadata = {
-    target: "runtime" as const,
-    hasMain: false,
-    hasCleanUp: false,
-    hasDeferredPolling: code.includes("handlePollDeferred"),
-    hasIosJobs: code.includes("IOS_JOBS"),
-  };
-  
-  return {
-    ok: errors.length === 0,
-    errors,
-    warnings,
-    metadata,
-  };
+  return validatePtSafe(code, "runtime");
 }
 
-// ============================================================================
-// Validate both artifacts together
-// ============================================================================
-
-export function validateGeneratedArtifacts(mainJs: string, runtimeJs: string): ValidationResult {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-  
-  // Validate each separately
-  const mainResult = validateMainJs(mainJs);
-  const runtimeResult = validateRuntimeJs(runtimeJs);
-  
-  errors.push(...mainResult.errors);
-  errors.push(...runtimeResult.errors);
-  
-  warnings.push(...mainResult.warnings);
-  warnings.push(...runtimeResult.warnings);
-  
-  // Cross-check: main must load runtime
-  if (mainJs.indexOf("loadRuntime") === -1) {
-    errors.push("main.js must have loadRuntime function");
-  }
-  
-  // Cross-check: runtime must have healthcheck
-  if (runtimeJs.indexOf("__healthcheck__") === -1) {
-    warnings.push("runtime.js should support __healthcheck__ for validation");
-  }
-  
-  // Cross-check: IOS_JOBS debe estar en main.js (dueño del estado persistente)
-  const mainHasIosJobs = mainJs.includes("IOS_JOBS") && mainJs.includes("function createIosJob");
-  const runtimeHasIosJobs = runtimeJs.includes("IOS_JOBS");
-  
-  if (runtimeHasIosJobs && !mainHasIosJobs) {
-    warnings.push("ARCHITECTURE: IOS_JOBS está en runtime.js pero no en main.js - el estado persistente debe estar en main.js");
-  }
-  
-  // Cross-check: Terminal listeners deben estar en main.js
-  const mainHasListeners = mainJs.includes("attachTerminalListeners");
-  const runtimeHasListeners = runtimeJs.includes("attachTerminalListeners");
-  
-  if (runtimeHasListeners && !mainHasListeners) {
-    warnings.push("ARCHITECTURE: attachTerminalListeners está en runtime.js pero no en main.js - los listeners deben estar en main.js");
-  }
-  
-  // Cross-check: cleanUp debe llamar detachAllTerminalListeners
-  const mainHasDetach = mainJs.includes("detachAllTerminalListeners");
-  if (mainHasListeners && mainHasIosJobs && !mainHasDetach) {
-    errors.push("main.js cleanUp() debe llamar detachAllTerminalListeners() si tiene listeners");
-  }
-  
-  // PR 5: Verificar paridad dispatcher - catálogo - handlers
-  const catalogHandlers = [
-    "handleAddDevice", "handleRemoveDevice", "handleListDevices", "handleRenameDevice",
-    "handleMoveDevice", "handleClearTopology", "handleAddModule", "handleRemoveModule",
-    "handleAddLink", "handleRemoveLink", "handleConfigHost", "handleConfigIos",
-    "handleExecIos", "handleExecInteractive", "handleSnapshot", "handleInspect",
-    "handleHardwareInfo", "handleHardwareCatalog", "handleCommandLog",
-    "handleListCanvasRects", "handleGetRect", "handleDevicesInRect",
-    "handleResolveCapabilities"
-  ];
-  
-  for (const handler of catalogHandlers) {
-    if (!runtimeJs.includes(`function ${handler}(`)) {
-      warnings.push(`FALTA HANDLER: ${handler} está en el catálogo pero no está definido en runtime.js`);
-    }
-  }
-  
-  return {
-    ok: errors.length === 0,
-    errors,
-    warnings,
-    metadata: {
-      target: "both",
-      hasMain: mainResult.metadata?.hasMain ?? false,
-      hasCleanUp: mainResult.metadata?.hasCleanUp ?? false,
-      hasDeferredPolling: mainResult.metadata?.hasDeferredPolling ?? false,
-      hasIosJobs: runtimeResult.metadata?.hasIosJobs ?? false,
-    },
-  };
-}
-
-export function validateQtScriptArtifacts(mainJs: string, runtimeJs: string): QtScriptValidationResult {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-
-  errors.push(...findForbiddenTokens(mainJs));
-  errors.push(...findForbiddenGlobals(mainJs));
-  errors.push(...findQtScriptMainViolations(mainJs));
-  errors.push(...findForbiddenTokens(runtimeJs));
-  errors.push(...findForbiddenGlobals(runtimeJs));
-  errors.push(...findForbiddenIosPatterns(runtimeJs));
-
-  if (runtimeJs.length < 500) {
-    errors.push(`runtime.js is too small (${runtimeJs.length} bytes)`);
-  }
-
-  if (runtimeJs.includes("IOS_JOBS") && runtimeJs.includes("attachTerminalListeners") && /while\s*\(\s*\w+\s*<\s*\w+Attempts/.test(runtimeJs)) {
-    errors.push("ARCHITECTURE VIOLATION: runtime.js mixes IOS_JOBS + attachTerminalListeners + sync polling - this can crash PT on stop");
-  }
-
-  if (!runtimeJs.includes("handlePollDeferred")) {
-    warnings.push("runtime.js should have handlePollDeferred");
-  }
-
-  if (!runtimeJs.includes("IOS_JOBS")) {
-    warnings.push("runtime.js does not define IOS_JOBS - job system may not work");
-  }
+export function validateGeneratedArtifacts(main: string, runtime: string): ValidationResult {
+  const mainRes = validateMainJs(main);
+  const runtimeRes = validateRuntimeJs(runtime);
 
   return {
-    ok: errors.length === 0,
-    errors,
-    warnings,
-    metadata: {
-      target: "both",
-      hasMain: mainJs.includes("function main()"),
-      hasCleanUp: mainJs.includes("function cleanup()"),
-      hasDeferredPolling: runtimeJs.includes("handlePollDeferred"),
-      hasIosJobs: runtimeJs.includes("IOS_JOBS"),
-      hasHostTick: mainJs.includes("function hostTick()"),
-      hasWatcher: mainJs.includes("function setupFileWatcher()") && mainJs.includes("function teardownFileWatcher()"),
-      hasCleanupHook: mainJs.includes("function cleanup()"),
-    },
+    ok: mainRes.ok && runtimeRes.ok,
+    errors: [...mainRes.errors, ...runtimeRes.errors],
+    warnings: [...mainRes.warnings, ...runtimeRes.warnings],
   };
 }
-
-// ============================================================================
-// Format errors for display
-// ============================================================================
 
 export function formatValidationErrors(result: ValidationResult): string {
-  if (result.ok) {
-    return "Validation passed";
-  }
-  
-  const lines: string[] = [];
-  lines.push("=== Validation Errors ===");
-  
-  for (const error of result.errors) {
-    lines.push(`ERROR: ${error}`);
-  }
-  
-  if (result.warnings.length > 0) {
-    lines.push("");
-    lines.push("=== Warnings ===");
-    for (const warning of result.warnings) {
-      lines.push(`WARNING: ${warning}`);
-    }
-  }
-  
-  return lines.join("\n");
+  let msg = "PT-safe Validation Failed:\n";
+  for (const err of result.errors) msg += `  - ERROR: ${err}\n`;
+  for (const warn of result.warnings) msg += `  - WARNING: ${warn}\n`;
+  return msg;
 }
-
-// ============================================================================
-// Legacy compatibility
-// ============================================================================
 
 export function validateMainCode(code: string): void {
   const result = validateMainJs(code);

@@ -5,6 +5,7 @@ import {
   isInteractiveDialog,
   isRecoverableState,
   needsResponse,
+  type IosMode,
 } from "@cisco-auto/ios-domain";
 
 const promptCases: Array<[string, IosMode]> = [
@@ -19,7 +20,7 @@ const promptCases: Array<[string, IosMode]> = [
   ["Proceed with reload? [confirm]", "reload-confirm"],
   ["Destination filename [startup-config]?", "copy-destination"],
   ["Delete filename [startup-config]?", "erase-confirm"],
-  ["Translating \"shwo\"....domain server (255.255.255.255)", "resolving-hostname"],
+  ["Translating 'shwo'....domain server (255.255.255.255)", "resolving-hostname"],
   ["--More--", "paging"],
 ];
 

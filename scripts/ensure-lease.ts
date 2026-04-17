@@ -7,47 +7,36 @@
 import { writeFileSync, existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
+import type { BridgeLease } from "@cisco-auto/types";
 
 const DEV_DIR = process.env.PT_DEV_DIR || resolve(homedir(), "pt-dev");
 const LEASE_FILE = resolve(DEV_DIR, "bridge-lease.json");
 
-interface BridgeLease {
-  ownerId: string;
-  pid: number;
-  hostname: string;
-  startedAt: number;
-  updatedAt: number;
-  expiresAt: number;
-  ttlMs: number;
-  processTitle: string;
-  version: string;
-}
-
 function isValidLease(lease: BridgeLease): boolean {
   const now = Date.now();
-  
+
   // Verificar campos requeridos
   if (!lease.ownerId || !lease.expiresAt || !lease.updatedAt) {
     return false;
   }
-  
+
   // Verificar que no esté expirado
   if (now > lease.expiresAt) {
     return false;
   }
-  
+
   // Verificar que no esté stale (muy viejo)
   const ageMs = now - lease.updatedAt;
-  if (ageMs > (lease.ttlMs * 2)) {
+  if (ageMs > lease.ttlMs * 2) {
     return false;
   }
-  
+
   return true;
 }
 
 function generateLease(): BridgeLease {
   const now = Date.now();
-  
+
   return {
     ownerId: `manual-${Date.now()}`,
     pid: process.pid,
@@ -57,36 +46,36 @@ function generateLease(): BridgeLease {
     expiresAt: 9999999999000, // Año 2286
     ttlMs: 60000,
     processTitle: "ensure-lease",
-    version: "2.0.0"
+    version: "2.0.0",
   };
 }
 
 function ensureLease(): void {
   console.log("🔍 Verificando lease...");
-  
+
   // Si ya existe un lease válido, terminar
   if (existsSync(LEASE_FILE)) {
     try {
       const content = readFileSync(LEASE_FILE, "utf-8");
       const lease = JSON.parse(content) as BridgeLease;
-      
+
       if (isValidLease(lease)) {
         console.log("✅ Lease válido encontrado:");
         console.log(`   Owner: ${lease.ownerId.substring(0, 12)}...`);
         console.log(`   Expires: ${new Date(lease.expiresAt).toISOString()}`);
         return;
       }
-      
+
       console.log("⚠️  Lease existente está expirado o stale");
     } catch (error) {
       console.log("⚠️  Lease existente está corrupto");
     }
   }
-  
+
   // Generar nuevo lease
   console.log("📝 Generando nuevo lease...");
   const lease = generateLease();
-  
+
   try {
     writeFileSync(LEASE_FILE, JSON.stringify(lease, null, 2));
     console.log("✅ Lease generado correctamente:");

@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, vi } from "bun:test";
-import { createJobExecutor, type ActiveJob } from "../../pt/kernel/job-executor";
+import { createExecutionEngine, type ActiveJob } from "../../pt/kernel/execution-engine";
 import { createTerminalEngine, type PTCommandLine } from "../../pt/terminal/terminal-engine";
 import { createDeferredJobPlan, commandStep } from "../../domain";
 
@@ -33,7 +33,7 @@ function createMockTerminal() {
   };
 }
 
-describe("createJobExecutor", () => {
+describe("createExecutionEngine", () => {
   let mockTerm: PTCommandLine;
   
   beforeEach(() => {
@@ -48,7 +48,7 @@ describe("createJobExecutor", () => {
     });
     terminal.attach("R1", mockTerm);
     
-    const executor = createJobExecutor(terminal);
+    const executor = createExecutionEngine(terminal);
     const plan = createDeferredJobPlan("R1", [
       commandStep("show version"),
     ]);
@@ -68,7 +68,7 @@ describe("createJobExecutor", () => {
     });
     terminal.attach("R1", mockTerm);
     
-    const executor = createJobExecutor(terminal);
+    const executor = createExecutionEngine(terminal);
     const plan = createDeferredJobPlan("R1", [
       commandStep("show version"),
     ]);
@@ -86,7 +86,7 @@ describe("createJobExecutor", () => {
     });
     terminal.attach("R1", mockTerm);
     
-    const executor = createJobExecutor(terminal);
+    const executor = createExecutionEngine(terminal);
     const plan = createDeferredJobPlan("R1", [
       commandStep("show version"),
     ]);
@@ -103,7 +103,7 @@ describe("createJobExecutor", () => {
     });
     terminal.attach("R1", mockTerm);
     
-    const executor = createJobExecutor(terminal);
+    const executor = createExecutionEngine(terminal);
     expect(executor.isJobFinished("unknown-id")).toBe(true);
   });
 });

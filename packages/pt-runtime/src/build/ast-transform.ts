@@ -393,6 +393,7 @@ function stripModuleSyntax(source: string): string {
   const result: string[] = [];
   let inImportMultiLine = false;
   let inExportMultiLine = false;
+  let inExportTypeAssign: { braceDepth: number; hitDepth0Once: boolean } | false = false;
   let inJSDocComment = false;
   let braceDepth = 0;
 
@@ -411,10 +412,13 @@ function stripModuleSyntax(source: string): string {
       continue;
     }
 
-    // Inside a multi-line import block: skip until we see `from "..."`
+    // Inside a multi-line import block: skip until we see `from "..."` then skip that line too
     if (inImportMultiLine) {
-      if (/from\s+["']/.test(trimmed)) inImportMultiLine = false;
-      continue;
+      if (/from\s+["']/.test(trimmed)) {
+        inImportMultiLine = false;
+        continue; // skip the closing line too ("} from ...;")
+      }
+      continue; // skip all lines until 'from'
     }
 
     // Inside a multi-line export { ... } block: skip until braces balance
@@ -422,6 +426,28 @@ function stripModuleSyntax(source: string): string {
       braceDepth += (line.match(/\{/g) || []).length;
       braceDepth -= (line.match(/\}/g) || []).length;
       if (braceDepth <= 0) inExportMultiLine = false;
+      continue;
+    }
+
+    // Inside an export type X = ...; block: skip until closing brace matches the opener
+    // Track brace depth to handle nested objects like linkStats: { ... };
+    // The first }; at depth 0 closes a nested object, not the export type.
+    // Only reset when we see }; at depth 0 AFTER already having closed at depth 0.
+    if (inExportTypeAssign) {
+      const openBraces = (line.match(/\{/g) || []).length;
+      const closeBraces = (line.match(/\}/g) || []).length;
+      inExportTypeAssign.braceDepth += openBraces - closeBraces;
+
+      const isClosingUnionLine = trimmed.startsWith("|") && trimmed.endsWith(";");
+      if (inExportTypeAssign.braceDepth <= 0 && closeBraces > 0) {
+        if (inExportTypeAssign.hitDepth0Once) {
+          inExportTypeAssign = false;
+        } else {
+          inExportTypeAssign.hitDepth0Once = true;
+        }
+      } else if (isClosingUnionLine) {
+        inExportTypeAssign = false;
+      }
       continue;
     }
 
@@ -434,8 +460,25 @@ function stripModuleSyntax(source: string): string {
 
     // ── Export stripping ─────────────────────────────────────────────
     if (/^export\s+default\s+/.test(trimmed)) continue;
-    if (/^export\s+type\s+/.test(trimmed)) continue;      // export type Foo = ...
+
+    // export type X = ... or export type X = Y & { ... }
+    // Skip if it's export type AND either ends with ; OR contains =
+    if (/^export\s+type\s+/.test(trimmed)) {
+      if (!trimmed.endsWith(";")) {
+        const openBraces = (line.match(/\{/g) || []).length;
+        const closeBraces = (line.match(/\}/g) || []).length;
+        inExportTypeAssign = { braceDepth: openBraces - closeBraces, hitDepth0Once: false };
+      }
+      continue;
+    }
     if (/^export\s+\*\s+from/.test(trimmed)) continue;   // export * from "..."
+
+    // Multi-line export type { ... } from "..." - skip until closing `from "..."`
+    if (/^export\s+type\s+\{/.test(trimmed)) {
+      // Check if it ends on this line (has `from "..."`)
+      if (!/from\s+["']/.test(trimmed)) inImportMultiLine = true; // reuse flag, same semantics
+      continue; // always skip export type lines
+    }
 
     // Re-export: export { X, Y } from "..."  (has 'from' = single-line re-export)
     if (/^export\s+\{/.test(trimmed) && /from\s+["']/.test(trimmed)) {
@@ -446,7 +489,8 @@ function stripModuleSyntax(source: string): string {
     if (/^export\s+\{[^}]+\};?\s*$/.test(trimmed)) continue;
 
     // Multi-line export { (no closing } or 'from' on same line)
-    if (/^export\s+\{/.test(trimmed) && !trimmed.includes("}")) {
+    // Also handles: export type { X, Y }
+    if ((/^export\s+\{/.test(trimmed) || /^export\s+type\s+\{/.test(trimmed)) && !trimmed.includes("}")) {
       inExportMultiLine = true;
       braceDepth = 1;
       continue;

@@ -81,9 +81,9 @@ Almost never changes. Regenerated only when Cisco hardware catalog updates.
 ## Data Flow
 
 ```
-Bridge writes command.json → commands/
+Bridge writes command envelopes → commands/
 
-Kernel polls commands/ → atomically moves to in-flight/
+Kernel polls `_queue.json` + `commands/` → atomically moves to `in-flight/`
 Kernel parses JSON envelope
 
 Kernel calls dispatch(payload, api) → runtime.js
@@ -98,7 +98,7 @@ Kernel begins async job execution via TerminalEngine
   Events fire: commandStarted → outputWritten → commandEnded
   JobExecutor processes step results
 
-Kernel polls __pollDeferred(type, id) → returns current job state
+Kernel polls `__pollDeferred(ticket)` → returns current job state
 Once jobDone=true → kernel writes results/{id}.json (completed)
 
 Kernel cleans up in-flight/{filename}

@@ -4,37 +4,29 @@ import type { PtDeps } from "../../pt-api/pt-deps.js";
 
 const deps: PtDeps = {
   ipc: {} as never,
-  getLW: () => ({} as never),
-  getNet: () => ({
-    getDevice: () => ({
-      getName: () => "PC1",
-      getModel: () => "pc",
-      getType: () => 8,
-      getPower: () => true,
-      getPortCount: () => 1,
-      getPortAt: () => ({
-        getName: () => "FastEthernet0",
-        getIpAddress: () => "10.0.0.10",
-        getSubnetMask: () => "255.255.255.0",
-        getDefaultGateway: () => "10.0.0.1",
-        getDnsServerIp: () => "8.8.8.8",
-        getIpv6Address: () => "",
-        getIpv6Enabled: () => false,
-        getIpv6Mtu: () => 0,
-        getMtu: () => 1500,
-        getIpMtu: () => 1500,
-        isPortUp: () => true,
-        isProtocolUp: () => true,
-        getInboundFirewallService: () => "",
-        getInboundFirewallServiceStatus: () => "",
-        getInboundIpv6FirewallService: () => "",
-        getInboundIpv6FirewallServiceStatus: () => "",
+  getLW: () => ({}) as never,
+  getNet: () =>
+    ({
+      getDevice: () => ({
+        getName: () => "PC1",
+        getModel: () => "pc",
+        getType: () => 8,
+        getPower: () => true,
+        getPortCount: () => 1,
+        getPortAt: () => ({
+          getName: () => "FastEthernet0",
+          getIpAddress: () => "10.0.0.10",
+          getSubnetMask: () => "255.255.255.0",
+          getDefaultGateway: () => "10.0.0.1",
+          getDnsServerIp: () => "8.8.8.8",
+          isPortUp: () => true,
+          isProtocolUp: () => true,
+        }),
+        getPort: () => null,
+        getDhcpFlag: () => false,
       }),
-      getPort: () => null,
-      getDhcpFlag: () => false,
-    }),
-  } as never),
-  getFM: () => ({} as never),
+    }) as never,
+  getFM: () => ({}) as never,
   dprint: () => {},
   DEV_DIR: "/tmp",
   getDeviceByName: () => null,
@@ -48,5 +40,100 @@ describe("host handlers", () => {
     const result = handleInspectHost({ type: "inspectHost", device: "PC1" }, deps);
     expect(result.ok).toBe(true);
     expect((result as any).device).toBe("PC1");
+  });
+
+  test("inspectHost no falla si el puerto no expone gateway", () => {
+    const localDeps: PtDeps = {
+      ...deps,
+      getNet: () =>
+        ({
+          getDevice: () => ({
+            getName: () => "PC1",
+            getModel: () => "pc",
+            getType: () => 8,
+            getPower: () => true,
+            getPortCount: () => 1,
+            getPortAt: () => ({
+              getName: () => "FastEthernet0",
+              getIpAddress: () => "10.0.0.10",
+              getSubnetMask: () => "255.255.255.0",
+              getDnsServerIp: () => "8.8.8.8",
+              isPortUp: () => true,
+              isProtocolUp: () => true,
+            }),
+            getPort: () => null,
+            getDhcpFlag: () => false,
+          }),
+        }) as never,
+    };
+
+    const result = handleInspectHost({ type: "inspectHost", device: "PC1" }, localDeps);
+
+    expect(result.ok).toBe(true);
+    expect((result as any).ports[0].gateway).toBeUndefined();
+  });
+
+  test("inspectHost no expone campos IPv6", () => {
+    const localDeps: PtDeps = {
+      ...deps,
+      getNet: () =>
+        ({
+          getDevice: () => ({
+            getName: () => "PC1",
+            getModel: () => "pc",
+            getType: () => 8,
+            getPower: () => true,
+            getPortCount: () => 1,
+            getPortAt: () => ({
+              getName: () => "FastEthernet0",
+              getIpAddress: () => "10.0.0.10",
+              getSubnetMask: () => "255.255.255.0",
+              getDefaultGateway: () => "10.0.0.1",
+              getDnsServerIp: () => "8.8.8.8",
+              isPortUp: () => true,
+              isProtocolUp: () => true,
+            }),
+            getPort: () => null,
+            getDhcpFlag: () => false,
+          }),
+        }) as never,
+    };
+
+    const result = handleInspectHost({ type: "inspectHost", device: "PC1" }, localDeps);
+
+    expect(result.ok).toBe(true);
+    expect((result as any).ports[0].ipv6Address).toBeUndefined();
+    expect((result as any).ports[0].ipv6Enabled).toBeUndefined();
+  });
+
+  test("inspectHost no falla si el puerto no expone getIpAddress", () => {
+    const localDeps: PtDeps = {
+      ...deps,
+      getNet: () =>
+        ({
+          getDevice: () => ({
+            getName: () => "PC1",
+            getModel: () => "pc",
+            getType: () => 8,
+            getPower: () => true,
+            getPortCount: () => 1,
+            getPortAt: () => ({
+              getName: () => "FastEthernet0",
+              getSubnetMask: () => "255.255.255.0",
+              getDefaultGateway: () => "10.0.0.1",
+              getDnsServerIp: () => "8.8.8.8",
+              isPortUp: () => true,
+              isProtocolUp: () => true,
+            }),
+            getPort: () => null,
+            getDhcpFlag: () => false,
+          }),
+        }) as never,
+    };
+
+    const result = handleInspectHost({ type: "inspectHost", device: "PC1" }, localDeps);
+
+    expect(result.ok).toBe(true);
+    expect((result as any).ports[0].ip).toBeUndefined();
   });
 });

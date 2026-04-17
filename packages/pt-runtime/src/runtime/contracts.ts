@@ -267,7 +267,7 @@ export interface ResultEnvelope {
   completedAt: number;
   status: "completed" | "failed" | "pending";
   ok: boolean;
-  value: RuntimeResult;
+  value?: RuntimeResult;
   jobId?: string;
   device?: string;
   phase?: string;
@@ -275,6 +275,12 @@ export interface ResultEnvelope {
   outputTail?: string;
   ptStatus?: number;
   errorCode?: string;
+  error?: {
+    code: string;
+    message: string;
+    phase: "queue" | "execution" | "validation";
+    stack?: string;
+  };
 }
 
 // ============================================================================

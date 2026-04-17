@@ -15,6 +15,24 @@ export interface PushResult {
   error?: string;
 }
 
+export async function waitForBridgeReady(
+  bridge: { isReady(): boolean },
+  timeoutMs: number,
+  pollMs = 50,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    if (bridge.isReady()) {
+      return true;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+
+  return bridge.isReady();
+}
+
 function getDevDir(): string {
   return process.env.PT_DEV_DIR || `${process.env.HOME ?? ""}/pt-dev`;
 }
@@ -37,11 +55,18 @@ export async function pushCommands(
   bridge.start();
 
   try {
-    const result = await bridge.sendCommandAndWait<{ device: string; commands: string[]; save?: boolean }, { ok: boolean; error?: string }>(
-      "configIos",
-      { device: deviceId, commands, save: true },
-      timeoutMs,
-    );
+    const bridgeReady = await waitForBridgeReady(bridge, timeoutMs);
+    if (!bridgeReady) {
+      return {
+        success: false,
+        error: "Bridge not ready",
+      };
+    }
+
+    const result = await bridge.sendCommandAndWait<
+      { device: string; commands: string[]; save?: boolean },
+      { ok: boolean; error?: string }
+    >("configIos", { device: deviceId, commands, save: true }, timeoutMs);
 
     if (result.ok) {
       return { success: true, commandId: result.id };
@@ -66,21 +91,25 @@ export async function pushCommands(
  * Send a raw code string to PT for evaluation.
  * Uses the "code" handler in the runtime.
  */
-export async function pushCode(
-  code: string,
-  timeoutMs = 120_000,
-): Promise<PushResult> {
+export async function pushCode(code: string, timeoutMs = 120_000): Promise<PushResult> {
   const devDir = getDevDir();
   const bridge = new FileBridgeV2({ root: devDir });
 
   bridge.start();
 
   try {
-    const result = await bridge.sendCommandAndWait<{ code: string }, { ok: boolean; error?: string }>(
-      "code",
-      { code },
-      timeoutMs,
-    );
+    const bridgeReady = await waitForBridgeReady(bridge, timeoutMs);
+    if (!bridgeReady) {
+      return {
+        success: false,
+        error: "Bridge not ready",
+      };
+    }
+
+    const result = await bridge.sendCommandAndWait<
+      { code: string },
+      { ok: boolean; error?: string }
+    >("code", { code }, timeoutMs);
 
     if (result.ok) {
       return { success: true, commandId: result.id };

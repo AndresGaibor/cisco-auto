@@ -46,7 +46,7 @@ export class BackpressureManager {
     if (pending >= this.config.maxPending) {
       throw new BackpressureError(
         `Command queue full: ${pending}/${this.config.maxPending} pending. ` +
-        `Wait for PT to process commands before sending more.`,
+          `Wait for PT to process commands before sending more.`,
         pending,
         this.config.maxPending,
       );
@@ -63,15 +63,13 @@ export class BackpressureManager {
         return;
       }
 
-      await new Promise((resolve) =>
-        setTimeout(resolve, this.config.checkIntervalMs)
-      );
+      await new Promise((resolve) => setTimeout(resolve, this.config.checkIntervalMs));
     }
 
     const pending = this.getPendingCount();
     throw new BackpressureError(
       `Timeout waiting for command queue capacity after ${timeoutMs ?? this.config.maxWaitMs}ms. ` +
-      `Queue has ${pending}/${this.config.maxPending} pending commands.`,
+        `Queue has ${pending}/${this.config.maxPending} pending commands.`,
       pending,
       this.config.maxPending,
     );
@@ -82,10 +80,12 @@ export class BackpressureManager {
       const commandsDir = this.paths.commandsDir();
       const inFlightDir = this.paths.inFlightDir();
 
-      const commands = readdirSync(commandsDir)
-        .filter((f) => f.endsWith(".json")).length;
-      const inFlight = readdirSync(inFlightDir)
-        .filter((f) => f.endsWith(".json")).length;
+      const commands = readdirSync(commandsDir).filter(
+        (f) => f.endsWith(".json") && f !== "_queue.json",
+      ).length;
+      const inFlight = readdirSync(inFlightDir).filter(
+        (f) => f.endsWith(".json") && f !== "_queue.json",
+      ).length;
 
       return commands + inFlight;
     } catch {
@@ -122,10 +122,12 @@ export class BackpressureManager {
     utilizationPercent: number;
   } {
     try {
-      const queuedCount = readdirSync(this.paths.commandsDir())
-        .filter((f) => f.endsWith(".json")).length;
-      const inFlightCount = readdirSync(this.paths.inFlightDir())
-        .filter((f) => f.endsWith(".json")).length;
+      const queuedCount = readdirSync(this.paths.commandsDir()).filter(
+        (f) => f.endsWith(".json") && f !== "_queue.json",
+      ).length;
+      const inFlightCount = readdirSync(this.paths.inFlightDir()).filter(
+        (f) => f.endsWith(".json") && f !== "_queue.json",
+      ).length;
       const totalPending = queuedCount + inFlightCount;
 
       return {

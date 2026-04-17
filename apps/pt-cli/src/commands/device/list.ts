@@ -62,6 +62,7 @@ export function createDeviceListCommand(): Command {
         count: result.count,
         connectionsByDevice: result.connectionsByDevice,
         unresolvedLinks: result.unresolvedLinks,
+        ptLinkDebug: (result as any).ptLinkDebug,
         useJson,
         verbose,
         linksMode,
@@ -93,6 +94,7 @@ interface ListedPort {
   ipAddress?: string;
   subnetMask?: string;
   macAddress?: string;
+  mac?: string;
   speed?: string;
   duplex?: "auto" | "full" | "half";
   vlan?: number;
@@ -101,12 +103,56 @@ interface ListedPort {
   connection?: PortConnection;
 }
 
+export function selectPortsForDisplay(ports: ListedPort[], verbose: boolean): ListedPort[] {
+  if (verbose) return ports;
+
+  const MAX_PORTS = 8;
+
+  const scorePort = (port: ListedPort): number => {
+    let score = 0;
+    if (port.link || port.connection) score += 100;
+    if ((port as any).linkedPortName) score += 80;
+    if (port.status === "up" || port.protocol === "up") score += 40;
+    if (port.ipAddress && port.ipAddress !== "0.0.0.0") score += 20;
+    if (port.macAddress || port.mac) score += 10;
+    return score;
+  };
+
+  return ports
+    .filter((port) => scorePort(port) > 0)
+    .sort((a, b) => scorePort(b) - scorePort(a))
+    .slice(0, MAX_PORTS);
+}
+
+export function extractDeviceMac(ports: ListedPort[]): string | undefined {
+  return ports
+    .map((port) => port.macAddress || port.mac)
+    .find((mac) => mac && mac !== "0.0.0.0" && mac !== "0000.0000.0000");
+}
+
+export function getPortLinkLabel(port: ListedPort): string {
+  if (port.connection?.remoteDevice && port.connection?.remotePort) {
+    return `${port.connection.remoteDevice}:${port.connection.remotePort}`;
+  }
+
+  const isUp =
+    (typeof (port as { up?: boolean }).up === "boolean" && (port as { up?: boolean }).up) ||
+    port.status === "up" ||
+    port.protocol === "up";
+
+  if (isUp) return "UP";
+  if (port.status === "administratively down") return "ADMIN-DOWN";
+  if (port.status === "down" || port.protocol === "down") return "DOWN";
+  return "--";
+}
+
 interface RenderDevice {
   name: string;
   model: string;
   type: string;
   power: boolean;
   ports?: ListedPort[];
+  mac?: string;
   displayName?: string;
   x?: number;
   y?: number;
@@ -120,6 +166,13 @@ interface RenderOptions {
   count: number;
   connectionsByDevice: Record<string, ConnectionInfo[]>;
   unresolvedLinks: UnresolvedLink[];
+  ptLinkDebug?: {
+    getLinkCountResult: number;
+    ptLinksFromLinkAt?: number;
+    ptLinksFromPortScan?: number;
+    ptLinksFound: number;
+    registryEntries: number;
+  };
   useJson: boolean;
   verbose: boolean;
   linksMode: boolean;
@@ -192,6 +245,8 @@ function renderDeviceList(options: RenderOptions): void {
   };
 
   const devices = options.devices;
+  const deviceMap = new Map(devices.map((device) => [device.name, device] as const));
+  const pad = (value: string, width: number) => value.padEnd(width, " ");
 
   if (options.linksMode) {
     console.log(`\n📡 Conectividad (${devices.length} dispositivos):`);
@@ -236,78 +291,79 @@ function renderDeviceList(options: RenderOptions): void {
     console.log(`\n📱 Dispositivos en Packet Tracer (${devices.length}):`);
     console.log("━".repeat(60));
 
-    const maxPorts = options.verbose ? Infinity : 8;
-
     devices.forEach((device, i) => {
       const typeName = getTypeName(device.type);
       const ports = device.ports || [];
+      const deviceMac = device.mac || extractDeviceMac(ports);
       const ip =
         device.ip || ports?.find((p) => p.ipAddress && p.ipAddress !== "0.0.0.0")?.ipAddress;
       const mask =
         device.mask || ports?.find((p) => p.ipAddress && p.ipAddress !== "0.0.0.0")?.subnetMask;
+      const hostname = device.hostname || device.name;
 
       console.log(`\n${i + 1}. ${chalk.cyan(device.name)}`);
+      console.log(`   ${chalk.gray("Device Name")}: ${device.name}`);
+      console.log(`   ${chalk.gray("Custom Device Model")}: ${device.model}`);
+      console.log(`   ${chalk.gray("Hostname")}: ${hostname}`);
 
       if (ip && ip !== "0.0.0.0") {
         console.log(`   ${chalk.green("●")} ${ip}/${mask || "?"}`);
       }
 
-      console.log(`   ${typeName} | ${device.model}`);
-
-      const interestingPorts = ports.filter(
-        (p) => p.ipAddress || p.status === "up" || p.connection,
+      console.log(
+        `   ${pad(chalk.gray("Port"), 22)}${pad(chalk.gray("Link"), 16)}${pad(chalk.gray("VLAN"), 8)}${pad(chalk.gray("IP Address"), 16)}${chalk.gray("MAC Address")}`,
       );
-      const portsToShow = interestingPorts.slice(0, maxPorts);
 
-      if (portsToShow.length > 0) {
-        console.log(`   ${chalk.gray("Puertos:")}`);
-        portsToShow.forEach((p) => {
-          const vlanStr = p.vlan !== null && p.vlan !== undefined ? `VLAN:${p.vlan}` : "";
-          const ipStr = p.ipAddress ? `${p.ipAddress}` : "";
-          const statusStr =
-            p.status === "up"
-              ? chalk.green("UP")
-              : p.status === "down"
-                ? chalk.red("DOWN")
-                : p.status === "administratively down"
-                  ? chalk.yellow("ADMIN-DOWN")
-                  : "";
-          const macStr = p.macAddress ? `MAC:${p.macAddress}` : "";
-          const parts = [p.name, ipStr, vlanStr, macStr, statusStr].filter(Boolean).join(" | ");
-          if (p.connection) {
-            const peer = p.connection.remoteDevice;
-            const remote = p.connection.remotePort;
-            const connBadge = confidenceBadge(p.connection.confidence);
-            console.log(`      ${parts} → ${chalk.cyan(peer)}:${remote} ${connBadge}`);
-          } else {
-            console.log(`      ${parts}`);
-          }
-        });
-        if (interestingPorts.length > maxPorts && !options.verbose) {
-          console.log(`      ${chalk.gray(`+${interestingPorts.length - maxPorts} más`)}`);
+      ports.forEach((p) => {
+        const rawLabel = getPortLinkLabel(p);
+        // Si no hay connection resuelta pero port.getLink() captó el peer (Track 2 fallback),
+        // mostrar el linkedPortName con color amarillo (menos certeza que el verde exact)
+        const linkedPortName = (p as any).linkedPortName as string | undefined;
+        let linkValue: string;
+        if (p.connection) {
+          linkValue = chalk.green(rawLabel);
+        } else if (rawLabel === "--" && linkedPortName) {
+          linkValue = chalk.yellow(linkedPortName);
+        } else if (rawLabel === "ADMIN-DOWN") {
+          linkValue = chalk.yellow(rawLabel);
+        } else if (rawLabel === "DOWN") {
+          linkValue = chalk.red(rawLabel);
+        } else if (rawLabel === "UP") {
+          linkValue = chalk.green(rawLabel);
+        } else {
+          linkValue = chalk.gray(rawLabel);
         }
-      }
+        const vlanValue = p.vlan !== null && p.vlan !== undefined ? String(p.vlan) : "--";
+        const ipValue = p.ipAddress && p.ipAddress !== "0.0.0.0" ? p.ipAddress : "--";
+        const macValue = p.macAddress || p.mac || "--";
+        const portCol = pad(p.name, 22);
+        const linkCol = pad(linkValue, 18);
+        const vlanCol = pad(vlanValue, 8);
+        const ipCol = pad(ipValue, 16);
+        console.log(`      ${portCol}${linkCol}${vlanCol}${ipCol}${macValue}`);
+      });
     });
   }
 
-  const allLinks = Object.values(options.connectionsByDevice).flat();
-  const totalLinks = allLinks.length;
-  const exactLinks = allLinks.filter((c) => c.confidence === "exact").length;
-  const mergedLinks = allLinks.filter((c) => c.confidence === "merged").length;
-  const registryLinks = allLinks.filter((c) => c.confidence === "registry").length;
-  const unresolvedCount = options.unresolvedLinks.length;
-
   console.log(`\n${chalk.gray("─".repeat(60))}`);
   console.log(`Total: ${devices.length} dispositivos`);
-  console.log(`Directos: ${exactLinks + mergedLinks + registryLinks}`);
-  if (unresolvedCount > 0) {
-    console.log(`\n${chalk.yellow("Sin resolver")} (${unresolvedCount}):`);
-    options.unresolvedLinks.forEach((ul) => {
-      const candidatesStr1 = ul.candidates1.length > 0 ? ` [${ul.candidates1.join(", ")}]` : "";
-      const candidatesStr2 = ul.candidates2.length > 0 ? ` [${ul.candidates2.join(", ")}]` : "";
-      console.log(
-        `   ${ul.port1Name}${candidatesStr1} ↔ ${ul.port2Name}${candidatesStr2} ${confidenceBadge(ul.confidence)}`,
-      );
-    });
+
+  // Mostrar diagnóstico de link discovery en --verbose
+  if (options.verbose && options.ptLinkDebug) {
+    const d = options.ptLinkDebug;
+    const parts = [
+      `getLinkAt=${d.getLinkCountResult}`,
+      `linkAt=${d.ptLinksFromLinkAt ?? "?"}`,
+      `portScan=${d.ptLinksFromPortScan ?? "?"}`,
+      `total=${d.ptLinksFound}`,
+      `registry=${d.registryEntries}`,
+    ];
+    console.log(chalk.gray(`\n[debug:links] ${parts.join("  ")}`));
+    if ((d.ptLinksFromPortScan ?? 0) === 0 && d.ptLinksFound <= 1) {
+      console.log(chalk.yellow(
+        "  ⚠ port.getLink() retornó null para todos los puertos UP.\n" +
+        "  El .pkt puede requerir Estrategia B (CDP CLI). Ver implementación_plan.md"
+      ));
+    }
   }
 }

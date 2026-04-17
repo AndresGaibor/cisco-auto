@@ -1,7 +1,12 @@
 import type { FileBridgePort } from "../ports/file-bridge.port.js";
 import type { TopologyCachePort } from "../ports/topology-cache.port.js";
-import type { TopologySnapshot, DeviceState } from "../../contracts/index.js";
-import { PT_NON_CREATABLE_MODELS } from "@cisco-auto/pt-runtime/value-objects";
+import type {
+  TopologySnapshot,
+  DeviceState,
+  ConnectionInfo,
+  UnresolvedLink,
+} from "../../contracts/index.js";
+import { PT_NON_CREATABLE_MODELS } from "@cisco-auto/pt-runtime";
 
 function ptDeviceTypeToString(typeId: number): DeviceState["type"] {
   const map: Record<number, DeviceState["type"]> = {
@@ -16,6 +21,16 @@ function ptDeviceTypeToString(typeId: number): DeviceState["type"] {
     8: "generic",
   };
   return map[typeId] ?? "generic";
+}
+
+import type { LinkStats } from "../../contracts/device-types.js";
+
+interface ListDevicesResultWithLinks {
+  devices?: DeviceState[];
+  connectionsByDevice?: Record<string, ConnectionInfo[]>;
+  unresolvedLinks?: UnresolvedLink[];
+  count?: number;
+  ptLinkDebug?: LinkStats;
 }
 
 export class TopologyQueryService {
@@ -88,66 +103,173 @@ export class TopologyQueryService {
 
   async listDevices(filter?: string | number | string[]): Promise<{
     devices: DeviceState[];
-    deviceLinks?: Record<string, string[]>;
-    count?: number;
+    connectionsByDevice: Record<string, ConnectionInfo[]>;
+    unresolvedLinks: UnresolvedLink[];
+    count: number;
+    ptLinkDebug?: LinkStats;
   }> {
-    const cachedDevices = this.cache.getDevices().filter((device) => {
-      const model = String(device.model || "").toLowerCase();
-      return !PT_NON_CREATABLE_MODELS.some((item: string) => item.toLowerCase() === model);
-    });
-
-    const filterAutoCreated = (devices: DeviceState[]) =>
-      devices.filter((device) => {
-        const model = String(device.model || "").toLowerCase();
-        return !PT_NON_CREATABLE_MODELS.some((item: string) => item.toLowerCase() === model);
-      });
-
-    if (cachedDevices.length > 0) {
-      if (typeof filter === "undefined") return { devices: cachedDevices };
-
+    const filterDevices = (devices: DeviceState[]) => {
       if (typeof filter === "number") {
         const targetType = ptDeviceTypeToString(filter);
-        return { devices: cachedDevices.filter((device) => device.type === targetType) };
+        return devices.filter((device) => device.type === targetType);
       }
 
-      const normalizedFilter = String(filter).toLowerCase();
-      return {
-        devices: cachedDevices.filter((device) => {
+      if (typeof filter === "string") {
+        const normalizedFilter = String(filter).toLowerCase();
+        return devices.filter((device) => {
           return (
             device.name.toLowerCase().includes(normalizedFilter) ||
             device.model.toLowerCase().includes(normalizedFilter) ||
             device.type.toLowerCase().includes(normalizedFilter)
           );
-        }),
+        });
+      }
+
+      return devices;
+    };
+
+    const cachedDevices = this.cache.getDevices().filter((device) => {
+      const model = String(device.model || "").toLowerCase();
+      return !PT_NON_CREATABLE_MODELS.some((item: string) => item.toLowerCase() === model);
+    });
+
+    if (cachedDevices.length > 0) {
+      try {
+        const result = await this.bridge.sendCommandAndWait<
+          DeviceState[] | ListDevicesResultWithLinks
+        >(
+          "listDevices",
+          {
+            id: this.generateId(),
+            filter,
+          },
+          15000,
+        );
+
+        const value = result.value;
+        // console.error("[DEBUG] Fast path resolved successfully");
+        if (Array.isArray(value)) {
+          const devices = filterDevices(
+            value.filter((device) => {
+              const model = String(device.model || "").toLowerCase();
+              return !PT_NON_CREATABLE_MODELS.some((item: string) => item.toLowerCase() === model);
+            }),
+          );
+          return {
+            devices,
+            connectionsByDevice: {},
+            unresolvedLinks: [],
+            count: devices.length,
+          };
+        }
+        if (value && typeof value === "object") {
+          const devices = Array.isArray(value.devices)
+            ? filterDevices(
+                value.devices.filter((device) => {
+                  const model = String(device.model || "").toLowerCase();
+                  return !PT_NON_CREATABLE_MODELS.some(
+                    (item: string) => item.toLowerCase() === model,
+                  );
+                }),
+              )
+            : [];
+          console.error(
+            "[DEBUG] value.connectionsByDevice:",
+            Object.keys(value.connectionsByDevice || {}).length,
+            "keys",
+          );
+          return {
+            devices,
+            connectionsByDevice: value.connectionsByDevice || {},
+            unresolvedLinks: value.unresolvedLinks || [],
+            count: value.count || devices.length,
+            ptLinkDebug: (value as ListDevicesResultWithLinks).ptLinkDebug,
+          };
+        }
+      } catch (e) {
+        console.error("[DEBUG] PT fast-path failed. Falling back to cache. Error:", e);
+        // PT no respondió; usar caché
+      }
+
+      const cachedLinks = this.cache.getLinks();
+      const connectionsByDevice: Record<string, ConnectionInfo[]> = {};
+      const unresolvedLinks: UnresolvedLink[] = [];
+
+      for (const link of cachedLinks) {
+        const d1Connections = connectionsByDevice[link.device1] ?? [];
+        const d2Connections = connectionsByDevice[link.device2] ?? [];
+        d1Connections.push({
+          localPort: link.port1,
+          remoteDevice: link.device2,
+          remotePort: link.port2,
+          confidence: "registry",
+        });
+        d2Connections.push({
+          localPort: link.port2,
+          remoteDevice: link.device1,
+          remotePort: link.port1,
+          confidence: "registry",
+        });
+        connectionsByDevice[link.device1] = d1Connections;
+        connectionsByDevice[link.device2] = d2Connections;
+      }
+
+      const filteredDevices = filterDevices(cachedDevices);
+
+      return {
+        devices: filteredDevices,
+        connectionsByDevice,
+        unresolvedLinks,
+        count: filteredDevices.length,
       };
     }
 
-    const result = await this.bridge.sendCommandAndWait<
-      | DeviceState[]
-      | {
-          devices?: DeviceState[];
-          deviceLinks?: Record<string, string[]>;
-          count?: number;
-          data?: unknown;
-        }
-    >("listDevices", {
-      id: this.generateId(),
-      filter,
-    });
+    const result = await this.bridge.sendCommandAndWait<DeviceState[] | ListDevicesResultWithLinks>(
+      "listDevices",
+      {
+        id: this.generateId(),
+        filter,
+      },
+    );
     const value = result.value;
+    // console.error("[DEBUG] Slow path resolved successfully");
 
     if (Array.isArray(value)) {
-      return { devices: filterAutoCreated(value), count: value.length };
-    }
-    if (value && typeof value === "object") {
-      const devices = Array.isArray(value.devices) ? filterAutoCreated(value.devices) : [];
       return {
-        devices,
-        deviceLinks: value.deviceLinks || {},
-        count: value.count || devices.length,
+        devices: filterDevices(
+          value.filter((device) => {
+            const model = String(device.model || "").toLowerCase();
+            return !PT_NON_CREATABLE_MODELS.some((item: string) => item.toLowerCase() === model);
+          }),
+        ),
+        connectionsByDevice: {},
+        unresolvedLinks: [],
+        count: filterDevices(
+          value.filter((device) => {
+            const model = String(device.model || "").toLowerCase();
+            return !PT_NON_CREATABLE_MODELS.some((item: string) => item.toLowerCase() === model);
+          }),
+        ).length,
       };
     }
-    return { devices: [] };
+    if (value && typeof value === "object") {
+      const devices = Array.isArray(value.devices)
+        ? filterDevices(
+            value.devices.filter((device) => {
+              const model = String(device.model || "").toLowerCase();
+              return !PT_NON_CREATABLE_MODELS.some((item: string) => item.toLowerCase() === model);
+            }),
+          )
+        : [];
+      return {
+        devices,
+        connectionsByDevice: value.connectionsByDevice || {},
+        unresolvedLinks: value.unresolvedLinks || [],
+        count: typeof value.count === "number" ? value.count : devices.length,
+        ptLinkDebug: (value as ListDevicesResultWithLinks).ptLinkDebug,
+      };
+    }
+    return { devices: [], connectionsByDevice: {}, unresolvedLinks: [], count: 0 };
   }
 
   getCachedSnapshot(): TopologySnapshot | null {

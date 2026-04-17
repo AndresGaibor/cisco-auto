@@ -58,5 +58,15 @@ export default [
       "@typescript-eslint/no-explicit-any": "off",
     },
   },
+  {
+    files: ["packages/pt-control/src/**/*.ts"],
+    ignores: ["**/__tests__/**", "**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        name: "@cisco-auto/pt-runtime",
+        message: "pt-control debe importar desde la API pública de @cisco-auto/pt-runtime (raíz), no desde rutas internas. Usar: import { ... } from '@cisco-auto/pt-runtime'",
+      }],
+    },
+  },
   prettier,
 ];

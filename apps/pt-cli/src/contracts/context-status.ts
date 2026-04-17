@@ -24,7 +24,6 @@ export interface ContextStatus {
   };
   bridge: {
     ready: boolean;
-    leaseValid?: boolean;
     queuedCount?: number;
     inFlightCount?: number;
     warnings?: string[];

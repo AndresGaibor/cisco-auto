@@ -1,6 +1,7 @@
 import type { PtDeps } from "../pt-api/pt-deps.js";
 import { ptError, ptSuccess, PtErrorCode, type PtResult } from "../pt-api/pt-results.js";
 import type { PTDevice, PTPort } from "../pt-api/pt-api-registry.js";
+import { ptSafeGet } from "../pt-api/pt-processes.js";
 
 export interface InspectHostPayload {
   type: "inspectHost";
@@ -9,22 +10,19 @@ export interface InspectHostPayload {
 
 function collectPorts(device: PTDevice): Array<Record<string, unknown>> {
   const ports: Array<Record<string, unknown>> = [];
+
   for (let i = 0; i < device.getPortCount(); i++) {
     const port = device.getPortAt(i) as PTPort | null;
     if (!port) continue;
 
     ports.push({
-      name: port.getName(),
-      ip: port.getIpAddress(),
-      mask: port.getSubnetMask(),
-      gateway: port.getDefaultGateway(),
-      dns: port.getDnsServerIp(),
-      ipv6Enabled: port.getIpv6Enabled ? port.getIpv6Enabled() : false,
-      ipv6Address: port.getIpv6Address ? port.getIpv6Address() : "",
-      mtu: port.getMtu ? port.getMtu() : 0,
-      ipv6Mtu: port.getIpv6Mtu ? port.getIpv6Mtu() : 0,
-      portUp: port.isPortUp ? port.isPortUp() : false,
-      protocolUp: port.isProtocolUp ? port.isProtocolUp() : false,
+      name: ptSafeGet(port, (p) => p.getName?.()) ?? "",
+      ip: ptSafeGet(port, (p) => p.getIpAddress?.()) ?? undefined,
+      mask: ptSafeGet(port, (p) => p.getSubnetMask?.()) ?? undefined,
+      gateway: ptSafeGet(port, (p) => p.getDefaultGateway?.()) ?? undefined,
+      dns: ptSafeGet(port, (p) => p.getDnsServerIp?.()) ?? undefined,
+      portUp: ptSafeGet(port, (p) => p.isPortUp?.()) ?? false,
+      protocolUp: ptSafeGet(port, (p) => p.isProtocolUp?.()) ?? false,
     });
   }
   return ports;

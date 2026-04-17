@@ -7,7 +7,7 @@ import type {
   AddLinkPayload,
 } from "../../contracts/index.js";
 import { validatePTModel } from "../../shared/utils/helpers.js";
-import { validatePortExists } from "@cisco-auto/pt-runtime/value-objects";
+import { validatePortExists } from "@cisco-auto/pt-runtime";
 
 export class TopologyMutationService {
   constructor(

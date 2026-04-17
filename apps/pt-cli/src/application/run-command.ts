@@ -1,29 +1,28 @@
 #!/usr/bin/env bun
-import { getContextualSuggestions } from './contextual-suggestions.js';
+import { getContextualSuggestions } from "./contextual-suggestions.js";
 /**
  * Runner unificado para todos los comandos de la CLI.
  * Encapsula lógica de ejecución, logging, historial y rendering.
  */
 
-import { randomUUID } from 'node:crypto';
-import { createDefaultPTController } from '@cisco-auto/pt-control';
-import type { PTController } from '@cisco-auto/pt-control';
+import { randomUUID } from "node:crypto";
+import { createDefaultPTController } from "@cisco-auto/pt-control";
+import type { PTController } from "@cisco-auto/pt-control";
 
-import type { CliResult } from '../contracts/cli-result.js';
-import { createErrorResult, createSuccessResult } from '../contracts/cli-result.js';
-import type { CommandMeta } from '../contracts/command-meta.js';
-import type { HistoryEntry } from '../contracts/history-entry.js';
-import type { GlobalFlags, OutputFormat } from '../flags.js';
+import type { CliResult } from "../contracts/cli-result.js";
+import { createErrorResult, createSuccessResult } from "../contracts/cli-result.js";
+import type { CommandMeta } from "../contracts/command-meta.js";
+import type { HistoryEntry } from "../contracts/history-entry.js";
+import type { GlobalFlags, OutputFormat } from "../flags.js";
 
-import { sessionLogStore } from '../telemetry/session-log-store.js';
-import { historyStore } from '../telemetry/history-store.js';
-import { bundleWriter } from '../telemetry/bundle-writer.js';
-import { persistHistoryEntryToMemory } from './memory-persistence.js';
-import type { CommandRuntimeContext } from './context-inspector.js';
-import { inspectCommandContext } from './context-inspector.js';
-import { buildContextWarnings } from './context-advice.js';
-import { collectContextStatus, writeContextStatus } from './context-supervisor.js';
-import { ensureSupervisorRunning } from '../system/context-supervisor.js';
+import { sessionLogStore } from "../telemetry/session-log-store.js";
+import { historyStore } from "../telemetry/history-store.js";
+import { bundleWriter } from "../telemetry/bundle-writer.js";
+import { persistHistoryEntryToMemory } from "./memory-persistence.js";
+import type { CommandRuntimeContext } from "./context-inspector.js";
+import { inspectCommandContext } from "./context-inspector.js";
+import { buildContextWarnings } from "./context-advice.js";
+import { collectContextStatus, writeContextStatus } from "./context-supervisor.js";
 
 export interface CommandContext {
   sessionId: string;
@@ -54,15 +53,6 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
   const startTime = Date.now();
   const sessionId = options.flags.sessionId ?? generateSessionId();
   const correlationId = generateCorrelationId();
-
-
-  // Asegurar que el supervisor de contexto esté corriendo
-  try {
-    await ensureSupervisorRunning();
-  } catch (e) {
-    console.debug('[runCommand] Error arrancando supervisor:', e);
-    // Continuar sin supervisor
-  }
   const controller = createDefaultPTController();
 
   const logPhase = async (phase: string, metadata?: Record<string, unknown>) => {
@@ -83,14 +73,14 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
     deviceCount: 0,
     linkCount: 0,
     heartbeat: {
-      state: 'unknown',
+      state: "unknown",
     },
     bridge: {
       ready: false,
       warnings: [],
     },
-    warnings: ['Controller no se pudo iniciar'],
-    notes: ['Contexto del controller no disponible'],
+    warnings: ["Controller no se pudo iniciar"],
+    notes: ["Contexto del controller no disponible"],
   };
   let contextStatusToPersist: Awaited<ReturnType<typeof collectContextStatus>> | null = null;
 
@@ -98,7 +88,7 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
     await controller.start();
     runtimeContext = await inspectCommandContext(controller);
 
-    await logPhase('start', {
+    await logPhase("start", {
       flags: options.flags,
       payloadPreview: options.payloadPreview,
       contextSummary: {
@@ -131,7 +121,7 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
     try {
       contextStatusToPersist = await collectContextStatus(controller);
     } catch (err) {
-      console.warn('No se pudo actualizar context-status:', err);
+      console.warn("No se pudo actualizar context-status:", err);
     }
 
     await controller.stop();
@@ -139,7 +129,7 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
 
   if (!result) {
     result = createErrorResult<T>(options.action, {
-      message: 'No result produced after execution.',
+      message: "No result produced after execution.",
     });
   }
 
@@ -155,11 +145,14 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
   result.warnings = mergedWarnings;
 
   // Fase 6: Drenar command trace del controller para trazabilidad end-to-end
-  const commandTrace = controller.drainCommandTrace();
-  const commandIds = commandTrace.map(t => t.id);
-  const interactionSummary = commandTrace.length > 0
-    ? commandTrace.map(t => `${t.type}:${t.commandType ?? 'unknown'}:${t.status ?? 'n/a'}`).join(', ')
-    : undefined;
+  const commandTrace = controller.drainCommandTrace?.() ?? [];
+  const commandIds = commandTrace.map((t) => t.id);
+  const interactionSummary =
+    commandTrace.length > 0
+      ? commandTrace
+          .map((t) => `${t.type}:${t.commandType ?? "unknown"}:${t.status ?? "n/a"}`)
+          .join(", ")
+      : undefined;
 
   // Phase 7: add contextual suggestions based on verification and context
   const suggestions = getContextualSuggestions(result, { saveRequested: options.flags.verify });
@@ -178,8 +171,6 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
       linkCount: runtimeContext.linkCount,
       heartbeat: runtimeContext.heartbeat,
       bridge: runtimeContext.bridge,
-      warnings: runtimeContext.warnings,
-      notes: runtimeContext.notes,
     };
   } else {
     result.meta = {
@@ -194,8 +185,6 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
         linkCount: runtimeContext.linkCount,
         heartbeat: runtimeContext.heartbeat,
         bridge: runtimeContext.bridge,
-        warnings: runtimeContext.warnings,
-        notes: runtimeContext.notes,
       },
     };
   }
@@ -206,24 +195,33 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
   }
 
   const historyEntry: HistoryEntry = {
-    schemaVersion: '1.0',
+    schemaVersion: "1.0",
     sessionId,
     correlationId,
     startedAt: new Date(startTime).toISOString(),
     endedAt: new Date().toISOString(),
     durationMs,
     action: options.action,
-    status: result.ok ? 'success' : 'error',
+    status: result.ok ? "success" : "error",
     ok: result.ok,
     argv: process.argv,
     flags: Object.fromEntries(Object.entries(options.flags)),
     payloadSummary: options.payloadPreview,
-    resultSummary: result.data != null && typeof result.data === 'object' && !Array.isArray(result.data)
-      ? Object.fromEntries(Object.entries(result.data))
-      : undefined,
+    resultSummary:
+      result.data != null && typeof result.data === "object" && !Array.isArray(result.data)
+        ? Object.fromEntries(Object.entries(result.data))
+        : undefined,
     commandIds: commandIds.length > 0 ? commandIds : (result.meta?.commandIds ?? []),
-    interactionSummary: interactionSummary ? { summary: interactionSummary } : (result.meta?.interactionSummary ? { summary: result.meta.interactionSummary } : undefined),
-    completionReason: result.ok ? 'completed' : (result.error?.message ? `error: ${result.error.message}` : 'failed'),
+    interactionSummary: interactionSummary
+      ? { summary: interactionSummary }
+      : result.meta?.interactionSummary
+        ? { summary: result.meta.interactionSummary }
+        : undefined,
+    completionReason: result.ok
+      ? "completed"
+      : result.error?.message
+        ? `error: ${result.error.message}`
+        : "failed",
     contextSummary: {
       bridgeReady: runtimeContext.bridgeReady,
       topologyMaterialized: runtimeContext.topologyMaterialized,
@@ -231,37 +229,38 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
       linkCount: runtimeContext.linkCount,
       warnings: runtimeContext.warnings,
     },
-    verificationSummary: result.verification?.verified === true
-      ? `verified via ${(result.verification.verificationSource && result.verification.verificationSource.length) ? result.verification.verificationSource.join(', ') : 'checks'}`
-      : result.verification?.partiallyVerified === true
-        ? `partially verified via ${(result.verification.verificationSource && result.verification.verificationSource.length) ? result.verification.verificationSource.join(', ') : 'partial checks'}`
-        : result.verification?.executed === true && result.verification?.verified === false
-          ? 'executed only (not verified)'
-          : undefined,
+    verificationSummary:
+      result.verification?.verified === true
+        ? `verified via ${result.verification.verificationSource && result.verification.verificationSource.length ? result.verification.verificationSource.join(", ") : "checks"}`
+        : result.verification?.partiallyVerified === true
+          ? `partially verified via ${result.verification.verificationSource && result.verification.verificationSource.length ? result.verification.verificationSource.join(", ") : "partial checks"}`
+          : result.verification?.executed === true && result.verification?.verified === false
+            ? "executed only (not verified)"
+            : undefined,
     warnings: result.warnings ?? [],
   };
 
   try {
     await historyStore.append(historyEntry);
   } catch (err) {
-    console.error('Error writing history:', err);
+    console.error("Error writing history:", err);
   }
 
   try {
     persistHistoryEntryToMemory(historyEntry);
   } catch (err) {
-    console.error('Error writing memory audit:', err);
+    console.error("Error writing memory audit:", err);
   }
 
   if (options.flags.traceBundle) {
     try {
       await bundleWriter.writeBundle(sessionId);
     } catch (err) {
-      console.error('Error writing bundle:', err);
+      console.error("Error writing bundle:", err);
     }
   }
 
-  await logPhase('end', {
+  await logPhase("end", {
     ok: result.ok,
     durationMs,
     contextWarnings: runtimeContext.warnings,
@@ -269,7 +268,7 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
 
   // Persistir estado de contexto tras la ejecución (Fase 3)
   try {
-    const ctxStatus = contextStatusToPersist ?? await collectContextStatus(controller);
+    const ctxStatus = contextStatusToPersist ?? (await collectContextStatus(controller));
     if (result.ok) {
       ctxStatus.bridge.ready = true;
     }
@@ -281,7 +280,7 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
     }
     // Si hubo verificación y falló, marcar posible desincronización con razón
     if (result.verification && result.verification.verified === false) {
-      ctxStatus.topology.health = 'desynced';
+      ctxStatus.topology.health = "desynced";
       const desyncReason = `Post-validation failed after ${options.action}`;
       if (!ctxStatus.warnings.includes(desyncReason)) {
         ctxStatus.warnings.push(desyncReason);
@@ -293,16 +292,15 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
     }
     await writeContextStatus(ctxStatus);
   } catch (err) {
-    console.warn('No se pudo actualizar context-status:', err);
+    console.warn("No se pudo actualizar context-status:", err);
   }
-
 
   return result;
 }
 
 export async function runCommandWithRender<T>(
   options: RunCommandOptions<T>,
-  renderFn: (result: CliResult<T>, format: OutputFormat) => string
+  renderFn: (result: CliResult<T>, format: OutputFormat) => string,
 ): Promise<void> {
   const result = await runCommand(options);
 

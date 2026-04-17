@@ -1,25 +1,12 @@
 // ============================================================================
-// Runtime Handlers - Lógica de negocio
+// Runtime Handlers - Fascia delgada (Barrel Export)
 // ============================================================================
 //
-// Estos handlers contienen toda la lógica de negocio ydevuelven planes de
-// ejecución o resultados inmediatos. No ejecutan la terminal directamente.
-//
-// El kernel (main) ejecuta los planes; los handlers solo decide QUÉ hacer.
+// Este archivo re-exporta las responsabilidades extraídas a módulos separados.
+// Mantiene los handlers y su registro para compatibilidad hacia atrás.
 // ============================================================================
 
-import type {
-  DeferredJobPlan,
-  DeferredStep,
-  SessionStateSnapshot,
-  DeferredStepType,
-  DeferredJobOptions,
-  DeviceRef,
-  RuntimeResult,
-  RuntimeApi,
-} from "../runtime/contracts";
 import type { PtResult } from "../pt-api/pt-results.js";
-import type { PtRuntimeApi } from "../pt-api/pt-deps.js";
 
 import {
   handleEnsureVlans,
@@ -43,534 +30,123 @@ import {
 } from "./device.js";
 import { handleAddLink, handleRemoveLink } from "./link.js";
 import { handleListCanvasRects, handleGetRect, handleDevicesInRect } from "./canvas.js";
-import { handleAddModule, handleRemoveModule } from "./module.js";
+import { handleAddModule, handleRemoveModule } from "./module/index.js";
+import { handleDeepInspect, type DeepInspectPayload } from "./deep-inspect.js";
 import {
   handleInspect,
   handleSnapshot,
   handleHardwareInfo,
   handleHardwareCatalog,
   handleCommandLog,
+  type InspectPayload,
+  type SnapshotPayload,
+  type HardwareInfoPayload,
+  type HardwareCatalogPayload,
+  type CommandLogPayload,
 } from "./inspect.js";
-import { getParser } from "./parsers/ios-parsers.js";
+import { getParser, type ParserFn } from "./parsers/ios-parsers.js";
+
+import {
+  registerHandler,
+  runtimeDispatcher,
+  validateHandlerCoverage,
+  HANDLER_MAP,
+  type HandlerFn,
+} from "./dispatcher";
 
 // ============================================================================
-// Payload Types
+// Re-exports desde módulos separados
 // ============================================================================
 
-export interface ConfigHostPayload {
-  type: "configHost";
-  device: string;
-  ip?: string;
-  mask?: string;
-  gateway?: string;
-  dns?: string;
-  dhcp?: boolean;
-}
+// IOS payloads (solo tipos)
+export type {
+  ConfigHostPayload,
+  ConfigIosPayload,
+  ExecIosPayload,
+  PollDeferredPayload,
+  ExecPcPayload,
+} from "./ios-payloads.js";
 
-export interface ConfigIosPayload {
-  type: "configIos";
-  device: string;
-  commands: string[];
-  save?: boolean;
-  stopOnError?: boolean;
-  ensurePrivileged?: boolean;
-  dismissInitialDialog?: boolean;
-  commandTimeoutMs?: number;
-  stallTimeoutMs?: number;
-}
+// Host handler
+export { handleConfigHost } from "./host-handler.js";
 
-export interface ExecIosPayload {
-  type: "execIos";
-  device: string;
-  command: string;
-  parse?: boolean;
-  ensurePrivileged?: boolean;
-  dismissInitialDialog?: boolean;
-  commandTimeoutMs?: number;
-  stallTimeoutMs?: number;
-}
+// IOS execution handlers
+export {
+  handleConfigIos,
+  handleExecIos,
+  handleDeferredPoll,
+  handlePing,
+  handleExecPc,
+} from "./ios-execution.js";
 
-export interface PollDeferredPayload {
-  type: "__pollDeferred";
-  ticket: string;
-}
-
-export interface ExecPcPayload {
-  type: "execPc";
-  device: string;
-  command: string;
-  timeoutMs?: number;
-}
-
-interface PollStateInProgress {
-  done: false;
-  state: string;
-  currentStep: number;
-  totalSteps: number;
-  outputTail?: string;
-}
-
-interface PollStateDone {
-  done: true;
-  ok: boolean;
-  error?: string;
-  errorCode?: string;
-  output?: string;
-  result?: unknown;
-}
+// Otros handlers de tipos
+export type {
+  ConfigVlanInterfacesPayload,
+  ConfigDhcpServerPayload,
+  InspectDhcpServerPayload,
+  InspectHostPayload,
+  ListDevicesPayload,
+  InspectPayload,
+  SnapshotPayload,
+  HardwareInfoPayload,
+  HardwareCatalogPayload,
+  CommandLogPayload,
+  DeepInspectPayload,
+  ParserFn,
+};
 
 // ============================================================================
-// Result Factories
+// Handler Registration - Registro único en runtime-handlers.ts
 // ============================================================================
 
-function createErrorResult(error: string, code?: string, extra: Partial<PtResult> = {}): PtResult {
-  return {
-    ok: false,
-    error,
-    code,
-    ...extra,
-  } as PtResult;
-}
+import { handleConfigHost } from "./host-handler.js";
+import {
+  handleConfigIos,
+  handleExecIos,
+  handleDeferredPoll,
+  handlePing,
+  handleExecPc,
+} from "./ios-execution.js";
 
-function createSuccessResult(value?: unknown, extra: Partial<PtResult> = {}): PtResult {
-  return {
-    ok: true,
-    ...(value !== undefined ? { value } : {}),
-    ...extra,
-  } as PtResult;
-}
+registerHandler("configHost", handleConfigHost as unknown as HandlerFn);
+registerHandler("configIos", handleConfigIos as unknown as HandlerFn);
+registerHandler("execIos", handleExecIos as unknown as HandlerFn);
+registerHandler("__pollDeferred", handleDeferredPoll as unknown as HandlerFn);
+registerHandler("__ping", handlePing as unknown as HandlerFn);
+registerHandler("execPc", handleExecPc as unknown as HandlerFn);
 
-function createDeferredResult(ticket: string, plan: DeferredJobPlan): PtResult {
-  return {
-    ok: true,
-    deferred: true,
-    ticket,
-    job: plan,
-  };
-}
+registerHandler("ensureVlans", handleEnsureVlans as unknown as HandlerFn);
+registerHandler("configVlanInterfaces", handleConfigVlanInterfaces as unknown as HandlerFn);
+registerHandler("configDhcpServer", handleConfigDhcpServer as unknown as HandlerFn);
+registerHandler("inspectDhcpServer", handleInspectDhcpServer as unknown as HandlerFn);
+registerHandler("inspectHost", handleInspectHost as unknown as HandlerFn);
 
-// ============================================================================
-// Output Sanitization
-// ============================================================================
+registerHandler("listDevices", handleListDevices as unknown as HandlerFn);
+registerHandler("addDevice", handleAddDevice as unknown as HandlerFn);
+registerHandler("removeDevice", handleRemoveDevice as unknown as HandlerFn);
+registerHandler("renameDevice", handleRenameDevice as unknown as HandlerFn);
+registerHandler("moveDevice", handleMoveDevice as unknown as HandlerFn);
 
-function sanitizeTerminalOutput(command: string | undefined, output: string): string {
-  const lines = output.split(/\r?\n/);
-  const cleaned: string[] = [];
+registerHandler("addLink", handleAddLink as unknown as HandlerFn);
+registerHandler("removeLink", handleRemoveLink as unknown as HandlerFn);
 
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
-    if (!line) continue;
+registerHandler("listCanvasRects", handleListCanvasRects as unknown as HandlerFn);
+registerHandler("getRect", handleGetRect as unknown as HandlerFn);
+registerHandler("devicesInRect", handleDevicesInRect as unknown as HandlerFn);
 
-    if (command && line === command.trim()) continue;
-    if (/^--More--$/i.test(line)) continue;
-    if (/Would you like to enter the initial configuration dialog/i.test(line)) continue;
-    if (/% Please answer 'yes' or 'no'\./i.test(line)) continue;
-    if (/^[A-Za-z0-9._()-]+(?:\(config[^\)]*\))?[>#]\s*$/.test(line)) continue;
+registerHandler("addModule", handleAddModule as unknown as HandlerFn);
+registerHandler("removeModule", handleRemoveModule as unknown as HandlerFn);
 
-    cleaned.push(rawLine);
-  }
-
-  return cleaned.join("\n").trim();
-}
+registerHandler("inspect", handleInspect as unknown as HandlerFn);
+registerHandler("snapshot", handleSnapshot as unknown as HandlerFn);
+registerHandler("hardwareInfo", handleHardwareInfo as unknown as HandlerFn);
+registerHandler("hardwareCatalog", handleHardwareCatalog as unknown as HandlerFn);
+registerHandler("commandLog", handleCommandLog as unknown as HandlerFn);
+registerHandler("deepInspect", handleDeepInspect as unknown as HandlerFn);
 
 // ============================================================================
-// Plan Builders - Lógica de negocio que construye planes
+// Barrel Exports - Re-exportar funciones del dispatcher
 // ============================================================================
 
-function buildConfigIosPlan(
-  device: string,
-  commands: string[],
-  options: {
-    save: boolean;
-    stopOnError: boolean;
-    ensurePrivileged: boolean;
-    dismissInitialDialog: boolean;
-    commandTimeoutMs: number;
-    stallTimeoutMs: number;
-  },
-): DeferredJobPlan {
-  const plan: DeferredStep[] = [];
-
-  if (options.ensurePrivileged) {
-    plan.push({ type: "ensure-mode", value: "priv-exec", options: { stopOnError: true } });
-  }
-
-  plan.push({ type: "ensure-mode", value: "config", options: { stopOnError: true } });
-
-  if (options.dismissInitialDialog) {
-    plan.push({ type: "command", value: "", options: { stopOnError: false } });
-    plan.push({ type: "confirm", value: "n", options: { stopOnError: false } });
-  }
-
-  for (const cmd of commands) {
-    plan.push({
-      type: "command",
-      value: cmd,
-      options: {
-        stopOnError: options.stopOnError,
-        timeoutMs: options.commandTimeoutMs,
-      },
-    });
-  }
-
-  if (options.save) {
-    plan.push({ type: "save-config", options: { stopOnError: false } });
-  }
-
-  plan.push({ type: "close-session" });
-
-  return {
-    id: "",
-    kind: "ios-session",
-    version: 1,
-    device,
-    plan,
-    options: {
-      stopOnError: options.stopOnError,
-      commandTimeoutMs: options.commandTimeoutMs,
-      stallTimeoutMs: options.stallTimeoutMs,
-    },
-    payload: { commands, save: options.save },
-  };
-}
-
-function buildExecIosPlan(
-  device: string,
-  command: string,
-  options: {
-    ensurePrivileged: boolean;
-    commandTimeoutMs: number;
-    stallTimeoutMs: number;
-  },
-): DeferredJobPlan {
-  const plan: DeferredStep[] = [];
-
-  if (options.ensurePrivileged) {
-    plan.push({ type: "ensure-mode", value: "priv-exec", options: { stopOnError: true } });
-  }
-
-  plan.push({
-    type: "command",
-    value: command,
-    options: {
-      stopOnError: false,
-      timeoutMs: options.commandTimeoutMs,
-    },
-  });
-
-  plan.push({ type: "close-session" });
-
-  return {
-    id: "",
-    kind: "ios-session",
-    version: 1,
-    device,
-    plan,
-    options: {
-      stopOnError: false,
-      commandTimeoutMs: options.commandTimeoutMs,
-      stallTimeoutMs: options.stallTimeoutMs,
-    },
-    payload: { command },
-  };
-}
-
-// ============================================================================
-// Handlers
-// ============================================================================
-
-export function handleConfigHost(payload: ConfigHostPayload, api: PtRuntimeApi): PtResult {
-  const device = api.getDeviceByName(payload.device);
-  if (!device) {
-    return createErrorResult(`Device not found: ${payload.device}`, "DEVICE_NOT_FOUND");
-  }
-
-  if (!device.hasTerminal) {
-    const net = device.getNetwork();
-    if (!net) {
-      return createErrorResult("Device has no network reference", "NO_NETWORK");
-    }
-    const dev = net.getDevice(payload.device);
-    if (!dev) {
-      return createErrorResult("Device not found in network", "DEVICE_NOT_FOUND");
-    }
-    const port = dev.getPortAt(0);
-    if (!port) {
-      return createErrorResult("No ports on device", "NO_PORTS");
-    }
-
-    if (payload.dhcp === true) {
-      try {
-        port.setDhcpEnabled(true);
-      } catch {
-        // PT API puede no soportar setDhcpEnabled en este dispositivo
-      }
-    } else {
-      if (payload.ip && payload.mask) {
-        port.setIpSubnetMask(payload.ip, payload.mask);
-      }
-      if (payload.gateway) {
-        port.setDefaultGateway(payload.gateway);
-      }
-      if (payload.dns) {
-        port.setDnsServerIp(payload.dns);
-      }
-    }
-
-    return createSuccessResult({
-      device: payload.device,
-      ip: payload.ip,
-      mask: payload.mask,
-      gateway: payload.gateway,
-    });
-  }
-
-  return createErrorResult("Device has CLI, use configIos instead", "INVALID_DEVICE_TYPE");
-}
-
-export function handleConfigIos(payload: ConfigIosPayload, api: PtRuntimeApi): PtResult {
-  const device = api.getDeviceByName(payload.device);
-  if (!device) {
-    return createErrorResult(`Device not found: ${payload.device}`, "DEVICE_NOT_FOUND");
-  }
-
-  if (!device.hasTerminal) {
-    return createErrorResult(`Device does not support CLI: ${payload.device}`, "NO_TERMINAL");
-  }
-
-  if (!payload.commands?.length) {
-    return createSuccessResult({ device: payload.device, executed: 0, results: [], skipped: true });
-  }
-
-  const plan = buildConfigIosPlan(payload.device, payload.commands, {
-    save: payload.save ?? true,
-    stopOnError: payload.stopOnError ?? true,
-    ensurePrivileged: payload.ensurePrivileged ?? true,
-    dismissInitialDialog: payload.dismissInitialDialog ?? true,
-    commandTimeoutMs: payload.commandTimeoutMs ?? 8000,
-    stallTimeoutMs: payload.stallTimeoutMs ?? 15000,
-  });
-
-  const ticket = "job_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
-  plan.id = ticket;
-
-  api.dprint(
-    `[configIos] Created plan ${ticket} for device ${payload.device} with ${plan.plan.length} steps`,
-  );
-
-  return createDeferredResult(ticket, plan);
-}
-
-export function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi): PtResult {
-  const device = api.getDeviceByName(payload.device);
-  if (!device) {
-    return createErrorResult(`Device not found: ${payload.device}`, "DEVICE_NOT_FOUND");
-  }
-
-  if (!device.hasTerminal) {
-    return createErrorResult(
-      `Device not ready: ${payload.device} is still booting or in ROMMON`,
-      "NO_TERMINAL",
-    );
-  }
-
-  const plan = buildExecIosPlan(payload.device, payload.command, {
-    ensurePrivileged: payload.ensurePrivileged ?? true,
-    commandTimeoutMs: payload.commandTimeoutMs ?? 8000,
-    stallTimeoutMs: payload.stallTimeoutMs ?? 15000,
-  });
-
-  const ticket = "job_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
-  plan.id = ticket;
-
-  api.dprint(
-    `[execIos] Created plan ${ticket} for device ${payload.device} command="${payload.command}"`,
-  );
-
-  return createDeferredResult(ticket, plan);
-}
-
-export function handleDeferredPoll(pollPayload: PollDeferredPayload, api: PtRuntimeApi): PtResult {
-  const { ticket } = pollPayload;
-
-  const jobState = (api as any).getJobState?.(ticket);
-  if (!jobState) {
-    return createErrorResult(`Job not found: ${ticket}`, "JOB_NOT_FOUND");
-  }
-
-  if (!jobState.done) {
-    const pollResult: PtResult = {
-      ok: true,
-      deferred: true,
-      ticket,
-      job: undefined as unknown as import("../runtime/contracts").DeferredJobPlan,
-    };
-    (pollResult as any).pollState = {
-      done: false,
-      state: jobState.state,
-      currentStep: jobState.currentStep,
-      totalSteps: jobState.totalSteps,
-      outputTail: jobState.outputTail,
-    };
-    return pollResult;
-  }
-
-  if (jobState.error) {
-    return createErrorResult(jobState.error, jobState.errorCode || "IOS_JOB_FAILED", {
-      raw: jobState.output,
-    });
-  }
-
-  const session = api.querySessionState(pollPayload.ticket.split("_")[1] || "");
-  const rawOutput = jobState.output || "";
-  const sanitizedOutput = sanitizeTerminalOutput(undefined, rawOutput);
-
-  const result: PtResult = {
-    ok: true,
-    raw: sanitizedOutput || rawOutput,
-    source: "terminal",
-  };
-
-  const payload = (api as any).jobPayload?.(ticket);
-  if (payload?.command) {
-    const parser = getParser(payload.command);
-    if (parser) {
-      try {
-        (result as any).parsed = parser(sanitizedOutput);
-      } catch (e) {
-        (result as any).parseError = String(e);
-      }
-    }
-  }
-
-  return result;
-}
-
-export function handlePing(api: PtRuntimeApi): PtResult {
-  return createSuccessResult({ status: "alive", timestamp: api.now() });
-}
-
-export function handleExecPc(payload: ExecPcPayload, api: PtRuntimeApi): PtResult {
-  const { device, command, timeoutMs = 30000 } = payload;
-
-  api.dprint(`[execPc] device=${device} command="${command}"`);
-
-  const deviceRef = api.getDeviceByName(device);
-  if (!deviceRef) {
-    return createErrorResult(`Device not found: ${device}`, "DEVICE_NOT_FOUND");
-  }
-
-  // PC/Server devices use a command prompt, not a CLI terminal.
-  // Build a simple one-step deferred plan — the kernel will execute it
-  // via the terminal engine, which handles events correctly.
-  const ticket = "pc_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
-
-  const plan: DeferredJobPlan = {
-    id: ticket,
-    kind: "ios-session", // reuse ios-session kind; kernel handles generic execution
-    version: 1,
-    device,
-    plan: [
-      { type: "command", value: command, options: { stopOnError: false, timeoutMs } },
-      { type: "close-session" },
-    ],
-    options: {
-      stopOnError: false,
-      commandTimeoutMs: timeoutMs,
-      stallTimeoutMs: timeoutMs,
-    },
-    payload: { device, command },
-  };
-
-  api.dprint(`[execPc] Created plan ${ticket} for device=${device} command="${command}"`);
-
-  return createDeferredResult(ticket, plan);
-}
-
-// ============================================================================
-// Handler Map - Registro centralizado de handlers
-// ============================================================================
-
-type HandlerFn = (payload: any, api: PtRuntimeApi) => PtResult;
-
-const HANDLER_MAP: Map<string, HandlerFn> = new Map();
-
-function registerHandler(type: string, handler: HandlerFn): void {
-  HANDLER_MAP.set(type, handler);
-}
-
-registerHandler("configHost", handleConfigHost as HandlerFn);
-registerHandler("configIos", handleConfigIos as HandlerFn);
-registerHandler("execIos", handleExecIos as HandlerFn);
-registerHandler("__pollDeferred", handleDeferredPoll as HandlerFn);
-registerHandler("__ping", handlePing as HandlerFn);
-registerHandler("execPc", handleExecPc as HandlerFn);
-
-// Register VLAN and DHCP handlers
-registerHandler("ensureVlans", handleEnsureVlans as HandlerFn);
-registerHandler("configVlanInterfaces", handleConfigVlanInterfaces as HandlerFn);
-registerHandler("configDhcpServer", handleConfigDhcpServer as HandlerFn);
-registerHandler("inspectDhcpServer", handleInspectDhcpServer as HandlerFn);
-registerHandler("inspectHost", handleInspectHost as HandlerFn);
-
-// Device handlers
-registerHandler("listDevices", handleListDevices as HandlerFn);
-registerHandler("addDevice", handleAddDevice as HandlerFn);
-registerHandler("removeDevice", handleRemoveDevice as HandlerFn);
-registerHandler("renameDevice", handleRenameDevice as HandlerFn);
-registerHandler("moveDevice", handleMoveDevice as HandlerFn);
-
-// Link handlers
-registerHandler("addLink", handleAddLink as HandlerFn);
-registerHandler("removeLink", handleRemoveLink as HandlerFn);
-
-// Canvas handlers
-registerHandler("listCanvasRects", handleListCanvasRects as HandlerFn);
-registerHandler("getRect", handleGetRect as HandlerFn);
-registerHandler("devicesInRect", handleDevicesInRect as HandlerFn);
-
-// Module handlers
-registerHandler("addModule", handleAddModule as HandlerFn);
-registerHandler("removeModule", handleRemoveModule as HandlerFn);
-
-// Inspect handlers
-registerHandler("inspect", handleInspect as HandlerFn);
-registerHandler("snapshot", handleSnapshot as HandlerFn);
-registerHandler("hardwareInfo", handleHardwareInfo as HandlerFn);
-registerHandler("hardwareCatalog", handleHardwareCatalog as HandlerFn);
-registerHandler("commandLog", handleCommandLog as HandlerFn);
-
-// ============================================================================
-// Dispatcher - Punto de entrada del runtime
-// ============================================================================
-
-export function runtimeDispatcher(
-  payload: Record<string, unknown>,
-  api: RuntimeApi,
-): RuntimeResult {
-  const type = payload.type as string;
-
-  api.dprint("[RUNTIME] Dispatching: " + type);
-
-  if (!type || typeof type !== "string") {
-    return createErrorResult("Missing payload.type", "INVALID_PAYLOAD") as RuntimeResult;
-  }
-
-  const handler = HANDLER_MAP.get(type);
-  if (!handler) {
-    return createErrorResult(`Unknown command type: ${type}`, "UNKNOWN_COMMAND") as RuntimeResult;
-  }
-
-  try {
-    return handler(payload, api as any) as RuntimeResult;
-  } catch (e) {
-    return createErrorResult(String(e), "DISPATCH_ERROR") as RuntimeResult;
-  }
-}
-
-export function validateHandlerCoverage(): { missing: string[]; registered: string[] } {
-  return {
-    missing: [],
-    registered: [...HANDLER_MAP.keys()],
-  };
-}
+export { runtimeDispatcher, validateHandlerCoverage, HANDLER_MAP, getParser };
+export type { HandlerFn };

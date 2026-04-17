@@ -119,109 +119,65 @@ export interface PTDeviceWithProcesses extends PTDevice {
 // in DhcpServerProcess and VlanManager above. Expand as PT API surface is confirmed.
 // ============================================================================
 
-export interface PTDnsServerProcess {
-  /** Retorna true si el servidor DNS está habilitado */
-  isEnabled?(): boolean;
-  /** Habilita o deshabilita el servidor DNS */
-  setEnable?(enabled: boolean): void;
-  /** Agrega una zona DNS */
-  addZone?(name: string, zoneData: string): boolean;
-  /** Elimina una zona DNS por nombre */
-  removeZone?(name: string): boolean;
-  /** Retorna el número de zonas configuradas */
-  getZoneCount?(): number;
-  /** Retorna la zona en el índice especificado */
-  getZoneAt?(index: number): { name: string; data: string } | null;
+export interface PTDnsServerProcess extends PTIpcBase {
+  setEnable(enabled: boolean): void;
+  isEnabled(): boolean;
+  addARecordToNameServerDb(domain: string, ip: string): void;
+  addCNAMEToNameServerDb(alias: string, domain: string): void;
+  addNSRecordToNameServerDb(domain: string, server: string): void;
+  addSOAToNameServerDb(domain: string, mailbox: string, serial: number, refresh: number, retry: number, expire: number, minimum: number): void;
+  removeARecordFromNameServerDb(domain: string): void;
+  getEntryCount(): number;
+  getEntryAt(index: number): any;
+  getSizeOfNameServerDb(): number;
+  getIpAddOfDomain(domain: string): string;
+  isDomainNameExisted(domain: string): boolean;
+  setPortNumber(port: number): void;
+  getPortNumber(): number;
 }
 
-export interface PTNtpServerProcess {
-  /** Retorna true si NTP está habilitado */
-  isEnabled?(): boolean;
-  /** Habilita o deshabilita NTP */
-  setEnable?(enabled: boolean): void;
-  /** Retorna true si el servidor opera como maestro */
-  getMasterMode?(): boolean;
-  /** Configura el modo maestro */
-  setMasterMode?(enabled: boolean): void;
-  /** Retorna el número de servidores NTP configurados */
-  getServerCount?(): number;
+export interface PTHttpServer extends PTIpcBase {
+  setEnable(enabled: boolean): void;
+  isEnabled(): boolean;
+  setPageContents(name: string, content: string): void;
+  getPage(name: string): string;
+  setUsername(user: string): void;
+  setPassword(pass: string): void;
+  setPortNumber(port: number): void;
+  getPortNumber(): number;
+  sendResponse(connId: number, data: string): void;
 }
 
-export interface PTSshServerProcess {
-  /** Retorna true si SSH está habilitado */
-  isEnabled?(): boolean;
-  /** Habilita o deshabilita SSH */
-  setEnable?(enabled: boolean): void;
-  /** Retorna los métodos de autenticación disponibles */
-  getAuthMethods?(): string[];
-  /** Configura los métodos de autenticación */
-  setAuthMethods?(methods: string[]): void;
+export interface PTVlanManager extends PTIpcBase {
+  addVlan(vlanId: number, name?: string): boolean;
+  removeVlan(vlanId: number): boolean;
+  getVlanCount(): number;
+  getVlanAt(index: number): PTVlanInfo | null;
+  getVlanByName(name: string): PTVlanInfo | null;
+  changeVlanName(vlanId: number, name: string): void;
+  addVlanInt(vlanId: number): boolean;
+  removeVlanInt(vlanId: number): boolean;
+  getVlanInt(vlanId: number): PTPort | null;
+  getVlanIntAt(index: number): PTPort | null;
+  getVlanIntCount(): number;
+  getMaxVlans(): number;
 }
 
-export interface PTRadiusServerProcess {
-  /** Retorna true si RADIUS está habilitado */
-  isEnabled?(): boolean;
-  /** Habilita o deshabilita RADIUS */
-  setEnable?(enabled: boolean): void;
-  /** Retorna el secreto compartido configurado */
-  getSharedSecret?(): string;
-  /** Configura el secreto compartido */
-  setSharedSecret?(secret: string): void;
-  /** Retorna el puerto de accounting */
-  getAcctPort?(): number;
+export interface PTRoutingProcess extends PTIpcBase {
+  addStaticRoute(dest: string, mask: string, nextHop: string, distance?: number): void;
+  removeStaticRoute(dest: string, mask: string, nextHop: string): void;
+  clearAllRoutes(): void;
+  getStaticRouteCount(): number;
+  getStaticRouteAt(index: number): any;
+  getRoutingTable(): any;
 }
 
-export interface PTSyslogServer {
-  /** Retorna true si syslog está habilitado */
-  isEnabled?(): boolean;
-  /** Habilita o deshabilita syslog */
-  setEnable?(enabled: boolean): void;
-  /** Retorna el estado actual del logging */
-  getLoggingState?(): string;
-  /** Configura el estado de logging */
-  setLoggingState?(state: string): void;
-}
-
-export interface PTOspfProcess {
-  /** Retorna true si OSPF está habilitado */
-  isEnabled?(): boolean;
-  /** Retorna el ID del proceso OSPF */
-  getProcessId?(): number;
-  /** Retorna el número de áreas configuradas */
-  getAreaCount?(): number;
-  /** Retorna el número de redes configuradas */
-  getNetworkCount?(): number;
-}
-
-export interface PTAclProcess {
-  /** Retorna true si la ACL está habilitada */
-  isEnabled?(): boolean;
-  /** Retorna el tipo de ACL (standard/extended) */
-  getAclType?(): string;
-  /** Retorna el número de reglas configuradas */
-  getRuleCount?(): number;
-  /** Retorna la regla en el índice especificado */
-  getRuleAt?(index: number): { action: string; source: string; destination: string } | null;
-}
-
-export interface PTStpProcess {
-  /** Retorna true si STP está habilitado */
-  isEnabled?(): boolean;
-  /** Retorna el modo STP activo (pvst/rapid-pvst/mstp) */
-  getMode?(): string;
-  /** Retorna true si este puente es el root bridge */
-  getRootBridge?(): boolean;
-  /** Retorna el estado de un puerto STP */
-  getPortState?(portName: string): string | null;
-}
-
-export interface PTRoutingProcess {
-  /** Retorna true si el proceso de routing está habilitado */
-  isEnabled?(): boolean;
-  /** Retorna el protocolo de routing activo */
-  getRoutingProtocol?(): string;
-  /** Retorna el número de rutas en la tabla */
-  getRouteCount?(): number;
+export interface PTAclProcess extends PTIpcBase {
+  addAcl(acl: any): void;
+  removeAcl(name: string): void;
+  getAclCount(): number;
+  getAclAt(index: number): any;
+  getAcl(name: string): any;
 }
 
 // ============================================================================

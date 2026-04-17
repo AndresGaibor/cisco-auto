@@ -99,25 +99,25 @@ describe("SessionMode", () => {
       expect(mode.getTransitionCommand(mode)).toBeNull();
     });
 
-    it("should return disable for priv-exec to user-exec", () => {
+    it("should return disable for privileged-exec to user-exec", () => {
       const from = new SessionMode('privileged-exec');
       const to = new SessionMode('user-exec');
       expect(to.getTransitionCommand(from)).toBe('disable');
     });
 
-    it("should return enable for user-exec to priv-exec", () => {
+    it("should return enable for user-exec to privileged-exec", () => {
       const from = new SessionMode('user-exec');
       const to = new SessionMode('privileged-exec');
       expect(to.getTransitionCommand(from)).toBe('enable');
     });
 
-    it("should return configure terminal for priv-exec to config", () => {
+    it("should return configure terminal for privileged-exec to config", () => {
       const from = new SessionMode('privileged-exec');
       const to = new SessionMode('config');
       expect(to.getTransitionCommand(from)).toBe('configure terminal');
     });
 
-    it("should return end for config to priv-exec", () => {
+    it("should return end for config to privileged-exec", () => {
       const from = new SessionMode('config');
       const to = new SessionMode('privileged-exec');
       expect(to.getTransitionCommand(from)).toBe('end');
@@ -163,7 +163,7 @@ describe("SessionMode", () => {
       expect(mode.value).toBe("user-exec");
     });
 
-    it("should infer priv-exec mode", () => {
+    it("should infer privileged-exec mode", () => {
       const mode = SessionMode.fromPrompt("Router#");
       expect(mode.value).toBe("privileged-exec");
     });

@@ -2,7 +2,7 @@
 // Canvas/Rect Handlers - Pure functions for canvas rectangle operations
 // ============================================================================
 
-import type { HandlerDeps, HandlerResult, PTLogicalWorkspace, PTDevice } from "../utils/helpers";
+import type { HandlerDeps, HandlerResult } from "../utils/helpers";
 
 // ============================================================================
 // Payload Types
@@ -30,10 +30,15 @@ export interface DevicesInRectPayload {
 /**
  * Get list of canvas rectangle IDs
  */
-export function handleListCanvasRects(_payload: ListCanvasRectsPayload, deps: HandlerDeps): HandlerResult {
-  const { getLW } = deps;
+export function handleListCanvasRects(
+  _payload: ListCanvasRectsPayload,
+  deps: HandlerDeps,
+): HandlerResult {
+  const { getLW, dprint } = deps;
 
   let rectIds: string[] = [];
+
+  dprint(`[handler:listCanvasRects] starting`);
 
   try {
     const lw = getLW();
@@ -44,11 +49,15 @@ export function handleListCanvasRects(_payload: ListCanvasRectsPayload, deps: Ha
       rectIds = [];
     }
   } catch (e) {
+    const errMsg = String(e);
+    dprint(`[handler:listCanvasRects] ERROR: ${errMsg}`);
     return {
       ok: false,
-      error: `Failed to get canvas rect IDs: ${String(e)}`,
+      error: `Failed to get canvas rect IDs: ${errMsg}`,
     };
   }
+
+  dprint(`[handler:listCanvasRects] SUCCESS count=${rectIds.length}`);
 
   return {
     ok: true,
@@ -61,9 +70,11 @@ export function handleListCanvasRects(_payload: ListCanvasRectsPayload, deps: Ha
  * Get detailed data for a specific rectangle
  */
 export function handleGetRect(payload: GetRectPayload, deps: HandlerDeps): HandlerResult {
-  const { getLW } = deps;
+  const { getLW, dprint } = deps;
 
   let rectData: Record<string, unknown> | null = null;
+
+  dprint(`[handler:getRect] rectId=${payload.rectId}`);
 
   try {
     const lw = getLW();
@@ -74,19 +85,24 @@ export function handleGetRect(payload: GetRectPayload, deps: HandlerDeps): Handl
       rectData = lw.getRectData(payload.rectId) || null;
     }
   } catch (e) {
+    const errMsg = String(e);
+    dprint(`[handler:getRect] ERROR: ${errMsg}`);
     return {
       ok: false,
-      error: `Failed to get rect data: ${String(e)}`,
+      error: `Failed to get rect data: ${errMsg}`,
     };
   }
 
   if (!rectData) {
+    dprint(`[handler:getRect] ERROR Rect not found: ${payload.rectId}`);
     return {
       ok: false,
       error: `Rect not found: ${payload.rectId}`,
       code: "RECT_NOT_FOUND",
     };
   }
+
+  dprint(`[handler:getRect] SUCCESS`);
 
   return {
     ok: true,
@@ -98,11 +114,16 @@ export function handleGetRect(payload: GetRectPayload, deps: HandlerDeps): Handl
 /**
  * Get devices located within a rectangle zone
  */
-export function handleDevicesInRect(payload: DevicesInRectPayload, deps: HandlerDeps): HandlerResult {
-  const { getLW, getNet } = deps;
+export function handleDevicesInRect(
+  payload: DevicesInRectPayload,
+  deps: HandlerDeps,
+): HandlerResult {
+  const { getLW, getNet, dprint } = deps;
 
   let devices: string[] = [];
   const clusters: string[] = [];
+
+  dprint(`[handler:devicesInRect] rectId=${payload.rectId}`);
 
   try {
     const lw = getLW();
@@ -111,7 +132,10 @@ export function handleDevicesInRect(payload: DevicesInRectPayload, deps: Handler
     if (lw.devicesAt && lw.getRectItemData) {
       const rectData = lw.getRectItemData(payload.rectId);
 
-      let x = 0, y = 0, width = 0, height = 0;
+      let x = 0,
+        y = 0,
+        width = 0,
+        height = 0;
 
       if (rectData && typeof rectData === "object") {
         x = (rectData.x as number) || 0;
@@ -119,6 +143,8 @@ export function handleDevicesInRect(payload: DevicesInRectPayload, deps: Handler
         width = (rectData.width as number) || 0;
         height = (rectData.height as number) || 0;
       }
+
+      dprint(`[handler:devicesInRect] rect bounds: x=${x} y=${y} w=${width} h=${height}`);
 
       if (width > 0 && height > 0) {
         const foundDevices = lw.devicesAt(x, y, width, height, payload.includeClusters || false);
@@ -139,6 +165,8 @@ export function handleDevicesInRect(payload: DevicesInRectPayload, deps: Handler
         const rw = (rectData.width as number) || 0;
         const rh = (rectData.height as number) || 0;
 
+        dprint(`[handler:devicesInRect] fallback enum rect: x=${rx} y=${ry} w=${rw} h=${rh}`);
+
         const deviceCount = net.getDeviceCount();
         for (let i = 0; i < deviceCount; i++) {
           const device = net.getDeviceAt(i);
@@ -147,23 +175,22 @@ export function handleDevicesInRect(payload: DevicesInRectPayload, deps: Handler
           const deviceX = device.getX ? device.getX() : 0;
           const deviceY = device.getY ? device.getY() : 0;
 
-          if (
-            deviceX >= rx &&
-            deviceX <= rx + rw &&
-            deviceY >= ry &&
-            deviceY <= ry + rh
-          ) {
+          if (deviceX >= rx && deviceX <= rx + rw && deviceY >= ry && deviceY <= ry + rh) {
             devices.push(device.getName());
           }
         }
       }
     }
   } catch (e) {
+    const errMsg = String(e);
+    dprint(`[handler:devicesInRect] ERROR: ${errMsg}`);
     return {
       ok: false,
-      error: `Failed to get devices in rect: ${String(e)}`,
+      error: `Failed to get devices in rect: ${errMsg}`,
     };
   }
+
+  dprint(`[handler:devicesInRect] SUCCESS found=${devices.length}`);
 
   return {
     ok: true,

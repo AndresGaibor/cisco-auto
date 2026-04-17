@@ -11,15 +11,15 @@ Generador de scripts PT (`main.js`, `runtime.js`, `catalog.js`) y API de tipos p
 ```
 src/
 ├── pt/                    # Código para PT Script Module (main.js)
-│   ├── kernel/           # Boot, job executor, command queue, lease manager
+│   ├── kernel/           # Boot, execution engine, kernel state, command queue, lease manager
 │   └── terminal/         # Terminal engine, session state, prompt parsing
-├── handlers/             # Handlers para operaciones (device, link, vlan, dhcp)
+├── handlers/             # Handlers para operaciones (device-crud, device-discovery, device-listing, link, vlan, dhcp)
 ├── pt-api/               # Tipos PT (IPC API, constants, processes)
 ├── domain/               # Runtime result, deferred job plan
 ├── runtime/              # Runtime types, contracts, metrics, logger
 ├── core/                 # Middleware, registry, dispatcher, builder
 ├── utils/                # Helpers, parser generator, constants
-├── build/                # Generadores de scripts (renderMain, renderRuntime)
+├── build/                # Generadores de scripts (renderMainV2, renderRuntimeV2, renderCatalog)
 └── value-objects/        # CableType, DeviceName, InterfaceName, SessionMode
 ```
 
@@ -516,9 +516,50 @@ interface RuntimeApi {
 
 ---
 
-### pt/kernel/job-executor.ts
+### pt/kernel/execution-engine.ts
 
 ```typescript
+export type JobPhase =
+  | "pending"
+  | "waiting-ensure-mode"
+  | "waiting-command"
+  | "waiting-confirm"
+  | "waiting-prompt"
+  | "waiting-save"
+  | "waiting-delay"
+  | "completed"
+  | "error";
+
+export interface JobStepResult {
+  stepIndex: number;
+  stepType: DeferredStepType;
+  command: string;
+  raw: string;
+  status: number | null;
+  error?: string;
+  completedAt: number;
+}
+
+export interface JobContext {
+  plan: DeferredJobPlan;
+  currentStep: number;
+  phase: JobPhase;
+  outputBuffer: string;
+  startedAt: number;
+  updatedAt: number;
+  stepResults: JobStepResult[];
+  lastMode: string;
+  lastPrompt: string;
+  paged: boolean;
+  waitingForCommandEnd: boolean;
+  finished: boolean;
+  result: TerminalResult | null;
+  error: string | null;
+  errorCode: string | null;
+  pendingDelay: number | null;
+  waitingForConfirm: boolean;
+}
+
 export interface ActiveJob {
   id: string;
   device: string;
@@ -526,7 +567,7 @@ export interface ActiveJob {
   pendingCommand: Promise<TerminalResult> | null;
 }
 
-export interface JobExecutor {
+export interface ExecutionEngine {
   startJob(plan: DeferredJobPlan): ActiveJob;
   advanceJob(jobId: string): void;
   getJob(jobId: string): ActiveJob | null;
@@ -534,7 +575,8 @@ export interface JobExecutor {
   isJobFinished(jobId: string): boolean;
 }
 
-export function createJobExecutor(terminal: TerminalEngine): JobExecutor;
+export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine;
+export function toKernelJobState(ctx: JobContext): KernelJobState;
 ```
 
 ---
@@ -627,34 +669,17 @@ export function createDirectoryManager(config: {
 
 ---
 
-### pt/kernel/job-state.ts
+### pt/kernel/kernel-state.ts
 
 ```typescript
-export interface JobContext {
-  plan: DeferredJobPlan;
-  currentStep: number;
-  phase: JobPhase;
-  outputBuffer: string;
-  startedAt: number;
-  updatedAt: number;
-  stepResults: JobStepResult[];
-  lastMode: string;
-  lastPrompt: string;
-  paged: boolean;
-  waitingForCommandEnd: boolean;
-  finished: boolean;
-  result: TerminalResult | null;
-  error: string | null;
-  errorCode: string | null;
-  pendingDelay: number | null;
-  waitingForConfirm: boolean;
+export interface KernelState {
+  isRunning: boolean;
+  isShuttingDown: boolean;
+  activeCommand: CommandEnvelope | null;
+  activeCommandFilename: string | null;
 }
 
-export function createJobContext(plan: DeferredJobPlan): JobContext;
-export function getCurrentStep(ctx: JobContext): DeferredStep | null;
-export function isJobFinished(ctx: JobContext): boolean;
-export function isStepStopOnError(ctx: JobContext): boolean;
-export function getStepTimeout(ctx: JobContext): number;
+export function createKernelState(): KernelState;
 ```
 
 ---
@@ -760,7 +785,7 @@ export function isInPrivilegedMode(mode: string): boolean;
 
 ---
 
-### handlers/device.ts
+### handlers/device-crud.ts
 
 ```typescript
 export interface AddDevicePayload {
@@ -775,10 +800,6 @@ export interface AddDevicePayload {
 export interface RemoveDevicePayload {
   type: "removeDevice";
   name: string;
-}
-
-export interface ListDevicesPayload {
-  type: "listDevices";
 }
 
 export interface RenameDevicePayload {
@@ -796,9 +817,45 @@ export interface MoveDevicePayload {
 
 export function handleAddDevice(payload: AddDevicePayload, deps: HandlerDeps): HandlerResult;
 export function handleRemoveDevice(payload: RemoveDevicePayload, deps: HandlerDeps): HandlerResult;
-export function handleListDevices(payload: ListDevicesPayload, deps: HandlerDeps): HandlerResult;
 export function handleRenameDevice(payload: RenameDevicePayload, deps: HandlerDeps): HandlerResult;
 export function handleMoveDevice(payload: MoveDevicePayload, deps: HandlerDeps): HandlerResult;
+```
+
+### handlers/device-discovery.ts
+
+```typescript
+export interface ListDevicesPayload {
+  type: "listDevices";
+}
+
+export type ListDevicesResult = HandlerResult & {
+  devices: Array<{ name: string; model: string; type: string; power: boolean; ports: any[] }>;
+  count: number;
+  connectionsByDevice: Record<string, ConnectionInfo[]>;
+  unresolvedLinks: Array<{...}>;
+};
+
+export function handleListDevices(payload: ListDevicesPayload, deps: HandlerDeps): ListDevicesResult;
+```
+
+### handlers/device-listing.ts
+
+```typescript
+export interface DeviceListingInput {
+  net: ReturnType<HandlerDeps["getNet"]>;
+  connectionsByDevice: Record<string, ConnectionInfo[]>;
+  portIndex: PortOwnerIndex;
+}
+
+export interface ListedDevice {
+  name: string;
+  model: string;
+  type: string;
+  power: boolean;
+  ports: any[];
+}
+
+export function composeDeviceListing(input: DeviceListingInput): ListedDevice[];
 ```
 
 ---

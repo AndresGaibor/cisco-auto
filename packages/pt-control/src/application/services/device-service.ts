@@ -80,4 +80,8 @@ export class DeviceService {
   moveDevice(name: string, x: number, y: number) {
     return this.mutation.moveDevice(name, x, y);
   }
+
+  deepInspect(path: string, method?: string, args?: any[]) {
+    return this.query.deepInspect(path, method, args);
+  }
 }

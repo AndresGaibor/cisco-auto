@@ -59,6 +59,8 @@ describe("handleAddLink", () => {
     const deps: any = {
       getLW: () => workspace as never,
       getNet: () => new MockNetwork(workspace) as never,
+      getFM: () => ({ fileExists: () => false, writePlainTextToFile: () => {}, getFileContents: () => "{}" } as any),
+      DEV_DIR: "/tmp",
       dprint: () => {},
     };
 

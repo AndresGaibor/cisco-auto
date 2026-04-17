@@ -37,8 +37,9 @@ export interface Lease {
 export interface Heartbeat {
   ts: number;
   running: boolean;
-  activeCommand: string | null;
+  activeCommand: { id: string; seq: number; type: string; startedAt: number } | null;
   queued: number;
+  loadedAt?: number;
 }
 
 export type { RuntimeApi, SessionStateSnapshot, DeviceRef };

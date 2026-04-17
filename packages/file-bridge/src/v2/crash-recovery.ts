@@ -60,6 +60,10 @@ export class CrashRecovery {
     const commandFiles = listJsonFiles(this.paths.commandsDir());
 
     for (const file of commandFiles) {
+      if (file === "_queue.json") {
+        continue;
+      }
+
       const filePath = join(this.paths.commandsDir(), file);
       const parsed = parseCommandFileName(file);
 
@@ -68,7 +72,7 @@ export class CrashRecovery {
         continue;
       }
 
-      const cmd = readJsonFile(filePath);
+      const cmd = readJsonFile<{ attempt?: number; seq?: number; type?: string }>(filePath);
       if (!cmd) {
         this.moveToDeadLetter(filePath, new Error("Corrupted command JSON"));
         continue;
@@ -117,7 +121,7 @@ export class CrashRecovery {
         continue;
       }
 
-      const cmd = readJsonFile(filePath);
+      const cmd = readJsonFile<{ attempt?: number; seq?: number; type?: string }>(filePath);
       if (!cmd) {
         this.moveToDeadLetter(filePath, new Error("Corrupted in-flight JSON"));
         continue;
@@ -127,7 +131,7 @@ export class CrashRecovery {
 
       if (currentAttempt < this.maxAttempts) {
         cmd.attempt = currentAttempt + 1;
-        const requeuePath = this.paths.commandFilePath(cmd.seq, cmd.type);
+        const requeuePath = this.paths.commandFilePath(cmd.seq!, cmd.type!);
         atomicWriteFile(requeuePath, JSON.stringify(cmd, null, 2));
         safeUnlink(filePath);
 
@@ -144,7 +148,7 @@ export class CrashRecovery {
       const failResult: BridgeResultEnvelope = {
         protocolVersion: 2,
         id: cmdId,
-        seq: cmd.seq,
+        seq: cmd.seq!,
         completedAt: Date.now(),
         status: "failed",
         ok: false,
@@ -177,11 +181,15 @@ export class CrashRecovery {
       renameSync(filePath, deadLetterPath);
       atomicWriteFile(
         this.paths.deadLetterErrorFile(deadLetterBase),
-        JSON.stringify({
-          originalFile: basename(filePath),
-          error: String(error),
-          movedAt: Date.now(),
-        }, null, 2),
+        JSON.stringify(
+          {
+            originalFile: basename(filePath),
+            error: String(error),
+            movedAt: Date.now(),
+          },
+          null,
+          2,
+        ),
       );
     } catch {
       // ignore

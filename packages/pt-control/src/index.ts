@@ -79,6 +79,14 @@ export { IOSFamily, type IosDeviceModel } from "@cisco-auto/ios-domain";
 // Device Validation - Validate devices against core catalog
 export { validatePTModel, resolveModel } from "./shared/utils/helpers.js";
 
+// PT Compatibility Contract - fuente de verdad para PT
+export {
+  assertCatalogLoaded,
+  assertCatalogHealth,
+  getContractSummary,
+  type PTCatalogHealth,
+} from "@cisco-auto/pt-runtime";
+
 // Application Services - planners and helpers
 export {
   LayoutPlannerService,

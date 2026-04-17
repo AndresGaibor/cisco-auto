@@ -3,13 +3,19 @@
  * PT Control V2 - Build Script
  *
  * Usage:
- *   bun run scripts/build.ts          # Full build (compile + generate + deploy)
- *   bun run scripts/build.ts --watch  # Watch mode
- *   bun run scripts/build.ts --deploy # Deploy to PT dev directory
+ *   bun run pt:build         # Full build (generate + validate + deploy to PT_DEV_DIR)
+ *   bun run pt:build --watch # Watch mode with auto-rebuild
  */
 
 import { resolve } from "node:path";
-import { existsSync, mkdirSync, copyFileSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  copyFileSync,
+  readFileSync,
+  writeFileSync,
+  utimesSync,
+} from "node:fs";
 import { homedir } from "node:os";
 
 // ============================================================================
@@ -17,18 +23,15 @@ import { homedir } from "node:os";
 // ============================================================================
 
 const ROOT_DIR = resolve(import.meta.dirname, "..");
-const DIST_DIR = resolve(ROOT_DIR, "dist");
 const GENERATED_DIR = resolve(ROOT_DIR, "generated");
 const DEV_DIR = process.env.PT_DEV_DIR || `${process.env.HOME ?? homedir()}/pt-dev`;
+const COMMANDS_DIR = resolve(DEV_DIR, "commands");
+const RESULTS_DIR = resolve(DEV_DIR, "results");
+const PROTOCOL_SEQ = resolve(DEV_DIR, "protocol.seq.json");
 
 // ============================================================================
 // Build Steps
 // ============================================================================
-
-async function compileTypeScript(): Promise<boolean> {
-  console.log("\n📦 Skipping TypeScript compilation - using JavaScript templates");
-  return true;
-}
 
 async function generateRuntime(): Promise<{ main: string; runtime: string } | null> {
   console.log("\n🔧 Generating runtime files from templates...");
@@ -41,7 +44,7 @@ async function generateRuntime(): Promise<{ main: string; runtime: string } | nu
     const { execSync } = await import("node:child_process");
     const result = execSync("bun run scripts/assemble.js", {
       cwd: resolve(ROOT_DIR, "..", "pt-runtime"),
-      encoding: "utf-8"
+      encoding: "utf-8",
     });
     console.log(result);
 
@@ -114,13 +117,11 @@ async function deployToDev(): Promise<boolean> {
   console.log(`\n🚀 Deploying to ${DEV_DIR}...`);
 
   try {
-    // Ensure dev directory exists
     if (!existsSync(DEV_DIR)) {
       mkdirSync(DEV_DIR, { recursive: true });
     }
 
-    // Copy generated files to dev directory
-    const files = ["main.js", "runtime.js"];
+    const files = ["runtime.js"];
 
     for (const file of files) {
       const src = resolve(GENERATED_DIR, file);
@@ -128,6 +129,10 @@ async function deployToDev(): Promise<boolean> {
 
       if (existsSync(src)) {
         copyFileSync(src, dest);
+        if (file === "runtime.js") {
+          const now = Date.now();
+          utimesSync(dest, new Date(now), new Date(now + 2000));
+        }
         console.log(`   ✓ ${dest}`);
       } else {
         console.error(`   ✗ ${src} not found, aborting deploy`);
@@ -143,27 +148,78 @@ async function deployToDev(): Promise<boolean> {
   }
 }
 
+// ============================================================================
+// Reload Trigger
+// ============================================================================
+
+function getNextSeq(): number {
+  try {
+    if (!existsSync(PROTOCOL_SEQ)) {
+      return 1;
+    }
+    const content = JSON.parse(readFileSync(PROTOCOL_SEQ, "utf-8"));
+    return content.nextSeq ?? 1;
+  } catch {
+    return 1;
+  }
+}
+
+function bumpSeq(): void {
+  try {
+    const seq = getNextSeq();
+    writeFileSync(PROTOCOL_SEQ, JSON.stringify({ nextSeq: seq + 1 }));
+  } catch {}
+}
+
+function triggerReload(): void {
+  if (!existsSync(COMMANDS_DIR)) {
+    mkdirSync(COMMANDS_DIR, { recursive: true });
+  }
+
+  bumpSeq();
+  const seq = getNextSeq();
+  const cmdFile = resolve(COMMANDS_DIR, `${String(seq).padStart(12, "0")}-__ping.json`);
+  const cmd = JSON.stringify({
+    type: "__ping",
+    id: `reload-${Date.now()}`,
+    payload: { type: "__ping" },
+  });
+  writeFileSync(cmdFile, cmd);
+  console.log(`🔄 Reload triggered: ${cmdFile}`);
+
+  setTimeout(() => {
+    try {
+      const resultFile = resolve(RESULTS_DIR, `${String(seq).padStart(12, "0")}-__ping.json`);
+      if (existsSync(resultFile)) {
+        const result = JSON.parse(readFileSync(resultFile, "utf-8"));
+        console.log(`   ↳ Result: ${result.ok ? "OK" : "ERROR"} ${result.error ?? ""}`);
+      }
+    } catch {}
+  }, 2000);
+}
+
+// ============================================================================
+// Watch Mode
+// ============================================================================
+
 async function watchMode(): Promise<void> {
   console.log("\n👀 Watch mode enabled - monitoring for changes...\n");
 
   const { watch } = await import("node:fs");
 
-  // Initial build
-  await build(false);
+  await build(true);
 
-  // Watch for changes
   const srcDir = resolve(ROOT_DIR, "src");
 
   watch(srcDir, { recursive: true }, async (event, filename) => {
     if (filename?.endsWith(".ts")) {
       console.log(`\n📝 Change detected: ${filename}`);
-      await build(false);
+      await build(true);
     }
   });
 
   console.log("Watching for changes in:", srcDir);
 
-  // Keep process alive
   process.stdin.resume();
 }
 
@@ -171,39 +227,31 @@ async function watchMode(): Promise<void> {
 // Main Build
 // ============================================================================
 
-async function build(deploy: boolean = true): Promise<boolean> {
+async function build(triggerReloadFlag: boolean = true): Promise<boolean> {
   console.log("═══════════════════════════════════════════");
   console.log("       PT Control V2 - Build");
   console.log("═══════════════════════════════════════════");
 
-  // Step 1: Compile TypeScript
-  const tsOk = await compileTypeScript();
-  if (!tsOk) {
-    console.error("\n❌ TypeScript compilation failed");
-    process.exit(1);
-  }
-
-  // Step 2: Generate runtime files
   const generated = await generateRuntime();
   if (!generated) {
     console.error("\n❌ Runtime generation failed");
     process.exit(1);
   }
 
-  // Step 3: Validate PT-safe (MANDATORY - aborts deploy if fails)
   const valid = validateArtifacts(generated.main, generated.runtime);
   if (!valid) {
     console.error("\n❌ PT-safe validation failed - artifacts will NOT be deployed");
     process.exit(1);
   }
 
-  // Step 4: Deploy (optional)
-  if (deploy) {
-    const deployOk = await deployToDev();
-    if (!deployOk) {
-      console.error("\n❌ Deployment failed");
-      process.exit(1);
-    }
+  const deployOk = await deployToDev();
+  if (!deployOk) {
+    console.error("\n❌ Deployment failed");
+    process.exit(1);
+  }
+
+  if (triggerReloadFlag) {
+    triggerReload();
   }
 
   console.log("\n═══════════════════════════════════════════");
@@ -221,8 +269,6 @@ const args = process.argv.slice(2);
 
 if (args.includes("--watch")) {
   watchMode().catch(console.error);
-} else if (args.includes("--no-deploy")) {
-  build(false).catch(console.error);
 } else {
   build(true).catch(console.error);
 }

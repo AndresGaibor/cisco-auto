@@ -11,7 +11,7 @@ import { LabExecutor } from "./lab-executor.js";
 import { LabReconciler } from "./lab-reconciler.js";
 import { LabRuntimeManager } from "./lab-runtime-manager.js";
 import { LabPlanPersistence } from "./lab-plan-persistence.js";
-import { LabVerifier, type VerificationReport } from "./lab-verifier.js";
+import type { VerificationReport } from "./lab-verifier.js";
 import { PTSafeValidator } from "./pt-safe-validator.js";
 
 export interface LabCLIConfig {
@@ -55,22 +55,32 @@ export class LabCLI {
   private planner: LabPlanner;
   private runtimeManager: LabRuntimeManager;
   private persistence: LabPlanPersistence;
-  private verifier: LabVerifier;
   private validator: PTSafeValidator;
+
+  private config: LabCLIConfig;
+  private generateId = () => `lab-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
   constructor(
     private reconciler: LabReconciler,
     private labSpec: LabSpec,
-    config: Partial<LabCLIConfig> = {}
+    config: Partial<LabCLIConfig> = {},
   ) {
-    const devDir = config.devDir ?? process.env.PT_DEV_DIR ?? `${process.env.HOME}/pt-dev`;
-    const stateDir = config.stateDir ?? "./lab-state";
+    this.config = {
+      devDir: config.devDir ?? process.env.PT_DEV_DIR ?? `${process.env.HOME}/pt-dev`,
+      stateDir: config.stateDir ?? "./lab-state",
+      autoVerify: config.autoVerify ?? true,
+      autoSave: config.autoSave ?? true,
+      verbose: config.verbose ?? false,
+    };
 
     this.diffEngine = new LabDiffEngine();
-    this.planner = new LabPlanner();
-    this.runtimeManager = new LabRuntimeManager({ devDir, autoDeploy: true, autoLoad: true });
-    this.persistence = new LabPlanPersistence(stateDir);
-    this.verifier = new LabVerifier(reconciler as any, reconciler as any);
+    this.planner = new LabPlanner(this.generateId);
+    this.runtimeManager = new LabRuntimeManager({
+      devDir: this.config.devDir,
+      autoDeploy: true,
+      autoLoad: false,
+    });
+    this.persistence = new LabPlanPersistence(this.config.stateDir);
     this.validator = new PTSafeValidator();
   }
 
@@ -82,18 +92,18 @@ export class LabCLI {
     return {
       plan,
       diffSummary: {
-        devicesToCreate: diff.devices.missing.length,
-        devicesToRemove: diff.devices.extra.length,
-        linksToCreate: diff.links.missing.length,
-        linksToRemove: diff.links.extra.length,
-        configChanges: 0,
+        devicesToCreate: diff.summary.missing,
+        devicesToRemove: diff.summary.extra,
+        linksToCreate: 0,
+        linksToRemove: 0,
+        configChanges: diff.summary.drift + diff.summary.unreliable,
       },
     };
   }
 
   async apply(
     plan: LabPlan,
-    options?: { verify?: boolean; resume?: boolean; saveState?: boolean }
+    options?: { verify?: boolean; resume?: boolean; saveState?: boolean },
   ): Promise<ApplyResult> {
     const shouldResume = options?.resume ?? false;
     const shouldSave = options?.saveState ?? true;
@@ -135,7 +145,11 @@ export class LabCLI {
           const op = state.operations.find((o) => o.id === progress.currentOperation!.id);
           if (op) {
             if (progress.lastResult.action === "failed") {
-              this.persistence.markOperationFailed(state, op.id, progress.lastResult.error ?? "Unknown error");
+              this.persistence.markOperationFailed(
+                state,
+                op.id,
+                progress.lastResult.error ?? "Unknown error",
+              );
             } else if (progress.lastResult.action === "skipped") {
               this.persistence.markOperationSkipped(state, op.id);
             } else {
@@ -149,7 +163,9 @@ export class LabCLI {
         }
 
         if (this.config?.verbose) {
-          console.log(`[${progress.completedOperations}/${progress.totalOperations}] ${progress.currentOperation.type} ${progress.currentOperation.resourceId}`);
+          console.log(
+            `[${progress.completedOperations}/${progress.totalOperations}] ${progress.currentOperation.type} ${progress.currentOperation.resourceId}`,
+          );
         }
       }
     }
@@ -168,11 +184,9 @@ export class LabCLI {
   }
 
   async verify(checks: LabCheckSpec[]): Promise<VerifyResult> {
-    const report = await this.verifier.verify(checks);
-    return {
-      report,
-      allPassed: report.failed === 0 && report.skipped === 0,
-    };
+    throw new Error(
+      "LabCLI.verify() requiere IosService y TopologyService -祖嘗 [LabVerifier] no disponible en este contexto",
+    );
   }
 
   async repair(): Promise<ApplyResult> {

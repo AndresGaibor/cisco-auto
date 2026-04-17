@@ -186,12 +186,28 @@ var __rest = function(s, e) {
 (function() {
   // Bootstrap globals — PT QTScript 9.0: 'self' is undefined.
   // Use 'this' (which IS the global object) as our global scope reference.
-  var _g = (function() { return this; })();
+  _g = (function() { return this; })();
   // Polyfill self so compiled kernel code using self.ipc / self.fm works transparently.
   if (typeof self === "undefined") { _g.self = _g; }
-  var ipc = (typeof ipc !== "undefined") ? ipc : null;
-  var dprint = (typeof dprint !== "undefined") ? dprint
-             : function(msg) { if (typeof print === "function") print(String(msg)); };
+  var ipc = (typeof _g.ipc !== "undefined" && _g.ipc !== null) ? _g.ipc : null;
+  if (!ipc && typeof _g.self !== "undefined" && _g.self && typeof _g.self.ipc !== "undefined") {
+    ipc = _g.self.ipc;
+  }
+  _g.ipc = ipc;
+  var __nativeDprint = (typeof _g.dprint === "function") ? _g.dprint : null;
+  var dprint = function(msg) {
+    try {
+      var appWindow = ipc && typeof ipc.appWindow === "function" ? ipc.appWindow() : null;
+      if (appWindow && typeof appWindow.writeToPT === "function") {
+        appWindow.writeToPT(String(msg) + "\\n");
+      }
+    } catch (_dprintErr) {}
+    try {
+      if (__nativeDprint) __nativeDprint(String(msg));
+    } catch (_nativeDprintErr) {}
+    try { if (typeof print === "function") print(String(msg)); } catch (_printErr) {}
+  };
+  _g.dprint = dprint;
   var DEV_DIR = (typeof DEV_DIR !== "undefined") ? DEV_DIR : ${devDirLiteral};
 
   // fm initialization with dual-path fallback (BUG-01 fix)
@@ -270,6 +286,7 @@ ${code}
 
   // Publish kernel factory on global scope
   if (typeof createKernel === "function") {
+      _g.createKernel = createKernel;
     _g.createKernel = function(cfg) {
       return createKernel(cfg);
     };
@@ -369,6 +386,7 @@ function main() {
   //   - hot-reloading whenever runtime.js file changes on disk
   try {
     if (typeof createKernel === "function") {
+      _g.createKernel = createKernel;
       var kernel = createKernel({
         devDir:                 devDir,
         commandsDir:            devDir + "/commands",

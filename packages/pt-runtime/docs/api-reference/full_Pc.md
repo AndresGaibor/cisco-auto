@@ -1,0 +1,112 @@
+# Clase: Pc
+
+- **Vía de acceso de muestra:** `devices[3]`
+- **Total de métodos únicos:** 102
+- **Total de propiedades únicas:** 0
+
+## Métodos Detallados
+
+| Método | Aridad | Firma |
+|---|---|---|
+| `activityTreeToXml` | 0 | `function() { [native code] }` |
+| `addCustomVar` | 0 | `function() { [native code] }` |
+| `addDeviceExternalAttributes` | 0 | `function() { [native code] }` |
+| `addModule` | 0 | `function() { [native code] }` |
+| `addProgrammingSerialOutputs` | 0 | `function() { [native code] }` |
+| `addSound` | 0 | `function() { [native code] }` |
+| `addUserDesktopApp` | 0 | `function() { [native code] }` |
+| `addUserDesktopAppFrom` | 0 | `function() { [native code] }` |
+| `addUserDesktopAppFromGlobal` | 0 | `function() { [native code] }` |
+| `clearDeviceExternalAttributes` | 0 | `function() { [native code] }` |
+| `clearProgrammingSerialOutputs` | 0 | `function() { [native code] }` |
+| `destroySounds` | 0 | `function() { [native code] }` |
+| `disableCip` | 0 | `function() { [native code] }` |
+| `disableOpc` | 0 | `function() { [native code] }` |
+| `disableProfinet` | 0 | `function() { [native code] }` |
+| `enableCip` | 0 | `function() { [native code] }` |
+| `enableOpc` | 0 | `function() { [native code] }` |
+| `enableProfinet` | 0 | `function() { [native code] }` |
+| `getAreaLeftX` | 0 | `function() { [native code] }` |
+| `getAreaTopY` | 0 | `function() { [native code] }` |
+| `getCenterXCoordinate` | 0 | `function() { [native code] }` |
+| `getCenterYCoordinate` | 0 | `function() { [native code] }` |
+| `getClassName` | 0 | `function() { [native code] }` |
+| `getCommandLine` | 0 | `function() { [native code] }` |
+| `getCommandPrompt` | 0 | `function() { [native code] }` |
+| `getCustomInterface` | 0 | `function() { [native code] }` |
+| `getCustomLogicalImage` | 0 | `function() { [native code] }` |
+| `getCustomPhysicalImage` | 0 | `function() { [native code] }` |
+| `getCustomVarNameAt` | 0 | `function() { [native code] }` |
+| `getCustomVarsCount` | 0 | `function() { [native code] }` |
+| `getCustomVarStr` | 0 | `function() { [native code] }` |
+| `getCustomVarValueStrAt` | 0 | `function() { [native code] }` |
+| `getDescriptor` | 0 | `function() { [native code] }` |
+| `getDeviceExternalAttributes` | 0 | `function() { [native code] }` |
+| `getDeviceExternalAttributeValue` | 0 | `function() { [native code] }` |
+| `getDhcpFlag` | 0 | `function() { [native code] }` |
+| `getGlobalXPhysicalWS` | 0 | `function() { [native code] }` |
+| `getGlobalYPhysicalWS` | 0 | `function() { [native code] }` |
+| `getModel` | 0 | `function() { [native code] }` |
+| `getName` | 0 | `function() { [native code] }` |
+| `getObjectUuid` | 0 | `function() { [native code] }` |
+| `getPhysicalObject` | 0 | `function() { [native code] }` |
+| `getPort` | 0 | `function() { [native code] }` |
+| `getPortAt` | 0 | `function() { [native code] }` |
+| `getPortCount` | 0 | `function() { [native code] }` |
+| `getPorts` | 0 | `function() { [native code] }` |
+| `getPower` | 0 | `function() { [native code] }` |
+| `getProcess` | 0 | `function() { [native code] }` |
+| `getProgrammingSerialOutputs` | 0 | `function() { [native code] }` |
+| `getRootModule` | 0 | `function() { [native code] }` |
+| `getRs232Port` | 0 | `function() { [native code] }` |
+| `getSerialNumber` | 0 | `function() { [native code] }` |
+| `getSupportedModule` | 0 | `function() { [native code] }` |
+| `getType` | 0 | `function() { [native code] }` |
+| `getUpTime` | 0 | `function() { [native code] }` |
+| `getUsbPortAt` | 0 | `function() { [native code] }` |
+| `getUsbPortCount` | 0 | `function() { [native code] }` |
+| `getUserDesktopAppAt` | 0 | `function() { [native code] }` |
+| `getUserDesktopAppByDir` | 0 | `function() { [native code] }` |
+| `getUserDesktopAppById` | 0 | `function() { [native code] }` |
+| `getUserDesktopAppCount` | 0 | `function() { [native code] }` |
+| `getXCoordinate` | 0 | `function() { [native code] }` |
+| `getXPhysicalWS` | 0 | `function() { [native code] }` |
+| `getYCoordinate` | 0 | `function() { [native code] }` |
+| `getYPhysicalWS` | 0 | `function() { [native code] }` |
+| `hasCustomVar` | 0 | `function() { [native code] }` |
+| `isDesktopAvailable` | 0 | `function() { [native code] }` |
+| `isOutdated` | 0 | `function() { [native code] }` |
+| `isProjectRunning` | 0 | `function() { [native code] }` |
+| `moveByInPhysicalWS` | 0 | `function() { [native code] }` |
+| `moveToLocation` | 0 | `function() { [native code] }` |
+| `moveToLocationCentered` | 0 | `function() { [native code] }` |
+| `moveToLocInPhysicalWS` | 0 | `function() { [native code] }` |
+| `playSound` | 0 | `function() { [native code] }` |
+| `registerDelegate` | 3 | `function() { [native code] }` |
+| `registerEvent` | 3 | `function() { [native code] }` |
+| `registerObjectEvent` | 0 | `function() { [native code] }` |
+| `relinkUserDesktopApp` | 0 | `function() { [native code] }` |
+| `removeCustomVar` | 0 | `function() { [native code] }` |
+| `removeModule` | 0 | `function() { [native code] }` |
+| `removeUserDesktopApp` | 0 | `function() { [native code] }` |
+| `restoreToDefault` | 0 | `function() { [native code] }` |
+| `runCodeInProject` | 0 | `function() { [native code] }` |
+| `runProject` | 0 | `function() { [native code] }` |
+| `serializeToXml` | 0 | `function() { [native code] }` |
+| `setCustomInterface` | 0 | `function() { [native code] }` |
+| `setCustomLogicalImage` | 0 | `function() { [native code] }` |
+| `setCustomPhysicalImage` | 0 | `function() { [native code] }` |
+| `setDefaultGateway` | 0 | `function() { [native code] }` |
+| `setDeviceExternalAttributes` | 0 | `function() { [native code] }` |
+| `setDhcpFlag` | 0 | `function() { [native code] }` |
+| `setName` | 0 | `function() { [native code] }` |
+| `setPower` | 0 | `function() { [native code] }` |
+| `setTime` | 0 | `function() { [native code] }` |
+| `stopProject` | 0 | `function() { [native code] }` |
+| `stopSound` | 0 | `function() { [native code] }` |
+| `stopSounds` | 0 | `function() { [native code] }` |
+| `subtractDeviceExternalAttributes` | 0 | `function() { [native code] }` |
+| `unregisterDelegate` | 3 | `function() { [native code] }` |
+| `unregisterEvent` | 3 | `function() { [native code] }` |
+| `unregisterObjectEvent` | 0 | `function() { [native code] }` |
+| `updateTemplateCreationTime` | 0 | `function() { [native code] }` |

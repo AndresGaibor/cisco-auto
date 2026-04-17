@@ -5,7 +5,8 @@ import type { HandlerDeps } from "../../ports";
 
 const deps = {
   getLW: () => ({}) as any,
-  getNet: () => ({ getDevice: () => null, getDeviceCount: () => 0, getDeviceAt: () => null }) as any,
+  getNet: () =>
+    ({ getDevice: () => null, getDeviceCount: () => 0, getDeviceAt: () => null }) as any,
   dprint: () => {},
 } as any;
 
@@ -19,6 +20,12 @@ describe("Handler wrappers", () => {
 
   test("DeviceHandler responde a payload inválido de forma segura", () => {
     const handler = new DeviceHandler();
+    const deps: any = {
+      getNet: () => ({ getDeviceAt: () => null, getDeviceCount: () => 0 }),
+      getFM: () => ({ fileExists: () => false }) as any,
+      DEV_DIR: "/tmp",
+      dprint: () => {},
+    };
     const result = handler.execute({ type: "listDevices" }, deps as any);
 
     expect(result.ok).toBe(true);

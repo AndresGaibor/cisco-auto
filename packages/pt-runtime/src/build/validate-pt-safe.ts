@@ -29,6 +29,26 @@ export interface ValidationResult {
   summary: ValidationSummary;
 }
 
+export function createValidationResult(
+  errors: ValidationError[],
+  warnings: ValidationError[],
+  bundleSize: number,
+): ValidationResult {
+  const byCategory = categorizeByLine(errors);
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+    summary: {
+      totalErrors: errors.length,
+      totalWarnings: warnings.length,
+      byCategory,
+      bundleSize,
+      estimatedSourceMapsSize: Math.ceil(bundleSize * 0.1),
+    },
+  };
+}
+
 export interface ValidationSummary {
   totalErrors: number;
   totalWarnings: number;
@@ -243,20 +263,7 @@ export function validatePtSafe(code: string): ValidationResult {
     }
   }
 
-  const byCategory = categorizeByLine(errors);
-
-  return {
-    valid: errors.length === 0,
-    errors,
-    warnings,
-    summary: {
-      totalErrors: errors.length,
-      totalWarnings: warnings.length,
-      byCategory,
-      bundleSize: code.length,
-      estimatedSourceMapsSize: Math.ceil(code.length * 0.1),
-    },
-  };
+  return createValidationResult(errors, warnings, code.length);
 }
 
 export function formatValidationResult(result: ValidationResult): string {

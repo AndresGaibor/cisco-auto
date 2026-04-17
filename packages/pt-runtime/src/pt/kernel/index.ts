@@ -1,12 +1,11 @@
 // packages/pt-runtime/src/pt/kernel/index.ts
-export * from "./main";
+export { createDirectoryManager } from "./directories";
+export { createLeaseManager } from "./lease";
+export { createCommandQueue } from "./command-queue";
+export { createRuntimeLoader } from "./runtime-loader";
+export { createHeartbeat } from "./heartbeat";
+export { createCleanupManager } from "./cleanup";
+export { createExecutionEngine, toKernelJobState } from "./execution-engine";
+export { safeFM } from "./safe-fm";
+export { createKernel } from "./main";
 export * from "./types";
-export * from "./directories";
-export * from "./lease";
-export * from "./command-queue";
-export * from "./runtime-loader";
-export * from "./heartbeat";
-export * from "./cleanup";
-export * from "./job-state";
-export * from "./step-handlers";
-export * from "./job-executor";

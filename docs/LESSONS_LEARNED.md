@@ -2,6 +2,83 @@
 
 ## Bugs Fixes Implementados
 
+### Bug 5: `pt device list` no debía bloquearse por estado viejo
+
+**Problema**: La CLI devolvía una lista vacía aunque el runtime ya había ejecutado `listDevices` y sí tenía dispositivos reales.
+
+**Síntoma**: `bun run pt device list` mostraba `No se encontraron dispositivos` o se quedaba esperando una ruta cacheada aunque PT respondía.
+
+**Causa raíz**:
+- `loadLiveDeviceListFromController()` hacía early-return por `bridgeStatus.ready` o `queuedCount` antes de intentar la ruta viva.
+- Un `catch` transformaba el timeout en error antes de permitir fallback a caché/state.
+- La cola llena no significaba que el runtime no tuviera un resultado válido.
+
+**Fix**: Hacer live-first:
+- intentar `controller.listDevices()` primero
+- caer a `getCachedSnapshot()` si falla
+- caer a `readState()` si no hay snapshot
+- devolver vacío solo como última opción
+
+**Prevención / Lección**: El `bridgeStatus` informa fallback, pero no debe bloquear la lectura viva cuando el runtime ya responde.
+
+**Archivo**: `apps/pt-cli/src/application/device-list.ts`, `apps/pt-cli/tests/device-list.test.ts`
+
+---
+
+### Bug 6: Carrera en escritura atómica
+
+**Problema**: Dos escrituras concurrentes podían chocar por usar siempre el mismo `.tmp`.
+
+**Síntoma**: `rename ENOENT` en checkpoint/consumer state bajo carga.
+
+**Causa raíz**: `atomicWriteFile()` reutilizaba `path.tmp` para todas las escrituras.
+
+**Fix**: Temp file único por escritura, con `pid + timestamp + random`.
+
+**Prevención / Lección**: Si varios procesos pueden escribir el mismo destino, el temp debe ser único por intento.
+
+**Archivo**: `packages/file-bridge/src/shared/fs-atomic.ts`
+
+---
+
+### Bug 7: Stubs frágiles en contexto CLI
+
+**Problema**: Los tests de contexto asumían métodos que no siempre existen en stubs simples.
+
+**Síntoma**: `getContextSummary`, `getCachedSnapshot` o `drainCommandTrace` fallaban en tests unitarios.
+
+**Causa raíz**: El runner no trataba esos métodos como opcionales.
+
+**Fix**: Hacer tolerantes esas llamadas con `?.()` y defaults seguros.
+
+**Prevención / Lección**: Cuando el runner consume controller real y stubs livianos, los helpers de contexto deben degradar sin romper el flujo.
+
+**Archivo**: `apps/pt-cli/src/application/context-inspector.ts`, `apps/pt-cli/src/application/context-supervisor.ts`, `apps/pt-cli/src/application/run-command.ts`
+
+---
+
+### Bug 8: Enlaces `ambiguous` se mostraban como conexiones directas
+
+**Problema**: `pt device list` mostraba equipos como `PC10` conectados directamente a `SW-Core` aunque no hubiera conexión física real.
+
+**Síntoma**: `SW-Core` aparecía con "7 enlaces" incluyendo `PC10`, cuando los PCs cuelgan del switch de acceso, no del core.
+
+**Causa raíz**:
+- `connectionsByDevice` incluía enlaces con `confidence === "ambiguous"` o `"unknown"`
+- El render los imprimía como conexiones directas
+
+**Fix**:
+- `connectionsByDevice` solo incluye `exact | merged | registry`
+- Enlaces `ambiguous`/`unknown` van a `unresolvedLinks` únicamente
+- Render: conexión directa inline por puerto (`Gi0/1 → PC10:Fa0 [exact]`)
+- Nueva sección "Sin resolver" al final con candidatos
+
+**Prevención / Lección**: No mezclar heurística de resolución con topología física. Un candidato de nombre no es una conexión directa.
+
+**Archivo**: `apps/pt-cli/src/application/device-list.ts`, `apps/pt-cli/src/commands/device/list.ts`
+
+---
+
 ### Bug 1: Error detection en output histórico
 
 **Problema**: El código verificaba errores (`% Invalid`, `% Incomplete`, `% Unknown`) en TODO el output del terminal (`output`), no solo en el output del comando actual.

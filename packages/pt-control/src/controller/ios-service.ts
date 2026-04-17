@@ -14,6 +14,7 @@ import type {
   IosExecutionSuccess,
   IosConfigApplyResult,
   IosConfidence,
+  IosExecutionEvidence,
 } from "../contracts/ios-execution-evidence.js";
 import type { DeviceCapabilities } from "../domain/ios/capabilities/pt-capability-resolver.js";
 
@@ -57,7 +58,10 @@ export class ControllerIosService {
   }
 
   showMacAddressTable(device: string): Promise<ShowMacAddressTable> {
-    return this.iosService.show(device, "show mac address-table") as Promise<ShowMacAddressTable>;
+    return this.iosService.show(
+      device,
+      "show mac address-table",
+    ) as unknown as Promise<ShowMacAddressTable>;
   }
 
   showCdpNeighbors(device: string): Promise<ShowCdpNeighbors> {
@@ -137,7 +141,11 @@ export class ControllerIosService {
     evidence: { source: string; status?: number; mode?: string },
     verificationCheck?: string,
   ): Promise<IosConfidence> {
-    return this.iosService.getConfidence(device, evidence as any, verificationCheck);
+    return this.iosService.getConfidence(
+      device,
+      evidence as IosExecutionEvidence,
+      verificationCheck,
+    );
   }
 
   configureDhcpPool(
@@ -215,5 +223,9 @@ export class ControllerIosService {
 
   commandLog(device?: string, limit = 100): Promise<unknown[]> {
     return this.deviceService.commandLog(device, limit);
+  }
+
+  deepInspect(path: string, method?: string, args?: unknown[]): Promise<unknown> {
+    return this.deviceService.deepInspect(path, method, args as any[]);
   }
 }

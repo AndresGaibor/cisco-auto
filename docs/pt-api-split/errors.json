@@ -1,0 +1,70 @@
+[
+  {
+    "context": "devices[0].getProcess()",
+    "error": "IPC Call ERROR: Router - Invalid arguments for IPC call \"getProcess\""
+  },
+  {
+    "context": "devices[1].getProcess()",
+    "error": "IPC Call ERROR: CiscoDevice - Invalid arguments for IPC call \"getProcess\""
+  },
+  {
+    "context": "devices[2].getProcess()",
+    "error": "IPC Call ERROR: Cloud - Invalid arguments for IPC call \"getProcess\""
+  },
+  {
+    "context": "devices[3].getProcess()",
+    "error": "IPC Call ERROR: Pc - Invalid arguments for IPC call \"getProcess\""
+  },
+  {
+    "context": "devices[4].getProcess()",
+    "error": "IPC Call ERROR: Server - Invalid arguments for IPC call \"getProcess\""
+  },
+  {
+    "context": "devices[5].getProcess()",
+    "error": "IPC Call ERROR: Router - Invalid arguments for IPC call \"getProcess\""
+  },
+  {
+    "context": "devices[6].getProcess()",
+    "error": "IPC Call ERROR: ASA - Invalid arguments for IPC call \"getProcess\""
+  },
+  {
+    "context": "devices[7].getProcess()",
+    "error": "IPC Call ERROR: MCU - Invalid arguments for IPC call \"getProcess\""
+  },
+  {
+    "context": "devices[7].getGoosePublisherProcessByPortName()",
+    "error": "IPC Call ERROR: MCU - Invalid arguments for IPC call \"getGoosePublisherProcessByPortName\""
+  },
+  {
+    "context": "devices[7].getGooseSubscriberProcessByPortName()",
+    "error": "IPC Call ERROR: MCU - Invalid arguments for IPC call \"getGooseSubscriberProcessByPortName\""
+  },
+  {
+    "context": "devices[7].getProfinetProcessByPortName()",
+    "error": "IPC Call ERROR: MCU - Invalid arguments for IPC call \"getProfinetProcessByPortName\""
+  },
+  {
+    "context": "devices[7].getSvPublisherProcessByPortName()",
+    "error": "IPC Call ERROR: MCU - Invalid arguments for IPC call \"getSvPublisherProcessByPortName\""
+  },
+  {
+    "context": "devices[7].getSvSubscriberProcessByPortName()",
+    "error": "IPC Call ERROR: MCU - Invalid arguments for IPC call \"getSvSubscriberProcessByPortName\""
+  },
+  {
+    "context": "devices[8].getProcess()",
+    "error": "IPC Call ERROR: SBC - Invalid arguments for IPC call \"getProcess\""
+  },
+  {
+    "context": "devices[9].getProcess()",
+    "error": "IPC Call ERROR: CiscoDevice - Invalid arguments for IPC call \"getProcess\""
+  },
+  {
+    "context": "devices[10].getProcess()",
+    "error": "IPC Call ERROR: CiscoDevice - Invalid arguments for IPC call \"getProcess\""
+  },
+  {
+    "context": "devices[11].getProcess()",
+    "error": "IPC Call ERROR: Pc - Invalid arguments for IPC call \"getProcess\""
+  }
+]

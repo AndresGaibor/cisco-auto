@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 /**
  * File Bridge V2 Protocol Schemas
@@ -12,12 +12,14 @@ export type BridgeProtocolVersion = typeof BRIDGE_PROTOCOL_VERSION;
 // Event Validation Schema
 // ============================================================================
 
-export const BridgeEventSchema = z.object({
-  seq: z.number().int().nonnegative(),
-  ts: z.number().int().nonnegative(),
-  type: z.string().min(1),
-  id: z.string().optional(),
-}).passthrough();
+export const BridgeEventSchema = z
+  .object({
+    seq: z.number().int().nonnegative(),
+    ts: z.number().int().nonnegative(),
+    type: z.string().min(1),
+    id: z.string().optional(),
+  })
+  .passthrough();
 
 export type BridgeEventInput = z.input<typeof BridgeEventSchema>;
 
@@ -47,7 +49,7 @@ export interface BridgeResultEnvelope<T = unknown> {
   seq: number;
   startedAt?: number;
   completedAt: number;
-  status: 'completed' | 'failed' | 'timeout';
+  status: "completed" | "failed" | "timeout";
   ok: boolean;
   value?: T;
   error?: BridgeErrorDetail;
@@ -57,7 +59,7 @@ export interface BridgeErrorDetail {
   code: string;
   message: string;
   retryable?: boolean;
-  phase?: 'queue' | 'pickup' | 'execute' | 'result';
+  phase?: "queue" | "pickup" | "execute" | "result";
 }
 
 // ============================================================================
@@ -108,9 +110,9 @@ export function generateBridgeCommandId(): string {
 export async function calculatePayloadChecksum(payload: unknown): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(JSON.stringify(payload));
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 // ============================================================================
@@ -121,19 +123,19 @@ export interface DeviceSnapshot {
   name: string;
   model?: string;
   type?: string;
-  ports?: Array<{ 
-    name: string; 
-    ip?: string; 
-    mac?: string; 
+  ports?: Array<{
+    name: string;
+    ip?: string;
+    mac?: string;
   }>;
   power?: boolean;
 }
 
 export interface LinkSnapshot {
   id: string;
-  device1: string; 
+  device1: string;
   port1: string;
-  device2: string; 
+  device2: string;
   port2: string;
   cableType?: string;
 }
@@ -141,9 +143,58 @@ export interface LinkSnapshot {
 export interface Snapshot {
   devices: Record<string, DeviceSnapshot>;
   links: Record<string, LinkSnapshot>;
-  metadata?: { 
-    deviceCount: number; 
-    linkCount: number; 
+  metadata?: {
+    deviceCount: number;
+    linkCount: number;
     capturedAt?: number;
+  };
+}
+
+// ============================================================================
+// Bridge Lease - Canonical lease contract for CLI ↔ PT coordination
+// ============================================================================
+
+export interface BridgeLease {
+  ownerId: string;
+  pid: number;
+  hostname: string;
+  startedAt: number;
+  updatedAt: number;
+  expiresAt: number;
+  ttlMs: number;
+  processTitle: string;
+  version: string;
+}
+
+// ============================================================================
+// Bridge Heartbeat - Written by PT runtime, read by file-bridge
+// ============================================================================
+
+export interface BridgeHeartbeat {
+  ts: number;
+  running: boolean;
+  activeCommand?: {
+    id: string;
+    seq: number;
+    type: string;
+    startedAt: number;
+  };
+  queued: number;
+  loadedAt?: number;
+}
+
+// ============================================================================
+// Bridge Runtime State - Written by PT runtime, read by file-bridge/CLI
+// ============================================================================
+
+export interface BridgeRuntimeState {
+  version: string;
+  timestamp: number;
+  devices?: Record<string, unknown>;
+  links?: Record<string, unknown>;
+  metadata?: {
+    deviceCount: number;
+    linkCount: number;
+    generatedBy?: string;
   };
 }

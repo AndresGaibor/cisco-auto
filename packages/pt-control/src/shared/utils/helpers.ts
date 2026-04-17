@@ -2,7 +2,11 @@
 // Runtime Helpers - Pure utility functions
 // ============================================================================
 
-import { PT_MODEL_MAP, PT_DEVICE_TYPE_MAP, PT_NON_CREATABLE_MODELS, validatePTModel as validatePTModelFn, getPTDeviceType } from "@cisco-auto/pt-runtime/value-objects";
+import {
+  PT_MODEL_MAP,
+  PT_NON_CREATABLE_MODELS,
+  validatePTModel as validatePTModelFn,
+} from "@cisco-auto/pt-runtime";
 
 // Device type IDs (from PT schema)
 const DEVICE_TYPES = {
@@ -82,7 +86,7 @@ export interface HandlerResult {
   [key: string]: unknown;
 }
 
-/** 
+/**
  * Valida y resuelve modelo contra catálogo de core
  * THROWS si modelo inválido
  */
@@ -91,13 +95,13 @@ export function validatePTModel(model: string): string {
   if (!(key in PT_MODEL_MAP)) {
     throw new Error(
       `Invalid device model: "${model}". ` +
-      `Check packages/core/src/catalog/ for valid models. ` +
-      `Available aliases: pc, server, cloud, ap, router, switch, 1941, 2960, ...`
+        `Check packages/core/src/catalog/ for valid models. ` +
+        `Available aliases: pc, server, cloud, ap, router, switch, 1941, 2960, ...`,
     );
   }
   if (PT_NON_CREATABLE_MODELS.some((item: string) => item.toLowerCase() === key)) {
     throw new Error(
-      `Invalid device model: "${model}". This model is auto-created by Packet Tracer and cannot be added manually.`
+      `Invalid device model: "${model}". This model is auto-created by Packet Tracer and cannot be added manually.`,
     );
   }
   return validatePTModelFn(model);
@@ -135,7 +139,11 @@ export function getDeviceTypeCandidates(model: string): number[] {
   const normalized = (model || "").toLowerCase();
 
   // Switches
-  if (normalized.indexOf("2960") === 0 || normalized.indexOf("3560") === 0 || normalized.indexOf("switch") >= 0) {
+  if (
+    normalized.indexOf("2960") === 0 ||
+    normalized.indexOf("3560") === 0 ||
+    normalized.indexOf("switch") >= 0
+  ) {
     return [DEVICE_TYPES.switch, DEVICE_TYPES.router];
   }
 
@@ -175,7 +183,7 @@ export function createDeviceWithFallback(
   y: number,
   typeList: number[],
   lw: PTLogicalWorkspace,
-  net: PTNetwork
+  net: PTNetwork,
 ): CreateDeviceResult | null {
   for (const typeId of typeList) {
     const autoName = lw.addDevice(typeId, model, x, y);

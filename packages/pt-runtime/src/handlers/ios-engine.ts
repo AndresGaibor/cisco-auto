@@ -14,6 +14,14 @@
  * contracts defined in `runtime/contracts.ts`.
  */
 
+import type {
+  PTCommandLine,
+  PTOutputWrittenArgs,
+  PTCommandEndedArgs,
+  PTModeChangedArgs,
+  PTPromptChangedArgs,
+} from "../pt-api/pt-api-registry";
+import type { PtDeferredDeps } from "../pt-api/pt-deps";
 
 export type IosJobPhase =
   | "queued"
@@ -142,7 +150,11 @@ export class IosSessionEngine {
       ok: !record.job.error,
       raw: record.job.output,
       executed: record.job.currentStep,
-      results: record.job.steps.map((command) => ({ command, raw: record.job.output, status: record.job.error ? 1 : 0 })),
+      results: record.job.steps.map((command) => ({
+        command,
+        raw: record.job.output,
+        status: record.job.error ? 1 : 0,
+      })),
       error: record.job.error || undefined,
       code: record.job.errorCode || undefined,
     };
@@ -227,10 +239,12 @@ export class IosSessionEngine {
     const listeners = record.listeners;
     const term = record.terminal;
 
-    if (listeners.outputWritten) term.unregisterEvent("outputWritten", null, listeners.outputWritten);
+    if (listeners.outputWritten)
+      term.unregisterEvent("outputWritten", null, listeners.outputWritten);
     if (listeners.commandEnded) term.unregisterEvent("commandEnded", null, listeners.commandEnded);
     if (listeners.modeChanged) term.unregisterEvent("modeChanged", null, listeners.modeChanged);
-    if (listeners.promptChanged) term.unregisterEvent("promptChanged", null, listeners.promptChanged);
+    if (listeners.promptChanged)
+      term.unregisterEvent("promptChanged", null, listeners.promptChanged);
 
     record.listeners = null;
     record.terminal = null;
@@ -278,7 +292,12 @@ export class IosSessionEngine {
     return !!job.device;
   }
 
-  private classifyTerminalState(prompt: string, mode: string, input: string, output: string): string {
+  private classifyTerminalState(
+    prompt: string,
+    mode: string,
+    input: string,
+    output: string,
+  ): string {
     if (output.includes("--More--")) return "dismiss-continue-dialog";
     if (/\[confirm\]/i.test(output)) return "dismiss-continue-dialog";
     if (/password:/i.test(output)) return "dismiss-autoinstall-dialog";

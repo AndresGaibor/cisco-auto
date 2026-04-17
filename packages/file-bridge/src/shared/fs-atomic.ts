@@ -30,7 +30,7 @@ export function ensureDir(path: string): void {
  */
 export function atomicWriteFile(path: string, content: string): void {
   ensureDir(dirname(path));
-  const tmp = `${path}.tmp`;
+  const tmp = `${path}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
   const fd = openSync(tmp, "w");
 
   try {

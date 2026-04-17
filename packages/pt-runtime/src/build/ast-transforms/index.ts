@@ -369,10 +369,10 @@ const forOfToForLoopTransform: AstTransform = {
       );
       
       const bodyStatements = ts.isBlock(forOf.statement)
-        ? [...forOf.statement.statements, varDecl]
-        : [varDecl, ts.factory.createExpressionStatement(forOf.statement as ts.Expression)];
+        ? forOf.statement.statements
+        : [forOf.statement];
       
-      const body = ts.factory.createBlock([varDecl, ...(ts.isBlock(forOf.statement) ? forOf.statement.statements : [])]);
+      const body = ts.factory.createBlock([varDecl, ...bodyStatements]);
       
       const forLoop = ts.factory.createForStatement(
         indexDecl.declarationList,

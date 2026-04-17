@@ -28,14 +28,7 @@ export {
 } from "./device";
 
 // Protocol schemas (OSPF, EIGRP, VTP)
-export {
-  OSPFSchema,
-  EIGRPSchema,
-  VTPSchema,
-  type OSPF,
-  type EIGRP,
-  type VTP,
-} from "./protocols";
+export { OSPFSchema, EIGRPSchema, VTPSchema, type OSPF, type EIGRP, type VTP } from "./protocols";
 
 // Security schemas (ACL, NAT)
 export { ACLSchema, NATSchema, type ACL, type NAT } from "./security";
@@ -220,6 +213,9 @@ export {
   type Snapshot,
   generateBridgeCommandId,
   calculatePayloadChecksum,
+  type BridgeLease,
+  type BridgeHeartbeat,
+  type BridgeRuntimeState,
 } from "./bridge";
 
 // IOS Results - IosMode exported from pt-api/ios-mode.ts (Single Source of Truth)

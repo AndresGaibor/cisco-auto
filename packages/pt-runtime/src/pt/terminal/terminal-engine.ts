@@ -1,5 +1,5 @@
-// TerminalEngine - Single owner of IOS session in PT
-// Uses PT TerminalLine events for async command execution
+// TerminalEngine - Gestor de sesiones IOS en PT
+// Delega ejecución de comandos a CommandExecutor
 
 import type { TerminalSessionState } from "./terminal-session";
 import type { SessionStateSnapshot } from "../../domain";
@@ -9,10 +9,13 @@ import {
   updateMode,
   updatePrompt,
   setPaging,
-  setBusy,
 } from "./terminal-session";
 import { parsePrompt, type IosMode } from "./prompt-parser";
-import { CommandStatus, isStatusOk } from "./terminal-events";
+import {
+  createCommandExecutor,
+  type ExecuteOptions,
+  type TerminalResult,
+} from "./command-executor";
 
 export interface TerminalEngineConfig {
   commandTimeoutMs: number;
@@ -20,24 +23,8 @@ export interface TerminalEngineConfig {
   pagerTimeoutMs: number;
 }
 
-export interface ExecuteOptions {
-  timeout?: number;
-  expectedPrompt?: string;
-  stopOnError?: boolean;
-  ensureMode?: IosMode;
-}
+export type { ExecuteOptions, TerminalResult };
 
-export interface TerminalResult {
-  ok: boolean;
-  output: string;
-  status: number;
-  session: SessionStateSnapshot;
-  mode: IosMode;
-}
-
-/**
- * PT TerminalLine API interface
- */
 interface PTCommandLine {
   getPrompt(): string;
   enterCommand(cmd: string): void;
@@ -54,15 +41,18 @@ interface PTCommandLine {
   enterChar(charCode: number, modifiers: number): void;
 }
 
-/**
- * TerminalEngine - manages IOS sessions using PT TerminalLine API
- */
 export function createTerminalEngine(config: TerminalEngineConfig) {
-  // Using plain objects instead of Map for QTScript compatibility (Fase 5)
   const sessions: Record<string, TerminalSessionState> = {};
   const terminals: Record<string, PTCommandLine> = {};
 
+  const { executeCommand } = createCommandExecutor({
+    commandTimeoutMs: config.commandTimeoutMs,
+  });
+
   function attach(device: string, term: PTCommandLine): void {
+    try {
+      dprint("[term] ATTACH device=" + device);
+    } catch {}
     terminals[device] = term;
     sessions[device] = createTerminalSession(device);
 
@@ -100,11 +90,20 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
         sessions[device] = updateMode(current, inputMode as IosMode);
       }
     });
+    try {
+      dprint("[term] ATTACH OK device=" + device);
+    } catch {}
   }
 
   function detach(device: string): void {
+    try {
+      dprint("[term] DETACH device=" + device);
+    } catch {}
     delete terminals[device];
     delete sessions[device];
+    try {
+      dprint("[term] DETACH OK device=" + device);
+    } catch {}
   }
 
   function getSession(device: string): SessionStateSnapshot | null {
@@ -122,112 +121,33 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
     return state ? state.busyJobId !== null : false;
   }
 
-  function executeCommand(
+  function isAnyBusy(): boolean {
+    for (const device in sessions) {
+      if (sessions[device].busyJobId !== null) return true;
+    }
+    return false;
+  }
+
+  function executeCmd(
     device: string,
     command: string,
     options?: ExecuteOptions,
   ): Promise<TerminalResult> {
     const term = terminals[device];
     if (!term) {
+      try {
+        dprint("[term] EXEC ERROR: no terminal for device=" + device);
+      } catch {}
       return Promise.reject(new Error(`No terminal attached to ${device}`));
     }
-    const terminal = term;
 
-    const timeout = options?.timeout ?? config.commandTimeoutMs;
-
-    function currentSession(): TerminalSessionState {
-      const s = sessions[device];
-      if (!s) throw new Error(`Session lost for ${device} during executeCommand`);
-      return s;
-    }
-
-    return new Promise((resolve, reject) => {
-      const buffer: string[] = [];
-      let settled = false;
-      let moreListener: ((src: unknown, args: unknown) => void) | null = null;
-
-      sessions[device] = setBusy(currentSession(), `cmd-${Date.now()}`);
-
-      const timeoutHandle = setTimeout(() => {
-        if (!settled) {
-          settled = true;
-          try {
-            terminal.unregisterEvent("outputWritten", null, onOutput);
-          } catch {}
-          try {
-            terminal.unregisterEvent("commandEnded", null, onEnded);
-          } catch {}
-          if (moreListener) {
-            try {
-              terminal.unregisterEvent("moreDisplayed", null, moreListener);
-            } catch {}
-          }
-          sessions[device] = setBusy(currentSession(), null);
-          reject(new Error(`Command timed out after ${timeout}ms: ${command}`));
-        }
-      }, timeout);
-
-      function onOutput(_src: unknown, args: unknown) {
-        const a = args as { newOutput?: string; data?: string; output?: string };
-        const data = a?.newOutput ?? a?.data ?? a?.output ?? "";
-        if (data) {
-          buffer.push(String(data));
-        }
-      }
-
-      function onMore(_src: unknown, _args: unknown) {
-        const cs = currentSession();
-        sessions[device] = setPaging(cs, true);
-      }
-      moreListener = onMore;
-
-      function onEnded(_src: unknown, args: unknown) {
-        if (settled) return;
-
-        const a = args as { status?: number };
-        const status = a?.status ?? 1;
-
-        settled = true;
-        clearTimeout(timeoutHandle);
-
-        try {
-          terminal.unregisterEvent("outputWritten", null, onOutput);
-        } catch {}
-        try {
-          terminal.unregisterEvent("commandEnded", null, onEnded);
-        } catch {}
-        try {
-          terminal.unregisterEvent("moreDisplayed", null, moreListener as any);
-        } catch {}
-
-        const finalSession = currentSession();
-        sessions[device] = setBusy(finalSession, null);
-
-        const output = buffer.join("");
-        resolve({
-          ok: isStatusOk(status),
-          output,
-          status,
-          session: toSnapshot(finalSession),
-          mode: finalSession.mode as IosMode,
-        });
-      }
-
-      try {
-        terminal.registerEvent("outputWritten", null, onOutput);
-      } catch {}
-      try {
-        terminal.registerEvent("commandEnded", null, onEnded);
-      } catch {}
-      try {
-        terminal.registerEvent("moreDisplayed", null, moreListener as any);
-      } catch {}
-
-      terminal.enterCommand(command);
-    });
+    return executeCommand(device, command, term, sessions, options);
   }
 
   function continuePager(device: string): void {
+    try {
+      dprint("[term] PAGER CONTINUE device=" + device);
+    } catch {}
     const term = terminals[device];
     if (term) {
       term.enterChar(32, 0);
@@ -235,6 +155,9 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
   }
 
   function confirmPrompt(device: string): void {
+    try {
+      dprint("[term] CONFIRM device=" + device);
+    } catch {}
     const term = terminals[device];
     if (term) {
       term.enterChar(13, 0);
@@ -247,7 +170,8 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
     getSession,
     getMode,
     isBusy,
-    executeCommand,
+    isAnyBusy,
+    executeCommand: executeCmd,
     continuePager,
     confirmPrompt,
   };

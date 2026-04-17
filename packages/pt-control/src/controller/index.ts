@@ -10,6 +10,7 @@ import type {
   TopologySnapshot,
   DeviceState,
   LinkState,
+  DeviceListResult,
   ShowIpInterfaceBrief,
   ShowVlan,
   ShowIpRoute,
@@ -146,7 +147,7 @@ export class PTController {
     return this.topologyFacade.moveDevice(name, x, y);
   }
 
-  async listDevices(filter?: string | number | string[]): Promise<DeviceState[]> {
+  async listDevices(filter?: string | number | string[]): Promise<DeviceListResult> {
     return this.topologyFacade.listDevices(filter);
   }
 
@@ -433,6 +434,10 @@ export class PTController {
     return this.controllerIosService.commandLog(device, limit);
   }
 
+  async deepInspect(path: string, method?: string, args?: any[]): Promise<any> {
+    return this.controllerIosService.deepInspect(path, method, args);
+  }
+
   on<E extends PTEventType>(eventType: E, handler: (event: PTEvent) => void): this {
     this.bridgeService.on(eventType, handler);
     return this;
@@ -496,7 +501,6 @@ export class PTController {
 
   getBridgeStatus(): {
     ready: boolean;
-    leaseValid?: boolean;
     queuedCount?: number;
     inFlightCount?: number;
     warnings?: string[];

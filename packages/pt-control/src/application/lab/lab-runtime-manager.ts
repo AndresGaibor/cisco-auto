@@ -1,7 +1,11 @@
 // LabRuntimeManager - Gestor unificado de runtime PT para laboratorios declarativos
 // Fase 5: Unificar runtime PT y file-bridge
 
-import { RuntimeGenerator, type RuntimeGeneratorConfig } from "@cisco-auto/pt-runtime";
+import {
+  RuntimeGenerator,
+  type RuntimeGeneratorConfig,
+  assertCatalogLoaded,
+} from "@cisco-auto/pt-runtime";
 import type { FileBridgePort } from "../ports/file-bridge.port.js";
 
 export interface LabRuntimeStatus {
@@ -34,15 +38,18 @@ export class LabRuntimeManager {
 
   constructor(
     config: Partial<LabRuntimeManagerConfig> = {},
-    private bridge?: FileBridgePort
+    private bridge?: FileBridgePort,
   ) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.generator = new RuntimeGenerator({
       devDir: this.config.devDir,
+      outputDir: this.config.devDir,
     });
   }
 
   async ensureRuntime(): Promise<void> {
+    assertCatalogLoaded();
+
     if (this.config.autoDeploy && !this.status.runtimeDeployed) {
       await this.deployRuntime();
     }

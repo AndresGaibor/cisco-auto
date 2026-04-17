@@ -37,6 +37,7 @@ export interface ListedPort {
   ipAddress?: string;
   subnetMask?: string;
   macAddress?: string;
+  mac?: string;
   speed?: string;
   duplex?: "auto" | "full" | "half";
   vlan?: number;
@@ -57,6 +58,7 @@ export interface TopologyDeviceLike {
   hostname?: string;
   ip?: string;
   mask?: string;
+  mac?: string;
 }
 
 export interface ListedDevice {
@@ -71,6 +73,7 @@ export interface ListedDevice {
   hostname?: string;
   ip?: string;
   mask?: string;
+  mac?: string;
 }
 
 export interface UnresolvedLink {
@@ -87,6 +90,41 @@ export interface DeviceListResult {
   count: number;
   connectionsByDevice: Record<string, ConnectionInfo[]>;
   unresolvedLinks: UnresolvedLink[];
+}
+
+function hasMacAddresses(devices: ListedDevice[]): boolean {
+  return devices.some((device) => device.ports?.some((port) => Boolean(port.macAddress)) ?? false);
+}
+
+function enrichMacAddresses(
+  devices: ListedDevice[],
+  snapshotDevices:
+    | Record<
+        string,
+        { name: string; ports?: Array<{ name: string; macAddress?: string; mac?: string }> }
+      >
+    | undefined,
+): ListedDevice[] {
+  if (!snapshotDevices) return devices;
+
+  const snapshotByName = new Map(
+    Object.values(snapshotDevices).map((device) => [device.name, device] as const),
+  );
+
+  return devices.map((device) => {
+    const cachedDevice = snapshotByName.get(device.name);
+    if (!cachedDevice?.ports?.length || !device.ports?.length) return device;
+
+    const ports = device.ports.map((port) => {
+      const currentMac = port.macAddress ?? port.mac;
+      if (currentMac) return { ...port, macAddress: currentMac, mac: currentMac };
+      const cachedPort = cachedDevice.ports?.find((candidate) => candidate.name === port.name);
+      const cachedMac = cachedPort?.macAddress ?? cachedPort?.mac;
+      return cachedMac ? { ...port, macAddress: cachedMac, mac: cachedMac } : port;
+    });
+
+    return { ...device, ports };
+  });
 }
 
 export function isEmptyTopologySnapshot(
@@ -208,6 +246,8 @@ function mapControllerResult(result: ControllerDeviceListResult): DeviceListResu
   const devices: ListedDevice[] = result.devices.map((device) => {
     const ports: ListedPort[] = (device.ports ?? []).map((port) => ({
       ...port,
+      macAddress: (port as ListedPort).macAddress ?? (port as ListedPort).mac,
+      mac: (port as ListedPort).mac ?? (port as ListedPort).macAddress,
       connection: undefined as PortConnection | undefined,
     }));
 
@@ -227,6 +267,7 @@ function mapControllerResult(result: ControllerDeviceListResult): DeviceListResu
 
     return {
       ...device,
+      mac: (device as TopologyDeviceLike).mac,
       ports,
     };
   });
@@ -288,7 +329,19 @@ export async function loadLiveDeviceListFromController(
     throw new Error("Packet Tracer no respondió. Verifica que esté abierto y el script cargado.");
   }
 
-  return mapControllerResult(result);
+  const mapped = mapControllerResult(result);
+  const cachedSnapshot = controller.getCachedSnapshot?.();
+  let devices = enrichMacAddresses(mapped.devices, cachedSnapshot?.devices);
+
+  if (!hasMacAddresses(devices) && typeof controller.snapshot === "function") {
+    const liveSnapshot = await controller.snapshot().catch(() => null);
+    devices = enrichMacAddresses(devices, liveSnapshot?.devices);
+  }
+
+  return {
+    ...mapped,
+    devices,
+  };
 }
 
 export async function loadLiveDeviceList(

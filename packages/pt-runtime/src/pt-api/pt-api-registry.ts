@@ -2,7 +2,22 @@
 // Registro de la API PT - fuente unica de verdad para tipos nativos de Packet Tracer
 // ============================================================================
 
-export interface PTIpc {
+/**
+ * Root interface for all Packet Tracer IPC objects.
+ * Every object in PT (Devices, Ports, Modules, Processes) inherits from this base.
+ */
+export interface PTIpcBase {
+  getClassName(): string // [CONFIRMED];
+  getObjectUuid(): string // [CONFIRMED];
+  registerEvent(event: string, context: any, handler: Function): void;
+  unregisterEvent(event: string, context: any, handler: Function): void;
+  registerDelegate(event: string, context: any, handler: Function): void;
+  unregisterDelegate(event: string, context: any, handler: Function): void;
+  registerObjectEvent(event: string, context: any, handler: Function): void;
+  unregisterObjectEvent(event: string, context: any, handler: Function): void;
+}
+
+export interface PTIpc extends PTIpcBase {
   network(): PTNetwork;
   // getNetwork() is an alias present in some PT versions — prefer network()
   getNetwork?(): PTNetwork;
@@ -13,16 +28,10 @@ export interface PTIpc {
   ipcManager?(): PTIpcManager;
   multiUserManager?(): PTMultiUserManager;
   userAppManager?(): PTUserAppManager;
-  commandLog?(): unknown;
-  options?(): unknown;
+  commandLog?(): PTCommandLog;
+  options?(): PTOptions;
   getObjectByUuid?(uuid: string): unknown | null;
   getObjectUuid?(obj: unknown): string | null;
-  registerEvent?(event: string, context: any, handler: Function): void;
-  unregisterEvent?(event: string, context: any, handler: Function): void;
-  registerDelegate?(event: string, context: any, handler: Function): void;
-  unregisterDelegate?(event: string, context: any, handler: Function): void;
-  registerObjectEvent?(event: string, context: any, handler: Function): void;
-  unregisterObjectEvent?(event: string, context: any, handler: Function): void;
 }
 
 // ============================================================================
@@ -69,7 +78,7 @@ declare class _SystemFileManager {
   getFilesInDirectory(path: string): string[];
   removeFile(path: string): boolean;
   removeDirectory?(path: string): boolean;
-  moveSrcFileToDestFile(src: string, dest: string): boolean;
+  moveSrcFileToDestFile(src: string, dest: string, overwrite?: boolean): boolean;
   copySrcFileToDestFile?(src: string, dest: string): boolean;
   copySrcDirectoryToDestDirectory?(src: string, dest: string): boolean;
   getFileSize?(path: string): number;
@@ -108,41 +117,42 @@ declare class _SystemFileManager {
 declare class _AppWindow {
   constructor();
   getActiveWorkspace(): PTWorkspace;
-  getVersion(): string;
-  getBasePath(): string;
-  getTempFileLocation(): string;
-  getUserFolder(): string;
-  isPTSA(): boolean;
-  isRealtimeMode(): boolean;
-  isSimulationMode(): boolean;
-  isMaximized(): boolean;
-  isMinimized(): boolean;
-  getWidth(): number;
-  getHeight(): number;
-  getX(): number;
-  getY(): number;
+  getVersion(): string // [CONFIRMED];
+  getBasePath(): string // [CONFIRMED];
+  getTempFileLocation(): string // [CONFIRMED];
+  getUserFolder(): string // [CONFIRMED];
+  isPTSA(): boolean // [CONFIRMED];
+  isRealtimeMode(): boolean // [CONFIRMED];
+  isSimulationMode(): boolean // [CONFIRMED];
+  isMaximized(): undefined // [CONFIRMED];
+  isMinimized(): undefined // [CONFIRMED];
+  getWidth(): number // [CONFIRMED];
+  getHeight(): number // [CONFIRMED];
+  getX(): number // [CONFIRMED];
+  getY(): number // [CONFIRMED];
   fileNew(...args: any[]): void;
   fileOpen(path?: string): void;
   fileOpenFromBytes?(bytes: Uint8Array, name: string): void;
   fileOpenFromURL?(url: string): void;
-  fileSave(): void;
+  fileSave(): boolean // [CONFIRMED];
   fileSaveAs(path?: string): void;
   fileSaveAsPkz?(path: string): void;
   fileSaveToBytes?(): Uint8Array;
   exit(): void;
   exitNoConfirm(): void;
   showMessageBox(message: string, title?: string): number;
-  getClipboardText(): string;
+  getClipboardText(): string // [CONFIRMED];
   setClipboardText(text: string): void;
   listDirectory(path: string): string[];
   zoomIn?(): void;
   zoomOut?(): void;
   zoomReset?(): void;
   setVisible(visible: boolean): void;
-  showNormal(): void;
-  showMaximized(): void;
-  showMinimized(): void;
-  raise(): void;
+  showNormal(): undefined // [CONFIRMED];
+  showMaximized(): undefined // [CONFIRMED];
+  showMinimized(): undefined // [CONFIRMED];
+  raise(): undefined // [CONFIRMED];
+  writeToPT(data: string): void;
   getClassName?(): string;
   getObjectUuid?(): string;
   registerObjectEvent?(event: string, context: any, handler: Function): void;
@@ -237,6 +247,8 @@ declare var _ScriptModule: {
   getFileSize(path: string): number;
   getFileCheckSum(path: string): string;
   addScriptFile(path: string, label: string): void;
+  getFilesInDirectory?(path: string): string[];
+  removeFile?(path: string): void;
   // IPC
   ipcCall(className: string, method: string, args: any[]): any;
   ipcObjectCall(className: string, method: string, args: any[]): any;
@@ -253,22 +265,22 @@ declare var _ScriptModule: {
 
 export interface PTAppWindow {
   getActiveWorkspace(): PTWorkspace;
-  getVersion(): string;
-  getBasePath(): string;
-  getTempFileLocation(): string;
-  getUserFolder(): string;
-  isPTSA(): boolean;
-  isRealtimeMode(): boolean;
-  isSimulationMode(): boolean;
-  isLogicalMode(): boolean;
-  isPhysicalMode(): boolean;
-  isMaximized(): boolean;
-  isMinimized(): boolean;
+  getVersion(): string // [CONFIRMED];
+  getBasePath(): string // [CONFIRMED];
+  getTempFileLocation(): string // [CONFIRMED];
+  getUserFolder(): string // [CONFIRMED];
+  isPTSA(): boolean // [CONFIRMED];
+  isRealtimeMode(): boolean // [CONFIRMED];
+  isSimulationMode(): boolean // [CONFIRMED];
+  isLogicalMode(): boolean // [CONFIRMED];
+  isPhysicalMode(): boolean // [CONFIRMED];
+  isMaximized(): undefined // [CONFIRMED];
+  isMinimized(): undefined // [CONFIRMED];
   fileNew(): void;
   fileOpen(path?: string): void;
   fileOpenFromBytes?(bytes: Uint8Array, name: string): void;
   fileOpenFromURL?(url: string): void;
-  fileSave(): void;
+  fileSave(): boolean // [CONFIRMED];
   fileSaveAs(path?: string): void;
   fileSaveAsPkz?(path: string): void;
   fileSaveAsAsync?(path: string, callback: Function): void;
@@ -278,7 +290,7 @@ export interface PTAppWindow {
   showMessageBox(message: string, title?: string): number;
   showMessageBoxWithCustomButtons?(message: string, title: string, buttons: string[]): number;
   openURL(url: string): void;
-  getClipboardText(): string;
+  getClipboardText(): string // [CONFIRMED];
   setClipboardText(text: string): void;
   listDirectory(path: string): string[];
   getDialogManager?(): unknown;
@@ -309,19 +321,19 @@ export interface PTAppWindow {
   getMaximumHeight?(): number;
   getMinimumWidth?(): number;
   getMinimumHeight?(): number;
-  getWidth(): number;
-  getHeight(): number;
-  getX(): number;
-  getY(): number;
+  getWidth(): number // [CONFIRMED];
+  getHeight(): number // [CONFIRMED];
+  getX(): number // [CONFIRMED];
+  getY(): number // [CONFIRMED];
   setVisible(visible: boolean): void;
-  showNormal(): void;
-  showMaximized(): void;
-  showMinimized(): void;
+  showNormal(): undefined // [CONFIRMED];
+  showMaximized(): undefined // [CONFIRMED];
+  showMinimized(): undefined // [CONFIRMED];
   setMaximumSize(width: number, height: number): void;
   setMinimumSize(width: number, height: number): void;
   setWindowGeometry?(x: number, y: number, width: number, height: number): void;
   setWindowTitle?(title: string): void;
-  raise(): void;
+  raise(): undefined // [CONFIRMED];
   suppressInstructionDlg?(suppress: boolean): void;
   setPreventClose?(prevent: boolean): void;
   isPreventClose?(): boolean;
@@ -333,7 +345,6 @@ export interface PTAppWindow {
   setPTSAPluginVisible?(visible: boolean): void;
   setPLFrameVisible?(visible: boolean): void;
   setRSFrameVisible?(visible: boolean): void;
-  writeToPT?(data: string): void;
   helpPath?(path?: string): void;
   getListOfFilesSaved?(): string[];
   getListOfFilesToOpen?(): string[];
@@ -341,6 +352,7 @@ export interface PTAppWindow {
   deletePTConf?(): void;
   getProcessId?(): number;
   getSessionId?(): string;
+  writeToPT(data: string): void;
 }
 
 export interface PTWorkspace {
@@ -448,7 +460,7 @@ export interface PTLogicalWorkspace {
   ): unknown[];
 }
 
-export interface PTNetwork {
+export interface PTNetwork extends PTIpcBase {
   getDevice(name: string): PTDevice | null;
   getDeviceAt(index: number): PTDevice | null;
   getDeviceCount(): number;
@@ -457,58 +469,170 @@ export interface PTNetwork {
   getTotalDeviceAttributeValue?(attribute: string): number;
 }
 
-export interface PTModule {
+export interface PTModule extends PTIpcBase {
   getSlotCount(): number;
   getSlotTypeAt(index: number): number;
   getModuleCount(): number;
   getModuleAt(index: number): PTModule | null;
   addModuleAt(moduleId: string, slotIndex: number): boolean;
+  removeModuleAt(slotIndex: number): boolean;
+  addSlot(type: number): boolean;
   getModuleNameAsString?(): string;
+  getModuleNumber?(): number;
   getSlotPath?(): string;
   getModuleType?(): number;
+  getPortCount(): number // [CONFIRMED];
+  getPortAt(index: number): PTPort | null;
+  getOwnerDevice(): PTDevice | null;
+  getDescriptor?(): string;
 }
 
-export interface PTDevice {
-  getName(): string;
+/**
+ * Multi-layer Switch Port (L2/L3)
+ */
+export interface PTRoutedSwitchPort extends PTSwitchPort, PTRouterPort {
+  isRoutedPort(): boolean;
+  setRoutedPort(routed: boolean): void;
+}
+
+/**
+ * Represents an internal OS or hardware process within a device.
+ */
+export interface PTProcess extends PTIpcBase {
+  getProcessId(): number // [CONFIRMED];
+  getProcessName(): string;
+  isProcessRunning(): boolean;
+  stopProcess(): void;
+  startProcess(): void;
+}
+
+export interface PTDevice extends PTIpcBase {
+  getName(): string // [CONFIRMED];
   setName(name: string): void;
-  getModel(): string;
-  getType(): number;
-  getClassName?(): string;
-  getObjectUuid?(): string;
-  getPower(): boolean;
+  getModel(): string // [CONFIRMED];
+  getType(): number // [CONFIRMED];
+  getPower(): boolean // [CONFIRMED];
   setPower(on: boolean): void;
-  skipBoot(): void;
+  skipBoot(): undefined // [CONFIRMED];
   getCommandLine(): PTCommandLine | null;
-  getPortCount(): number;
+  getPortCount(): number // [CONFIRMED];
   getPortAt(index: number): PTPort | null;
   getPort(name: string): PTPort | null;
   addModule(slot: string, module: string): boolean;
   removeModule(slot: string): boolean;
   setDhcpFlag(enabled: boolean): void;
-  getDhcpFlag(): boolean;
+  getDhcpFlag(): boolean // [CONFIRMED];
   moveToLocation(x: number, y: number): boolean;
   moveToLocationCentered(x: number, y: number): boolean;
-  /** Canvas position — may not be available in all PT versions */
   getX?(): number;
   getY?(): number;
-  /** Serialize device config to XML string */
   serializeToXml?(): string;
-  /**
-   * Get a named process attached to this device.
-   * Use `getProcessByCandidates()` from pt-processes.ts to handle name variants.
-   * @example device.getProcess("DhcpServerMainProcess")
-   */
-  getProcess?<T = unknown>(name: string): T | null;
-  /** Get the root module of this device's module tree (for modular routers) */
+  activityTreeToXml?(): string;
+  
+  // Customization & Media
+  addCustomVar(name: string, value: string): void;
+  getCustomVar(name: string): string;
+  addSound(soundId: string, path: string): void;
+  destroySounds(): undefined // [CONFIRMED];
+  
+  // App Management
+  addUserDesktopApp(appId: string): void;
+  addUserDesktopAppFrom(appId: string, source: string): void;
+  addUserDesktopAppFromGlobal(appId: string): void;
+  removeUserDesktopApp(appId: string): void;
+  isDesktopAvailable(): boolean // [CONFIRMED];
+  
+  // Internal State
+  getProcess<T = PTProcess>(name: string): T | null;
   getRootModule?(): PTModule | null;
-  /**
-   * Device events — confirmed working in PT 9.0:
-   *   "moduleAdded"  args: { model, slotPath, type }
-   *   "portAdded"    args: { portName }
-   */
-  registerEvent?(event: string, context: any, handler: Function): void;
-  unregisterEvent?(event: string, context: any, handler: Function): void;
+  getUpTime?(): number;
+  getSerialNumber?(): string;
+  isBooting?(): boolean;
+  restoreToDefault?(): void;
+  
+  // Advanced Identification
+  addDeviceExternalAttributes(attrs: any): void;
+  clearDeviceExternalAttributes(): undefined // [CONFIRMED];
 }
+
+/**
+ * Specialized Server API
+ */
+export interface PTServer extends PTDevice {
+  enableCip(): undefined // [CONFIRMED];
+  disableCip(): undefined // [CONFIRMED];
+  enableOpc(): undefined // [CONFIRMED];
+  disableOpc(): undefined // [CONFIRMED];
+  enableProfinet(): undefined // [CONFIRMED];
+  disableProfinet(): undefined // [CONFIRMED];
+  addProgrammingSerialOutputs(): void;
+  clearProgrammingSerialOutputs(): undefined // [CONFIRMED];
+  
+  // Area & UI
+  getAreaLeftX(): number // [CONFIRMED];
+  getAreaTopY(): number // [CONFIRMED];
+  getAreaRightX(): number;
+  getAreaBottomY(): number;
+}
+
+/**
+ * Specialized ASA (Firewall) API
+ */
+export interface PTAsa extends PTDevice {
+  addBookmark(name: string, url: string): void;
+  removeBookmark(name: string): void;
+  getBookmarkCount(): number;
+  getWebvpnUserManager(): any;
+  setHostName(name: string): void;
+  setEnablePassword(pwd: string): void;
+  setEnableSecret(secret: string): void;
+  
+  // Boot & System
+  addBootSystem(path: string): void;
+  clearBootSystem(): void;
+  addUserPassEntry(user: string, pass: string, level: number): void;
+  clearFtpPasswd(): undefined // [CONFIRMED];
+}
+
+/**
+ * Specialized Cloud API
+ */
+export interface PTCloud extends PTDevice {
+  addPhoneConnection(port1: string, port2: string): void;
+  addPortConnection(port1: string, port2: string): void;
+  addSubLinkConnection(port1: string, vpi1: number, vci1: number, port2: string, vpi2: number, vci2: number): void;
+  removePortConnection(port1: string, port2: string): void;
+  removeAllPortConnection(): void;
+  isDslConnection(): boolean;
+}
+
+/**
+ * Specialized MCU / SBC (IoT) API
+ */
+export interface PTMcu extends PTDevice {
+  analogWrite(pin: number, value: number): void;
+  digitalWrite(pin: number, value: number): void;
+  analogRead(pin: number): number;
+  digitalRead(pin: number): number;
+  getSlotsCount(): number;
+  getAnalogSlotsCount(): number;
+  getDigitalSlotsCount(): number;
+  getComponentAtSlot(slot: number): any;
+  getComponentByName(name: string): any;
+  
+  // IoT Advanced
+  addSerialOutputs(pin: number, data: string): void;
+  clearSerialOutputs(): void;
+  enableIec61850(): void;
+  disableIec61850(): void;
+  enableGoosePublisherOnPort(portName: string): void;
+  disableGoosePublisherOnPort(portName: string): void;
+  setSubComponentIndex(index: number): void;
+  getSubComponentIndex(): number;
+}
+
+/** Alias for SBC (matches MCU surface in PT) */
+export type PTSbc = PTMcu;
 
 export interface PTCommandLine {
   /**
@@ -575,8 +699,8 @@ export interface PTMoreDisplayedArgs {
   active: boolean;
 }
 
-export interface PTPort {
-  getName(): string;
+export interface PTPort extends PTIpcBase {
+  getName(): string // [CONFIRMED];
   getIpAddress(): string;
   getSubnetMask(): string;
   getMacAddress(): string;
@@ -600,17 +724,135 @@ export interface PTPort {
   getIpv6Mtu(): number;
   isPortUp(): boolean;
   isProtocolUp(): boolean;
-  setInboundFirewallService(state: string): void;
-  getInboundFirewallService(): string;
-  getInboundFirewallServiceStatus(): string;
-  setInboundIpv6FirewallService(state: string): void;
-  getInboundIpv6FirewallService(): string;
-  getInboundIpv6FirewallServiceStatus(): string;
-  setMtu(mtu: number): void;
-  getMtu(): number;
-  setIpMtu(mtu: number): void;
-  getIpMtu(): number;
+  isPowerOn(): boolean;
+  setPower(on: boolean): void;
+  
+  // Physical & Hardware (Deep API)
+  getLightStatus(): number;
+  getBandwidth(): number;
+  setBandwidth(kbps: number): void;
+  getBia(): string // [CONFIRMED];
+  getChannel(): number;
+  setChannel(chan: number): void;
+  getClockRate(): number;
+  setClockRate(rate: number): void;
+  getDescription(): string;
+  setDescription(desc: string): void;
+  getHardwareQueue(): any;
+  getQosQueue(): any;
+  getEncapProcess(): any;
+  getKeepAliveProcess(): any;
+  getHigherProcessCount(): number;
+  getRemotePortName(): string;
+  getTerminalTypeShortString(): string;
+  getType(): number // [CONFIRMED];
+  isAutoCross(): boolean;
+  isBandwidthAutoNegotiate(): boolean;
+  setBandwidthAutoNegotiate(auto: boolean): void;
+  isDuplexAutoNegotiate(): boolean;
+  setDuplexAutoNegotiate(auto: boolean): void;
+  isEthernetPort(): boolean;
+  isFullDuplex(): boolean;
+  setFullDuplex(full: boolean): void;
+  isStraightPins(): boolean;
+  isWirelessPort(): boolean;
+  getLink(): PTLink | null;
+  deleteLink(): void;
+  
+  // Legacy / Context
   getConnectorType?(): string;
+  getDelay?(): number;
+  setDelay?(delay: number): void;
+  getOwnerDevice?(): PTDevice | null;
+}
+
+/**
+ * Specialized Router Port API (132 methods)
+ */
+export interface PTRouterPort extends PTPort {
+  // OSPF
+  getOspfCost(): number;
+  setOspfCost(cost: number): void;
+  getOspfPriority(): number;
+  setOspfPriority(prio: number): void;
+  getOspfHelloInterval(): number;
+  setOspfHelloInterval(ms: number): void;
+  getOspfDeadInterval(): number;
+  setOspfDeadInterval(ms: number): void;
+  getOspfAuthKey(): string;
+  setOspfAuthKey(key: string): void;
+  getOspfAuthType(): number;
+  addOspfMd5Key(keyId: number, key: string): void;
+  removeOspfMd5Key(keyId: number): void;
+
+  // EIGRP / RIP
+  addEntryEigrpPassive(as: number, network: string, wildcard: string): void;
+  removeEntryEigrpPassive(as: number, network: string, wildcard: string): void;
+  isRipPassive(): boolean;
+  setRipPassive(passive: boolean): void;
+  isRipSplitHorizon(): boolean;
+  setRipSplitHorizon(enabled: boolean): void;
+
+  // IPv6 Advanced
+  getIpv6Addresses(): string[];
+  addIpv6Address(ip: string, prefix: number): void;
+  removeIpv6Address(ip: string): void;
+  removeAllIpv6Addresses(): void;
+  getIpv6LinkLocal(): string;
+  setIpv6LinkLocal(ip: string): void;
+  isInIpv6Multicast(): boolean;
+
+  // NAT & Security
+  getNatMode(): number;
+  setNatMode(mode: number): void;
+  getAclInID(): string;
+  setAclInID(id: string): void;
+  getAclOutID(): string;
+  setAclOutID(id: string): void;
+  setZoneMemberName(name: string): void;
+  getZoneMemberName(): string;
+
+  // Hardware
+  getClockRate(): number;
+  setClockRate(rate: number): void;
+  getBandwidthInfo(): any;
+  setBandwidthInfo(bw: number, delay: number): void;
+  isBandwidthAutoNegotiate(): boolean;
+  setBandwidthAutoNegotiate(auto: boolean): void;
+  isDuplexAutoNegotiate(): boolean;
+  setDuplexAutoNegotiate(auto: boolean): void;
+}
+
+/**
+ * Specialized Switch Port API (66 methods)
+ */
+export interface PTSwitchPort extends PTPort {
+  // VLANs
+  getAccessVlan(): number;
+  setAccessVlan(vlanId: number): void;
+  getNativeVlanId(): number;
+  setNativeVlanId(vlanId: number): void;
+  getVoipVlanId(): number;
+  setVoipVlanId(vlanId: number): void;
+  addTrunkVlans(vlans: number[]): void;
+  removeTrunkVlans(vlans: number[]): void;
+
+  // Port Mode
+  isAccessPort(): boolean;
+  isAdminModeSet(): boolean;
+  isNonegotiate(): boolean;
+  setNonegotiateFlag(enabled: boolean): void;
+
+  // Security & Spanning Tree
+  getPortSecurity(): any | null;
+  getStpStatus?(): string;
+}
+
+/**
+ * Specialized Host Port API (110 methods)
+ */
+export interface PTHostPort extends PTPort {
+  // Host specific services could be added here from dump
 }
 
 export interface PTLink {
@@ -632,6 +874,32 @@ export interface PTHardwareFactory {
 }
 
 export interface PTSimulation {
+  backward(): void;
+  forward(): void;
+  resetSimulation(): void;
+  setSimulationMode(enabled: boolean): void;
+  isSimulationMode(): boolean // [CONFIRMED];
+  createFrameInstance(): any;
+  getCurrentSimTime(): number;
+  getClassName?(): string;
+  getObjectUuid?(): string;
+}
+
+export interface PTOptions {
+  setAnimation(enabled: boolean): void;
+  setSound(enabled: boolean): void;
+  setHideDevLabel(enabled: boolean): void;
+  setDeviceModelShown(enabled: boolean): void;
+  setMainToolbarShown(enabled: boolean): void;
+  setCliTabHidden(enabled: boolean): void;
+  getClassName?(): string;
+  getObjectUuid?(): string;
+}
+
+export interface PTCommandLog {
+  getLogCount(): number;
+  getLogAt(index: number): string;
+  clearLog(): void;
   getClassName?(): string;
   getObjectUuid?(): string;
 }
@@ -665,7 +933,7 @@ export interface PTFileManager {
   getFilesInDirectory(path: string): string[];
   removeFile(path: string): boolean;
   removeDirectory?(path: string): boolean;
-  moveSrcFileToDestFile(src: string, dest: string): boolean;
+  moveSrcFileToDestFile(src: string, dest: string, overwrite?: boolean): boolean;
 
   // Copy operations
   copySrcFileToDestFile?(src: string, dest: string): boolean;
@@ -739,39 +1007,62 @@ export interface PTGlobalScope {
   DEV_DIR: string;
 }
 
+export interface PTCloudSerialPort extends PTPort {
+  addDlci(vpi: number, name: string): void;
+  removeDlci(vpi: number): void;
+  getDlciCount(): number;
+  getDlciAt(index: number): number;
+}
+
+export interface PTCloudPotsPort extends PTPort {
+  getPhoneNumber(): string;
+  setPhoneNumber(num: string): void;
+}
+
 export const PT_API_METHOD_INDEX: Record<string, string[]> = {
-  PTIpc: ["network", "appWindow", "systemFileManager"],
-  PTAppWindow: ["getActiveWorkspace"],
-  PTWorkspace: ["getLogicalWorkspace"],
+  PTIpc: ["network", "appWindow", "systemFileManager", "simulation", "hardwareFactory", "ipcManager", "multiUserManager", "userAppManager", "commandLog", "options"],
+  PTAppWindow: ["getActiveWorkspace", "getVersion", "fileNew", "fileOpen", "fileSave", "fileSaveAs", "fileSaveAsPkz", "getClipboardText", "setClipboardText", "openURL", "getWidth", "getHeight", "getX", "getY", "showNormal", "showMaximized", "showMinimized", "setWindowGeometry"],
+  PTWorkspace: ["getLogicalWorkspace", "getGeoView", "getRackView", "zoomIn", "zoomOut", "zoomReset", "getEnvironmentTimeInSeconds", "pauseEnvironmentTime", "resumeEnvironmentTime", "resetEnvironment"],
   PTLogicalWorkspace: [
     "addDevice",
     "removeDevice",
-    "deleteDevice",
     "removeObject",
     "deleteObject",
     "createLink",
+    "autoConnectDevices",
     "deleteLink",
+    "addCluster",
+    "addNote",
+    "addTextPopup",
+    "addRemoteNetwork",
+    "changeNoteText",
+    "setCanvasItemRealPos",
+    "setDeviceCustomImage",
+    "clearLayer",
+    "drawCircle",
+    "drawLine",
+    "getCanvasRectIds",
+    "getCanvasEllipseIds",
+    "getCanvasItemIds",
+    "getCanvasNoteIds",
+    "getRectItemData",
+    "centerOn",
+    "centerOnComponentByName",
+    "devicesAt"
   ],
-  PTNetwork: ["getDevice", "getDeviceAt", "getDeviceCount"],
+  PTNetwork: ["getDevice", "getDeviceAt", "getDeviceCount", "getLinkAt", "getLinkCount"],
   PTDevice: [
-    "getName",
-    "setName",
-    "getModel",
-    "getType",
-    "getPower",
-    "setPower",
-    "skipBoot",
-    "getCommandLine",
-    "getPortCount",
-    "getPortAt",
-    "getPort",
-    "addModule",
-    "removeModule",
-    "setDhcpFlag",
-    "getDhcpFlag",
-    "moveToLocation",
-    "moveToLocationCentered",
+    "getName", "setName", "getModel", "getType", "getPower", "setPower", "skipBoot", "getCommandLine", "getPortCount", "getPortAt", "getPort", "addModule", "removeModule", "setDhcpFlag", "getDhcpFlag", "moveToLocation", "moveToLocationCentered", "getX", "getY", "serializeToXml", "getProcess", "getRootModule", "isBooting", "restoreToDefault", "getUpTime", "getSerialNumber"
   ],
+  PTModule: ["getSlotCount", "getSlotTypeAt", "getModuleCount", "getModuleAt", "addModuleAt", "removeModuleAt", "getPortCount", "getPortAt", "getOwnerDevice"],
+  PTServer: ["enableCip", "disableCip", "enableOpc", "disableOpc", "enableProfinet", "disableProfinet", "addProgrammingSerialOutputs", "clearProgrammingSerialOutputs", "addUserDesktopApp", "removeUserDesktopApp", "isDesktopAvailable"],
+  PTAsa: ["addBookmark", "removeBookmark", "getBookmarkCount", "getWebvpnUserManager", "setHostName", "setEnablePassword", "setEnableSecret"],
+  PTCloud: ["addPhoneConnection", "addPortConnection", "addSubLinkConnection", "removePortConnection", "removeAllPortConnection", "isDslConnection"],
+  PTMcu: ["analogWrite", "digitalWrite", "analogRead", "digitalRead", "getSlotsCount", "getAnalogSlotsCount", "getDigitalSlotsCount", "getComponentAtSlot", "getComponentByName", "enableIec61850", "disableIec61850", "enableGoosePublisherOnPort", "setSubComponentIndex"],
+  PTWirelessRouter: ["addNatEntry", "removeNatEntry", "setDMZEntry", "isRemoteManagementEnable"],
+  PTSimulation: ["backward", "forward", "resetSimulation", "setSimulationMode", "isSimulationMode", "createFrameInstance", "getCurrentSimTime"],
+  PTOptions: ["setAnimation", "setSound", "setHideDevLabel", "setDeviceModelShown", "setMainToolbarShown", "setCliTabHidden"],
+  PTCommandLog: ["getLogCount", "getLogAt", "clearLog"],
   PTCommandLine: [
     "enterCommand",
     "getPrompt",
@@ -782,55 +1073,13 @@ export const PT_API_METHOD_INDEX: Record<string, string[]> = {
     "unregisterEvent",
   ],
   PTPort: [
-    "getName",
-    "getIpAddress",
-    "getSubnetMask",
-    "setIpSubnetMask",
-    "getDefaultGateway",
-    "setDefaultGateway",
-    "getDnsServerIp",
-    "setDnsServerIp",
-    "setDhcpEnabled",
-    "setDhcpClientFlag",
-    "isDhcpClientOn",
-    "setIpv6Enabled",
-    "getIpv6Enabled",
-    "getIpv6Address",
-    "setIpv6AddressAutoConfig",
-    "setv6DefaultGateway",
-    "getv6DefaultGateway",
-    "setv6ServerIp",
-    "getv6ServerIp",
-    "setIpv6Mtu",
-    "getIpv6Mtu",
-    "isPortUp",
-    "isProtocolUp",
-    "setInboundFirewallService",
-    "getInboundFirewallService",
-    "getInboundFirewallServiceStatus",
-    "setInboundIpv6FirewallService",
-    "getInboundIpv6FirewallService",
-    "getInboundIpv6FirewallServiceStatus",
-    "setMtu",
-    "getMtu",
-    "setIpMtu",
-    "getIpMtu",
+    "getName", "getIpAddress", "getSubnetMask", "setIpSubnetMask", "getDefaultGateway", "setDefaultGateway", "getDnsServerIp", "setDnsServerIp", "setDhcpEnabled", "setDhcpClientFlag", "isDhcpClientOn", "setIpv6Enabled", "getIpv6Enabled", "getIpv6Address", "setIpv6AddressAutoConfig", "setv6DefaultGateway", "getv6DefaultGateway", "setv6ServerIp", "getv6ServerIp", "setIpv6Mtu", "getIpv6Mtu", "isPortUp", "isProtocolUp", "isPowerOn", "setPower", "setInboundFirewallService", "getInboundFirewallService", "setMtu", "getMtu", "setIpMtu", "getIpMtu", "getBia", "isEthernetPort", "isWirelessPort", "getBandwidth", "setBandwidth", "getDelay", "setDelay", "isFullDuplex", "setFullDuplex"
   ],
-  PTFileManager: ["getFileContents", "writePlainTextToFile", "fileExists"],
-  ipc: ["network", "appWindow", "systemFileManager"],
-  "ipc.network()": ["getDevice", "getDeviceAt", "getDeviceCount"],
-  "ipc.appWindow()": ["getActiveWorkspace"],
-  "ipc.appWindow().getActiveWorkspace()": ["getLogicalWorkspace"],
-  "ipc.appWindow().getActiveWorkspace().getLogicalWorkspace()": [
-    "addDevice",
-    "removeDevice",
-    "deleteDevice",
-    "removeObject",
-    "deleteObject",
-    "createLink",
-    "deleteLink",
-  ],
-  "ipc.systemFileManager()": ["getFileContents", "writePlainTextToFile", "fileExists"],
+  PTRouterPort: ["getOspfCost", "setOspfCost", "getOspfPriority", "setOspfPriority", "getOspfHelloInterval", "getOspfDeadInterval", "getOspfAuthKey", "getOspfAuthType", "addOspfMd5Key", "removeOspfMd5Key", "addEntryEigrpPassive", "removeEntryEigrpPassive", "isRipPassive", "setRipPassive", "isRipSplitHorizon", "setRipSplitHorizon", "getIpv6Addresses", "addIpv6Address", "getNatMode", "setNatMode", "getAclInID", "setAclInID", "getAclOutID", "setAclOutID", "setZoneMemberName", "getZoneMemberName", "getClockRate", "setClockRate"],
+  PTSwitchPort: ["getAccessVlan", "setAccessVlan", "getNativeVlanId", "setNativeVlanId", "getVoipVlanId", "setVoipVlanId", "addTrunkVlans", "removeTrunkVlans", "isAccessPort", "isAdminModeSet", "isNonegotiate", "setNonegotiateFlag", "getPortSecurity", "getStpStatus"],
+  PTRoutedSwitchPort: ["isRoutedPort", "setRoutedPort"],
+  PTCloudSerialPort: ["addDlci", "removeDlci", "getDlciCount", "getDlciAt"],
+  PTCloudPotsPort: ["getPhoneNumber", "setPhoneNumber"],
 };
 
 /**

@@ -8,7 +8,7 @@ import {
   handleExecIos,
   handleDeferredPoll,
   handleConfigHost,
-} from "../src/handlers/config.js";
+} from "../src/handlers/runtime-handlers";
 import type { HandlerDeps, PTDevice, PTCommandLine } from "../src/utils/helpers";
 
 describe("Phase 3 - Config Handlers", () => {
@@ -39,14 +39,13 @@ describe("Phase 3 - Config Handlers", () => {
     } as unknown as PTDevice;
 
     deps = {
-      getNet: () => ({
-        getDevice: (name: string) => (name === "R1" ? mockDevice : null),
-        getDeviceCount: () => 1,
-        getDeviceAt: () => mockDevice,
-      }) as any,
-      getLW: () => ({}) as any,
+      getDeviceByName: (name: string) => (name === "R1" ? { ...mockDevice, hasTerminal: true, getTerminal: () => mockTerm } as any : null),
+      listDevices: () => ["R1"],
+      getActiveJobs: () => [],
+      startDeferredJob: () => "ticket",
+      getDeferredJob: () => null,
       dprint: () => {},
-    };
+    } as any;
 
     // Setup global IOS_JOBS (shared scope in PT)
     (globalThis as any).IOS_JOBS = {};

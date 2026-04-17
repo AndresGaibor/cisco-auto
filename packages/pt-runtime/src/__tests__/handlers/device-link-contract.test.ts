@@ -48,15 +48,27 @@ function createMockLW(): HandlerDeps["getLW"] {
   }) as any;
 }
 
+const commonDeps = {
+  getFM: () => ({ 
+    fileExists: () => false, 
+    writePlainTextToFile: () => {}, 
+    getFileContents: () => "{}" 
+  } as any),
+  DEV_DIR: "/tmp",
+  dprint: () => {},
+};
+
 describe("handleAddDevice contract", () => {
   test("retorna HandlerResult con ok booleano y sin campo autoName", () => {
-    const result = handleAddDevice({ type: "addDevice", name: "R1", model: "2911" }, {
+    const result = handleAddDevice({ type: "addDevice", name: "R1", model: "2911", deviceType: 0 }, {
       getLW: createMockLW(),
-      getNet: createMockNet({}),
-      dprint: () => {},
-    });
+      getNet: createMockNet({
+        "2911_0": createMockDevice("2911_0", "2911", DEVICE_TYPES.router),
+      }),
+      ...commonDeps,
+    } as any);
 
-    expect((result as any)).toHaveProperty("ok");
+    expect((result as any).ok).toBe(true);
     expect(typeof (result as any).ok).toBe("boolean");
     expect((result as any)).not.toHaveProperty("autoName");
   });
@@ -64,16 +76,13 @@ describe("handleAddDevice contract", () => {
   test("el tipo de retorno no depende de deviceType para ser string", () => {
     const stringResult = handleAddDevice({ type: "addDevice", name: "R1", model: "2911", deviceType: 0 }, {
       getLW: createMockLW(),
-      getNet: createMockNet({}),
-      dprint: () => {},
-    });
+      getNet: createMockNet({
+        "2911_0": createMockDevice("2911_0", "2911", DEVICE_TYPES.router),
+      }),
+      ...commonDeps,
+    } as any);
 
-    if (stringResult.ok) {
-      expect(typeof stringResult.type).toBe("string");
-      expect(stringResult).not.toHaveProperty("autoName");
-    } else {
-      expect(stringResult).toHaveProperty("error");
-    }
+    expect(typeof (stringResult as any).type).toBe("string");
   });
 });
 
@@ -85,7 +94,7 @@ describe("handleAddLink contract", () => {
         "R1": createMockDevice("R1", "2911", DEVICE_TYPES.router, ["GigabitEthernet0/0"]),
         "S1": createMockDevice("S1", "2960", DEVICE_TYPES.switch, ["FastEthernet0/1"]),
       }),
-      dprint: () => {},
+      ...commonDeps,
     };
 
     const result = handleAddLink({
@@ -121,7 +130,7 @@ describe("handleAddLink contract", () => {
         "R1": createMockDevice("R1", "2911", DEVICE_TYPES.router, ["Serial0/0/0"]),
         "R2": createMockDevice("R2", "2911", DEVICE_TYPES.router, ["Serial0/0/0"]),
       }),
-      dprint: () => {},
+      ...commonDeps,
     };
 
     const result = handleAddLink({
@@ -148,7 +157,7 @@ describe("handleAddLink contract", () => {
         "R1": createMockDevice("R1", "2911", DEVICE_TYPES.router, ["GigabitEthernet0/0"]),
         "S1": createMockDevice("S1", "2960", DEVICE_TYPES.switch, ["FastEthernet0/1"]),
       }),
-      dprint: () => {},
+      ...commonDeps,
     };
 
     const result = handleAddLink({
@@ -173,7 +182,7 @@ describe("handleListDevices contract", () => {
         "Switch1": createMockDevice("Switch1", "2960", DEVICE_TYPES.switch),
         "PC1": createMockDevice("PC1", "PC1", DEVICE_TYPES.pc),
       }),
-      dprint: () => {},
+      ...commonDeps,
     };
 
     const result = handleListDevices({ type: "listDevices" }, deps) as { ok: boolean; devices: { name: string; model: string; type: string; power: boolean }[]; count: number };
@@ -200,7 +209,7 @@ describe("handleListDevices contract", () => {
         "S1": createMockDevice("S1", "2960", 1),
         "PC1": createMockDevice("PC1", "PC1", 3),
       }),
-      dprint: () => {},
+      ...commonDeps,
     };
 
     const result = handleListDevices({ type: "listDevices" }, deps) as { ok: boolean; devices: { type: string }[]; count: number };
@@ -217,7 +226,7 @@ describe("handleRemoveDevice contract", () => {
     const deps: any = {
       getLW: createMockLW(),
       getNet: createMockNet({}),
-      dprint: () => {},
+      ...commonDeps,
     };
 
     const result = handleRemoveDevice({ type: "removeDevice", name: "R1" }, deps);
@@ -232,7 +241,7 @@ describe("handleRemoveLink contract", () => {
     const deps: any = {
       getLW: createMockLW(),
       getNet: createMockNet({}),
-      dprint: () => {},
+      ...commonDeps,
     };
 
     const result = handleRemoveLink({ device: "R1", port: "GigabitEthernet0/0" }, deps);

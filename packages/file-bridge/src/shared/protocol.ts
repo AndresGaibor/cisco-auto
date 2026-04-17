@@ -5,9 +5,8 @@
  * This file is kept for backwards compatibility during migration
  */
 
-import type { BridgeCommandEnvelope } from '@cisco-auto/types';
+import type { BridgeCommandEnvelope } from "@cisco-auto/types";
 
-// Re-export from @cisco-auto/types for backwards compatibility
 export {
   BRIDGE_PROTOCOL_VERSION,
   BridgeEventSchema,
@@ -18,12 +17,13 @@ export {
   type BridgeEvent,
   type BridgeCheckpoint,
   type BridgeQueueStatus,
-} from '@cisco-auto/types';
+  type BridgeLease,
+  type BridgeHeartbeat,
+  type BridgeRuntimeState,
+} from "@cisco-auto/types";
 
-// Re-export BridgeCommandEnvelope separately for extends usage
-export type { BridgeCommandEnvelope } from '@cisco-auto/types';
+export type { BridgeCommandEnvelope } from "@cisco-auto/types";
 
-// Local types specific to file-bridge implementation (not schema-related)
 export interface ConsumerCheckpoint {
   consumerId: string;
   /** Relative path within logsDir, e.g. "events.current.ndjson" */
@@ -33,18 +33,6 @@ export interface ConsumerCheckpoint {
   /** Last seq number that was successfully processed */
   lastSeq: number;
   updatedAt: number;
-}
-
-export interface BridgeLease {
-  ownerId: string;
-  pid: number;
-  hostname: string;
-  startedAt: number;
-  updatedAt: number;
-  expiresAt: number;
-  ttlMs: number;
-  processTitle: string;
-  version: string;
 }
 
 export interface RotationEntry {

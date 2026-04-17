@@ -1,0 +1,80 @@
+{
+  "generatedAt": "2026-04-15T07:49:24.729Z",
+  "platform": "Packet Tracer",
+  "source": "pt-full-api-dump.js",
+  "seedDevicesCreated": 12,
+  "seedDevices": [
+    {
+      "name": "Router2",
+      "typeId": 0,
+      "model": "2911",
+      "label": "Router-2911"
+    },
+    {
+      "name": "Switch2",
+      "typeId": 1,
+      "model": "2960-24TT",
+      "label": "Switch-2960"
+    },
+    {
+      "name": "Cloud2",
+      "typeId": 2,
+      "model": "Cloud-PT",
+      "label": "Cloud-PT"
+    },
+    {
+      "name": "PC2",
+      "typeId": 8,
+      "model": "PC-PT",
+      "label": "PC-PT"
+    },
+    {
+      "name": "Server2",
+      "typeId": 9,
+      "model": "Server-PT",
+      "label": "Server-PT"
+    },
+    {
+      "name": "Multilayer Switch2",
+      "typeId": 16,
+      "model": "3650-24PS",
+      "label": "MLS-3650"
+    },
+    {
+      "name": "ASA2",
+      "typeId": 27,
+      "model": "5505",
+      "label": "ASA-5505"
+    },
+    {
+      "name": "MCU2",
+      "typeId": 36,
+      "model": "MCU-PT",
+      "label": "MCU-PT"
+    },
+    {
+      "name": "SBC2",
+      "typeId": 37,
+      "model": "SBC-PT",
+      "label": "SBC-PT"
+    },
+    {
+      "name": "Wireless LAN Controller2",
+      "typeId": 41,
+      "model": "WLC-PT",
+      "label": "WLC-PT"
+    },
+    {
+      "name": "Light Weight Access Point2",
+      "typeId": 44,
+      "model": "LAP-PT",
+      "label": "LAP-PT"
+    },
+    {
+      "name": "PT-Controller2",
+      "typeId": 50,
+      "model": "NetworkController",
+      "label": "NetworkController"
+    }
+  ]
+}

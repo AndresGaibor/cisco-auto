@@ -15,8 +15,12 @@ const RUNTIME_SOURCE_FILES = getAllRuntimeFiles();
 
 function assembleRuntimeOutput(code: string, devDirLiteral: string): string {
   return `
-var __ipc = (typeof ipc !== "undefined") ? ipc : null;
-var __dprint = (typeof dprint !== "undefined") ? dprint : function() {};
+var __ipc = (typeof _g !== "undefined" && _g && typeof _g.ipc !== "undefined" && _g.ipc !== null) ? _g.ipc : null;
+if (!__ipc && typeof self !== "undefined" && self && typeof self.ipc !== "undefined") {
+  __ipc = self.ipc;
+}
+var __dprint = (typeof dprint !== "undefined") ? dprint
+             : function(msg) { if (typeof print === "function") print(String(msg)); };
 var __DEV_DIR = (typeof DEV_DIR !== "undefined") ? DEV_DIR : ${devDirLiteral};
 var __fm = (typeof fm !== "undefined") ? fm : null;
 if (!__fm && __ipc && typeof __ipc.systemFileManager === "function") {

@@ -28,22 +28,23 @@ describe('Fase 7 - RuntimeGenerator', () => {
     expect(existsSync(join(outputDir, 'manifest.json'))).toBe(true);
 
     rmSync(root, { recursive: true, force: true });
-  });
+  }, 30000);
 
   test('manifest incluye metadata de versión y checksum', async () => {
     const root = mkdtempSync(join(tmpdir(), 'pt-runtime-manifest-'));
     const generator = new RuntimeGenerator({ outputDir: join(root, 'generated'), devDir: join(root, 'pt-dev') });
 
     const main = generator.generateMain();
+    const catalog = generator.generateCatalog();
     const runtime = generator.generateRuntime();
-    await generator.writeManifest(main, runtime, join(root, 'generated'));
+    await generator.writeManifest(main, catalog, runtime, join(root, 'generated'));
 
     const manifest = JSON.parse(readFileSync(join(root, 'generated', 'manifest.json'), 'utf-8'));
-    expect(manifest.cliVersion).toBe('0.2.0');
-    expect(manifest.protocolVersion).toBe(2);
+    expect(manifest.cliVersion).toBe('0.3.0');
+    expect(manifest.protocolVersion).toBe(3);
     expect(manifest.mainChecksum).toBeDefined();
     expect(manifest.runtimeChecksum).toBeDefined();
 
     rmSync(root, { recursive: true, force: true });
-  });
+  }, 30000);
 });

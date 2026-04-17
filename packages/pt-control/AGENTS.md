@@ -10,12 +10,27 @@ CLI profesional (`bun run pt`) para controlar Cisco Packet Tracer en tiempo real
 
 ```
 src/
-├── controller/        # PTController - API de alto nivel para controlar PT
-├── vdom/              # VirtualTopology - Estado de topología basado en eventos
-├── types/            # Definiciones de tipos para la CLI
-├── parsers/          # Parsers IOS (re-exportados de ios-domain)
-├── logging/          # LogManager - Logging NDJSON con tracking de sesión
-└── shared/           # Utilidades compartidas
+├── agent/              # Workflows de agentes: task-scoped context building
+├── application/        # Servicios de aplicación (topology, device, ios, canvas)
+│   ├── ports/          # Interfaces de puertos (FileBridgePort)
+│   └── services/       # Servicios concretos (TopologyService, DeviceService, etc.)
+├── autonomy/           # Lógica de autonomía para decisiones automáticas
+├── checks/             # Validaciones y checks de salud
+├── contracts/          # Contratos de tipos (PTEvent, DeviceState, TopologySnapshot, etc.)
+├── controller/         # PTController - API de alto nivel para controlar PT
+├── domain/             # Lógica de dominio (IOS capabilities resolver)
+├── infrastructure/     # Implementaciones de infraestructura (PT bridge, topology cache)
+├── intent/             # Resolución de intents de usuario
+├── logging/            # LogManager - Logging NDJSON con tracking de sesión
+├── pt/                 # Módulos PT canónicos (terminal, topology, server, planner, ledger, diagnosis)
+├── query/              # Query processing
+├── shared/             # Utilidades compartidas
+├── simulation/         # Simulación de red
+├── tools/              # Herramientas utilities
+├── types/              # Definiciones de tipos para la CLI
+├── utils/              # Utilities varias
+├── validation/          # Validación de dispositivos contra catalog
+└── vdom/               # VirtualTopology - Estado de topología basado en eventos
 ```
 
 ## Clases, Funciones, Métodos y Variables Clave
@@ -25,195 +40,320 @@ src/
 ```typescript
 // Configuración del controller
 interface PTControllerConfig {
-  devDir?: string;
-  timeoutMs?: number;
-  onEvent?: (event: PTEvent) => void;
+  devDir: string;
 }
 
 // Crear controller
-function createPTController(config?: PTControllerConfig): PTController;
+function createPTController(config: PTControllerConfig): PTController;
 function createDefaultPTController(): PTController;
 
-// Interface del controller
+// Interface del controller (50+ métodos)
 interface PTController {
-  // lifecycle
-  connect(): Promise<void>;
-  disconnect(): Promise<void>;
-  isConnected(): boolean;
+  // Lifecycle
+  start(): Promise<void>;
+  stop(): Promise<void>;
+
+  // Bridge access
+  getBridge(): FileBridgePort;
+  getTopologyCache(): TopologyCache;
+
+  // Command trace
+  drainCommandTrace(): CommandTraceEntry[];
 
   // Device management
   addDevice(
     name: string,
     model: string,
     options?: { x?: number; y?: number },
-  ): Promise<DeviceResult>;
+  ): Promise<DeviceState>;
   removeDevice(name: string): Promise<void>;
   renameDevice(oldName: string, newName: string): Promise<void>;
-  moveDevice(name: string, x: number, y: number): Promise<void>;
-  listDevices(): Promise<string[]>;
-  getDeviceInfo(name: string): Promise<DeviceInfo>;
+  moveDevice(
+    name: string,
+    x: number,
+    y: number,
+  ): Promise<
+    { ok: true; name: string; x: number; y: number } | { ok: false; error: string; code: string }
+  >;
+  listDevices(filter?: string | number | string[]): Promise<DeviceListResult>;
+  inspectDevice(name: string, includeXml?: boolean): Promise<DeviceState>;
+
+  // Module management
+  addModule(device: string, slot: number, module: string): Promise<void>;
+  removeModule(device: string, slot: number): Promise<void>;
 
   // Link management
-  addLink(device1: string, port1: string, device2: string, port2: string): Promise<void>;
+  addLink(
+    device1: string,
+    port1: string,
+    device2: string,
+    port2: string,
+    linkType?: CableType,
+  ): Promise<LinkState>;
   removeLink(device: string, port: string): Promise<void>;
 
-  // IOS commands
-  executeCommand(device: string, command: string): Promise<CommandResult>;
-  executeShow(device: string, showCommand: string): Promise<string>;
+  // Topology management
+  clearTopology(): Promise<{
+    removedDevices: number;
+    removedLinks: number;
+    remainingDevices: number;
+    remainingLinks: number;
+  }>;
 
-  // Session management
-  createSession(device: string): Promise<CliSession>;
-  closeSession(device: string): Promise<void>;
+  // Host configuration (PC/Server)
+  configHost(
+    device: string,
+    options: { ip?: string; mask?: string; gateway?: string; dns?: string; dhcp?: boolean },
+  ): Promise<void>;
+  inspectHost(device: string): Promise<DeviceState>;
 
-  // Topology
-  getTopology(): Promise<TopologySnapshot>;
-  exportTopology(format: "json" | "yaml"): Promise<string>;
+  // IOS configuration and execution
+  configIos(device: string, commands: string[], options?: { save?: boolean }): Promise<void>;
+  execIos<T = ParsedOutput>(
+    device: string,
+    command: string,
+    parse?: boolean,
+    timeout?: number,
+  ): Promise<{ raw: string; parsed?: T }>;
+  show(device: string, command: string): Promise<ParsedOutput>;
+  showIpInterfaceBrief(device: string): Promise<ShowIpInterfaceBrief>;
+  showVlan(device: string): Promise<ShowVlan>;
+  showIpRoute(device: string): Promise<ShowIpRoute>;
+  showRunningConfig(device: string): Promise<ShowRunningConfig>;
+  showMacAddressTable(device: string): Promise<ShowMacAddressTable>;
+  showCdpNeighbors(device: string): Promise<ShowCdpNeighbors>;
+  execInteractive(
+    device: string,
+    command: string,
+    options?: { timeout?: number; parse?: boolean; ensurePrivileged?: boolean },
+  ): Promise<{ raw: string; parsed?: ParsedOutput; session?: { mode: string } }>;
+  execIosWithEvidence<T = ParsedOutput>(
+    device: string,
+    command: string,
+    parse?: boolean,
+    timeout?: number,
+  ): Promise<IosExecutionSuccess<T>>;
+  configIosWithResult(
+    device: string,
+    commands: string[],
+    options?: { save?: boolean },
+  ): Promise<IosConfigApplyResult>;
+
+  // DHCP
+  configureDhcpServer(
+    device: string,
+    options: {
+      poolName: string;
+      network: string;
+      subnetMask: string;
+      defaultRouter?: string;
+      dnsServers?: string[];
+      excludedAddresses?: string[];
+      leaseTime?: number;
+      domainName?: string;
+    },
+  ): Promise<void>;
+  inspectDhcpServer(
+    device: string,
+  ): Promise<{
+    ok: boolean;
+    device: string;
+    pools: Array<{
+      name: string;
+      network: string;
+      subnetMask: string;
+      defaultRouter?: string;
+      dnsServers?: string[];
+      leaseTime?: number;
+      domainName?: string;
+    }>;
+    excludedAddresses?: string[];
+    poolCount: number;
+    excludedAddressCount: number;
+  }>;
+  configureDhcpPool(
+    device: string,
+    poolName: string,
+    network: string,
+    mask: string,
+    defaultRouter: string,
+    dnsServer?: string,
+    options?: { save?: boolean },
+  ): Promise<void>;
+
+  // OSPF
+  configureOspfNetwork(
+    device: string,
+    processId: number,
+    network: string,
+    wildcard: string,
+    area: number,
+    options?: { save?: boolean },
+  ): Promise<void>;
+
+  // SSH
+  configureSshAccess(
+    device: string,
+    domainName: string,
+    username: string,
+    password: string,
+    options?: { save?: boolean },
+  ): Promise<void>;
+
+  // Access Lists
+  configureAccessListStandard(
+    device: string,
+    aclNumber: number,
+    entries: string[],
+    options?: { save?: boolean },
+  ): Promise<void>;
+
+  // Parsed show commands
+  showParsed<T = ParsedOutput>(
+    device: string,
+    command: string,
+    options?: { ensurePrivileged?: boolean; timeout?: number },
+  ): Promise<IosExecutionSuccess<T>>;
+  getIosConfidence(
+    device: string,
+    evidence: { source: string; status?: number; mode?: string },
+    verificationCheck?: string,
+  ): Promise<IosConfidence>;
+
+  // Capabilities
+  resolveCapabilities(device: string): Promise<DeviceCapabilities>;
+
+  // Canvas
+  listCanvasRects(): Promise<{ rects: string[]; count: number }>;
+  getRect(rectId: string): Promise<unknown>;
+  devicesInRect(rectId: string, includeClusters?: boolean): Promise<DevicesInRectResult>;
+
+  // Snapshot
+  snapshot(): Promise<TopologySnapshot>;
+  inspect(device: string, includeXml?: boolean): Promise<DeviceState>;
+  hardwareInfo(device: string): Promise<unknown>;
+  hardwareCatalog(deviceType?: string): Promise<unknown>;
+  commandLog(device?: string, limit?: number): Promise<unknown[]>;
+  deepInspect(path: string, method?: string, args?: any[]): Promise<any>;
+
+  // Event handling
+  on<E extends PTEventType>(eventType: E, handler: (event: PTEvent) => void): this;
+  onAll(handler: (event: PTEvent) => void): this;
+
+  // Runtime loading
+  loadRuntime(code: string): Promise<void>;
+  loadRuntimeFromFile(filePath: string): Promise<void>;
+
+  // Cached state
+  getCachedSnapshot(): TopologySnapshot | null;
+  getTwin(): NetworkTwin | null;
+  readState<T = unknown>(): T | null;
+
+  // Context and health
+  getContextSummary(): {
+    bridgeReady: boolean;
+    topologyMaterialized: boolean;
+    deviceCount: number;
+    linkCount: number;
+  };
+  getHealthSummary(): Promise<{
+    bridgeReady: boolean;
+    topologyHealth: string;
+    heartbeatState: "ok" | "stale" | "missing" | "unknown";
+    warnings: string[];
+  }>;
+  getHeartbeat<T = unknown>(): T | null;
+  getHeartbeatHealth(): {
+    state: "ok" | "stale" | "missing" | "unknown";
+    ageMs?: number;
+    lastSeenTs?: number;
+  };
+  getBridgeStatus(): {
+    ready: boolean;
+    queuedCount?: number;
+    inFlightCount?: number;
+    warnings?: string[];
+  };
+  getSystemContext(): {
+    bridgeReady: boolean;
+    topologyMaterialized: boolean;
+    deviceCount: number;
+    linkCount: number;
+    heartbeat: {
+      state: "ok" | "stale" | "missing" | "unknown";
+      ageMs?: number;
+      lastSeenTs?: number;
+    };
+    warnings: string[];
+  };
 }
+```
 
-export class PTController {
-  // Constructor
-  constructor(config: PTControllerConfig);
+### TopologyCache (reemplaza VirtualTopology en docs de PTController)
 
-  // Métodos principales
-  async connect(): Promise<void>;
-  async disconnect(): Promise<void>;
-  isConnected(): boolean;
-  async addDevice(
-    name: string,
-    model: string,
-    options?: { x?: number; y?: number },
-  ): Promise<DeviceResult>;
-  async removeDevice(name: string): Promise<void>;
-  async renameDevice(oldName: string, newName: string): Promise<void>;
-  async moveDevice(name: string, x: number, y: number): Promise<void>;
-  async listDevices(): Promise<string[]>;
-  async getDeviceInfo(name: string): Promise<DeviceInfo>;
-  async executeCommand(device: string, command: string): Promise<CommandResult>;
-  async executeShow(device: string, showCommand: string): Promise<string>;
-  async createSession(device: string): Promise<CliSession>;
-  async closeSession(device: string): Promise<void>;
-  async getTopology(): Promise<TopologySnapshot>;
+```typescript
+// Cache de topología que sincroniza con PT via bridge
+class TopologyCache {
+  start(): void;
+  stop(): void;
+  refreshFromState(): void;
+  applySnapshot(snapshot: TopologySnapshot): void;
+  getSnapshot(): TopologySnapshot;
+  isMaterialized(): boolean;
+  getDevice(name: string): DeviceState | undefined;
+  getDevices(): DeviceState[];
+  getLinks(): LinkState[];
+  getDeviceNames(): string[];
+  getConnectedDevices(deviceName: string): string[];
+  findLinkBetween(device1: string, device2: string): LinkState | undefined;
 }
 ```
 
 ### VirtualTopology (vdom/)
 
 ```typescript
-// Estado de topología basado en eventos
+// Estado de topología basado en eventos - mantenido por TopologyCache internamente
 interface VirtualTopology {
-  // Devices
-  getDevices(): Map<string, VDevice>;
-  getDevice(name: string): VDevice | undefined;
-  addDevice(device: VDevice): void;
-  removeDevice(name: string): void;
-  updateDevice(name: string, updates: Partial<VDevice>): void;
-
-  // Links
-  getLinks(): Map<string, VLink>;
-  getLink(id: string): VLink | undefined;
-  addLink(link: VLink): void;
-  removeLink(id: string): void;
-
-  // Subscriptions
-  subscribe(callback: TopologyCallback): () => void;
-  onDeviceAdded(callback: (device: VDevice) => void): () => void;
-  onDeviceRemoved(callback: (name: string) => void): () => void;
-  onLinkAdded(callback: (link: VLink) => void): () => void;
-  onLinkRemoved(callback: (id: string) => void): () => void;
+  getSnapshot(): TopologySnapshot;
+  getSnapshotRef(): Readonly<TopologySnapshot>;
+  getDevice(name: string): DeviceState | undefined;
+  getDeviceNames(): string[];
+  getLink(id: string): LinkState | undefined;
+  getLinks(): LinkState[];
+  getVersion(): number;
+  getLastUpdate(): number;
+  isMaterialized(): boolean;
+  applyEvent(event: PTEvent): void;
+  replaceSnapshot(snapshot: TopologySnapshot): void;
+  onChange(handler: (delta: TopologyDelta) => void, label?: string): () => void;
+  getConnectedDevices(deviceName: string): string[];
+  findLinkBetween(device1: string, device2: string): LinkState | undefined;
+  createLinkId(device1: string, port1: string, device2: string, port2: string): string;
+  getDevicesInZone(zoneGeometry: { x1: number; y1: number; x2: number; y2: number }): string[];
+  isDeviceInZone(
+    deviceName: string,
+    zoneGeometry: { x1: number; y1: number; x2: number; y2: number },
+  ): boolean;
+  getZonesForDevice(
+    deviceName: string,
+    allZones: { id: string; geometry: { x1: number; y1: number; x2: number; y2: number } }[],
+  ): string[];
+  toJSON(): string;
+  toNetworkTwin(): NetworkTwin;
+  enrichNetworkTwinWithZones(twin: NetworkTwin, rects: unknown[]): NetworkTwin;
 }
 
-interface VDevice {
-  id: string;
-  name: string;
-  model: string;
-  type: DeviceType;
-  x: number;
-  y: number;
-  interfaces: Map<string, VInterface>;
-  powered: boolean;
-}
-
-interface VInterface {
-  name: string;
-  ipAddress?: string;
-  subnetMask?: string;
-  status: "up" | "down";
-  vlan?: number;
-  linkedTo?: { device: string; port: string };
-}
-
-interface VLink {
-  id: string;
-  device1: string;
-  port1: string;
-  device2: string;
-  port2: string;
-  cableType: CableType;
-}
-
-function createVirtualTopology(): VirtualTopology;
+function createVirtualTopology(initialSnapshot?: TopologySnapshot): VirtualTopology;
 ```
 
 ### CliSession
 
-```typescript
-// Sesión CLI con estado para un dispositivo
-interface CliSession {
-  device: string;
-  mode: IosMode;
-  prompt: string;
-  isConnected: boolean;
-
-  // Ejecutar comandos
-  execute(command: string): Promise<CommandResult>;
-  executeShow(showCommand: string): Promise<string>;
-
-  // Control de sesión
-  enterPriv(): Promise<void>;
-  exitPriv(): Promise<void>;
-  close(): Promise<void>;
-
-  // Esperar y responder
-  waitForPrompt(timeoutMs?: number): Promise<void>;
-  sendResponse(response: string): Promise<void>;
-}
-
-interface CommandResult {
-  ok: boolean;
-  output: string;
-  status: number;
-  mode: IosMode;
-  paging: boolean;
-}
-
-interface CommandHistoryEntry {
-  command: string;
-  output: string;
-  timestamp: number;
-  status: number;
-}
-
-function createCliSession(device: string, term: PTCommandLine): CliSession;
-```
-
-### Parsers IOS (re-exportados de ios-domain)
+No existe en pt-control. Se re-exporta desde `@cisco-auto/ios-domain`:
 
 ```typescript
-// Parser functions para outputs IOS
-function parseShowIpInterfaceBrief(output: string): IpInterfaceBriefEntry[];
-function parseShowVlan(output: string): VlanInfo[];
-function parseShowIpRoute(output: string): RouteEntry[];
-function parseShowRunningConfig(output: string): ConfigSection[];
-function parseShowInterfaces(output: string): InterfaceInfo[];
-function parseShowIpArp(output: string): ArpEntry[];
-function parseShowMacAddressTable(output: string): MacEntry[];
-function parseShowSpanningTree(output: string): StpInfo[];
-function parseShowVersion(output: string): VersionInfo;
-function parseShowCdpNeighbors(output: string): CdpNeighbor[];
-
-// Acceso a parsers
-function getParser(name: string): ParserFunction | undefined;
-const PARSERS: Record<string, ParserFunction>;
+// Re-exportado desde ios-domain
+export { CliSession, createCliSession } from "@cisco-auto/ios-domain";
+export type { CommandHandler, CommandHistoryEntry, CliSessionState } from "@cisco-auto/ios-domain";
 ```
 
 ### LogManager
@@ -274,34 +414,38 @@ function resetLogManager(): void;
 ### CommandTraceEntry
 
 ```typescript
+// Entrada de trace de comando - campos verificados del código
 interface CommandTraceEntry {
   id: string;
-  timestamp: number;
-  sessionId: string;
-  device: string;
-  command: string;
-  outputPreview: string;
-  status: number;
-  durationMs: number;
+  type: string;
+  completedAt: number;
+  ok?: boolean;
+  ts?: number;
+  status?: string;
+  commandType?: string;
 }
 ```
 
 ### IOS Capabilities
 
 ```typescript
-// Resolución de capacidades de dispositivo
+// Resolución de capacidades de dispositivo - interfaz verificada
 interface DeviceCapabilities {
   model: string;
   family: IOSFamily;
-  type: DeviceType;
-  supportsVlan: boolean;
-  supportsRouting: boolean;
+  supportsTrunkEncapsulationCmd: boolean;
+  supportsTrunkMode: boolean;
+  supportsTrunkEncapsulation: boolean;
+  supportsRouterSubinterfaces: boolean;
+  supportsSubinterfaces: boolean;
+  supportsDot1qEncapsulation: boolean;
+  supportsSvi: boolean;
+  supportsIpRouting: boolean;
+  supportsDhcpRelay: boolean;
   supportsAcl: boolean;
   supportsNat: boolean;
-  supportsDhcp: boolean;
-  maxVlanId: number;
-  maxInterfaces: number;
-  modules: ModuleInfo[];
+  supportsVlan: boolean;
+  maxVlanCount: number;
 }
 
 function resolveCapabilities(model: string): DeviceCapabilities;
@@ -310,57 +454,29 @@ function resolveCapabilities(model: string): DeviceCapabilities;
 ### IOSFamily
 
 ```typescript
-enum IOSFamily {
-  CISCO_IOS = "cisco-ios",
-  CISCO_IOS_XE = "cisco-ios-xe",
-  CISCO_NXOS = "cisco-nxos",
-  CISCO_WLC = "cisco-wlc",
-  UNKNOWN = "unknown",
-}
-
-interface IosDeviceModel {
-  model: string;
-  family: IOSFamily;
-  capabilities: DeviceCapabilities;
-}
+// Re-exportado desde @cisco-auto/ios-domain
+export { IOSFamily, type IosDeviceModel } from "@cisco-auto/ios-domain";
 ```
 
 ### Output Classification
 
 ```typescript
-type OutputClassificationType =
-  | "success"
-  | "error"
-  | "paging"
-  | "confirm"
-  | "password"
-  | "dns-lookup"
-  | "unknown";
-
-interface OutputClassification {
-  type: OutputClassificationType;
-  cleaned: string;
-  hasError: boolean;
-  needsResponse: boolean;
-}
-
-function classifyOutput(output: string): OutputClassification;
-function isSuccessResult(result: CommandResult): boolean;
-function isErrorResult(result: CommandResult): boolean;
-function isPagingResult(result: CommandResult): boolean;
-function isConfirmPrompt(output: string): boolean;
-function isPasswordPrompt(output: string): boolean;
-
-// Prompt state
-type IosMode = "user-exec" | "priv-exec" | "config" | "config-if" | "unknown";
-
-interface PromptState {
-  mode: IosMode;
-  hostname: string;
-  partial: boolean;
-}
-
-function inferPromptState(prompt: string): PromptState;
+// Re-exportado desde @cisco-auto/ios-domain
+export {
+  inferPromptState,
+  type IosMode,
+  type PromptState,
+  type CommandResult,
+  createSuccessResult,
+  createErrorResult,
+  isSuccessResult,
+  isErrorResult,
+  isPagingResult,
+  isConfirmPrompt,
+  isPasswordPrompt,
+  classifyOutput,
+  type OutputClassificationType,
+} from "@cisco-auto/ios-domain";
 ```
 
 ---
@@ -398,29 +514,64 @@ bun run pt audit-failed
 ```typescript
 // Controller
 export { PTController, createPTController, createDefaultPTController };
+export type { PTControllerConfig };
 
 // Virtual DOM
-export { VirtualTopology, createVirtualTopology };
+export { VirtualTopology, createVirtualTopology } from "./vdom/index.js";
 
 // Types
 export * from "./types/index.js";
 
-// Parsers
-export * from "./parsers/index.js";
+// Parsers (re-exportados desde ios-domain)
+export { parseShowIpInterfaceBrief, parseShowVlan, parseShowIpRoute, ... } from "@cisco-auto/ios-domain";
 
 // Logging
 export { LogManager, getLogManager, resetLogManager };
 export type { LogEntry, LogSession, LogConfig, LogQueryOptions, LogStats };
 export { redactSensitive };
+export type { CommandTraceEntry } from "./controller/index.js";
 
-// IOS Session
+// IOS Session (desde ios-domain)
 export { CliSession, createCliSession };
 export type { CommandHandler, CommandHistoryEntry, CliSessionState };
 
+export { inferPromptState, type IosMode, type PromptState };
+export { type CommandResult, createSuccessResult, ... } from "@cisco-auto/ios-domain";
+
 // Capabilities
-export { resolveCapabilities, type DeviceCapabilities };
-export { IOSFamily, type IosDeviceModel };
+export { resolveCapabilities, type DeviceCapabilities } from "./domain/ios/capabilities/pt-capability-resolver.js";
+export { IOSFamily, type IosDeviceModel } from "@cisco-auto/ios-domain";
 
 // Validation
-export { validatePTModel, resolveModel };
+export { validatePTModel, resolveModel } from "./shared/utils/helpers.js";
+
+// PT Compatibility Contract
+export { assertCatalogLoaded, assertCatalogHealth, getContractSummary, type PTCatalogHealth } from "@cisco-auto/pt-runtime";
+
+// Application Services
+export { LayoutPlannerService, PortPlannerService, LinkFeasibilityService } from "./application/services/index.js";
+
+// PT feature modules
+export * from "./pt/terminal/index.js";
+export * from "./pt/topology/index.js";
+export * from "./pt/server/index.js";
+export * from "./pt/planner/index.js";
+export * from "./pt/ledger/index.js";
+export * from "./pt/diagnosis/index.js";
+
+// Capability Matrix (kernel)
+export * from "@cisco-auto/kernel/domain/ios/capability-matrix/index.js";
+
+// Agent workflow
+export * from "./agent/index.js";
 ```
+
+---
+
+## Notas Importantes
+
+- **CliSession NO existe en pt-control** — se re-exporta desde `@cisco-auto/ios-domain`. No definir una interfaz local para esto.
+- **VirtualTopology es interno** — TopologyCache lo usa internamente y lo envolvuelve. Para acceso público, usar `getTopologyCache()` del controller.
+- **PTController tiene 50+ métodos** — la interfaz oficial está en `src/controller/index.ts` línea 59. La documentación anterior estaba ~70% desactualizada.
+- **CommandTraceEntry tiene campos específicos** — id, type, completedAt, ok, ts, status, commandType. No incluye sessionId, device, command, outputPreview, durationMs como decía la versión anterior.
+- **DeviceCapabilities tiene 15+ campos** — incluye supportsTrunkEncapsulationCmd, supportsTrunkMode, supportsDot1qEncapsulation, supportsSvi, supportsIpRouting, maxVlanCount, etc. NO tiene type, supportsRouting, supportsAcl, maxVlanId, maxInterfaces, o modules.

@@ -1,6 +1,10 @@
 /**
  * File Bridge V2 Types - Type definitions for file bridge operations
  * Interfaces for bridge options, health, and reports
+ *
+ * @deprecated Use types from @cisco-auto/types or define inline.
+ *             This file will be removed in a future version.
+ *             All canonical protocol types live in @cisco-auto/types.
  */
 
 // ============================================================================
@@ -26,7 +30,7 @@ export interface FileBridgeV2Options {
 // ============================================================================
 
 export interface BridgeHealth {
-  status: 'healthy' | 'degraded' | 'unhealthy';
+  status: "healthy" | "degraded" | "unhealthy";
   uptime: number;
   messagesProcessed: number;
   messagesFailed: number;
@@ -102,15 +106,15 @@ export interface QueueStats {
 // ============================================================================
 
 export type BridgeEventType =
-  | 'connected'
-  | 'disconnected'
-  | 'message'
-  | 'error'
-  | 'health-check'
-  | 'gc-complete'
-  | 'queue-full'
-  | 'queue-empty'
-  | 'threshold-exceeded';
+  | "connected"
+  | "disconnected"
+  | "message"
+  | "error"
+  | "health-check"
+  | "gc-complete"
+  | "queue-full"
+  | "queue-empty"
+  | "threshold-exceeded";
 
 export interface BridgeEvent {
   type: BridgeEventType;

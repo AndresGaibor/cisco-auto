@@ -1,12 +1,12 @@
-import type { LabSpec } from '../../contracts/lab-spec.js';
-import type { LabDiff, LabDiffItem, LabPlan, LabOperation } from './lab-plan-types.js';
+import type { LabSpec } from "../../contracts/lab-spec.js";
+import type { LabDiff, LabDiffItem, LabPlan, LabOperation } from "./lab-plan-types.js";
 
 /**
  * Generador de planes de operaciones a partir de un diff.
- * 
+ *
  * Convierte el diff (missing, drift, extra, unsupported, unreliable) en operaciones
  * atómicas ordenadas con dependencias explícitas.
- * 
+ *
  * NO planea clearTopology() por defecto - solo en modo 'rebuild' explícito.
  */
 export class LabPlanner {
@@ -15,10 +15,10 @@ export class LabPlanner {
   /**
    * Genera un plan de operaciones para llevar el estado observado al deseado.
    */
-  plan(spec: LabSpec, diff: LabDiff, mode: 'incremental' | 'rebuild' = 'incremental'): LabPlan {
+  plan(spec: LabSpec, diff: LabDiff, mode: "incremental" | "rebuild" = "incremental"): LabPlan {
     const operations: LabOperation[] = [];
 
-    if (mode === 'rebuild') {
+    if (mode === "rebuild") {
       operations.push(this.createClearTopologyOperation());
     }
 
@@ -46,63 +46,67 @@ export class LabPlanner {
   private createClearTopologyOperation(): LabOperation {
     return {
       id: this.generateId(),
-      type: 'remove-device',
-      resourceType: 'device',
-      resourceId: '*',
-      description: 'Limpiar topología completa (modo rebuild)',
+      type: "remove-device",
+      resourceType: "device",
+      resourceId: "*",
+      description: "Limpiar topología completa (modo rebuild)",
       params: { all: true },
-      status: 'pending',
+      status: "pending",
     };
   }
 
-  private planItem(spec: LabSpec, item: LabDiffItem, mode: 'incremental' | 'rebuild'): LabOperation[] {
+  private planItem(
+    spec: LabSpec,
+    item: LabDiffItem,
+    mode: "incremental" | "rebuild",
+  ): LabOperation[] {
     switch (item.status) {
-      case 'missing':
+      case "missing":
         return this.planMissing(item, mode);
-      case 'drift':
+      case "drift":
         return this.planDrift(item, mode);
-      case 'extra':
+      case "extra":
         return this.planExtra(item, mode);
-      case 'unsupported':
+      case "unsupported":
         return this.planUnsupported(item);
-      case 'unreliable':
+      case "unreliable":
         return this.planUnreliable(item);
-      case 'ok':
+      case "ok":
         return [];
       default:
         return [];
     }
   }
 
-  private planMissing(item: LabDiffItem, mode: 'incremental' | 'rebuild'): LabOperation[] {
-    const expected = item.expected as any;
+  private planMissing(item: LabDiffItem, mode: "incremental" | "rebuild"): LabOperation[] {
+    const expected = item.expected as Record<string, unknown>;
 
     switch (item.resourceType) {
-      case 'device':
+      case "device":
         return [
           {
             id: this.generateId(),
-            type: 'create-device',
-            resourceType: 'device',
+            type: "create-device",
+            resourceType: "device",
             resourceId: item.resourceId,
-            description: `Crear dispositivo ${expected.name}`,
-            device: expected.name,
+            description: `Crear dispositivo ${expected.name as string}`,
+            device: expected.name as string,
             params: {
               name: expected.name,
               model: expected.ptModel ?? expected.model,
-              x: expected.x,
-              y: expected.y,
+              x: expected.x as number,
+              y: expected.y as number,
             },
-            status: 'pending',
+            status: "pending",
           },
         ];
 
-      case 'link':
+      case "link":
         return [
           {
             id: this.generateId(),
-            type: 'create-link',
-            resourceType: 'link',
+            type: "create-link",
+            resourceType: "link",
             resourceId: item.resourceId,
             description: `Crear enlace ${expected.fromDevice}:${expected.fromPort} <-> ${expected.toDevice}:${expected.toPort}`,
             params: {
@@ -110,128 +114,128 @@ export class LabPlanner {
               fromPort: expected.fromPort,
               toDevice: expected.toDevice,
               toPort: expected.toPort,
-              cableType: expected.cableType ?? 'auto',
+              cableType: expected.cableType ?? "auto",
             },
-            dependsOn: [expected.fromDevice, expected.toDevice],
-            status: 'pending',
+            dependsOn: [expected.fromDevice as string, expected.toDevice as string],
+            status: "pending",
           },
         ];
 
-      case 'vlan':
+      case "vlan":
         return [
           {
             id: this.generateId(),
-            type: 'configure-vlan',
-            resourceType: 'vlan',
+            type: "configure-vlan",
+            resourceType: "vlan",
             resourceId: item.resourceId,
             description: `Configurar VLAN ${expected.id} (${expected.name})`,
             params: expected,
-            status: 'pending',
+            status: "pending",
           },
         ];
 
-      case 'trunk':
+      case "trunk":
         return [
           {
             id: this.generateId(),
-            type: 'configure-trunk',
-            resourceType: 'trunk',
+            type: "configure-trunk",
+            resourceType: "trunk",
             resourceId: item.resourceId,
-            description: `Configurar trunk ${expected.device}:${expected.port}`,
-            device: expected.device,
+            description: `Configurar trunk ${expected.device as string}:${expected.port}`,
+            device: expected.device as string | undefined,
             params: expected,
-            dependsOn: [expected.device],
-            status: 'pending',
+            dependsOn: [expected.device as string],
+            status: "pending",
           },
         ];
 
-      case 'access-port':
+      case "access-port":
         return [
           {
             id: this.generateId(),
-            type: 'configure-access-port',
-            resourceType: 'access-port',
+            type: "configure-access-port",
+            resourceType: "access-port",
             resourceId: item.resourceId,
-            description: `Configurar puerto access ${expected.device}:${expected.port} VLAN ${expected.vlan}`,
-            device: expected.device,
+            description: `Configurar puerto access ${expected.device as string}:${expected.port} VLAN ${expected.vlan}`,
+            device: expected.device as string | undefined,
             params: expected,
-            dependsOn: [expected.device],
-            status: 'pending',
+            dependsOn: [expected.device as string],
+            status: "pending",
           },
         ];
 
-      case 'svi':
+      case "svi":
         return [
           {
             id: this.generateId(),
-            type: 'configure-svi',
-            resourceType: 'svi',
+            type: "configure-svi",
+            resourceType: "svi",
             resourceId: item.resourceId,
-            description: `Configurar SVI ${expected.device} VLAN ${expected.vlan}`,
-            device: expected.device,
+            description: `Configurar SVI ${expected.device as string} VLAN ${expected.vlan}`,
+            device: expected.device as string | undefined,
             params: expected,
-            dependsOn: [expected.device],
-            status: 'pending',
+            dependsOn: [expected.device as string],
+            status: "pending",
           },
         ];
 
-      case 'static-route':
+      case "static-route":
         return [
           {
             id: this.generateId(),
-            type: 'configure-static-route',
-            resourceType: 'static-route',
+            type: "configure-static-route",
+            resourceType: "static-route",
             resourceId: item.resourceId,
             description: `Configurar ruta estática ${expected.network} via ${expected.nextHop}`,
-            device: expected.device,
+            device: expected.device as string | undefined,
             params: expected,
-            dependsOn: [expected.device],
-            status: 'pending',
+            dependsOn: [expected.device as string],
+            status: "pending",
           },
         ];
 
-      case 'dhcp-pool':
+      case "dhcp-pool":
         return [
           {
             id: this.generateId(),
-            type: 'configure-dhcp-pool',
-            resourceType: 'dhcp-pool',
+            type: "configure-dhcp-pool",
+            resourceType: "dhcp-pool",
             resourceId: item.resourceId,
             description: `Configurar pool DHCP ${expected.poolName}`,
-            device: expected.device,
+            device: expected.device as string | undefined,
             params: expected,
-            dependsOn: [expected.device],
-            status: 'pending',
+            dependsOn: [expected.device as string],
+            status: "pending",
           },
         ];
 
-      case 'host':
+      case "host":
         return [
           {
             id: this.generateId(),
-            type: 'configure-host',
-            resourceType: 'host',
+            type: "configure-host",
+            resourceType: "host",
             resourceId: item.resourceId,
-            description: `Configurar host ${expected.device}`,
-            device: expected.device,
+            description: `Configurar host ${expected.device as string}`,
+            device: expected.device as string | undefined,
             params: expected,
-            dependsOn: [expected.device],
-            status: 'pending',
+            dependsOn: [expected.device as string],
+            status: "pending",
           },
         ];
 
-      case 'service':
+      case "service":
         return [
           {
             id: this.generateId(),
-            type: 'configure-service',
-            resourceType: 'service',
+            type: "configure-service",
+            resourceType: "service",
             resourceId: item.resourceId,
-            description: `Configurar servicio ${expected.type} en ${expected.device}`,
-            device: expected.device,
+            description: `Configurar servicio ${expected.type} en ${expected.device as string}`,
+            device: expected.device as string | undefined,
             params: expected,
-            dependsOn: [expected.device],
-            status: 'pending',
+            dependsOn: [expected.device as string],
+            status: "pending",
           },
         ];
 
@@ -240,38 +244,38 @@ export class LabPlanner {
     }
   }
 
-  private planDrift(item: LabDiffItem, mode: 'incremental' | 'rebuild'): LabOperation[] {
-    const expected = item.expected as any;
+  private planDrift(item: LabDiffItem, mode: "incremental" | "rebuild"): LabOperation[] {
+    const expected = item.expected as Record<string, unknown>;
 
     switch (item.resourceType) {
-      case 'device':
+      case "device":
         if (item.diff?.model) {
           return [
             {
               id: this.generateId(),
-              type: 'remove-device',
-              resourceType: 'device',
+              type: "remove-device",
+              resourceType: "device",
               resourceId: item.resourceId,
               description: `Remover dispositivo ${item.resourceId} (modelo incorrecto)`,
               device: item.resourceId,
               params: { name: item.resourceId },
-              status: 'pending',
+              status: "pending",
             },
             {
               id: this.generateId(),
-              type: 'create-device',
-              resourceType: 'device',
+              type: "create-device",
+              resourceType: "device",
               resourceId: item.resourceId,
               description: `Recrear dispositivo ${expected.name} con modelo correcto`,
-              device: expected.name,
+              device: expected.name as string,
               params: {
                 name: expected.name,
-                model: expected.ptModel ?? expected.model,
+                model: (expected.ptModel ?? expected.model) as string,
                 x: expected.x,
                 y: expected.y,
               },
               dependsOn: [item.resourceId],
-              status: 'pending',
+              status: "pending",
             },
           ];
         }
@@ -280,8 +284,8 @@ export class LabPlanner {
           return [
             {
               id: this.generateId(),
-              type: 'move-device',
-              resourceType: 'device',
+              type: "move-device",
+              resourceType: "device",
               resourceId: item.resourceId,
               description: `Mover dispositivo ${item.resourceId} a posición correcta`,
               device: item.resourceId,
@@ -290,23 +294,23 @@ export class LabPlanner {
                 x: expected.x,
                 y: expected.y,
               },
-              status: 'pending',
+              status: "pending",
             },
           ];
         }
 
         return [];
 
-      case 'link':
+      case "link":
         return [
           {
             id: this.generateId(),
-            type: 'repair-link',
-            resourceType: 'link',
+            type: "repair-link",
+            resourceType: "link",
             resourceId: item.resourceId,
             description: `Reparar enlace ${item.resourceId} (tipo de cable incorrecto)`,
             params: { ...expected },
-            status: 'pending',
+            status: "pending",
           },
         ];
 
@@ -315,40 +319,40 @@ export class LabPlanner {
     }
   }
 
-  private planExtra(item: LabDiffItem, mode: 'incremental' | 'rebuild'): LabOperation[] {
-    if (mode === 'rebuild') {
+  private planExtra(item: LabDiffItem, mode: "incremental" | "rebuild"): LabOperation[] {
+    if (mode === "rebuild") {
       return [];
     }
 
     switch (item.resourceType) {
-      case 'device':
+      case "device":
         return [
           {
             id: this.generateId(),
-            type: 'remove-device',
-            resourceType: 'device',
+            type: "remove-device",
+            resourceType: "device",
             resourceId: item.resourceId,
             description: `Remover dispositivo extra ${item.resourceId}`,
             device: item.resourceId,
             params: { name: item.resourceId },
-            status: 'pending',
+            status: "pending",
           },
         ];
 
-      case 'link':
-        const observed = item.observed as any;
+      case "link":
+        const observed = item.observed as Record<string, unknown>;
         return [
           {
             id: this.generateId(),
-            type: 'remove-link',
-            resourceType: 'link',
+            type: "remove-link",
+            resourceType: "link",
             resourceId: item.resourceId,
             description: `Remover enlace extra ${item.resourceId}`,
             params: {
               device: observed.device1,
               port: observed.port1,
             },
-            status: 'pending',
+            status: "pending",
           },
         ];
 
@@ -361,18 +365,18 @@ export class LabPlanner {
     return [
       {
         id: this.generateId(),
-        type: 'unsupported-resource',
+        type: "unsupported-resource",
         resourceType: item.resourceType,
         resourceId: item.resourceId,
         description: `Recurso no soportado: ${item.resourceId}`,
-        params: { reason: item.notes?.join(', ') ?? 'No soportado' },
-        status: 'skipped',
+        params: { reason: item.notes?.join(", ") ?? "No soportado" },
+        status: "skipped",
       },
     ];
   }
 
   private planUnreliable(item: LabDiffItem): LabOperation[] {
-    return this.planMissing(item, 'incremental');
+    return this.planMissing(item, "incremental");
   }
 
   private topologicalSort(operations: LabOperation[]): LabOperation[] {
@@ -384,7 +388,7 @@ export class LabPlanner {
     const deviceDepMap = new Map<string, string>();
 
     for (const op of operations) {
-      if (op.type === 'create-device' && op.device) {
+      if (op.type === "create-device" && op.device) {
         deviceDepMap.set(op.device, op.id);
       }
     }
@@ -421,7 +425,7 @@ export class LabPlanner {
     return sorted;
   }
 
-  private computePlanSummary(operations: LabOperation[]): LabPlan['summary'] {
+  private computePlanSummary(operations: LabOperation[]): LabPlan["summary"] {
     const byType: Record<string, number> = {};
     const byStatus: Record<string, number> = {};
 

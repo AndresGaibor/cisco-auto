@@ -33,7 +33,19 @@ export class IosService {
     inspectDevice: (device: string) => Promise<DeviceState>,
   ) {
     this.execution = new IosExecutionService(bridge, generateId);
-    this.semantic = new IosSemanticService(bridge as any, this.execution, inspectDevice);
+    const eventBridge: {
+      appendEvent?: (event: {
+        type: string;
+        id: string;
+        device: string;
+        verification: unknown;
+      }) => void;
+    } = {
+      appendEvent: (bridge as { appendEvent?: (event: unknown) => void }).appendEvent
+        ? (e) => (bridge as { appendEvent?: (event: unknown) => void }).appendEvent!(e)
+        : undefined,
+    };
+    this.semantic = new IosSemanticService(eventBridge, this.execution, inspectDevice);
   }
 
   getSession(device: string) {

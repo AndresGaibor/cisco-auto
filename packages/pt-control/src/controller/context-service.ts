@@ -91,7 +91,6 @@ export class ControllerContextService {
 
   getBridgeStatus(): {
     ready: boolean;
-    leaseValid?: boolean;
     queuedCount?: number;
     inFlightCount?: number;
     warnings?: string[];
@@ -110,9 +109,11 @@ export class ControllerContextService {
     const warnings: string[] = [];
 
     if (hb.state === "stale") warnings.push("Heartbeat stale - PT podría no estar respondiendo");
-    if (hb.state === "missing") warnings.push("Heartbeat missing - PT probablemente no está disponible");
+    if (hb.state === "missing")
+      warnings.push("Heartbeat missing - PT probablemente no está disponible");
     if (!bridgeStatus.ready) warnings.push("Bridge no está listo");
-    if (bridgeStatus.warnings && bridgeStatus.warnings.length) warnings.push(...bridgeStatus.warnings);
+    if (bridgeStatus.warnings && bridgeStatus.warnings.length)
+      warnings.push(...bridgeStatus.warnings);
 
     return {
       bridgeReady,

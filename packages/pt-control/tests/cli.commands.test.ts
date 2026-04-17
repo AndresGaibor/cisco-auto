@@ -54,22 +54,23 @@ describe("getHeartbeatHealth", () => {
   });
 
   it("getHeartbeatHealth and bridge status via controller (Phase 5)", async () => {
-    const hbPath = join(testDir, 'heartbeat.json');
+    const hbPath = join(testDir, "heartbeat.json");
     const now = Date.now();
-    const { writeFileSync } = require('node:fs');
-    writeFileSync(hbPath, JSON.stringify({ timestamp: now }), 'utf-8');
+    const { writeFileSync } = require("node:fs");
+    writeFileSync(hbPath, JSON.stringify({ timestamp: now }), "utf-8");
 
     await controller.start();
     try {
       const hb = controller.getHeartbeat();
       expect(hb).not.toBeNull();
       const hbHealth = controller.getHeartbeatHealth();
-      expect(hbHealth.state).toBe('ok');
+      expect(hbHealth.state).toBe("ok");
       const bridgeStatus = controller.getBridgeStatus();
-      expect(typeof bridgeStatus.ready).toBe('boolean');
+      expect(typeof bridgeStatus.ready).toBe("boolean");
+      expect("leaseValid" in bridgeStatus).toBe(false);
       const ctx = controller.getSystemContext();
-      expect(typeof ctx.bridgeReady).toBe('boolean');
-      expect(typeof ctx.deviceCount).toBe('number');
+      expect(typeof ctx.bridgeReady).toBe("boolean");
+      expect(typeof ctx.deviceCount).toBe("number");
     } finally {
       await controller.stop();
     }

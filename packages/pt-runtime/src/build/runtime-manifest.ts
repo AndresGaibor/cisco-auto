@@ -33,6 +33,18 @@ export const RUNTIME_MANIFEST = {
     // NOTE: runtime/index.ts excluded — only TS re-exports + has globalThis reference
   ],
 
+  domain: [
+    "domain/contracts.ts",
+    "domain/deferred-job-plan.ts",
+    "domain/runtime-result.ts",
+    "domain/link-types.ts",
+    "domain/port-owner-index.ts",
+    "domain/link-registry.ts",
+    "domain/pt-link-collector.ts",
+    "domain/link-merge.ts",
+    "domain/ios-plans.ts",
+  ],
+
   utils: [
     "utils/helpers.ts",
     "utils/constants.ts",
@@ -47,6 +59,8 @@ export const RUNTIME_MANIFEST = {
 
   handlers: [
     // Handler implementations
+    "handlers/device-crud.ts",
+    "handlers/device-discovery.ts",
     "handlers/device.ts",
     "handlers/link.ts",
     "handlers/inspect.ts",

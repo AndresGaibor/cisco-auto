@@ -19,7 +19,7 @@ export function inferModeFromPrompt(prompt: string): string {
   if (trimmed.endsWith("(config-router)#")) return "config-router";
   if (trimmed.endsWith("(config-subif)#")) return "config-subif";
   if (trimmed.endsWith("(config-vlan)#")) return "config-vlan";
-  if (trimmed.endsWith("#")) return "priv-exec";
+  if (trimmed.endsWith("#")) return "privileged-exec";
   if (trimmed.endsWith(">")) return "user-exec";
   return "unknown";
 }
@@ -48,5 +48,5 @@ export function isInConfigMode(mode: string): boolean {
 }
 
 export function isInPrivilegedMode(mode: string): boolean {
-  return mode === "priv-exec" || isInConfigMode(mode);
+  return mode === "privileged-exec" || isInConfigMode(mode);
 }

@@ -54,4 +54,16 @@ export class DeviceQueryService {
     if (!result.value) throw new Error(`Failed to inspect DHCP server on device '${device}'`);
     return result.value;
   }
+
+  async deepInspect(path: string, method?: string, args?: any[]): Promise<any> {
+    const result = await this.bridge.sendCommandAndWait("deepInspect", {
+      type: "deepInspect", // Garantizar el tipo dentro del objeto
+      id: this.generateId(),
+      path,
+      method,
+      args,
+    });
+    if (!result.ok) throw new Error(`Deep inspection failed: ${result.error}`);
+    return result.value;
+  }
 }

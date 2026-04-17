@@ -8,6 +8,8 @@
  * No imports/exports - all code is global scope compatible.
  */
 
+declare function print(msg: string): void;
+
 import { runtimeDispatcher } from "../handlers/runtime-handlers";
 import { initializeLogger, getLogger } from "./logger";
 import { getMetrics } from "./metrics";
@@ -39,22 +41,43 @@ function getPipeline(): MiddlewarePipeline {
 }
 
 function initializeRuntime(api: RuntimeApi): void {
-  if (_initialized) return;
-  _initialized = true;
+  if (!_initialized) {
+    _initialized = true;
 
-  initializeLogger({
-    level: "info",
-    transport: function (entry) {
-      if (api.dprint) {
-        api.dprint(JSON.stringify(entry));
+    var transportRobusto = function (entry: any) {
+      try {
+        if (api.dprint) {
+          api.dprint(JSON.stringify(entry));
+        } else {
+          var fallbackMsg = "[LOG FALLBACK] " + JSON.stringify(entry);
+          if (
+            typeof globalThis !== "undefined" &&
+            (globalThis as any).ipc &&
+            (globalThis as any).ipc.appWindow &&
+            (globalThis as any).ipc.appWindow().writeToPT
+          ) {
+            (globalThis as any).ipc.appWindow().writeToPT(fallbackMsg + "\n");
+          } else if (typeof print === "function") {
+            print(fallbackMsg);
+          } else {
+            console.error(fallbackMsg);
+          }
+        }
+      } catch (e) {
+        console.error("[LOG TRANSPORT ERROR]", JSON.stringify(entry), "Error:", e);
       }
-    },
-  });
+    };
 
-  getLogger("runtime").info("PT Runtime initialized", {
-    version: "1.0.0",
-    timestamp: new Date().toISOString(),
-  });
+    initializeLogger({
+      level: "info",
+      transport: transportRobusto,
+    });
+
+    getLogger("runtime").info("PT Runtime initialized", {
+      version: "1.0.0",
+      timestamp: new Date().toISOString(),
+    });
+  }
 }
 
 /**
@@ -72,15 +95,45 @@ function runtime(payload: Record<string, unknown>, api: RuntimeApi): RuntimeResu
 
   try {
     if (payload.type === "__pollDeferred") {
-      return handlePollDeferred(payload, api);
+      var pollLog = log.withCommand("__pollDeferred");
+      pollLog.debug("Runtime entrada __pollDeferred", {
+        ticket: payload.ticket,
+      });
+
+      var pollResult = handlePollDeferred(payload, api);
+
+      pollLog.debug("Runtime resultado __pollDeferred", {
+        done: (pollResult as any).done,
+        ok: (pollResult as any).ok,
+        error: (pollResult as any).error,
+      });
+
+      return pollResult;
     }
 
     if (payload.type === "__hasPendingDeferred") {
-      return handleHasPendingDeferred(api) as unknown as RuntimeResult;
+      var hasPendingLog = log.withCommand("__hasPendingDeferred");
+      hasPendingLog.debug("Runtime entrada __hasPendingDeferred", {});
+
+      var hasPendingResult = handleHasPendingDeferred(api);
+
+      hasPendingLog.debug("Runtime resultado __hasPendingDeferred", {
+        pending: hasPendingResult.pending,
+      });
+
+      return hasPendingResult as unknown as RuntimeResult;
     }
 
+    var commandType = String(payload.type || "unknown");
+    var payloadKeys = Object.keys(payload);
+
+    log.debug("Runtime entrada", {
+      commandType: commandType,
+      payloadKeys: payloadKeys,
+    });
+
     var ctx: MiddlewareContext = {
-      type: payload.type || "unknown",
+      type: commandType,
       payload: payload,
       mutablePayload: Object.assign({}, payload),
       api: api,
@@ -89,6 +142,9 @@ function runtime(payload: Record<string, unknown>, api: RuntimeApi): RuntimeResu
     };
 
     var pipeline = getPipeline();
+
+    log.debug("Runtime dispatch", { commandType: commandType });
+
     var result = runtimeDispatcher(ctx.mutablePayload, api);
 
     var r = result as RuntimeDeferredResult;
@@ -100,15 +156,29 @@ function runtime(payload: Record<string, unknown>, api: RuntimeApi): RuntimeResu
       }
     }
 
+    var rAny = r as any;
+    log.debug("Runtime resultado", {
+      commandType: commandType,
+      ok: rAny.ok,
+      deferred: rAny.deferred,
+      ticket: rAny.ticket,
+      error: rAny.error,
+    });
+
     return result;
   } catch (error) {
-    var message = error instanceof Error ? error.message : String(error);
-    log.error("Runtime fatal error", { error: message });
+    var errMsg = error instanceof Error ? error.message : String(error);
+    var errStack = error instanceof Error ? error.stack : undefined;
+    log.error("Runtime fatal error", {
+      error: errMsg,
+      stack: errStack,
+      payloadType: payload.type,
+    });
     metrics.increment("runtime.fatal_error");
 
     return {
       ok: false,
-      error: "Runtime error: " + message,
+      error: "Runtime error: " + errMsg,
     };
   }
 }
@@ -155,6 +225,14 @@ function handleHasPendingDeferred(api: RuntimeApi): { pending: boolean } {
   return { pending: hasPending };
 }
 
+declare var self: any;
+
 // Export for global scope
-(globalThis as any).runtime = runtime;
+var _global =
+  typeof self !== "undefined"
+    ? self
+    : typeof this !== "undefined"
+      ? this
+      : Function("return this")();
+(_global as any).runtime = runtime;
 export { runtime };

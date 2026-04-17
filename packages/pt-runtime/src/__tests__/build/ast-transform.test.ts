@@ -14,7 +14,7 @@ describe("transformToPtSafeAst", () => {
       `],
     ]);
 
-    const result = transformToPtSafeAst(sourceFiles);
+    const result = transformToPtSafeAst(sourceFiles, { treeShake: false });
 
     expect(result.validation.valid).toBe(true);
     expect(result.code).not.toContain("import type");

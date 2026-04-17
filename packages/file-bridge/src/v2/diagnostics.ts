@@ -70,7 +70,8 @@ export class BridgeDiagnostics {
     if (inFlight > 10) issues.push(`${inFlight} commands stuck in-flight`);
     if (pendingCommands > 100) issues.push(`Command queue backing up: ${pendingCommands} pending`);
     for (const c of consumers) {
-      if (c.lagEvents > 1000) issues.push(`Consumer ${c.consumerId} lagging by ${c.lagEvents} events`);
+      if (c.lagEvents > 1000)
+        issues.push(`Consumer ${c.consumerId} lagging by ${c.lagEvents} events`);
     }
 
     let currentFileSize = 0;
@@ -100,7 +101,7 @@ export class BridgeDiagnostics {
 
   private countFilesInDir(dir: string): number {
     try {
-      return readdirSync(dir).filter((f) => f.endsWith(".json")).length;
+      return readdirSync(dir).filter((f) => f.endsWith(".json") && f !== "_queue.json").length;
     } catch {
       return 0;
     }
@@ -108,9 +109,9 @@ export class BridgeDiagnostics {
 
   private countRotatedLogs(): number {
     try {
-      return readdirSync(this.paths.logsDir())
-        .filter((f) => f.startsWith("events.") && f.endsWith(".ndjson"))
-        .length;
+      return readdirSync(this.paths.logsDir()).filter(
+        (f) => f.startsWith("events.") && f.endsWith(".ndjson"),
+      ).length;
     } catch {
       return 0;
     }
@@ -119,12 +120,11 @@ export class BridgeDiagnostics {
   private getConsumerLag(): BridgeHealth["consumers"] {
     const consumers: BridgeHealth["consumers"] = [];
     try {
-      const consumerFiles = readdirSync(this.paths.consumerStateDir())
-        .filter((f) => f.endsWith(".json"));
+      const consumerFiles = readdirSync(this.paths.consumerStateDir()).filter((f) =>
+        f.endsWith(".json"),
+      );
       for (const cf of consumerFiles) {
-        const cp = JSON.parse(
-          readFileSync(join(this.paths.consumerStateDir(), cf), "utf8")
-        );
+        const cp = JSON.parse(readFileSync(join(this.paths.consumerStateDir(), cf), "utf8"));
         const seqStore = this.seq.peek();
         consumers.push({
           consumerId: cf.replace(".json", ""),
@@ -141,12 +141,11 @@ export class BridgeDiagnostics {
 
   isLogNeededByAnyConsumer(logFile: string): boolean {
     try {
-      const consumerFiles = readdirSync(this.paths.consumerStateDir())
-        .filter((f) => f.endsWith(".json"));
+      const consumerFiles = readdirSync(this.paths.consumerStateDir()).filter((f) =>
+        f.endsWith(".json"),
+      );
       for (const cf of consumerFiles) {
-        const cp = JSON.parse(
-          readFileSync(join(this.paths.consumerStateDir(), cf), "utf8")
-        );
+        const cp = JSON.parse(readFileSync(join(this.paths.consumerStateDir(), cf), "utf8"));
         if (cp.currentFile === logFile) return true;
       }
     } catch {

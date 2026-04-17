@@ -9,6 +9,7 @@
 // - Must use dprint() as transport in QtScript, console.error in Node.js
 
 declare function dprint(msg: string): void;
+declare function print(msg: string): void;
 
 export type LogLevel = "debug" | "info" | "warn" | "error" | "silent";
 
@@ -32,18 +33,35 @@ export interface PtLoggerConfig {
   maxDataSize: number;
 }
 
+function createFallbackTransport(): (entry: LogEntry) => void {
+  return function (entry: LogEntry) {
+    var msg = "[LOG FALLBACK] " + JSON.stringify(entry);
+    try {
+      if (typeof dprint === "function") {
+        dprint(msg);
+      } else if (
+        typeof globalThis !== "undefined" &&
+        (globalThis as any).ipc &&
+        (globalThis as any).ipc.appWindow &&
+        (globalThis as any).ipc.appWindow().writeToPT
+      ) {
+        (globalThis as any).ipc.appWindow().writeToPT(msg + "\n");
+      } else if (typeof print === "function") {
+        print(msg);
+      } else {
+        console.error(msg);
+      }
+    } catch (e) {
+      console.error("[LOG FALLBACK ERROR]", msg, "Transport error:", e);
+    }
+  };
+}
+
 var DEFAULT_CONFIG: PtLoggerConfig = {
   level: "info",
   includeData: true,
   enableTracing: true,
-  transport:
-    typeof dprint === "function"
-      ? function (entry: LogEntry) {
-          dprint(JSON.stringify(entry));
-        }
-      : function (entry: LogEntry) {
-          console.error(JSON.stringify(entry));
-        },
+  transport: createFallbackTransport(),
   maxDataSize: 2048,
 };
 
@@ -131,7 +149,11 @@ export class PtLogger {
       }
     }
 
-    this.config.transport(entry);
+    try {
+      this.config.transport(entry);
+    } catch (e) {
+      console.error("[LOG TRANSPORT ERROR]", JSON.stringify(entry), "Error:", e);
+    }
   }
 
   private getTimestamp(): string {
