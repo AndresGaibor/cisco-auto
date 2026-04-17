@@ -144,7 +144,7 @@ export function handleDeferredPoll(pollPayload: PollDeferredPayload, api: PtRunt
   return result;
 }
 
-export function handlePing(api: PtRuntimeApi): PtResult {
+export function handlePing(_payload: Record<string, unknown>, api: PtRuntimeApi): PtResult {
   return createSuccessResult({ status: "alive", timestamp: api.now() });
 }
 

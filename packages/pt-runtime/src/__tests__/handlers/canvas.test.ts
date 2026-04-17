@@ -5,9 +5,11 @@ import type { HandlerDeps } from "../../utils/helpers";
 function createDeps(lw: any, net: any): HandlerDeps {
   return {
     ipc: {} as never,
+    privileged: null,
+    global: null,
     getLW: () => lw,
     getNet: () => net,
-    getFM: () => ({} as never),
+    getFM: () => ({}) as never,
     dprint: () => {},
     DEV_DIR: "/tmp",
     getDeviceByName: () => null,
@@ -52,7 +54,10 @@ describe("Canvas handlers", () => {
   test("handleDevicesInRect returns empty when no devicesAt", () => {
     const lw = { getRectItemData: () => ({ x: 0, y: 0, width: 100, height: 100 }) };
     const net = { getDeviceCount: () => 0 };
-    const result = handleDevicesInRect({ type: "devicesInRect", rectId: "rect1" }, createDeps(lw, net));
+    const result = handleDevicesInRect(
+      { type: "devicesInRect", rectId: "rect1" },
+      createDeps(lw, net),
+    );
     expect(result.ok).toBe(true);
     expect((result as any).devices).toEqual([]);
     expect((result as any).count).toBe(0);

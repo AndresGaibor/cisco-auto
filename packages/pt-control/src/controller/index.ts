@@ -6,7 +6,6 @@ import { resolve } from "node:path";
 import type {
   PTEvent,
   PTEventType,
-  PTEventTypeMap,
   TopologySnapshot,
   DeviceState,
   LinkState,
@@ -26,6 +25,7 @@ import type {
   IosExecutionSuccess,
   IosConfigApplyResult,
   IosConfidence,
+  IosExecutionEvidence,
 } from "../contracts/ios-execution-evidence.js";
 import type { DeviceCapabilities } from "../domain/ios/capabilities/pt-capability-resolver.js";
 import { TopologyService } from "../application/services/topology-service.js";
@@ -95,10 +95,10 @@ export class PTController {
 
     this.iosService = new IosService(this.bridge, generateId, (d) => this.deviceService.inspect(d));
 
-    this.controllerIosService = new ControllerIosService(this.iosService, this.deviceService);
     this.bridgeService = new BridgeService(this.bridge, this.topologyCache);
-    this.canvasFacade = new ControllerCanvasService(this.canvasService);
+    this.controllerIosService = new ControllerIosService(this.iosService, this.deviceService);
     this.topologyFacade = new ControllerTopologyService(this.topologyService, this.deviceService);
+    this.canvasFacade = new ControllerCanvasService(this.canvasService);
   }
 
   async start(): Promise<void> {
@@ -210,7 +210,7 @@ export class PTController {
   }
 
   async configIos(device: string, commands: string[], options?: { save?: boolean }): Promise<void> {
-    await this.controllerIosService.configIos(device, commands, options);
+    await this.iosService.configIos(device, commands, options).then(() => undefined);
   }
 
   async execIos<T = ParsedOutput>(
@@ -219,35 +219,35 @@ export class PTController {
     parse = true,
     timeout = 5000,
   ): Promise<{ raw: string; parsed?: T }> {
-    return this.controllerIosService.execIos<T>(device, command, parse, timeout);
+    return this.iosService.execIos<T>(device, command, parse, timeout);
   }
 
   async show(device: string, command: string): Promise<ParsedOutput> {
-    return this.controllerIosService.show(device, command);
+    return this.iosService.show(device, command);
   }
 
   async showIpInterfaceBrief(device: string): Promise<ShowIpInterfaceBrief> {
-    return this.controllerIosService.showIpInterfaceBrief(device);
+    return this.iosService.showIpInterfaceBrief(device);
   }
 
   async showVlan(device: string): Promise<ShowVlan> {
-    return this.controllerIosService.showVlan(device);
+    return this.iosService.showVlan(device);
   }
 
   async showIpRoute(device: string): Promise<ShowIpRoute> {
-    return this.controllerIosService.showIpRoute(device);
+    return this.iosService.showIpRoute(device);
   }
 
   async showRunningConfig(device: string): Promise<ShowRunningConfig> {
-    return this.controllerIosService.showRunningConfig(device);
+    return this.iosService.showRunningConfig(device);
   }
 
   async showMacAddressTable(device: string): Promise<ShowMacAddressTable> {
-    return this.controllerIosService.showMacAddressTable(device);
+    return this.iosService.show(device, "show mac address-table") as Promise<ShowMacAddressTable>;
   }
 
   async showCdpNeighbors(device: string): Promise<ShowCdpNeighbors> {
-    return this.controllerIosService.showCdpNeighbors(device);
+    return this.iosService.showCdpNeighbors(device);
   }
 
   async execInteractive(
@@ -259,7 +259,7 @@ export class PTController {
       ensurePrivileged?: boolean;
     },
   ): Promise<{ raw: string; parsed?: ParsedOutput; session?: { mode: string } }> {
-    return this.controllerIosService.execInteractive(device, command, options);
+    return this.iosService.execInteractive(device, command, options);
   }
 
   async execIosWithEvidence<T = ParsedOutput>(
@@ -268,7 +268,7 @@ export class PTController {
     parse = true,
     timeout = 5000,
   ): Promise<IosExecutionSuccess<T>> {
-    return this.controllerIosService.execIosWithEvidence<T>(device, command, parse, timeout);
+    return this.iosService.execIos<T>(device, command, parse, timeout);
   }
 
   async configIosWithResult(
@@ -276,7 +276,7 @@ export class PTController {
     commands: string[],
     options?: { save?: boolean } | undefined,
   ): Promise<IosConfigApplyResult> {
-    return this.controllerIosService.configIosWithResult(device, commands, options);
+    return this.iosService.configIos(device, commands, options);
   }
 
   async configureDhcpServer(
@@ -292,7 +292,7 @@ export class PTController {
       domainName?: string;
     },
   ): Promise<void> {
-    await this.controllerIosService.configureDhcpServer(device, options);
+    return this.controllerIosService.configureDhcpServer(device, options);
   }
 
   async inspectDhcpServer(device: string): Promise<{
@@ -319,7 +319,7 @@ export class PTController {
     command: string,
     options?: { ensurePrivileged?: boolean; timeout?: number },
   ): Promise<IosExecutionSuccess<T>> {
-    return this.controllerIosService.showParsed<T>(device, command, options);
+    return this.iosService.showParsed<T>(device, command, options);
   }
 
   async getIosConfidence(
@@ -327,7 +327,11 @@ export class PTController {
     evidence: { source: string; status?: number; mode?: string },
     verificationCheck?: string,
   ): Promise<IosConfidence> {
-    return this.controllerIosService.getIosConfidence(device, evidence, verificationCheck);
+    return this.iosService.getConfidence(
+      device,
+      evidence as IosExecutionEvidence,
+      verificationCheck,
+    );
   }
 
   async configureDhcpPool(
@@ -339,7 +343,7 @@ export class PTController {
     dnsServer?: string,
     options?: { save?: boolean },
   ): Promise<void> {
-    await this.controllerIosService.configureDhcpPool(
+    await this.iosService.configureDhcpPool(
       device,
       poolName,
       network,
@@ -358,14 +362,7 @@ export class PTController {
     area: number,
     options?: { save?: boolean },
   ): Promise<void> {
-    await this.controllerIosService.configureOspfNetwork(
-      device,
-      processId,
-      network,
-      wildcard,
-      area,
-      options,
-    );
+    await this.iosService.configureOspfNetwork(device, processId, network, wildcard, area, options);
   }
 
   async configureSshAccess(
@@ -375,13 +372,7 @@ export class PTController {
     password: string,
     options?: { save?: boolean },
   ): Promise<void> {
-    await this.controllerIosService.configureSshAccess(
-      device,
-      domainName,
-      username,
-      password,
-      options,
-    );
+    await this.iosService.configureSshAccess(device, domainName, username, password, options);
   }
 
   async configureAccessListStandard(
@@ -390,16 +381,11 @@ export class PTController {
     entries: string[],
     options?: { save?: boolean },
   ): Promise<void> {
-    await this.controllerIosService.configureAccessListStandard(
-      device,
-      aclNumber,
-      entries,
-      options,
-    );
+    await this.iosService.configureAccessListStandard(device, aclNumber, entries, options);
   }
 
   async resolveCapabilities(device: string): Promise<DeviceCapabilities> {
-    return this.controllerIosService.resolveCapabilities(device);
+    return this.iosService.resolveCapabilities(device);
   }
 
   async listCanvasRects(): Promise<{ rects: string[]; count: number }> {
@@ -419,23 +405,32 @@ export class PTController {
   }
 
   async inspect(device: string, includeXml = false): Promise<DeviceState> {
-    return this.controllerIosService.inspect(device, includeXml);
+    return this.deviceService.inspect(device, includeXml);
   }
 
   async hardwareInfo(device: string): Promise<unknown> {
-    return this.controllerIosService.hardwareInfo(device);
+    return this.deviceService.hardwareInfo(device);
   }
 
   async hardwareCatalog(deviceType?: string): Promise<unknown> {
-    return this.controllerIosService.hardwareCatalog(deviceType);
+    return this.deviceService.hardwareCatalog(deviceType);
   }
 
   async commandLog(device?: string, limit = 100): Promise<unknown[]> {
-    return this.controllerIosService.commandLog(device, limit);
+    return this.deviceService.commandLog(device, limit);
   }
 
   async deepInspect(path: string, method?: string, args?: any[]): Promise<any> {
-    return this.controllerIosService.deepInspect(path, method, args);
+    return this.deviceService.deepInspect(path, method, args);
+  }
+
+  /**
+   * Generic payload sender (Bypass/Hacker mode)
+   */
+  async send(type: string, payload: Record<string, any>): Promise<any> {
+    const result = await (this.bridge as any).sendCommandAndWait(type, payload);
+    if (!result.ok) throw result.error || result;
+    return result.value;
   }
 
   on<E extends PTEventType>(eventType: E, handler: (event: PTEvent) => void): this {
@@ -486,7 +481,6 @@ export class PTController {
     return this.contextService.getHealthSummary();
   }
 
-  // --- Bridge/Context helpers (Phase 5 additions)
   getHeartbeat<T = unknown>(): T | null {
     return this.contextService.getHeartbeat<T>();
   }
@@ -508,10 +502,6 @@ export class PTController {
     return this.contextService.getBridgeStatus();
   }
 
-  /**
-   * getSystemContext(): aggregated system context meant to be the single source of truth
-   * for CLI commands like `status` and `doctor`.
-   */
   getSystemContext(): {
     bridgeReady: boolean;
     topologyMaterialized: boolean;

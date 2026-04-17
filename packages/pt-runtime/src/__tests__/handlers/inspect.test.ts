@@ -5,9 +5,11 @@ import type { HandlerDeps } from "../../utils/helpers";
 function createDeps(net: any): HandlerDeps {
   return {
     ipc: {} as never,
-    getLW: () => ({} as never),
+    privileged: null,
+    global: null,
+    getLW: () => ({}) as never,
     getNet: () => net,
-    getFM: () => ({} as never),
+    getFM: () => ({}) as never,
     dprint: () => {},
     DEV_DIR: "/tmp",
     getDeviceByName: () => null,

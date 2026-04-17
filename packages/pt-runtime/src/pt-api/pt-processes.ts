@@ -3,7 +3,7 @@
 // Fuente única de verdad para nombres e interfaces de procesos PT
 // ============================================================================
 
-import type { PTDevice, PTPort } from "./pt-api-registry.js";
+import type { PTDevice, PTPort, PTIpcBase } from "./pt-api-registry.js";
 
 // ============================================================================
 // Nombres de Procesos - Catálogo de nombres válidos por categoría
@@ -104,10 +104,8 @@ export interface PTVlanManager {
   getVlanInt(vlanId: number): PTPort | null;
 }
 
-export interface PTHostPort extends PTPort {
-  isDhcpClientOn(): boolean;
-  setDhcpClientFlag(enabled: boolean): void;
-}
+// PTHostPort is defined in pt-api-registry.ts (line 854)
+// Avoid duplicate here - it's the same interface
 
 export interface PTDeviceWithProcesses extends PTDevice {
   getProcess<T = unknown>(name: string): T | null;
@@ -125,7 +123,15 @@ export interface PTDnsServerProcess extends PTIpcBase {
   addARecordToNameServerDb(domain: string, ip: string): void;
   addCNAMEToNameServerDb(alias: string, domain: string): void;
   addNSRecordToNameServerDb(domain: string, server: string): void;
-  addSOAToNameServerDb(domain: string, mailbox: string, serial: number, refresh: number, retry: number, expire: number, minimum: number): void;
+  addSOAToNameServerDb(
+    domain: string,
+    mailbox: string,
+    serial: number,
+    refresh: number,
+    retry: number,
+    expire: number,
+    minimum: number,
+  ): void;
   removeARecordFromNameServerDb(domain: string): void;
   getEntryCount(): number;
   getEntryAt(index: number): any;

@@ -55,9 +55,10 @@ import type {
   PTDhcpPoolProcess,
   PTDhcpLease,
   PTVlanManager,
-  PTHostPort,
   PTDeviceWithProcesses,
 } from "../pt-api/pt-processes.js";
+
+import type { PTHostPort } from "../pt-api/pt-api-registry.js";
 
 export type {
   PTDhcpServerMainProcess,

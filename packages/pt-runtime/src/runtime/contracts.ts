@@ -118,7 +118,10 @@ export interface RuntimeApi {
   dprint(msg: string): void;
 
   /** IPC reference */
-  ipc: unknown;
+  ipc: any;
+
+  /** Privileged access to _ScriptModule (bypasses IPC security) */
+  privileged: any;
 
   /** Create a deferred job and start execution */
   createJob(plan: DeferredJobPlan): string;

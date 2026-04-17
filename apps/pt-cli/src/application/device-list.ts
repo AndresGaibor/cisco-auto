@@ -6,8 +6,9 @@
  * NO llama al bridge directamente.
  */
 
-import { createDefaultPTController, type PTController } from "@cisco-auto/pt-control";
+import type { PTController } from "@cisco-auto/pt-control";
 import type { DeviceListResult as ControllerDeviceListResult } from "@cisco-auto/pt-control";
+import { createDefaultPTController } from "./controller-provider.js";
 
 const DEBUG = process.env.PT_DEBUG === "1";
 
@@ -326,7 +327,9 @@ export async function loadLiveDeviceListFromController(
       };
     }
 
-    throw new Error("Packet Tracer no respondió. Verifica que esté abierto y el script cargado.");
+    throw new Error(
+      "Packet Tracer no respondió. Verifica que esté abierto y el runtime generado esté cargado.",
+    );
   }
 
   const mapped = mapControllerResult(result);
@@ -363,7 +366,9 @@ export async function loadLiveDeviceList(
     return await loadLiveDeviceListFromController(controller, type, 15000, options);
   } catch (err) {
     if (err instanceof Error && err.message.includes("no respondió a tiempo")) {
-      throw new Error("Packet Tracer no respondió. Verifica que esté abierto y el script cargado.");
+      throw new Error(
+        "Packet Tracer no respondió. Verifica que esté abierto y el runtime generado esté cargado.",
+      );
     }
     throw err;
   } finally {

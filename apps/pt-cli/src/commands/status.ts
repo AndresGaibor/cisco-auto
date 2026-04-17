@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 import { Command } from "commander";
-import { createDefaultPTController } from "@cisco-auto/pt-control";
 import { loadContextStatus, collectContextStatus } from "../application/context-supervisor.js";
 import { getGlobalFlags } from "../flags.js";
 import type { ContextStatus } from "../contracts/context-status.js";
@@ -8,6 +7,7 @@ import { historyStore } from "../telemetry/history-store.js";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { getDefaultDevDir } from "../system/paths.js";
+import { createDefaultPTController } from "../application/controller-provider.js";
 
 export function createStatusCommand(): Command {
   return new Command("status")

@@ -32,6 +32,7 @@ import { handleAddLink, handleRemoveLink } from "./link.js";
 import { handleListCanvasRects, handleGetRect, handleDevicesInRect } from "./canvas.js";
 import { handleAddModule, handleRemoveModule } from "./module/index.js";
 import { handleDeepInspect, type DeepInspectPayload } from "./deep-inspect.js";
+import { handleEvaluate, type EvaluatePayload } from "./evaluate.js";
 import {
   handleInspect,
   handleSnapshot,
@@ -143,6 +144,7 @@ registerHandler("hardwareInfo", handleHardwareInfo as unknown as HandlerFn);
 registerHandler("hardwareCatalog", handleHardwareCatalog as unknown as HandlerFn);
 registerHandler("commandLog", handleCommandLog as unknown as HandlerFn);
 registerHandler("deepInspect", handleDeepInspect as unknown as HandlerFn);
+registerHandler("__evaluate", handleEvaluate as unknown as HandlerFn);
 
 // ============================================================================
 // Barrel Exports - Re-exportar funciones del dispatcher

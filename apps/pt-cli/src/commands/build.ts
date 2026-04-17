@@ -59,8 +59,5 @@ export function createBuildCommand(): Command {
         console.log("\n❌ Build failed");
         process.exit(ExitCodes.ERROR);
       }
-
-      console.log("\n✅ Build completado. Archivos deployados a ~/pt-dev/");
-      console.log("💡 Ahora carga ~/pt-dev/main.js en Packet Tracer");
     });
 }

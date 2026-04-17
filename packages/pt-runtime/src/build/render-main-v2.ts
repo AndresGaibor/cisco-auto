@@ -15,7 +15,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { transformToPtSafeAst } from "./ast-transform.js";
 import { formatValidationResult } from "./validate-pt-safe.js";
-import { getAllMainFiles } from "./main-manifest.js";
+import { getAllMainFiles, validateMainManifestDependencies } from "./main-manifest.js";
 
 export interface RenderMainV2Options {
   srcDir: string;
@@ -33,6 +33,15 @@ export function renderMainV2(options: RenderMainV2Options): string {
     if (fs.existsSync(filePath)) {
       sourceFiles.set(relPath, fs.readFileSync(filePath, "utf-8"));
     }
+  }
+
+  const missingDependencies = validateMainManifestDependencies(sourceFiles);
+  if (missingDependencies.length > 0) {
+    throw new Error(
+      "main.js manifest missing transitive dependencies:\n" +
+        missingDependencies.map((file) => `  - ${file}`).join("\n") +
+        "\nAdd them to MAIN_MANIFEST before building.",
+    );
   }
 
   const { code, validation } = transformToPtSafeAst(sourceFiles, {
@@ -53,7 +62,11 @@ export function renderMainV2(options: RenderMainV2Options): string {
     throw new Error(`main.js generation failed PT-safe validation (${validation.errors.length} error(s))`);
   }
 
-  if (validation.warnings.length > 0) {
+  const showWarnings = typeof Bun !== "undefined"
+    ? Bun.env.PT_SHOW_VALIDATION_WARNINGS === "1" || Bun.env.PT_DEBUG === "1"
+    : false;
+
+  if (showWarnings && validation.warnings.length > 0) {
     console.warn(`[render-main-v2] ${validation.warnings.length} warning(s):`);
     for (const w of validation.warnings) {
       console.warn(`  ${w.line}:${w.column}: ${w.message}`);

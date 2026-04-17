@@ -55,7 +55,10 @@ export function createInspectApiCommand(): Command {
         console.log(chalk.cyan('─'.repeat(60)));
         console.log();
       } catch (error: any) {
-        console.error(chalk.red(`\n❌ Error de inspección: ${error.message}`));
+        const errorMsg = error.message && typeof error.message === 'object' 
+          ? JSON.stringify(error.message, null, 2)
+          : error.message;
+        console.error(chalk.red(`\n❌ Error de inspección: ${errorMsg || error}`));
       } finally {
         await controller.stop();
       }

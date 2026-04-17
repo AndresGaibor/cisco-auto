@@ -5,6 +5,7 @@ import { createInspectNeighborsCommand } from './neighbors.js';
 import { createInspectFreePortsCommand } from './free-ports.js';
 import { createInspectDriftCommand } from './drift.js';
 import { createInspectApiCommand } from './api.js';
+import { createEvaluateCommand } from './eval.js';
 
 export function createInspectCommand(): Command {
   const command = new Command('inspect')
@@ -15,6 +16,7 @@ export function createInspectCommand(): Command {
   command.addCommand(createInspectFreePortsCommand());
   command.addCommand(createInspectDriftCommand());
   command.addCommand(createInspectApiCommand());
+  command.addCommand(createEvaluateCommand());
 
   return command;
 }

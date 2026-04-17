@@ -12,6 +12,8 @@ import type { RuntimeApi, DeviceRef, SessionStateSnapshot } from "../runtime/con
 
 export interface PtDeps {
   readonly ipc: PTIpc;
+  readonly privileged: any;
+  readonly global: any;
   getLW(): PTLogicalWorkspace;
   getNet(): PTNetwork;
   getFM(): PTFileManager;
@@ -57,6 +59,8 @@ export interface PtRuntimeApi extends RuntimeApi {
 export function createPtDepsFromGlobals(scope: PTGlobalScope): PtDeps {
   return {
     ipc: scope.ipc,
+    privileged: (scope as any)._ScriptModule || null,
+    global: scope,
     getLW: () => scope.ipc.appWindow().getActiveWorkspace().getLogicalWorkspace(),
     getNet: () => scope.ipc.network(),
     getFM: () => scope.ipc.systemFileManager(),

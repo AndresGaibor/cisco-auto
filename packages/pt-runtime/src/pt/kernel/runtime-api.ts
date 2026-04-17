@@ -15,6 +15,7 @@ export function createRuntimeApi(subsystems: KernelSubsystems): RuntimeApi {
 
   return {
     ipc: ipc as any,
+    privileged: scope._ScriptModule || null,
     getDeviceByName: function (name: string): DeviceRef | null {
       const dev = net && net.getDevice ? net.getDevice(name) : null;
       if (!dev) return null;

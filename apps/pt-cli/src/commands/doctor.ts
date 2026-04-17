@@ -64,7 +64,7 @@ export function createDoctorCommand(): Command {
             result.advice = [
               'Ejecuta "pt build" para desplegar archivos a ~/pt-dev/',
               "Asegúrate de que Packet Tracer esté ejecutándose",
-              "Carga ~/pt-dev/main.js en Packet Tracer",
+              "Verifica que el script generado esté cargado en Packet Tracer",
               'Revisa "pt logs errors" para errores recientes',
             ];
           }

@@ -10,9 +10,11 @@ function createDeps(mainProcess: any): PtDeps {
 
   return {
     ipc: {} as never,
-    getLW: () => ({} as never),
-    getNet: () => ({ getDevice: () => device } as never),
-    getFM: () => ({} as never),
+    privileged: null,
+    global: null,
+    getLW: () => ({}) as never,
+    getNet: () => ({ getDevice: () => device }) as never,
+    getFM: () => ({}) as never,
     dprint: () => {},
     DEV_DIR: "/tmp",
     getDeviceByName: () => device,
@@ -36,7 +38,9 @@ describe("DHCP handlers", () => {
     };
 
     const server = {
-      setEnable: (enabled: boolean) => { if (!enabled) throw new Error("disabled"); },
+      setEnable: (enabled: boolean) => {
+        if (!enabled) throw new Error("disabled");
+      },
       addPool: () => true,
       getPoolByName: () => pool,
       getPoolCount: () => 1,
@@ -48,7 +52,10 @@ describe("DHCP handlers", () => {
       addExcludedAddress: () => {},
     };
 
-    const result = handleConfigDhcpServer({ type: "configDhcpServer", device: "R1", enabled: true, pools: [{ name: "POOL1" }] }, createDeps(server));
+    const result = handleConfigDhcpServer(
+      { type: "configDhcpServer", device: "R1", enabled: true, pools: [{ name: "POOL1" }] },
+      createDeps(server),
+    );
     expect(result.ok).toBe(true);
     expect((result as any).enabled).toBe(true);
   });
@@ -80,7 +87,10 @@ describe("DHCP handlers", () => {
       addExcludedAddress: () => {},
     };
 
-    const result = handleInspectDhcpServer({ type: "inspectDhcpServer", device: "R1" }, createDeps(server));
+    const result = handleInspectDhcpServer(
+      { type: "inspectDhcpServer", device: "R1" },
+      createDeps(server),
+    );
     expect(result.ok).toBe(true);
     expect((result as any).pools[0].name).toBe("POOL1");
   });

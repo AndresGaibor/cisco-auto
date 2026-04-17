@@ -6,7 +6,6 @@ import { getContextualSuggestions } from "./contextual-suggestions.js";
  */
 
 import { randomUUID } from "node:crypto";
-import { createDefaultPTController } from "@cisco-auto/pt-control";
 import type { PTController } from "@cisco-auto/pt-control";
 
 import type { CliResult } from "../contracts/cli-result.js";
@@ -23,6 +22,7 @@ import type { CommandRuntimeContext } from "./context-inspector.js";
 import { inspectCommandContext } from "./context-inspector.js";
 import { buildContextWarnings } from "./context-advice.js";
 import { collectContextStatus, writeContextStatus } from "./context-supervisor.js";
+import { createDefaultPTController } from "./controller-provider.js";
 
 export interface CommandContext {
   sessionId: string;

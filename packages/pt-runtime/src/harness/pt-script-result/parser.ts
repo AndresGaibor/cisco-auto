@@ -122,20 +122,26 @@ export function getDeviceMethods(dump: PTDump, model: string): string[] {
 export function parseDumpFromMdFiles(dirPath: string): PTDump {
   const fs = require("fs");
   const path = require("path");
-  
+
   const dump: PTDump = {
-    meta: { generatedAt: "", platform: "Packet Tracer", source: "MD Files", seedDevicesCreated: 0, seedDevices: [] },
+    meta: {
+      generatedAt: "",
+      platform: "Packet Tracer",
+      source: "MD Files",
+      seedDevicesCreated: 0,
+      seedDevices: [],
+    },
     globals: [],
     surfaces: [],
     devices: [],
     summary: { globalsFound: 0, devicesFound: 0, objectsInspected: 0, errorsFound: 0 },
-    errors: []
+    errors: [],
   };
 
   if (!fs.existsSync(dirPath)) return dump;
 
   const files = fs.readdirSync(dirPath);
-  
+
   // Basic reconstruction logic for testing purposes
   files.forEach((file: string) => {
     const content = fs.readFileSync(path.join(dirPath, file), "utf8");
@@ -143,12 +149,20 @@ export function parseDumpFromMdFiles(dirPath: string): PTDump {
       const className = file.replace("class_", "").replace(".md", "");
       const methods: any[] = [];
       const lines = content.split("\n");
-      lines.forEach(line => {
+      lines.forEach((line: string) => {
         const match = line.match(/^\| `([^`]+)` \|/);
         if (match) methods.push({ name: match[1], arity: 0 });
       });
       dump.surfaces.push({ className, methods, properties: [] });
-      dump.devices.push({ name: className, model: "Generic", className, methods, typeId: 0, label: "", ports: [] } as any);
+      dump.devices.push({
+        name: className,
+        model: "Generic",
+        className,
+        methods,
+        typeId: 0,
+        label: "",
+        ports: [],
+      } as any);
     } else if (file.startsWith("global_")) {
       const name = file.replace("global_", "").replace(".md", "");
       dump.globals.push(name);
@@ -156,12 +170,12 @@ export function parseDumpFromMdFiles(dirPath: string): PTDump {
   });
 
   // Mock some seed devices if Router exists to satisfy mapping tests
-  if (dump.surfaces.find(s => s.className === "Router")) {
+  if (dump.surfaces.find((s) => s.className === "Router")) {
     dump.meta.seedDevices.push(
       { name: "Router2", typeId: 0, model: "2911", label: "Router-2911" },
       { name: "Switch2", typeId: 1, model: "2960-24TT", label: "Switch-2960" },
       { name: "PC2", typeId: 8, model: "PC-PT", label: "PC" },
-      { name: "Server2", typeId: 9, model: "Server-PT", label: "Server" }
+      { name: "Server2", typeId: 9, model: "Server-PT", label: "Server" },
     );
     dump.summary.devicesFound = 4;
     dump.summary.globalsFound = dump.globals.length;

@@ -1,6 +1,7 @@
 import type { PtDeps } from "../pt-api/pt-deps.js";
 import { ptError, ptSuccess, PtErrorCode, type PtResult } from "../pt-api/pt-results.js";
-import type { PTVlanManager, PTDeviceWithProcesses, PTHostPort } from "../pt-api/pt-processes.js";
+import type { PTVlanManager, PTDeviceWithProcesses } from "../pt-api/pt-processes.js";
+import type { PTHostPort } from "../pt-api/pt-api-registry.js";
 import { getVlanManager } from "../pt-api/pt-processes.js";
 
 export interface EnsureVlansPayload {

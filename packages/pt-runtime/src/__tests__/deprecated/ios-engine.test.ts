@@ -5,6 +5,8 @@ import type { PtDeferredDeps } from "../../pt-api/pt-deps.js";
 function createDeps(): PtDeferredDeps {
   return {
     ipc: {} as never,
+    privileged: null,
+    global: null,
     getLW: () => ({}) as never,
     getNet: () => ({}) as never,
     getFM: () => ({}) as never,

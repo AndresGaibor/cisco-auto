@@ -4,6 +4,8 @@ import type { PtDeps } from "../../pt-api/pt-deps.js";
 
 const deps: PtDeps = {
   ipc: {} as never,
+  privileged: null,
+  global: null,
   getLW: () => ({}) as never,
   getNet: () =>
     ({

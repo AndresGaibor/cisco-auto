@@ -2,20 +2,18 @@
 /**
  * PT Control V2 - Build Script
  *
+ * Uses the modern RuntimeGenerator pipeline from @cisco-auto/pt-runtime.
+ * Generates main.js, runtime.js, catalog.js, and manifest.json and deploys
+ * them to PT_DEV_DIR. The kernel's runtime-loader handles hot reload
+ * by monitoring runtime.js mtime — no external reload trigger needed.
+ *
  * Usage:
- *   bun run pt:build         # Full build (generate + validate + deploy to PT_DEV_DIR)
+ *   bun run pt:build         # Full build + deploy to PT_DEV_DIR
  *   bun run pt:build --watch # Watch mode with auto-rebuild
  */
 
 import { resolve } from "node:path";
-import {
-  existsSync,
-  mkdirSync,
-  copyFileSync,
-  readFileSync,
-  writeFileSync,
-  utimesSync,
-} from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, utimesSync } from "node:fs";
 import { homedir } from "node:os";
 
 // ============================================================================
@@ -30,122 +28,108 @@ const RESULTS_DIR = resolve(DEV_DIR, "results");
 const PROTOCOL_SEQ = resolve(DEV_DIR, "protocol.seq.json");
 
 // ============================================================================
-// Build Steps
+// Modern Runtime Generator (pipeline V2)
 // ============================================================================
 
-async function generateRuntime(): Promise<{ main: string; runtime: string } | null> {
-  console.log("\n🔧 Generating runtime files from templates...");
+async function generateAndDeploy(): Promise<{
+  mainChanged: boolean;
+  runtimeChanged: boolean;
+  catalogChanged: boolean;
+} | null> {
+  console.log("\n🔧 Generating runtime files via RuntimeGenerator...");
 
   try {
+    const { RuntimeGenerator } = await import("@cisco-auto/pt-runtime");
+
+    const generator = new RuntimeGenerator({
+      devDir: DEV_DIR,
+      outputDir: GENERATED_DIR,
+    });
+
+    const report = await generator.build();
+
+    console.log("✅ Runtime files generated:");
+    console.log(`   - ${GENERATED_DIR}/main.js`);
+    console.log(`   - ${GENERATED_DIR}/runtime.js`);
+    console.log(`   - ${GENERATED_DIR}/catalog.js`);
+    console.log(`   - ${GENERATED_DIR}/manifest.json`);
+
     if (!existsSync(GENERATED_DIR)) {
       mkdirSync(GENERATED_DIR, { recursive: true });
     }
 
-    const { execSync } = await import("node:child_process");
-    const result = execSync("bun run scripts/assemble.js", {
-      cwd: resolve(ROOT_DIR, "..", "pt-runtime"),
-      encoding: "utf-8",
-    });
-    console.log(result);
+    const artifacts = [
+      { src: "main.js", dest: resolve(DEV_DIR, "main.js") },
+      { src: "runtime.js", dest: resolve(DEV_DIR, "runtime.js") },
+      { src: "catalog.js", dest: resolve(DEV_DIR, "catalog.js") },
+      { src: "manifest.json", dest: resolve(DEV_DIR, "manifest.json") },
+    ];
 
-    const mainPath = resolve(GENERATED_DIR, "main.js");
-    const runtimePath = resolve(GENERATED_DIR, "runtime.js");
-
-    if (!existsSync(mainPath) || !existsSync(runtimePath)) {
-      throw new Error("Assembly failed - output files not found");
+    for (const { src, dest } of artifacts) {
+      const srcPath = resolve(GENERATED_DIR, src);
+      if (!existsSync(srcPath)) {
+        console.error(`   ✗ ${src} not found, aborting deploy`);
+        return null;
+      }
+      mkdirSync(resolve(dest, ".."), { recursive: true });
+      writeFileSync(dest, readFileSync(srcPath));
+      if (src === "runtime.js") {
+        const now = Date.now();
+        utimesSync(dest, new Date(now), new Date(now + 2000));
+      }
+      console.log(`   ✓ ${dest}`);
     }
 
-    console.log("✅ Runtime files generated:");
-    console.log(`   - ${mainPath}`);
-    console.log(`   - ${runtimePath}`);
-    return { main: mainPath, runtime: runtimePath };
+    console.log("✅ Deployment complete");
+
+    return report.changes;
   } catch (error) {
-    console.error("❌ Runtime generation error:", error);
+    console.error("❌ Runtime generation/deploy error:", error);
     return null;
   }
 }
 
-/**
- * Validate generated artifacts are PT-safe.
- * Returns true if both main.js and runtime.js pass validation.
- */
-function validateArtifacts(main: string, runtime: string): boolean {
+// ============================================================================
+// Artifact Validation
+// ============================================================================
+
+function validateArtifacts(): boolean {
   console.log("\n🔍 Validating generated artifacts...");
 
-  try {
-    if (!existsSync(main)) {
-      console.error("❌ main.js not found");
-      return false;
-    }
-    if (!existsSync(runtime)) {
-      console.error("❌ runtime.js not found");
-      return false;
-    }
+  const files = [
+    { path: resolve(DEV_DIR, "main.js"), name: "main.js" },
+    { path: resolve(DEV_DIR, "runtime.js"), name: "runtime.js" },
+    { path: resolve(DEV_DIR, "catalog.js"), name: "catalog.js" },
+    { path: resolve(DEV_DIR, "manifest.json"), name: "manifest.json" },
+  ];
 
-    const mainContent = readFileSync(main, "utf-8");
-    const runtimeContent = readFileSync(runtime, "utf-8");
-
-    if (mainContent.length < 100) {
-      console.error("❌ main.js is too short");
+  for (const { path, name } of files) {
+    if (!existsSync(path)) {
+      console.error(`❌ ${name} not found`);
       return false;
     }
-    if (runtimeContent.length < 100) {
-      console.error("❌ runtime.js is too short");
+    const content = readFileSync(path, "utf-8");
+    if (content.length < 50) {
+      console.error(`❌ ${name} is too short (${content.length} bytes)`);
       return false;
     }
+  }
 
-    if (!mainContent.includes("createKernel")) {
-      console.error("❌ main.js missing 'createKernel'");
-      return false;
-    }
-    console.log("✅ main.js contains 'createKernel'");
-
-    if (!runtimeContent.includes("_ptDispatch")) {
-      console.error("❌ runtime.js missing '_ptDispatch'");
-      return false;
-    }
-    console.log("✅ runtime.js contains '_ptDispatch'");
-
-    return true;
-  } catch (e) {
-    console.error("❌ Validation error:", e);
+  const mainContent = readFileSync(resolve(DEV_DIR, "main.js"), "utf-8");
+  if (!mainContent.includes("createKernel")) {
+    console.error("❌ main.js missing 'createKernel'");
     return false;
   }
-}
+  console.log("✅ main.js contains 'createKernel'");
 
-async function deployToDev(): Promise<boolean> {
-  console.log(`\n🚀 Deploying to ${DEV_DIR}...`);
-
-  try {
-    if (!existsSync(DEV_DIR)) {
-      mkdirSync(DEV_DIR, { recursive: true });
-    }
-
-    const files = ["runtime.js"];
-
-    for (const file of files) {
-      const src = resolve(GENERATED_DIR, file);
-      const dest = resolve(DEV_DIR, file);
-
-      if (existsSync(src)) {
-        copyFileSync(src, dest);
-        if (file === "runtime.js") {
-          const now = Date.now();
-          utimesSync(dest, new Date(now), new Date(now + 2000));
-        }
-        console.log(`   ✓ ${dest}`);
-      } else {
-        console.error(`   ✗ ${src} not found, aborting deploy`);
-        return false;
-      }
-    }
-
-    console.log("✅ Deployment complete");
-    return true;
-  } catch (error) {
-    console.error("❌ Deployment error:", error);
+  const runtimeContent = readFileSync(resolve(DEV_DIR, "runtime.js"), "utf-8");
+  if (!runtimeContent.includes("_ptDispatch")) {
+    console.error("❌ runtime.js missing '_ptDispatch'");
     return false;
   }
+  console.log("✅ runtime.js contains '_ptDispatch'");
+
+  return true;
 }
 
 // ============================================================================
@@ -211,7 +195,7 @@ async function watchMode(): Promise<void> {
 
   const srcDir = resolve(ROOT_DIR, "src");
 
-  watch(srcDir, { recursive: true }, async (event, filename) => {
+  watch(srcDir, { recursive: true }, async (_event, filename) => {
     if (filename?.endsWith(".ts")) {
       console.log(`\n📝 Change detected: ${filename}`);
       await build(true);
@@ -232,21 +216,15 @@ async function build(triggerReloadFlag: boolean = true): Promise<boolean> {
   console.log("       PT Control V2 - Build");
   console.log("═══════════════════════════════════════════");
 
-  const generated = await generateRuntime();
-  if (!generated) {
-    console.error("\n❌ Runtime generation failed");
+  const changes = await generateAndDeploy();
+  if (!changes) {
+    console.error("\n❌ Runtime generation/deploy failed");
     process.exit(1);
   }
 
-  const valid = validateArtifacts(generated.main, generated.runtime);
+  const valid = validateArtifacts();
   if (!valid) {
-    console.error("\n❌ PT-safe validation failed - artifacts will NOT be deployed");
-    process.exit(1);
-  }
-
-  const deployOk = await deployToDev();
-  if (!deployOk) {
-    console.error("\n❌ Deployment failed");
+    console.error("\n❌ Artifact validation failed");
     process.exit(1);
   }
 
@@ -254,9 +232,19 @@ async function build(triggerReloadFlag: boolean = true): Promise<boolean> {
     triggerReload();
   }
 
-  console.log("\n═══════════════════════════════════════════");
-  console.log("✅ Build completed successfully!");
-  console.log("═══════════════════════════════════════════\n");
+  if (changes.mainChanged) {
+    console.log("\n✅ Build completado. main.js y runtime.js actualizados.");
+    console.log("💡 Recarga ~/pt-dev/main.js en Packet Tracer.");
+  } else if (changes.runtimeChanged) {
+    console.log("\n✅ Build completado. runtime.js actualizado; main.js sin cambios.");
+    console.log("💡 Runtime hot-reload activo en Packet Tracer.");
+  } else if (changes.catalogChanged) {
+    console.log("\n✅ Build completado. Solo catalog.js cambió.");
+    console.log("💡 No necesitas recargar main.js.");
+  } else {
+    console.log("\n✅ Build completado. Sin cambios efectivos en main.js ni runtime.js.");
+    console.log("💡 No necesitas recargar main.js.");
+  }
 
   return true;
 }

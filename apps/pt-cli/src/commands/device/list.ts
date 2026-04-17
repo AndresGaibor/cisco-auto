@@ -38,7 +38,9 @@ export function createDeviceListCommand(): Command {
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes("no respondió") || msg.includes("no conectado")) {
           console.log(chalk.red("✗ Packet Tracer no responde."));
-          console.log(chalk.gray("  Verifica que PT esté abierto y ~/pt-dev/main.js cargado."));
+          console.log(
+            chalk.gray("  Verifica que PT esté abierto y el script generado esté cargado."),
+          );
         } else {
           console.log(chalk.red("✗ Error: " + msg));
         }
@@ -50,7 +52,7 @@ export function createDeviceListCommand(): Command {
           console.log(JSON.stringify([], null, 2));
         } else {
           console.log(chalk.yellow("No se encontraron dispositivos."));
-          console.log(chalk.gray("Verifica que PT esté abierto y el runtime activo."));
+          console.log(chalk.gray("Verifica que PT esté abierto y el runtime esté activo."));
         }
         return;
       }
@@ -360,10 +362,12 @@ function renderDeviceList(options: RenderOptions): void {
     ];
     console.log(chalk.gray(`\n[debug:links] ${parts.join("  ")}`));
     if ((d.ptLinksFromPortScan ?? 0) === 0 && d.ptLinksFound <= 1) {
-      console.log(chalk.yellow(
-        "  ⚠ port.getLink() retornó null para todos los puertos UP.\n" +
-        "  El .pkt puede requerir Estrategia B (CDP CLI). Ver implementación_plan.md"
-      ));
+      console.log(
+        chalk.yellow(
+          "  ⚠ port.getLink() retornó null para todos los puertos UP.\n" +
+            "  El .pkt puede requerir Estrategia B (CDP CLI). Ver implementación_plan.md",
+        ),
+      );
     }
   }
 }

@@ -5,9 +5,11 @@ import type { HandlerDeps } from "../../utils/helpers";
 function createDeps(device: any): HandlerDeps {
   return {
     ipc: {} as never,
-    getLW: () => ({} as never),
-    getNet: () => ({ getDevice: () => device } as never),
-    getFM: () => ({} as never),
+    privileged: null,
+    global: null,
+    getLW: () => ({}) as never,
+    getNet: () => ({ getDevice: () => device }) as never,
+    getFM: () => ({}) as never,
     dprint: () => {},
     DEV_DIR: "/tmp",
     getDeviceByName: () => device,
@@ -20,13 +22,20 @@ function createDeps(device: any): HandlerDeps {
 describe("Device handlers (rename/move)", () => {
   test("handleRenameDevice returns error for non-existent device", () => {
     const deps = createDeps(null);
-    const result = handleRenameDevice({ type: "renameDevice", oldName: "NONEXISTENT", newName: "R2" }, deps);
+    const result = handleRenameDevice(
+      { type: "renameDevice", oldName: "NONEXISTENT", newName: "R2" },
+      deps,
+    );
     expect(result.ok).toBe(false);
     expect((result as any).code).toBe("DEVICE_NOT_FOUND");
   });
 
   test("handleRenameDevice renames device successfully", () => {
-    const device = { setName: (n: string) => { if (n !== "R2") throw new Error("fail"); } };
+    const device = {
+      setName: (n: string) => {
+        if (n !== "R2") throw new Error("fail");
+      },
+    };
     const deps = createDeps(device);
     const result = handleRenameDevice({ type: "renameDevice", oldName: "R1", newName: "R2" }, deps);
     expect(result.ok).toBe(true);
@@ -36,7 +45,10 @@ describe("Device handlers (rename/move)", () => {
 
   test("handleMoveDevice returns error for non-existent device", () => {
     const deps = createDeps(null);
-    const result = handleMoveDevice({ type: "moveDevice", name: "NONEXISTENT", x: 100, y: 200 }, deps);
+    const result = handleMoveDevice(
+      { type: "moveDevice", name: "NONEXISTENT", x: 100, y: 200 },
+      deps,
+    );
     expect(result.ok).toBe(false);
     expect((result as any).code).toBe("DEVICE_NOT_FOUND");
   });

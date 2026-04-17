@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
 
-import { parseProgram } from './program';
+import { parseProgram } from "./program";
 
-parseProgram(process.argv);
+await parseProgram(process.argv);

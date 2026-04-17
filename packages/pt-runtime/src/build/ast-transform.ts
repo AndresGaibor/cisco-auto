@@ -439,13 +439,8 @@ function stripModuleSyntax(source: string): string {
       inExportTypeAssign.braceDepth += openBraces - closeBraces;
 
       const isClosingUnionLine = trimmed.startsWith("|") && trimmed.endsWith(";");
-      if (inExportTypeAssign.braceDepth <= 0 && closeBraces > 0) {
-        if (inExportTypeAssign.hitDepth0Once) {
-          inExportTypeAssign = false;
-        } else {
-          inExportTypeAssign.hitDepth0Once = true;
-        }
-      } else if (isClosingUnionLine) {
+      const isTypeAliasTerminated = inExportTypeAssign.braceDepth <= 0 && (trimmed.endsWith(";") || closeBraces > 0);
+      if (isTypeAliasTerminated || isClosingUnionLine) {
         inExportTypeAssign = false;
       }
       continue;

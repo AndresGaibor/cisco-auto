@@ -222,24 +222,6 @@ if (typeof Object.fromEntries !== "function") {
     const currentMtime = fa.getFileMtime(config.runtimeFile);
     const busy = isBusyCheck();
 
-    try {
-      const appWindow = (typeof self !== "undefined" ? self.ipc : null)?.appWindow?.();
-      if (appWindow && typeof appWindow.writeToPT === "function") {
-        appWindow.writeToPT(
-          "[RELOAD] mtime=" + currentMtime + " lastMtime=" + lastMtime + " busy=" + busy + "\n",
-        );
-      }
-    } catch {}
-
-    console.log(
-      "[runtime-loader] reloadIfNeeded: currentMtime=" +
-        currentMtime +
-        " lastMtime=" +
-        lastMtime +
-        " busy=" +
-        busy,
-    );
-
     // Sin cambios y sin recarga pendiente: no hacer nada.
     if (currentMtime === lastMtime && !pendingReload) {
       return;

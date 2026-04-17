@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { transformToPtSafeAst, type AstTransformOptions } from "./ast-transform.js";
 import { validatePtSafe, formatValidationResult, type ValidationResult } from "./validate-pt-safe.js";
-import { getAllRuntimeFiles } from "./runtime-manifest.js";
+import { getAllRuntimeFiles, validateRuntimeManifestDependencies } from "./runtime-manifest.js";
 
 export interface RenderRuntimeV2Options {
   srcDir: string;
@@ -130,6 +130,15 @@ function validateAndTransform(srcDir: string, minify: boolean): { code: string; 
     if (fs.existsSync(filePath)) {
       sourceFiles.set(relPath, fs.readFileSync(filePath, "utf-8"));
     }
+  }
+
+  const missingDependencies = validateRuntimeManifestDependencies(sourceFiles);
+  if (missingDependencies.length > 0) {
+    throw new Error(
+      "runtime.js manifest missing transitive dependencies:\n" +
+        missingDependencies.map((file) => `  - ${file}`).join("\n") +
+        "\nAdd them to RUNTIME_MANIFEST before building.",
+    );
   }
 
   const { code, validation } = transformToPtSafeAst(sourceFiles, {

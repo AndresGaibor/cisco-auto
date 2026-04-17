@@ -132,10 +132,17 @@ function runtime(payload: Record<string, unknown>, api: RuntimeApi): RuntimeResu
       payloadKeys: payloadKeys,
     });
 
+    var mutablePayload: Record<string, unknown> = {};
+    for (var key in payload) {
+      if (Object.prototype.hasOwnProperty.call(payload, key)) {
+        mutablePayload[key] = payload[key];
+      }
+    }
+
     var ctx: MiddlewareContext = {
       type: commandType,
       payload: payload,
-      mutablePayload: Object.assign({}, payload),
+      mutablePayload: mutablePayload,
       api: api,
       state: {},
       startedAt: Date.now(),

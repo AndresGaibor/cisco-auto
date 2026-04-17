@@ -63,11 +63,31 @@ export interface PtDeferredResult extends PtResultBase {
 export type PtResult = PtSuccessResult | PtErrorResult | PtDeferredResult;
 
 export function ptSuccess(data?: Record<string, unknown>): PtSuccessResult {
-  return { ok: true, ...(data ?? {}) };
+  var res: PtSuccessResult = { ok: true };
+  if (data) {
+    for (var key in data) {
+      if (Object.prototype.hasOwnProperty.call(data, key)) {
+        (res as any)[key] = data[key];
+      }
+    }
+  }
+  return res;
 }
 
-export function ptError(error: string, code?: PtErrorCode | string, extra?: Record<string, unknown>): PtErrorResult {
-  return { ok: false, error, code, ...(extra ?? {}) };
+export function ptError(
+  error: string,
+  code?: PtErrorCode | string,
+  extra?: Record<string, unknown>,
+): PtErrorResult {
+  var res: PtErrorResult = { ok: false, error: error, code: code };
+  if (extra) {
+    for (var key in extra) {
+      if (Object.prototype.hasOwnProperty.call(extra, key)) {
+        (res as any)[key] = extra[key];
+      }
+    }
+  }
+  return res;
 }
 
 export function ptDeferred(ticket: string, job: DeferredJobPlan): PtDeferredResult {

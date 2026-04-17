@@ -6,7 +6,7 @@ import type { HandlerDeps, HandlerResult } from "../utils/helpers.js";
 
 export interface DeepInspectPayload {
   type: "deepInspect";
-  /** Path to the object relative to ipc (e.g., "network().getDevice('Router0')") */
+  /** Path to the object relative to global scope (e.g., "AssessmentModel") or ipc (e.g., "network().getDevice('Router0')") */
   path: string;
   /** Method to call on the resolved object */
   method?: string;
@@ -17,40 +17,61 @@ export interface DeepInspectPayload {
 /**
  * High-performance, dynamic inspector for the PT internal API.
  * Uses the 18k+ method map to unlock full PT capabilities.
+ * 
+ * Supports three levels of resolution:
+ * 1. Global Scope (this) - For system objects like AssessmentModel, Simulation.
+ * 2. IPC Scope (ipc) - For network topology and device control.
+ * 3. Privileged Scope (_ScriptModule) - For file system and low-level IPC.
  */
 export function handleDeepInspect(payload: DeepInspectPayload, deps: HandlerDeps): HandlerResult {
-  const { getIpc } = deps;
-  const ipc = getIpc();
+  const { ipc, global, privileged } = deps;
   
-  if (!ipc) {
-    return { ok: false, error: "IPC connection unavailable", code: "IPC_UNAVAILABLE" };
+  if (!ipc && !global) {
+    return { ok: false, error: "Runtime environment unavailable", code: "IPC_UNAVAILABLE" };
   }
 
   try {
-    // 1. Resolve target object using a safe evaluation scope
-    // We use a limited scope to prevent arbitrary JS execution outside the PT API
-    const target = resolvePath(ipc, payload.path);
+    // 1. Resolve target object using Global Search Order:
+    // a. Check Global Scope first (this includes AssessmentModel, scriptEngine, etc.)
+    let target = resolvePath(global, payload.path);
     
+    // b. Fallback to IPC (where most network methods live)
     if (!target) {
-      return { ok: false, error: `Could not resolve path: ${payload.path}`, code: "PATH_NOT_RESOLVED" };
+        target = resolvePath(ipc, payload.path);
+    }
+    
+    // c. Fallback to Privileged object (_ScriptModule)
+    if (!target && privileged) {
+        target = resolvePath(privileged, payload.path);
+    }
+
+    if (!target) {
+      return { ok: false, error: "Could not resolve path: " + payload.path, code: "PATH_NOT_RESOLVED" };
     }
 
     // 2. If no method is provided, return an overview of the object
     if (!payload.method) {
+      var methods: string[] = [];
+      try {
+          for (var k in target) {
+              if (typeof target[k] === 'function') methods.push(k);
+          }
+      } catch(e) {}
+
       return {
         ok: true,
-        className: target.getClassName ? target.getClassName() : typeof target,
-        methods: Object.keys(target).filter(k => typeof target[k] === 'function'),
+        className: (typeof target.getClassName === 'function') ? target.getClassName() : typeof target,
+        methods: methods,
         value: (typeof target !== 'object') ? target : "[Object]"
       };
     }
 
     // 3. Call the requested method
     if (typeof target[payload.method] !== 'function') {
-      return { ok: false, error: `Method '${payload.method}' not found on object`, code: "METHOD_NOT_FOUND" };
+      return { ok: false, error: "Method '" + payload.method + "' not found on object", code: "METHOD_NOT_FOUND" };
     }
 
-    const result = target[payload.method](...(payload.args || []));
+    var result = target[payload.method].apply(target, payload.args || []);
     
     // 4. Return result, serializing basic types or providing info for objects
     return {
@@ -59,9 +80,14 @@ export function handleDeepInspect(payload: DeepInspectPayload, deps: HandlerDeps
     };
 
   } catch (error: any) {
+    var errMsg = "DEEP_INSPECT_ERROR: " + (error.message || error);
+    try {
+        if (deps.dprint) deps.dprint(errMsg);
+    } catch(e) {}
+    
     return { 
       ok: false, 
-      error: error.message || "Unknown error during deep inspection", 
+      error: errMsg, 
       code: "INSPECTION_FAILED" 
     };
   }
@@ -72,34 +98,35 @@ export function handleDeepInspect(payload: DeepInspectPayload, deps: HandlerDeps
  * Supports method calls in the path like getDevice('R1').getPortAt(0)
  */
 function resolvePath(root: any, path: string): any {
-  if (!path || path === "ipc") return root;
+  if (!root) return null;
+  if (!path || path === "ipc" || path === "global" || path === "this") return root;
   
-  // Basic tokenizer for path (simple implementation for PT context)
-  const parts = path.split('.');
-  let current = root;
+  var parts = path.split('.');
+  var current = root;
   
-  for (let part of parts) {
+  for (var i = 0; i < parts.length; i++) {
+    var part = parts[i];
     if (!current) return null;
     
     // Check if part is a method call: name(arg)
-    const methodMatch = part.match(/^(\w+)\((.*)\)$/);
+    var methodMatch = part.match(/^(\w+)\((.*)\)$/);
     if (methodMatch) {
-      const methodName = methodMatch[1];
-      const argStr = methodMatch[2];
+      var methodName = methodMatch[1];
+      var argStr = methodMatch[2];
       
       if (typeof current[methodName] !== 'function') return null;
       
-      // Parse simple arguments (string, number, boolean)
-      const args = argStr ? argStr.split(',').map(a => {
-        const trimmed = a.trim();
-        if (trimmed.startsWith("'") || trimmed.startsWith("'")) return trimmed.slice(1, -1);
+      // Parse simple arguments
+      var args = argStr ? argStr.split(',').map(function(a) {
+        var trimmed = a.trim();
+        if (trimmed.startsWith("'") || trimmed.startsWith("\"")) return trimmed.slice(1, -1);
         if (trimmed === "true") return true;
         if (trimmed === "false") return false;
         if (!isNaN(Number(trimmed))) return Number(trimmed);
         return trimmed;
       }) : [];
       
-      current = current[methodName](...args);
+      current = current[methodName].apply(current, args);
     } else {
       current = current[part];
     }
@@ -117,8 +144,8 @@ function serializeResult(val: any): any {
     return {
       __pt_object__: true,
       className: val.getClassName(),
-      uuid: val.getObjectUuid ? val.getObjectUuid() : undefined
-    };
+      uuid: (typeof val.getObjectUuid === 'function') ? val.getObjectUuid() : undefined
+    } as any;
   }
   
   return val;
