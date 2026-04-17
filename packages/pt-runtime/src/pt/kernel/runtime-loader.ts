@@ -11,6 +11,7 @@
 
 import type { RuntimeApi } from "../../runtime/contracts";
 import { createFileAccess, type FileAccess } from "./file-access";
+import { writeDebugLog } from "./debug-log.js";
 
 export interface RuntimeLoader {
   load(): void;
@@ -38,10 +39,7 @@ export function createRuntimeLoader(config: { runtimeFile: string }) {
 
     const visibleLog = (message: string) => {
       try {
-        const appWindow = (typeof self !== "undefined" ? self.ipc : null)?.appWindow?.();
-        if (appWindow && typeof appWindow.writeToPT === "function") {
-          appWindow.writeToPT(String(message) + "\n");
-        }
+        writeDebugLog("loader", message);
       } catch {}
       try {
         dprint(message);

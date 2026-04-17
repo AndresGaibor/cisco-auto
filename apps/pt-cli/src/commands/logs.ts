@@ -8,6 +8,7 @@
 import { Command } from "commander";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import * as readline from "node:readline";
 
 import type { CliResult } from "../contracts/cli-result.js";
 import { createSuccessResult, createErrorResult } from "../contracts/cli-result.js";
@@ -24,10 +25,28 @@ import {
   getSessionLogsDir,
   getEventsPath,
   getBundlesDir,
+  getPtDebugLogPath,
 } from "../system/paths.js";
 import { sessionLogStore } from "../telemetry/session-log-store.js";
 import { bundleWriter } from "../telemetry/bundle-writer.js";
 import type { SessionLogEvent } from "../telemetry/session-log-store.js";
+import { createDebugLogStream } from "../telemetry/debug-log-stream.js";
+
+const SCOPE_COLORS: Record<string, string> = {
+  kernel: "\x1b[36m",
+  loader: "\x1b[33m",
+  runtime: "\x1b[32m",
+  bridge: "\x1b[35m",
+  cli: "\x1b[34m",
+};
+
+function getScopeColor(scope: string): string {
+  const lower = scope.toLowerCase();
+  for (const [key, color] of Object.entries(SCOPE_COLORS)) {
+    if (lower.includes(key)) return color;
+  }
+  return "\x1b[37m";
+}
 
 const LOGS_EXAMPLES = [
   { command: "pt logs tail", description: "Mostrar últimos eventos" },
@@ -85,6 +104,7 @@ export function createLogsCommand(): Command {
     .description("Mostrar los últimos N eventos del log actual")
     .argument("[lines]", "Número de líneas (default: 20)", "20")
     .option("-f, --follow", "Seguir nuevos eventos en tiempo real", false)
+    .option("-l, --live", "Seguir logs en tiempo real", false)
     .option("--errors-only", "Mostrar solo errores", false)
     .option("--bridge", "Incluir eventos del bridge", false)
     .option("--examples", "Mostrar ejemplos", false)
@@ -114,6 +134,52 @@ export function createLogsCommand(): Command {
       }
 
       const lines = parseInt(linesArg, 10) || 20;
+
+      if (options.live) {
+        const debugLogPath = getPtDebugLogPath();
+
+        if (!existsSync(debugLogPath)) {
+          console.log("Esperando logs...");
+          console.log(
+            "(El archivo de debug log aún no existe. Asegúrate de que Packet Tracer esté corriendo.)",
+          );
+        }
+
+        const stream = createDebugLogStream(debugLogPath);
+        const initialEntries = stream.tail(lines);
+
+        console.log(`\n=== Últimos ${lines} entradas de debug ===\n`);
+        for (const entry of initialEntries) {
+          const time = entry.timestamp.split("T")[1]?.split(".")[0]?.slice(0, 8) ?? "";
+          const scopeColor = getScopeColor(entry.scope);
+          console.log(`[${time}] ${scopeColor}${entry.scope.padEnd(10)}\x1b[0m ${entry.message}`);
+        }
+
+        console.log("\n⏳ Listening for new entries... (Ctrl+C para salir)\n");
+
+        const stopFollow = stream.follow(
+          (entry) => {
+            const time = entry.timestamp.split("T")[1]?.split(".")[0]?.slice(0, 8) ?? "";
+            const scopeColor = getScopeColor(entry.scope);
+            readline.moveCursor(process.stdout, 0, -1);
+            readline.clearLine(process.stdout, 0);
+            console.log(`[${time}] ${scopeColor}${entry.scope.padEnd(10)}\x1b[0m ${entry.message}`);
+            console.log("\n⏳ Listening for new entries... (Ctrl+C para salir)");
+          },
+          (err) => {
+            console.error("Error en stream de debug:", err.message);
+          },
+        );
+
+        process.on("SIGINT", () => {
+          stopFollow();
+          console.log("\n\nDetenido.");
+          process.exit(0);
+        });
+
+        return;
+      }
+
       const logsDir = getLogsDir();
 
       const entries: unknown[] = [];

@@ -27,6 +27,7 @@ import { createExecutionEngine, type ActiveJob, toKernelJobState } from "./execu
 import { safeFM } from "./safe-fm";
 import { createKernelLifecycle } from "./kernel-lifecycle";
 import { createKernelState, type KernelState } from "./kernel-state";
+import { initDebugLog, writeDebugLog } from "./debug-log.js";
 
 export { createDirectoryManager } from "./directories";
 export { createLeaseManager } from "./lease";
@@ -60,6 +61,7 @@ export function createKernel(config: KernelConfig) {
   const state = createKernelState();
 
   const dirs = createDirectoryManager(config);
+  initDebugLog(config.logsDir);
   const lease = createLeaseManager({ devDir: config.devDir, checkIntervalMs: 1000 });
   const queue = createCommandQueue({
     commandsDir: config.commandsDir,
@@ -81,11 +83,7 @@ export function createKernel(config: KernelConfig) {
 
   function kernelLog(message: string): void {
     try {
-      const scope = (typeof self !== "undefined" ? self : Function("return this")()) as any;
-      const appWindow = scope.ipc?.appWindow?.();
-      if (appWindow && typeof appWindow.writeToPT === "function") {
-        appWindow.writeToPT("[kernel] " + message + "\n");
-      }
+      writeDebugLog("kernel", message);
     } catch {}
     try {
       dprint("[kernel] " + message);

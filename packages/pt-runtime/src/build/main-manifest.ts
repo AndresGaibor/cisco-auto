@@ -30,6 +30,7 @@ export const MAIN_MANIFEST = {
     "pt/kernel/queue-poller.ts",
     "pt/kernel/kernel-lifecycle.ts",
     "pt/kernel/runtime-loader.ts",
+    "pt/kernel/debug-log.ts",
   ],
 
   terminal: [

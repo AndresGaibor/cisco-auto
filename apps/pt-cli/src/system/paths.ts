@@ -4,8 +4,8 @@
  * Proporciona funciones para resolver rutas dentro del directorio de desarrollo.
  */
 
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 /**
  * Obtiene el directorio raíz de pt-dev.
@@ -14,13 +14,13 @@ import { join } from 'node:path';
  */
 export function getDefaultDevDir(): string {
   const home = homedir();
-  const isWindows = process.platform === 'win32';
-  
+  const isWindows = process.platform === "win32";
+
   if (isWindows) {
-    return process.env.PT_DEV_DIR ?? join(process.env.USERPROFILE ?? home, 'pt-dev');
+    return process.env.PT_DEV_DIR ?? join(process.env.USERPROFILE ?? home, "pt-dev");
   }
-  
-  return process.env.PT_DEV_DIR ?? join(home, 'pt-dev');
+
+  return process.env.PT_DEV_DIR ?? join(home, "pt-dev");
 }
 
 /**
@@ -37,7 +37,7 @@ export function resolvePtDevPath(...parts: string[]): string {
  * @returns Ruta al directorio de logs
  */
 export function getLogsDir(): string {
-  return resolvePtDevPath('logs');
+  return resolvePtDevPath("logs");
 }
 
 /**
@@ -45,7 +45,7 @@ export function getLogsDir(): string {
  * @returns Ruta al directorio de logs de sesión
  */
 export function getSessionLogsDir(): string {
-  return join(getLogsDir(), 'sessions');
+  return join(getLogsDir(), "sessions");
 }
 
 /**
@@ -53,7 +53,7 @@ export function getSessionLogsDir(): string {
  * @returns Ruta al directorio de logs de comandos
  */
 export function getCommandLogsDir(): string {
-  return join(getLogsDir(), 'commands');
+  return join(getLogsDir(), "commands");
 }
 
 /**
@@ -61,7 +61,7 @@ export function getCommandLogsDir(): string {
  * @returns Ruta al directorio de bundles
  */
 export function getBundlesDir(): string {
-  return join(getLogsDir(), 'bundles');
+  return join(getLogsDir(), "bundles");
 }
 
 /**
@@ -69,7 +69,7 @@ export function getBundlesDir(): string {
  * @returns Ruta al directorio de historial
  */
 export function getHistoryDir(): string {
-  return join(getDefaultDevDir(), 'history');
+  return join(getDefaultDevDir(), "history");
 }
 
 /**
@@ -77,11 +77,11 @@ export function getHistoryDir(): string {
  * @returns Ruta al archivo de índice de historial
  */
 export function getHistoryIndexPath(): string {
-  return join(getHistoryDir(), 'index.json');
+  return join(getHistoryDir(), "index.json");
 }
 
 export function getHistorySessionsDir(): string {
-  return join(getHistoryDir(), 'sessions');
+  return join(getHistoryDir(), "sessions");
 }
 
 /**
@@ -90,7 +90,7 @@ export function getHistorySessionsDir(): string {
  * @returns Ruta al archivo de historial de sesión
  */
 export function getHistorySessionPath(sessionId: string): string {
-  return join(getHistoryDir(), 'sessions', `${sessionId}.json`);
+  return join(getHistoryDir(), "sessions", `${sessionId}.json`);
 }
 
 /**
@@ -125,7 +125,7 @@ export function getBundlePath(sessionId: string): string {
  * @returns Ruta al directorio de resultados
  */
 export function getResultsDir(): string {
-  return resolvePtDevPath('results');
+  return resolvePtDevPath("results");
 }
 
 /**
@@ -133,7 +133,7 @@ export function getResultsDir(): string {
  * @returns Ruta al directorio de comandos en vuelo
  */
 export function getInFlightDir(): string {
-  return resolvePtDevPath('in-flight');
+  return resolvePtDevPath("in-flight");
 }
 
 /**
@@ -141,7 +141,7 @@ export function getInFlightDir(): string {
  * @returns Ruta al directorio de comandos
  */
 export function getCommandsDir(): string {
-  return resolvePtDevPath('commands');
+  return resolvePtDevPath("commands");
 }
 
 /**
@@ -149,7 +149,7 @@ export function getCommandsDir(): string {
  * @returns Ruta al archivo de eventos
  */
 export function getEventsPath(): string {
-  return join(getLogsDir(), 'events.current.ndjson');
+  return join(getLogsDir(), "events.current.ndjson");
 }
 
 /**
@@ -158,23 +158,31 @@ export function getEventsPath(): string {
  */
 export function getContextDir(): string {
   const home = homedir();
-  const isWindows = process.platform === 'win32';
+  const isWindows = process.platform === "win32";
   if (isWindows) {
-    return process.env.PT_CLI_HOME ?? join(process.env.USERPROFILE ?? home, '.pt-cli');
+    return process.env.PT_CLI_HOME ?? join(process.env.USERPROFILE ?? home, ".pt-cli");
   }
-  return process.env.PT_CLI_HOME ?? join(home, '.pt-cli');
+  return process.env.PT_CLI_HOME ?? join(home, ".pt-cli");
 }
 
 /**
  * Ruta al archivo de estado de contexto persistido
  */
 export function getContextStatusPath(): string {
-  return join(getContextDir(), 'context-status.json');
+  return join(getContextDir(), "context-status.json");
 }
 
 /**
  * Obtiene la ruta de la base de datos SQLite de memoria compartida.
  */
 export function getMemoryDbPath(): string {
-  return resolvePtDevPath('memory.db');
+  return resolvePtDevPath("memory.db");
+}
+
+/**
+ * Obtiene la ruta del archivo de logs de debug de PT.
+ * pt-dev/logs/pt-debug.current.ndjson
+ */
+export function getPtDebugLogPath(): string {
+  return join(getLogsDir(), "pt-debug.current.ndjson");
 }
