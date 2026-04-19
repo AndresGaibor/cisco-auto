@@ -6,8 +6,10 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { FileBridgePort } from "../ports/file-bridge.port.js";
-import type { ScenarioDefinition, ValidationResult } from "../../contracts/scenarios.js";
+import type { ValidationResult } from "../../contracts/scenarios.js";
 import { OmniscienceService } from "./omniscience-service.js";
+import { RuntimeOmniAdapter } from "../../adapters/runtime-omni-adapter.js";
+import { RuntimePrimitiveAdapter } from "../../adapters/runtime-primitive-adapter.js";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -219,10 +221,14 @@ function yamlToLab(parsed: Record<string, unknown>): ParsedLab {
 // ============================================================================
 
 export class ScenarioService {
+  private readonly omniPort: RuntimeOmniAdapter;
+  private readonly primitivePort: RuntimePrimitiveAdapter;
   private readonly omni: OmniscienceService;
 
   constructor(private readonly bridge: FileBridgePort) {
-    this.omni = new OmniscienceService(this.bridge);
+    this.omniPort = new RuntimeOmniAdapter({ bridge });
+    this.primitivePort = new RuntimePrimitiveAdapter(bridge);
+    this.omni = new OmniscienceService(this.omniPort);
   }
 
   /**
@@ -272,10 +278,12 @@ export class ScenarioService {
     }
 
     const script = this.buildInjectionScript(lab);
-    const res = await this.omni.evaluate(script);
-    console.log(`   🔹 Kernel: ${res}`);
+    const res = await this.omniPort.runOmniCapability("omni.evaluate.raw", { code: script });
 
-    if (String(res).includes("ERROR")) {
+    const kernelMessage = res.ok ? String(res.value ?? "OK") : `ERROR: ${res.error ?? "unknown"}`;
+    console.log(`   🔹 Kernel: ${kernelMessage}`);
+
+    if (!res.ok || kernelMessage.includes("ERROR") || kernelMessage.includes("INJECT_ERROR")) {
       console.log(`❌ Error en inyección. Revisa el lab YAML.`);
       return;
     }
@@ -304,8 +312,9 @@ export class ScenarioService {
     }
 
     const script = this.buildInjectionScript(lab, true);
-    const res = await this.omni.evaluate(script);
-    console.log(`   🔹 Kernel: ${res}`);
+    const res = await this.omniPort.runOmniCapability("omni.evaluate.raw", { code: script });
+    const kernelMessage = res.ok ? String(res.value ?? "OK") : `ERROR: ${res.error ?? "unknown"}`;
+    console.log(`   🔹 Kernel: ${kernelMessage}`);
   }
 
   /**
@@ -327,15 +336,27 @@ export class ScenarioService {
     console.log(`🔍 Validando Escenario ${id}: ${lab.name || ESCENARIOS_META[id]?.nombre}`);
 
     // Validación capa física
-    const topo = await this.omni.getTopology();
+    const snapshotResult = await this.primitivePort.runPrimitive(
+      "topology.snapshot",
+      {},
+      { timeoutMs: 15000 },
+    );
+
+    const snapshotValue =
+      snapshotResult.ok && snapshotResult.value && typeof snapshotResult.value === "object"
+        ? (snapshotResult.value as { links?: unknown[] })
+        : null;
+
+    const detectedLinks = Array.isArray(snapshotValue?.links) ? snapshotValue.links.length : 0;
     const expectedLinks = lab.links.length;
-    if (topo.links.length >= expectedLinks) {
+
+    if (detectedLinks >= expectedLinks) {
       result.details.physical.push(
-        `✅ ${topo.links.length} enlace(s) detectado(s) (esperados: ${expectedLinks})`,
+        `✅ ${detectedLinks} enlace(s) detectado(s) (esperados: ${expectedLinks})`,
       );
     } else {
       result.details.physical.push(
-        `❌ Solo ${topo.links.length} enlace(s) (esperados: ${expectedLinks})`,
+        `❌ Solo ${detectedLinks} enlace(s) (esperados: ${expectedLinks})`,
       );
     }
 

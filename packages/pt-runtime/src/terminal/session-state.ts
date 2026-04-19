@@ -4,6 +4,8 @@
 
 import type { SessionStateSnapshot } from "../domain";
 
+export type TerminalSessionKind = "unknown" | "ios" | "host";
+
 export type TerminalMode =
   | "unknown"
   | "user-exec"
@@ -17,13 +19,16 @@ export type TerminalMode =
   | "wizard"
   | "confirm"
   | "pager"
-  | "boot";
+  | "boot"
+  | "host-prompt"
+  | "host-busy";
 
 export type TerminalHealth = "healthy" | "stale" | "desynced" | "blocked" | "broken";
 
 export interface TerminalSessionState {
   deviceName: string;
   sessionId: string;
+  sessionKind: TerminalSessionKind;
   createdAt: number;
   lastActivityAt: number;
   isOpen: boolean;
@@ -50,6 +55,7 @@ export function createTerminalSessionState(deviceName: string): TerminalSessionS
   return {
     deviceName,
     sessionId,
+    sessionKind: "unknown",
     createdAt: now,
     lastActivityAt: now,
     isOpen: false,
@@ -81,7 +87,17 @@ export function toSnapshot(state: TerminalSessionState): SessionStateSnapshot {
 }
 
 export function updateMode(state: TerminalSessionState, mode: TerminalMode): TerminalSessionState {
-  return { ...state, lastActivityAt: Date.now(), lastMode: mode };
+  return {
+    ...state,
+    lastActivityAt: Date.now(),
+    lastMode: mode,
+    sessionKind:
+      mode === "host-prompt" || mode === "host-busy"
+        ? "host"
+        : mode === "unknown"
+          ? state.sessionKind
+          : "ios",
+  };
 }
 
 export function updatePrompt(state: TerminalSessionState, prompt: string): TerminalSessionState {
@@ -93,7 +109,7 @@ export function setPaging(state: TerminalSessionState, paging: boolean): Termina
 }
 
 export function markWizardDetected(state: TerminalSessionState): TerminalSessionState {
-  return { ...state, wizardDetected: true, confirmPromptActive: false };
+  return { ...state, wizardDetected: true, confirmPromptActive: false, sessionKind: "ios" };
 }
 
 export function markConfirmPrompt(state: TerminalSessionState): TerminalSessionState {

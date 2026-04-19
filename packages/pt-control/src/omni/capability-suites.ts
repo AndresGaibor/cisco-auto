@@ -4,6 +4,7 @@
 
 import type { CapabilityRisk } from "./capability-types.js";
 import { filterCapabilities } from "./capability-registry.js";
+import { INTERACTIVE_VERIFICATION_BASELINES } from "./suites/interactive-verification-baselines.js";
 
 export interface CapabilitySuite {
   id: string;
@@ -165,3 +166,33 @@ export function getPrerequisites(suiteId: string): string[] {
   const suite = SUITES.get(suiteId);
   return suite?.prerequisites ?? [];
 }
+
+registerSuite({
+  id: "interactive-smoke",
+  title: "Interactive Smoke",
+  description: "Baseline mínima de interacción terminal IOS/host con evidencia verificable",
+  capabilityIds: [...INTERACTIVE_VERIFICATION_BASELINES["interactive-smoke"]],
+  estimatedDurationMs: 60000,
+  risk: "safe",
+  prerequisites: [],
+});
+
+registerSuite({
+  id: "interactive-network",
+  title: "Interactive Network",
+  description: "Baseline de ping/tracert/arp/cdp",
+  capabilityIds: [...INTERACTIVE_VERIFICATION_BASELINES["interactive-network"]],
+  estimatedDurationMs: 90000,
+  risk: "safe",
+  prerequisites: [],
+});
+
+registerSuite({
+  id: "interactive-switching",
+  title: "Interactive Switching",
+  description: "Baseline de switching y observabilidad IOS",
+  capabilityIds: [...INTERACTIVE_VERIFICATION_BASELINES["interactive-switching"]],
+  estimatedDurationMs: 60000,
+  risk: "safe",
+  prerequisites: [],
+});

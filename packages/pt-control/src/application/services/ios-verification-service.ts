@@ -1,4 +1,17 @@
-import type { VerificationResult, VerificationCheck } from "../../contracts/verification-result.js";
+export interface VerificationCheck {
+  name: string;
+  ok: boolean;
+  details?: Record<string, unknown>;
+}
+
+export interface VerificationResult {
+  executed: boolean;
+  verified: boolean;
+  partiallyVerified?: boolean;
+  verificationSource?: string[];
+  warnings?: string[];
+  checks?: VerificationCheck[];
+}
 
 export type ExecFn = (device: string, command: string, parse?: boolean, timeout?: number) => Promise<{ raw: string; parsed?: any }>;
 
@@ -138,7 +151,7 @@ export class IosVerificationService {
           checks.push({ name: 'access-port-mode', ok: !!hasAccess, details: { interface: found } });
           if (expectedVlan) {
             const m = JSON.stringify(cfg).match(/switchport access vlan\s+(\d+)/i);
-            const foundVlan = m ? parseInt(m[1]) : null;
+            const foundVlan = m ? parseInt(m[1]!) : null;
             checks.push({ name: 'access-port-vlan', ok: foundVlan === expectedVlan, details: { expected: expectedVlan, found: foundVlan } });
             const verified = !!hasAccess && (foundVlan === expectedVlan);
             return this.makeResult(true, verified, checks, warnings, sources);
@@ -158,7 +171,7 @@ export class IosVerificationService {
         checks.push({ name: 'access-port-mode', ok: !!hasAccess, details: { interface: portName } });
         if (expectedVlan) {
           var vm = block.match(/switchport access vlan\s+(\d+)/i);
-          var fv = vm ? parseInt(vm[1]) : null;
+          var fv = vm ? parseInt(vm[1]!) : null;
           checks.push({ name: 'access-port-vlan', ok: fv === expectedVlan, details: { expected: expectedVlan, found: fv } });
           return this.makeResult(true, !!hasAccess && fv === expectedVlan, checks, warnings, sources);
         }
@@ -192,10 +205,10 @@ export class IosVerificationService {
 
       if (expectedVlans && expectedVlans.length > 0) {
         var m = block.match(/switchport trunk allowed vlan\s+(.+)/i);
-        var allowed = m ? m[1].trim() : '';
+        var allowed = m ? (m[1] ?? "").trim() : "";
         var allowedSet = new Set<number>();
         if (allowed) {
-          allowed.split(/[,\s]+/).forEach(function(p){ if(p) { if(p.indexOf('-')>=0) { var r = p.split('-'); var a = parseInt(r[0]); var b = parseInt(r[1]); for(var x=a;x<=b;x++) allowedSet.add(x); } else allowedSet.add(parseInt(p)); } });
+          allowed.split(/[,\s]+/).forEach(function(p){ if(p) { if(p.indexOf('-')>=0) { var r = p.split('-'); var a = parseInt(r[0] ?? ""); var b = parseInt(r[1] ?? ""); for(var x=a;x<=b;x++) allowedSet.add(x); } else allowedSet.add(parseInt(p)); } });
         }
         var allPresent = expectedVlans.every(function(v){ return allowedSet.has(v); });
         checks.push({ name: 'trunk-allowed-vlans', ok: allPresent, details: { expected: expectedVlans, allowed: Array.from(allowedSet) } });
@@ -370,6 +383,32 @@ export class IosVerificationService {
       checks.push({ name: 'acl-present', ok: hasAcl, details: { aclNumber } });
       if (!hasAcl) warnings.push(`ACL ${aclNumber} not found in show access-lists`);
       return this.makeResult(true, hasAcl, checks, warnings, sources);
+    } catch (err) {
+      return this.makeResult(false, false, checks, [String(err)], sources);
+    }
+  }
+
+  async verifyRunningConfigContains(device: string, snippets: string[]): Promise<VerificationResult> {
+    const sources = ["show running-config"];
+    const checks: VerificationCheck[] = [];
+    const warnings: string[] = [];
+
+    try {
+      const out = await this.exec(device, "show running-config", false, 15000);
+      const raw = out.raw || "";
+
+      for (const snippet of snippets) {
+        const ok = raw.toLowerCase().includes(snippet.toLowerCase());
+        checks.push({
+          name: "running-config-contains",
+          ok,
+          details: { snippet },
+        });
+        if (!ok) warnings.push(`No se encontró snippet en running-config: ${snippet}`);
+      }
+
+      const verified = checks.length > 0 && checks.every((c) => c.ok);
+      return this.makeResult(true, verified, checks, warnings, sources);
     } catch (err) {
       return this.makeResult(false, false, checks, [String(err)], sources);
     }

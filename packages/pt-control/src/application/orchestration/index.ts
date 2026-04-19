@@ -1,204 +1,212 @@
-// Orquestador principal - Coordina ejecución de intents
-// Patrón: Intent → Plan → Execution → Evidence → Verdict
+import type { RuntimePrimitivePort } from "../../ports/runtime-primitive-port.js";
+import type { RuntimeTerminalPort } from "../../ports/runtime-terminal-port.js";
+import type { RuntimeOmniPort } from "../../ports/runtime-omni-port.js";
+import type { PostVerificationSpec } from "../services/ios-post-verification.js";
+import type {
+  ScenarioEndToEndSpec,
+} from "../services/scenario-end-to-end-verification-service.js";
+import { PostVerificationRunner } from "./post-verification-runner.js";
 
-import type { Intent } from "../../contracts/intent";
-import type { ExecutionPlan, ExecutionStep } from "../../contracts/plan";
-import type { ExecutionEvidence } from "../../contracts/evidence";
-import type { ExecutionVerdict, VerdictStatus } from "../../contracts/verdict";
-import type { FileBridgePort } from "../ports/file-bridge.port.js";
-import {
-  createPrimitivePort,
-  createTerminalPort,
-  createOmniPort,
-  type RuntimePrimitivePort,
-  type RuntimeTerminalPort,
-  type RuntimeOmniPort,
-} from "../../ports";
-import type { Planner } from "../planners/types";
-import type { Verifier } from "../verification/types";
-import type { Diagnoser } from "../diagnosis/types";
-import type { FallbackPolicy } from "../fallback/types";
-
-export interface OrchestratorConfig {
-  defaultTimeout: number;
-  maxRetries: number;
-  enableFallback: boolean;
+export interface ExecutionIntent {
+  id: string;
+  kind: string;
+  goal: string;
+  target?: string;
+  metadata?: Record<string, unknown>;
 }
 
-export interface OrchestratorContext {
+export interface ExecutionEvidence {
+  rawRuntimeResults: unknown[];
+  rawTerminalResults: unknown[];
+  rawOmniResults: unknown[];
+  warnings: string[];
+  anomalies: string[];
+  normalizedFacts: Record<string, unknown>;
+  postVerification?: unknown;
+  scenarioVerification?: unknown;
+}
+
+export interface ExecutionVerdict {
+  ok: boolean;
+  status: "success" | "partial" | "failed";
+  goalSatisfied: boolean;
+  partial?: boolean;
+  reason?: string;
+  warnings: string[];
+  evidence: ExecutionEvidence;
+  confidence: number;
+  nextActions?: string[];
+}
+
+export interface ExecutionStep {
+  kind: "primitive" | "terminal-plan" | "omni-capability";
+  id?: string;
+  payload?: Record<string, unknown>;
+  plan?: unknown;
+  optional?: boolean;
+}
+
+export interface ExecutionPlan {
+  id: string;
+  intentId: string;
+  strategy: string;
+  steps: ExecutionStep[];
+  metadata?: {
+    postVerification?: {
+      device: string;
+      checks: PostVerificationSpec[];
+    };
+    scenarioVerification?: ScenarioEndToEndSpec;
+  };
+}
+
+export interface Planner {
+  buildPlan(intent: ExecutionIntent): Promise<ExecutionPlan>;
+}
+
+export interface OrchestratorDeps {
   primitivePort: RuntimePrimitivePort;
   terminalPort: RuntimeTerminalPort;
   omniPort: RuntimeOmniPort;
   planner: Planner;
-  verifier: Verifier;
-  diagnoser: Diagnoser;
-  fallbackPolicy: FallbackPolicy;
+  postVerificationRunner: PostVerificationRunner;
 }
 
-export function createOrchestrator(config: OrchestratorConfig, bridge: FileBridgePort): OrchestratorContext {
-  return {
-    primitivePort: createPrimitivePort({ bridge, defaultTimeout: config.defaultTimeout }),
-    terminalPort: createTerminalPort({ bridge, defaultTimeout: config.defaultTimeout }),
-    omniPort: createOmniPort({ bridge }),
-    planner: createDefaultPlanner(),
-    verifier: createDefaultVerifier(),
-    diagnoser: createDefaultDiagnoser(),
-    fallbackPolicy: createDefaultFallbackPolicy(),
-  };
+export type OrchestratorContext = OrchestratorDeps;
+
+export class Orchestrator {
+  constructor(private readonly deps: OrchestratorDeps) {}
+
+  async executeIntent(intent: ExecutionIntent): Promise<ExecutionVerdict> {
+    const plan = await this.deps.planner.buildPlan(intent);
+
+    const evidence: ExecutionEvidence = {
+      rawRuntimeResults: [],
+      rawTerminalResults: [],
+      rawOmniResults: [],
+      warnings: [],
+      anomalies: [],
+      normalizedFacts: {
+        strategy: plan.strategy,
+        planId: plan.id,
+        stepCount: plan.steps.length,
+      },
+    };
+
+    for (const step of plan.steps) {
+      try {
+        if (step.kind === "primitive" && step.id) {
+          const result = await this.deps.primitivePort.runPrimitive(
+            step.id,
+            step.payload ?? {},
+            {},
+          );
+          evidence.rawRuntimeResults.push(result);
+
+          if (!result.ok && !step.optional) {
+            return {
+              ok: false,
+              status: "failed",
+              goalSatisfied: false,
+              reason: `Primitive step failed: ${step.id}`,
+              warnings: evidence.warnings,
+              evidence,
+              confidence: 0.4,
+            };
+          }
+        }
+
+        if (step.kind === "terminal-plan" && step.plan) {
+          const result = await this.deps.terminalPort.runTerminalPlan(step.plan as any, {});
+          evidence.rawTerminalResults.push(result);
+
+          if (!result.ok && !step.optional) {
+            return {
+              ok: false,
+              status: "failed",
+              goalSatisfied: false,
+              reason: "Terminal plan step failed",
+              warnings: evidence.warnings.concat(result.warnings ?? []),
+              evidence,
+              confidence: 0.4,
+            };
+          }
+        }
+
+        if (step.kind === "omni-capability" && step.id) {
+          const result = await this.deps.omniPort.runOmniCapability(
+            step.id,
+            step.payload ?? {},
+            {},
+          );
+          evidence.rawOmniResults.push(result);
+
+          if (!result.ok && !step.optional) {
+            return {
+              ok: false,
+              status: "failed",
+              goalSatisfied: false,
+              reason: `Omni capability failed: ${step.id}`,
+              warnings: evidence.warnings.concat(result.warnings ?? []),
+              evidence,
+              confidence: 0.4,
+            };
+          }
+        }
+      } catch (e) {
+        if (!step.optional) {
+          return {
+            ok: false,
+            status: "failed",
+            goalSatisfied: false,
+            reason: `Execution step crashed: ${String(e)}`,
+            warnings: evidence.warnings,
+            evidence,
+            confidence: 0.2,
+          };
+        }
+        evidence.warnings.push(`Optional step failed: ${String(e)}`);
+      }
+    }
+
+    if (plan.metadata?.postVerification || plan.metadata?.scenarioVerification) {
+      const pv = await this.deps.postVerificationRunner.run({
+        device: plan.metadata?.postVerification?.device,
+        postChecks: plan.metadata?.postVerification?.checks,
+        scenario: plan.metadata?.scenarioVerification,
+      });
+
+      evidence.warnings.push(...pv.warnings);
+      if (pv.postVerification) evidence.postVerification = pv.postVerification;
+      if (pv.scenarioVerification) evidence.scenarioVerification = pv.scenarioVerification;
+
+      if (!pv.ok) {
+        return {
+          ok: false,
+          status: "failed",
+          goalSatisfied: false,
+          reason: pv.error ?? "Post-verification failed",
+          warnings: evidence.warnings,
+          evidence,
+          confidence: 0.6,
+        };
+      }
+    }
+
+    return {
+      ok: true,
+      status: "success",
+      goalSatisfied: true,
+      warnings: evidence.warnings,
+      evidence,
+      confidence: 0.95,
+    };
+  }
 }
 
 export async function executeIntent(
-  orchestrator: OrchestratorContext,
-  intent: Intent
+  orchestrator: OrchestratorDeps,
+  intent: ExecutionIntent,
 ): Promise<ExecutionVerdict> {
-  const plan = await orchestrator.planner.buildPlan(intent);
-
-  if (!plan) {
-    return {
-      ok: false,
-      status: "failed",
-      goalSatisfied: false,
-      partial: false,
-      reason: "No se pudo construir plan para la intención",
-      warnings: [],
-      evidence: createEmptyEvidence(),
-      confidence: 0,
-    };
-  }
-
-  const evidence = await executePlan(orchestrator, plan);
-  const verdict = await orchestrator.verifier.verify(evidence, plan.successCriteria);
-
-  return verdict;
-}
-
-async function executePlan(
-  orchestrator: OrchestratorContext,
-  plan: ExecutionPlan
-): Promise<ExecutionEvidence> {
-  const runtimeResults: Record<string, unknown>[] = [];
-  const terminalResults: Record<string, unknown>[] = [];
-  const omniResults: Record<string, unknown>[] = [];
-  const warnings: string[] = [];
-
-  for (const step of plan.steps) {
-    try {
-      switch (step.kind) {
-        case "primitive": {
-          const result = await orchestrator.primitivePort.runPrimitive(
-            step.runtimePrimitiveId!,
-            step.payload
-          );
-          runtimeResults.push({ stepId: step.id, ...result });
-          if (!result.ok && !step.optional) {
-            warnings.push(`Step ${step.id} failed: ${result.error}`);
-          }
-          break;
-        }
-        case "terminal-plan": {
-          const result = await orchestrator.terminalPort.runTerminalPlan(step.terminalPlan!);
-          terminalResults.push({ stepId: step.id, ...result });
-          if (!result.ok && !step.optional) {
-            warnings.push(`Step ${step.id} failed`);
-          }
-          break;
-        }
-        case "omni-capability": {
-          const result = await orchestrator.omniPort.runOmniCapability(
-            step.omniCapabilityId!,
-            step.payload
-          );
-          omniResults.push({ stepId: step.id, ...result });
-          if (!result.ok && !step.optional) {
-            warnings.push(`Step ${step.id} failed: ${result.error}`);
-          }
-          break;
-        }
-      }
-    } catch (e) {
-      warnings.push(`Step ${step.id} threw: ${String(e)}`);
-    }
-  }
-
-  return {
-    rawRuntimeResults: runtimeResults,
-    rawTerminalResults: terminalResults,
-    rawOmniResults: omniResults,
-    snapshotsBeforeAfter: [],
-    normalizedFacts: [],
-    warnings,
-    anomalies: [],
-    confidenceInputs: { stepsCount: plan.steps.length },
-  };
-}
-
-function createEmptyEvidence(): ExecutionEvidence {
-  return {
-    rawRuntimeResults: [],
-    rawTerminalResults: [],
-    rawOmniResults: [],
-    snapshotsBeforeAfter: [],
-    normalizedFacts: [],
-    warnings: [],
-    anomalies: [],
-    confidenceInputs: {},
-  };
-}
-
-function createDefaultPlanner(): Planner {
-  return {
-    buildPlan: async (intent: Intent) => {
-      return {
-        id: `plan-${intent.id}`,
-        intentId: intent.id,
-        strategy: "default",
-        steps: [],
-      };
-    },
-  };
-}
-
-function createDefaultVerifier(): Verifier {
-  return {
-    verify: async (evidence: ExecutionEvidence, criteria: any) => {
-      const hasFailures =
-        evidence.rawRuntimeResults.some((r: any) => !r.ok) ||
-        evidence.rawTerminalResults.some((r: any) => !r.ok) ||
-        evidence.rawOmniResults.some((r: any) => !r.ok);
-
-      const status: VerdictStatus = hasFailures ? "failed" : "success";
-
-      return {
-        ok: !hasFailures,
-        status,
-        goalSatisfied: !hasFailures,
-        partial: false,
-        reason: hasFailures ? "Verification failed" : "Success",
-        warnings: evidence.warnings,
-        evidence,
-        confidence: hasFailures ? 0.5 : 1,
-      };
-    },
-  };
-}
-
-function createDefaultDiagnoser(): Diagnoser {
-  return {
-    diagnose: async (evidence: ExecutionEvidence) => {
-      const failures = evidence.warnings.map((w) => ({
-        type: "unknown" as const,
-        message: w,
-      }));
-      return { failures, rootCause: failures[0]?.message };
-    },
-  };
-}
-
-function createDefaultFallbackPolicy(): FallbackPolicy {
-  return {
-    selectStrategy: async (intent: Intent, previousResult: any) => {
-      return "primitive";
-    },
-    shouldRetry: (attempt: number, error: any) => attempt < 3,
-  };
+  return new Orchestrator(orchestrator).executeIntent(intent);
 }

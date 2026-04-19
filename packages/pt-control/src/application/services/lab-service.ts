@@ -113,7 +113,6 @@ export interface LabVerification {
 }
 
 export interface LabContext {
-  controller: PTController;
   snapshotBefore?: Record<string, unknown>;
   snapshotAfter?: Record<string, unknown>;
   deviceXml?: Record<string, ParsedDeviceXml>;
@@ -266,9 +265,7 @@ export class LabService {
     const checks: LabCheck[] = [];
     const evidence: Record<string, unknown> = {};
 
-    const contexto: LabContext = {
-      controller: {} as PTController,
-    };
+    const contexto: LabContext = {};
 
     try {
       contexto.snapshotBefore = await this.getSnapshot();
@@ -338,5 +335,3 @@ export class LabService {
     }
   }
 }
-
-import type { PTController } from "../../controller/index.js";

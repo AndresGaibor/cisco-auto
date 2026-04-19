@@ -141,7 +141,7 @@ export function createControlComposition(
   const generateId = () => `ctrl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
   // Servicios de aplicación
-  const topologyService = new TopologyService(bridge, topologyCache, generateId);
+  const topologyService = new TopologyService(primitiveAdapter, topologyCache, generateId);
   const deviceService = new DeviceService(primitiveAdapter, topologyCache, generateId);
   const canvasService = new CanvasService(primitiveAdapter, generateId);
   const contextService = new ControllerContextService(bridge, topologyCache);
@@ -157,7 +157,6 @@ export function createControlComposition(
   const canvasFacade = new ControllerCanvasService(canvasService);
 
   const labService = new LabService(
-    bridge,
     primitiveAdapter,
     topologyCache,
     deviceService,

@@ -1,6 +1,6 @@
-// RuntimeTerminalAdapter — Implementación del puerto terminal
-// Conecta al motor terminal real via FileBridgePort (sendCommandAndWait)
-// No contiene lógica de negocio — solo mapea TerminalPlan → comandos IOS
+// RuntimeTerminalAdapter — Implementación robusta del puerto terminal
+// Soporta tanto IOS como Host Command Prompt
+// Habla con el runtime solo por el adapter. No contiene lógica de negocio.
 
 import type { FileBridgePort } from "../application/ports/file-bridge.port.js";
 import type {
@@ -8,7 +8,6 @@ import type {
   TerminalPortOptions,
   TerminalPortResult,
   TerminalPlan,
-  TerminalPlanStep,
   SessionResult,
 } from "../ports/runtime-terminal-port.js";
 
@@ -18,7 +17,51 @@ export interface RuntimeTerminalAdapterDeps {
   defaultTimeout?: number;
 }
 
-export function createRuntimeTerminalAdapter(deps: RuntimeTerminalAdapterDeps): RuntimeTerminalPort {
+type ExecInteractiveValue = {
+  raw?: string;
+  parsed?: unknown;
+  session?: {
+    mode?: string;
+    prompt?: string;
+    paging?: boolean;
+    awaitingConfirm?: boolean;
+    autoDismissedInitialDialog?: boolean;
+  };
+  diagnostics?: {
+    commandStatus?: number;
+    completionReason?: string;
+  };
+};
+
+function normalizeStatus(value: ExecInteractiveValue): number {
+  if (typeof value?.diagnostics?.commandStatus === "number") {
+    return value.diagnostics.commandStatus;
+  }
+
+  const raw = String(value?.raw ?? "");
+  if (
+    raw.includes("% Invalid") ||
+    raw.includes("% Incomplete") ||
+    raw.includes("% Ambiguous") ||
+    raw.includes("% Unknown") ||
+    raw.includes("%Error") ||
+    raw.toLowerCase().includes("invalid command")
+  ) {
+    return 1;
+  }
+
+  return 0;
+}
+
+function detectHostMode(session: ExecInteractiveValue["session"]): boolean {
+  if (!session?.mode) return false;
+  const mode = session.mode.toLowerCase();
+  return mode.includes("host") || mode === "pc" || mode === "server";
+}
+
+export function createRuntimeTerminalAdapter(
+  deps: RuntimeTerminalAdapterDeps,
+): RuntimeTerminalPort {
   const { bridge, generateId, defaultTimeout = 30000 } = deps;
 
   async function runTerminalPlan(
@@ -26,111 +69,165 @@ export function createRuntimeTerminalAdapter(deps: RuntimeTerminalAdapterDeps): 
     options?: TerminalPortOptions,
   ): Promise<TerminalPortResult> {
     const timeoutMs = options?.timeoutMs ?? defaultTimeout;
-    const stallTimeoutMs = options?.stallTimeoutMs ?? 5000;
+
+    if (!plan.device || !String(plan.device).trim()) {
+      return {
+        ok: false,
+        output: "",
+        status: 1,
+        promptBefore: "",
+        promptAfter: "",
+        modeBefore: "",
+        modeAfter: "",
+        events: [],
+        warnings: ["TerminalPlan.device es obligatorio"],
+        confidence: 0,
+      };
+    }
+
+    if (!Array.isArray(plan.steps) || plan.steps.length === 0) {
+      return {
+        ok: false,
+        output: "",
+        status: 1,
+        promptBefore: "",
+        promptAfter: "",
+        modeBefore: "",
+        modeAfter: "",
+        events: [],
+        warnings: ["TerminalPlan.steps no puede estar vacío"],
+        confidence: 0,
+      };
+    }
 
     let promptBefore = "";
     let modeBefore = "";
     let promptAfter = "";
     let modeAfter = "";
-    const events: unknown[] = [];
-    const warnings: string[] = [];
     let aggregatedOutput = "";
-    let lastStatus = 0;
+    let finalStatus = 0;
 
-    for (const step of plan.steps) {
+    const warnings: string[] = [];
+    const events: Array<Record<string, unknown>> = [];
+
+    for (let i = 0; i < plan.steps.length; i += 1) {
+      const step = plan.steps[i]!;
+      const command = String(step.command ?? "");
       const stepTimeout = step.timeout ?? timeoutMs;
 
-      const result = await bridge.sendCommandAndWait<any>("execInteractive", {
-        id: generateId(),
-        device: plan.device,
-        command: step.command,
-        options: {
-          timeout: stepTimeout,
-          parse: false,
-          ensurePrivileged: false,
+      const bridgeResult = await bridge.sendCommandAndWait<{ value?: ExecInteractiveValue }>(
+        "execInteractive",
+        {
+          id: generateId(),
+          device: plan.device,
+          command,
+          options: {
+            timeout: stepTimeout,
+            parse: false,
+            ensurePrivileged: false,
+          },
         },
+      );
+
+      const value = (bridgeResult?.value ?? {}) as ExecInteractiveValue;
+      const raw = String(value.raw ?? "");
+      const status = normalizeStatus(value);
+      const isHost = detectHostMode(value.session);
+
+      if (i === 0) {
+        promptBefore = String(value.session?.prompt ?? "");
+        modeBefore = String(value.session?.mode ?? "");
+      }
+
+      promptAfter = String(value.session?.prompt ?? promptAfter);
+      modeAfter = String(value.session?.mode ?? modeAfter);
+      aggregatedOutput += raw.endsWith("\n") ? raw : `${raw}\n`;
+      finalStatus = status;
+
+      events.push({
+        stepIndex: i,
+        command,
+        status,
+        promptAfter,
+        modeAfter,
+        completionReason: value.diagnostics?.completionReason,
+        paging: Boolean(value.session?.paging),
+        awaitingConfirm: Boolean(value.session?.awaitingConfirm),
+        autoDismissedInitialDialog: Boolean(value.session?.autoDismissedInitialDialog),
+        sessionKind: isHost ? "host" : "ios",
       });
 
-      const value = result.value ?? {};
-      const raw = value.raw ?? "";
-
-      if (promptBefore === "" && value.session) {
-        promptBefore = value.session.prompt ?? "";
-        modeBefore = value.session.mode ?? "";
-      }
-
-      promptAfter = value.session?.prompt ?? promptAfter;
-      modeAfter = value.session?.mode ?? modeAfter;
-
-      aggregatedOutput += raw + "\n";
-      lastStatus = value.diagnostics?.commandStatus ?? (raw.includes("%") || raw.includes("Invalid") ? 1 : 0);
-
       if (value.session?.paging) {
-        warnings.push(`Step "${step.command}" triggered paging on device ${plan.device}`);
+        warnings.push(`El comando "${command}" activó paginación en ${plan.device}`);
       }
 
-      if (value.session?.awaitingConfirm) {
-        warnings.push(`Step "${step.command}" is awaiting confirmation on device ${plan.device}`);
+      if (value.session?.awaitingConfirm && !isHost) {
+        warnings.push(`El comando "${command}" dejó confirmación pendiente en ${plan.device}`);
       }
 
-      if (step.expectedPrompt && !raw.includes(step.expectedPrompt)) {
-        warnings.push(`Expected prompt "${step.expectedPrompt}" not found after "${step.command}"`);
+      if (
+        step.expectedPrompt &&
+        promptAfter &&
+        !promptAfter.includes(step.expectedPrompt)
+      ) {
+        warnings.push(
+          `Prompt esperado "${step.expectedPrompt}" no alcanzado tras "${command}". Prompt final: "${promptAfter}"`,
+        );
       }
 
-      if (stepTimeout > timeoutMs + stallTimeoutMs) {
-        warnings.push(`Step "${step.command}" exceeded expected stall timeout`);
+      if (isHost && (raw.includes("request timed out") || raw.includes("reply from"))) {
+        warnings.push(`Comando host "${command}" produjo output de red (ping/tracert)`);
+      }
+
+      if (status !== 0) {
+        return {
+          ok: false,
+          output: aggregatedOutput.trim(),
+          status,
+          promptBefore,
+          promptAfter,
+          modeBefore,
+          modeAfter,
+          events,
+          warnings,
+          confidence: warnings.length > 0 ? 0.5 : 0.6,
+        };
       }
     }
 
-    const hasWarnings = warnings.length > 0;
-    const confidence = hasWarnings ? 0.7 : 1.0;
-
     return {
-      ok: lastStatus === 0,
+      ok: true,
       output: aggregatedOutput.trim(),
-      status: lastStatus,
+      status: finalStatus,
       promptBefore,
       promptAfter,
       modeBefore,
       modeAfter,
       events,
       warnings,
-      confidence,
+      confidence: warnings.length > 0 ? 0.8 : 1,
     };
   }
 
   async function ensureSession(device: string): Promise<SessionResult> {
-    try {
-      const result = await bridge.sendCommandAndWait<any>("execIos", {
-        id: generateId(),
-        device,
-        command: "show version",
-        parse: false,
-        timeout: defaultTimeout,
-      });
-
-      const value = result.value;
-      if (!value || value.ok === false) {
-        return {
-          ok: false,
-          error: value?.error ?? "No se pudo abrir sesión en el dispositivo",
-        };
-      }
-
-      return {
-        ok: true,
-        sessionId: `${device}-${Date.now()}`,
-      };
-    } catch (e) {
+    if (!device || !String(device).trim()) {
       return {
         ok: false,
-        error: String(e),
+        error: "Device es obligatorio para ensureSession()",
       };
     }
+
+    return {
+      ok: true,
+      sessionId: `terminal:${String(device).trim()}`,
+    };
   }
 
-  async function pollTerminalJob(jobId: string): Promise<TerminalPortResult | null> {
-    return null;
+  async function pollTerminalJob(_jobId: string): Promise<TerminalPortResult | null> {
+    throw new Error(
+      "pollTerminalJob() no está habilitado en la arquitectura actual. " +
+        "Usa runTerminalPlan() directamente o elimina pollTerminalJob() del contrato si ya no se necesita.",
+    );
   }
 
   return {

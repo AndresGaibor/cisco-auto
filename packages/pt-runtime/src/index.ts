@@ -1,14 +1,16 @@
 // ============================================================================
 // PT Runtime - Public API
 // ============================================================================
-// API mínima pública. La lógica CLI fue movida a src/cli.ts
+// API pública mínima y deliberada.
+// Sin lógica CLI.
+// Sin promoción de superficies legacy innecesarias.
 
 export {
   createRuntimeState,
   bootstrapKernel,
   createDispatchLoop,
-  createRuntimeLoader as createPhase6RuntimeLoader,
-  createCleanupManager as createPhase6CleanupManager,
+  createRuntimeLoader,
+  createCleanupManager,
   isIdempotentClean,
   safeCleanup,
 } from "./kernel";
@@ -16,22 +18,51 @@ export {
 export { listRuntimeSnapshots, restoreRuntimeSnapshot } from "./runtime-artifacts";
 
 // --------------------------------------------------------------------
-// Terminal (nuevo subsistema Phase 2)
+// Terminal - solo subsistema nuevo público
 // --------------------------------------------------------------------
 export {
+  createTerminalSessionState,
+  getSession,
+  ensureSession,
+  disposeSession,
+  disposeAllSessions,
+  detectModeFromPrompt,
+  detectWizardFromOutput,
+  detectConfirmPrompt,
+  normalizePrompt,
+  promptMatches,
+  createPagerState,
+  detectPagerOutput,
+  createPagerHandler,
   createCommandExecutor,
+  createModeGuard,
+  createTerminalPlan,
+  createCommandStep,
+  createPlanEngine,
+  buildEvidence,
+  hasValidEvidence,
+  calculateConfidence,
+  TerminalErrors,
+  createTerminalError,
+  type TerminalSessionState,
+  type TerminalMode,
+  type TerminalHealth,
+  type PagerState,
   type CommandExecutionResult,
   type ExecutionOptions,
   type PTCommandLine,
-  ensureSession,
-  getSession,
-  detectModeFromPrompt,
-  type TerminalMode,
+  type ModeTransitionResult,
+  type TerminalPlan,
+  type TerminalPlanStep,
+  type TerminalPlanResult,
+  type TerminalPlanPolicies,
+  type TerminalExecutionEvidence,
   type TerminalErrorCode,
+  type TerminalError,
 } from "./terminal";
 
 // --------------------------------------------------------------------
-// Primitives - API pública
+// Primitives - API pública aprobada
 // --------------------------------------------------------------------
 export {
   addDevice,
@@ -51,28 +82,28 @@ export {
   topologySnapshot,
   hardwareInfo,
   processInfo,
-  type PrimitiveDomain,
-  type PrimitiveResult,
-  type PrimitiveEntry,
-  type PrimitiveContext,
   registerPrimitive,
   getPrimitive,
   listPrimitives,
   getPrimitivesByDomain,
   executePrimitive,
+  type PrimitiveDomain,
+  type PrimitiveResult,
+  type PrimitiveEntry,
+  type PrimitiveContext,
 } from "./primitives";
 
 // --------------------------------------------------------------------
-// Omni - Funciones públicas de evaluación/adapter
+// Omni adapters - API pública aprobada
 // --------------------------------------------------------------------
 export {
-  type OmniResult,
   evaluateExpression,
   getAssessmentItem,
   accessGlobal,
   getProcess,
   getEnvironmentInfo,
   serializeDevice,
+  type OmniResult,
 } from "./omni";
 
 // --------------------------------------------------------------------
@@ -80,9 +111,9 @@ export {
 // --------------------------------------------------------------------
 export {
   validateES5,
+  validatePTSafe,
   type ES5ValidationResult,
   type ES5ValidationError,
-  validatePTSafe,
   type PTSafeValidationResult,
   type PTSafeValidationError,
   type PTSafeOptions,
@@ -98,19 +129,14 @@ export {
   normalizeArtifactForChecksum,
   renderRuntimeV2,
   renderRuntimeV2Sync,
-  renderRuntimeV2Sync as renderRuntimeSource,
   renderMainV2,
-  renderMainV2 as renderMainSource,
   renderCatalog,
   RuntimeGenerator,
-  type RuntimeGeneratorConfig,
-} from "./build/index.js";
-
-export {
   ModularRuntimeGenerator,
+  type RuntimeGeneratorConfig,
   type ModularGeneratorConfig,
   type ModularManifest,
-} from "./build/render-runtime-modular.js";
+} from "./build/index.js";
 
 export type {
   RuntimeArtifactManifest,
@@ -119,6 +145,6 @@ export type {
 } from "./build/manifest.js";
 
 // --------------------------------------------------------------------
-// PT Compatibility Contract - público para pt-control
+// PT compatibility contract - público para pt-control
 // --------------------------------------------------------------------
 export * from "./contracts/pt-compatibility.js";

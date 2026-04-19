@@ -12,13 +12,13 @@ import type {
   ShowMacAddressTable,
   ShowCdpNeighbors,
   DeviceState,
-} from "../../contracts/index.js";
+} from "@cisco-auto/types";
 import type {
   IosExecutionSuccess,
   IosConfigApplyResult,
   IosConfidence,
   IosExecutionEvidence,
-} from "../../contracts/ios-execution-evidence.js";
+} from "../../contracts/ios-execution-evidence";
 import type { DeviceCapabilities } from "../../domain/ios/capabilities/pt-capability-resolver.js";
 import type { RuntimeTerminalPort } from "../../ports/runtime-terminal-port.js";
 import { IosExecutionService } from "./ios-execution-service.js";
@@ -34,7 +34,7 @@ export class IosService {
     inspectDevice: (device: string) => Promise<DeviceState>,
     terminalPort: RuntimeTerminalPort,
   ) {
-    this.execution = new IosExecutionService(bridge, generateId, terminalPort);
+    this.execution = new IosExecutionService(generateId, terminalPort);
     const eventBridge: {
       appendEvent?: (event: {
         type: string;

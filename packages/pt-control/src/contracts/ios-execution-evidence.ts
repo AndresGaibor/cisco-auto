@@ -5,14 +5,20 @@ export interface IosExecutionEvidence {
   device?: string;
   status?: number;
   mode?: string;
+  prompt?: string;
   timestamp?: number;
   metadata?: Record<string, unknown>;
+  paging?: boolean;
+  awaitingConfirm?: boolean;
+  autoDismissedInitialDialog?: boolean;
+  completionReason?: string;
 }
 
 export interface IosExecutionSuccess<T = unknown> {
   ok: boolean;
   raw: string;
   value?: T;
+  parsed?: T;
   status?: number;
   mode?: string;
   evidence?: IosExecutionEvidence;
@@ -21,7 +27,10 @@ export interface IosExecutionSuccess<T = unknown> {
 export interface IosConfigApplyResult {
   ok: boolean;
   raw: string;
-  commandCount: number;
+  executed: boolean;
+  device: string;
+  commands: string[];
+  results: Array<{ index: number; command: string; ok: boolean; output: string }>;
   warnings?: string[];
   evidence?: IosExecutionEvidence;
 }

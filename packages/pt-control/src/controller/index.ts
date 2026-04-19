@@ -6,13 +6,6 @@ import type {
   DeviceState,
   LinkState,
   DeviceListResult,
-  ShowIpInterfaceBrief,
-  ShowVlan,
-  ShowIpRoute,
-  ShowRunningConfig,
-  ShowMacAddressTable,
-  ShowCdpNeighbors,
-  ParsedOutput,
   AddLinkPayload,
   DevicesInRectResult,
   NetworkTwin,
@@ -173,206 +166,6 @@ export class PTController {
     return deviceState;
   }
 
-  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
-  async configIos(device: string, commands: string[], options?: { save?: boolean }): Promise<void> {
-    await this._composition.iosService.configIos(device, commands, options).then(() => undefined);
-  }
-
-  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
-  async execIos<T = ParsedOutput>(
-    device: string,
-    command: string,
-    parse = true,
-    timeout = 5000,
-  ): Promise<{ raw: string; parsed?: T }> {
-    return this._composition.iosService.execIos<T>(device, command, parse, timeout);
-  }
-
-  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
-  async show(device: string, command: string): Promise<ParsedOutput> {
-    return this._composition.iosService.show(device, command);
-  }
-
-  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
-  async showIpInterfaceBrief(device: string): Promise<ShowIpInterfaceBrief> {
-    return this._composition.iosService.showIpInterfaceBrief(device);
-  }
-
-  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
-  async showVlan(device: string): Promise<ShowVlan> {
-    return this._composition.iosService.showVlan(device);
-  }
-
-  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
-  async showIpRoute(device: string): Promise<ShowIpRoute> {
-    return this._composition.iosService.showIpRoute(device);
-  }
-
-  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
-  async showRunningConfig(device: string): Promise<ShowRunningConfig> {
-    return this._composition.iosService.showRunningConfig(device);
-  }
-
-  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
-  async showMacAddressTable(device: string): Promise<ShowMacAddressTable> {
-    return this._composition.iosService.show(device, "show mac address-table") as Promise<ShowMacAddressTable>;
-  }
-
-  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
-  async showCdpNeighbors(device: string): Promise<ShowCdpNeighbors> {
-    return this._composition.iosService.showCdpNeighbors(device);
-  }
-
-  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
-  async execInteractive(
-    device: string,
-    command: string,
-    options?: {
-      timeout?: number;
-      parse?: boolean;
-      ensurePrivileged?: boolean;
-    },
-  ): Promise<{ raw: string; parsed?: ParsedOutput; session?: { mode: string } }> {
-    return this._composition.iosService.execInteractive(device, command, options);
-  }
-
-  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
-  async execIosWithEvidence<T = ParsedOutput>(
-    device: string,
-    command: string,
-    parse = true,
-    timeout = 5000,
-  ): Promise<IosExecutionSuccess<T>> {
-    return this._composition.iosService.execIos<T>(device, command, parse, timeout);
-  }
-
-  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
-  async configIosWithResult(
-    device: string,
-    commands: string[],
-    options?: { save?: boolean } | undefined,
-  ): Promise<IosConfigApplyResult> {
-    return this._composition.iosService.configIos(device, commands, options);
-  }
-
-  /** @deprecated Usar orchestrator o primitivas RuntimePrimitivePort en vez de controllerIosService. */
-  async configureDhcpServer(
-    device: string,
-    options: {
-      poolName: string;
-      network: string;
-      subnetMask: string;
-      defaultRouter?: string;
-      dnsServers?: string[];
-      excludedAddresses?: string[];
-      leaseTime?: number;
-      domainName?: string;
-    },
-  ): Promise<void> {
-    return this._composition.controllerIosService.configureDhcpServer(device, options);
-  }
-
-  /** @deprecated Usar orchestrator o primitivas RuntimePrimitivePort en vez de controllerIosService. */
-  async inspectDhcpServer(device: string): Promise<{
-    ok: boolean;
-    device: string;
-    pools: Array<{
-      name: string;
-      network: string;
-      subnetMask: string;
-      defaultRouter?: string;
-      dnsServers?: string[];
-      leaseTime?: number;
-      domainName?: string;
-    }>;
-    excludedAddresses?: string[];
-    poolCount: number;
-    excludedAddressCount: number;
-  }> {
-    return this._composition.controllerIosService.inspectDhcpServer(device);
-  }
-
-  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
-  async showParsed<T = ParsedOutput>(
-    device: string,
-    command: string,
-    options?: { ensurePrivileged?: boolean; timeout?: number },
-  ): Promise<IosExecutionSuccess<T>> {
-    return this._composition.iosService.showParsed<T>(device, command, options);
-  }
-
-  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
-  async getIosConfidence(
-    device: string,
-    evidence: { source: string; status?: number; mode?: string },
-    verificationCheck?: string,
-  ): Promise<IosConfidence> {
-    return this._composition.iosService.getConfidence(
-      device,
-      evidence as IosExecutionEvidence,
-      verificationCheck,
-    );
-  }
-
-  /** @deprecated Usar orchestrator o primitivas RuntimePrimitivePort en vez de iosService directo. */
-  async configureDhcpPool(
-    device: string,
-    poolName: string,
-    network: string,
-    mask: string,
-    defaultRouter: string,
-    dnsServer?: string,
-    options?: { save?: boolean },
-  ): Promise<void> {
-    await this._composition.iosService.configureDhcpPool(
-      device,
-      poolName,
-      network,
-      mask,
-      defaultRouter,
-      dnsServer,
-      options,
-    );
-  }
-
-  /** @deprecated Usar orchestrator o primitivas RuntimePrimitivePort en vez de iosService directo. */
-  async configureOspfNetwork(
-    device: string,
-    processId: number,
-    network: string,
-    wildcard: string,
-    area: number,
-    options?: { save?: boolean },
-  ): Promise<void> {
-    await this._composition.iosService.configureOspfNetwork(device, processId, network, wildcard, area, options);
-  }
-
-  /** @deprecated Usar orchestrator o primitivas RuntimePrimitivePort en vez de iosService directo. */
-  async configureSshAccess(
-    device: string,
-    domainName: string,
-    username: string,
-    password: string,
-    options?: { save?: boolean },
-  ): Promise<void> {
-    await this._composition.iosService.configureSshAccess(device, domainName, username, password, options);
-  }
-
-  /** @deprecated Usar orchestrator o primitivas RuntimePrimitivePort en vez de iosService directo. */
-  async configureAccessListStandard(
-    device: string,
-    aclNumber: number,
-    entries: string[],
-    options?: { save?: boolean },
-  ): Promise<void> {
-    await this._composition.iosService.configureAccessListStandard(device, aclNumber, entries, options);
-  }
-
-  /** @deprecated Usar orchestrator o domain capabilities en vez de iosService directo. */
-  async resolveCapabilities(device: string): Promise<DeviceCapabilities> {
-    return this._composition.iosService.resolveCapabilities(device);
-  }
-
   async listCanvasRects(): Promise<{ rects: string[]; count: number }> {
     return this._composition.canvasFacade.listCanvasRects();
   }
@@ -409,14 +202,41 @@ export class PTController {
     return this._composition.deviceService.deepInspect(path, method, args);
   }
 
+  async runPrimitive(
+    id: string,
+    payload: unknown,
+    options?: import("../ports/runtime-primitive-port.js").PrimitivePortOptions,
+  ): Promise<import("../ports/runtime-primitive-port.js").PrimitivePortResult> {
+    return this._composition.primitivePort.runPrimitive(id, payload, options);
+  }
+
+  async runTerminalPlan(
+    plan: import("../ports/runtime-terminal-port.js").TerminalPlan,
+    options?: import("../ports/runtime-terminal-port.js").TerminalPortOptions,
+  ): Promise<import("../ports/runtime-terminal-port.js").TerminalPortResult> {
+    return this._composition.terminalPort.runTerminalPlan(plan, options);
+  }
+
+  async ensureTerminalSession(
+    device: string,
+  ): Promise<import("../ports/runtime-terminal-port.js").SessionResult> {
+    return this._composition.terminalPort.ensureSession(device);
+  }
+
+  async runOmniCapability(
+    id: string,
+    payload: unknown,
+    options?: import("../ports/runtime-omni-port.js").OmniPortOptions,
+  ): Promise<import("../ports/runtime-omni-port.js").OmniPortResult> {
+    return this._composition.omniPort.runOmniCapability(id, payload, options);
+  }
+
   /**
-   * @deprecated Usar orchestrator, workflows o ports/adapters en vez de bypass directo.
-   * Este método existe solo para backward compatibility y será removido.
+   * @deprecated Usar runPrimitive(), runTerminalPlan() o runOmniCapability().
    */
-  async send(type: string, payload: Record<string, any>): Promise<any> {
+  async send(_type: string, _payload: Record<string, any>): Promise<any> {
     throw new Error(
-      "PTController.send() está deprecated. Usar orchestrator, RuntimePrimitivePort, " +
-      "RuntimeTerminalPort o RuntimeOmniPort directamente."
+      "PTController.send() está deprecated. Usa runPrimitive(), runTerminalPlan() o runOmniCapability().",
     );
   }
 

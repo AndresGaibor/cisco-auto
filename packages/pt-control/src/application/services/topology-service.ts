@@ -2,8 +2,8 @@
 // TopologyService - Device and topology management
 // ============================================================================
 
-import type { FileBridgePort } from "../ports/file-bridge.port.js";
 import type { TopologyCachePort } from "../ports/topology-cache.port.js";
+import type { RuntimePrimitivePort } from "../../ports/runtime-primitive-port.js";
 import type {
   TopologySnapshot,
   DeviceState,
@@ -18,9 +18,13 @@ export class TopologyService {
   private readonly query: TopologyQueryService;
   private readonly mutation: TopologyMutationService;
 
-  constructor(bridge: FileBridgePort, cache: TopologyCachePort, generateId: () => string) {
-    this.query = new TopologyQueryService(bridge, cache, generateId);
-    this.mutation = new TopologyMutationService(bridge, cache, generateId, (deviceName) =>
+  constructor(
+    primitivePort: RuntimePrimitivePort,
+    cache: TopologyCachePort,
+    generateId: () => string,
+  ) {
+    this.query = new TopologyQueryService(cache, primitivePort, generateId);
+    this.mutation = new TopologyMutationService(primitivePort, generateId, (deviceName) =>
       this.getDeviceState(deviceName),
     );
   }

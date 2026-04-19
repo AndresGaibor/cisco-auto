@@ -2,34 +2,100 @@
 // Terminal Module - Exports públicos del subsistema terminal
 // ============================================================================
 
-// Session State & Registry (from new terminal subsystem)
-export { createTerminalSessionState, type TerminalSessionState, type TerminalMode, type TerminalHealth } from "./session-state";
+// Session State & Registry
+export {
+  createTerminalSessionState,
+  type TerminalSessionState,
+  type TerminalMode,
+  type TerminalHealth,
+  type TerminalSessionKind,
+} from "./session-state";
 
-export { getSession, ensureSession, disposeSession, disposeAllSessions, getAllSessions } from "./session-registry";
+export {
+  getSession,
+  ensureSession,
+  disposeSession,
+  disposeAllSessions,
+  getAllSessions,
+} from "./session-registry";
 
-// Detection 
-export { detectModeFromPrompt, detectWizardFromOutput, detectConfirmPrompt, normalizePrompt, promptMatches } from "./prompt-detector";
+// Detection
+export {
+  detectModeFromPrompt,
+  detectSessionKind,
+  detectWizardFromOutput,
+  detectConfirmPrompt,
+  detectPager,
+  detectBootOutput,
+  detectHostBusy,
+  normalizePrompt,
+  promptMatches,
+  isPrivilegedMode,
+  isConfigMode,
+  isHostMode,
+  needsEnable,
+  needsConfigTerminal,
+} from "./prompt-detector";
 
-export { createPagerState, detectPager as detectPagerOutput, createPagerHandler, type PagerState } from "./pager-handler";
+// Pager
+export {
+  createPagerState,
+  detectPager as detectPagerOutput,
+  createPagerHandler,
+  type PagerState,
+} from "./pager-handler";
 
 // Execution
-export { createCommandExecutor, type CommandExecutionResult, type ExecutionOptions, type PTCommandLine } from "./command-executor";
+export {
+  createCommandExecutor,
+  type CommandExecutionResult,
+  type ExecutionOptions,
+  type PTCommandLine,
+} from "./command-executor";
 
 export { createModeGuard, type ModeTransitionResult } from "./mode-guard";
 
 // Planning
-export { createTerminalPlan, createCommandStep, type TerminalPlan, type TerminalPlanStep, type TerminalPlanResult, type TerminalPlanPolicies } from "./terminal-plan";
+export {
+  createTerminalPlan,
+  createCommandStep,
+  type TerminalPlan,
+  type TerminalPlanStep,
+  type TerminalPlanResult,
+  type TerminalPlanPolicies,
+} from "./terminal-plan";
 
 export { createPlanEngine } from "./plan-engine";
 
+// Standard Plans
+export {
+  createIosShowPlan,
+  createIosConfigPlan,
+  createIosEnablePlan,
+  createIosSaveConfigPlan,
+  createHostPingPlan,
+  createHostIpconfigPlan,
+  createHostTracertPlan,
+  createHostArpPlan,
+  createHostRoutePlan,
+} from "./standard-plans";
+
 // Evidence & Errors
-export { buildEvidence, hasValidEvidence, calculateConfidence, type TerminalExecutionEvidence } from "./ios-evidence";
+export {
+  buildEvidence,
+  hasValidEvidence,
+  calculateConfidence,
+  type TerminalExecutionEvidence,
+} from "./ios-evidence";
 
-export { TerminalErrors, createTerminalError, type TerminalErrorCode, type TerminalError } from "./terminal-errors";
+export {
+  TerminalErrors,
+  createTerminalError,
+  type TerminalErrorCode,
+  type TerminalError,
+} from "./terminal-errors";
 
-// Re-export existing pt/terminal
+// Re-export existing pt/terminal where still useful
 export { isStatusOk, CommandStatus, type CommandEndedPayload } from "../pt/terminal/terminal-events";
-
 export { createTerminalSession, toSnapshot, type TerminalSessionState as ExistingSessionState } from "../pt/terminal/terminal-session";
-
 export { parsePrompt, type IosMode } from "../pt/terminal/prompt-parser";

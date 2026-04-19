@@ -528,6 +528,237 @@ register({
   supportPolicy: { minRunsForSupported: 3, flakinessThreshold: 0.15, timeoutMs: 30000 },
 });
 
+register({
+  id: "terminal.show-version",
+  title: "Show Version",
+  domain: "terminal",
+  kind: "primitive",
+  risk: "safe",
+  description: "Ejecutar show version en un dispositivo IOS",
+  tags: ["terminal", "ios", "show", "version"],
+  prerequisites: [{ type: "device", constraint: "IOS device must exist" }],
+  setup: NOOP_ACTION,
+  execute: { type: "terminal", handler: "show version", code: "show version" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: {
+    fields: {
+      output: { required: true, type: "string" },
+      status: { required: true, type: "number" },
+    },
+  },
+  supportPolicy: { minRunsForSupported: 3, flakinessThreshold: 0.1, timeoutMs: 15000 },
+});
+
+register({
+  id: "terminal.show-running-config",
+  title: "Show Running Config",
+  domain: "terminal",
+  kind: "primitive",
+  risk: "safe",
+  description: "Ejecutar show running-config en un dispositivo IOS",
+  tags: ["terminal", "ios", "show", "running-config"],
+  prerequisites: [{ type: "device", constraint: "IOS device must exist" }],
+  setup: NOOP_ACTION,
+  execute: { type: "terminal", handler: "show running-config", code: "show running-config" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: {
+    fields: {
+      output: { required: true, type: "string" },
+      status: { required: true, type: "number" },
+    },
+  },
+  supportPolicy: { minRunsForSupported: 3, flakinessThreshold: 0.15, timeoutMs: 25000 },
+});
+
+register({
+  id: "host.ipconfig",
+  title: "Host Ipconfig",
+  domain: "host",
+  kind: "primitive",
+  risk: "safe",
+  description: "Ejecutar ipconfig /all en un host",
+  tags: ["terminal", "host", "ipconfig"],
+  prerequisites: [{ type: "device", constraint: "Host device must exist" }],
+  setup: NOOP_ACTION,
+  execute: { type: "terminal", handler: "ipconfig /all", code: "ipconfig /all" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: {
+    fields: {
+      output: { required: true, type: "string" },
+      status: { required: true, type: "number" },
+    },
+  },
+  supportPolicy: { minRunsForSupported: 3, flakinessThreshold: 0.1, timeoutMs: 15000 },
+});
+
+register({
+  id: "host.ping",
+  title: "Host Ping",
+  domain: "host",
+  kind: "primitive",
+  risk: "safe",
+  description: "Ejecutar ping desde un host",
+  tags: ["terminal", "host", "ping"],
+  prerequisites: [{ type: "device", constraint: "Host device must exist" }],
+  setup: NOOP_ACTION,
+  execute: { type: "terminal", handler: "ping", code: "ping" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: {
+    fields: {
+      output: { required: true, type: "string" },
+      status: { required: true, type: "number" },
+    },
+  },
+  supportPolicy: { minRunsForSupported: 3, flakinessThreshold: 0.15, timeoutMs: 20000 },
+});
+
+register({
+  id: "host.tracert",
+  title: "Host Traceroute",
+  domain: "host",
+  kind: "primitive",
+  risk: "safe",
+  description: "Ejecutar tracert desde un host",
+  tags: ["terminal", "host", "tracert", "traceroute"],
+  prerequisites: [{ type: "device", constraint: "Host device must exist" }],
+  setup: NOOP_ACTION,
+  execute: { type: "terminal", handler: "tracert", code: "tracert" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: {
+    fields: {
+      output: { required: true, type: "string" },
+      status: { required: true, type: "number" },
+    },
+  },
+  supportPolicy: { minRunsForSupported: 3, flakinessThreshold: 0.2, timeoutMs: 60000 },
+});
+
+register({
+  id: "host.arp",
+  title: "Host ARP Table",
+  domain: "host",
+  kind: "primitive",
+  risk: "safe",
+  description: "Ejecutar arp -a en un host",
+  tags: ["terminal", "host", "arp"],
+  prerequisites: [{ type: "device", constraint: "Host device must exist" }],
+  setup: NOOP_ACTION,
+  execute: { type: "terminal", handler: "arp -a", code: "arp -a" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: {
+    fields: {
+      output: { required: true, type: "string" },
+      status: { required: true, type: "number" },
+    },
+  },
+  supportPolicy: { minRunsForSupported: 3, flakinessThreshold: 0.1, timeoutMs: 15000 },
+});
+
+register({
+  id: "terminal.show-ip-interface-brief",
+  title: "Show IP Interface Brief",
+  domain: "terminal",
+  kind: "primitive",
+  risk: "safe",
+  description: "Ejecutar show ip interface brief en un dispositivo IOS",
+  tags: ["terminal", "ios", "show", "ip-interface"],
+  prerequisites: [{ type: "device", constraint: "IOS device must exist" }],
+  setup: NOOP_ACTION,
+  execute: { type: "terminal", handler: "show ip interface brief", code: "show ip interface brief" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: {
+    fields: {
+      output: { required: true, type: "string" },
+      status: { required: true, type: "number" },
+    },
+  },
+  supportPolicy: { minRunsForSupported: 3, flakinessThreshold: 0.1, timeoutMs: 15000 },
+});
+
+register({
+  id: "terminal.show-vlan-brief",
+  title: "Show VLAN Brief",
+  domain: "terminal",
+  kind: "primitive",
+  risk: "safe",
+  description: "Ejecutar show vlan brief en un switch IOS",
+  tags: ["terminal", "ios", "show", "vlan"],
+  prerequisites: [{ type: "device", constraint: "Switch must exist" }],
+  setup: NOOP_ACTION,
+  execute: { type: "terminal", handler: "show vlan brief", code: "show vlan brief" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: {
+    fields: {
+      output: { required: true, type: "string" },
+      status: { required: true, type: "number" },
+    },
+  },
+  supportPolicy: { minRunsForSupported: 3, flakinessThreshold: 0.1, timeoutMs: 15000 },
+});
+
+register({
+  id: "terminal.show-cdp-neighbors",
+  title: "Show CDP Neighbors",
+  domain: "terminal",
+  kind: "primitive",
+  risk: "safe",
+  description: "Ejecutar show cdp neighbors en un dispositivo IOS",
+  tags: ["terminal", "ios", "show", "cdp", "neighbors"],
+  prerequisites: [{ type: "device", constraint: "IOS device must exist" }],
+  setup: NOOP_ACTION,
+  execute: { type: "terminal", handler: "show cdp neighbors", code: "show cdp neighbors" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: {
+    fields: {
+      output: { required: true, type: "string" },
+      status: { required: true, type: "number" },
+    },
+  },
+  supportPolicy: { minRunsForSupported: 3, flakinessThreshold: 0.15, timeoutMs: 20000 },
+});
+
+register({
+  id: "terminal.show-ip-route",
+  title: "Show IP Route",
+  domain: "terminal",
+  kind: "primitive",
+  risk: "safe",
+  description: "Ejecutar show ip route en un router IOS",
+  tags: ["terminal", "ios", "show", "ip-route", "routing"],
+  prerequisites: [{ type: "device", constraint: "Router must exist" }],
+  setup: NOOP_ACTION,
+  execute: { type: "terminal", handler: "show ip route", code: "show ip route" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: {
+    fields: {
+      output: { required: true, type: "string" },
+      status: { required: true, type: "number" },
+    },
+  },
+  supportPolicy: { minRunsForSupported: 3, flakinessThreshold: 0.1, timeoutMs: 15000 },
+});
+
+register({
+  id: "terminal.show-mac-address-table",
+  title: "Show MAC Address Table",
+  domain: "terminal",
+  kind: "primitive",
+  risk: "safe",
+  description: "Ejecutar show mac address-table en un switch IOS",
+  tags: ["terminal", "ios", "show", "mac", "switch"],
+  prerequisites: [{ type: "device", constraint: "Switch must exist" }],
+  setup: NOOP_ACTION,
+  execute: { type: "terminal", handler: "show mac address-table", code: "show mac address-table" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: {
+    fields: {
+      output: { required: true, type: "string" },
+      status: { required: true, type: "number" },
+    },
+  },
+  supportPolicy: { minRunsForSupported: 3, flakinessThreshold: 0.1, timeoutMs: 15000 },
+});
+
 export function getCapability(id: string): CapabilitySpec | undefined {
   return CAPABILITY_REGISTRY.get(id);
 }

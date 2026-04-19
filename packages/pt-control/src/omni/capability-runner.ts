@@ -18,9 +18,13 @@ import type {
   RuntimeOmniPort,
   TerminalPlan,
 } from "../ports/index.js";
-import type { Intent } from "../contracts/intent.js";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Intent = any;
 import type { OrchestratorContext } from "../application/orchestration/index.js";
 import { executeIntent } from "../application/orchestration/index.js";
+import { createTerminalPlanFromInput } from "../pt/terminal/standard-terminal-plans.js";
+import { parseTerminalOutput } from "../pt/terminal/terminal-output-parsers.js";
+import { verifyTerminalEvidence } from "../pt/terminal/terminal-evidence-verifier.js";
 
 export interface CapabilityContext {
   primitivePort: RuntimePrimitivePort;
@@ -203,34 +207,90 @@ async function executeTerminal(
   input: Record<string, unknown>,
   context: CapabilityContext
 ): Promise<{ ok: boolean; evidence: Record<string, unknown>; error?: string; warnings: string[] }> {
-  const terminalHandler = capability.execute.handler;
-  if (!terminalHandler) {
-    return { ok: false, evidence: {}, error: "Terminal handler no especificado en capability", warnings: [] };
+  const device = (input.device as string) ?? (input.target as string) ?? "";
+  if (!device) {
+    return {
+      ok: false,
+      evidence: {},
+      error: "Device no especificado en input para plan terminal",
+      warnings: [],
+    };
   }
 
-  const terminalPlan: TerminalPlan = {
-    id: `capability-${capability.id}`,
-    device: (input.device as string) ?? (input.target as string) ?? "",
-    steps: capability.execute.code
-      ? [{ command: capability.execute.code }]
-      : [{ command: terminalHandler }],
-  };
+  const profile =
+    (input.profile as "ios" | "host" | undefined) ??
+    (capability.tags.includes("host") ? "host" : "ios");
 
-  if (!terminalPlan.device) {
-    return { ok: false, evidence: {}, error: "Device no especificado en input para plan terminal", warnings: [] };
-  }
+  const command =
+    (input.command as string | undefined) ??
+    capability.execute.code ??
+    (capability.execute.handler && capability.execute.handler.startsWith("show ")
+      ? capability.execute.handler
+      : undefined);
+
+  const commands = Array.isArray(input.commands)
+    ? (input.commands as string[]).filter(Boolean)
+    : undefined;
+
+  const timeout =
+    typeof input.timeout === "number"
+      ? (input.timeout as number)
+      : capability.supportPolicy.timeoutMs;
+
+  const terminalPlan: TerminalPlan = createTerminalPlanFromInput({
+    device,
+    profile,
+    command,
+    commands,
+    target: input.pingTarget as string | undefined,
+    timeout,
+    save: Boolean(input.save),
+    expectedPrompt: input.expectedPrompt as string | undefined,
+  });
 
   try {
     const result = await context.terminalPort.runTerminalPlan(terminalPlan);
+    const parsed = parseTerminalOutput(capability.id, result.output);
+    const verdict = verifyTerminalEvidence(
+      capability.id,
+      result.output,
+      parsed,
+      result.status,
+    );
+
+    const mergedWarnings = [...result.warnings, ...verdict.warnings];
+
     return {
-      ok: result.ok,
-      evidence: { output: result.output, status: result.status, modeAfter: result.modeAfter },
-      error: result.ok ? undefined : `Terminal execution failed: ${result.warnings.join(", ")}`,
-      warnings: result.warnings,
+      ok: result.ok && verdict.ok,
+      evidence: {
+        output: result.output,
+        status: result.status,
+        modeBefore: result.modeBefore,
+        modeAfter: result.modeAfter,
+        promptBefore: result.promptBefore,
+        promptAfter: result.promptAfter,
+        events: result.events,
+        parsed,
+        verifier: {
+          ok: verdict.ok,
+          reason: verdict.reason,
+          confidence: verdict.confidence,
+        },
+      },
+      error:
+        result.ok && verdict.ok
+          ? undefined
+          : verdict.reason ?? `Terminal execution failed: ${mergedWarnings.join(", ")}`,
+      warnings: mergedWarnings,
     };
   } catch (e) {
     const error = String(e);
-    return { ok: false, evidence: {}, error: `Error en terminalPort.runTerminalPlan: ${error}`, warnings: [] };
+    return {
+      ok: false,
+      evidence: {},
+      error: `Error en terminalPort.runTerminalPlan: ${error}`,
+      warnings: [],
+    };
   }
 }
 
@@ -265,41 +325,63 @@ async function executeWorkflow(
 ): Promise<{ ok: boolean; evidence: Record<string, unknown>; error?: string; warnings: string[] }> {
   const workflowPlanId = capability.execute.plan;
   if (!workflowPlanId) {
-    return { ok: false, evidence: {}, error: "Workflow plan no especificado en capability", warnings: [] };
+    return {
+      ok: false,
+      evidence: {},
+      error: "Workflow plan no especificado en capability",
+      warnings: [],
+    };
   }
 
   if (!context.orchestrator) {
-    return { ok: false, evidence: {}, error: "Orchestrator no disponible en context", warnings: [] };
+    return {
+      ok: false,
+      evidence: {},
+      error: "Orchestrator no disponible en context",
+      warnings: [],
+    };
   }
 
-  const intent: Intent = {
+  const intent: any = {
     id: `intent-${Date.now()}`,
     kind: "capability-probe",
     goal: capability.title,
-    target: input.device as string | undefined,
-    metadata: { capabilityId: capability.id, workflowPlanId },
+    target: (input.device as string | undefined) ?? (input.target as string | undefined),
+    metadata: {
+      capabilityId: capability.id,
+      workflowPlanId,
+      input,
+    },
   };
 
   try {
     const verdict = await executeIntent(context.orchestrator, intent);
+
     return {
       ok: verdict.ok,
       evidence: {
-        planId: intent.id,
-        strategy: verdict.status,
-        stepsExecuted: verdict.evidence.rawRuntimeResults.length + verdict.evidence.rawTerminalResults.length + verdict.evidence.rawOmniResults.length,
+        verdictStatus: verdict.status,
+        goalSatisfied: verdict.goalSatisfied,
+        partial: verdict.partial,
+        confidence: verdict.confidence,
         rawRuntimeResults: verdict.evidence.rawRuntimeResults,
         rawTerminalResults: verdict.evidence.rawTerminalResults,
         rawOmniResults: verdict.evidence.rawOmniResults,
         warnings: verdict.evidence.warnings,
         anomalies: verdict.evidence.anomalies,
+        normalizedFacts: verdict.evidence.normalizedFacts,
       },
       error: verdict.ok ? undefined : verdict.reason,
       warnings: verdict.warnings,
     };
   } catch (e) {
     const error = String(e);
-    return { ok: false, evidence: {}, error: `Error en workflow execution: ${error}`, warnings: [] };
+    return {
+      ok: false,
+      evidence: {},
+      error: `Error en workflow execution: ${error}`,
+      warnings: [],
+    };
   }
 }
 
