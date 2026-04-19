@@ -1,39 +1,4 @@
-/**
- * PT Control - Contract Exports
- * 
- * PT Control specific types and schemas. Shared topology/command/event
- * contracts come directly from @cisco-auto/types, so these modules simply
- * re-export the canonical definitions to avoid duplication.
- */
-
-// Export PT-specific contracts (some are pure re-exports)
-export * from "./snapshots.js";
-export * from "./parsed-output.js";
-export * from "./commands.js";
-export * from "./events.js";
-export * from "./ios-interactive-result.js";
-export * from "./canvas.js";
-
-// Modular Twin Types (refactored from twin-types.ts)
-export * from "./twin-enums.js";
-export * from "./placement-types.js";
-export * from "./port-types.js";
-export * from "./provenance-types.js";
-export * from "./config-types.js";
-export * from "./device-traits-types.js";
-export * from "./device-types.js";
-export * from "./spatial-types.js";
-export * from "./link-types.js";
-export * from "./network-types.js";
-export * from "./agent-context-types.js";
-
-// Lab specification contracts
-export * from "./lab-spec.js";
-export * from "./lab-resource.js";
-
-// Keep legacy export for backward compatibility
-export * from "./twin-types.js";
-
-// Fase 4: IOS execution evidence, results, and confidence
-export * from "./ios-execution-evidence.js";
-export * from "./omniscience.js";
+export type { Intent, IntentKind } from "./intent.js";
+export type { ExecutionPlan, ExecutionStep, StepKind } from "./plan.js";
+export type { ExecutionEvidence } from "./evidence.js";
+export type { ExecutionVerdict, VerdictStatus } from "./verdict.js";

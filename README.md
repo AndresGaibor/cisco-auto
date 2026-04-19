@@ -23,6 +23,40 @@ El proyecto utiliza una **arquitectura Plugin-First** basada en tres patrones fu
 | **Domain-Driven Design (DDD)** | Bounded contexts, aggregates, entities, value objects, domain events. |
 | **Plugin-First** | Toda funcionalidad de protocolo es un plugin registrable. El backend (Packet Tracer) también es un plugin. |
 
+### Arquitectura Final (Fase 7)
+
+El proyecto se divide en tres componentes principales definidos en **Fase 7 - Consolidación**:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ cisco-auto                                                  │
+├─────────────────────────────────────────────────────────────┤
+│ [pt-runtime]                                               │
+│   Kernel mínimo + Terminal Engine + Primitives + Omni     │
+│   Adapters + Catalog + Compat/Build                       │
+│   → Thin kernel: lifecycle, dispatch, primitives PT-safe │
+├─────────────────────────────────────────────────────────────┤
+│ [pt-control]                                               │
+│   Orchestration brain + Planners + Workflows + Verification│
+│   + Diagnosis + Fallback + Omni Harness + Quality/Release  │
+│   → Orchestrator: workflows, planificación, validación    │
+├─────────────────────────────────────────────────────────────┤
+│ [omni]                                                     │
+│   Capability Registry + Runner + Suites + Evidence Ledger  │
+│   + Support Matrix + Regression Compare                   │
+│   → Sistema de capabilities con contract y evidence        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+| Componente | Scope | Restricción |
+|------------|-------|-------------|
+| `main.js` | Kernel mínimo | Sin workflows |
+| `runtime.js` | Primitives baixas | Sin lógica alta |
+| `omni` | Capabilities | Con contract |
+| `pt-control` | Orchestration | Workflows solos |
+
+> Ver: `docs/refactor/final-consolidation-phase7.md`
+
 ### Principios de Diseño
 
 1. **Plugin-First**: VLAN, Routing, Security, Services, Switching e IPv6 son plugins independientes. Agregar un nuevo protocolo solo requiere crear un plugin y registrarlo.
@@ -583,6 +617,44 @@ Para obtener información detallada sobre el uso, la arquitectura y el desarroll
 - [**@cisco-auto/pt-control**](./packages/pt-control/README.md)
 - [**@cisco-auto/pt-runtime**](./packages/pt-runtime/README.md)
 - [**@cisco-auto/file-bridge**](./packages/file-bridge/README.md)
+
+---
+
+## 📋 Fase 7 - Consolidación
+
+La **Fase 7** establece las bases para un sistema mantenible y predecible donde cada componente tiene responsabilidades claras.
+
+### Documentos de Fase 7
+
+| Documento | Descripción |
+|----------|-------------|
+| [`docs/refactor/final-consolidation-phase7.md`](./docs/refactor/final-consolidation-phase7.md) | Arquitectura final, componentes, restricciones |
+| [`docs/refactor/operational-readiness-phase7.md`](./docs/refactor/operational-readiness-phase7.md) | Validación de entorno, smoke checks, comandos oficiales |
+| [`docs/refactor/future-change-rules-phase7.md`](./docs/refactor/future-change-rules-phase7.md) | Reglas para cambios futuros, proceso de release |
+| [`docs/refactor/regression-baseline-phase7.md`](./docs/refactor/regression-baseline-phase7.md) | Baseline de regression |
+| [`docs/refactor/legacy-exit-plan-phase7.md`](./docs/refactor/legacy-exit-plan-phase7.md) | Plan de salida de legacy |
+
+### Quality Gates
+
+Para validar una release:
+
+```bash
+# Baseline completa
+bun run pt omni regression-smoke
+bun run pt omni terminal-core
+bun run pt omni device-basic
+bun run pt omni link-basic
+bun run pt omni workflow-basic
+bun run pt omni omni-safe
+```
+
+### Reglas de Cambio Futuro
+
+Ver `docs/refactor/future-change-rules-phase7.md` para:
+- Nueva capability = Primitive | Omni Adapter | Workflow
+- NO crear handler runtime alto por "rapidez"
+- Hack nuevo = Capability documentada en omni
+- Cambio kernel/build = Validadores + baseline completa
 
 ---
 

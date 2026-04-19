@@ -61,3 +61,17 @@ export enum CommandStatus {
 export function isStatusOk(status: number): boolean {
   return status === CommandStatus.OK;
 }
+
+export interface TerminalEventRecord {
+  sessionId: string;
+  deviceName: string;
+  eventType: string;
+  timestamp: number;
+  raw: string;
+  normalized: string;
+}
+
+export interface CommandEndedPayload {
+  status?: number;
+  command?: string;
+}

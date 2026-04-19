@@ -37,7 +37,7 @@ describe("ios execution handlers", () => {
       dprint: vi.fn(),
     };
 
-    const result = await handleExecPc({ device: "PC1", command: "ipconfig" }, api);
+    const result = await handleExecPc({ type: "execPc", device: "PC1", command: "ipconfig" }, api);
 
     expect(api.getDeviceByName).toHaveBeenCalledWith("PC1");
     expect(cli.enterCommand).toHaveBeenCalledWith("ipconfig");

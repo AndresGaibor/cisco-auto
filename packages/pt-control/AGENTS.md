@@ -6,6 +6,8 @@
 
 CLI profesional (`bun run pt`) para controlar Cisco Packet Tracer en tiempo real. Proporciona una API de alto nivel para interactuar con dispositivos PT, gestionar topologías, y ejecutar comandos IOS.
 
+> **FRONTERA ARQUITECTURAL**: `pt-control` es el **orchestration brain** que contiene planners, workflows, diagnosis, verification, policies, y evidence evaluation. Consume primitives de `pt-runtime`. Ver `docs/architecture/runtime-control-boundary.md`.
+
 ## Arquitectura General
 
 ```

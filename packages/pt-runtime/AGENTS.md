@@ -6,6 +6,8 @@
 
 Generador de scripts PT (`main.js`, `runtime.js`, `catalog.js`) y API de tipos para Packet Tracer. El runtime se ejecuta dentro de PT y controla dispositivos via IPC.
 
+> **FRONTERA ARQUITECTURAL**: `pt-runtime` es un **thin kernel** que contiene lifecycle, dispatch, primitives PT-safe, terminal engine, y adapters `omni` de bajo nivel. **NO contiene lógica de negocio**. Ver `docs/architecture/runtime-control-boundary.md`.
+
 ## Arquitectura General
 
 ```

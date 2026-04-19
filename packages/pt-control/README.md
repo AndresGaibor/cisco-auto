@@ -1,6 +1,57 @@
 # pt-control
 
-**pt-control** es la nueva CLI profesional para controlar Cisco Packet Tracer en tiempo real desde TypeScript/Bun. Este paquete reemplaza los flujos legacy basados en YAML y .pka para nuevos laboratorios y automatizaciones.
+**pt-control** es el **orchestration brain** del proyecto cisco-auto. Es la CLI profesional para controlar Cisco Packet Tracer en tiempo real desde TypeScript/Bun. Este paquete reemplaza los flujos legacy basados en YAML y .pka para nuevos laboratorios y automatizaciones.
+
+> **FRONTERA ARQUITECTURAL**: `pt-control` es el **orchestration brain** que contiene planners, workflows, diagnosis, verification, policies, y evidence evaluation. Consume primitives de `pt-runtime`. Ver `docs/architecture/runtime-control-boundary.md`.
+
+---
+
+## Arquitectura (Fase 7)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ pt-control                                                │
+├─────────────────────────────────────────────────────────────┤
+│ [Orchestrator]                                            │
+│   - Command routing                                       │
+│   - Workflow execution                                   │
+│   - Error handling                                       │
+├─────────────────────────────────────────────────────────────┤
+│ [Planners]                                               │
+│   - device-add planner                                   │
+│   - link-add planner                                     │
+│   - config planner                                      │
+│   - lab validation planner                              │
+├─────────────────────────────────────────────────────────────┤
+│ [Workflows]                                               │
+│   - workflow:device-add                                  │
+│   - workflow:link-add                                   │
+│   - workflow:vlan-config                               │
+│   - workflow:dhcp-config                               │
+├─────────────────────────────────────────────────────────────┤
+│ [Verification]                                           │
+│   - Topology verification                                │
+│   - Config verification                                │
+│   - Connectivity verification                          │
+├─────────────────────────────────────────────────────────────┤
+│ [Diagnosis]                                              │
+│   - Error diagnosis                                     │
+│   - Failure analysis                                   │
+│   - Root cause identification                          │
+├──��──────────────────────────────────────────────────────────┤
+│ [Fallback / Omni Harness]                                 │
+│   - Omni fallback for failures                          │
+│   - Retry logic                                        │
+│   - Recovery strategies                               │
+├─────────────────────────────────────────────────────────────┤
+│ [Quality / Release]                                      │
+│   - Quality gates                                     │
+│   - Release validation                                │
+│   - Baseline verification                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+> Ver: `docs/refactor/operational-readiness-phase7.md`
 
 ---
 
@@ -91,6 +142,49 @@ bun run scripts/topologia-apply.ts --config topology-config.json --dry-run --ver
    - Edita según tu topología
    - Ejecuta: `bun run scripts/topologia-apply.ts --config topology-config.json`
 4. Evita YAML/.pka para nuevos laboratorios: usa la CLI y scripts dinámicos.
+
+---
+
+## Fase 7 - Consolidación
+
+Ver referencia en README raíz del proyecto: `docs/refactor/future-change-rules-phase7.md`
+
+### Quality Gates Disponibles
+
+```bash
+# Regression smoke
+bun run pt omni regression-smoke
+
+# Terminal core
+bun run pt omni terminal-core
+
+# Device basic
+bun run pt omni device-basic
+
+# Link basic
+bun run pt omni link-basic
+
+# Workflow basic
+bun run pt omni workflow-basic
+
+# Omni safe
+bun run pt omni omni-safe
+```
+
+### Comandos Oficiales
+
+| Comando | Descripción |
+|---------|-------------|
+| `bun run pt status` | Ver status general |
+| `bun run pt omni regression-smoke` | Smoke test |
+| `bun run pt device add <model> <name>` | Agregar dispositivo |
+| `bun run pt link add <d1> <p1> <d2> <p2>` | Conectar |
+| `bun run pt exec <dev> <cmd>` | Ejecutar comando IOS |
+| `bun run pt canvas clear` | Limpiar topología |
+| `bun run pt omni raw "<code>"` | Raw execution |
+| `bun run pt omni genome <device>` | Genome |
+
+> Ver: `docs/refactor/operational-readiness-phase7.md`
 
 ---
 

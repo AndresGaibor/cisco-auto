@@ -97,6 +97,7 @@ export {
 } from "./application/services/index.js";
 
 export * from "./contracts/omniscience.js";
+export * from "./contracts/ios-execution-evidence.js";
 
 // PT feature modules - canonical stack
 export * from "./pt/terminal/index.js";
@@ -109,5 +110,11 @@ export * from "./pt/diagnosis/index.js";
 // Capability Matrix (kernel)
 export * from "@cisco-auto/kernel/domain/ios/capability-matrix/index.js";
 
+// Omni - Capability Harness
+export * from "./omni/index.js";
+
 // Agent workflow - task-scoped context building and rendering
 export * from "./agent/index.js";
+
+// Quality Gates (Fase 7)
+export * from "./quality/index.js";

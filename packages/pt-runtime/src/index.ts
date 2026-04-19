@@ -24,8 +24,47 @@ export * from "./handlers";
 // PT Kernel (for PT Script Module)
 export * from "./pt/kernel";
 
-// PT Terminal
-export * from "./pt/terminal";
+// Kernel refactorizado (Fase 6) — estado global explícito, bootstrap, dispatch, cleanup
+export {
+  createRuntimeState,
+  bootstrapKernel,
+  createDispatchLoop,
+  createRuntimeLoader as createPhase6RuntimeLoader,
+  createCleanupManager as createPhase6CleanupManager,
+  isIdempotentClean,
+  safeCleanup,
+} from "./kernel";
+
+// PT Terminal (legacy) — avoid re-exporting types that conflict with new terminal
+export {
+  createTerminalSession,
+  toSnapshot,
+  type TerminalSessionState as ExistingTerminalSessionState,
+  parsePrompt,
+  type IosMode
+} from "./pt/terminal";
+
+// New Terminal Subsystem (Phase 2) — primary exports
+export {
+  createCommandExecutor,
+  type CommandExecutionResult,
+  type ExecutionOptions,
+  type PTCommandLine,
+  ensureSession,
+  getSession,
+  detectModeFromPrompt,
+  type TerminalMode,
+  type TerminalErrorCode
+} from "./terminal";
+
+// Primitives (Phase 3)
+export * from "./primitives";
+
+// Omni adapters (Phase 3)
+export * from "./omni";
+
+// Compat validators (Fase 6) — ES5 y PT-safe
+export * from "./compat";
 
 // Runtime artifacts (snapshots)
 export { listRuntimeSnapshots, restoreRuntimeSnapshot } from "./runtime-artifacts";

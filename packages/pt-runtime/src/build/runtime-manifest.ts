@@ -212,3 +212,225 @@ function resolveManifestImport(
 
   return fallback;
 }
+
+// ============================================================================
+// PARTE 2: RuntimeManifest — metadatos del runtime generado
+// ============================================================================
+
+import { computeChecksum, normalizeArtifactForChecksum } from "./checksum.js";
+
+export interface AssetMetadata {
+  filename: string;
+  checksum: string;
+  size: number;
+  mtime: number;
+}
+
+export interface RuntimeManifest {
+  version: string;
+  generatedAt: number;
+  buildFingerprint: string;
+  assetMain: AssetMetadata;
+  assetRuntime: AssetMetadata;
+  assetCatalog: AssetMetadata;
+  primitives: string[];
+  omniAdapters: string[];
+  commandIds: string[];
+  deviceIds: string[];
+}
+
+export interface ManifestValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+class RuntimeManifestBuilderImpl {
+  private _version = "1.0.0";
+  private _fingerprint = "";
+  private _assetMain: AssetMetadata | null = null;
+  private _assetRuntime: AssetMetadata | null = null;
+  private _assetCatalog: AssetMetadata | null = null;
+  private _primitives: string[] = [];
+  private _omniAdapters: string[] = [];
+  private _commandIds: string[] = [];
+  private _deviceIds: string[] = [];
+
+  withVersion(v: string): this {
+    this._version = v;
+    return this;
+  }
+
+  withFingerprint(f: string): this {
+    this._fingerprint = f;
+    return this;
+  }
+
+  withAsset(name: "main" | "runtime" | "catalog", meta: AssetMetadata): this {
+    switch (name) {
+      case "main":
+        this._assetMain = meta;
+        break;
+      case "runtime":
+        this._assetRuntime = meta;
+        break;
+      case "catalog":
+        this._assetCatalog = meta;
+        break;
+    }
+    return this;
+  }
+
+  withPrimitive(id: string): this {
+    this._primitives.push(id);
+    return this;
+  }
+
+  withOmniAdapter(id: string): this {
+    this._omniAdapters.push(id);
+    return this;
+  }
+
+  withCommandId(id: string): this {
+    this._commandIds.push(id);
+    return this;
+  }
+
+  withDeviceId(id: string): this {
+    this._deviceIds.push(id);
+    return this;
+  }
+
+  build(): RuntimeManifest {
+    if (!this._assetMain || !this._assetRuntime || !this._assetCatalog) {
+      throw new Error("RuntimeManifest requires all asset metadata (main, runtime, catalog)");
+    }
+
+    return {
+      version: this._version,
+      generatedAt: Date.now(),
+      buildFingerprint: this._fingerprint,
+      assetMain: this._assetMain,
+      assetRuntime: this._assetRuntime,
+      assetCatalog: this._assetCatalog,
+      primitives: [...this._primitives],
+      omniAdapters: [...this._omniAdapters],
+      commandIds: [...this._commandIds],
+      deviceIds: [...this._deviceIds],
+    };
+  }
+
+  toJSON(): string {
+    return JSON.stringify(this.build(), null, 2);
+  }
+}
+
+export function createRuntimeManifest(): RuntimeManifestBuilder {
+  return new RuntimeManifestBuilderImpl();
+}
+
+export interface RuntimeManifestBuilder {
+  withVersion(v: string): this;
+  withFingerprint(f: string): this;
+  withAsset(name: "main" | "runtime" | "catalog", meta: AssetMetadata): this;
+  withPrimitive(id: string): this;
+  withOmniAdapter(id: string): this;
+  withCommandId(id: string): this;
+  withDeviceId(id: string): this;
+  build(): RuntimeManifest;
+  toJSON(): string;
+}
+
+export function validateManifest(manifest: RuntimeManifest): ManifestValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (!manifest.version || typeof manifest.version !== "string") {
+    errors.push("manifest.version is required and must be a string");
+  }
+
+  if (!manifest.generatedAt || typeof manifest.generatedAt !== "number") {
+    errors.push("manifest.generatedAt is required and must be a number");
+  }
+
+  if (!manifest.buildFingerprint || typeof manifest.buildFingerprint !== "string") {
+    errors.push("manifest.buildFingerprint is required and must be a string");
+  }
+
+  if (!manifest.assetMain) {
+    errors.push("manifest.assetMain is required");
+  } else {
+    if (!manifest.assetMain.filename) errors.push("manifest.assetMain.filename is required");
+    if (!manifest.assetMain.checksum) errors.push("manifest.assetMain.checksum is required");
+    if (typeof manifest.assetMain.size !== "number") errors.push("manifest.assetMain.size must be a number");
+    if (typeof manifest.assetMain.mtime !== "number") errors.push("manifest.assetMain.mtime must be a number");
+  }
+
+  if (!manifest.assetRuntime) {
+    errors.push("manifest.assetRuntime is required");
+  } else {
+    if (!manifest.assetRuntime.filename) errors.push("manifest.assetRuntime.filename is required");
+    if (!manifest.assetRuntime.checksum) errors.push("manifest.assetRuntime.checksum is required");
+    if (typeof manifest.assetRuntime.size !== "number") errors.push("manifest.assetRuntime.size must be a number");
+    if (typeof manifest.assetRuntime.mtime !== "number") errors.push("manifest.assetRuntime.mtime must be a number");
+  }
+
+  if (!manifest.assetCatalog) {
+    errors.push("manifest.assetCatalog is required");
+  } else {
+    if (!manifest.assetCatalog.filename) errors.push("manifest.assetCatalog.filename is required");
+    if (!manifest.assetCatalog.checksum) errors.push("manifest.assetCatalog.checksum is required");
+    if (typeof manifest.assetCatalog.size !== "number") errors.push("manifest.assetCatalog.size must be a number");
+    if (typeof manifest.assetCatalog.mtime !== "number") errors.push("manifest.assetCatalog.mtime must be a number");
+  }
+
+  if (!Array.isArray(manifest.primitives)) {
+    errors.push("manifest.primitives must be an array");
+  }
+
+  if (!Array.isArray(manifest.omniAdapters)) {
+    errors.push("manifest.omniAdapters must be an array");
+  }
+
+  if (!Array.isArray(manifest.commandIds)) {
+    errors.push("manifest.commandIds must be an array");
+  }
+
+  if (!Array.isArray(manifest.deviceIds)) {
+    errors.push("manifest.deviceIds must be an array");
+  }
+
+  if (manifest.primitives.length === 0) {
+    warnings.push("manifest.primitives is empty — no primitives registered");
+  }
+
+  if (manifest.omniAdapters.length === 0) {
+    warnings.push("manifest.omniAdapters is empty — no omni adapters registered");
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
+
+export function fingerprintFromCode(
+  mainCode: string,
+  runtimeCode: string,
+  catalogCode: string,
+): string {
+  const combined = normalizeArtifactForChecksum(mainCode) +
+    "|" +
+    normalizeArtifactForChecksum(runtimeCode) +
+    "|" +
+    normalizeArtifactForChecksum(catalogCode);
+
+  let hash = 0;
+  for (let i = 0; i < combined.length; i++) {
+    const char = combined.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash;
+  }
+  return Math.abs(hash).toString(16);
+}

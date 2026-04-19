@@ -96,7 +96,7 @@ Referencia técnica completa: `docs/PT_EVALUATE_HACKING_GUIDE.md`.
 
 **main.js (kernel):** Solo carga `runtime.js`. Maneja lifecycle, command queue, lease, heartbeat, job execution. **No se modifica más.** Su único trabajo: bootstrap → load runtime → poll commands → delegate to runtime.
 
-**runtime.js:** Toda la lógica de negocio. Command handlers (`handleListDevices`, `handleSnapshot`, `handleConfigIos`, etc.). Se itera y mejora constantemente.
+**runtime.js:** Primitives PT-safe, terminal engine, y adapters de bajo nivel. NO contiene lógica de negocio compuesta. Ver `docs/architecture/runtime-control-boundary.md`.
 
 ```
 main.js (kernel, casi estático)
@@ -126,6 +126,15 @@ runtime.js (lógica, iterativo)
 **Hot reload:** Si solo se cambia `runtime.js` (lógica), NO hace falta recargar `main.js` en PT. El kernel tiene reload automático de `runtime.js` cuando detecta que cambió el archivo `mtime`. Solo recargar `main.js` si se modificó el kernel (`src/pt/kernel/`) o hay un error de bootstrap.
 
 **Reglas de kernel vs runtime:**
+
+**IMPORTANTE — Nueva Frontera (Fase 1):**
+
+- `pt-runtime` es **thin kernel**: kernel lifecycle, dispatch, primitives PT-safe, terminal engine, adapters omni de bajo nivel. **NO lógica de negocio**.
+- `pt-control` es **orchestration brain**: planners, workflows, diagnosis, verification, policies, evidence evaluation.
+- Handlers de negocio (VLAN, DHCP compuesto, routing) deben vivir en `pt-control`, no en runtime.
+- Ver documento canónico: `docs/architecture/runtime-control-boundary.md`
+
+**Reglas heredadas:**
 - NO agregar lógica de negocio en el kernel (`src/pt/kernel/`)
 - Si el usuario pide algo en el kernel y es lógica → hacerlo en runtime (`src/runtime/`) en vez
 - Si se necesita testear lógica del kernel → probar primero en runtime si es posible (es el entorno real de ejecución)

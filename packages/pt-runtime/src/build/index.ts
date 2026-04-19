@@ -9,3 +9,8 @@ export * from "./main-manifest";
 export * from "./render-catalog";
 export * from "./render-main-v2";
 export * from "./render-runtime-v2";
+export * from "./main-generator";
+export * from "./runtime-generator";
+export * from "./catalog-generator";
+export * from "./generated-asset-checks";
+export { computeChecksum, normalizeArtifactForChecksum } from "./checksum.js";
