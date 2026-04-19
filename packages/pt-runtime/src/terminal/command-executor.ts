@@ -93,13 +93,13 @@ function guessFailureStatus(output: string): number {
 }
 
 function computeConfidence(
-  ok: boolean,
+  cmdOk: boolean,
   warnings: string[],
   output: string,
   modeMatched: boolean,
   promptMatched: boolean,
 ): number {
-  let confidence = ok ? 1 : 0;
+  let confidence = cmdOk ? 1 : 0;
   if (warnings.length > 0 && confidence > 0) confidence = 0.8;
   if (!modeMatched || !promptMatched) confidence = Math.min(confidence, 0.6);
   if (!output.trim()) confidence = Math.min(confidence, 0.5);
@@ -211,7 +211,7 @@ export function createCommandExecutor(config?: { commandTimeoutMs?: number; stal
         }
       }
 
-      function finalize(ok: boolean, status: number, error?: string, code?: TerminalErrorCode): void {
+      function finalize(cmdOk: boolean, status: number, error?: string, code?: TerminalErrorCode): void {
         if (settled) return;
         settled = true;
         clearTimers();
@@ -239,7 +239,7 @@ export function createCommandExecutor(config?: { commandTimeoutMs?: number; stal
         session.pagerActive = false;
         session.confirmPromptActive = false;
 
-        if (!ok) {
+        if (!cmdOk) {
           session.health = "desynced";
         }
 
@@ -268,10 +268,10 @@ export function createCommandExecutor(config?: { commandTimeoutMs?: number; stal
           finalWarnings.push("Host command produced long-running/busy output");
         }
 
-        const confidence = computeConfidence(ok, finalWarnings, output, modeMatched, promptMatched);
+        const confidence = computeConfidence(cmdOk, finalWarnings, output, modeMatched, promptMatched);
 
         resolve({
-          ok: ok && promptMatched && modeMatched,
+          ok: cmdOk && promptMatched && modeMatched,
           command,
           status,
           startedAt,
@@ -290,9 +290,9 @@ export function createCommandExecutor(config?: { commandTimeoutMs?: number; stal
         });
       }
 
-      function finalizeFailure(code: TerminalErrorCode, error: string): void {
+      function finalizeFailure(errorCode: TerminalErrorCode, errorMessage: string): void {
         const status = (endedStatus ?? guessFailureStatus(outputBuffer.join(""))) || 1;
-        finalize(false, status, error, code);
+        finalize(false, status, errorMessage, errorCode);
       }
 
       function onStarted(_src: unknown, args: unknown): void {

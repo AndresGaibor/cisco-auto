@@ -1,13 +1,7 @@
 import { basicConfigSchema, type BasicConfig, type BasicConfigInput, type LineEntry } from './basic-config.schema.js';
+import { buildValidationResult } from '../shared/validation.utils.js';
 
 export const BASIC_VERIFY_COMMANDS = ['show running-config | section hostname', 'show running-config | include banner', 'show running-config | include ip ssh', 'show line vty 0'] as const;
-
-function buildValidationResult(errors: Array<{ path: string; message: string; code: string }>) {
-  return {
-    ok: errors.length === 0,
-    errors,
-  };
-}
 
 export function generateBasicCommands(spec: BasicConfigInput): string[] {
   const config = basicConfigSchema.parse(spec);

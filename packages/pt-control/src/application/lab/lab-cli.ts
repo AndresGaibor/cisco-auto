@@ -185,7 +185,7 @@ export class LabCLI {
 
   async verify(checks: LabCheckSpec[]): Promise<VerifyResult> {
     throw new Error(
-      "LabCLI.verify() requiere IosService y TopologyService -祖嘗 [LabVerifier] no disponible en este contexto",
+      "LabCLI.verify() requires IosService and TopologyService - [LabVerifier] not available in this context",
     );
   }
 

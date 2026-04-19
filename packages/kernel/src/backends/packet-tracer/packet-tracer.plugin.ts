@@ -1,21 +1,15 @@
 import type { BackendPlugin } from "../../plugin-api/backend.plugin.js";
 import type { PluginValidationResult } from "../../plugin-api/plugin.types.js";
+import { toValidationResult } from '../../plugins/shared/validation.utils.js';
 import {
   createPacketTracerAdapter,
   type PacketTracerBackendAdapter,
   type PacketTracerAdapterDependencies,
 } from "./packet-tracer.adapter.js";
 
-function createValidationResult(errors: PluginValidationResult["errors"]): PluginValidationResult {
-  return {
-    ok: errors.length === 0,
-    errors,
-  };
-}
-
 function validateConfig(config: unknown): PluginValidationResult {
   if (typeof config !== "object" || config === null) {
-    return createValidationResult([
+    return toValidationResult([
       { path: "config", message: "Configuration must be an object", code: "invalid_type" },
     ]);
   }
@@ -25,12 +19,12 @@ function validateConfig(config: unknown): PluginValidationResult {
     typeof (config as { devDir?: unknown }).devDir !== "string" ||
     (config as { devDir?: string }).devDir.trim() === ""
   ) {
-    return createValidationResult([
+    return toValidationResult([
       { path: "devDir", message: "devDir is required", code: "missing_dev_dir" },
     ]);
   }
 
-  return createValidationResult([]);
+  return toValidationResult([]);
 }
 
 export interface PacketTracerBackendPlugin extends BackendPlugin {

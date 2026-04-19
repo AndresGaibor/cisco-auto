@@ -1,14 +1,8 @@
 import type { ProtocolPlugin } from '../../plugin-api/protocol.plugin.js';
 import type { PluginValidationResult } from '../../plugin-api/plugin.types.js';
 import { ipv6ConfigSchema, type Ipv6ConfigInput } from './ipv6.schema.js';
+import { toValidationResult } from '../shared/validation.utils.js';
 export { generateIpv6Commands, IPV6_VERIFY_COMMANDS } from './ipv6.generator.js';
-
-function toValidationResult(errors: PluginValidationResult['errors']): PluginValidationResult {
-  return {
-    ok: errors.length === 0,
-    errors,
-  };
-}
 
 export function validateIpv6Config(spec: unknown): PluginValidationResult {
   const parsed = ipv6ConfigSchema.safeParse(spec);

@@ -82,8 +82,8 @@ export class IosSemanticService {
         device,
         await this.verifier.verifyInterfaceIp(device, `Vlan${vlan}`, ip),
       );
-    } catch {
-      // Verificación opcional falló, la configuración ya se aplicó
+    } catch (err) {
+      console.warn(`Optional verification failed for ${device}, configuration was applied:`, err);
     }
   }
 
@@ -109,8 +109,8 @@ export class IosSemanticService {
     );
     try {
       this.recordVerification(device, await this.verifier.verifyAccessPort(device, portName, vlan));
-    } catch {
-      // Verificación opcional falló, la configuración ya se aplicó
+    } catch (err) {
+      console.warn(`Optional verification failed for ${device}, configuration was applied:`, err);
     }
   }
 
@@ -135,8 +135,8 @@ export class IosSemanticService {
     );
     try {
       this.recordVerification(device, await this.verifier.verifyTrunkPort(device, portName, vlans));
-    } catch {
-      // Verificación opcional falló, la configuración ya se aplicó
+    } catch (err) {
+      console.warn(`Optional verification failed for ${device}, configuration was applied:`, err);
     }
   }
 
@@ -167,8 +167,8 @@ export class IosSemanticService {
         device,
         await this.verifier.verifySubinterface(device, subinterfaceName, ip),
       );
-    } catch {
-      // Verificación opcional falló, la configuración ya se aplicó
+    } catch (err) {
+      console.warn(`Optional verification failed for ${device}, configuration was applied:`, err);
     }
   }
 
@@ -197,8 +197,8 @@ export class IosSemanticService {
         device,
         await this.verifier.verifyStaticRoute(device, network, mask, nextHop),
       );
-    } catch {
-      // Verificación opcional falló, la configuración ya se aplicó
+    } catch (err) {
+      console.warn(`Optional verification failed for ${device}, configuration was applied:`, err);
     }
   }
 
@@ -224,8 +224,8 @@ export class IosSemanticService {
         device,
         await this.verifier.verifyDhcpRelay(device, interfaceName, helperAddress),
       );
-    } catch {
-      // Verificación opcional falló, la configuración ya se aplicó
+    } catch (err) {
+      console.warn(`Optional verification failed for ${device}, configuration was applied:`, err);
     }
   }
 

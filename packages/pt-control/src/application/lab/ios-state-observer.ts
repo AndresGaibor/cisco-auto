@@ -94,7 +94,8 @@ export class IOSStateObserver {
         name: v.name ?? "",
         status: (v.status as "active" | "suspended" | "act/unsup") ?? "active",
       }));
-    } catch {
+    } catch (err) {
+      console.warn(`Error obtaining VLANs from ${device}:`, err);
       return [];
     }
   }
@@ -112,7 +113,8 @@ export class IOSStateObserver {
           mask: r.mask,
           nextHop: r.nextHop ?? "",
         }));
-    } catch {
+    } catch (err) {
+      console.warn(`Error obtaining VLANs from ${device}:`, err);
       return [];
     }
   }
@@ -124,7 +126,8 @@ export class IOSStateObserver {
     try {
       const result = await this.ios.showIpInterfaceBrief(device);
       return result?.interfaces ?? [];
-    } catch {
+    } catch (err) {
+      console.warn(`Error obtaining VLANs from ${device}:`, err);
       return [];
     }
   }
@@ -156,7 +159,8 @@ export class IOSStateObserver {
       }
 
       return svis;
-    } catch {
+    } catch (err) {
+      console.warn(`Error obtaining VLANs from ${device}:`, err);
       return [];
     }
   }

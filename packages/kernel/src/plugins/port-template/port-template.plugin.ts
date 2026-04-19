@@ -1,14 +1,8 @@
 import type { ProtocolPlugin } from '../../plugin-api/protocol.plugin.js';
 import type { PluginValidationResult } from '../../plugin-api/plugin.types.js';
 import { portTemplateConfigSchema, portTemplateSchema, type PortTemplateConfigInput } from './port-template.schema.js';
+import { toValidationResult } from '../shared/validation.utils.js';
 export { generatePortTemplateCommands, PORT_TEMPLATE_VERIFY_COMMANDS } from './port-template.generator.js';
-
-function toValidationResult(errors: PluginValidationResult['errors']): PluginValidationResult {
-  return {
-    ok: errors.length === 0,
-    errors,
-  };
-}
 
 export function validatePortTemplateConfig(spec: unknown): PluginValidationResult {
   const parsed = portTemplateConfigSchema.safeParse(spec);

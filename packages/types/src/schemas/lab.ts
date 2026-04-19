@@ -82,7 +82,7 @@ export function validateLabSafe(data: unknown): { success: boolean; data?: Lab; 
   } else {
     return { 
       success: false, 
-      errors: result.error.issues.map((e) => `${(e as any).path?.join('.') ?? ''}: ${e.message}`) 
+      errors: result.error.issues.map((e) => `${e.path?.join('.') ?? ''}: ${e.message}`) 
     };
   }
 }
