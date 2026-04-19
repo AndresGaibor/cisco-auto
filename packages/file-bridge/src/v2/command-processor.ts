@@ -72,67 +72,82 @@ export class CommandProcessor {
         continue;
       }
 
-      const claimResult = this.claimCommandFile(file);
-      if (!claimResult.ok || !claimResult.path) continue;
-
-      this.eventWriter.append({
-        seq: this.seq.next(),
-        ts: Date.now(),
-        type: "command-claimed",
-        id: cmdId,
-        commandType: parsed.type,
-      });
-
-      try {
-        const content = readFileSync(claimResult.path, "utf8");
-        const envelope = JSON.parse(content) as BridgeCommandEnvelope<T>;
-
-        if (envelope.expiresAt && Date.now() > envelope.expiresAt) {
-          this.publishResult(envelope, {
-            startedAt: Date.now(),
-            status: "timeout",
-            ok: false,
-            error: {
-              code: "EXPIRED",
-              message: "Command expired before being processed",
-              phase: "queue",
-            },
-          });
-          continue;
-        }
-
-        if (envelope.checksum) {
-          const computed = checksumOf({ type: envelope.type, payload: envelope.payload });
-          if (computed !== envelope.checksum) {
-            this.publishResult(envelope, {
-              startedAt: Date.now(),
-              status: "failed",
-              ok: false,
-              error: {
-                code: "CHECKSUM_MISMATCH",
-                message: "Payload integrity compromised",
-                phase: "queue",
-              },
-            });
-            continue;
-          }
-        }
-
-        this.eventWriter.append({
-          seq: envelope.seq,
-          ts: Date.now(),
-          type: "command-picked",
-          id: envelope.id,
-          commandType: envelope.type,
-        });
-
-        return envelope;
-      } catch (err) {
-        this.moveToDeadLetter(claimResult.path, err);
-      }
+      const envelope = this.claimAndReadEnvelope<T>(file, sourcePath, parsed, cmdId);
+      if (envelope) return envelope;
     }
 
     return null;
+  }
+
+  private claimAndReadEnvelope<T>(
+    filename: string,
+    sourcePath: string,
+    parsed: { seq: number; type: string },
+    cmdId: string,
+  ): BridgeCommandEnvelope<T> | null {
+    const claimResult = this.claimCommandFile(filename);
+    if (!claimResult.ok || !claimResult.path) return null;
+
+    this.eventWriter.append({
+      seq: this.seq.next(),
+      ts: Date.now(),
+      type: "command-claimed",
+      id: cmdId,
+      commandType: parsed.type,
+    });
+
+    try {
+      const content = readFileSync(claimResult.path, "utf8");
+      const envelope = JSON.parse(content) as BridgeCommandEnvelope<T>;
+
+      if (this.isCommandExpired(envelope)) {
+        this.publishResult(envelope, {
+          startedAt: Date.now(),
+          status: "timeout",
+          ok: false,
+          error: {
+            code: "EXPIRED",
+            message: "Command expired before being processed",
+            phase: "queue",
+          },
+        });
+        return null;
+      }
+
+      if (envelope.checksum) {
+        const computed = checksumOf({ type: envelope.type, payload: envelope.payload });
+        if (computed !== envelope.checksum) {
+          this.publishResult(envelope, {
+            startedAt: Date.now(),
+            status: "failed",
+            ok: false,
+            error: {
+              code: "CHECKSUM_MISMATCH",
+              message: "Payload integrity compromised",
+              phase: "queue",
+            },
+          });
+          return null;
+        }
+      }
+
+      this.eventWriter.append({
+        seq: envelope.seq,
+        ts: Date.now(),
+        type: "command-picked",
+        id: envelope.id,
+        commandType: envelope.type,
+      });
+
+      return envelope;
+    } catch (err) {
+      this.moveToDeadLetter(claimResult.path, err);
+      return null;
+    }
+  }
+
+  private isCommandExpired(envelope: BridgeCommandEnvelope<unknown>): boolean {
+    return envelope.expiresAt !== undefined && Date.now() > envelope.expiresAt;
   }
 
   private claimCommandFile(filename: string): ClaimResult {

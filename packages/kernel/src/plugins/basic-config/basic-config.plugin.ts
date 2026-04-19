@@ -1,14 +1,8 @@
 import type { ProtocolPlugin } from '../../plugin-api/protocol.plugin.js';
 import type { PluginValidationResult } from '../../plugin-api/plugin.types.js';
 import { basicConfigSchema, type BasicConfigInput } from './basic-config.schema.js';
+import { toValidationResult } from '../shared/validation.utils.js';
 export { generateBasicCommands, verifyShowRunningConfig, BASIC_VERIFY_COMMANDS } from './basic-config.generator.js';
-
-function toValidationResult(errors: PluginValidationResult['errors']): PluginValidationResult {
-  return {
-    ok: errors.length === 0,
-    errors,
-  };
-}
 
 export function validateBasicConfig(spec: unknown): PluginValidationResult {
   const parsed = basicConfigSchema.safeParse(spec);

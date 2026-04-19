@@ -1,14 +1,8 @@
 import type { ProtocolPlugin } from '../../plugin-api/protocol.plugin.js';
 import type { PluginValidationResult } from '../../plugin-api/plugin.types.js';
 import { vlanSchema, type VlanConfigInput, sviSchema, type SviConfigInput } from './vlan.schema.js';
+import { toValidationResult } from '../shared/validation.utils.js';
 export { generateVlanCommands, VLAN_VERIFY_COMMANDS, verifyShowVlanBriefOutput, generateSviCommands, SVI_VERIFY_COMMANDS, verifyShowIpInterfaceBrief } from './vlan.generator.js';
-
-function toValidationResult(errors: PluginValidationResult['errors']): PluginValidationResult {
-  return {
-    ok: errors.length === 0,
-    errors,
-  };
-}
 
 export function validateVlanConfig(spec: unknown): PluginValidationResult {
   const parsed = vlanSchema.safeParse(spec);

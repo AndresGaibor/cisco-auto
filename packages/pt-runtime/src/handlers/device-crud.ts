@@ -61,14 +61,14 @@ export function handleRemoveDevice(payload: RemoveDevicePayload, deps: HandlerDe
 
   if (payload.name === "ALL" || !payload.name) {
     try {
-      var count = net.getDeviceCount();
-      dprint("[handler:removeDevice] Bulk remove started. Count: " + count);
-      for (var i = count - 1; i >= 0; i--) {
+      var deviceCount = net.getDeviceCount();
+      dprint("[handler:removeDevice] Bulk remove started. Count: " + deviceCount);
+      for (var deviceIndex = deviceCount - 1; deviceIndex >= 0; deviceIndex--) {
         try {
-          var d = net.getDeviceAt(i);
-          if (d) lw.removeDevice(d.getName());
+          var device = net.getDeviceAt(deviceIndex);
+          if (device) lw.removeDevice(device.getName());
         } catch (inner) {
-          dprint("[handler:removeDevice] Skip device at " + i);
+          dprint("[handler:removeDevice] Skip device at " + deviceIndex);
         }
       }
       return { ok: true, result: "CLEAN_ATTEMPT_FINISHED" };

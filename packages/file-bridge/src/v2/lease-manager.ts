@@ -62,20 +62,7 @@ export class LeaseManager {
   }
 
   renewLease(): void {
-    const lease: BridgeLease = {
-      ownerId: this.ownerId,
-      pid: process.pid,
-      hostname: hostname(),
-      startedAt: Date.now(),
-      updatedAt: Date.now(),
-      expiresAt: Date.now() + this.leaseTtlMs,
-      ttlMs: this.leaseTtlMs,
-      processTitle: process.title || "node",
-      version: "2.0.0",
-    };
-
-    mkdirSync(dirname(this.leaseFilePath), { recursive: true });
-    writeFileSync(this.leaseFilePath, JSON.stringify(lease, null, 2), "utf8");
+    this.writeLease(this.buildLease());
     this.logger(`Lease renewed (ownerId=${this.ownerId.substring(0, 8)}..., expires_in=${this.leaseTtlMs}ms)`);
   }
 
@@ -100,8 +87,8 @@ export class LeaseManager {
     }
   }
 
-  private tryAcquireLease(): boolean {
-    const lease: BridgeLease = {
+  private buildLease(): BridgeLease {
+    return {
       ownerId: this.ownerId,
       pid: process.pid,
       hostname: hostname(),
@@ -112,9 +99,15 @@ export class LeaseManager {
       processTitle: process.title || "node",
       version: "2.0.0",
     };
+  }
 
+  private writeLease(lease: BridgeLease): void {
     mkdirSync(dirname(this.leaseFilePath), { recursive: true });
     writeFileSync(this.leaseFilePath, JSON.stringify(lease, null, 2), "utf8");
+  }
+
+  private tryAcquireLease(): boolean {
+    this.writeLease(this.buildLease());
 
     const written = this.readLease();
     const acquired = written?.ownerId === this.ownerId;

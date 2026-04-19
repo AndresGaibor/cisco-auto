@@ -123,7 +123,7 @@ export function readJsonFile<T = unknown>(path: string): T | null {
   } catch (err) {
     const error = err as NodeJS.ErrnoException;
     if (error.code === "ENOENT") return null;
-    return null;
+    throw err;
   }
 }
 

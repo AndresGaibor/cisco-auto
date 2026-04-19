@@ -20,7 +20,7 @@ export function normalizeIfaceName(name: string): string {
 }
 
 /** Normalize a MAC address for comparison (remove delimiters, lowercase) */
-export function normalizeMac(mac: any): string {
+export function normalizeMac(mac: string | null | undefined): string {
   if (!mac) return "";
   return String(mac).toLowerCase().replace(/[:.-]/g, "");
 }

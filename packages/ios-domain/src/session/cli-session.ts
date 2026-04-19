@@ -120,6 +120,23 @@ export class CliSession {
     return result;
   }
 
+  private detectPagingMode(raw: string): "paging" | "normal" {
+    const promptState = inferPromptState(raw);
+    return promptState.mode === "paging" ? "paging" : "normal";
+  }
+
+  private updateStateFromPagingOutput(raw: string): void {
+    if (this.detectPagingMode(raw) === "paging") {
+      this.state.paging = true;
+    } else {
+      this.state.paging = false;
+      const promptState = inferPromptState(raw);
+      if (promptState.mode !== "unknown") {
+        this.state.mode = promptState.mode;
+      }
+    }
+  }
+
   private async accumulatePagingOutput(initialResult: CommandResult): Promise<void> {
     let accumulatedOutput = initialResult.raw;
     let totalBytes = Buffer.byteLength(accumulatedOutput, "utf8");
@@ -150,16 +167,7 @@ export class CliSession {
         break;
       }
 
-      const promptState = inferPromptState(raw);
-      if (promptState.mode === "paging") {
-        this.state.paging = true;
-      } else {
-        this.state.paging = false;
-        if (promptState.mode !== "unknown") {
-          this.state.mode = promptState.mode;
-        }
-      }
-
+      this.updateStateFromPagingOutput(raw);
       this.lastCommandTime = Date.now();
     }
 
@@ -329,6 +337,9 @@ export class CliSession {
 
   exportTranscript(): SessionTranscript {
     const deviceName = this.state.deviceName ?? "unknown";
+    const startedAt = this.history[0]?.timestamp ?? Date.now();
+    const endedAt = this.history[this.history.length - 1]?.timestamp;
+
     const entries: CommandTranscriptEntry[] = this.history.map((entry) => ({
       command: entry.command,
       raw: entry.result.raw,
@@ -336,7 +347,7 @@ export class CliSession {
       modeAfter: entry.result.modeAfter ?? "unknown",
       classification: entry.result.classification ?? "unknown",
       ok: entry.result.ok,
-      durationMs: entry.timestamp ? entry.timestamp - this.lastCommandTime : 0,
+      durationMs: entry.timestamp - startedAt,
       truncated: entry.result.truncated,
       source: "terminal" as const,
       sessionId: deviceName,
@@ -345,8 +356,6 @@ export class CliSession {
       warnings: entry.result.warnings,
     }));
 
-    const allWarnings = entries.flatMap((e) => e.warnings ?? []);
-
     return {
       sessionId: deviceName,
       device: deviceName,
@@ -354,9 +363,9 @@ export class CliSession {
       modeFinal: this.state.mode,
       desynced: this.state.desynced,
       lastError: this.desyncReason,
-      warnings: allWarnings,
-      startedAt: entries[0]?.timestamp ?? Date.now(),
-      endedAt: entries[entries.length - 1]?.timestamp,
+      warnings: entries.flatMap((e) => e.warnings ?? []),
+      startedAt,
+      endedAt,
     };
   }
 }

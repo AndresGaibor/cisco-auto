@@ -132,16 +132,8 @@ export class SequenceStore {
 
   private isLockStale(): boolean {
     try {
-      const { mtimeMs } = { mtimeMs: Date.now() - LOCK_STALE_THRESHOLD_MS - 1 };
-      // Use stat directly since we need actual mtime
-      const stat = { mtimeMs: 0 };
-      try {
-        const fs = require("node:fs");
-        const s = fs.statSync(this.lockFile);
-        stat.mtimeMs = s.mtimeMs;
-      } catch {
-        return true; // File doesn't exist, not stale
-      }
+      const fs = require("node:fs");
+      const stat = fs.statSync(this.lockFile);
       return Date.now() - stat.mtimeMs > LOCK_STALE_THRESHOLD_MS;
     } catch {
       return true;
@@ -149,8 +141,8 @@ export class SequenceStore {
   }
 
   private sleep(ms: number): void {
-    const end = Date.now() + ms;
-    while (Date.now() < end) {
+    const deadline = Date.now() + ms;
+    while (Date.now() < deadline) {
       // busy wait for precise timing
     }
   }

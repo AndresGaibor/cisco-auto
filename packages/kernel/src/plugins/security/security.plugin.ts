@@ -1,17 +1,8 @@
 import type { ProtocolPlugin } from '../../plugin-api/protocol.plugin.js';
 import type { PluginValidationResult } from '../../plugin-api/plugin.types.js';
 import { securitySchema, type SecurityConfigInput } from './security.schema.js';
+import { toValidationResult } from '../shared/validation.utils.js';
 export { generateSecurityCommands, SECURITY_VERIFY_COMMANDS, verifyShowAccessLists } from './security.generator.js';
-
-/**
- * Convierte errores de validación a PluginValidationResult
- */
-function toValidationResult(errors: PluginValidationResult['errors']): PluginValidationResult {
-  return {
-    ok: errors.length === 0,
-    errors,
-  };
-}
 
 /**
  * Valida la configuración de seguridad (ACL + NAT)

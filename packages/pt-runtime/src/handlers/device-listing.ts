@@ -25,13 +25,32 @@ export interface PortLinkResult {
   evidence: { source: string };
 }
 
+interface PortWithLinks {
+  name: string;
+  linkedPortMac?: string;
+  linkedPortName?: string;
+  connection?: ConnectionInfo;
+}
+
+function getLinkedPortMac(port: unknown): string | undefined {
+  return (port as PortWithLinks).linkedPortMac;
+}
+
+function getLinkedPortName(port: unknown): string | undefined {
+  return (port as PortWithLinks).linkedPortName;
+}
+
+function setPortConnection(port: unknown, connection: ConnectionInfo): void {
+  (port as PortWithLinks).connection = connection;
+}
+
 export function composeDeviceListing(input: DeviceListingInput): ListedDevice[] {
   const { net, connectionsByDevice, portIndex } = input;
   const devices: ListedDevice[] = [];
-  const count = net.getDeviceCount();
+  const deviceCount = net.getDeviceCount();
 
-  for (let i = 0; i < count; i++) {
-    const device = net.getDeviceAt(i);
+  for (let deviceIndex = 0; deviceIndex < deviceCount; deviceIndex++) {
+    const device = net.getDeviceAt(deviceIndex);
     if (!device) continue;
 
     const name = device.getName();
@@ -53,49 +72,46 @@ export function composeDeviceListing(input: DeviceListingInput): ListedDevice[] 
   return devices;
 }
 
+function isHighConfidenceConnection(connection: ConnectionInfo): boolean {
+  return (
+    connection.confidence === "exact" ||
+    connection.confidence === "merged" ||
+    connection.confidence === "registry"
+  );
+}
+
 function filterValidConnections(connectionsRaw: ConnectionInfo[]): ConnectionInfo[] {
-  const connections: ConnectionInfo[] = [];
-  for (let ci = 0; ci < connectionsRaw.length; ci++) {
-    const conn = connectionsRaw[ci];
-    if (
-      conn.confidence === "exact" ||
-      conn.confidence === "merged" ||
-      conn.confidence === "registry"
-    ) {
-      connections.push(conn);
-    } else if (conn.remoteDevice && conn.remotePort) {
-      connections.push(conn);
-    }
-  }
-  return connections;
+  return connectionsRaw.filter(
+    (conn) => isHighConfidenceConnection(conn) || (conn.remoteDevice && conn.remotePort),
+  );
 }
 
 function attachConnectionsToPorts(
-  devicePorts: any[],
+  devicePorts: unknown[],
   connections: ConnectionInfo[],
   portIndex: PortOwnerIndex,
   deviceName: string,
 ): void {
-  for (let pi = 0; pi < devicePorts.length; pi++) {
-    const port = devicePorts[pi];
+  for (let i = 0; i < devicePorts.length; i++) {
+    const port = devicePorts[i] as PortWithLinks;
     const portNameNorm = normalizeIfaceName(port.name);
     let conn: ConnectionInfo | null = null;
 
-    for (let ci = 0; ci < connections.length; ci++) {
-      const c = connections[ci];
-      if (c.localPort === port.name || normalizeIfaceName(c.localPort || "") === portNameNorm) {
-        conn = c;
+    for (let connectionIndex = 0; connectionIndex < connections.length; connectionIndex++) {
+      const connection = connections[connectionIndex];
+      if (connection.localPort === port.name || normalizeIfaceName(connection.localPort || "") === portNameNorm) {
+        conn = connection;
         break;
       }
     }
 
     if (conn) {
-      (port as any).connection = conn;
+      setPortConnection(port, conn);
       continue;
     }
 
-    const linkedMac = (port as any).linkedPortMac as string | undefined;
-    const linkedPortName = (port as any).linkedPortName as string | undefined;
+    const linkedMac = getLinkedPortMac(port);
+    const linkedPortName = getLinkedPortName(port);
     if (linkedMac || linkedPortName) {
       const remoteOwner = linkedMac ? (portIndex.byMac[linkedMac] ?? null) : null;
       const remoteByName =
@@ -104,13 +120,13 @@ function attachConnectionsToPorts(
         remoteOwner ?? (remoteByName.length === 1 ? remoteByName[0] : null) ?? null;
 
       if (resolvedRemote && resolvedRemote.deviceName !== deviceName) {
-        (port as any).connection = {
+        setPortConnection(port, {
           localPort: port.name,
           remoteDevice: resolvedRemote.deviceName,
           remotePort: resolvedRemote.portName,
           confidence: linkedMac ? "exact" : "ambiguous",
           evidence: { source: linkedMac ? "track2-mac" : "track2-name" },
-        };
+        });
       }
     }
   }

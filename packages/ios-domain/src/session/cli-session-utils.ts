@@ -58,23 +58,50 @@ export function updateStateFromResult(
   const promptState = inferPromptState(result.raw);
   const classification = classifyOutput(result.raw);
 
-  // Handle paging state
+  handlePagingState(state, result, promptState, classification);
+  handleConfirmationState(state, result, promptState, classification);
+  handlePasswordPrompt(state, result, promptState);
+  handleDnsLookup(state, result, promptState, classification);
+  handleCopyDestinationPrompt(state, result, promptState);
+  handleReloadConfirm(state, result, promptState);
+  handleEraseConfirm(state, result, promptState);
+  handleDesync(state, result, promptState);
+  updateModeFromPrompt(state, result, promptState);
+}
+
+function handlePagingState(
+  state: CliSessionState,
+  result: CommandResult,
+  promptState: ReturnType<typeof inferPromptState>,
+  classification: ReturnType<typeof classifyOutput>,
+): void {
   if (promptState.mode === "paging" || classification.type === "paging") {
     result.paging = true;
     state.paging = true;
   } else {
     state.paging = false;
   }
+}
 
-  // Handle confirmation state
+function handleConfirmationState(
+  state: CliSessionState,
+  result: CommandResult,
+  promptState: ReturnType<typeof inferPromptState>,
+  classification: ReturnType<typeof classifyOutput>,
+): void {
   if (promptState.mode === "awaiting-confirm" || classification.type === "confirmation-required") {
     result.awaitingConfirm = true;
     state.awaitingConfirm = true;
   } else {
     state.awaitingConfirm = false;
   }
+}
 
-  // Handle password prompt
+function handlePasswordPrompt(
+  state: CliSessionState,
+  result: CommandResult,
+  promptState: ReturnType<typeof inferPromptState>,
+): void {
   if (promptState.mode === "awaiting-password") {
     state.awaitingPassword = true;
     state.mode = "awaiting-password";
@@ -83,8 +110,14 @@ export function updateStateFromResult(
   } else {
     state.awaitingPassword = false;
   }
+}
 
-  // Handle DNS hostname lookup
+function handleDnsLookup(
+  state: CliSessionState,
+  result: CommandResult,
+  promptState: ReturnType<typeof inferPromptState>,
+  classification: ReturnType<typeof classifyOutput>,
+): void {
   if (promptState.mode === "resolving-hostname" || classification.type === "dns-lookup") {
     state.awaitingDnsLookup = true;
     state.mode = "resolving-hostname";
@@ -97,33 +130,58 @@ export function updateStateFromResult(
     state.mode = "unknown";
     result.modeAfter = "unknown";
   }
+}
 
-  // Handle copy destination prompt
+function handleCopyDestinationPrompt(
+  state: CliSessionState,
+  result: CommandResult,
+  promptState: ReturnType<typeof inferPromptState>,
+): void {
   if (promptState.mode === "copy-destination") {
     state.awaitingCopyDestination = true;
     result.awaitingConfirm = true;
   }
+}
 
-  // Handle reload confirmation
+function handleReloadConfirm(
+  state: CliSessionState,
+  result: CommandResult,
+  promptState: ReturnType<typeof inferPromptState>,
+): void {
   if (promptState.mode === "reload-confirm") {
     state.awaitingReloadConfirm = true;
     result.awaitingConfirm = true;
   }
+}
 
-  // Handle erase confirmation
+function handleEraseConfirm(
+  state: CliSessionState,
+  result: CommandResult,
+  promptState: ReturnType<typeof inferPromptState>,
+): void {
   if (promptState.mode === "erase-confirm") {
     state.awaitingEraseConfirm = true;
     result.awaitingConfirm = true;
   }
+}
 
-  // Handle desync
+function handleDesync(
+  state: CliSessionState,
+  result: CommandResult,
+  promptState: ReturnType<typeof inferPromptState>,
+): void {
   if (promptState.mode === "unknown" && result.modeBefore !== "unknown" && result.modeBefore !== "paging") {
     state.desynced = true;
     result.error = result.error ?? `Session desynced: Mode inference returned unknown after ${result.modeBefore}`;
     result.classification = "session-desync";
   }
+}
 
-  // Update mode for non-interactive prompts
+function updateModeFromPrompt(
+  state: CliSessionState,
+  result: CommandResult,
+  promptState: ReturnType<typeof inferPromptState>,
+): void {
   if (
     promptState.mode !== "unknown" &&
     promptState.mode !== "paging" &&

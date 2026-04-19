@@ -1,14 +1,8 @@
 import type { ProtocolPlugin } from '../../plugin-api/protocol.plugin.js';
 import type { PluginValidationResult } from '../../plugin-api/plugin.types.js';
 import { routingConfigSchema, type RoutingConfigInput } from './routing.schema.js';
+import { toValidationResult } from '../shared/validation.utils.js';
 export { generateRoutingCommands, ROUTING_VERIFY_COMMANDS } from './routing.generator.js';
-
-function toValidationResult(errors: PluginValidationResult['errors']): PluginValidationResult {
-  return {
-    ok: errors.length === 0,
-    errors,
-  };
-}
 
 export function validateRoutingConfig(spec: unknown): PluginValidationResult {
   const parsed = routingConfigSchema.safeParse(spec);

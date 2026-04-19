@@ -1,6 +1,7 @@
 import type { ProtocolPlugin } from '../../plugin-api/protocol.plugin.js';
 import type { PluginValidationResult } from '../../plugin-api/plugin.types.js';
 import { stpSchema, vtpSchema, etherChannelSchema } from './switching.schema.js';
+import { toValidationResult } from '../shared/validation.utils.js';
 export {
   generateStpCommands,
   generateVtpCommands,
@@ -11,15 +12,8 @@ export {
   verifyShowEtherchannelSummary,
 } from './switching.generator.js';
 
-function toValidationResult(errors: PluginValidationResult['errors']): PluginValidationResult {
-  return {
-    ok: errors.length === 0,
-    errors,
-  };
-}
-
-function validateSchema(schema: typeof stpSchema, spec: unknown): PluginValidationResult {
-  const parsed = schema.safeParse(spec);
+export function validateStpConfig(spec: unknown): PluginValidationResult {
+  const parsed = stpSchema.safeParse(spec);
 
   if (!parsed.success) {
     return toValidationResult(
@@ -31,23 +25,12 @@ function validateSchema(schema: typeof stpSchema, spec: unknown): PluginValidati
     );
   }
 
-  return toValidationResult([]);
-}
-
-function validateStpConfig(spec: unknown): PluginValidationResult {
-  const result = validateSchema(stpSchema, spec);
-
-  if (!result.ok) {
-    return result;
-  }
-
-  const config = spec as Record<string, unknown>;
+  const config = parsed.data;
   const errors: PluginValidationResult['errors'] = [];
 
-  // Validar que no haya prioridades duplicadas en vlanConfig
   const vlanPriorities = new Map<number, number>();
-  for (const [index, vlanConf] of ((config.vlanConfig as Record<string, unknown>[]) ?? []).entries()) {
-    const vlanId = vlanConf.vlanId as number;
+  for (const [index, vlanConf] of (config.vlanConfig ?? []).entries()) {
+    const vlanId = vlanConf.vlanId;
     if (vlanConf.priority !== undefined) {
       if (vlanPriorities.has(vlanId)) {
         errors.push({
@@ -56,7 +39,7 @@ function validateStpConfig(spec: unknown): PluginValidationResult {
           code: 'duplicate_stp_vlan_priority',
         });
       }
-      vlanPriorities.set(vlanId, vlanConf.priority as number);
+      vlanPriorities.set(vlanId, vlanConf.priority);
     }
   }
 
@@ -64,16 +47,21 @@ function validateStpConfig(spec: unknown): PluginValidationResult {
 }
 
 function validateVtpConfig(spec: unknown): PluginValidationResult {
-  const result = validateSchema(vtpSchema, spec);
+  const parsed = vtpSchema.safeParse(spec);
 
-  if (!result.ok) {
-    return result;
+  if (!parsed.success) {
+    return toValidationResult(
+      parsed.error.issues.map((issue) => ({
+        path: issue.path.join('.'),
+        message: issue.message,
+        code: issue.code,
+      }))
+    );
   }
 
-  const config = spec as Record<string, unknown>;
+  const config = parsed.data;
   const errors: PluginValidationResult['errors'] = [];
 
-  // Validar coherencia: modo transparent no usa domain/password
   if (config.mode === 'transparent' && config.password !== undefined) {
     errors.push({
       path: 'password',
@@ -86,18 +74,22 @@ function validateVtpConfig(spec: unknown): PluginValidationResult {
 }
 
 function validateEtherChannelConfig(spec: unknown): PluginValidationResult {
-  const result = validateSchema(etherChannelSchema, spec);
+  const parsed = etherChannelSchema.safeParse(spec);
 
-  if (!result.ok) {
-    return result;
+  if (!parsed.success) {
+    return toValidationResult(
+      parsed.error.issues.map((issue) => ({
+        path: issue.path.join('.'),
+        message: issue.message,
+        code: issue.code,
+      }))
+    );
   }
 
-  const config = spec as Record<string, unknown>;
+  const config = parsed.data;
   const errors: PluginValidationResult['errors'] = [];
 
-  // Validar que haya al menos 2 interfaces
-  const interfaces = config.interfaces as string[] | undefined;
-  if (interfaces === undefined || interfaces.length < 2) {
+  if (config.interfaces.length < 2) {
     errors.push({
       path: 'interfaces',
       message: 'At least 2 interfaces are required for EtherChannel',
@@ -105,7 +97,6 @@ function validateEtherChannelConfig(spec: unknown): PluginValidationResult {
     });
   }
 
-  // Validar coherencia trunk/access
   if (config.trunkMode === 'access' && config.nativeVlan !== undefined) {
     errors.push({
       path: 'nativeVlan',
@@ -192,4 +183,4 @@ export const switchingPlugin: ProtocolPlugin = {
   validate: validateStpConfig,
 };
 
-export { validateStpConfig, validateVtpConfig, validateEtherChannelConfig };
+export { validateVtpConfig, validateEtherChannelConfig };

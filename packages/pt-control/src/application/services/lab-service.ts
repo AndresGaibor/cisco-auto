@@ -118,7 +118,7 @@ export interface LabContext {
   deviceXml?: Record<string, ParsedDeviceXml>;
 }
 
-function tagContent(xml: string, tag: string, fallback = ""): string {
+function extractXmlTagContent(xml: string, tag: string, fallback = ""): string {
   const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i");
   const m = xml.match(re);
   return m && m[1] ? m[1].trim() : fallback;
@@ -142,7 +142,7 @@ function allTags(xml: string, tag: string): string[] {
 }
 
 function parseDeviceXml(xml: string): ParsedDeviceXml {
-  const hostname = tagContent(xml, "hostname") || tagAttr(xml, "device", "name");
+  const hostname = extractXmlTagContent(xml, "hostname") || tagAttr(xml, "device", "name");
   const model = tagAttr(xml, "device", "model");
   const powerStr = tagAttr(xml, "device", "power");
   const power = powerStr === "true" || powerStr === "1";
@@ -151,36 +151,36 @@ function parseDeviceXml(xml: string): ParsedDeviceXml {
 
   const ports: XmlPort[] = [];
   for (const portXml of allTags(xml, "port")) {
-    const name = tagAttr(portXml, "port", "name") || tagContent(portXml, "name");
+    const name = tagAttr(portXml, "port", "name") || extractXmlTagContent(portXml, "name");
     ports.push({
       name,
-      ipAddress: tagContent(portXml, "ipAddress") || undefined,
-      subnetMask: tagContent(portXml, "subnetMask") || undefined,
-      macAddress: tagContent(portXml, "macAddress") || undefined,
-      status: tagContent(portXml, "status") || undefined,
-      protocol: tagContent(portXml, "protocol") || undefined,
-      vlan: parseInt(tagContent(portXml, "vlan") || "0", 10) || undefined,
-      mode: tagContent(portXml, "mode") || undefined,
-      description: tagContent(portXml, "description") || undefined,
-      bandwidth: tagContent(portXml, "bandwidth") || undefined,
-      delay: tagContent(portXml, "delay") || undefined,
-      duplex: tagContent(portXml, "duplex") || undefined,
-      speed: tagContent(portXml, "speed") || undefined,
-      encapsulation: tagContent(portXml, "encapsulation") || undefined,
-      trunkVlan: parseInt(tagContent(portXml, "trunkVlan") || "0", 10) || undefined,
-      type: tagContent(portXml, "type") || undefined,
+      ipAddress: extractXmlTagContent(portXml, "ipAddress") || undefined,
+      subnetMask: extractXmlTagContent(portXml, "subnetMask") || undefined,
+      macAddress: extractXmlTagContent(portXml, "macAddress") || undefined,
+      status: extractXmlTagContent(portXml, "status") || undefined,
+      protocol: extractXmlTagContent(portXml, "protocol") || undefined,
+      vlan: parseInt(extractXmlTagContent(portXml, "vlan") || "0", 10) || undefined,
+      mode: extractXmlTagContent(portXml, "mode") || undefined,
+      description: extractXmlTagContent(portXml, "description") || undefined,
+      bandwidth: extractXmlTagContent(portXml, "bandwidth") || undefined,
+      delay: extractXmlTagContent(portXml, "delay") || undefined,
+      duplex: extractXmlTagContent(portXml, "duplex") || undefined,
+      speed: extractXmlTagContent(portXml, "speed") || undefined,
+      encapsulation: extractXmlTagContent(portXml, "encapsulation") || undefined,
+      trunkVlan: parseInt(extractXmlTagContent(portXml, "trunkVlan") || "0", 10) || undefined,
+      type: extractXmlTagContent(portXml, "type") || undefined,
     });
   }
 
   const modules: XmlModule[] = [];
   for (const modXml of allTags(xml, "module")) {
-    const slot = tagAttr(modXml, "module", "slot") || tagContent(modXml, "slot");
+    const slot = tagAttr(modXml, "module", "slot") || extractXmlTagContent(modXml, "slot");
     modules.push({
       slot,
-      model: tagContent(modXml, "model") || undefined,
-      type: tagContent(modXml, "type") || undefined,
-      ports: tagContent(modXml, "ports")
-        ? tagContent(modXml, "ports")
+      model: extractXmlTagContent(modXml, "model") || undefined,
+      type: extractXmlTagContent(modXml, "type") || undefined,
+      ports: extractXmlTagContent(modXml, "ports")
+        ? extractXmlTagContent(modXml, "ports")
             .split(",")
             .map((p) => p.trim())
         : [],
@@ -190,44 +190,44 @@ function parseDeviceXml(xml: string): ParsedDeviceXml {
   const vlans: XmlVlan[] = [];
   for (const vlanXml of allTags(xml, "vlan")) {
     vlans.push({
-      id: parseInt(tagAttr(vlanXml, "vlan", "id") || tagContent(vlanXml, "id") || "0", 10),
-      name: tagContent(vlanXml, "name") || undefined,
-      state: tagContent(vlanXml, "state") || undefined,
+      id: parseInt(tagAttr(vlanXml, "vlan", "id") || extractXmlTagContent(vlanXml, "id") || "0", 10),
+      name: extractXmlTagContent(vlanXml, "name") || undefined,
+      state: extractXmlTagContent(vlanXml, "state") || undefined,
     });
   }
 
   const routingTable: XmlRoutingEntry[] = [];
   for (const routeXml of allTags(xml, "route")) {
     routingTable.push({
-      type: tagContent(routeXml, "type") || "C",
-      network: tagContent(routeXml, "network") || "",
-      mask: tagContent(routeXml, "mask") || undefined,
-      nextHop: tagContent(routeXml, "nextHop") || undefined,
-      interface: tagContent(routeXml, "interface") || undefined,
-      metric: tagContent(routeXml, "metric") || undefined,
-      distance: tagContent(routeXml, "distance") || undefined,
-      age: tagContent(routeXml, "age") || undefined,
+      type: extractXmlTagContent(routeXml, "type") || "C",
+      network: extractXmlTagContent(routeXml, "network") || "",
+      mask: extractXmlTagContent(routeXml, "mask") || undefined,
+      nextHop: extractXmlTagContent(routeXml, "nextHop") || undefined,
+      interface: extractXmlTagContent(routeXml, "interface") || undefined,
+      metric: extractXmlTagContent(routeXml, "metric") || undefined,
+      distance: extractXmlTagContent(routeXml, "distance") || undefined,
+      age: extractXmlTagContent(routeXml, "age") || undefined,
     });
   }
 
   const arpTable: XmlArpEntry[] = [];
   for (const arpXml of allTags(xml, "arp")) {
     arpTable.push({
-      ipAddress: tagContent(arpXml, "ipAddress") || "",
-      macAddress: tagContent(arpXml, "macAddress") || "",
-      interface: tagContent(arpXml, "interface") || "",
-      age: tagContent(arpXml, "age") || undefined,
-      type: tagContent(arpXml, "type") || undefined,
+      ipAddress: extractXmlTagContent(arpXml, "ipAddress") || "",
+      macAddress: extractXmlTagContent(arpXml, "macAddress") || "",
+      interface: extractXmlTagContent(arpXml, "interface") || "",
+      age: extractXmlTagContent(arpXml, "age") || undefined,
+      type: extractXmlTagContent(arpXml, "type") || undefined,
     });
   }
 
   const macTable: XmlMacEntry[] = [];
   for (const macXml of allTags(xml, "mac")) {
     macTable.push({
-      vlan: tagContent(macXml, "vlan") || "1",
-      macAddress: tagContent(macXml, "macAddress") || "",
-      type: tagContent(macXml, "type") || "",
-      ports: (tagContent(macXml, "ports") || "").split(",").map((p) => p.trim()),
+      vlan: extractXmlTagContent(macXml, "vlan") || "1",
+      macAddress: extractXmlTagContent(macXml, "macAddress") || "",
+      type: extractXmlTagContent(macXml, "type") || "",
+      ports: (extractXmlTagContent(macXml, "ports") || "").split(",").map((p) => p.trim()),
     });
   }
 
@@ -236,10 +236,10 @@ function parseDeviceXml(xml: string): ParsedDeviceXml {
     model: model || undefined,
     typeId: typeId,
     power: power,
-    version: tagContent(xml, "version") || undefined,
-    uptime: tagContent(xml, "uptime") || undefined,
-    serialNumber: tagContent(xml, "serialNumber") || undefined,
-    configRegister: tagContent(xml, "configRegister") || undefined,
+    version: extractXmlTagContent(xml, "version") || undefined,
+    uptime: extractXmlTagContent(xml, "uptime") || undefined,
+    serialNumber: extractXmlTagContent(xml, "serialNumber") || undefined,
+    configRegister: extractXmlTagContent(xml, "configRegister") || undefined,
     ports,
     modules,
     vlans,

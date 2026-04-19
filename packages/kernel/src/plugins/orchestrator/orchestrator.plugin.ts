@@ -1,14 +1,8 @@
 import type { ProtocolPlugin } from '../../plugin-api/protocol.plugin.js';
 import type { PluginValidationResult } from '../../plugin-api/plugin.types.js';
 import { deviceConfigSpecSchema, type DeviceConfigSpecInput } from './orchestrator.schema.js';
+import { toValidationResult } from '../shared/validation.utils.js';
 export { orchestrateConfig, verifyOrchestratedConfig, generateSviCommands, SECTION_ORDER } from './orchestrator.generator.js';
-
-function toValidationResult(errors: PluginValidationResult['errors']): PluginValidationResult {
-  return {
-    ok: errors.length === 0,
-    errors,
-  };
-}
 
 export function validateDeviceConfigSpec(spec: unknown): PluginValidationResult {
   const parsed = deviceConfigSpecSchema.safeParse(spec);
