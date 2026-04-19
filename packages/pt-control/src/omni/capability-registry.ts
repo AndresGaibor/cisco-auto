@@ -318,6 +318,128 @@ register({
 });
 
 register({
+  id: "omni.device.skipboot",
+  title: "Skip Device Boot",
+  domain: "device",
+  kind: "hack",
+  risk: "dangerous",
+  description: "Ejecutar device.skipBoot() para bypass del diálogo inicial IOS",
+  tags: ["omni", "device", "skipboot", "hack"],
+  prerequisites: [
+    { type: "device", constraint: "Device must exist" },
+  ],
+  setup: NOOP_ACTION,
+  execute: { type: "hack", adapter: "skipBootDevice" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: { fields: { skipped: { required: true, type: "boolean" } } },
+  supportPolicy: { minRunsForSupported: 2, flakinessThreshold: 0.2, timeoutMs: 5000 },
+});
+
+register({
+  id: "omni.device.mactable",
+  title: "Get MAC Address Table",
+  domain: "device",
+  kind: "hack",
+  risk: "dangerous",
+  description: "Extraer tabla MAC de un switch via getMacAddressTable()",
+  tags: ["omni", "device", "mactable", "hack"],
+  prerequisites: [
+    { type: "device", constraint: "Device must exist" },
+  ],
+  setup: NOOP_ACTION,
+  execute: { type: "hack", adapter: "getMacAddressTable" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: { fields: { entryCount: { required: true, type: "number" } } },
+  supportPolicy: { minRunsForSupported: 2, flakinessThreshold: 0.25, timeoutMs: 5000 },
+});
+
+register({
+  id: "omni.device.arp",
+  title: "Get ARP Table",
+  domain: "device",
+  kind: "hack",
+  risk: "dangerous",
+  description: "Extraer tabla ARP de un dispositivo via getArpTable()",
+  tags: ["omni", "device", "arp", "hack"],
+  prerequisites: [
+    { type: "device", constraint: "Device must exist" },
+  ],
+  setup: NOOP_ACTION,
+  execute: { type: "hack", adapter: "getArpTable" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: { fields: { found: { required: true, type: "boolean" } } },
+  supportPolicy: { minRunsForSupported: 2, flakinessThreshold: 0.25, timeoutMs: 5000 },
+});
+
+register({
+  id: "omni.device.routing",
+  title: "Get Routing Table",
+  domain: "device",
+  kind: "hack",
+  risk: "dangerous",
+  description: "Extraer tabla de enrutamiento via getRoutingTable()",
+  tags: ["omni", "device", "routing", "hack"],
+  prerequisites: [
+    { type: "device", constraint: "Device must exist" },
+  ],
+  setup: NOOP_ACTION,
+  execute: { type: "hack", adapter: "getRoutingTable" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: { fields: { found: { required: true, type: "boolean" } } },
+  supportPolicy: { minRunsForSupported: 2, flakinessThreshold: 0.25, timeoutMs: 5000 },
+});
+
+register({
+  id: "omni.port.inspect",
+  title: "Inspect Port",
+  domain: "device",
+  kind: "hack",
+  risk: "dangerous",
+  description: "Inspeccionar propiedades físicas de puerto - LED status, BIA, OSPF intervals, ACL applied",
+  tags: ["omni", "port", "inspect", "hack"],
+  prerequisites: [
+    { type: "device", constraint: "Device must exist" },
+  ],
+  setup: NOOP_ACTION,
+  execute: { type: "hack", adapter: "inspectPort" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: { fields: { lightStatus: { required: false, type: "number" }, hasOspf: { required: true, type: "boolean" }, hasAcl: { required: true, type: "boolean" } } },
+  supportPolicy: { minRunsForSupported: 2, flakinessThreshold: 0.3, timeoutMs: 5000 },
+});
+
+register({
+  id: "omni.simulation.forward",
+  title: "Forward Simulation",
+  domain: "environment",
+  kind: "hack",
+  risk: "dangerous",
+  description: "Avanzar N frames de simulación para forzar convergencia (STP, ARP)",
+  tags: ["omni", "simulation", "hack"],
+  prerequisites: [],
+  setup: NOOP_ACTION,
+  execute: { type: "hack", adapter: "forwardSimulation" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: { fields: { framesAdvanced: { required: true, type: "number" } } },
+  supportPolicy: { minRunsForSupported: 2, flakinessThreshold: 0.25, timeoutMs: 5000 },
+});
+
+register({
+  id: "omni.workspace.delete",
+  title: "Delete Device by Reference",
+  domain: "environment",
+  kind: "hack",
+  risk: "dangerous",
+  description: "Borrar dispositivo por referencia de objeto usando w.deleteDevice() - bypass de nombres duplicados",
+  tags: ["omni", "workspace", "delete", "hack"],
+  prerequisites: [],
+  setup: NOOP_ACTION,
+  execute: { type: "hack", adapter: "deleteDeviceByRef" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: { fields: { deleted: { required: true, type: "boolean" } } },
+  supportPolicy: { minRunsForSupported: 2, flakinessThreshold: 0.2, timeoutMs: 5000 },
+});
+
+register({
   id: "workflow.vlan.simple",
   title: "VLAN Simple",
   domain: "orchestration",

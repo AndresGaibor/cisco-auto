@@ -2,6 +2,9 @@
 // Link Primitives - Operaciones atómicas de enlace
 // ============================================================================
 
+import { registerPrimitive } from "../primitive-registry";
+import type { PrimitiveDomain } from "../primitive-registry";
+
 export interface AddLinkPayload {
   type: "addLink";
   device1: string;
@@ -78,3 +81,15 @@ export function removeLink(payload: RemoveLinkPayload, lw: any): LinkPrimitiveRe
     return { ok: false, error: String(e), code: "LINK_REMOVAL_FAILED" };
   }
 }
+
+registerPrimitive({
+  id: "link.add",
+  domain: "link" as PrimitiveDomain,
+  implementation: ((payload: any, ctx: { net: any; lw: any }) => addLink(payload, ctx.net, ctx.lw)) as any,
+});
+
+registerPrimitive({
+  id: "link.remove",
+  domain: "link" as PrimitiveDomain,
+  implementation: ((payload: any, ctx: { net: any; lw: any }) => removeLink(payload, ctx.lw)) as any,
+});

@@ -5,7 +5,15 @@ import type { Intent } from "../../contracts/intent";
 import type { ExecutionPlan, ExecutionStep } from "../../contracts/plan";
 import type { ExecutionEvidence } from "../../contracts/evidence";
 import type { ExecutionVerdict, VerdictStatus } from "../../contracts/verdict";
-import { createPrimitivePort, createTerminalPort, createOmniPort, type RuntimePrimitivePort, type RuntimeTerminalPort, type RuntimeOmniPort } from "../../ports";
+import type { FileBridgePort } from "../ports/file-bridge.port.js";
+import {
+  createPrimitivePort,
+  createTerminalPort,
+  createOmniPort,
+  type RuntimePrimitivePort,
+  type RuntimeTerminalPort,
+  type RuntimeOmniPort,
+} from "../../ports";
 import type { Planner } from "../planners/types";
 import type { Verifier } from "../verification/types";
 import type { Diagnoser } from "../diagnosis/types";
@@ -27,11 +35,11 @@ export interface OrchestratorContext {
   fallbackPolicy: FallbackPolicy;
 }
 
-export function createOrchestrator(config: OrchestratorConfig): OrchestratorContext {
+export function createOrchestrator(config: OrchestratorConfig, bridge: FileBridgePort): OrchestratorContext {
   return {
-    primitivePort: createPrimitivePort({ defaultTimeout: config.defaultTimeout }),
-    terminalPort: createTerminalPort({ defaultTimeout: config.defaultTimeout }),
-    omniPort: createOmniPort({ defaultTimeout: config.defaultTimeout }),
+    primitivePort: createPrimitivePort({ bridge, defaultTimeout: config.defaultTimeout }),
+    terminalPort: createTerminalPort({ bridge, defaultTimeout: config.defaultTimeout }),
+    omniPort: createOmniPort({ bridge }),
     planner: createDefaultPlanner(),
     verifier: createDefaultVerifier(),
     diagnoser: createDefaultDiagnoser(),

@@ -34,6 +34,10 @@ function ensureLedgerDir(): void {
   }
 }
 
+export const record = saveRunResult;
+
+export const query = (capabilityId: string) => queryRuns({ capabilityId });
+
 export async function saveRunResult(result: CapabilityRunResult): Promise<void> {
   ensureLedgerDir();
 
@@ -76,6 +80,11 @@ export async function readRunResult(runId: string): Promise<CapabilityRunResult 
   } catch {
     return null;
   }
+}
+
+export async function getLatest(capabilityId: string): Promise<LedgerIndexEntry | null> {
+  const runs = await queryRuns({ capabilityId, supportStatus: undefined });
+  return runs[0] ?? null;
 }
 
 export async function queryRuns(options: {

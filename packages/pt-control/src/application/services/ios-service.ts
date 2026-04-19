@@ -20,6 +20,7 @@ import type {
   IosExecutionEvidence,
 } from "../../contracts/ios-execution-evidence.js";
 import type { DeviceCapabilities } from "../../domain/ios/capabilities/pt-capability-resolver.js";
+import type { RuntimeTerminalPort } from "../../ports/runtime-terminal-port.js";
 import { IosExecutionService } from "./ios-execution-service.js";
 import { IosSemanticService } from "./ios-semantic-service.js";
 
@@ -31,8 +32,9 @@ export class IosService {
     bridge: FileBridgePort,
     generateId: () => string,
     inspectDevice: (device: string) => Promise<DeviceState>,
+    terminalPort: RuntimeTerminalPort,
   ) {
-    this.execution = new IosExecutionService(bridge, generateId);
+    this.execution = new IosExecutionService(bridge, generateId, terminalPort);
     const eventBridge: {
       appendEvent?: (event: {
         type: string;

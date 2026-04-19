@@ -2,6 +2,9 @@
 // Host Primitives - Configuración de host (PC/Server)
 // ============================================================================
 
+import { registerPrimitive } from "../primitive-registry";
+import type { PrimitiveDomain } from "../primitive-registry";
+
 export interface SetIpPayload {
   type: "setIp";
   device: string;
@@ -136,3 +139,27 @@ export function setDhcp(payload: SetDhcpPayload, net: any): HostPrimitiveResult 
     return { ok: false, error: String(e), code: "HOST_DHCP_SET_FAILED" };
   }
 }
+
+registerPrimitive({
+  id: "host.setIp",
+  domain: "host" as PrimitiveDomain,
+  implementation: ((payload: any, ctx: { net: any; lw: any }) => setIp(payload, ctx.net)) as any,
+});
+
+registerPrimitive({
+  id: "host.setGateway",
+  domain: "host" as PrimitiveDomain,
+  implementation: ((payload: any, ctx: { net: any; lw: any }) => setGateway(payload, ctx.net)) as any,
+});
+
+registerPrimitive({
+  id: "host.setDns",
+  domain: "host" as PrimitiveDomain,
+  implementation: ((payload: any, ctx: { net: any; lw: any }) => setDns(payload, ctx.net)) as any,
+});
+
+registerPrimitive({
+  id: "host.setDhcp",
+  domain: "host" as PrimitiveDomain,
+  implementation: ((payload: any, ctx: { net: any; lw: any }) => setDhcp(payload, ctx.net)) as any,
+});

@@ -2,6 +2,8 @@
 // Device Primitives - Operaciones atómicas de dispositivo
 // ============================================================================
 
+import { registerPrimitive } from "../primitive-registry";
+import type { PrimitiveDomain } from "../primitive-registry";
 import type { DeviceRef } from "../../runtime/contracts";
 import type { PTDevice } from "../../pt-api/pt-api-registry";
 
@@ -162,3 +164,33 @@ export function listDevices(net: any): DevicePrimitiveResult {
     return { ok: false, error: String(e), code: "DEVICE_LIST_FAILED" };
   }
 }
+
+registerPrimitive({
+  id: "device.add",
+  domain: "device" as PrimitiveDomain,
+  implementation: ((payload: any, ctx: { net: any; lw: any }) => addDevice(payload, ctx.net, ctx.lw)) as any,
+});
+
+registerPrimitive({
+  id: "device.remove",
+  domain: "device" as PrimitiveDomain,
+  implementation: ((payload: any, ctx: { net: any; lw: any }) => removeDevice(payload, ctx.net, ctx.lw)) as any,
+});
+
+registerPrimitive({
+  id: "device.rename",
+  domain: "device" as PrimitiveDomain,
+  implementation: ((payload: any, ctx: { net: any; lw: any }) => renameDevice(payload, ctx.net)) as any,
+});
+
+registerPrimitive({
+  id: "device.move",
+  domain: "device" as PrimitiveDomain,
+  implementation: ((payload: any, ctx: { net: any; lw: any }) => moveDevice(payload, ctx.net)) as any,
+});
+
+registerPrimitive({
+  id: "device.list",
+  domain: "device" as PrimitiveDomain,
+  implementation: ((payload: any, ctx: { net: any; lw: any }) => listDevices(ctx.net)) as any,
+});

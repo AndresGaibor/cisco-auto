@@ -1,5 +1,6 @@
 import type { FileBridgePort } from "../ports/file-bridge.port.js";
 import type { TopologyCachePort } from "../ports/topology-cache.port.js";
+import type { RuntimePrimitivePort } from "../../ports/runtime-primitive-port.js";
 import type {
   TopologySnapshot,
   DeviceState,
@@ -37,25 +38,21 @@ export class TopologyQueryService {
   constructor(
     private bridge: FileBridgePort,
     private cache: TopologyCachePort,
+    private primitivePort: RuntimePrimitivePort,
     private generateId: () => string,
   ) {}
 
   async snapshot(): Promise<TopologySnapshot | null> {
-    // Fast path: return cache immediately if already materialized.
-    // This avoids a 30s PT round-trip when PT is not connected.
     if (this.cache.isMaterialized()) {
-      // Still try a live refresh, but with a very short timeout (3s)
-      // so we get fresh data when PT is active without blocking when it's not.
       try {
-        const result = await this.bridge.sendCommandAndWait<TopologySnapshot>(
-          "snapshot",
+        const result = await this.primitivePort.runPrimitive(
+          "topology.snapshot",
           { id: this.generateId() },
-          3000, // 3s fast timeout — fall back to cache if PT doesn't respond
+          { timeoutMs: 3000 },
         );
-        const value = result.value;
-        if (value && typeof value === "object" && "devices" in value && "links" in value) {
-          this.cache.applySnapshot(value);
-          return value;
+        if (result.ok && result.value && typeof result.value === "object" && "devices" in result.value && "links" in result.value) {
+          this.cache.applySnapshot(result.value as TopologySnapshot);
+          return result.value as TopologySnapshot;
         }
       } catch {
         // PT not responding — use cached data, no blocking
@@ -63,8 +60,6 @@ export class TopologyQueryService {
       return this.cache.getSnapshot();
     }
 
-    // Cold path: no cache yet, try PT with full 30s timeout
-    // First check if there's any state written to disk (fast, no PT needed)
     const diskState = this.bridge.readState<TopologySnapshot>();
     if (
       diskState &&
@@ -76,23 +71,19 @@ export class TopologyQueryService {
       return diskState;
     }
 
-    // Only send a command to PT if the bridge has a valid lease (PT is actively running)
-    // isReady() = bridge running AND holding a valid lease from PT's kernel
     if (!this.bridge.isReady()) {
-      // PT script is not running or lease expired — no point waiting 30s
       return null;
     }
 
     try {
-      const result = await this.bridge.sendCommandAndWait<TopologySnapshot>(
-        "snapshot",
+      const result = await this.primitivePort.runPrimitive(
+        "topology.snapshot",
         { id: this.generateId() },
-        30000,
+        { timeoutMs: 30000 },
       );
-      const value = result.value;
-      if (value && typeof value === "object" && "devices" in value && "links" in value) {
-        this.cache.applySnapshot(value);
-        return value;
+      if (result.ok && result.value && typeof result.value === "object" && "devices" in result.value && "links" in result.value) {
+        this.cache.applySnapshot(result.value as TopologySnapshot);
+        return result.value as TopologySnapshot;
       }
     } catch {
       // PT no responde; no hay cache

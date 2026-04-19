@@ -1,22 +1,106 @@
 // ============================================================================
-// PT Control - Main Entry Point
+// PT Control - Main Entry Point (Arquitectura Ports & Adapters)
 // ============================================================================
 
-// Controller - High-level API for controlling Packet Tracer
+// ============================================================================
+// PORTS - Contratos (interfaces)
+// ============================================================================
+
+export type {
+  RuntimePrimitivePort,
+  PrimitivePortOptions,
+  PrimitivePortResult,
+} from "./ports/runtime-primitive-port.js";
+
+export type {
+  RuntimeTerminalPort,
+  TerminalPortOptions,
+  TerminalPortResult,
+  TerminalPlan,
+  TerminalPlanStep,
+} from "./ports/runtime-terminal-port.js";
+
+export type {
+  RuntimeOmniPort,
+  OmniPortOptions,
+  OmniPortResult,
+  OmniCapabilityMetadata,
+  OmniRisk,
+  OmniDomain,
+} from "./ports/runtime-omni-port.js";
+
+// ============================================================================
+// ADAPTERS - Implementaciones concretas
+// ============================================================================
+
+export { RuntimePrimitiveAdapter } from "./adapters/runtime-primitive-adapter.js";
+export { createRuntimeTerminalAdapter } from "./adapters/runtime-terminal-adapter.js";
+export { RuntimeOmniAdapter, createOmniAdapter } from "./adapters/runtime-omni-adapter.js";
+
+// ============================================================================
+// ORCHESTRATOR
+// ============================================================================
+
+export { createOrchestrator, executeIntent } from "./application/orchestration/index.js";
+export type { OrchestratorConfig, OrchestratorContext } from "./application/orchestration/index.js";
+
+// ============================================================================
+// COMPOSITION ROOT (pendiente)
+// ============================================================================
+
+// TODO: Implementar controlComposition que injectable los ports y orchestrator
+// export { controlComposition } from "./application/bootstrap/control-composition";
+
+// ============================================================================
+// CONTRACTS (contratos de negocio)
+// ============================================================================
+
+export * from "./contracts/omniscience.js";
+export * from "./contracts/ios-execution-evidence.js";
+
+// ============================================================================
+// OMNI (Capability Harness)
+// ============================================================================
+
+export * from "./omni/index.js";
+
+// ============================================================================
+// AGENT (workflows de agentes)
+// ============================================================================
+
+export * from "./agent/index.js";
+
+// ============================================================================
+// QUALITY GATES
+// ============================================================================
+
+export * from "./quality/index.js";
+
+// ============================================================================
+// PT FEATURE MODULES
+// ============================================================================
+
+export * from "./pt/terminal/index.js";
+export * from "./pt/topology/index.js";
+export * from "./pt/server/index.js";
+export * from "./pt/planner/index.js";
+export * from "./pt/ledger/index.js";
+export * from "./pt/diagnosis/index.js";
+
+// ============================================================================
+// LEGACY EXPORTS (mantenidos por compatibilidad)
+// ============================================================================
+
+// Controller - API de alto nivel
 export {
   PTController,
   createPTController,
-  createDefaultPTController,
-  type PTControllerConfig,
 } from "./controller/index.js";
 
-// Types - All type definitions
-export * from "./types/index.js";
-
-// Virtual DOM - Event-driven topology state
+// Virtual DOM
 export { VirtualTopology, createVirtualTopology } from "./vdom/index.js";
 
-// Parsers - IOS output parsers
+// Parsers IOS
 export {
   parseShowIpInterfaceBrief,
   parseShowVlan,
@@ -32,7 +116,7 @@ export {
   PARSERS,
 } from "@cisco-auto/ios-domain";
 
-// Logging - NDJSON logging with session tracking
+// Logging
 export { LogManager, getLogManager, resetLogManager } from "./logging/index.js";
 export type {
   LogEntry,
@@ -44,7 +128,7 @@ export type {
 export { redactSensitive } from "./logging/index.js";
 export type { CommandTraceEntry } from "./controller/index.js";
 
-// IOS Session - Stateful IOS CLI session management
+// IOS Session
 export {
   CliSession,
   createCliSession,
@@ -68,7 +152,7 @@ export {
   type OutputClassificationType,
 } from "@cisco-auto/ios-domain";
 
-// IOS Capabilities - Device capability resolution
+// IOS Capabilities
 export {
   resolveCapabilities,
   type DeviceCapabilities,
@@ -76,10 +160,10 @@ export {
 
 export { IOSFamily, type IosDeviceModel } from "@cisco-auto/ios-domain";
 
-// Device Validation - Validate devices against core catalog
+// Device Validation
 export { validatePTModel, resolveModel } from "./shared/utils/helpers.js";
 
-// PT Compatibility Contract - fuente de verdad para PT
+// PT Compatibility Contract
 export {
   assertCatalogLoaded,
   assertCatalogHealth,
@@ -87,7 +171,7 @@ export {
   type PTCatalogHealth,
 } from "@cisco-auto/pt-runtime";
 
-// Application Services - planners and helpers
+// Application Services
 export {
   LayoutPlannerService,
   PortPlannerService,
@@ -96,25 +180,8 @@ export {
   ScenarioService,
 } from "./application/services/index.js";
 
-export * from "./contracts/omniscience.js";
-export * from "./contracts/ios-execution-evidence.js";
+// Capability Matrix
+export * from "@cisco-auto/kernel/domain/ios/capability-matrix";
 
-// PT feature modules - canonical stack
-export * from "./pt/terminal/index.js";
-export * from "./pt/topology/index.js";
-export * from "./pt/server/index.js";
-export * from "./pt/planner/index.js";
-export * from "./pt/ledger/index.js";
-export * from "./pt/diagnosis/index.js";
-
-// Capability Matrix (kernel)
-export * from "@cisco-auto/kernel/domain/ios/capability-matrix/index.js";
-
-// Omni - Capability Harness
-export * from "./omni/index.js";
-
-// Agent workflow - task-scoped context building and rendering
-export * from "./agent/index.js";
-
-// Quality Gates (Fase 7)
-export * from "./quality/index.js";
+// Types
+export * from "./types/index.js";

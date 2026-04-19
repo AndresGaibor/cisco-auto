@@ -2,7 +2,7 @@
 // Support Matrix - Consolida soporte de capabilities
 // ============================================================================
 
-import type { CapabilitySupportStatus, SupportMatrixEntry, EnvironmentFingerprint } from "./capability-types.js";
+import type { CapabilitySupportStatus, CapabilityRunResult, SupportMatrixEntry, EnvironmentFingerprint } from "./capability-types.js";
 import { queryRuns, readRunResult } from "./evidence-ledger.js";
 
 const SUPPORT_CACHE_FILE = process.env.OMNI_SUPPORT_CACHE ?? "/tmp/omni-support-cache.json";
@@ -38,7 +38,7 @@ export async function querySupportMatrixByFilter(options: {
   const results: SupportMatrixEntry[] = [];
 
   for (const [capId, capRuns] of Object.entries(byCapability)) {
-    const entry = aggregateRuns(capId, capRuns);
+    const entry = await aggregateRuns(capId, capRuns);
 
     if (options.status && entry.status !== options.status) {
       continue;
@@ -50,33 +50,109 @@ export async function querySupportMatrixByFilter(options: {
   return results;
 }
 
-function aggregateRuns(
+function classifyCapability(
+  runs: { runId: string; timestamp: number; ok: boolean; supportStatus: string; durationMs: number }[],
+  fullResults: Map<string, CapabilityRunResult>
+): CapabilitySupportStatus {
+  if (runs.length === 0) {
+    return "unsupported";
+  }
+
+  const hasFailures = runs.some((r) => !r.ok);
+  const successCount = runs.filter((r) => r.ok).length;
+  const avgConfidence = successCount / runs.length;
+
+  const CRITICAL_WARNINGS = ["timeout", "crash", "segmentation fault", "panic", "fatal"];
+
+  let hasCriticalWarnings = false;
+  let inconsistentCleanup = false;
+  const cleanupStatuses = new Set<string>();
+
+  for (const run of runs) {
+    const full = fullResults.get(run.runId);
+    if (full) {
+      if (full.warnings && full.warnings.length > 0) {
+        for (const w of full.warnings) {
+          const lower = w.toLowerCase();
+          if (CRITICAL_WARNINGS.some((cw) => lower.includes(cw))) {
+            hasCriticalWarnings = true;
+          }
+        }
+      }
+      if (full.cleanupStatus) {
+        cleanupStatuses.add(full.cleanupStatus);
+        if (full.cleanupStatus === "failed" || full.cleanupStatus === "partial") {
+          inconsistentCleanup = true;
+        }
+      }
+    }
+  }
+
+  if (runs.length === 1) {
+    const singleRun = runs[0]!;
+    if (!singleRun.ok) return "unsupported";
+    if (hasCriticalWarnings || inconsistentCleanup) return "experimental";
+    return "experimental";
+  }
+
+  if (runs.length === 2) {
+    if (avgConfidence >= 0.9 && !hasCriticalWarnings && !inconsistentCleanup) {
+      return "experimental";
+    }
+    if (hasFailures) return "flaky";
+    return "experimental";
+  }
+
+  if (runs.length >= 3) {
+    if (avgConfidence >= 0.8 && !hasCriticalWarnings && !inconsistentCleanup) {
+      return "supported";
+    }
+    if (hasFailures && avgConfidence >= 0.5) {
+      return "flaky";
+    }
+    if (!hasFailures && (hasCriticalWarnings || inconsistentCleanup)) {
+      return "partial";
+    }
+    if (avgConfidence < 0.5) {
+      return "flaky";
+    }
+    return "partial";
+  }
+
+  return "unsupported";
+}
+
+async function aggregateRuns(
   capabilityId: string,
   runs: { runId: string; timestamp: number; ok: boolean; supportStatus: string; durationMs: number }[]
-): SupportMatrixEntry {
+): Promise<SupportMatrixEntry> {
+  const fullResults = new Map<string, CapabilityRunResult>();
+  await Promise.all(
+    runs.map(async (r) => {
+      const full = await readRunResult(r.runId);
+      if (full) fullResults.set(r.runId, full);
+    })
+  );
+
   const successRuns = runs.filter((r) => r.ok).length;
   const failedRuns = runs.filter((r) => !r.ok).length;
+  const avgConfidence = runs.length > 0 ? successRuns / runs.length : 0;
 
-  let totalConfidence = 0;
-  for (const r of runs) {
-    if (r.ok) totalConfidence += 1;
-  }
-  const avgConfidence = runs.length > 0 ? totalConfidence / runs.length : 0;
-
-  let status: CapabilitySupportStatus = "unsupported";
-
-  if (runs.length >= 3 && avgConfidence >= 0.8) {
-    status = "supported";
-  } else if (runs.length >= 1 && avgConfidence >= 0.5) {
-    status = "partial";
-  } else if (runs.length >= 3 && avgConfidence < 0.5) {
-    status = "flaky";
-  }
+  const status = classifyCapability(runs, fullResults);
 
   const durations = runs.map((r) => r.durationMs);
   const avgDuration = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : 0;
 
   const timestamps = runs.map((r) => r.timestamp);
+
+  const firstRunId = runs[0]?.runId ?? "";
+  const fullLast = firstRunId ? fullResults.get(firstRunId) : undefined;
+  const lastEnv = fullLast?.environment ?? {
+    hostPlatform: process.platform,
+    nodeVersion: process.version.replace(/^v/, ""),
+    executionMode: process.env.NODE_ENV ?? "production",
+    timestamp: Date.now(),
+  };
 
   return {
     capabilityId,
@@ -91,12 +167,7 @@ function aggregateRuns(
     averageDurationMs: avgDuration,
     lastRun: Math.max(...timestamps),
     firstRun: Math.min(...timestamps),
-    lastEnvironment: {
-      hostPlatform: process.platform,
-      nodeVersion: process.version.replace(/^v/, ""),
-      executionMode: process.env.NODE_ENV ?? "production",
-      timestamp: Date.now(),
-    } as EnvironmentFingerprint,
+    lastEnvironment: lastEnv as EnvironmentFingerprint,
   };
 }
 

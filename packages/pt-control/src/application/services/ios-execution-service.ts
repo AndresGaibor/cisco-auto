@@ -14,6 +14,7 @@ import type {
 } from "../../contracts/ios-execution-evidence.js";
 import { getParser, parseShowRunningConfig, parseShowCdpNeighbors, CliSession } from "@cisco-auto/ios-domain";
 import { IosSetupGuard } from "../../domain/ios/session/setup-guard.js";
+import type { RuntimeTerminalPort, TerminalPlan } from "../../ports/runtime-terminal-port.js";
 
 export class IosExecutionService {
   private readonly setupGuard: IosSetupGuard;
@@ -21,6 +22,7 @@ export class IosExecutionService {
   constructor(
     private bridge: FileBridgePort,
     private generateId: () => string,
+    private terminalPort: RuntimeTerminalPort,
   ) {
     this.setupGuard = new IosSetupGuard(bridge);
   }
@@ -47,28 +49,15 @@ export class IosExecutionService {
   private createBridgeHandler(device: string) {
     return {
       enterCommand: async (cmd: string): Promise<[number, string]> => {
-        const result = await this.bridge.sendCommandAndWait<any>("execInteractive", {
+        const plan: TerminalPlan = {
           id: this.generateId(),
           device,
-          command: cmd,
-          options: { timeout: 30000, parse: false, ensurePrivileged: false },
-        });
+          steps: [{ command: cmd, timeout: 30000 }],
+        };
+        const result = await this.terminalPort.runTerminalPlan(plan, { timeoutMs: 30000 });
 
-        const raw = result.value?.raw ?? "";
-        const diagnostics = result.value?.diagnostics;
-        let status = 0;
-
-        if (diagnostics) {
-          if (diagnostics.source !== "terminal") {
-            status = 1;
-          } else if (diagnostics.completionReason !== "command-ended") {
-            status = 1;
-          }
-        } else {
-          status = raw.includes("%") || raw.includes("Invalid") ? 1 : 0;
-        }
-
-        return [status, raw];
+        const status = result.ok ? 0 : 1;
+        return [status, result.output];
       },
     };
   }
@@ -108,43 +97,37 @@ export class IosExecutionService {
     parse = true,
     timeout = 5000
   ): Promise<{ raw: string; parsed?: any }> {
-    const result = await this.bridge.sendCommandAndWait<any>("execIos", {
+    const plan: TerminalPlan = {
       id: this.generateId(),
       device,
-      command,
-      parse,
-      timeout,
-    });
-    const value = result.value;
-    if (!value) return { raw: "", parsed: undefined };
-    return { raw: value.raw || "", parsed: value.parsed };
+      steps: [{ command, timeout }],
+    };
+    const result = await this.terminalPort.runTerminalPlan(plan, { timeoutMs: timeout });
+    if (!result.ok) return { raw: result.output || "", parsed: undefined };
+    return { raw: result.output || "", parsed: undefined };
   }
 
   async execIos<T = ParsedOutput>(device: string, command: string, parse = true, timeout = 5000): Promise<IosExecutionSuccess<T>> {
-    const result = await this.bridge.sendCommandAndWait<any>("execIos", {
+    const plan: TerminalPlan = {
       id: this.generateId(),
       device,
-      command,
-      parse,
-      timeout,
-    });
+      steps: [{ command, timeout }],
+    };
+    const result = await this.terminalPort.runTerminalPlan(plan, { timeoutMs: timeout });
 
-    const value = result.value;
-    const evidence = this.normalizeEvidence(value);
-
-    if (!value || value.ok === false) {
-      this.throwNormalizedIosError("execIos", device, value);
+    if (!result.ok) {
+      throw new Error(`execIos failed: command '${command}' returned status ${result.status}`);
     }
 
-    if (evidence.source !== "terminal") {
-      this.throwNormalizedIosError("execIos", device, {
-        ...value,
-        error: `Execution did not come from a real terminal (source=${evidence.source})`,
-        code: "NON_TERMINAL_SOURCE",
-      });
-    }
+    const evidence: IosExecutionEvidence = {
+      source: "terminal",
+      status: result.status,
+      mode: result.modeAfter,
+      prompt: result.promptAfter,
+      completionReason: result.status === 0 ? "command-ended" : undefined,
+    };
 
-    return { ok: true, raw: value.raw || "", parsed: value.parsed as T | undefined, evidence };
+    return { ok: true, raw: result.output || "", parsed: undefined, evidence };
   }
 
   async execInteractive(
@@ -152,87 +135,67 @@ export class IosExecutionService {
     command: string,
     options?: { timeout?: number; parse?: boolean; ensurePrivileged?: boolean }
   ): Promise<IosExecutionSuccess<ParsedOutput>> {
-    await this.setupGuard.ensureReady(device);
-
-    const result = await this.bridge.sendCommandAndWait<any>("execInteractive", {
+    const timeout = options?.timeout ?? 30000;
+    const plan: TerminalPlan = {
       id: this.generateId(),
       device,
-      command,
-      options: {
-        timeout: options?.timeout ?? 30000,
-        parse: options?.parse ?? true,
-        ensurePrivileged: options?.ensurePrivileged ?? false,
-      },
-    });
+      steps: [{ command, timeout }],
+    };
+    const result = await this.terminalPort.runTerminalPlan(plan, { timeoutMs: timeout });
 
-    const value = result.value;
-    const evidence = this.normalizeEvidence(value);
-
-    if (!value || value.ok === false) {
-      this.throwNormalizedIosError("execInteractive", device, value);
+    if (!result.ok) {
+      throw new Error(`execInteractive failed: command '${command}' returned status ${result.status}`);
     }
 
-    if (evidence.source !== "terminal") {
-      this.throwNormalizedIosError("execInteractive", device, {
-        ...value,
-        error: "Interactive execution did not come from a real terminal",
-        code: "NON_TERMINAL_SOURCE",
-      });
-    }
+    const evidence: IosExecutionEvidence = {
+      source: "terminal",
+      status: result.status,
+      mode: result.modeAfter,
+      prompt: result.promptAfter,
+      completionReason: result.status === 0 ? "command-ended" : undefined,
+    };
 
-    return { ok: true, raw: value.raw || "", parsed: value.parsed, evidence };
+    return { ok: true, raw: result.output || "", parsed: undefined, evidence };
   }
 
   async configIos(device: string, commands: string[], options?: { save?: boolean }): Promise<IosConfigApplyResult> {
-    const result = await this.bridge.sendCommandAndWait<any>("configIos", {
-      id: this.generateId(),
-      device,
-      commands,
-      save: options?.save ?? true,
-    });
+    const steps = [
+      { command: "configure terminal", timeout: 5000 },
+      ...commands.map(cmd => ({ command: cmd, timeout: 5000 })),
+      { command: "end", timeout: 5000 },
+    ];
 
-    const value = result.value;
-
-    if (value && typeof value === "object") {
-      if (value.deferred === true) {
-        return { executed: true, device, commands, results: [], evidence: { source: "unknown" as const } };
-      }
-
-      const evidence = this.normalizeEvidence(value);
-
-      if (value.ok === false) {
-        const errorMsg = value.error || "IOS configuration failed";
-        if (errorMsg.includes("Cannot read property")) {
-          throw new Error(
-            `IOS simulator error on device '${device}'. The PT IOS simulator may not be available or the device may not support IOS commands in the current PT session.\n` +
-            `Details: ${errorMsg}\n` +
-            `Suggestion: Verify that Packet Tracer is running with the runtime scripts loaded, and that the device model supports IOS.`
-          );
-        }
-
-        const code = value.code;
-        if (code) {
-          throw new Error(`IOS configuration failed (${code}): ${errorMsg}`);
-        }
-        throw new Error(errorMsg);
-      }
-
-      if (evidence.source === "synthetic") {
-        throw new Error(`IOS configuration returned synthetic result for device '${device}'. Terminal execution is not available.`);
-      }
-
-      const results = (value.results || []).map((r: any) => ({
-        index: r.index,
-        command: r.command,
-        ok: r.ok,
-        output: r.output || "",
-      }));
-
-      return { executed: true, device, commands, results, evidence };
+    if (options?.save) {
+      steps.push({ command: "copy running-config startup-config", timeout: 10000 });
     }
 
-    const evidence = value ? this.normalizeEvidence(value) : { source: "unknown" as const };
-    return { executed: true, device, commands, results: [], evidence };
+    const plan: TerminalPlan = {
+      id: this.generateId(),
+      device,
+      steps,
+    };
+
+    const result = await this.terminalPort.runTerminalPlan(plan);
+
+    const evidence: IosExecutionEvidence = {
+      source: "terminal",
+      status: result.status,
+      mode: result.modeAfter,
+      completionReason: result.status === 0 ? "command-ended" : undefined,
+    };
+
+    if (!result.ok) {
+      throw new Error(`IOS configuration failed: command returned status ${result.status}`);
+    }
+
+    const results = commands.map((cmd, index) => ({
+      index,
+      command: cmd,
+      ok: true,
+      output: "",
+    }));
+
+    return { executed: true, device, commands, results, evidence };
   }
 
   async showParsed<T = ParsedOutput>(device: string, command: string, options?: { ensurePrivileged?: boolean; timeout?: number }): Promise<IosExecutionSuccess<T>> {

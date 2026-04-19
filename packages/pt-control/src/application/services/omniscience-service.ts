@@ -1,21 +1,23 @@
 // ============================================================================
-// Omniscience Service V11 - THE ULTIMATE ORCHESTRATOR
-// Fixed: Reliable port discovery and Terminal-based Ping with Output Capture.
+// Omniscience Service V12 - Migrado a RuntimeOmniPort
+// delegacion pura al adapter, sin ejecutores directos
 // ============================================================================
 
-import type { FileBridgePort } from "../ports/file-bridge.port.js";
-import type { 
-    PhysicalLink, PortIntelligence, DeviceGenome,
-    AuditReport, EnvironmentRules, NetworkTopology, 
-    ProcessState, DesktopApp, DeepDeviceContext
+import type { RuntimeOmniPort } from "../../ports/runtime-omni-port.js";
+import type {
+    PortIntelligence, DeviceGenome,
+    AuditReport, NetworkTopology,
+    DeepDeviceContext
 } from "../../contracts/omniscience.js";
 
 export class OmniscienceService {
-  constructor(private readonly bridge: FileBridgePort) {}
+  constructor(private readonly omniPort: RuntimeOmniPort) {}
 
   async getDeepDeviceContext(name: string): Promise<DeepDeviceContext> {
     const genome = await this.getDeviceGenome(name);
-    const portListStr = await this.evaluate(`
+    const portListResult = await this.omniPort.runOmniCapability(
+      "omni.evaluate.raw",
+      { code: `
         (function() {
             var d = n.getDevice('${name}');
             if (!d) return "";
@@ -26,8 +28,10 @@ export class OmniscienceService {
             }
             return p.join('|');
         })()
-    `);
-    
+      ` }
+    );
+
+    const portListStr = portListResult.ok ? String(portListResult.value || "") : "";
     const realPorts = String(portListStr || "").split('|').filter(Boolean);
     if (realPorts.length > 0) genome.ports = realPorts;
 
@@ -46,12 +50,16 @@ export class OmniscienceService {
   }
 
   async getDeviceGenome(deviceName: string): Promise<DeviceGenome> {
-    const xmlRes = await this.bridge.sendCommandAndWait("getNetworkGenoma", { deviceName });
-    if (!xmlRes.ok) throw new Error(xmlRes.error);
-    const xml = String((xmlRes.value as any)?.result || "");
+    const genomaResult = await this.omniPort.runOmniCapability(
+      "omni.device.genoma",
+      { deviceName }
+    );
+    if (!genomaResult.ok) throw new Error(genomaResult.error);
+    const xml = String(genomaResult.value || "");
+
     const extract = (tag: string) => (xml.match(new RegExp(`<${tag}.*?>(.*?)<\\/${tag}>`)) || [])[1] || "";
     const extractMatch = (pattern: RegExp) => (xml.match(pattern) || [])[1] || "";
-    
+
     return {
         name: extract("NAME") || deviceName,
         model: extractMatch(/model="(.*?)"/) || "Unknown",
@@ -70,9 +78,12 @@ export class OmniscienceService {
   }
 
   async auditPort(deviceName: string, portName: string): Promise<PortIntelligence> {
-    const res = await this.bridge.sendCommandAndWait("getPortDeepStats", { deviceName, portName });
+    const res = await this.omniPort.runOmniCapability(
+      "omni.device.portStats",
+      { deviceName, portName }
+    );
     if (!res.ok) throw new Error(res.error);
-    const s = (res.value as any)?.result || {};
+    const s = res.value as any || {};
     return {
         name: s.name || portName,
         status: s.status === 1 ? "UP" : (s.status === 2 ? "NEGOTIATING" : "DOWN"),
@@ -83,57 +94,86 @@ export class OmniscienceService {
   }
 
   async getTopology(): Promise<NetworkTopology> {
-    const res = await this.bridge.sendCommandAndWait("siphonPhysicalTopology", {});
+    const res = await this.omniPort.runOmniCapability(
+      "omni.topology.physical",
+      {}
+    );
     if (!res.ok) return { devices: [], links: [] };
-    const rawData = (res.value as any)?.result || "";
-    const links = String(rawData).split("|||").filter(Boolean).map(record => {
+    const rawData = String(res.value || "");
+    const links = rawData.split("|||").filter(Boolean).map(record => {
         if (!record.includes(":::")) return null;
-        const [id, connection] = record.split(":::");
+        const parts = record.split(":::");
+        const id = parts[0] ?? "";
+        const connection = parts[1] ?? "";
+        if (!id || !connection) return null;
         const [from, to] = connection.split(" <---> ");
+        if (!from || !to) return null;
         return { id, from, to };
     }).filter((l): l is any => l !== null);
     return { devices: [], links };
   }
 
   async sendPing(sourceDevice: string, targetIp: string): Promise<{ success: boolean, raw: string }> {
-    const res = await this.bridge.sendCommandAndWait<any>("__ping", { 
-        device: sourceDevice, 
-        target: targetIp 
-    });
-    
-    if (!res.ok) return { success: false, raw: "Error en el Bridge: " + res.error };
+    const res = await this.omniPort.runOmniCapability(
+      "omni.evaluate.raw",
+      { code: `
+        (function() {
+          var net = ipc.network();
+          var dev = net.getDevice('${sourceDevice}');
+          if (!dev) return { error: 'Device not found' };
+          var term = dev.getTerminal ? dev.getTerminal() : null;
+          if (!term) return { error: 'No terminal' };
+          term.clear();
+          term.sendText('ping ${targetIp}\\n');
+          return { sent: true };
+        })()
+      ` }
+    );
 
-    if (res.deferred && res.ticket) {
-        let done = false;
-        let pollRes;
-        while (!done) {
-            await new Promise(r => setTimeout(r, 1000));
-            pollRes = await this.bridge.sendCommandAndWait<any>("__pollDeferred", { ticket: res.ticket });
-            if (!pollRes || !pollRes.ok || pollRes.done) done = true;
-        }
-        if (pollRes && pollRes.ok) {
-            const raw = String(pollRes.raw || "");
-            const success = raw.includes("Reply from") || raw.includes("!!!!") || (raw.includes("Success rate") && !raw.includes("0 percent"));
-            return { success, raw };
-        }
-    }
-    return { success: !!(res.value && (res.value as any).success === true), raw: "Resultado instantáneo (sin terminal)" };
+    if (!res.ok) return { success: false, raw: "Error en OmniPort: " + res.error };
+
+    await new Promise(r => setTimeout(r, 3000));
+
+    const pollResult = await this.omniPort.runOmniCapability(
+      "omni.evaluate.raw",
+      { code: `
+        (function() {
+          var net = ipc.network();
+          var dev = net.getDevice('${sourceDevice}');
+          if (!dev) return '';
+          var term = dev.getTerminal ? dev.getTerminal() : null;
+          if (!term) return '';
+          return term.getOutput ? term.getOutput() : '';
+        })()
+      ` }
+    );
+
+    const raw = pollResult.ok ? String(pollResult.value || "") : "";
+    const success = raw.includes("Reply from") || raw.includes("!!!!") || (raw.includes("Success rate") && !raw.includes("0 percent"));
+    return { success, raw };
   }
 
   async evaluate(code: string): Promise<any> {
-    const res = await this.bridge.sendCommandAndWait("__evaluate", { code });
+    const res = await this.omniPort.runOmniCapability("omni.evaluate.raw", { code });
     if (!res.ok) throw new Error(res.error);
-    return (res.value as any)?.result;
+    return res.value;
   }
 
   private async getOneConfig(deviceName: string): Promise<string> {
     try {
-      const res = await this.evaluate("global.AssessmentModel.getRunningConfig('" + deviceName + "')");
-      return String(res || "N/A");
+      const res = await this.omniPort.runOmniCapability(
+        "omni.assessment.read",
+        { action: "getRunningConfig", deviceId: deviceName }
+      );
+      return res.ok ? String(res.value || "N/A") : "N/A";
     } catch(e) { return "N/A"; }
   }
 
   async setReality(options: any): Promise<void> {
-    await this.bridge.sendCommandAndWait("setEnvironmentRules", options);
+    const res = await this.omniPort.runOmniCapability(
+      "omni.environment.rules",
+      { rules: options }
+    );
+    if (!res.ok) throw new Error(res.error);
   }
 }

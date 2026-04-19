@@ -8,9 +8,47 @@ import type {
   EnvironmentFingerprint,
   CleanupStatus,
   CapabilitySupportStatus,
+  CapabilityAction,
 } from "./capability-types.js";
 import { getCapability } from "./capability-registry.js";
 import { captureFingerprint } from "./environment-fingerprint.js";
+import type {
+  RuntimePrimitivePort,
+  RuntimeTerminalPort,
+  RuntimeOmniPort,
+  TerminalPlan,
+} from "../ports/index.js";
+import type { Intent } from "../contracts/intent.js";
+
+export interface CapabilityContext {
+  primitivePort: RuntimePrimitivePort;
+  terminalPort: RuntimeTerminalPort;
+  omniPort: RuntimeOmniPort;
+  workflowPlanner?: {
+    buildPlan(intent: Intent): Promise<{ id: string; intentId: string; strategy: string; steps: any[] } | null>;
+  };
+}
+
+function createNoOpCapabilityContext(): CapabilityContext {
+  const noOpPort = {
+    runPrimitive: async () => ({ ok: false, error: "Puerto no inicializado" }),
+    validatePayload: () => false,
+    getPrimitiveMetadata: () => null,
+  };
+  return {
+    primitivePort: noOpPort as RuntimePrimitivePort,
+    terminalPort: {
+      runTerminalPlan: async () => ({ ok: false, output: "", status: 0, promptBefore: "", promptAfter: "", modeBefore: "", modeAfter: "", events: [], warnings: ["Puerto no inicializado"], confidence: 0 }),
+      ensureSession: async () => ({ ok: false, error: "Puerto no inicializado" }),
+      pollTerminalJob: async () => null,
+    },
+    omniPort: {
+      runOmniCapability: async () => ({ ok: false, error: "Puerto no inicializado", confidence: 0 }),
+      describeCapability: () => null,
+      cleanupCapability: async () => {},
+    },
+  };
+}
 
 function generateRunId(): string {
   return `run-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -18,7 +56,8 @@ function generateRunId(): string {
 
 export async function runCapability(
   capabilityId: string,
-  input: Record<string, unknown> = {}
+  input: Record<string, unknown> = {},
+  context?: CapabilityContext
 ): Promise<CapabilityRunResult> {
   const startTime = Date.now();
   const runId = generateRunId();
@@ -52,7 +91,7 @@ export async function runCapability(
   let error: string | undefined;
 
   try {
-    const executionResult = await executeCapability(capability, input);
+    const executionResult = await executeCapability(capability, input, context);
     evidence.execution = executionResult.evidence;
     ok = executionResult.ok;
     if (executionResult.error) {
@@ -106,22 +145,24 @@ export async function runCapability(
 
 async function executeCapability(
   capability: CapabilitySpec,
-  input: Record<string, unknown>
+  input: Record<string, unknown>,
+  context?: CapabilityContext
 ): Promise<{ ok: boolean; evidence: Record<string, unknown>; error?: string; warnings: string[] }> {
   const warnings: string[] = [];
+  const ctx = context ?? createNoOpCapabilityContext();
 
   switch (capability.execute.type) {
     case "primitive": {
-      return executePrimitive(capability.execute.handler!, input);
+      return executePrimitive(capability, input, ctx);
     }
     case "terminal": {
-      return executeTerminal(capability.execute.handler!, input);
+      return executeTerminal(capability, input, ctx);
     }
     case "hack": {
-      return executeHack(capability.execute.adapter!, input);
+      return executeHack(capability, input, ctx);
     }
     case "workflow": {
-      return executeWorkflow(capability.execute.plan!, input);
+      return executeWorkflow(capability, input, ctx);
     }
     default:
       return {
@@ -134,31 +175,126 @@ async function executeCapability(
 }
 
 async function executePrimitive(
-  handler: string,
-  input: Record<string, unknown>
+  capability: CapabilitySpec,
+  input: Record<string, unknown>,
+  context: CapabilityContext
 ): Promise<{ ok: boolean; evidence: Record<string, unknown>; error?: string; warnings: string[] }> {
-  return { ok: false, evidence: {}, error: `Primitive handler no implementado: ${handler}`, warnings: [] };
+  const primitiveId = capability.execute.handler;
+  if (!primitiveId) {
+    return { ok: false, evidence: {}, error: "Primitive handler no especificado en capability", warnings: [] };
+  }
+
+  try {
+    const result = await context.primitivePort.runPrimitive(primitiveId, input);
+    return {
+      ok: result.ok,
+      evidence: result.evidence ?? { value: result.value },
+      error: result.error,
+      warnings: result.warnings ?? [],
+    };
+  } catch (e) {
+    const error = String(e);
+    return { ok: false, evidence: {}, error: `Error en primitivePort.runPrimitive: ${error}`, warnings: [] };
+  }
 }
 
 async function executeTerminal(
-  handler: string,
-  input: Record<string, unknown>
+  capability: CapabilitySpec,
+  input: Record<string, unknown>,
+  context: CapabilityContext
 ): Promise<{ ok: boolean; evidence: Record<string, unknown>; error?: string; warnings: string[] }> {
-  return { ok: false, evidence: {}, error: `Terminal handler no implementado: ${handler}`, warnings: [] };
+  const terminalHandler = capability.execute.handler;
+  if (!terminalHandler) {
+    return { ok: false, evidence: {}, error: "Terminal handler no especificado en capability", warnings: [] };
+  }
+
+  const terminalPlan: TerminalPlan = {
+    id: `capability-${capability.id}`,
+    device: (input.device as string) ?? (input.target as string) ?? "",
+    steps: capability.execute.code
+      ? [{ command: capability.execute.code }]
+      : [{ command: terminalHandler }],
+  };
+
+  if (!terminalPlan.device) {
+    return { ok: false, evidence: {}, error: "Device no especificado en input para plan terminal", warnings: [] };
+  }
+
+  try {
+    const result = await context.terminalPort.runTerminalPlan(terminalPlan);
+    return {
+      ok: result.ok,
+      evidence: { output: result.output, status: result.status, modeAfter: result.modeAfter },
+      error: result.ok ? undefined : `Terminal execution failed: ${result.warnings.join(", ")}`,
+      warnings: result.warnings,
+    };
+  } catch (e) {
+    const error = String(e);
+    return { ok: false, evidence: {}, error: `Error en terminalPort.runTerminalPlan: ${error}`, warnings: [] };
+  }
 }
 
 async function executeHack(
-  adapter: string,
-  input: Record<string, unknown>
+  capability: CapabilitySpec,
+  input: Record<string, unknown>,
+  context: CapabilityContext
 ): Promise<{ ok: boolean; evidence: Record<string, unknown>; error?: string; warnings: string[] }> {
-  return { ok: false, evidence: {}, error: `Hack adapter no implementado: ${adapter}`, warnings: [] };
+  const hackAdapterId = capability.execute.adapter;
+  if (!hackAdapterId) {
+    return { ok: false, evidence: {}, error: "Hack adapter no especificado en capability", warnings: [] };
+  }
+
+  try {
+    const result = await context.omniPort.runOmniCapability(hackAdapterId, input);
+    return {
+      ok: result.ok,
+      evidence: result.evidence ?? { value: result.value },
+      error: result.error,
+      warnings: result.warnings ?? [],
+    };
+  } catch (e) {
+    const error = String(e);
+    return { ok: false, evidence: {}, error: `Error en omniPort.runOmniCapability: ${error}`, warnings: [] };
+  }
 }
 
 async function executeWorkflow(
-  plan: string,
-  input: Record<string, unknown>
+  capability: CapabilitySpec,
+  input: Record<string, unknown>,
+  context: CapabilityContext
 ): Promise<{ ok: boolean; evidence: Record<string, unknown>; error?: string; warnings: string[] }> {
-  return { ok: false, evidence: {}, error: `Workflow plan no implementado: ${plan}`, warnings: [] };
+  const workflowPlanId = capability.execute.plan;
+  if (!workflowPlanId) {
+    return { ok: false, evidence: {}, error: "Workflow plan no especificado en capability", warnings: [] };
+  }
+
+  if (!context.workflowPlanner) {
+    return { ok: false, evidence: {}, error: "Workflow planner no disponible en context", warnings: [] };
+  }
+
+  const intent: Intent = {
+    id: `intent-${Date.now()}`,
+    kind: "capability-probe",
+    goal: capability.title,
+    target: input.device as string | undefined,
+    metadata: { capabilityId: capability.id, workflowPlanId },
+  };
+
+  try {
+    const plan = await context.workflowPlanner.buildPlan(intent);
+    if (!plan) {
+      return { ok: false, evidence: {}, error: `No se pudo construir plan para workflow: ${workflowPlanId}`, warnings: [] };
+    }
+    return {
+      ok: true,
+      evidence: { planId: plan.id, strategy: plan.strategy, stepsCount: plan.steps.length },
+      error: undefined,
+      warnings: [],
+    };
+  } catch (e) {
+    const error = String(e);
+    return { ok: false, evidence: {}, error: `Error en workflow execution: ${error}`, warnings: [] };
+  }
 }
 
 async function executeCleanup(
@@ -225,13 +361,14 @@ function classifySupport(
 export async function runCapabilityWithTimeout(
   capabilityId: string,
   input: Record<string, unknown> = {},
-  timeoutMs: number = 30000
+  timeoutMs: number = 30000,
+  context?: CapabilityContext
 ): Promise<CapabilityRunResult> {
   const capability = getCapability(capabilityId);
   const timeout = capability?.supportPolicy.timeoutMs ?? timeoutMs;
 
   return Promise.race([
-    runCapability(capabilityId, input),
+    runCapability(capabilityId, input, context),
     new Promise<CapabilityRunResult>((resolve) =>
       setTimeout(() => {
         resolve({

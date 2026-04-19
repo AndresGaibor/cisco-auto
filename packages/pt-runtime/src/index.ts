@@ -9,21 +9,6 @@ import { ModularRuntimeGenerator } from "./build/render-runtime-modular";
 // PT Compatibility Contract — público para pt-control
 export * from "./contracts/pt-compatibility.js";
 
-// Domain layer
-export * from "./domain";
-
-// Runtime core
-export * from "./runtime";
-
-// Core utilities
-export * from "./core";
-
-// Handlers
-export * from "./handlers";
-
-// PT Kernel (for PT Script Module)
-export * from "./pt/kernel";
-
 // Kernel refactorizado (Fase 6) — estado global explícito, bootstrap, dispatch, cleanup
 export {
   createRuntimeState,

@@ -46,6 +46,7 @@ export function createOmniscienceCommand(): Command {
     });
 
   addCapabilityCommands(cmd);
+  addMatrixCommands(cmd);
   addRegressionCommands(cmd);
 
   return cmd;
@@ -140,10 +141,58 @@ function addCapabilityCommands(cmd: Command): void {
       console.log("");
     });
 
+  suiteCmd
+    .command("run")
+    .description("Ejecutar una suite de capabilities")
+    .argument("<suite-id>", "ID de la suite")
+    .option("-l, --label <label>", "Etiqueta para esta ejecución", "current")
+    .option("--baseline", "Marcar como baseline")
+    .action(async (suiteId: string, opts) => {
+      const m = await ensureOmni();
+      const { runRegression } = m;
+      const result = await runRegression({ suiteId, label: opts.label, baseline: opts.baseline });
+      console.log(`\n## Suite: ${result.suiteId}`);
+      console.log(`Label: ${result.label}`);
+      console.log(`Total: ${result.total}, Passed: ${result.passed}, Failed: ${result.failed}`);
+      console.log(`Duration: ${result.results.reduce((a: number, r: any) => a + r.durationMs, 0)}ms`);
+      console.log("");
+    });
+
   cmd.addCommand(suiteCmd);
 }
 
+function addMatrixCommands(cmd: Command): void {
+  async function ensureOmni() {
+    return await import("@cisco-auto/pt-control");
+  }
+
+  const matrixCmd = new Command("matrix");
+  matrixCmd.description("Support Matrix - estado de soporte de capabilities");
+
+  matrixCmd
+    .command("report")
+    .description("Generar report de support matrix")
+    .option("-d, --domain <domain>", "Filtrar por dominio", "all")
+    .option("-s, --suite <suite-id>", "Suite específica")
+    .option("-f, --format <format>", "Formato de salida", "table")
+    .action(async (opts) => {
+      const m = await ensureOmni();
+      const result = await m.runMatrix({
+        domain: opts.domain === "all" ? undefined : opts.domain,
+        suite: opts.suite,
+        format: opts.format,
+      });
+      m.printMatrixReport(result, opts.format);
+    });
+
+  cmd.addCommand(matrixCmd);
+}
+
 function addRegressionCommands(cmd: Command): void {
+  async function ensureOmni() {
+    return await import("@cisco-auto/pt-control");
+  }
+
   async function getRegressionRunner() {
     const pt: any = await import("@cisco-auto/pt-control");
     return pt.runRegressionSmoke;
@@ -163,6 +212,24 @@ function addRegressionCommands(cmd: Command): void {
       console.log(`\n## Regression: ${result.label}`);
       console.log(`Total: ${result.total}, Passed: ${result.passed}, Failed: ${result.failed}`);
       console.log("");
+    });
+
+  regCmd
+    .command("compare")
+    .description("Ejecutar regression y comparar con baseline")
+    .argument("<suite-id>", "ID de la suite")
+    .option("-l, --label <label>", "Etiqueta para esta ejecución", "current")
+    .option("-b, --baseline-label <label>", "Label del baseline a comparar", "baseline")
+    .option("-f, --format <format>", "Formato de salida", "table")
+    .action(async (suiteId: string, opts) => {
+      const m = await ensureOmni();
+      const { runRegressionWithComparison, printComparisonReport } = await import("@cisco-auto/pt-control");
+      const result = await runRegressionWithComparison({
+        suite: suiteId,
+        label: opts.label,
+        baseline: opts.baseline,
+      });
+      printComparisonReport(result, opts.format);
     });
 
   cmd.addCommand(regCmd);

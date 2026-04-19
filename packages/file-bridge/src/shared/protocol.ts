@@ -41,6 +41,11 @@ export interface RotationEntry {
   previousFile: string;
   bytesSizeAtRotation: number;
   lastSeqInFile: number;
+  firstSeqInFile?: number;
+  recordCount?: number;
+  bytes?: number;
+  createdAt?: number;
+  closedAt?: number;
 }
 
 export interface RotationManifest {

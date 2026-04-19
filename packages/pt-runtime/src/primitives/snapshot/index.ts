@@ -2,6 +2,9 @@
 // Snapshot Primitives - Captura de estado
 // ============================================================================
 
+import { registerPrimitive } from "../primitive-registry";
+import type { PrimitiveDomain } from "../primitive-registry";
+
 export interface SnapshotPrimitiveResult {
   ok: boolean;
   value?: unknown;
@@ -160,3 +163,21 @@ export function processInfo(deviceName: string, net: any): SnapshotPrimitiveResu
     return { ok: false, error: String(e), code: "PROCESS_INFO_FAILED" };
   }
 }
+
+registerPrimitive({
+  id: "topology.snapshot",
+  domain: "snapshot" as PrimitiveDomain,
+  implementation: ((payload: any, ctx: { net: any; lw: any }) => topologySnapshot(ctx.net)) as any,
+});
+
+registerPrimitive({
+  id: "topology.hardwareInfo",
+  domain: "snapshot" as PrimitiveDomain,
+  implementation: ((payload: any, ctx: { net: any; lw: any }) => hardwareInfo(payload.device, ctx.net)) as any,
+});
+
+registerPrimitive({
+  id: "topology.processInfo",
+  domain: "snapshot" as PrimitiveDomain,
+  implementation: ((payload: any, ctx: { net: any; lw: any }) => processInfo(payload.device, ctx.net)) as any,
+});

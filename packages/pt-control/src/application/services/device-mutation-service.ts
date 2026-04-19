@@ -1,13 +1,15 @@
 import type { FileBridgePort } from "../ports/file-bridge.port.js";
+import type { RuntimePrimitivePort } from "../../ports/runtime-primitive-port.js";
 import type { DeviceState } from "../../contracts/index.js";
 import { validateModuleExists, validateModuleSlotCompatible } from "@cisco-auto/pt-runtime";
 import { DeviceQueryService } from "./device-query-service.js";
 
 export class DeviceMutationService {
   constructor(
-    private bridge: FileBridgePort,
-    private query: DeviceQueryService,
-    private generateId: () => string,
+    private readonly bridge: FileBridgePort,
+    private readonly primitivePort: RuntimePrimitivePort,
+    private readonly query: DeviceQueryService,
+    private readonly generateId: () => string,
   ) {}
 
   async addModule(device: string, slot: number, module: string): Promise<void> {
@@ -22,22 +24,26 @@ export class DeviceMutationService {
         slotValidation.error ?? `El módulo ${module} no es válido para ${currentDevice.model}`,
       );
 
-    await this.bridge.sendCommandAndWait("addModule", {
-      id: this.generateId(),
-      device,
-      slot,
-      module,
-    });
+    const result = await this.primitivePort.runPrimitive("module.add", { device, slot, module });
+    if (!result.ok) {
+      throw new Error(result.error ?? `Error añadiendo módulo ${module} a ${device}`);
+    }
   }
 
   async removeModule(device: string, slot: number): Promise<void> {
-    await this.bridge.sendCommandAndWait("removeModule", { id: this.generateId(), device, slot });
+    const result = await this.primitivePort.runPrimitive("module.remove", { device, slot });
+    if (!result.ok) {
+      throw new Error(result.error ?? `Error removiendo módulo de ${device}`);
+    }
   }
 
   async configHost(
     device: string,
     options: { ip?: string; mask?: string; gateway?: string; dns?: string; dhcp?: boolean },
   ): Promise<void> {
+    // TODO: [workflow-migration] Migrar a planner/workflow
+    // Este método compone múltiples primitivas (host.setIp, host.setGateway, etc.)
+    // y tiene lógica de negocio: determinar qué primitivas invocar según las opciones.
     await this.bridge.sendCommandAndWait("configHost", {
       id: this.generateId(),
       device,
@@ -46,6 +52,7 @@ export class DeviceMutationService {
   }
 
   async configureHostDhcp(device: string): Promise<void> {
+    // TODO: [workflow-migration] Delegar a workflow de DHCP que use primitiva host.setDhcp
     await this.configHost(device, { dhcp: true });
   }
 
@@ -67,6 +74,8 @@ export class DeviceMutationService {
       excluded?: Array<{ start: string; end: string }>;
     },
   ): Promise<void> {
+    // TODO: [workflow-migration] Migrar a planner/workflow
+    // Lógica de negocio compleja: validación de pools, exclusión de IPs, lease time, etc.
     await this.bridge.sendCommandAndWait("configDhcpServer", {
       id: this.generateId(),
       device,
@@ -95,6 +104,7 @@ export class DeviceMutationService {
     }>;
     excludedAddresses: Array<{ start: string; end: string }>;
   }> {
+    // TODO: [workflow-migration] query con lógica de parsing - posible usar device.inspect + parsing
     const result = await this.bridge.sendCommandAndWait<{
       ok: boolean;
       device: string;
@@ -123,17 +133,15 @@ export class DeviceMutationService {
   ): Promise<
     { ok: true; name: string; x: number; y: number } | { ok: false; error: string; code: string }
   > {
-    const result = await this.bridge.sendCommandAndWait<{
-      ok: boolean;
-      name?: string;
-      x?: number;
-      y?: number;
-      error?: string;
-      code?: string;
-    }>("moveDevice", { id: this.generateId(), name, x, y });
-    const value = result.value;
-    if (value?.ok) return { ok: true, name: value.name!, x: value.x!, y: value.y! };
-    return { ok: false, error: value?.error ?? "Unknown error", code: value?.code ?? "UNKNOWN" };
+    const result = await this.primitivePort.runPrimitive("device.move", { name, x, y });
+    if (!result.ok) {
+      return { ok: false, error: result.error ?? "Unknown error", code: result.code ?? "UNKNOWN" };
+    }
+    const value = result.value as { name?: string; x?: number; y?: number } | undefined;
+    if (!value?.name || value.x === undefined || value.y === undefined) {
+      return { ok: false, error: "Respuesta inválida de primitiva", code: "INVALID_RESPONSE" };
+    }
+    return { ok: true, name: value.name, x: value.x, y: value.y };
   }
 
   async ensureVlans(
@@ -144,6 +152,8 @@ export class DeviceMutationService {
     device: string;
     vlans: Array<{ id: number; name: string; created: boolean }>;
   }> {
+    // TODO: [workflow-migration] Migrar a planner/workflow
+    // Lógica de negocio: crear VLANs, asignar nombres, manejar errores por VLAN
     const result = await this.bridge.sendCommandAndWait<{
       ok: boolean;
       device: string;
@@ -160,6 +170,8 @@ export class DeviceMutationService {
     device: string;
     interfaces: Array<{ vlanId: number; ip: string; mask: string; error?: string }>;
   }> {
+    // TODO: [workflow-migration] Migrar a planner/workflow
+    // Lógica de negocio: validar VLANs, configurar interfaces, aplicar IP/subnet
     const result = await this.bridge.sendCommandAndWait<{
       ok: boolean;
       device: string;

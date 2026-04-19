@@ -1,18 +1,11 @@
-import type { FileBridgePort } from "../ports/file-bridge.port.js";
-import type { TopologyCachePort } from "../ports/topology-cache.port.js";
-import type {
-  LinkState,
-  DeviceState,
-  TopologySnapshot,
-  AddLinkPayload,
-} from "../../contracts/index.js";
+import type { RuntimePrimitivePort } from "../../ports/runtime-primitive-port.js";
+import type { CableType, DeviceState, LinkState, TopologySnapshot } from "@cisco-auto/types";
 import { validatePTModel } from "../../shared/utils/helpers.js";
 import { validatePortExists } from "@cisco-auto/pt-runtime";
 
 export class TopologyMutationService {
   constructor(
-    private bridge: FileBridgePort,
-    private cache: TopologyCachePort,
+    private primitivePort: RuntimePrimitivePort,
     private generateId: () => string,
     private getDeviceState: (deviceName: string) => DeviceState | undefined,
   ) {}
@@ -23,8 +16,18 @@ export class TopologyMutationService {
     options?: { x?: number; y?: number },
   ): Promise<DeviceState> {
     const validatedModel = validatePTModel(model);
-    const result = await this.bridge.sendCommandAndWait<{
-      ok: boolean;
+    const result = await this.primitivePort.runPrimitive("device.add", {
+      name,
+      model: validatedModel,
+      x: options?.x ?? 100,
+      y: options?.y ?? 100,
+    });
+
+    if (!result.ok) {
+      throw new Error(result.error ?? `Failed to add device '${name}'`);
+    }
+
+    const value = result.value as {
       name: string;
       model: string;
       type: string;
@@ -32,16 +35,7 @@ export class TopologyMutationService {
       x: number;
       y: number;
       ports: unknown[];
-    }>("addDevice", {
-      id: this.generateId(),
-      name,
-      model: validatedModel,
-      x: options?.x ?? 100,
-      y: options?.y ?? 100,
-    });
-
-    const value = result.value;
-    if (!value) throw new Error(`Failed to add device '${name}'`);
+    };
 
     return {
       name: value.name,
@@ -55,15 +49,20 @@ export class TopologyMutationService {
   }
 
   async removeDevice(name: string): Promise<void> {
-    await this.bridge.sendCommandAndWait("removeDevice", { id: this.generateId(), name });
+    const result = await this.primitivePort.runPrimitive("device.remove", { name });
+    if (!result.ok) {
+      throw new Error(result.error ?? `Failed to remove device '${name}'`);
+    }
   }
 
   async renameDevice(oldName: string, newName: string): Promise<void> {
-    await this.bridge.sendCommandAndWait("renameDevice", {
-      id: this.generateId(),
+    const result = await this.primitivePort.runPrimitive("device.rename", {
       oldName,
       newName,
     });
+    if (!result.ok) {
+      throw new Error(result.error ?? `Failed to rename device from '${oldName}' to '${newName}'`);
+    }
   }
 
   async moveDevice(
@@ -73,17 +72,12 @@ export class TopologyMutationService {
   ): Promise<
     { ok: true; name: string; x: number; y: number } | { ok: false; error: string; code: string }
   > {
-    const result = await this.bridge.sendCommandAndWait<{
-      ok: boolean;
-      name?: string;
-      x?: number;
-      y?: number;
-      error?: string;
-      code?: string;
-    }>("moveDevice", { id: this.generateId(), name, x, y });
-    const value = result.value;
-    if (value?.ok) return { ok: true, name: value.name!, x: value.x!, y: value.y! };
-    return { ok: false, error: value?.error ?? "Unknown error", code: value?.code ?? "UNKNOWN" };
+    const result = await this.primitivePort.runPrimitive("device.move", { name, x, y });
+    if (!result.ok) {
+      return { ok: false, error: result.error ?? "Unknown error", code: result.code ?? "UNKNOWN" };
+    }
+    const value = result.value as { name: string; x: number; y: number };
+    return { ok: true, name: value.name, x: value.x, y: value.y };
   }
 
   async addLink(
@@ -91,7 +85,7 @@ export class TopologyMutationService {
     port1: string,
     device2: string,
     port2: string,
-    linkType: AddLinkPayload["linkType"] = "auto",
+    linkType: CableType = "auto",
   ): Promise<LinkState> {
     const device1State = this.getDeviceState(device1);
     const device2State = this.getDeviceState(device2);
@@ -108,18 +102,28 @@ export class TopologyMutationService {
         throw new Error(validation.error ?? `Puerto inválido: ${device2State.model}:${port2}`);
     }
 
-    const result = await this.bridge.sendCommandAndWait<{
-      ok: boolean;
+    const result = await this.primitivePort.runPrimitive("link.add", {
+      device1,
+      port1,
+      device2,
+      port2,
+      cableType: linkType,
+    });
+
+    if (!result.ok) {
+      throw new Error(
+        result.error ?? `Failed to add link between ${device1}:${port1} and ${device2}:${port2}`,
+      );
+    }
+
+    const value = result.value as {
       id: string;
       device1: string;
       port1: string;
       device2: string;
       port2: string;
       cableType: string;
-    }>("addLink", { id: this.generateId(), device1, port1, device2, port2, linkType });
-    const value = result.value;
-    if (!value)
-      throw new Error(`Failed to add link between ${device1}:${port1} and ${device2}:${port2}`);
+    };
 
     return {
       id: value.id,
@@ -132,7 +136,10 @@ export class TopologyMutationService {
   }
 
   async removeLink(device: string, port: string): Promise<void> {
-    await this.bridge.sendCommandAndWait("removeLink", { id: this.generateId(), device, port });
+    const result = await this.primitivePort.runPrimitive("link.remove", { device, port });
+    if (!result.ok) {
+      throw new Error(result.error ?? `Failed to remove link from ${device}:${port}`);
+    }
   }
 
   async clearTopology(): Promise<{
@@ -145,10 +152,11 @@ export class TopologyMutationService {
     let removedLinks = 0;
 
     for (let pass = 0; pass < 5; pass++) {
-      const snapshot = await this.bridge.readState<TopologySnapshot>();
-      const devices = this.cache.getDevices();
-      const linkEntries = Object.values(snapshot?.links ?? {});
-      const deviceNames = Array.from(new Set(devices.map((device) => device.name).filter(Boolean)));
+      const snapshotResult = await this.primitivePort.runPrimitive("topology.snapshot", {});
+      const snapshot = snapshotResult.value as TopologySnapshot | undefined;
+      const linkEntries = Object.values(snapshot?.links ?? {}) as LinkState[];
+      const deviceEntries = Object.values(snapshot?.devices ?? {}) as DeviceState[];
+      const deviceNames = deviceEntries.map((d) => d.name).filter(Boolean) as string[];
 
       if (linkEntries.length === 0 && deviceNames.length === 0) {
         return { removedDevices, removedLinks, remainingDevices: 0, remainingLinks: 0 };
@@ -179,40 +187,25 @@ export class TopologyMutationService {
 
       await new Promise((resolve) => setTimeout(resolve, 250));
 
-      const afterSnapshot = await this.bridge.readState<TopologySnapshot>();
-      const afterDevices = this.cache.getDevices();
-      const remainingDevices = Array.from(
-        new Set(afterDevices.map((device) => device.name).filter(Boolean)),
-      ).length;
+      const afterResult = await this.primitivePort.runPrimitive("topology.snapshot", {});
+      const afterSnapshot = afterResult.value as TopologySnapshot | undefined;
+      const remainingDevices = Object.keys(afterSnapshot?.devices ?? {}).length;
       const remainingLinks = Object.keys(afterSnapshot?.links ?? {}).length;
 
       if (remainingDevices === 0 && remainingLinks === 0) {
-        this.cache.applySnapshot({
-          devices: {},
-          links: {},
-          timestamp: Date.now(),
-          version: "clear",
-        });
         return { removedDevices, removedLinks, remainingDevices: 0, remainingLinks: 0 };
       }
     }
 
-    const finalSnapshot = await this.bridge.readState<TopologySnapshot>();
-    const finalDevices = this.cache.getDevices();
-    const uniqueDeviceNames = Array.from(
-      new Set(finalDevices.map((device) => device.name).filter(Boolean)),
-    );
+    const finalResult = await this.primitivePort.runPrimitive("topology.snapshot", {});
+    const finalSnapshot = finalResult.value as TopologySnapshot | undefined;
     const remainingDevices = Object.keys(finalSnapshot?.devices ?? {}).length;
     const remainingLinks = Object.keys(finalSnapshot?.links ?? {}).length;
-
-    if (remainingDevices === 0 && remainingLinks === 0) {
-      this.cache.applySnapshot({ devices: {}, links: {}, timestamp: Date.now(), version: "clear" });
-    }
 
     return {
       removedDevices,
       removedLinks,
-      remainingDevices: Math.max(remainingDevices, uniqueDeviceNames.length),
+      remainingDevices,
       remainingLinks,
     };
   }

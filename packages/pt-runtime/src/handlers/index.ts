@@ -1,12 +1,22 @@
 // ============================================================================
-// Handlers Index - Export all handlers
+// Handlers Index - Active handlers (NOT legacy)
 // ============================================================================
 
-export * from "./device";
-export * from "./link";
-export * from "./inspect";
+/**
+ * @deprecated Los handlers legacy (device, link, inspect, canvas, vlan, dhcp, host)
+ * fueron removidos del export público.
+ *
+ * Sistema NUEVO ( Phase 3+ ):
+ *   - runtime-handlers.ts → dispatcher central (Map-based)
+ *   - primitives/ → primitivas de dispositivo
+ *   - terminal/ → subsistema de terminal
+ *   - omni/ → adapters omni
+ *
+ * Handlers de negocio (VLAN, DHCP, etc.) viven en pt-control.
+ * Ver docs/architecture/runtime-control-boundary.md
+ *
+ * Para backward compat de consumers internos: import desde "../legacy"
+ */
+
 export * from "./module";
-export * from "./canvas";
-export * from "./vlan";
-export * from "./dhcp";
-export * from "./host";
+export * from "./runtime-handlers";

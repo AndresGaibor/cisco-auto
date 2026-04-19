@@ -1,8 +1,4 @@
-import { FileBridgeV2 } from "@cisco-auto/file-bridge";
-import { TopologyCache } from "../infrastructure/pt/topology-cache.js";
 import type { FileBridgePort } from "../application/ports/file-bridge.port.js";
-import { homedir, platform } from "node:os";
-import { resolve } from "node:path";
 import type {
   PTEvent,
   PTEventType,
@@ -28,6 +24,7 @@ import type {
   IosExecutionEvidence,
 } from "../contracts/ios-execution-evidence.js";
 import type { DeviceCapabilities } from "../domain/ios/capabilities/pt-capability-resolver.js";
+import { TopologyCache } from "../infrastructure/pt/topology-cache.js";
 import { TopologyService } from "../application/services/topology-service.js";
 import { DeviceService } from "../application/services/device-service.js";
 import { IosService } from "../application/services/ios-service.js";
@@ -41,12 +38,7 @@ import { ControllerCanvasService } from "./canvas-service.js";
 import { ControllerTopologyService } from "./topology-service.js";
 import { OmniscienceService } from "../application/services/omniscience-service.js";
 import { LabService } from "../application/services/lab-service.js";
-
-export { FileBridgeV2 } from "@cisco-auto/file-bridge";
-
-export interface PTControllerConfig {
-  devDir: string;
-}
+import type { ControlComposition } from "../application/bootstrap/control-composition.js";
 
 export interface CommandTraceEntry {
   id: string;
@@ -59,78 +51,38 @@ export interface CommandTraceEntry {
 }
 
 export class PTController {
-  private readonly bridge: FileBridgePort;
-  private readonly topologyCache: TopologyCache;
-  private readonly topologyService: TopologyService;
-  private readonly deviceService: DeviceService;
-  private readonly iosService: IosService;
-  private readonly canvasService: CanvasService;
-  private readonly contextService: ControllerContextService;
-  private readonly snapshotService: SnapshotService;
-  private readonly commandTraceService: CommandTraceService;
-  private readonly controllerIosService: ControllerIosService;
-  private readonly bridgeService: BridgeService;
-  public readonly omniscience: OmniscienceService;
-  public readonly labService: LabService;
-  private readonly canvasFacade: ControllerCanvasService;
-  private readonly topologyFacade: ControllerTopologyService;
+  private readonly _composition: ControlComposition;
 
-  constructor(config: PTControllerConfig);
-  constructor(bridge: FileBridgePort);
-  constructor(configOrBridge: PTControllerConfig | FileBridgePort) {
-    if ("devDir" in configOrBridge) {
-      const config = configOrBridge as PTControllerConfig;
-      this.bridge = new FileBridgeV2({ root: config.devDir });
-    } else {
-      const externalBridge = configOrBridge as FileBridgePort;
-      this.bridge = externalBridge;
-    }
+  constructor(composition: ControlComposition) {
+    this._composition = composition;
+  }
 
-    this.topologyCache = new TopologyCache(this.bridge);
-    this.omniscience = new OmniscienceService(this.bridge);
+  public get omniscience() {
+    return this._composition.omniscience;
+  }
 
-    const generateId = () => `ctrl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-
-    this.topologyService = new TopologyService(this.bridge, this.topologyCache, generateId);
-    this.deviceService = new DeviceService(this.bridge, this.topologyCache, generateId);
-    this.canvasService = new CanvasService(this.bridge, generateId);
-    this.contextService = new ControllerContextService(this.bridge, this.topologyCache);
-    this.snapshotService = new SnapshotService(this.topologyService, this.topologyCache);
-    this.commandTraceService = new CommandTraceService(this.bridge);
-
-    this.iosService = new IosService(this.bridge, generateId, (d) => this.deviceService.inspect(d));
-
-    this.bridgeService = new BridgeService(this.bridge, this.topologyCache);
-    this.controllerIosService = new ControllerIosService(this.iosService, this.deviceService);
-    this.topologyFacade = new ControllerTopologyService(this.topologyService, this.deviceService);
-    this.canvasFacade = new ControllerCanvasService(this.canvasService);
-    this.labService = new LabService(
-      this.bridge,
-      this.topologyCache,
-      this.deviceService,
-      this.iosService,
-      this.topologyService,
-    );
+  public get labService() {
+    return this._composition.labService;
   }
 
   async start(): Promise<void> {
-    this.bridgeService.start();
+    this._composition.bridgeService.start();
   }
 
   async stop(): Promise<void> {
-    await this.bridgeService.stop();
+    await this._composition.bridgeService.stop();
   }
 
   getBridge(): FileBridgePort {
-    return this.bridgeService.getBridge();
+    return this._composition.bridgeService.getBridge();
   }
 
   getTopologyCache(): TopologyCache {
-    return this.bridgeService.getTopologyCache();
+    return this._composition.bridgeService.getTopologyCache();
   }
 
   drainCommandTrace(): CommandTraceEntry[] {
-    return this.commandTraceService.drainCommandTrace();
+    return this._composition.commandTraceService.drainCommandTrace();
   }
 
   async addDevice(
@@ -138,15 +90,15 @@ export class PTController {
     model: string,
     options?: { x?: number; y?: number },
   ): Promise<DeviceState> {
-    return this.topologyFacade.addDevice(name, model, options);
+    return this._composition.topologyFacade.addDevice(name, model, options);
   }
 
   async removeDevice(name: string): Promise<void> {
-    await this.topologyFacade.removeDevice(name);
+    await this._composition.topologyFacade.removeDevice(name);
   }
 
   async renameDevice(oldName: string, newName: string): Promise<void> {
-    await this.topologyFacade.renameDevice(oldName, newName);
+    await this._composition.topologyFacade.renameDevice(oldName, newName);
   }
 
   async moveDevice(
@@ -156,23 +108,23 @@ export class PTController {
   ): Promise<
     { ok: true; name: string; x: number; y: number } | { ok: false; error: string; code: string }
   > {
-    return this.topologyFacade.moveDevice(name, x, y);
+    return this._composition.topologyFacade.moveDevice(name, x, y);
   }
 
   async listDevices(filter?: string | number | string[]): Promise<DeviceListResult> {
-    return this.topologyFacade.listDevices(filter);
+    return this._composition.topologyFacade.listDevices(filter);
   }
 
   async inspectDevice(name: string, includeXml = false): Promise<DeviceState> {
-    return this.deviceService.inspect(name, includeXml);
+    return this._composition.deviceService.inspect(name, includeXml);
   }
 
   async addModule(device: string, slot: number, module: string): Promise<void> {
-    await this.deviceService.addModule(device, slot, module);
+    await this._composition.deviceService.addModule(device, slot, module);
   }
 
   async removeModule(device: string, slot: number): Promise<void> {
-    await this.deviceService.removeModule(device, slot);
+    await this._composition.deviceService.removeModule(device, slot);
   }
 
   async addLink(
@@ -182,11 +134,11 @@ export class PTController {
     port2: string,
     linkType: AddLinkPayload["linkType"] = "auto",
   ): Promise<LinkState> {
-    return this.topologyFacade.addLink(device1, port1, device2, port2, linkType);
+    return this._composition.topologyFacade.addLink(device1, port1, device2, port2, linkType);
   }
 
   async removeLink(device: string, port: string): Promise<void> {
-    await this.topologyFacade.removeLink(device, port);
+    await this._composition.topologyFacade.removeLink(device, port);
   }
 
   async clearTopology(): Promise<{
@@ -195,7 +147,7 @@ export class PTController {
     remainingDevices: number;
     remainingLinks: number;
   }> {
-    return this.topologyFacade.clearTopology();
+    return this._composition.topologyFacade.clearTopology();
   }
 
   async configHost(
@@ -208,11 +160,11 @@ export class PTController {
       dhcp?: boolean;
     },
   ): Promise<void> {
-    await this.topologyFacade.configHost(device, options);
+    await this._composition.topologyFacade.configHost(device, options);
   }
 
   async inspectHost(device: string): Promise<DeviceState> {
-    const deviceState = await this.deviceService.inspect(device);
+    const deviceState = await this._composition.deviceService.inspect(device);
     if (deviceState.type !== "pc" && deviceState.type !== "server") {
       throw new Error(
         `Dispositivo '${device}' no es un host (PC/Server-PT). Tipo: ${deviceState.type}`,
@@ -222,7 +174,7 @@ export class PTController {
   }
 
   async configIos(device: string, commands: string[], options?: { save?: boolean }): Promise<void> {
-    await this.iosService.configIos(device, commands, options).then(() => undefined);
+    await this._composition.iosService.configIos(device, commands, options).then(() => undefined);
   }
 
   async execIos<T = ParsedOutput>(
@@ -231,35 +183,35 @@ export class PTController {
     parse = true,
     timeout = 5000,
   ): Promise<{ raw: string; parsed?: T }> {
-    return this.iosService.execIos<T>(device, command, parse, timeout);
+    return this._composition.iosService.execIos<T>(device, command, parse, timeout);
   }
 
   async show(device: string, command: string): Promise<ParsedOutput> {
-    return this.iosService.show(device, command);
+    return this._composition.iosService.show(device, command);
   }
 
   async showIpInterfaceBrief(device: string): Promise<ShowIpInterfaceBrief> {
-    return this.iosService.showIpInterfaceBrief(device);
+    return this._composition.iosService.showIpInterfaceBrief(device);
   }
 
   async showVlan(device: string): Promise<ShowVlan> {
-    return this.iosService.showVlan(device);
+    return this._composition.iosService.showVlan(device);
   }
 
   async showIpRoute(device: string): Promise<ShowIpRoute> {
-    return this.iosService.showIpRoute(device);
+    return this._composition.iosService.showIpRoute(device);
   }
 
   async showRunningConfig(device: string): Promise<ShowRunningConfig> {
-    return this.iosService.showRunningConfig(device);
+    return this._composition.iosService.showRunningConfig(device);
   }
 
   async showMacAddressTable(device: string): Promise<ShowMacAddressTable> {
-    return this.iosService.show(device, "show mac address-table") as Promise<ShowMacAddressTable>;
+    return this._composition.iosService.show(device, "show mac address-table") as Promise<ShowMacAddressTable>;
   }
 
   async showCdpNeighbors(device: string): Promise<ShowCdpNeighbors> {
-    return this.iosService.showCdpNeighbors(device);
+    return this._composition.iosService.showCdpNeighbors(device);
   }
 
   async execInteractive(
@@ -271,7 +223,7 @@ export class PTController {
       ensurePrivileged?: boolean;
     },
   ): Promise<{ raw: string; parsed?: ParsedOutput; session?: { mode: string } }> {
-    return this.iosService.execInteractive(device, command, options);
+    return this._composition.iosService.execInteractive(device, command, options);
   }
 
   async execIosWithEvidence<T = ParsedOutput>(
@@ -280,7 +232,7 @@ export class PTController {
     parse = true,
     timeout = 5000,
   ): Promise<IosExecutionSuccess<T>> {
-    return this.iosService.execIos<T>(device, command, parse, timeout);
+    return this._composition.iosService.execIos<T>(device, command, parse, timeout);
   }
 
   async configIosWithResult(
@@ -288,7 +240,7 @@ export class PTController {
     commands: string[],
     options?: { save?: boolean } | undefined,
   ): Promise<IosConfigApplyResult> {
-    return this.iosService.configIos(device, commands, options);
+    return this._composition.iosService.configIos(device, commands, options);
   }
 
   async configureDhcpServer(
@@ -304,7 +256,7 @@ export class PTController {
       domainName?: string;
     },
   ): Promise<void> {
-    return this.controllerIosService.configureDhcpServer(device, options);
+    return this._composition.controllerIosService.configureDhcpServer(device, options);
   }
 
   async inspectDhcpServer(device: string): Promise<{
@@ -323,7 +275,7 @@ export class PTController {
     poolCount: number;
     excludedAddressCount: number;
   }> {
-    return this.controllerIosService.inspectDhcpServer(device);
+    return this._composition.controllerIosService.inspectDhcpServer(device);
   }
 
   async showParsed<T = ParsedOutput>(
@@ -331,7 +283,7 @@ export class PTController {
     command: string,
     options?: { ensurePrivileged?: boolean; timeout?: number },
   ): Promise<IosExecutionSuccess<T>> {
-    return this.iosService.showParsed<T>(device, command, options);
+    return this._composition.iosService.showParsed<T>(device, command, options);
   }
 
   async getIosConfidence(
@@ -339,7 +291,7 @@ export class PTController {
     evidence: { source: string; status?: number; mode?: string },
     verificationCheck?: string,
   ): Promise<IosConfidence> {
-    return this.iosService.getConfidence(
+    return this._composition.iosService.getConfidence(
       device,
       evidence as IosExecutionEvidence,
       verificationCheck,
@@ -355,7 +307,7 @@ export class PTController {
     dnsServer?: string,
     options?: { save?: boolean },
   ): Promise<void> {
-    await this.iosService.configureDhcpPool(
+    await this._composition.iosService.configureDhcpPool(
       device,
       poolName,
       network,
@@ -374,7 +326,7 @@ export class PTController {
     area: number,
     options?: { save?: boolean },
   ): Promise<void> {
-    await this.iosService.configureOspfNetwork(device, processId, network, wildcard, area, options);
+    await this._composition.iosService.configureOspfNetwork(device, processId, network, wildcard, area, options);
   }
 
   async configureSshAccess(
@@ -384,7 +336,7 @@ export class PTController {
     password: string,
     options?: { save?: boolean },
   ): Promise<void> {
-    await this.iosService.configureSshAccess(device, domainName, username, password, options);
+    await this._composition.iosService.configureSshAccess(device, domainName, username, password, options);
   }
 
   async configureAccessListStandard(
@@ -393,86 +345,83 @@ export class PTController {
     entries: string[],
     options?: { save?: boolean },
   ): Promise<void> {
-    await this.iosService.configureAccessListStandard(device, aclNumber, entries, options);
+    await this._composition.iosService.configureAccessListStandard(device, aclNumber, entries, options);
   }
 
   async resolveCapabilities(device: string): Promise<DeviceCapabilities> {
-    return this.iosService.resolveCapabilities(device);
+    return this._composition.iosService.resolveCapabilities(device);
   }
 
   async listCanvasRects(): Promise<{ rects: string[]; count: number }> {
-    return this.canvasFacade.listCanvasRects();
+    return this._composition.canvasFacade.listCanvasRects();
   }
 
   async getRect(rectId: string): Promise<unknown> {
-    return this.canvasFacade.getRect(rectId);
+    return this._composition.canvasFacade.getRect(rectId);
   }
 
   async devicesInRect(rectId: string, includeClusters = false): Promise<DevicesInRectResult> {
-    return this.canvasFacade.devicesInRect(rectId, includeClusters);
+    return this._composition.canvasFacade.devicesInRect(rectId, includeClusters);
   }
 
   async snapshot(): Promise<TopologySnapshot> {
-    return this.snapshotService.snapshot();
+    return this._composition.snapshotService.snapshot();
   }
 
   async inspect(device: string, includeXml = false): Promise<DeviceState> {
-    return this.deviceService.inspect(device, includeXml);
+    return this._composition.deviceService.inspect(device, includeXml);
   }
 
   async hardwareInfo(device: string): Promise<unknown> {
-    return this.deviceService.hardwareInfo(device);
+    return this._composition.deviceService.hardwareInfo(device);
   }
 
   async hardwareCatalog(deviceType?: string): Promise<unknown> {
-    return this.deviceService.hardwareCatalog(deviceType);
+    return this._composition.deviceService.hardwareCatalog(deviceType);
   }
 
   async commandLog(device?: string, limit = 100): Promise<unknown[]> {
-    return this.deviceService.commandLog(device, limit);
+    return this._composition.deviceService.commandLog(device, limit);
   }
 
   async deepInspect(path: string, method?: string, args?: any[]): Promise<any> {
-    return this.deviceService.deepInspect(path, method, args);
+    return this._composition.deviceService.deepInspect(path, method, args);
   }
 
-  /**
-   * Generic payload sender (Bypass/Hacker mode)
-   */
   async send(type: string, payload: Record<string, any>): Promise<any> {
-    const result = await (this.bridge as any).sendCommandAndWait(type, payload);
+    const result = await (this._composition.bridge as any).sendCommandAndWait(type, payload);
     if (!result.ok) throw result.error || result;
     return result.value;
   }
 
   on<E extends PTEventType>(eventType: E, handler: (event: PTEvent) => void): this {
-    this.bridgeService.on(eventType, handler);
+    this._composition.bridgeService.on(eventType, handler);
     return this;
   }
 
   onAll(handler: (event: PTEvent) => void): this {
-    this.bridgeService.onAll(handler);
+    this._composition.bridgeService.onAll(handler);
     return this;
   }
 
   async loadRuntime(code: string): Promise<void> {
-    return this.bridgeService.loadRuntime(code);
+    return this._composition.bridgeService.loadRuntime(code);
   }
 
   async loadRuntimeFromFile(filePath: string): Promise<void> {
-    return this.bridgeService.loadRuntimeFromFile(filePath);
+    return this._composition.bridgeService.loadRuntimeFromFile(filePath);
   }
 
   getCachedSnapshot(): TopologySnapshot | null {
-    return this.snapshotService.getCachedSnapshot();
+    return this._composition.snapshotService.getCachedSnapshot();
   }
 
   getTwin(): NetworkTwin | null {
-    return this.snapshotService.getTwin();
+    return this._composition.snapshotService.getTwin();
   }
 
   readState<T = unknown>(): T | null {
-    return this.bridgeService.readState<T>();
+    return this._composition.bridgeService.readState<T>();
   }
 
   getContextSummary(): {
@@ -481,7 +430,7 @@ export class PTController {
     deviceCount: number;
     linkCount: number;
   } {
-    return this.contextService.getContextSummary();
+    return this._composition.contextService.getContextSummary();
   }
 
   async getHealthSummary(): Promise<{
@@ -490,11 +439,11 @@ export class PTController {
     heartbeatState: "ok" | "stale" | "missing" | "unknown";
     warnings: string[];
   }> {
-    return this.contextService.getHealthSummary();
+    return this._composition.contextService.getHealthSummary();
   }
 
   getHeartbeat<T = unknown>(): T | null {
-    return this.contextService.getHeartbeat<T>();
+    return this._composition.contextService.getHeartbeat<T>();
   }
 
   getHeartbeatHealth(): {
@@ -502,7 +451,7 @@ export class PTController {
     ageMs?: number;
     lastSeenTs?: number;
   } {
-    return this.contextService.getHeartbeatHealth();
+    return this._composition.contextService.getHeartbeatHealth();
   }
 
   getBridgeStatus(): {
@@ -511,7 +460,7 @@ export class PTController {
     inFlightCount?: number;
     warnings?: string[];
   } {
-    return this.contextService.getBridgeStatus();
+    return this._composition.contextService.getBridgeStatus();
   }
 
   getSystemContext(): {
@@ -526,27 +475,10 @@ export class PTController {
     };
     warnings: string[];
   } {
-    return this.contextService.getSystemContext();
+    return this._composition.contextService.getSystemContext();
   }
 }
 
-export function createPTController(config: PTControllerConfig): PTController {
-  return new PTController(config);
-}
-
-function getDefaultDevDir(): string {
-  if (process.env.PT_DEV_DIR) {
-    return process.env.PT_DEV_DIR;
-  }
-  const home = homedir();
-  if (platform() === "win32") {
-    return resolve(process.env.USERPROFILE || home, "pt-dev");
-  }
-  return resolve(home, "pt-dev");
-}
-
-const DEFAULT_DEV_DIR = getDefaultDevDir();
-
-export function createDefaultPTController(): PTController {
-  return new PTController({ devDir: DEFAULT_DEV_DIR });
+export function createPTController(composition: ControlComposition): PTController {
+  return new PTController(composition);
 }

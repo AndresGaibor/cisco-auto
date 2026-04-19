@@ -28,7 +28,8 @@ export type CapabilitySupportStatus =
   | "flaky"
   | "unsupported"
   | "broken"
-  | "dangerous";
+  | "dangerous"
+  | "experimental";
 
 export type CleanupStatus = "success" | "partial" | "failed" | "skipped";
 

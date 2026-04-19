@@ -2,6 +2,9 @@
 // Module Primitives - Operaciones de módulo
 // ============================================================================
 
+import { registerPrimitive } from "../primitive-registry";
+import type { PrimitiveDomain } from "../primitive-registry";
+
 export interface AddModulePayload {
   type: "addModule";
   device: string;
@@ -100,3 +103,15 @@ export function inspectModuleSlots(deviceName: string, net: any): ModulePrimitiv
     return { ok: false, error: String(e), code: "MODULE_INSPECT_FAILED" };
   }
 }
+
+registerPrimitive({
+  id: "module.add",
+  domain: "module" as PrimitiveDomain,
+  implementation: ((payload: any, ctx: { net: any; lw: any }) => addModule(payload, ctx.net)) as any,
+});
+
+registerPrimitive({
+  id: "module.remove",
+  domain: "module" as PrimitiveDomain,
+  implementation: ((payload: any, ctx: { net: any; lw: any }) => removeModule(payload, ctx.net)) as any,
+});

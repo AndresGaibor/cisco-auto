@@ -58,7 +58,6 @@ export async function compareToBaseline(
 
   const baselineOk = baselineRun.ok;
   const currentOk = currentRun.ok;
-
   const baselineConfidence = baselineOk ? 1 : 0;
   const currentConfidence = currentOk ? 1 : 0;
 
@@ -67,17 +66,29 @@ export async function compareToBaseline(
   if (baselineOk && !currentOk) {
     result = "regressed";
   } else if (!baselineOk && currentOk) {
-    result = "improved";
+    if (baselineRuns.length === 0) {
+      result = "newly-supported";
+    } else {
+      result = "improved";
+    }
   } else if (!baselineOk && !currentOk) {
-    // Both failed, check changes in support status
-    if (baselineRun.supportStatus !== currentRun.supportStatus) {
+    if (baselineRun.supportStatus === "broken" && currentRun.supportStatus !== "broken") {
+      result = "newly-supported";
+    } else if (baselineRun.supportStatus !== "broken" && currentRun.supportStatus === "broken") {
+      result = "newly-broken";
+    } else {
       result = "regressed";
     }
   } else if (baselineOk && currentOk) {
-    // Both passed, check confidence
     if (currentConfidence > baselineConfidence) {
       result = "improved";
     } else if (currentConfidence < baselineConfidence) {
+      result = "regressed";
+    }
+  }
+
+  if (baselineRun.supportStatus === "flaky" || currentRun.supportStatus === "flaky") {
+    if (result === "unchanged" && baselineRun.supportStatus !== currentRun.supportStatus) {
       result = "regressed";
     }
   }
