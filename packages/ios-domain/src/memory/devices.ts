@@ -3,6 +3,16 @@
 
 import { Database } from 'bun:sqlite';
 
+export interface DeviceRow {
+  id: string;
+  hostname: string;
+  ip_address: string | null;
+  device_type: string | null;
+  os_version: string | null;
+  last_connected: number;
+  updated_at: number;
+}
+
 /**
  * Clase para manejar la memoria de dispositivos
  */
@@ -41,19 +51,19 @@ export class DeviceMemory {
   /**
    * Obtiene un dispositivo por su ID
    */
-  getDevice(id: string): any {
-    return this.db.query('SELECT * FROM devices WHERE id = ?').get(id);
+  getDevice(id: string): DeviceRow | null {
+    return this.db.query('SELECT * FROM devices WHERE id = ?').get(id) as DeviceRow | null;
   }
 
   /**
    * Obtiene los dispositivos más recientemente conectados
    */
-  getRecentDevices(limit: number = 10): any[] {
+  getRecentDevices(limit: number = 10): DeviceRow[] {
     return this.db.query(`
       SELECT * FROM devices 
       ORDER BY last_connected DESC 
       LIMIT ?
-    `).all(limit);
+    `).all(limit) as DeviceRow[];
   }
 
   /**
@@ -77,7 +87,7 @@ export class DeviceMemory {
   /**
    * Obtiene todos los dispositivos
    */
-  getAllDevices(): any[] {
-    return this.db.query('SELECT * FROM devices ORDER BY hostname').all();
+  getAllDevices(): DeviceRow[] {
+    return this.db.query('SELECT * FROM devices ORDER BY hostname').all() as DeviceRow[];
   }
 }

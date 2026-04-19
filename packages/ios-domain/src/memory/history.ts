@@ -3,6 +3,16 @@
 
 import { Database } from 'bun:sqlite';
 
+export interface CommandHistoryRow {
+  id: number;
+  device_id: string;
+  command: string;
+  output: string;
+  status: string;
+  session_id: string | null;
+  timestamp: number;
+}
+
 /**
  * Clase para manejar el historial de comandos
  */
@@ -33,28 +43,28 @@ export class HistoryMemory {
   /**
    * Obtiene el historial de comandos por sesión
    */
-  getSessionCommands(sessionId: string): any[] {
+  getSessionCommands(sessionId: string): CommandHistoryRow[] {
     return this.db
       .query('SELECT * FROM command_history WHERE session_id = ? ORDER BY id ASC')
-      .all(sessionId);
+      .all(sessionId) as CommandHistoryRow[];
   }
 
   /**
    * Obtiene el historial de comandos por dispositivo
    */
-  getDeviceCommands(deviceId: string): any[] {
+  getDeviceCommands(deviceId: string): CommandHistoryRow[] {
     return this.db
       .query('SELECT * FROM command_history WHERE device_id = ? ORDER BY timestamp DESC')
-      .all(deviceId);
+      .all(deviceId) as CommandHistoryRow[];
   }
 
   /**
    * Obtiene comandos fallidos
    */
-  getFailedCommands(): any[] {
+  getFailedCommands(): CommandHistoryRow[] {
     return this.db
       .query("SELECT * FROM command_history WHERE status = 'failed' ORDER BY timestamp DESC")
-      .all();
+      .all() as CommandHistoryRow[];
   }
 
   /**

@@ -4,9 +4,18 @@
  * Manejo del historial y estado de sesiones CLI
  */
 
+export interface CommandResult {
+  ok: boolean;
+  output: string;
+  status: number;
+  mode: string;
+  paging: boolean;
+  rawOutput: string;
+}
+
 export interface CommandHistoryEntry {
   command: string;
-  result: any; // CommandResult
+  result: CommandResult;
   timestamp: number;
 }
 
@@ -29,7 +38,7 @@ export class CliSessionHistory {
     this.maxSize = maxSize;
   }
 
-  addEntry(command: string, result: any): void {
+  addEntry(command: string, result: CommandResult): void {
     this.entries.push({
       command,
       result,
