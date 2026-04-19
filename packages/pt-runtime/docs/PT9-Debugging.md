@@ -117,6 +117,42 @@ Router16 confirmed with live processes:
 
 ---
 
+## PT_DEBUG Flag — Control Debug Log Output
+
+By default, `dprint()` output is sent ONLY to the PT Activity Log (`native dprint`) and the NDJSON log file (`logs/pt-debug.current.ndjson`). The PT Debug window (which shows `appWindow.writeToPT` output) is silent.
+
+### Enable PT Debug Window Output
+
+In the PT Console, set the debug flag:
+
+```javascript
+self.PT_DEBUG = 1   // Enable PT Debug window output
+self.PT_DEBUG = 0   // Disable PT Debug window output
+```
+
+### What Gets Logged
+
+When `PT_DEBUG=1`, `dprint()` calls will write to the PT Debug window in addition to the Activity Log. This includes:
+
+- `[kernel]` — Kernel lifecycle, dispatch, command queue
+- `[loader]` — Runtime.js loading and hot reload
+- `[queue-claim]` — Command claim operations
+- `[KERNEL-IIFE]` — Kernel bootstrap sanity checks
+- `[main]` — Script module entry point logging
+
+### Default Behavior (PT_DEBUG not set or falsy)
+
+```javascript
+// In PT Console, default is silent:
+self.PT_DEBUG   // → undefined (falsy)
+```
+
+Without `PT_DEBUG=1`, you only get:
+1. **Activity Log** — native `dprint()` output (always on)
+2. **Terminal logs** — `bun run pt log --live` from the CLI
+
+---
+
 ## See Also
 
 - `docs/PT-API-COMPLETE.md` — 1348-line comprehensive test results

@@ -3,23 +3,25 @@
 This file serves as the primary instructional context for Gemini CLI interactions within the `cisco-auto` project. It outlines the project's purpose, architecture, development standards, and key operational commands.
 
 ## Project Overview
-**cisco-auto** is a powerful automation tool designed to simplify and accelerate the configuration, deployment, and validation of Cisco Packet Tracer laboratories and real network equipment. It targets a drastic reduction in configuration time (from 45 minutes to under 2 minutes) while ensuring topology compliance through a declarative approach.
+**cisco-auto** is a professional-grade Network Intelligence and Automation platform for Cisco Packet Tracer (v9.0). It is designed to act as a **Virtual CCIE**, allowing users to build, iterate, debug, and validate complex network topologies (like the 76 CCNA Scenarios) directly from the command line.
+
+It transcends basic configuration by utilizing an "Omniscience Layer" that hooks directly into the C++ engine of the simulator via QtScript, bypassing standard API limitations.
 
 ### Core Technologies
 - **Runtime:** [Bun](https://bun.sh/) (v1.1+ mandatory). **Do NOT use Node.js or npm.**
 - **Language:** TypeScript (Strict mode).
 - **Validation:** Zod.
 - **CLI Framework:** Commander.js.
-- **Communication:** FileBridge (file-based bridge to Packet Tracer).
+- **Communication:** FileBridge (file-based IPC to Packet Tracer).
 
 ## Architecture (Monorepo)
 The project is structured as a monorepo using Bun workspaces:
 
-- **`apps/pt-cli`**: The main Command Line Interface (`bun run pt`).
+- **`apps/pt-cli`**: The main Command Line Interface (`bun run pt`). This is the primary tool for building and validating labs (e.g., `pt device add`, `pt link add`, `pt lab validate`).
+- **`packages/pt-runtime`**: The ES5 Kernel injected into Packet Tracer. Contains the Omniscience handlers (Bypasses, Memory Injection, XML Genomes).
+- **`packages/pt-control`**: The rich, type-safe TypeScript abstraction layer (e.g., `OmniscienceService`, `ScenarioService`).
 - **`packages/core`**: Business logic, orchestrators, and topology building.
-- **`packages/pt-control`**: Real-time control engine for Cisco Packet Tracer.
 - **`packages/file-bridge`**: Communication bridge between the CLI and Packet Tracer.
-- **`packages/pt-runtime`**: Generates the runtime environment for Packet Tracer scripts.
 - **`packages/types`**: Shared TypeScript definitions.
 
 ## Building and Running

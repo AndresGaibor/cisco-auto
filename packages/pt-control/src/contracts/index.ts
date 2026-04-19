@@ -36,3 +36,4 @@ export * from "./twin-types.js";
 
 // Fase 4: IOS execution evidence, results, and confidence
 export * from "./ios-execution-evidence.js";
+export * from "./omniscience.js";

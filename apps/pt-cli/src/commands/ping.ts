@@ -211,82 +211,16 @@ async function performPing(
   timeout: number,
 ): Promise<PingResult> {
   try {
-    const { devices } = await controller.listDevices();
-    const fromDeviceInfo = devices.find((d: any) => d.name === fromDevice);
-    const deviceType = fromDeviceInfo?.type;
-    const isIosDevice =
-      deviceType === "router" || deviceType === "switch" || deviceType === 4 || deviceType === 6;
-    const isPc = !isIosDevice;
-
-    let raw = "";
-    let execResult: any;
-
-    if (isPc) {
-      const bridge = controller.getBridge();
-      const pcTimeout = Math.max(timeout, 30000);
-      const pcResult = await bridge.sendCommandAndWait("execPc", {
-        device: fromDevice,
-        command: `ping ${toIp}`,
-        timeoutMs: pcTimeout,
-      });
-      raw = pcResult?.value?.raw || "";
-    } else {
-      execResult = await controller.execInteractive(fromDevice, `ping ${toIp} repeat ${count}`, {
-        timeout,
-        parse: false,
-      });
-      raw = execResult.raw || "";
-
-      if (!raw && !execResult.session) {
-        return {
-          from: fromDevice,
-          to: toIp,
-          success: false,
-          error: `Device ${fromDevice} no tiene CLI IOS - ping solo funciona desde routers/switches`,
-          packetLoss: 100,
-          packetsSent: count,
-          packetsReceived: 0,
-        };
-      }
-    }
-
-    const success =
-      raw.toLowerCase().includes("success") ||
-      raw.includes("Reply from") ||
-      raw.includes("Paquetes perdidos: 0%") ||
-      raw.includes("0% packet loss") ||
-      (raw.includes("100%") === false && raw.includes("!")) ||
-      (raw.includes("Success") && raw.includes("rate")) ||
-      raw.includes("Rate = 100%");
-
-    const packetsMatch = raw.match(
-      /(\d+)\s+(?:packets?|messages?|paquetes?)\s+(?:sent|transmitted|enviados)/i,
-    );
-    const sent = packetsMatch ? parseInt(packetsMatch[1]) : count;
-
-    const receivedMatch = raw.match(
-      /(\d+)\s+(?:packets?|messages?|paquetes?)\s+(?:received|rcvd|ok|recibidos)/i,
-    );
-    const received = receivedMatch ? parseInt(receivedMatch[1]) : sent;
-
-    const latencyMatch = raw.match(/(\d+)\s*(?:ms|milliseconds?|mseg)/i);
-    const latency = latencyMatch ? parseInt(latencyMatch[1]) : undefined;
-
-    const packetLossMatch = raw.match(/(?:Paquetes perdidos|packet loss|perdidos):\s*(\d+)%/i);
-    const packetLoss = packetLossMatch
-      ? parseInt(packetLossMatch[1])
-      : sent > 0
-        ? Math.round(((sent - received) / sent) * 100)
-        : 100;
-
+    const result = await controller.omniscience.sendPing(fromDevice, toIp);
+    
     return {
       from: fromDevice,
       to: toIp,
-      success: success && packetLoss < 100,
-      latency,
-      packetLoss,
-      packetsSent: sent,
-      packetsReceived: received,
+      success: result.success,
+      packetsSent: count,
+      packetsReceived: result.success ? count : 0,
+      packetLoss: result.success ? 0 : 100,
+      raw: result.raw
     };
   } catch (error: any) {
     return {
@@ -302,22 +236,15 @@ async function performPing(
 }
 
 function renderPingResult(result: PingResult): void {
+  if (result.raw) {
+      console.log(chalk.bold.cyan(`\n📟 SALIDA DE CONSOLA (${result.from}):`));
+      console.log(chalk.gray(result.raw));
+  }
+
   if (result.success) {
-    console.log(chalk.green(`✓ Ping ${result.from} → ${result.to}`));
-    if (result.latency !== undefined) {
-      console.log(`  Latencia: ${chalk.cyan(result.latency + " ms")}`);
-    }
-    console.log(`  Paquetes: ${result.packetsReceived}/${result.packetsSent} recibidos`);
-    if (result.packetLoss !== undefined && result.packetLoss > 0) {
-      console.log(chalk.yellow(`  Pérdida: ${result.packetLoss}%`));
-    }
+    console.log(chalk.green(`\n✓ Conectividad verificada: ${result.from} → ${result.to}`));
   } else {
-    console.log(chalk.red(`✗ Ping ${result.from} → ${result.to} FALLÓ`));
-    if (result.error) {
-      console.log(`  Error: ${result.error}`);
-    }
-    if (result.packetLoss !== undefined) {
-      console.log(`  Paquetes perdidos: ${result.packetLoss}%`);
-    }
+    console.log(chalk.red(`\n✗ Fallo de conectividad: ${result.from} → ${result.to}`));
+    if (result.error) console.log(`  Error: ${result.error}`);
   }
 }

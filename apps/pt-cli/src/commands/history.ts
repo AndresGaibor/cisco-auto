@@ -5,37 +5,41 @@
  * Migrado al patrón runCommand con CliResult
  */
 
-import { Command } from 'commander';
-import { existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { Command } from "commander";
+import { existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
-import type { CliResult } from '../contracts/cli-result.js';
-import { createSuccessResult, createErrorResult } from '../contracts/cli-result.js';
-import type { CommandMeta } from '../contracts/command-meta.js';
-import type { GlobalFlags } from '../flags.js';
+import type { CliResult } from "../contracts/cli-result.js";
+import { createSuccessResult, createErrorResult } from "../contracts/cli-result.js";
+import type { CommandMeta } from "../contracts/command-meta.js";
+import type { GlobalFlags } from "../flags.js";
 
-import { runCommand } from '../application/run-command.js';
-import { renderCliResult } from '../ux/renderers.js';
-import { printExamples } from '../ux/examples.js';
-import { historyStore } from '../telemetry/history-store.js';
-import type { HistoryEntry } from '../contracts/history-entry.js';
-import { getHistoryDir } from '../system/paths.js';
+import { runCommand } from "../application/run-command.js";
+import { renderCliResult } from "../ux/renderers.js";
+import { printExamples } from "../ux/examples.js";
+import { historyStore } from "../telemetry/history-store.js";
+import type { HistoryEntry } from "../contracts/history-entry.js";
+import { getHistoryDir } from "../system/paths.js";
+import { renderHistoryBlock } from "../telemetry/render-history-block.js";
 
 const HISTORY_EXAMPLES = [
-  { command: 'pt history list', description: 'Listar últimas ejecuciones' },
-  { command: 'pt history list --limit 20 --failed', description: 'Listar últimos 20 comandos fallidos' },
-  { command: 'pt history show abc123', description: 'Ver detalle de una sesión' },
-  { command: 'pt history last', description: 'Ver última ejecución' },
-  { command: 'pt history rerun abc123', description: 'Re-ejecutar sesión anterior' },
-  { command: 'pt history explain abc123', description: 'Explicar error de una sesión' },
+  { command: "pt history list", description: "Listar últimas ejecuciones" },
+  {
+    command: "pt history list --limit 20 --failed",
+    description: "Listar últimos 20 comandos fallidos",
+  },
+  { command: "pt history show abc123", description: "Ver detalle de una sesión" },
+  { command: "pt history last", description: "Ver última ejecución" },
+  { command: "pt history rerun abc123", description: "Re-ejecutar sesión anterior" },
+  { command: "pt history explain abc123", description: "Explicar error de una sesión" },
 ];
 
 const HISTORY_META: CommandMeta = {
-  id: 'history',
-  summary: 'Historial de ejecuciones de comandos',
-  longDescription: 'Lista y muestra detalles de ejecuciones anteriores de comandos de la CLI.',
+  id: "history",
+  summary: "Historial de ejecuciones de comandos",
+  longDescription: "Lista y muestra detalles de ejecuciones anteriores de comandos de la CLI.",
   examples: HISTORY_EXAMPLES,
-  related: ['logs', 'results', 'doctor'],
+  related: ["logs", "results", "doctor"],
   supportsVerify: false,
   supportsJson: true,
   supportsPlan: false,
@@ -58,21 +62,47 @@ function formatDuration(ms: number): string {
   return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
 }
 
-function truncate(str: string, maxLen: number): string {
-  if (str.length <= maxLen) return str;
-  return str.slice(0, maxLen - 3) + '...';
+function colorFn(code: string, text: string): string {
+  return `\x1b[${code}m${text}\x1b[0m`;
+}
+function bold(text: string): string {
+  return colorFn("1", text);
+}
+function dim(text: string): string {
+  return colorFn("2", text);
+}
+function red(text: string): string {
+  return colorFn("31", text);
+}
+function green(text: string): string {
+  return colorFn("32", text);
+}
+function cyan(text: string): string {
+  return colorFn("36", text);
 }
 
-function getField(entry: HistoryEntry, field: 'sessionId' | 'session_id'): string {
-  return entry.sessionId ?? (entry as unknown as Record<string, unknown>).session_id as string ?? '';
+function truncate(str: string, maxLen: number): string {
+  if (str.length <= maxLen) return str;
+  return str.slice(0, maxLen - 3) + "...";
+}
+
+function getField(entry: HistoryEntry, field: "sessionId" | "session_id"): string {
+  return (
+    entry.sessionId ?? ((entry as unknown as Record<string, unknown>).session_id as string) ?? ""
+  );
 }
 
 function getDuration(entry: HistoryEntry): number {
-  return entry.durationMs ?? (entry as unknown as Record<string, unknown>).duration_ms as number ?? 0;
+  return (
+    entry.durationMs ?? ((entry as unknown as Record<string, unknown>).duration_ms as number) ?? 0
+  );
 }
 
 function getTargetDevice(entry: HistoryEntry): string | undefined {
-  return entry.targetDevice ?? (entry as unknown as Record<string, unknown>).target_device as string | undefined;
+  return (
+    entry.targetDevice ??
+    ((entry as unknown as Record<string, unknown>).target_device as string | undefined)
+  );
 }
 
 function inferFailureCauses(entry: HistoryEntry): string[] {
@@ -80,101 +110,131 @@ function inferFailureCauses(entry: HistoryEntry): string[] {
 
   const ctx = entry.contextSummary as Record<string, unknown> | undefined;
   if (ctx?.bridgeReady === false) {
-    causes.push('Bridge no estaba listo durante la ejecución.');
+    causes.push("Bridge no estaba listo durante la ejecución.");
   }
 
-  if (entry.warnings?.some(w => /heartbeat stale|heartbeat missing/i.test(w))) {
-    causes.push('Packet Tracer parecía no estar disponible o no responder.');
+  if (entry.warnings?.some((w) => /heartbeat stale|heartbeat missing/i.test(w))) {
+    causes.push("Packet Tracer parecía no estar disponible o no responder.");
   }
 
-  if (entry.verificationSummary?.includes('not verified')) {
-    causes.push('La acción pudo ejecutarse, pero no quedó verificada.');
+  if (entry.verificationSummary?.includes("not verified")) {
+    causes.push("La acción pudo ejecutarse, pero no quedó verificada.");
   }
 
-  if (entry.warnings?.some(w => /desincronizada|desynced/i.test(w))) {
-    causes.push('La topología pudo haber quedado desincronizada tras la ejecución.');
+  if (entry.warnings?.some((w) => /desincronizada|desynced/i.test(w))) {
+    causes.push("La topología pudo haber quedado desincronizada tras la ejecución.");
   }
 
-  const errMsg = entry.errorMessage ?? (entry as unknown as Record<string, unknown>).error_message as string | undefined;
+  const errMsg =
+    entry.errorMessage ??
+    ((entry as unknown as Record<string, unknown>).error_message as string | undefined);
   if (errMsg) {
-    if (/lease/i.test(errMsg)) causes.push('El lease del bridge era inválido o expiró.');
-    if (/runtime/i.test(errMsg)) causes.push('El runtime de PT no estaba cargado o falló.');
-    if (/timeout/i.test(errMsg)) causes.push('Se agotó el tiempo de espera del comando.');
-    if (/terminal/i.test(errMsg)) causes.push('La terminal del dispositivo no estaba disponible.');
+    if (/lease/i.test(errMsg)) causes.push("El lease del bridge era inválido o expiró.");
+    if (/runtime/i.test(errMsg)) causes.push("El runtime de PT no estaba cargado o falló.");
+    if (/timeout/i.test(errMsg)) causes.push("Se agotó el tiempo de espera del comando.");
+    if (/terminal/i.test(errMsg)) causes.push("La terminal del dispositivo no estaba disponible.");
   }
 
   const compReason = entry.completionReason;
-  if (compReason && entry.status !== 'success') {
+  if (compReason && entry.status !== "success") {
     causes.push(`Razón de finalización: ${compReason}`);
   }
 
-  if (causes.length === 0 && entry.status !== 'success') {
-    causes.push('Causa no determinada. Revisa pt logs session para más detalle.');
+  if (causes.length === 0 && entry.status !== "success") {
+    causes.push("Causa no determinada. Revisa pt logs session para más detalle.");
   }
 
   return causes;
 }
 
 function classifyRerunnable(entry: HistoryEntry): { rerunnable: boolean; reason: string } {
-  const action = entry.action ?? '';
-  const nonTerminalActions = ['history.list', 'history.show', 'history.last', 'status', 'doctor', 'results.list', 'results.view', 'device.list', 'device.get', 'link.list', 'lab.list', 'lab.validate', 'topology.analyze'];
-  const writeActions = ['config.ios', 'config.host', 'device.add', 'device.remove', 'link.add', 'link.remove', 'vlan.apply', 'stp.apply', 'routing.apply', 'acl.apply'];
+  const action = entry.action ?? "";
+  const nonTerminalActions = [
+    "history.list",
+    "history.show",
+    "history.last",
+    "status",
+    "doctor",
+    "results.list",
+    "results.view",
+    "device.list",
+    "device.get",
+    "link.list",
+    "lab.list",
+    "lab.validate",
+    "topology.analyze",
+  ];
+  const writeActions = [
+    "config.ios",
+    "config.host",
+    "device.add",
+    "device.remove",
+    "link.add",
+    "link.remove",
+    "vlan.apply",
+    "stp.apply",
+    "routing.apply",
+    "acl.apply",
+  ];
 
   if (nonTerminalActions.includes(action)) {
-    return { rerunnable: true, reason: 'Lectura idempotente, seguro re-ejecutar.' };
+    return { rerunnable: true, reason: "Lectura idempotente, seguro re-ejecutar." };
   }
 
   if (writeActions.includes(action)) {
-    return { rerunnable: false, reason: 'Acción de escritura con efectos secundarios. Re-ejecutar manualmente con precaución.' };
+    return {
+      rerunnable: false,
+      reason:
+        "Acción de escritura con efectos secundarios. Re-ejecutar manualmente con precaución.",
+    };
   }
 
-  if (entry.status === 'error' && entry.errorMessage?.includes('confirmación')) {
-    return { rerunnable: false, reason: 'Requirió confirmación interactiva.' };
+  if (entry.status === "error" && entry.errorMessage?.includes("confirmación")) {
+    return { rerunnable: false, reason: "Requirió confirmación interactiva." };
   }
 
-  return { rerunnable: false, reason: 'Tipo de acción no clasificado como rerunnable.' };
+  return { rerunnable: false, reason: "Tipo de acción no clasificado como rerunnable." };
 }
 
 function formatStatus(entry: HistoryEntry): { icon: string; status: string } {
-  const status = entry.status ?? (entry.ok ? 'success' : 'error');
-  if (status === 'success') return { icon: '✓', status: 'éxito' };
-  if (status === 'error' || status === 'failure') return { icon: '✗', status: 'error' };
-  return { icon: '?', status };
+  const status = entry.status ?? (entry.ok ? "success" : "error");
+  if (status === "success") return { icon: "✓", status: "éxito" };
+  if (status === "error" || status === "failure") return { icon: "✗", status: "error" };
+  return { icon: "?", status };
 }
 
 function formatEntryCompact(entry: HistoryEntry): string {
   const { icon } = formatStatus(entry);
-  const sessionId = getField(entry, 'sessionId').slice(0, 8) || 'unknown';
-  const action = truncate(entry.action ?? '', 15);
+  const sessionId = getField(entry, "sessionId").slice(0, 8) || "unknown";
+  const action = truncate(entry.action ?? "", 15);
   const duration = getDuration(entry);
   const durationStr = formatDuration(duration);
   const targetDevice = getTargetDevice(entry);
-  
-  let summary = '';
+
+  let summary = "";
   if (targetDevice) {
-    summary = targetDevice.split(' ')[0] ?? targetDevice;
+    summary = targetDevice.split(" ")[0] ?? targetDevice;
   }
-  
+
   return `${icon} ${sessionId}  ${action.padEnd(18)} ${durationStr.padEnd(6)} ${summary}`;
 }
 
 export function createHistoryCommand(): Command {
-  const cmd = new Command('history')
-    .description('Historial de ejecuciones de comandos');
+  const cmd = new Command("history").description("Historial de ejecuciones de comandos");
 
   cmd
-    .command('list')
-    .description('Lista las últimas ejecuciones')
-    .option('-n, --limit <num>', 'Número de entradas a mostrar', '10')
-    .option('--failed', 'Mostrar solo ejecuciones fallidas', false)
-    .option('-a, --action <prefix>', 'Filtrar por prefijo de acción')
-    .option('--examples', 'Mostrar ejemplos', false)
-    .option('--explain', 'Explicar', false)
-    .option('--plan', 'Mostrar plan', false)
+    .command("list")
+    .description("Lista las últimas ejecuciones")
+    .option("-n, --limit <num>", "Número de entradas a mostrar", "10")
+    .option("--failed", "Mostrar solo ejecuciones fallidas", false)
+    .option("-a, --action <prefix>", "Filtrar por prefijo de acción")
+    .option("--examples", "Mostrar ejemplos", false)
+    .option("--explain", "Explicar", false)
+    .option("--plan", "Mostrar plan", false)
     .action(async (options) => {
-      const globalExamples = process.argv.includes('--examples');
-      const globalExplain = process.argv.includes('--explain');
-      const globalPlan = process.argv.includes('--plan');
+      const globalExamples = process.argv.includes("--examples");
+      const globalExplain = process.argv.includes("--explain");
+      const globalPlan = process.argv.includes("--plan");
 
       if (globalExamples) {
         console.log(printExamples(HISTORY_META));
@@ -187,22 +247,35 @@ export function createHistoryCommand(): Command {
       }
 
       if (globalPlan) {
-        console.log('Plan de ejecución:');
-        console.log('  1. Leer entradas del historial desde history-store');
-        console.log('  2. Filtrar por limit, failed, action');
-        console.log('  3. Mostrar en formato tabla o JSON');
+        console.log("Plan de ejecución:");
+        console.log("  1. Leer entradas del historial desde history-store");
+        console.log("  2. Filtrar por limit, failed, action");
+        console.log("  3. Mostrar en formato tabla o JSON");
         return;
       }
 
       const flags: GlobalFlags = {
-        json: false, jq: null, output: 'text', verbose: false, quiet: false,
-        trace: false, tracePayload: false, traceResult: false, traceDir: null,
-        traceBundle: false, traceBundlePath: null, sessionId: null,
-        examples: globalExamples, schema: false, explain: globalExplain, plan: globalPlan, verify: false,
+        json: false,
+        jq: null,
+        output: "text",
+        verbose: false,
+        quiet: false,
+        trace: false,
+        tracePayload: false,
+        traceResult: false,
+        traceDir: null,
+        traceBundle: false,
+        traceBundlePath: null,
+        sessionId: null,
+        examples: globalExamples,
+        schema: false,
+        explain: globalExplain,
+        plan: globalPlan,
+        verify: false,
       };
 
       const result = await runCommand<HistoryListResult>({
-        action: 'history.list',
+        action: "history.list",
         meta: HISTORY_META,
         flags,
         payloadPreview: { limit: options.limit, failed: options.failed, action: options.action },
@@ -214,14 +287,18 @@ export function createHistoryCommand(): Command {
               actionPrefix: options.action,
             });
 
-            return createSuccessResult('history.list', {
-              entries,
-              count: entries.length,
-            }, {
-              advice: ['Usa pt history show <sessionId> para ver detalles'],
-            });
+            return createSuccessResult(
+              "history.list",
+              {
+                entries,
+                count: entries.length,
+              },
+              {
+                advice: ["Usa pt history show <sessionId> para ver detalles"],
+              },
+            );
           } catch (error) {
-            return createErrorResult('history.list', {
+            return createErrorResult("history.list", {
               message: error instanceof Error ? error.message : String(error),
             }) as CliResult<HistoryListResult>;
           }
@@ -232,9 +309,9 @@ export function createHistoryCommand(): Command {
       if (!flags.quiet || !result.ok) console.log(output);
 
       if (result.ok && result.data) {
-        console.log('\nÚltimas ejecuciones\n');
-        console.log('  Sesión    Acción              Duración  Detalles');
-        console.log('  ' + '-'.repeat(56));
+        console.log("\nÚltimas ejecuciones\n");
+        console.log("  Sesión    Acción              Duración  Detalles");
+        console.log("  " + "-".repeat(56));
         for (const entry of result.data.entries) {
           console.log(formatEntryCompact(entry));
         }
@@ -245,17 +322,17 @@ export function createHistoryCommand(): Command {
     });
 
   cmd
-    .command('show')
-    .description('Muestra detalle de una ejecución')
-    .argument('<sessionId>', 'ID de la sesión')
-    .option('--json', 'Salida en JSON', false)
-    .option('--examples', 'Mostrar ejemplos', false)
-    .option('--explain', 'Explicar', false)
-    .option('--plan', 'Mostrar plan', false)
+    .command("show")
+    .description("Muestra detalle de una ejecución")
+    .argument("<sessionId>", "ID de la sesión")
+    .option("--json", "Salida en JSON", false)
+    .option("--examples", "Mostrar ejemplos", false)
+    .option("--explain", "Explicar", false)
+    .option("--plan", "Mostrar plan", false)
     .action(async (sessionId: string, options) => {
-      const globalExamples = process.argv.includes('--examples');
-      const globalExplain = process.argv.includes('--explain');
-      const globalPlan = process.argv.includes('--plan');
+      const globalExamples = process.argv.includes("--examples");
+      const globalExplain = process.argv.includes("--explain");
+      const globalPlan = process.argv.includes("--plan");
 
       if (globalExamples) {
         console.log(printExamples(HISTORY_META));
@@ -268,46 +345,59 @@ export function createHistoryCommand(): Command {
       }
 
       if (globalPlan) {
-        console.log('Plan de ejecución:');
+        console.log("Plan de ejecución:");
         console.log(`  1. Buscar sesión: ${sessionId}`);
-        console.log('  2. Mostrar detalle completo');
+        console.log("  2. Mostrar detalle completo");
         return;
       }
 
       const flags: GlobalFlags = {
-        json: false, jq: null, output: 'text', verbose: false, quiet: false,
-        trace: false, tracePayload: false, traceResult: false, traceDir: null,
-        traceBundle: false, traceBundlePath: null, sessionId: null,
-        examples: globalExamples, schema: false, explain: globalExplain, plan: globalPlan, verify: false,
+        json: false,
+        jq: null,
+        output: "text",
+        verbose: false,
+        quiet: false,
+        trace: false,
+        tracePayload: false,
+        traceResult: false,
+        traceDir: null,
+        traceBundle: false,
+        traceBundlePath: null,
+        sessionId: null,
+        examples: globalExamples,
+        schema: false,
+        explain: globalExplain,
+        plan: globalPlan,
+        verify: false,
       };
 
       const result = await runCommand<HistoryShowResult>({
-        action: 'history.show',
+        action: "history.show",
         meta: HISTORY_META,
         flags,
         payloadPreview: { sessionId },
         execute: async (): Promise<CliResult<HistoryShowResult>> => {
           try {
             const entry = await historyStore.read(sessionId);
-            
+
             const historyDir = getHistoryDir();
             let availableSessions: string[] | undefined;
-            
+
             if (!entry && existsSync(historyDir)) {
-              const sessionsDir = join(historyDir, 'sessions');
+              const sessionsDir = join(historyDir, "sessions");
               if (existsSync(sessionsDir)) {
                 availableSessions = readdirSync(sessionsDir)
-                  .filter(f => f.endsWith('.json'))
-                  .map(f => f.replace('.json', ''));
+                  .filter((f) => f.endsWith(".json"))
+                  .map((f) => f.replace(".json", ""));
               }
             }
 
-            return createSuccessResult('history.show', {
+            return createSuccessResult("history.show", {
               entry,
               availableSessions,
             });
           } catch (error) {
-            return createErrorResult('history.show', {
+            return createErrorResult("history.show", {
               message: error instanceof Error ? error.message : String(error),
             }) as CliResult<HistoryShowResult>;
           }
@@ -319,88 +409,74 @@ export function createHistoryCommand(): Command {
 
       if (result.ok && result.data?.entry) {
         const e = result.data.entry;
-        console.log('');
-        console.log(`═══ Sesión: ${e.sessionId} ═══`);
-        console.log(`Acción    : ${e.action}`);
-        console.log(`Estado    : ${e.status ?? (e.ok ? 'éxito' : 'error')}`);
-        console.log(`Duración  : ${e.durationMs ? formatDuration(e.durationMs) : 'n/a'}`);
-        console.log(`Inicio    : ${e.startedAt}`);
-        if (e.endedAt) console.log(`Fin       : ${e.endedAt}`);
+        const status = e.status ?? (e.ok ? "success" : "error");
+        const errorMsg =
+          e.errorMessage ??
+          ((e as unknown as Record<string, unknown>).error_message as string | undefined);
+        const causes = inferFailureCauses(e);
 
-        const targetDevice = getTargetDevice(e);
-        if (targetDevice) console.log(`Dispositivo: ${targetDevice}`);
-
-        if (e.commandIds && e.commandIds.length > 0) {
-          console.log(`Commands  : ${e.commandIds.join(', ')}`);
-        }
-
-        if (e.interactionSummary) {
-          const summary = typeof e.interactionSummary === 'object'
-            ? (e.interactionSummary as Record<string, unknown>).summary
-            : e.interactionSummary;
-          if (summary) console.log(`Interacción: ${summary}`);
-        }
-
-        if (e.verificationSummary) {
-          console.log(`Verificación: ${e.verificationSummary}`);
-        }
-
-        if (e.completionReason) {
-          console.log(`Finalización: ${e.completionReason}`);
-        }
+        renderHistoryBlock(
+          e.sessionId,
+          e.action,
+          status,
+          e.startedAt,
+          e.endedAt,
+          e.durationMs,
+          getTargetDevice(e),
+          e.commandIds,
+          e.completionReason,
+          errorMsg,
+          causes,
+        );
 
         const ctx = e.contextSummary as Record<string, unknown> | undefined;
         if (ctx) {
-          console.log('Contexto  :');
-          if (typeof ctx.bridgeReady === 'boolean') console.log(`  bridge: ${ctx.bridgeReady ? 'ready' : 'not ready'}`);
-          if (typeof ctx.topologyMaterialized === 'boolean') console.log(`  topology: ${ctx.topologyMaterialized ? 'materialized' : 'warming'}`);
-          if (typeof ctx.deviceCount === 'number') console.log(`  devices: ${ctx.deviceCount}`);
-          if (typeof ctx.linkCount === 'number') console.log(`  links: ${ctx.linkCount}`);
+          console.log("  Contexto:");
+          if (typeof ctx.bridgeReady === "boolean")
+            console.log(`    bridge: ${ctx.bridgeReady ? "ready" : "not ready"}`);
+          if (typeof ctx.topologyMaterialized === "boolean")
+            console.log(`    topology: ${ctx.topologyMaterialized ? "materialized" : "warming"}`);
+          if (typeof ctx.deviceCount === "number") console.log(`    devices: ${ctx.deviceCount}`);
+          if (typeof ctx.linkCount === "number") console.log(`    links: ${ctx.linkCount}`);
         }
 
         if (e.warnings && e.warnings.length > 0) {
-          console.log('Warnings  :');
-          for (const w of e.warnings) console.log(`  - ${w}`);
+          console.log("  Warnings:");
+          for (const w of e.warnings) console.log(`    - ${w}`);
         }
 
-        if (e.status !== 'success') {
-          const causes = inferFailureCauses(e);
-          if (causes.length > 0) {
-            console.log('Causas probables:');
-            for (const c of causes) console.log(`  → ${c}`);
-          }
+        if (e.interactionSummary) {
+          const summary =
+            typeof e.interactionSummary === "object"
+              ? (e.interactionSummary as Record<string, unknown>).summary
+              : e.interactionSummary;
+          if (summary) console.log(`  Interacción: ${summary}`);
         }
 
-        if (e.errorMessage || (e as unknown as Record<string, unknown>).error_message) {
-          const msg = e.errorMessage ?? (e as unknown as Record<string, unknown>).error_message;
-          console.log(`\nError     : ${msg}`);
-        }
-
-        console.log('');
-        console.log('Comandos relacionados:');
-        console.log(`  pt logs session ${e.sessionId}  - Timeline completo`);
+        console.log("  Comandos relacionados:");
+        console.log(`    pt logs session ${e.sessionId}  - Timeline completo`);
         if (e.commandIds && e.commandIds.length > 0) {
-          console.log(`  pt logs command ${e.commandIds[0]}    - Trace del comando`);
+          console.log(`    pt logs command ${e.commandIds[0]}    - Trace del comando`);
         }
-        console.log(`  pt results list         - Resultados`);
-        console.log(`  pt doctor               - Diagnóstico`);
-        console.log('');
+        console.log(`    pt results list         - Resultados`);
+        console.log(`    pt doctor               - Diagnóstico`);
+        console.log("");
       }
 
       if (!result.ok) process.exit(1);
     });
 
   cmd
-    .command('last')
-    .description('Muestra la última ejecución')
-    .option('--json', 'Salida en JSON', false)
-    .option('--examples', 'Mostrar ejemplos', false)
-    .option('--explain', 'Explicar', false)
-    .option('--plan', 'Mostrar plan', false)
+    .command("last")
+    .description("Muestra la última ejecución")
+    .option("--json", "Salida en JSON", false)
+    .option("--examples", "Mostrar ejemplos", false)
+    .option("--explain", "Explicar", false)
+    .option("--plan", "Mostrar plan", false)
     .action(async (options) => {
-      const globalExamples = process.argv.includes('--examples');
-      const globalExplain = process.argv.includes('--explain');
-      const globalPlan = process.argv.includes('--plan');
+      const globalExamples = process.argv.includes("--examples");
+      const globalExplain = process.argv.includes("--explain");
+      const globalPlan = process.argv.includes("--plan");
 
       if (globalExamples) {
         console.log(printExamples(HISTORY_META));
@@ -408,39 +484,52 @@ export function createHistoryCommand(): Command {
       }
 
       if (globalExplain || globalPlan) {
-        console.log('Plan de ejecución:');
-        console.log('  1. Obtener última entrada del historial');
-        console.log('  2. Mostrar detalle');
+        console.log("Plan de ejecución:");
+        console.log("  1. Obtener última entrada del historial");
+        console.log("  2. Mostrar detalle");
         return;
       }
 
       const flags: GlobalFlags = {
-        json: false, jq: null, output: 'text', verbose: false, quiet: false,
-        trace: false, tracePayload: false, traceResult: false, traceDir: null,
-        traceBundle: false, traceBundlePath: null, sessionId: null,
-        examples: globalExamples, schema: false, explain: globalExplain, plan: globalPlan, verify: false,
+        json: false,
+        jq: null,
+        output: "text",
+        verbose: false,
+        quiet: false,
+        trace: false,
+        tracePayload: false,
+        traceResult: false,
+        traceDir: null,
+        traceBundle: false,
+        traceBundlePath: null,
+        sessionId: null,
+        examples: globalExamples,
+        schema: false,
+        explain: globalExplain,
+        plan: globalPlan,
+        verify: false,
       };
 
       const result = await runCommand<HistoryShowResult>({
-        action: 'history.last',
+        action: "history.last",
         meta: HISTORY_META,
         flags,
         payloadPreview: {},
         execute: async (): Promise<CliResult<HistoryShowResult>> => {
           try {
             const entries = await historyStore.list({ limit: 1 });
-            
+
             if (entries.length === 0) {
-              return createErrorResult('history.last', {
-                message: 'No hay historial disponible',
+              return createErrorResult("history.last", {
+                message: "No hay historial disponible",
               }) as CliResult<HistoryShowResult>;
             }
 
-            return createSuccessResult('history.last', {
+            return createSuccessResult("history.last", {
               entry: entries[0]!,
             });
           } catch (error) {
-            return createErrorResult('history.last', {
+            return createErrorResult("history.last", {
               message: error instanceof Error ? error.message : String(error),
             }) as CliResult<HistoryShowResult>;
           }
@@ -454,18 +543,18 @@ export function createHistoryCommand(): Command {
     });
 
   cmd
-    .command('rerun')
-    .description('Re-ejecuta una sesión anterior (si es rerunnable)')
-    .argument('<sessionId>', 'ID de la sesión')
-    .option('--force', 'Forzar re-ejecución sin verificar si es rerunnable', false)
-    .option('--dry-run', 'Solo mostrar qué se re-ejecutaría', false)
-    .option('--examples', 'Mostrar ejemplos', false)
-    .option('--explain', 'Explicar', false)
-    .option('--plan', 'Mostrar plan', false)
+    .command("rerun")
+    .description("Re-ejecuta una sesión anterior (si es rerunnable)")
+    .argument("<sessionId>", "ID de la sesión")
+    .option("--force", "Forzar re-ejecución sin verificar si es rerunnable", false)
+    .option("--dry-run", "Solo mostrar qué se re-ejecutaría", false)
+    .option("--examples", "Mostrar ejemplos", false)
+    .option("--explain", "Explicar", false)
+    .option("--plan", "Mostrar plan", false)
     .action(async (sessionId: string, options) => {
-      const globalExamples = process.argv.includes('--examples');
-      const globalExplain = process.argv.includes('--explain');
-      const globalPlan = process.argv.includes('--plan');
+      const globalExamples = process.argv.includes("--examples");
+      const globalExplain = process.argv.includes("--explain");
+      const globalPlan = process.argv.includes("--plan");
 
       if (globalExamples) {
         console.log(printExamples(HISTORY_META));
@@ -473,16 +562,16 @@ export function createHistoryCommand(): Command {
       }
 
       if (globalExplain) {
-        console.log('Re-ejecuta una sesión anterior preservando los argumentos originales.');
-        console.log('Solo comandos de lectura idempotentes son rerunnables por defecto.');
+        console.log("Re-ejecuta una sesión anterior preservando los argumentos originales.");
+        console.log("Solo comandos de lectura idempotentes son rerunnables por defecto.");
         return;
       }
 
       if (globalPlan) {
-        console.log('Plan de ejecución:');
+        console.log("Plan de ejecución:");
         console.log(`  1. Leer sesión: ${sessionId}`);
-        console.log('  2. Clasificar si es rerunnable');
-        console.log('  3. Si es rerunnable (o --force), re-ejecutar con argv original');
+        console.log("  2. Clasificar si es rerunnable");
+        console.log("  3. Si es rerunnable (o --force), re-ejecutar con argv original");
         return;
       }
 
@@ -496,46 +585,54 @@ export function createHistoryCommand(): Command {
       const classification = classifyRerunnable(entry);
       const argv = entry.argv as string[] | undefined;
 
-      console.log(`\n═══ Re-ejecutar sesión ═══`);
-      console.log(`Sesión   : ${sessionId}`);
-      console.log(`Acción   : ${entry.action}`);
-      console.log(`Estado   : ${entry.status ?? (entry.ok ? 'éxito' : 'error')}`);
-      if (entry.startedAt) console.log(`Ejecutada: ${entry.startedAt}`);
+      const status = entry.status ?? (entry.ok ? "success" : "error");
+
+      console.log("");
+      renderHistoryBlock(
+        sessionId,
+        entry.action,
+        status,
+        entry.startedAt,
+        entry.endedAt,
+        entry.durationMs,
+        getTargetDevice(entry),
+        entry.commandIds,
+        entry.completionReason,
+      );
 
       if (!classification.rerunnable && !options.force) {
-        console.log(`\n✗ No es rerunnable de forma segura`);
-        console.log(`  Razón: ${classification.reason}`);
-        console.log(`\nUsa --force para forzar la re-ejecución:`);
-        console.log(`  pt history rerun ${sessionId} --force`);
+        console.log(`  ${red("✗")} No es rerunnable de forma segura`);
+        console.log(`    Razón: ${classification.reason}`);
+        console.log(`\n  Usa --force para forzar la re-ejecución:`);
+        console.log(`    pt history rerun ${sessionId} --force`);
         process.exit(1);
       }
 
       if (options.force && !classification.rerunnable) {
-        console.log(`\n⚠ Forzando re-ejecución (acción de escritura)`);
-        console.log(`  Razón: ${classification.reason}`);
+        console.log(`  ${dim("⚠")} Forzando re-ejecución (acción de escritura)`);
+        console.log(`    Razón: ${classification.reason}`);
       }
 
       if (!argv || argv.length === 0) {
-        console.error(`\n✗ La sesión no tiene argv almacenado`);
-        console.error(`  No se puede re-ejecutar. Ejecuta comandos nuevamente para grabar argv.`);
+        console.error(`  ${red("✗")} La sesión no tiene argv almacenado`);
+        console.error(`    No se puede re-ejecutar. Ejecuta comandos nuevamente para grabar argv.`);
         process.exit(1);
       }
 
-      // Mostrar dry-run info
       if (options.dryRun) {
-        console.log(`\n── Dry run ──`);
-        console.log(`Comando que se ejecutaría:`);
-        console.log(`  ${argv.join(' ')}`);
-        console.log('');
+        console.log(`  ${dim("─")} Dry run ${dim("─")}`);
+        console.log(`  ${dim("Comando que se ejecutaría:")}`);
+        console.log(`    ${cyan(argv.join(" "))}`);
+        console.log("");
         return;
       }
 
-      console.log(`\n▶ Re-ejecutando...`);
-      console.log(`  ${argv.join(' ')}`);
-      console.log('');
+      console.log(`  ${green("▶")} Re-ejecutando...`);
+      console.log(`    ${cyan(argv.join(" "))}`);
+      console.log("");
 
       // Import here to avoid circular dependency issues
-      const { createProgram } = await import('../program.js');
+      const { createProgram } = await import("../program.js");
 
       try {
         const program = createProgram();
@@ -543,25 +640,25 @@ export function createHistoryCommand(): Command {
         // El primer elemento es típicamente 'node' o 'bun', el segundo el script
         // Solo usamos los argumentos del comando (去除 pt y history rerun)
         const argsToParse = argv.slice(2);
-        program.parse(argsToParse, { from: 'user' });
+        program.parse(argsToParse, { from: "user" });
       } catch (error) {
-        console.error(`\n✗ Error durante re-ejecución:`);
-        console.error(`  ${error instanceof Error ? error.message : String(error)}`);
+        console.error(`  ${red("✗")} Error durante re-ejecución:`);
+        console.error(`    ${error instanceof Error ? error.message : String(error)}`);
         process.exit(1);
       }
     });
 
   cmd
-    .command('explain')
-    .description('Explica el error de una sesión fallida')
-    .argument('<sessionId>', 'ID de la sesión')
-    .option('--examples', 'Mostrar ejemplos', false)
-    .option('--explain', 'Explicar', false)
-    .option('--plan', 'Mostrar plan', false)
+    .command("explain")
+    .description("Explica el error de una sesión fallida")
+    .argument("<sessionId>", "ID de la sesión")
+    .option("--examples", "Mostrar ejemplos", false)
+    .option("--explain", "Explicar", false)
+    .option("--plan", "Mostrar plan", false)
     .action(async (sessionId: string, options) => {
-      const globalExamples = process.argv.includes('--examples');
-      const globalExplain = process.argv.includes('--explain');
-      const globalPlan = process.argv.includes('--plan');
+      const globalExamples = process.argv.includes("--examples");
+      const globalExplain = process.argv.includes("--explain");
+      const globalPlan = process.argv.includes("--plan");
 
       if (globalExamples) {
         console.log(printExamples(HISTORY_META));
@@ -569,61 +666,87 @@ export function createHistoryCommand(): Command {
       }
 
       if (globalPlan) {
-        console.log('Plan de ejecución:');
+        console.log("Plan de ejecución:");
         console.log(`  1. Buscar sesión: ${sessionId}`);
-        console.log('  2. Analizar error');
-        console.log('  3. Proponer próximos pasos');
+        console.log("  2. Analizar error");
+        console.log("  3. Proponer próximos pasos");
         return;
       }
 
       const flags: GlobalFlags = {
-        json: false, jq: null, output: 'text', verbose: false, quiet: false,
-        trace: false, tracePayload: false, traceResult: false, traceDir: null,
-        traceBundle: false, traceBundlePath: null, sessionId: null,
-        examples: globalExamples, schema: false, explain: globalExplain, plan: globalPlan, verify: false,
+        json: false,
+        jq: null,
+        output: "text",
+        verbose: false,
+        quiet: false,
+        trace: false,
+        tracePayload: false,
+        traceResult: false,
+        traceDir: null,
+        traceBundle: false,
+        traceBundlePath: null,
+        sessionId: null,
+        examples: globalExamples,
+        schema: false,
+        explain: globalExplain,
+        plan: globalPlan,
+        verify: false,
       };
 
-      type ExplainResult = { sessionId: string; error?: string; duration?: number; causes?: string[] };
+      type ExplainResult = {
+        sessionId: string;
+        error?: string;
+        duration?: number;
+        causes?: string[];
+      };
       const result = await runCommand<ExplainResult>({
-        action: 'history.explain',
+        action: "history.explain",
         meta: HISTORY_META,
         flags,
         payloadPreview: { sessionId },
         execute: async (): Promise<CliResult<ExplainResult>> => {
           try {
             const entry = await historyStore.read(sessionId);
-            
+
             if (!entry) {
-              return createErrorResult('history.explain', {
+              return createErrorResult("history.explain", {
                 message: `No se encontró la sesión: ${sessionId}`,
               }) as CliResult<ExplainResult>;
             }
 
-            const status = entry.status ?? (entry.ok ? 'success' : 'error');
-            
-            if (status === 'success') {
-              return createErrorResult('history.explain', {
+            const status = entry.status ?? (entry.ok ? "success" : "error");
+
+            if (status === "success") {
+              return createErrorResult("history.explain", {
                 message: `La sesión ${sessionId} fue exitosa, no hay error que explicar`,
               }) as CliResult<ExplainResult>;
             }
 
-            const errorMessage = entry.errorMessage ?? (entry as unknown as Record<string, unknown>).error_message as string | undefined;
-            const duration = entry.durationMs ?? (entry as unknown as Record<string, unknown>).duration_ms as number | undefined;
+            const errorMessage =
+              entry.errorMessage ??
+              ((entry as unknown as Record<string, unknown>).error_message as string | undefined);
+            const duration =
+              entry.durationMs ??
+              ((entry as unknown as Record<string, unknown>).duration_ms as number | undefined);
             const causes = inferFailureCauses(entry);
 
-            return createSuccessResult('history.explain', {
-              sessionId,
-              error: errorMessage,
-              duration,
-              causes,
-            }, {
-              advice: [
-                'Usa pt logs session ' + sessionId + ' para más detalles',
-                'Usa pt doctor para diagnostics',
-              ],
-            });
+            return createSuccessResult(
+              "history.explain",
+              {
+                sessionId,
+                error: errorMessage,
+                duration,
+                causes,
+              },
+              {
+                advice: [
+                  "Usa pt logs session " + sessionId + " para más detalles",
+                  "Usa pt doctor para diagnostics",
+                ],
+              },
+            );
           } catch (error) {
-            return createErrorResult('history.explain', {
+            return createErrorResult("history.explain", {
               message: error instanceof Error ? error.message : String(error),
             }) as CliResult<ExplainResult>;
           }
@@ -634,22 +757,22 @@ export function createHistoryCommand(): Command {
       if (!flags.quiet || !result.ok) console.log(output);
 
       if (result.ok && result.data) {
-        console.log('');
-        console.log(`═══ Explicación: ${result.data.sessionId} ═══`);
-        if (result.data.error) {
-          console.log(`Error: ${result.data.error}`);
-        }
-        if (result.data.duration) {
-          console.log(`Duración: ${formatDuration(result.data.duration)}`);
-        }
-        if (result.data.causes && result.data.causes.length > 0) {
-          console.log('');
-          console.log('Causas probables:');
-          for (const c of result.data.causes) {
-            console.log(`  → ${c}`);
+        const { sessionId, error, duration, causes } = result.data;
+        const status = "error";
+
+        console.log("");
+        console.log(`  ${bold("Explicación de sesión")} ${dim(`(${sessionId.slice(0, 8)})`)}`);
+        console.log("");
+        if (error) console.log(`  ${red("✗")}  Error: ${error}`);
+        if (duration) console.log(`  ${dim("⏱")}  Duración: ${formatDuration(duration)}`);
+        if (causes && causes.length > 0) {
+          console.log("");
+          console.log(`  ${bold("Causas probables:")}`);
+          for (const c of causes) {
+            console.log(`    ${red("→")}  ${c}`);
           }
         }
-        console.log('');
+        console.log("");
       }
 
       if (!result.ok) process.exit(1);

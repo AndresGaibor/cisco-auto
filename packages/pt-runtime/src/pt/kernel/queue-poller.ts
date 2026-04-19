@@ -57,12 +57,15 @@ export function pollCommandQueue(subsystems: KernelSubsystems, state: KernelStat
   state.activeCommand = claimed;
   state.activeCommandFilename = (claimed as any).filename ?? null;
   heartbeat.setActiveCommand(claimed.id);
-  kernelLog(">>> DISPATCH: " + claimed.id + " type=" + ((claimed as any).type || "unknown"));
+  kernelLog(
+    ">>> DISPATCH: " + claimed.id + " type=" + ((claimed as any).type || "unknown"),
+    "info",
+  );
 
   try {
     const runtimeFn = runtimeLoader.getRuntimeFn();
     if (!runtimeFn) {
-      kernelLog("RUNTIME NOT LOADED - rejecting command");
+      kernelLog("RUNTIME NOT LOADED - rejecting command", "error");
       finishActiveCommand(subsystems, state, {
         ok: false,
         error: "Runtime not loaded",
@@ -72,12 +75,10 @@ export function pollCommandQueue(subsystems: KernelSubsystems, state: KernelStat
     }
 
     const runtimeApi = createRuntimeApi(subsystems);
-    kernelLog("Executing runtime handler...");
     const result = runtimeFn(claimed.payload, runtimeApi);
-    kernelLog("Runtime handler returned, finishing command...");
     finishActiveCommand(subsystems, state, result);
   } catch (e) {
-    kernelLog("RUNTIME FATAL ERROR: " + String(e));
+    kernelLog("RUNTIME FATAL ERROR: " + String(e), "error");
     finishActiveCommand(subsystems, state, {
       ok: false,
       error: "Runtime fatal: " + String(e),

@@ -55,11 +55,23 @@ export function collectPorts(device: PTDevice): Array<Record<string, any>> {
     const port = device.getPortAt(i) as PTPort | null;
     if (!port || typeof port.getName !== "function") continue;
 
+    let ip = typeof port.getIpAddress === "function" ? String(port.getIpAddress()) : "";
+    let mask = typeof port.getSubnetMask === "function" ? String(port.getSubnetMask()) : "";
+
+    // OMNISCIENCE BYPASS: If no IP on port, check device IPv4 Manager (for PCs/Servers)
+    if ((!ip || ip === "0.0.0.0" || ip === "") && (device as any).getIPv4Config) {
+      const ipv4 = (device as any).getIPv4Config();
+      if (ipv4 && ipv4.getIpAddress) {
+          try { ip = String(ipv4.getIpAddress().toString()); } catch(e) { ip = String(ipv4.getIpAddress()); }
+          try { mask = String(ipv4.getSubnetMask().toString()); } catch(e) { mask = String(ipv4.getSubnetMask()); }
+      }
+    }
+
     const data: Record<string, any> = {
-      name: port.getName(),
-      ipAddress: typeof port.getIpAddress === "function" ? port.getIpAddress() : "",
-      subnetMask: typeof port.getSubnetMask === "function" ? port.getSubnetMask() : "",
-      macAddress: typeof port.getMacAddress === "function" ? port.getMacAddress() : "",
+      name: String(port.getName()),
+      ipAddress: String(ip),
+      subnetMask: String(mask),
+      macAddress: String(typeof port.getMacAddress === "function" ? port.getMacAddress() : ""),
       status: (typeof port.isPortUp === "function" ? port.isPortUp() : false) ? "up" : "down",
       protocol: (typeof port.isProtocolUp === "function" ? port.isProtocolUp() : false)
         ? "up"

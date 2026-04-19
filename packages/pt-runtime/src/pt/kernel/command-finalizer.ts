@@ -17,7 +17,7 @@ export function finishActiveCommand(
   }
 
   const cmdId = state.activeCommand.id;
-  subsystems.kernelLog("<<< COMPLETING: " + cmdId + " ok=" + (result?.ok !== false));
+  subsystems.kernelLog("<<< COMPLETING: " + cmdId + " ok=" + (result?.ok !== false), "info");
 
   try {
     const envelope: ResultEnvelope = {
@@ -51,10 +51,10 @@ export function finishActiveCommand(
         subsystems.heartbeat.setQueuedCount(subsystems.queue.count());
       }
     } else {
-      subsystems.kernelLogSubsystem("fm", "FM unavailable, cannot write result");
+      subsystems.kernelLog("FM unavailable, cannot write result", "error");
     }
   } catch (e) {
-    subsystems.kernelLog("ERROR saving result for " + cmdId + ": " + String(e));
+    subsystems.kernelLog("ERROR saving result for " + cmdId + ": " + String(e), "error");
   }
 
   state.activeCommand = null;

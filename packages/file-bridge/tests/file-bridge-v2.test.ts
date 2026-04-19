@@ -90,6 +90,75 @@ describe("FileBridgeV2", () => {
       );
     });
 
+    it("should follow deferred results until completion", async () => {
+      bridge.start();
+
+      const sentTypes: string[] = [];
+      const bridgeAny = bridge as any;
+      const originalSendCommand = bridgeAny.sendCommand.bind(bridge);
+
+      bridgeAny.sendCommand = (type: string, payload: any, expiresAtMs?: number) => {
+        const envelope = originalSendCommand(type, payload, expiresAtMs);
+        sentTypes.push(type);
+
+        const resultPath = join(testDir, "results", `${envelope.id}.json`);
+        if (type === "execPc") {
+          writeFileSync(
+            resultPath,
+            JSON.stringify({
+              protocolVersion: 2,
+              id: envelope.id,
+              seq: envelope.seq,
+              startedAt: envelope.createdAt,
+              completedAt: Date.now(),
+              status: "completed",
+              ok: true,
+              value: {
+                ok: true,
+                deferred: true,
+                ticket: "ticket-123",
+                job: { id: "ticket-123" },
+              },
+            }),
+            "utf-8",
+          );
+        }
+
+        if (type === "__pollDeferred") {
+          writeFileSync(
+            resultPath,
+            JSON.stringify({
+              protocolVersion: 2,
+              id: envelope.id,
+              seq: envelope.seq,
+              startedAt: envelope.createdAt,
+              completedAt: Date.now(),
+              status: "completed",
+              ok: true,
+              value: {
+                ok: true,
+                raw: "Success rate is 100 percent",
+                status: 0,
+              },
+            }),
+            "utf-8",
+          );
+        }
+
+        return envelope;
+      };
+
+      const result = await bridge.sendCommandAndWait("execPc", { device: "PC1", command: "ping" });
+
+      expect(sentTypes).toEqual(["execPc", "__pollDeferred"]);
+      expect(result.ok).toBe(true);
+      expect(result.value).toEqual({
+        ok: true,
+        raw: "Success rate is 100 percent",
+        status: 0,
+      });
+    });
+
     it("should timeout without noisy ENOENT logs", async () => {
       bridge.start();
       const logs: string[] = [];

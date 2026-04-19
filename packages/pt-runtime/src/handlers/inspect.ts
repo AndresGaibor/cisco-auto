@@ -4,6 +4,8 @@
 
 import type { HandlerDeps, HandlerResult } from "../utils/helpers";
 import { getCableTypeName } from "../utils/constants";
+import { parseDeviceXml } from "../utils/device-xml-parser";
+import type { ParsedDeviceXml } from "../utils/device-xml-parser";
 
 // ============================================================================
 // Payload Types
@@ -142,7 +144,9 @@ export function handleInspect(payload: InspectPayload, deps: HandlerDeps): Handl
 
   if (payload.includeXml && serializeToXml.serializeToXml) {
     try {
-      result.xml = serializeToXml.serializeToXml();
+      const rawXml = serializeToXml.serializeToXml();
+      result.xml = rawXml;
+      result.xmlParsed = parseDeviceXml(rawXml) as ParsedDeviceXml;
     } catch {
       // ignore
     }

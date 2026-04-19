@@ -15,6 +15,19 @@ export { CanvasService } from "./canvas-service.js";
 export { LayoutPlannerService } from "./layout-planner-service.js";
 export { PortPlannerService } from "./port-planner-service.js";
 export { LinkFeasibilityService } from "./link-feasibility-service.js";
+export { OmniscienceService } from "./omniscience-service.js";
+export { ScenarioService } from "./scenario-service.js";
+export { LabService } from "./lab-service.js";
+export type { LabScenario, LabCheck, LabVerification, LabContext } from "./lab-service.js";
+export type {
+  ParsedDeviceXml,
+  XmlPort,
+  XmlModule,
+  XmlVlan,
+  XmlRoutingEntry,
+  XmlArpEntry,
+  XmlMacEntry,
+} from "./lab-service.js";
 
 // PT Terminal Policy Engine
 export {

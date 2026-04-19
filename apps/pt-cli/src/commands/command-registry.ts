@@ -8,7 +8,6 @@ import { createShowCdpCommand } from "./show-cdp";
 import { createConfigHostCommand } from "./config-host";
 import { createLabVlanCommand } from "./vlan";
 import { createEtherchannelCommand } from "./etherchannel";
-import { createLinkCommand } from "./link/index";
 import { createConfigIOSCommand } from "./config-ios";
 import { createConfigOspfCommand } from "./config-ospf";
 import { createConfigEigrpCommand } from "./config-eigrp";
@@ -56,16 +55,29 @@ import { createLayoutCommand } from "./layout/index";
 import { createVerifyCommand } from "./verify/index";
 import { createAgentCommand } from "./agent/index";
 
-// Nuevos comandos de módulos avanzados
+// Módulos avanzados
 import { createLintCommand } from "./lint";
 import { createCapabilityCommand } from "./capability";
 import { createPlannerCommand } from "./planner";
 import { createLedgerCommand } from "./ledger";
 import { createDiagnoseCommand } from "./diagnose";
+import { createOmniscienceCommand } from "./omniscience/index";
+import { createLinkCommand } from "./link/index";
+import { createConfigCommand } from "./config/index";
+import { createCanvasCommand } from "./canvas/index";
+import { createAuditCommand } from "./lab/audit";
+import { createSimulationCommand } from "./simulation/index";
+import { createInspectPortCommand } from "./inspect/port";
 
 export type CommandFactory = () => Command;
 
 export const COMMAND_FACTORIES: CommandFactory[] = [
+  createOmniscienceCommand,
+  createLinkCommand,
+  createConfigCommand,
+  createCanvasCommand,
+  createAuditCommand,
+  createSimulationCommand,
   createInspectCommand,
   createLayoutCommand,
   createVerifyCommand,
@@ -86,7 +98,6 @@ export const COMMAND_FACTORIES: CommandFactory[] = [
   createConfigApplyCommand,
   createLabVlanCommand,
   createEtherchannelCommand,
-  createLinkCommand,
   createConfigIOSCommand,
   createRoutingCommand,
   createRouterCommand,
@@ -122,7 +133,6 @@ export const COMMAND_FACTORIES: CommandFactory[] = [
   createPingCommand,
   createShowMacCommand,
   createCheckCommand,
-  // Módulos avanzados
   createLintCommand,
   createCapabilityCommand,
   createPlannerCommand,
@@ -131,5 +141,16 @@ export const COMMAND_FACTORIES: CommandFactory[] = [
 ];
 
 export function getRegisteredCommandIds(): string[] {
-  return COMMAND_FACTORIES.map((factory) => factory().name()).sort();
+  const ids: string[] = [];
+  const names = new Set<string>();
+  
+  for (const factory of COMMAND_FACTORIES) {
+    const cmd = factory();
+    const name = cmd.name();
+    if (!names.has(name)) {
+        ids.push(name);
+        names.add(name);
+    }
+  }
+  return ids.sort();
 }

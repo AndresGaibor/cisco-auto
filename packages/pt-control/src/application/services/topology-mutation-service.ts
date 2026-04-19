@@ -187,7 +187,13 @@ export class TopologyMutationService {
       const remainingLinks = Object.keys(afterSnapshot?.links ?? {}).length;
 
       if (remainingDevices === 0 && remainingLinks === 0) {
-        return { removedDevices, removedLinks, remainingDevices, remainingLinks };
+        this.cache.applySnapshot({
+          devices: {},
+          links: {},
+          timestamp: Date.now(),
+          version: "clear",
+        });
+        return { removedDevices, removedLinks, remainingDevices: 0, remainingLinks: 0 };
       }
     }
 
@@ -198,6 +204,10 @@ export class TopologyMutationService {
     );
     const remainingDevices = Object.keys(finalSnapshot?.devices ?? {}).length;
     const remainingLinks = Object.keys(finalSnapshot?.links ?? {}).length;
+
+    if (remainingDevices === 0 && remainingLinks === 0) {
+      this.cache.applySnapshot({ devices: {}, links: {}, timestamp: Date.now(), version: "clear" });
+    }
 
     return {
       removedDevices,

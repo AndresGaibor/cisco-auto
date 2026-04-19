@@ -200,3 +200,72 @@ export function handleDevicesInRect(
     count: devices.length,
   };
 }
+
+/**
+ * Clear the entire canvas by removing links first and then devices.
+ */
+export function handleClearCanvas(_payload: any, deps: HandlerDeps): HandlerResult {
+  const { getNet, getLW, dprint } = deps;
+  const net = getNet() as any;
+  const lw = getLW() as any;
+
+  dprint(`[handler:clearCanvas] starting canvas cleanup`);
+
+  try {
+    let linksDeleted = 0;
+    if (net && typeof net.getLinkCount === "function" && typeof net.getLinkAt === "function") {
+      for (let i = Number(net.getLinkCount()) - 1; i >= 0; i--) {
+        try {
+          const link = net.getLinkAt(i);
+          const port1 = link && typeof link.getPort1 === "function" ? link.getPort1() : null;
+          const port2 = link && typeof link.getPort2 === "function" ? link.getPort2() : null;
+
+          if (port1 && typeof port1.deleteLink === "function") {
+            port1.deleteLink();
+            linksDeleted++;
+            continue;
+          }
+
+          if (port2 && typeof port2.deleteLink === "function") {
+            port2.deleteLink();
+            linksDeleted++;
+          }
+        } catch (linkErr) {
+          dprint(`[handler:clearCanvas] skip link at ${i}: ${String(linkErr)}`);
+        }
+      }
+    }
+
+    let devicesDeleted = 0;
+    if (net && typeof net.getDeviceCount === "function" && typeof net.getDeviceAt === "function") {
+      const count = Number(net.getDeviceCount());
+      for (let i = count - 1; i >= 0; i--) {
+        try {
+          const device = net.getDeviceAt(i);
+          const name = device && typeof device.getName === "function" ? device.getName() : null;
+          if (!name || typeof lw.removeDevice !== "function") continue;
+          lw.removeDevice(name);
+          devicesDeleted++;
+        } catch (deviceErr) {
+          dprint(`[handler:clearCanvas] skip device at ${i}: ${String(deviceErr)}`);
+        }
+      }
+    }
+
+    dprint(`[handler:clearCanvas] SUCCESS links=${linksDeleted} devices=${devicesDeleted}`);
+
+    return {
+      ok: true,
+      result: "CANVAS_CLEARED",
+      linksDeleted,
+      devicesDeleted,
+    };
+  } catch (e) {
+    const errMsg = String(e);
+    dprint(`[handler:clearCanvas] ERROR: ${errMsg}`);
+    return {
+      ok: false,
+      error: `Failed to clear canvas: ${errMsg}`,
+    };
+  }
+}

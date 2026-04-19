@@ -1,37 +1,76 @@
 #!/usr/bin/env bun
 import { createDefaultPTController } from "@cisco-auto/pt-control";
 
-async function conquer() {
+async function globalWakeUp() {
   const controller = createDefaultPTController();
   try {
     await controller.start();
-    console.log("\n🔥 ATAQUE SIMULTÁNEO A AMBOS LADOS DEL ENLACE...");
+    console.log("\n🔥 DESPERTANDO TODA LA INFRAESTRUCTURA...");
 
-    const r1Cmd = "network().getDevice('Router0').getCommandLine()";
-    const s1Cmd = "network().getDevice('Switch0').getCommandLine()";
+    const wakeup = `
+        (function() {
+            var net = ipc.network();
+            var dCount = net.getDeviceCount();
+            var logs = [];
+            
+            for(var i=0; i<dCount; i++) {
+                var dev = net.getDeviceAt(i);
+                if (dev.getClassName() === "Router" || dev.getClassName() === "Switch") {
+                    var cli = dev.getCommandLine();
+                    cli.enterCommand("enable");
+                    cli.enterCommand("conf t");
+                    // Levantamos las primeras 3 interfaces Gigabit
+                    cli.enterCommand("interface GigabitEthernet0/0");
+                    cli.enterCommand("no shutdown");
+                    cli.enterCommand("interface GigabitEthernet0/1");
+                    cli.enterCommand("no shutdown");
+                    cli.enterCommand("interface GigabitEthernet0/2");
+                    cli.enterCommand("no shutdown");
+                    cli.enterCommand("end");
+                    logs.push(dev.getName() + ": AWAKE");
+                }
+            }
+            return logs.join(", ");
+        })()
+    `;
 
-    console.log("➡️ Router0: Levantando Gig0/0...");
-    await controller.deepInspect(r1Cmd, "enterCommand", ["enable", "conf t", "interface GigabitEthernet0/0", "no shutdown", "end"]);
+    const res = await controller.send("__evaluate", { code: wakeup });
+    console.log(`✅ Equipos despertados: ${res.result}`);
 
-    console.log("➡️ Switch0: Levantando Gig0/1...");
-    await controller.deepInspect(s1Cmd, "enterCommand", ["enable", "conf t", "interface GigabitEthernet0/1", "no shutdown", "switchport mode access", "end"]);
+    console.log("\n⏳ Esperando 10 segundos para que los enlaces se activen...");
+    await new Promise(r => setTimeout(r, 10000));
 
-    console.log("\n⏳ Esperando convergencia (STP puede tardar 30s)...");
-    for(let i=0; i<6; i++) {
-        process.stdout.write(".");
-        await new Promise(r => setTimeout(r, 5000));
-        
-        const led = await controller.deepInspect("network().getDevice('Router0').getPort('GigabitEthernet0/0')", "getLightStatus", []);
-        if (led.result === 1) {
-            console.log("\n✅ ¡LOGRADO! El link está VERDE.");
-            break;
-        } else if (led.result === 2) {
-            console.log("\n🟠 Link en ÁMBAR (STP Negociando).");
-        }
+    console.log("\n🕸️  EXTRAYENDO MAPA DE CONECTIVIDAD FINAL...");
+    // Lanzamos el crawler V4 (ahora los links ya no deberían ser opacos)
+    const crawlRes = await controller.send("__evaluate", { code: `
+        (function() {
+            var net = ipc.network();
+            var connections = [];
+            for(var i=0; i<net.getDeviceCount(); i++) {
+                var dev = net.getDeviceAt(i);
+                for(var j=0; j<dev.getPortCount(); j++) {
+                    var link = dev.getPortAt(j).getLink();
+                    if (link) {
+                        try {
+                            var ep1 = link.getEndPoint1();
+                            var ep2 = link.getEndPoint2();
+                            var line = ep1.getOwnerDevice().getName() + ":" + ep1.getName() + " ➔ " + 
+                                       ep2.getOwnerDevice().getName() + ":" + ep2.getName();
+                            if (connections.indexOf(line) === -1) connections.push(line);
+                        } catch(e) {}
+                    }
+                }
+            }
+            return connections.join("|||");
+        })()
+    ` });
+
+    if (crawlRes.ok && crawlRes.result) {
+        console.log("\n🔗 MAPA DE RED REAL:");
+        crawlRes.result.split("|||").forEach((l: string) => console.log(`  🟢 ${l}`));
+    } else {
+        console.log("\n⚠️  Los enlaces siguen siendo opacos. Esto confirma que el motor protege la topología manual.");
     }
-
-    const finalLed = await controller.deepInspect("network().getDevice('Router0').getPort('GigabitEthernet0/0')", "getLightStatus", []);
-    console.log(`\nEstado LED final: ${finalLed.result}`);
 
   } catch (error: any) {
     console.error(`Error: ${error.message}`);
@@ -39,4 +78,4 @@ async function conquer() {
     await controller.stop();
   }
 }
-conquer();
+globalWakeUp();

@@ -159,17 +159,6 @@ Assembly (wrap IIFE, inject globals)
 dist-qtscript/ (main.js, runtime.js, catalog.js)
 ```
 
-### Documentación
-
-| Documento | Descripción |
-|---|---|
-| [PT-API-COMPLETE.md](packages/pt-runtime/docs/PT-API-COMPLETE.md) | API PT completa — 1348 líneas, verificada contra PT 9.0.0.0810 |
-| [PT-API.md](packages/pt-runtime/docs/PT-API.md) | Referencia rápida de interfaces PT |
-| [ARCHITECTURE.md](packages/pt-runtime/docs/ARCHITECTURE.md) | main.js vs runtime.js, data flow |
-| [BUILD.md](packages/pt-runtime/docs/BUILD.md) | Pipeline, PT-safe rules, manifests |
-| [PT9-Debugging.md](packages/pt-runtime/docs/PT9-Debugging.md) | Cómo depurar en PT (pegar código en consola) |
-| [pt-runtime-migration-diff.md](packages/pt-runtime/docs/pt-runtime-migration-diff.md) | Histórico de cambios de build |
-
 ---
 
 ## ✨ Características Principales
@@ -581,18 +570,19 @@ bun run pt:deploy
 
 ## 📚 Documentación
 
-| Documento | Descripción |
-|-----------|-------------|
-| [Arquitectura General](docs/architecture/OVERVIEW.md) | Visión general de la arquitectura |
-| [Sistema de Plugins](docs/architecture/PLUGIN_SYSTEM.md) | Cómo crear y registrar plugins |
-| [Bounded Contexts](docs/architecture/BOUNDED_CONTEXTS.md) | Dominios y límites contextuales |
-| [Reglas de Dependencia](docs/architecture/DEPENDENCY_RULE.md) | Reglas de dependencia entre capas |
-| [Estrategia de Testing](docs/architecture/TESTING_STRATEGY.md) | Cómo testear el proyecto |
-| [Guía de Migración](docs/MIGRATION_GUIDE.md) | Migrar de generadores legacy a plugins |
-| [PT Control Arquitectura](docs/PT_CONTROL_ARCHITECTURE.md) | Arquitectura de PT Control V2 |
-| [PT Control Quickstart](docs/PT_CONTROL_QUICKSTART.md) | Inicio rápido de PT Control |
-| [Modelos de Dispositivos](docs/PT_CONTROL_MODELS.md) | Catálogo de dispositivos soportados |
-| [Troubleshooting](docs/PT_CONTROL_TROUBLESHOOTING.md) | Guía de resolución de problemas |
+Para obtener información detallada sobre el uso, la arquitectura y el desarrollo, consulta nuestro [**Centro de Documentación**](./docs/README.md).
+
+### Guías Generales:
+- [**Arquitectura General**](./docs/ARCHITECTURE.md)
+- [**Instalación**](./docs/INSTALL.md)
+- [**Troubleshooting**](./docs/TROUBLESHOOTING.md)
+- [**Manual de la CLI para IA**](./docs/CLI_AGENT_SKILL.md)
+
+### Por Paquetes:
+- [**@cisco-auto/kernel**](./packages/kernel/README.md)
+- [**@cisco-auto/pt-control**](./packages/pt-control/README.md)
+- [**@cisco-auto/pt-runtime**](./packages/pt-runtime/README.md)
+- [**@cisco-auto/file-bridge**](./packages/file-bridge/README.md)
 
 ---
 

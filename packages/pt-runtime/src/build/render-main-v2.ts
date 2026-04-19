@@ -208,10 +208,15 @@ var __rest = function(s, e) {
   }
   _g.ipc = ipc;
   var __nativeDprint = (typeof _g.dprint === "function") ? _g.dprint : null;
+  var __ptDebug = false;
+  try {
+    var _scope = (typeof self !== "undefined") ? self : Function("return this")();
+    __ptDebug = _scope.PT_DEBUG === 1 || _scope.PT_DEBUG === "1" || _scope.PT_DEBUG === true;
+  } catch (_ptDebugErr) {}
   var dprint = function(msg) {
     try {
       var appWindow = ipc && typeof ipc.appWindow === "function" ? ipc.appWindow() : null;
-      if (appWindow && typeof appWindow.writeToPT === "function") {
+      if (__ptDebug && appWindow && typeof appWindow.writeToPT === "function") {
         appWindow.writeToPT(String(msg) + "\\n");
       }
     } catch (_dprintErr) {}
@@ -289,6 +294,31 @@ var __rest = function(s, e) {
   if (!_g.DEV_DIR) _g.DEV_DIR = DEV_DIR;
   if (!_g.fm) _g.fm = fm;
   if (!_g.safeFM) _g.safeFM = safeFM;
+
+  var __ptDebugEvents = [];
+  var __ptDebugSeq = 0;
+  function __writeDebugLog(scope, message, level) {
+    try {
+      if (!fm || !fm.writePlainTextToFile) return;
+      __ptDebugSeq += 1;
+      __ptDebugEvents.push(JSON.stringify({
+        seq: __ptDebugSeq,
+        timestamp: new Date().toISOString(),
+        scope: scope,
+        message: String(message),
+        level: level || "debug",
+      }));
+      if (__ptDebugEvents.length > 500) {
+        __ptDebugEvents = __ptDebugEvents.slice(-500);
+      }
+      fm.writePlainTextToFile(DEV_DIR + "/logs/pt-debug.current.ndjson", __ptDebugEvents.join("\\n") + "\\n");
+    } catch (e) {}
+  }
+
+  var dprint = function(msg) {
+    __writeDebugLog("kernel", msg, "debug");
+  };
+  _g.dprint = dprint;
 
   // SANITY CHECK: if this doesn't print, the IIFE itself is crashing
   if (typeof dprint === "function") dprint("[KERNEL-IIFE] running, ipc=" + (ipc ? "OK" : "NULL"));

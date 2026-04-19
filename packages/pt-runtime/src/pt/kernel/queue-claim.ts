@@ -1,11 +1,12 @@
 // packages/pt-runtime/src/pt/kernel/queue-claim.ts
-// Lógica de claim atómico: mover commands → in-flight y reclamar huérfanos
+// Lógica de claim atómico: mover commands -> in-flight y reclamar huérfanos
 
 import { safeFM } from "./safe-fm";
 import type { CommandEnvelope } from "./types";
 import { QueueIndex } from "./queue-index";
 import { QueueDiscovery } from "./queue-discovery";
 import { DeadLetter } from "./dead-letter";
+import { writeDebugLog } from "./debug-log";
 
 export interface QueueClaim {
   poll(): CommandEnvelope | null;
@@ -43,17 +44,21 @@ export function createQueueClaim(
     return listCandidates().length;
   }
 
+  function logQueue(message: string): void {
+    writeDebugLog("queue", message);
+  }
+
   function poll(): CommandEnvelope | null {
     const s = safeFM();
     if (!s.available || !s.fm) {
-      dprint("[queue-claim] FM not available");
+      logQueue("[queue-claim] FM not available");
       return null;
     }
     const fm = s.fm;
 
     const files = listCandidates();
     if (files.length > 0) {
-      dprint(
+      logQueue(
         "[queue-claim] candidates: " + files.length + " - " + JSON.stringify(files.slice(0, 3)),
       );
     }
@@ -64,7 +69,7 @@ export function createQueueClaim(
 
       try {
         if (fm.fileExists(dstPath)) {
-          dprint("[queue-claim] reclaiming in-flight: " + filename);
+          logQueue("[queue-claim] reclaiming in-flight: " + filename);
           const cmd = tryReclaimFromInFlight(filename, dstPath);
           if (cmd) return cmd;
 
@@ -78,9 +83,9 @@ export function createQueueClaim(
         }
 
         fm.moveSrcFileToDestFile(srcPath, dstPath, false);
-        dprint("[queue-claim] claimed: " + filename);
+        logQueue("[queue-claim] claimed: " + filename);
       } catch (e) {
-        dprint("[queue-claim] claim failed: " + filename + " - " + String(e));
+        logQueue("[queue-claim] claim failed: " + filename + " - " + String(e));
         continue;
       }
 
@@ -101,13 +106,13 @@ export function createQueueClaim(
       if (content && content.length >= 10) {
         const cmd: CommandEnvelope = JSON.parse(content);
         if (cmd && cmd.id) {
-          dprint("[queue-claim] reclaimed from in-flight: " + filename);
+          logQueue("[queue-claim] reclaimed from in-flight: " + filename);
           return { ...cmd, filename } as CommandEnvelope;
         }
-        dprint("[queue-claim] reclaim invalid envelope: " + filename);
+        logQueue("[queue-claim] reclaim invalid envelope: " + filename);
       }
     } catch (e) {
-      dprint("[queue-claim] reclaim failed: " + filename + " - " + String(e));
+      logQueue("[queue-claim] reclaim failed: " + filename + " - " + String(e));
     }
     return null;
   }
@@ -131,14 +136,14 @@ export function createQueueClaim(
           try {
             fm.moveSrcFileToDestFile(srcPath, dstPath, false);
           } catch (moveErr) {
-            dprint("[queue-claim] fallback move error: " + String(moveErr));
+            logQueue("[queue-claim] fallback move error: " + String(moveErr));
           }
-          dprint("[queue-claim] reclaimed from commands: " + filename);
+          logQueue("[queue-claim] reclaimed from commands: " + filename);
           return { ...cmd, filename } as CommandEnvelope;
         }
       }
     } catch (fallbackErr) {
-      dprint("[queue-claim] reclaim fallback failed: " + filename + " - " + String(fallbackErr));
+      logQueue("[queue-claim] reclaim fallback failed: " + filename + " - " + String(fallbackErr));
     }
     return null;
   }
@@ -151,20 +156,20 @@ export function createQueueClaim(
     try {
       const content = fm.getFileContents(dstPath);
       if (!content || content.length < 10) {
-        dprint("[queue-claim] empty file: " + filename);
+        logQueue("[queue-claim] empty file: " + filename);
         deadLetter.move(dstPath, "Empty file");
         return null;
       }
 
       const cmd: CommandEnvelope = JSON.parse(content);
       if (cmd && cmd.id) {
-        dprint("[queue-claim] parsed: " + filename);
+        logQueue("[queue-claim] parsed: " + filename);
         return { ...cmd, filename } as CommandEnvelope;
       }
 
       deadLetter.move(dstPath, "Invalid envelope: missing id");
     } catch (e) {
-      dprint("[queue-claim] invalid command: " + filename + " - " + String(e));
+      logQueue("[queue-claim] invalid command: " + filename + " - " + String(e));
       deadLetter.move(dstPath, e);
     }
     return null;

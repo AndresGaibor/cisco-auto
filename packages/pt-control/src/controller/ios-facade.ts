@@ -106,26 +106,50 @@ export class IosFacade {
       domainName?: string;
     },
   ): Promise<void> {
-    await this.deviceService.configureDhcpServer(device, options);
+    await this.deviceService.configureDhcpServer(device, {
+      enabled: true,
+      pools: [
+        {
+          name: options.poolName,
+          network: options.network,
+          mask: options.subnetMask,
+          defaultRouter: options.defaultRouter ?? "",
+          dns: options.dnsServers?.[0],
+        },
+      ],
+      excluded: options.excludedAddresses?.map((e) => {
+        const [start, end] = e.split("-");
+        return { start: start ?? e, end: end ?? e };
+      }),
+    });
   }
 
   async inspectDhcpServer(device: string): Promise<{
     ok: boolean;
     device: string;
+    enabled: boolean;
     pools: Array<{
       name: string;
       network: string;
-      subnetMask: string;
-      defaultRouter?: string;
-      dnsServers?: string[];
-      leaseTime?: number;
-      domainName?: string;
+      mask: string;
+      defaultRouter: string;
+      dns?: string;
+      startIp?: string;
+      endIp?: string;
+      maxUsers?: number;
+      leaseCount: number;
+      leases: Array<{ mac: string; ip: string; expires: string }>;
     }>;
-    excludedAddresses?: string[];
+    excludedAddresses: Array<{ start: string; end: string }>;
     poolCount: number;
     excludedAddressCount: number;
   }> {
-    return this.deviceService.inspectDhcpServer(device);
+    const result = await this.deviceService.inspectDhcpServer(device);
+    return {
+      ...result,
+      poolCount: result.pools.length,
+      excludedAddressCount: result.excludedAddresses.length,
+    };
   }
 
   async showParsed<T = ParsedOutput>(

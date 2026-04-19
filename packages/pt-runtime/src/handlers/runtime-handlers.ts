@@ -29,10 +29,43 @@ import {
   type ListDevicesPayload,
 } from "./device.js";
 import { handleAddLink, handleRemoveLink } from "./link.js";
-import { handleListCanvasRects, handleGetRect, handleDevicesInRect } from "./canvas.js";
+import { handleSetDeviceIp, handleSetDefaultGateway } from "./device-config.js";
+import {
+  handleListCanvasRects,
+  handleGetRect,
+  handleDevicesInRect,
+  handleClearCanvas,
+} from "./canvas.js";
 import { handleAddModule, handleRemoveModule } from "./module/index.js";
 import { handleDeepInspect, type DeepInspectPayload } from "./deep-inspect.js";
 import { handleEvaluate, type EvaluatePayload } from "./evaluate.js";
+import {
+  handleSiphonPhysicalTopology,
+  handleGetDeviceHardwareInfo,
+  handleGetPortDeepStats,
+} from "./omniscience-physical.js";
+import {
+  handleSiphonAllConfigs,
+  handleGetAssessmentState,
+  handleSetInstructionPanel,
+  handleEvaluateInternalVariable,
+  handleGetActivityTreeXml,
+  handleExecIosOmni,
+} from "./omniscience-logical.js";
+import {
+  handleSetEnvironmentRules,
+  handleControlSimulation,
+  handleGetNetworkGenoma,
+  handleExfiltrateHostFile,
+  handleSkipBoot,
+  handleWorkspaceVisuals,
+} from "./omniscience-environment.js";
+import {
+  handleSiphonDesktopApps,
+  handleSiphonActiveProcesses,
+  handleIsDesktopReady,
+} from "./omniscience-telepathy.js";
+import { handleKVStore, handleBase64, handleCryptoUtils } from "./omniscience-utils.js";
 import {
   handleInspect,
   handleSnapshot,
@@ -78,6 +111,7 @@ export {
   handleDeferredPoll,
   handlePing,
   handleExecPc,
+  handleExecPcDirect,
 } from "./ios-execution.js";
 
 // Otros handlers de tipos
@@ -107,6 +141,7 @@ import {
   handleDeferredPoll,
   handlePing,
   handleExecPc,
+  handleExecPcDirect,
 } from "./ios-execution.js";
 
 registerHandler("configHost", handleConfigHost as unknown as HandlerFn);
@@ -115,6 +150,7 @@ registerHandler("execIos", handleExecIos as unknown as HandlerFn);
 registerHandler("__pollDeferred", handleDeferredPoll as unknown as HandlerFn);
 registerHandler("__ping", handlePing as unknown as HandlerFn);
 registerHandler("execPc", handleExecPc as unknown as HandlerFn);
+registerHandler("execPcDirect", handleExecPcDirect as unknown as HandlerFn);
 
 registerHandler("ensureVlans", handleEnsureVlans as unknown as HandlerFn);
 registerHandler("configVlanInterfaces", handleConfigVlanInterfaces as unknown as HandlerFn);
@@ -128,12 +164,17 @@ registerHandler("removeDevice", handleRemoveDevice as unknown as HandlerFn);
 registerHandler("renameDevice", handleRenameDevice as unknown as HandlerFn);
 registerHandler("moveDevice", handleMoveDevice as unknown as HandlerFn);
 
+// Device Config
+registerHandler("setDeviceIp", handleSetDeviceIp as unknown as HandlerFn);
+registerHandler("setDefaultGateway", handleSetDefaultGateway as unknown as HandlerFn);
+
 registerHandler("addLink", handleAddLink as unknown as HandlerFn);
 registerHandler("removeLink", handleRemoveLink as unknown as HandlerFn);
 
 registerHandler("listCanvasRects", handleListCanvasRects as unknown as HandlerFn);
 registerHandler("getRect", handleGetRect as unknown as HandlerFn);
 registerHandler("devicesInRect", handleDevicesInRect as unknown as HandlerFn);
+registerHandler("clearCanvas", handleClearCanvas as unknown as HandlerFn);
 
 registerHandler("addModule", handleAddModule as unknown as HandlerFn);
 registerHandler("removeModule", handleRemoveModule as unknown as HandlerFn);
@@ -145,6 +186,37 @@ registerHandler("hardwareCatalog", handleHardwareCatalog as unknown as HandlerFn
 registerHandler("commandLog", handleCommandLog as unknown as HandlerFn);
 registerHandler("deepInspect", handleDeepInspect as unknown as HandlerFn);
 registerHandler("__evaluate", handleEvaluate as unknown as HandlerFn);
+
+// Omniscience Physical
+registerHandler("siphonPhysicalTopology", handleSiphonPhysicalTopology as unknown as HandlerFn);
+registerHandler("getDeviceHardwareInfo", handleGetDeviceHardwareInfo as unknown as HandlerFn);
+registerHandler("getPortDeepStats", handleGetPortDeepStats as unknown as HandlerFn);
+
+// Omniscience Logical
+registerHandler("siphonAllConfigs", handleSiphonAllConfigs as unknown as HandlerFn);
+registerHandler("getAssessmentState", handleGetAssessmentState as unknown as HandlerFn);
+registerHandler("setInstructionPanel", handleSetInstructionPanel as unknown as HandlerFn);
+registerHandler("evaluateInternalVariable", handleEvaluateInternalVariable as unknown as HandlerFn);
+registerHandler("getActivityTreeXml", handleGetActivityTreeXml as unknown as HandlerFn);
+registerHandler("execIosOmni", handleExecIosOmni as unknown as HandlerFn);
+
+// Omniscience Environment
+registerHandler("setEnvironmentRules", handleSetEnvironmentRules as unknown as HandlerFn);
+registerHandler("controlSimulation", handleControlSimulation as unknown as HandlerFn);
+registerHandler("getNetworkGenoma", handleGetNetworkGenoma as unknown as HandlerFn);
+registerHandler("exfiltrateHostFile", handleExfiltrateHostFile as unknown as HandlerFn);
+registerHandler("skipBoot", handleSkipBoot as unknown as HandlerFn);
+registerHandler("workspaceVisuals", handleWorkspaceVisuals as unknown as HandlerFn);
+
+// Omniscience Telepathy
+registerHandler("siphonDesktopApps", handleSiphonDesktopApps as unknown as HandlerFn);
+registerHandler("siphonActiveProcesses", handleSiphonActiveProcesses as unknown as HandlerFn);
+registerHandler("isDesktopReady", handleIsDesktopReady as unknown as HandlerFn);
+
+// Omniscience Utils
+registerHandler("kvStore", handleKVStore as unknown as HandlerFn);
+registerHandler("base64", handleBase64 as unknown as HandlerFn);
+registerHandler("cryptoUtils", handleCryptoUtils as unknown as HandlerFn);
 
 // ============================================================================
 // Barrel Exports - Re-exportar funciones del dispatcher

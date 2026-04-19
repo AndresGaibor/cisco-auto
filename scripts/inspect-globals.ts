@@ -1,20 +1,31 @@
-import { file } from "bun";
-import { join } from "node:path";
+#!/usr/bin/env bun
+import { createDefaultPTController } from "@cisco-auto/pt-control";
 
-async function inspect() {
-  const jsonPath = join(process.cwd(), "docs", "pt-script-result.json");
-  const rawText = await file(jsonPath).text();
-  const firstBrace = rawText.indexOf('{');
-  const lastBrace = rawText.lastIndexOf('}');
-  const data = JSON.parse(rawText.substring(firstBrace, lastBrace + 1));
-  
-  for (const glob of data.globals || []) {
-    console.log(`Global: ${glob.name}`);
-    console.log(`- Type: ${glob.type}`);
-    console.log(`- Has methods array: ${!!glob.methods}`);
-    console.log(`- Keys: ${Object.keys(glob).join(", ")}`);
-    console.log("---");
+async function exploreRaw() {
+  const controller = createDefaultPTController();
+  try {
+    await controller.start();
+    console.log("\n🧪 EXPLORANDO ESTRUCTURA CRUDA DEL DISPOSITIVO...");
+
+    const exploit = `
+        (function() {
+            var net = ipc.network();
+            var d = net.getDeviceAt(0);
+            var info = {
+                name: d.getName(),
+                keys: []
+            };
+            for(var k in d) { info.keys.push(k); }
+            return info;
+        })()
+    `;
+    const res = await controller.send("__evaluate", { code: exploit });
+    console.log(JSON.stringify(res, null, 2));
+
+  } catch (error: any) {
+    console.error(`Error: ${error.message}`);
+  } finally {
+    await controller.stop();
   }
 }
-
-inspect().catch(console.error);
+exploreRaw();

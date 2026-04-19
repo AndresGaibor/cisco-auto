@@ -95,20 +95,38 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
 
   for (const attempt of attempts) {
     try {
-      const success = !!lw.createLink(
+      const created = lw.createLink(
         attempt.devName1,
         attempt.port1,
         attempt.devName2,
         attempt.port2,
         cableType,
       );
-      if (success) {
-        usedAttempt = attempt;
-        dprint(
-          `[handler:addLink] SUCCESS via ${attempt.devName1}:${attempt.port1} -> ${attempt.devName2}:${attempt.port2}`,
-        );
-        break;
+      if (!created) {
+        lastError = "lw.createLink returned falsy";
+        dprint(`[handler:addLink] attempt returned falsy`);
+        continue;
       }
+
+      // VERIFICAR QUE EL LINK EXISTE EN PT — lw.createLink puede retornar truthy sin crear realmente
+      const dev1Obj = net.getDevice(attempt.devName1);
+      const dev1Port = dev1Obj?.getPort(attempt.port1);
+      const linkObj = dev1Port?.getLink ? dev1Port.getLink() : null;
+
+      if (!linkObj) {
+        lastError =
+          "lw.createLink returned truthy but port.getLink() is null — link not created in PT";
+        dprint(
+          `[handler:addLink] VERIFICATION FAILED: link not created despite createLink success`,
+        );
+        continue;
+      }
+
+      usedAttempt = attempt;
+      dprint(
+        `[handler:addLink] SUCCESS verified via ${attempt.devName1}:${attempt.port1} -> ${attempt.devName2}:${attempt.port2}`,
+      );
+      break;
     } catch (error) {
       lastError = String(error);
       dprint(`[handler:addLink] attempt failed: ${lastError}`);
@@ -121,18 +139,30 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
 
     for (const attempt of attempts) {
       try {
-        const success = !!lw.createLink(
+        const created = lw.createLink(
           attempt.devName1,
           attempt.port1,
           attempt.devName2,
           attempt.port2,
           autoCableType,
         );
-        if (success) {
-          usedAttempt = attempt;
-          dprint(`[handler:addLink] SUCCESS via auto cable`);
-          break;
+        if (!created) {
+          lastError = "auto: lw.createLink returned falsy";
+          continue;
         }
+
+        const dev1Obj = net.getDevice(attempt.devName1);
+        const dev1Port = dev1Obj?.getPort(attempt.port1);
+        const linkObj = dev1Port?.getLink ? dev1Port.getLink() : null;
+
+        if (!linkObj) {
+          lastError = "auto: lw.createLink returned truthy but link not verified in PT";
+          continue;
+        }
+
+        usedAttempt = attempt;
+        dprint(`[handler:addLink] SUCCESS via auto cable verified`);
+        break;
       } catch (error) {
         lastError = String(error);
       }
@@ -159,17 +189,28 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
     };
   }
 
-  const key = `${payload.device1}:${resolvedPort1}--${payload.device2}:${resolvedPort2}`;
+  // Normalizar key para evitar duplicados invertidos: siempre device1 < device2 alfabéticamente
+  const keyParts = [
+    `${payload.device1}:${resolvedPort1}`,
+    `${payload.device2}:${resolvedPort2}`,
+  ].sort();
+
+  // Prevenir doble-guardado: verificar si el link ya existe en alguna dirección
   const registry = getLinkRegistry(deps.DEV_DIR, deps.getFM());
-  registry[key] = {
-    device1: payload.device1,
-    port1: resolvedPort1,
-    device2: payload.device2,
-    port2: resolvedPort2,
-    source: "runtime",
-    createdAt: Date.now(),
-  };
-  saveLinkRegistry(deps.DEV_DIR, deps.getFM(), registry);
+  const reverseKey = `${keyParts[1]}--${keyParts[0]}`;
+  if (registry[keyParts.join("--")] || registry[reverseKey]) {
+    dprint(`[handler:addLink] DUPLICATE detected, skipping registry write`);
+  } else {
+    registry[keyParts.join("--")] = {
+      device1: keyParts[0].split(":")[0],
+      port1: keyParts[0].split(":")[1],
+      device2: keyParts[1].split(":")[0],
+      port2: keyParts[1].split(":")[1],
+      source: "runtime",
+      createdAt: Date.now(),
+    };
+    saveLinkRegistry(deps.DEV_DIR, deps.getFM(), registry);
+  }
 
   const linkId = `${payload.device1}:${payload.port1}--${payload.device2}:${payload.port2}`;
 

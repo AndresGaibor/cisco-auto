@@ -313,13 +313,11 @@ function renderDeviceList(options: RenderOptions): void {
       }
 
       console.log(
-        `   ${pad(chalk.gray("Port"), 22)}${pad(chalk.gray("Link"), 16)}${pad(chalk.gray("VLAN"), 8)}${pad(chalk.gray("IP Address"), 16)}${chalk.gray("MAC Address")}`,
+        `   ${pad(chalk.gray("Port"), 22)}${pad(chalk.gray("Link"), 20)}${pad(chalk.gray("VLAN"), 6)}${pad(chalk.gray("IP Address"), 18)}${chalk.gray("MAC Address")}`,
       );
 
       ports.forEach((p) => {
         const rawLabel = getPortLinkLabel(p);
-        // Si no hay connection resuelta pero port.getLink() captó el peer (Track 2 fallback),
-        // mostrar el linkedPortName con color amarillo (menos certeza que el verde exact)
         const linkedPortName = (p as any).linkedPortName as string | undefined;
         let linkValue: string;
         if (p.connection) {
@@ -336,12 +334,14 @@ function renderDeviceList(options: RenderOptions): void {
           linkValue = chalk.gray(rawLabel);
         }
         const vlanValue = p.vlan !== null && p.vlan !== undefined ? String(p.vlan) : "--";
-        const ipValue = p.ipAddress && p.ipAddress !== "0.0.0.0" ? p.ipAddress : "--";
-        const macValue = p.macAddress || p.mac || "--";
+        // FIX: Prioritize ipAddress from our new collector
+        const ipValue = (p.ipAddress && p.ipAddress !== "0.0.0.0") ? p.ipAddress : "--";
+        const macValue = (p.macAddress && p.macAddress !== "") ? p.macAddress : (p.mac || "--");
+        
         const portCol = pad(p.name, 22);
-        const linkCol = pad(linkValue, 18);
-        const vlanCol = pad(vlanValue, 8);
-        const ipCol = pad(ipValue, 16);
+        const linkCol = pad(linkValue, 28); // Increased for ANSI colors
+        const vlanCol = pad(vlanValue, 6);
+        const ipCol = pad(ipValue, 18);
         console.log(`      ${portCol}${linkCol}${vlanCol}${ipCol}${macValue}`);
       });
     });

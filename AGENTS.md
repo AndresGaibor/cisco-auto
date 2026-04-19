@@ -52,6 +52,32 @@ Agent({
 })
 ```
 
+## Protocolo de Omnisciencia (Modo Dios)
+
+**IMPORTANTE:** Si un comando oficial de la API (`addDevice`, `addLink`, `setIpAddress`) falla con un error `[object Object]` o un timeout, NO te rindas. El agente debe contraatacar usando la **Omnisciencia de Capa 0**.
+
+### 🛠️ El Comando `pt omni raw`
+Este comando permite inyectar Javascript puro directamente en el motor C++ de Packet Tracer. Úsalo para:
+- **Bypass de Nombres:** Si un borrado por nombre falla, borra por referencia de objeto usando el shortcut `w`.
+- **Bypass de Booteo:** Si un router bloquea comandos, usa `device.skipBoot()` inyectado.
+- **Auditoría Forense:** Lee tablas MAC, ARP y configuraciones sin pasar por la consola (vía `AssessmentModel`).
+
+### 🚀 Shortcuts Inyectados en el Kernel
+Cuando escribas código para `pt omni raw`, tienes acceso a estos alias pre-inyectados:
+- `ipc`: El objeto base de comunicación.
+- `n`: El objeto `Network` (topología en RAM).
+- `w`: El `LogicalWorkspace` (control gráfico y creación de enlaces).
+- `global`: El contexto raíz (acceso a `AssessmentModel`, `Simulation`, `Base64`).
+- `privileged`: El `_ScriptModule` (acceso a archivos del host macOS/Linux).
+
+### 🔍 Estrategia de Auto-Mejora y Debugging
+Si detectas un fallo persistente:
+1.  **Investigación Genómica:** Usa `pt omni genome <device>` para ver el XML real del equipo.
+2.  **Inyección de Prueba:** Usa `pt omni raw` para interrogar la memoria RAM del simulador (ej. `n.getDeviceCount()`).
+3.  **Parcheo Dinámico:** Si descubres un método nuevo, documéntalo inmediatamente en `docs/ULTIMATE_PT_API_DEEP_DIVE.md` y actualiza el `OmniscienceService` en `pt-control`.
+
+Referencia técnica completa: `docs/PT_EVALUATE_HACKING_GUIDE.md`.
+
 ---
 
 ## Identidad del Proyecto

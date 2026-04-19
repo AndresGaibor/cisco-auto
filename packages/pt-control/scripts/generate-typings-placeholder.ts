@@ -1,2 +1,1 @@
-// Placeholder script: in full implementation this would scrape PT docs and generate TS types
-console.log("generate-typings-placeholder: stub");
+// Placeholder script: en una implementación completa generaría typings desde PT

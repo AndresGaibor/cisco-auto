@@ -37,9 +37,9 @@ export function createRuntimeLoader(config: { runtimeFile: string }) {
       return;
     }
 
-    const visibleLog = (message: string) => {
+    const visibleLog = (message: string, level: "debug" | "info" | "warn" | "error" = "debug") => {
       try {
-        writeDebugLog("loader", message);
+        writeDebugLog("loader", message, level);
       } catch {}
       try {
         dprint(message);
@@ -55,7 +55,7 @@ export function createRuntimeLoader(config: { runtimeFile: string }) {
           true;
       } catch {}
 
-      visibleLog("[loader] Loading runtime.js...");
+      visibleLog("[loader] Loading runtime.js...", "info");
       const mtime = fa.getFileMtime(config.runtimeFile);
       if (!force && mtime === lastMtime && runtimeFn) {
         visibleLog("[loader] No change detected (mtime=" + mtime + "), skipping");
@@ -128,7 +128,10 @@ if (typeof Object.fromEntries !== "function") {
       visibleLog("[loader] Checking _ptDispatch registration...");
       const dispatch = _g._ptDispatch;
       if (typeof dispatch !== "function") {
-        visibleLog("[loader] ERROR: _ptDispatch not found on global. Check runtime init errors.");
+        visibleLog(
+          "[loader] ERROR: _ptDispatch not found on global. Check runtime init errors.",
+          "error",
+        );
         throw new Error("runtime.js did not register _ptDispatch — check for init errors");
       }
 
@@ -141,7 +144,7 @@ if (typeof Object.fromEntries !== "function") {
         (typeof self !== "undefined" ? self : Function("return this")()).__ptRuntimeLoadSucceeded =
           true;
       } catch {}
-      visibleLog("[loader] SUCCESS: runtime.js loaded (mtime=" + mtime + ")");
+      visibleLog("[loader] SUCCESS: runtime.js loaded (mtime=" + mtime + ")", "info");
       visibleLog("[loader] _ptDispatch registered, ready for dispatch");
     } catch (e) {
       try {
@@ -155,11 +158,11 @@ if (typeof Object.fromEntries !== "function") {
         (typeof self !== "undefined" ? self : Function("return this")()).__ptRuntimeLoadError =
           String(e);
       } catch {}
-      visibleLog("[loader] LOAD ERROR: " + String(e));
-      visibleLog("[loader] Keeping previous runtime if available");
+      visibleLog("[loader] LOAD ERROR: " + String(e), "error");
+      visibleLog("[loader] Keeping previous runtime if available", "warn");
       if (!runtimeFn && lastGoodRuntimeFn) {
         runtimeFn = lastGoodRuntimeFn;
-        visibleLog("[loader] Reverted to last good runtime");
+        visibleLog("[loader] Reverted to last good runtime", "info");
       }
     }
   }
@@ -167,7 +170,10 @@ if (typeof Object.fromEntries !== "function") {
   function loadDemo(): void {
     try {
       const _g: any = typeof self !== "undefined" ? self : Function("return this")();
-      const visibleLog = (message: string) => {
+      const visibleLog = (
+        message: string,
+        level: "debug" | "info" | "warn" | "error" = "debug",
+      ) => {
         try {
           const appWindow = (typeof self !== "undefined" ? self.ipc : null)?.appWindow?.();
           if (appWindow && typeof appWindow.writeToPT === "function") {
@@ -182,7 +188,7 @@ if (typeof Object.fromEntries !== "function") {
         } catch {}
       };
 
-      visibleLog("[runtime-demo] Loading lightweight demo runtime...");
+      visibleLog("[runtime-demo] Loading lightweight demo runtime...", "info");
 
       runtimeFn = function (payload: Record<string, unknown>, api: RuntimeApi) {
         const type = String((payload as { type?: unknown })?.type ?? "unknown");
@@ -201,7 +207,7 @@ if (typeof Object.fromEntries !== "function") {
       lastMtime = Date.now();
       pendingReload = false;
       _g.__ptRuntimeDemoLoaded = true;
-      visibleLog("[runtime-demo] Demo runtime loaded");
+      visibleLog("[runtime-demo] Demo runtime loaded", "info");
     } catch (e) {
       try {
         dprint("[runtime-demo] Demo load error: " + String(e));

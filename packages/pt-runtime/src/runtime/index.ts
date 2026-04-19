@@ -28,6 +28,15 @@ import type { RuntimeApi, RuntimeResult, RuntimeDeferredResult } from "./contrac
 var _pipeline: MiddlewarePipeline | null = null;
 var _initialized = false;
 
+function isDebugEnabled(): boolean {
+  try {
+    var scope = (typeof self !== "undefined" ? self : Function("return this")()) as any;
+    return scope.PT_DEBUG === 1 || scope.PT_DEBUG === "1" || scope.PT_DEBUG === true;
+  } catch {
+    return false;
+  }
+}
+
 function getPipeline(): MiddlewarePipeline {
   if (!_pipeline) {
     _pipeline = new MiddlewarePipeline();
@@ -69,7 +78,7 @@ function initializeRuntime(api: RuntimeApi): void {
     };
 
     initializeLogger({
-      level: "info",
+      level: isDebugEnabled() ? "debug" : "info",
       transport: transportRobusto,
     });
 

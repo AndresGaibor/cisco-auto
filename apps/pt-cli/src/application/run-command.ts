@@ -194,6 +194,19 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
     result.meta.durationMs = durationMs;
   }
 
+  const resultSummary =
+    result.data != null && typeof result.data === "object" && !Array.isArray(result.data)
+      ? Object.fromEntries(Object.entries(result.data))
+      : result.data !== undefined
+        ? { value: result.data }
+        : undefined;
+
+  const completionReason = result.ok
+    ? "completed"
+    : result.error?.message
+      ? `error: ${result.error.message}`
+      : "failed";
+
   const historyEntry: HistoryEntry = {
     schemaVersion: "1.0",
     sessionId,
@@ -217,11 +230,7 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
       : result.meta?.interactionSummary
         ? { summary: result.meta.interactionSummary }
         : undefined,
-    completionReason: result.ok
-      ? "completed"
-      : result.error?.message
-        ? `error: ${result.error.message}`
-        : "failed",
+    completionReason,
     contextSummary: {
       bridgeReady: runtimeContext.bridgeReady,
       topologyMaterialized: runtimeContext.topologyMaterialized,
@@ -264,6 +273,11 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
     ok: result.ok,
     durationMs,
     contextWarnings: runtimeContext.warnings,
+    commandIds,
+    completionReason,
+    resultSummary,
+    error: result.error,
+    interactionSummary: interactionSummary ? { summary: interactionSummary } : undefined,
   });
 
   // Persistir estado de contexto tras la ejecución (Fase 3)

@@ -41,9 +41,32 @@ if (!__fm && typeof _ScriptModule !== "undefined" && _ScriptModule) {
   };
 }
 var ipc = __ipc;
-var dprint = __dprint;
 var DEV_DIR = __DEV_DIR;
 var fm = __fm;
+
+var __ptDebugEvents = [];
+var __ptDebugSeq = 0;
+function __writeDebugLog(scope, message, level) {
+  try {
+    if (!fm || !fm.writePlainTextToFile) return;
+    __ptDebugSeq += 1;
+    __ptDebugEvents.push(JSON.stringify({
+      seq: __ptDebugSeq,
+      timestamp: new Date().toISOString(),
+      scope: scope,
+      message: String(message),
+      level: level || "debug",
+    }));
+    if (__ptDebugEvents.length > 500) {
+      __ptDebugEvents = __ptDebugEvents.slice(-500);
+    }
+    fm.writePlainTextToFile(DEV_DIR + "/logs/pt-debug.current.ndjson", __ptDebugEvents.join("\\n") + "\\n");
+  } catch (e) {}
+}
+
+var dprint = function(msg) {
+  __writeDebugLog("runtime", msg, "debug");
+};
 
 var _g = (typeof self !== "undefined") ? self
        : (typeof _global !== "undefined") ? _global

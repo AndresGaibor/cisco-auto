@@ -1,13 +1,41 @@
-import { file } from "bun";
-import { join } from "node:path";
+#!/usr/bin/env bun
+import { createDefaultPTController } from "@cisco-auto/pt-control";
 
-async function run() {
-  const jsonPath = join(process.cwd(), "docs", "pt-script-result.json");
-  const text = await file(jsonPath).text();
-  const data = JSON.parse(text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1));
-  const router = data.devices.find(d => d.className === "Router");
-  console.log("Total métodos listados en Router:", router.methods.length);
-  const unique = new Set(router.methods.map(m => m.name));
-  console.log("Total métodos únicos en Router:", unique.size);
+async function verifyMethods() {
+  const controller = createDefaultPTController();
+  try {
+    await controller.start();
+    console.log("\n🧪 VERIFICANDO MÉTODOS OCULTOS DE PORT...");
+
+    const portPath = "network().getDevice('Router0').getPortAt(0)";
+    
+    // Lista de sospechosos habituales según el dump
+    const candidates = [
+        "getIpAddress",
+        "getSubnetMask",
+        "getMacAddress",
+        "getLightStatus",
+        "isPortUp",
+        "getLink",
+        "getDuplex",
+        "getSpeed",
+        "getType"
+    ];
+
+    for (const m of candidates) {
+        process.stdout.write(`Probando ${m}... `);
+        const res = await controller.deepInspect(portPath, m, []);
+        if (res.ok) {
+            console.log(`✅ RESPUESTA: ${JSON.stringify(res.result)}`);
+        } else {
+            console.log(`❌ NO DISPONIBLE`);
+        }
+    }
+
+  } catch (error: any) {
+    console.error(`Error: ${error.message}`);
+  } finally {
+    await controller.stop();
+  }
 }
-run().catch(console.error);
+verifyMethods();

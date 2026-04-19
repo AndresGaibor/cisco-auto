@@ -8,7 +8,6 @@
 import { Command } from "commander";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import * as readline from "node:readline";
 
 import type { CliResult } from "../contracts/cli-result.js";
 import { createSuccessResult, createErrorResult } from "../contracts/cli-result.js";
@@ -31,6 +30,10 @@ import { sessionLogStore } from "../telemetry/session-log-store.js";
 import { bundleWriter } from "../telemetry/bundle-writer.js";
 import type { SessionLogEvent } from "../telemetry/session-log-store.js";
 import { createDebugLogStream } from "../telemetry/debug-log-stream.js";
+import { formatDebugLogMessage, shouldRenderDebugLogEntry } from "../telemetry/debug-log-view.js";
+import { runLiveTui } from "../telemetry/log-live-tui.js";
+import { renderSessionBlock, formatSessionTime } from "../telemetry/log-summary.js";
+import { formatEcuadorTime } from "../telemetry/time-format.js";
 
 const SCOPE_COLORS: Record<string, string> = {
   kernel: "\x1b[36m",
@@ -46,6 +49,144 @@ function getScopeColor(scope: string): string {
     if (lower.includes(key)) return color;
   }
   return "\x1b[37m";
+}
+
+function color(code: string, text: string): string {
+  return `\x1b[${code}m${text}\x1b[0m`;
+}
+
+function gray(text: string): string {
+  return color("90", text);
+}
+
+function cyan(text: string): string {
+  return color("36", text);
+}
+
+function green(text: string): string {
+  return color("32", text);
+}
+
+function yellow(text: string): string {
+  return color("33", text);
+}
+
+function red(text: string): string {
+  return color("31", text);
+}
+
+function bold(text: string): string {
+  return color("1", text);
+}
+
+function isSessionLogLike(entry: unknown): entry is SessionLogEvent {
+  if (!entry || typeof entry !== "object") return false;
+  const value = entry as Record<string, unknown>;
+  return (
+    typeof value.session_id === "string" &&
+    typeof value.action === "string" &&
+    typeof value.timestamp === "string"
+  );
+}
+
+function renderGenericTailLine(entry: Record<string, unknown>): string {
+  const timestamp = typeof entry.timestamp === "string" ? formatSessionTime(entry.timestamp) : "";
+  const phase = typeof entry.phase === "string" ? entry.phase.toLowerCase() : "unknown";
+  const action =
+    typeof entry.action === "string"
+      ? entry.action
+      : typeof entry.message === "string"
+        ? entry.message
+        : "evento";
+  const sessionId =
+    typeof entry.session_id === "string"
+      ? entry.session_id
+      : typeof entry.sessionId === "string"
+        ? entry.sessionId
+        : "unknown";
+  const ok = entry.ok;
+
+  const badge =
+    phase === "start"
+      ? cyan(" START ")
+      : phase === "end" && ok === true
+        ? green(" OK ")
+        : phase === "end" && ok === false
+          ? red(" ERR ")
+          : phase === "error"
+            ? red(" ERR ")
+            : yellow(` ${phase.toUpperCase().slice(0, 4)} `);
+
+  return `${gray(`[${timestamp}]`)} ${badge} ${bold(action)} ${gray(`session:${sessionId}`)}`.trim();
+}
+
+function renderErrorLine(error: {
+  timestamp: string;
+  sessionId: string;
+  action: string;
+  error: string;
+}): string[] {
+  const time = formatSessionTime(error.timestamp);
+  return [
+    `${gray(`[${time}]`)} ${red(" ERR ")} ${bold(error.action)} ${gray(`session:${error.sessionId}`)}`,
+    `${gray("      ↳")} ${red(" error ")} ${error.error ? dimTruncate(error.error, 120) : ""}`.trim(),
+  ];
+}
+
+function dimTruncate(text: string, max: number): string {
+  const value = text.length > max ? `${text.slice(0, max - 1)}…` : text;
+  return color("2", value);
+}
+
+async function renderLiveDebugLog(lines: number): Promise<void> {
+  const debugLogPath = getPtDebugLogPath();
+  const verbose = process.argv.includes("--verbose") || process.argv.includes("--debug");
+
+  if (!existsSync(debugLogPath)) {
+    console.log("Esperando logs...");
+    console.log(
+      "(El archivo de debug log aún no existe. Asegúrate de que Packet Tracer esté corriendo.)",
+    );
+    return;
+  }
+
+  const stream = createDebugLogStream(debugLogPath);
+  const initialEntries = stream.tail(lines);
+
+  console.log(`\n=== Eventos relevantes de debug (últimas ${lines} entradas crudas) ===\n`);
+  if (!verbose) {
+    console.log(
+      "Nota: se muestran solo eventos relevantes. Usa --verbose para ver el detalle completo.\n",
+    );
+  }
+  for (const entry of initialEntries) {
+    if (!shouldRenderDebugLogEntry(entry, { verbose })) continue;
+    const time = formatLocalTime(entry.timestamp);
+    const scopeColor = getScopeColor(entry.scope);
+    const message = formatDebugLogMessage(entry);
+    console.log(`[${time}] ${scopeColor}${entry.scope.padEnd(10)}\x1b[0m ${message}`);
+  }
+
+  console.log("\n⏳ Listening for new entries... (Ctrl+C para salir)\n");
+
+  const stopFollow = stream.follow(
+    (entry) => {
+      if (!shouldRenderDebugLogEntry(entry, { verbose })) return;
+      const time = formatLocalTime(entry.timestamp);
+      const scopeColor = getScopeColor(entry.scope);
+      const message = formatDebugLogMessage(entry);
+      console.log(`[${time}] ${scopeColor}${entry.scope.padEnd(10)}\x1b[0m ${message}`);
+    },
+    (err) => {
+      console.error("Error en stream de debug:", err.message);
+    },
+  );
+
+  process.on("SIGINT", () => {
+    stopFollow();
+    console.log("\n\nDetenido.");
+    process.exit(0);
+  });
 }
 
 const LOGS_EXAMPLES = [
@@ -92,11 +233,24 @@ interface LogBundleResult {
 export function createLogsCommand(): Command {
   const cmd = new Command("logs");
 
+  cmd.option("-l, --live", "Seguir logs en tiempo real", false);
+
   cmd.description("Inspeccionar trazas de ejecución").hook("preAction", async () => {
     const logsDir = getLogsDir();
     if (!existsSync(logsDir)) {
       console.log("Directorio de logs no existe. Ejecuta algunos comandos primero.");
     }
+  });
+
+  cmd.action(async function (this: Command) {
+    const options = this.opts() as { live?: boolean };
+
+    if (options.live) {
+      await runLiveTui();
+      return;
+    }
+
+    this.help({ error: false });
   });
 
   const tailCmd = cmd
@@ -136,47 +290,7 @@ export function createLogsCommand(): Command {
       const lines = parseInt(linesArg, 10) || 20;
 
       if (options.live) {
-        const debugLogPath = getPtDebugLogPath();
-
-        if (!existsSync(debugLogPath)) {
-          console.log("Esperando logs...");
-          console.log(
-            "(El archivo de debug log aún no existe. Asegúrate de que Packet Tracer esté corriendo.)",
-          );
-        }
-
-        const stream = createDebugLogStream(debugLogPath);
-        const initialEntries = stream.tail(lines);
-
-        console.log(`\n=== Últimos ${lines} entradas de debug ===\n`);
-        for (const entry of initialEntries) {
-          const time = entry.timestamp.split("T")[1]?.split(".")[0]?.slice(0, 8) ?? "";
-          const scopeColor = getScopeColor(entry.scope);
-          console.log(`[${time}] ${scopeColor}${entry.scope.padEnd(10)}\x1b[0m ${entry.message}`);
-        }
-
-        console.log("\n⏳ Listening for new entries... (Ctrl+C para salir)\n");
-
-        const stopFollow = stream.follow(
-          (entry) => {
-            const time = entry.timestamp.split("T")[1]?.split(".")[0]?.slice(0, 8) ?? "";
-            const scopeColor = getScopeColor(entry.scope);
-            readline.moveCursor(process.stdout, 0, -1);
-            readline.clearLine(process.stdout, 0);
-            console.log(`[${time}] ${scopeColor}${entry.scope.padEnd(10)}\x1b[0m ${entry.message}`);
-            console.log("\n⏳ Listening for new entries... (Ctrl+C para salir)");
-          },
-          (err) => {
-            console.error("Error en stream de debug:", err.message);
-          },
-        );
-
-        process.on("SIGINT", () => {
-          stopFollow();
-          console.log("\n\nDetenido.");
-          process.exit(0);
-        });
-
+        await runLiveTui();
         return;
       }
 
@@ -221,20 +335,12 @@ export function createLogsCommand(): Command {
 
       for (const rawEntry of entries.slice(-lines)) {
         const entry = rawEntry as Record<string, unknown>;
-        const timestamp = (entry.timestamp as string)?.split("T")[1]?.split(".")[0] ?? "";
-        const action = entry.action ?? entry.phase ?? "unknown";
-        const outcome = entry.outcome ?? "";
-        const sessId = entry.session_id ?? entry.sessionId ?? "";
-
-        if (outcome === "error" || outcome === "failure") {
-          console.log(`[${timestamp}] 🔴 ${action} -> ${outcome}`);
-          console.log(`        Sesión: ${sessId}`);
-          if (entry.error) {
-            console.log(`        Error: ${entry.error}`);
+        if (isSessionLogLike(entry)) {
+          for (const line of renderSessionBlock(entry)) {
+            console.log(line);
           }
         } else {
-          const icon = outcome === "success" ? "✅" : "⚪";
-          console.log(`[${timestamp}] ${icon} ${action} -> ${outcome || "ok"}`);
+          console.log(renderGenericTailLine(entry));
         }
       }
 
@@ -342,29 +448,8 @@ export function createLogsCommand(): Command {
           console.log("  No se encontraron eventos para esta sesión.");
         } else {
           for (const evt of result.data.events) {
-            const ts = evt.timestamp ? (evt.timestamp.split("T")[1]?.split(".")[0] ?? "") : "";
-            const phase = evt.phase ?? "unknown";
-            const action = evt.action ?? "";
-            const meta = evt.metadata as Record<string, unknown> | undefined;
-            const ok = meta?.ok;
-
-            let icon = "⚪";
-            if (phase === "end" && ok === false) icon = "🔴";
-            else if (phase === "end" && ok === true) icon = "🟢";
-            else if (phase === "start") icon = "🔵";
-
-            console.log(`  ${icon} [${ts}] ${phase.padEnd(10)} ${action}`);
-
-            if (meta?.contextSummary) {
-              const ctx = meta.contextSummary as Record<string, unknown>;
-              if (ctx.bridgeReady !== undefined) {
-                console.log(
-                  `           bridge: ${ctx.bridgeReady ? "ready" : "not ready"}, devices: ${ctx.deviceCount ?? 0}, links: ${ctx.linkCount ?? 0}`,
-                );
-              }
-            }
-            if (meta?.error) {
-              console.log(`           error: ${meta.error}`);
+            for (const line of renderSessionBlock(evt)) {
+              console.log(`  ${line}`);
             }
           }
         }
@@ -593,13 +678,13 @@ export function createLogsCommand(): Command {
             const action = err.action.toLowerCase();
             const msg = err.error.toLowerCase();
             if (action.includes("bridge") || msg.includes("lease") || msg.includes("queue"))
-              byLayer.bridge.push(err);
+              byLayer.bridge!.push(err);
             else if (action.includes("pt") || msg.includes("runtime") || msg.includes("terminal"))
-              byLayer.pt.push(err);
+              byLayer.pt!.push(err);
             else if (action.includes("ios") || action.includes("config") || msg.includes("command"))
-              byLayer.ios.push(err);
-            else if (msg.includes("verif")) byLayer.verification.push(err);
-            else byLayer.other.push(err);
+              byLayer.ios!.push(err);
+            else if (msg.includes("verif")) byLayer.verification!.push(err);
+            else byLayer.other!.push(err);
           }
 
           for (const [layer, errs] of Object.entries(byLayer)) {
@@ -742,8 +827,8 @@ export function createLogsCommand(): Command {
               )
                 continue;
 
-              const meta = evt.metadata as Record<string, unknown> | undefined;
-              const evtDevice = meta?.payloadPreview?.device as string | undefined;
+              const meta = evt.metadata as { payloadPreview?: { device?: string } } | undefined;
+              const evtDevice = meta?.payloadPreview?.device;
 
               if (device && evtDevice && !evtDevice.toLowerCase().includes(device.toLowerCase()))
                 continue;
@@ -778,4 +863,12 @@ export function createLogsCommand(): Command {
     });
 
   return cmd;
+}
+
+function formatLocalTime(timestamp: string): string {
+  try {
+    return formatEcuadorTime(timestamp);
+  } catch {
+    return "";
+  }
 }

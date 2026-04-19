@@ -16,7 +16,7 @@ export interface KernelSubsystems {
   terminal: ReturnType<typeof import("../terminal/terminal-engine").createTerminalEngine>;
   lease: ReturnType<typeof import("./lease").createLeaseManager>;
   config: KernelConfig;
-  kernelLog: (message: string) => void;
+  kernelLog: (message: string, level?: "debug" | "info" | "warn" | "error") => void;
   kernelLogSubsystem: (name: string, message: string) => void;
 }
 
@@ -45,7 +45,7 @@ export function createKernelLifecycle(
   let commandPollInterval: any = null;
 
   function boot(): void {
-    kernelLog("=== KERNEL BOOT STARTING ===");
+    kernelLog("=== KERNEL BOOT STARTING ===", "info");
     kernelLog("Initializing subsystems...");
     try {
       state.isShuttingDown = false;
@@ -107,13 +107,13 @@ export function createKernelLifecycle(
         kernelLogSubsystem("exec", "Initializing execution engine...");
         kernelLogSubsystem("exec", "Execution engine ready");
 
-        kernelLog("=== KERNEL BOOT COMPLETE === isRunning=" + state.isRunning);
+        kernelLog("=== KERNEL BOOT COMPLETE === isRunning=" + state.isRunning, "info");
       } else {
-        kernelLog("FATAL: Runtime not available. Retrying in 5s...");
+        kernelLog("FATAL: Runtime not available. Retrying in 5s...", "error");
         setTimeout(boot, 5000);
       }
     } catch (e) {
-      kernelLog("FATAL BOOT ERROR: " + String(e));
+      kernelLog("FATAL BOOT ERROR: " + String(e), "error");
     }
   }
 
@@ -127,7 +127,7 @@ export function createKernelLifecycle(
       );
       return;
     }
-    kernelLog("=== KERNEL SHUTDOWN STARTING ===");
+    kernelLog("=== KERNEL SHUTDOWN STARTING ===", "info");
     state.isShuttingDown = true;
     state.isRunning = false;
     kernelLog("State: isRunning=false, isShuttingDown=true");
@@ -156,7 +156,7 @@ export function createKernelLifecycle(
     kernelLogSubsystem("lease", "Stopping lease manager...");
     lease.stop();
 
-    kernelLog("=== KERNEL SHUTDOWN COMPLETE ===");
+    kernelLog("=== KERNEL SHUTDOWN COMPLETE ===", "info");
   }
 
   return { boot, shutdown };

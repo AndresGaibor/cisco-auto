@@ -1,146 +1,158 @@
-# PT Runtime Architecture
+# Arquitectura General — cisco-auto
 
-## Overview
+## ¿Qué es este proyecto?
 
-`@cisco-auto/pt-runtime` is a TypeScript library that generates PT-safe JavaScript for execution inside Cisco Packet Tracer's QtScript engine.
+**cisco-auto** es un toolkit de automatización para Cisco Packet Tracer y equipos de red reales. Permite definir topologías de red de forma declarativa (YAML/JSON), generar configuraciones IOS automáticamente y desplegarlas tanto en Packet Tracer (control en tiempo real) como en dispositivos físicos vía SSH/Telnet.
 
-## Architecture Diagram
+**Objetivo principal**: Reducir el tiempo de configuración de laboratorios de 30-45 minutos a menos de 2 minutos.
 
-```
-Lab YAML → @cisco-auto/core → Command Files → @cisco-auto/file-bridge
-    ↓
-@cisco-auto/pt-runtime:
-  TypeScript Handlers + Kernel + Terminal Engine
-    ↓ transformToPtSafeAst()
-  ES5-compatible JavaScript (runtime.js + main.js)
-    ↓ deploy()
-  PT Script Module → QtScript Engine → Packet Tracer
-```
+## Estilo de Arquitectura
 
-## Command Flow
+El proyecto sigue una **arquitectura Plugin-First** basada en tres patrones:
 
-1. **Lab YAML** → `@cisco-auto/core` parses configuration
-2. **Command Files** → Written to filesystem via `@cisco-auto/file-bridge`
-3. **PT Script Module** → Heartbeat detects new command files
-4. **main.js** → Reads command file, calls runtime
-5. **runtime.js** → Dispatcher routes to appropriate handler
-6. **Handler** → Executes PT API calls via IPC
-7. **Result** → Written back via file-bridge
-8. **Return** → Result object returned to PT Script Module
+| Patrón | Aplicación |
+|--------|-----------|
+| **Clean Architecture** | Capas concéntricas: dominio → aplicación → infraestructura. Las dependencias apuntan hacia adentro. |
+| **Hexagonal Architecture (Ports & Adapters)** | El dominio define puertos (interfaces), los adaptadores externos los implementan. |
+| **Domain-Driven Design (DDD)** | Bounded contexts, aggregates, entities, value objects, domain events, repositories. |
+| **Plugin-First** | Toda funcionalidad de protocolo (VLAN, Routing, Security, etc.) es un plugin registrable. El backend (Packet Tracer) también es un plugin. |
 
-## Directory Structure
+## Estructura del Proyecto (Monorepo)
 
 ```
-packages/pt-runtime/src/
-├── build/              # Build pipeline
-│   ├── ast-transform.ts      # TypeScript → ES5 transpiler
-│   ├── validate-pt-safe.ts    # PT safety validation
-│   ├── render-runtime-v2.ts   # Bundle generator
-│   └── runtime-manifest.ts   # File manifest
-├── core/               # Core runtime
-│   ├── dispatcher.ts         # Command dispatcher
-│   ├── middleware.ts         # Middleware pipeline
-│   ├── built-in-middleware.ts # Logging, metrics, validation
-│   └── plugin-api.ts         # Plugin system
-├── handlers/           # Command handlers
-│   ├── device.handler.ts    # addDevice, removeDevice, etc.
-│   ├── link.handler.ts      # addLink, removeLink
-│   ├── config.handler.ts     # configIos, execIos
-│   └── runtime-handlers.ts   # Core handlers (dispatcher entry)
-├── runtime/            # Runtime utilities
-│   ├── logger.ts            # Structured logging
-│   ├── metrics.ts           # Metrics collection
-│   ├── payload-validator.ts # Security validation
-│   ├── pt-version.ts        # PT version detection
-│   └── feature-flags.ts     # Feature flags
-├── pt/                 # PT-specific code
-│   ├── kernel/          # PT kernel
-│   └── terminal/        # Terminal emulation
-└── pt-api/             # PT API types
+cisco-auto/
+├── apps/
+│   └── pt-cli/                 # CLI principal (entry point)
+│
+├── packages/
+│   ├── kernel/                 # ★ Núcleo: dominio, aplicación, plugins, backends
+│   │   ├── src/domain/         #   Dominio (aggregates, entities, value objects)
+│   │   ├── src/application/    #   Capa de aplicación (use cases, ports)
+│   │   ├── src/plugin-api/     #   Interfaces de plugin (contratos)
+│   │   ├── src/plugins/        #   Plugins de protocolo (vlan, routing, security...)
+│   │   └── src/backends/       #   Backends (packet-tracer)
+│   │
+│   ├── types/                  # Tipos compartidos y schemas Zod
+│   ├── core/                   # Lógica de negocio legacy (orquestadores, parsers)
+│   ├── pt-control/             # Motor de control en tiempo real de Packet Tracer
+│   ├── pt-runtime/             # Generador de runtime JS para Packet Tracer
+│   ├── file-bridge/            # Puente de comunicación CLI ↔ Packet Tracer
+│   └── ios-domain/             # Dominio IOS (generadores, parsers, schemas)
+│
+├── labs/                       # Definiciones de laboratorios YAML
+├── configs/                    # Configuraciones generadas
+└── docs/                       # Documentación
 ```
 
-## Key Components
+## Paquetes Principales
 
-### Dispatcher
+### @cisco-auto/kernel
 
-The dispatcher (`runtimeDispatcher`) is the entry point for all commands:
+El corazón del sistema. Contiene:
+
+- **Dominio**: Modelos puros de red sin dependencias externas
+- **Aplicación**: Casos de uso que orquestan operaciones
+- **Plugin API**: Contratos para plugins de protocolo y backend
+- **Plugins**: Implementaciones concretas (VLAN, Routing, Security, Services, Switching, IPv6)
+- **Backends**: Adaptadores para Packet Tracer
+
+### @cisco-auto/types
+
+Single Source of Truth para tipos TypeScript y schemas Zod. Define:
+- Esquemas de dispositivos, protocolos, laboratorios
+- Tipos para PT Control (DeviceState, TopologySnapshot)
+- Tipos del protocolo FileBridge
+
+### @cisco-auto/pt-control
+
+Motor de control en tiempo real de Packet Tracer:
+- FileBridge V2 para comunicación basada en filesystem
+- Controlador de alto nivel (PTController)
+- VDOM para estado de topología
+- Logging estructurado NDJSON
+- CLI con OCLIF
+
+### @cisco-auto/file-bridge
+
+Sistema de IPC basado en filesystem:
+- Lease manager (instancia única)
+- Backpressure (control de flujo)
+- Crash recovery
+- Garbage collection automática
+
+### @cisco-auto/core
+
+Lógica de negocio y orquestadores:
+- Parser YAML con validación Zod
+- Generadores de configuración IOS
+- Deploy orchestrator (SSH/Telnet)
+- Parsers de output IOS (`show ip interface brief`, `show vlan`, etc.)
+- Modelos canónicos de dispositivos
+
+## Stack Tecnológico
+
+| Componente | Tecnología | Notas |
+|------------|-----------|-------|
+| Runtime | **Bun** 1.1+ | TypeScript nativo, obligatorio. No usar Node/npm |
+| Lenguaje | TypeScript 5.x | Modo estricto, módulos ES |
+| Validación | Zod 4.x | Schema validation en runtime |
+| Logging | Pino 10.x | JSON estructurado, NDJSON |
+| Testing | Bun Test | Runner integrado, sin dependencias externas |
+| YAML | js-yaml | Parsing de lab definitions |
+| SSH | node-ssh | Conexión a dispositivos reales |
+
+## Decisiones de Diseño Clave
+
+### 1. Plugin-First
+
+Toda funcionalidad de protocolo es un plugin independiente que implementa `ProtocolPlugin`:
 
 ```typescript
-function runtimeDispatcher(payload, api) {
-  const handler = HANDLER_MAP.get(payload.type);
-  if (!handler) {
-    return { ok: false, error: "Unknown command type" };
-  }
-  return handler(payload, api);
+// packages/kernel/src/plugin-api/protocol.plugin.ts
+export interface ProtocolPlugin {
+  id: string;
+  category: 'switching' | 'routing' | 'security' | 'services';
+  name: string;
+  version: string;
+  description: string;
+  commands: PluginCommandDefinition[];
+  validate(config: unknown): PluginValidationResult;
 }
 ```
 
-### Middleware Pipeline
+Esto permite:
+- Agregar nuevos protocolos sin modificar el núcleo
+- Validación consistente de configuraciones
+- Generación de comandos IOS encapsulada
+- Testing aislado por protocolo
 
-Middleware provides cross-cutting concerns:
+### 2. Backend como Plugin
 
-1. **errorRecoveryMiddleware** - Catches exceptions
-2. **rateLimitMiddleware** - Prevents command flooding
-3. **loggingMiddleware** - Structured logging
-4. **metricsMiddleware** - Metrics collection
-5. **validationMiddleware** - Payload validation
-
-### PtLogger
-
-Structured JSON logging compatible with QtScript:
+Packet Tracer no es una dependencia hardcodeada. Es un `BackendPlugin` que implementa `BackendPort`:
 
 ```typescript
-const log = getLogger("device").withDevice("Router1");
-log.info("Operation completed", { duration: 123 });
-// Outputs: {"ts":"...","level":"info","logger":"device","msg":"Operation completed","device":"Router1","data":{"duration":123}}
+// packages/kernel/src/application/ports/driven/backend.port.ts
+export interface BackendPort {
+  connect(config: unknown): Promise<void>;
+  disconnect(): Promise<void>;
+  isConnected(): boolean;
+}
 ```
 
-### Payload Validator
+Esto permite agregar backends alternativos en el futuro (GNS3, EVE-NG, dispositivos reales directos).
 
-Runtime validation prevents injection attacks:
+### 3. Dominio Puro
 
-- Size limits (64KB max)
-- Prototype pollution check
-- IOS command sanitization
-- Path traversal prevention
+El dominio (`packages/kernel/src/domain/`) no tiene dependencias externas. Usa solo:
+- Value Objects con validación incorporada
+- Entities con identidad
+- Aggregates que garantizan invariantes
+- Domain Events para comunicación entre bounded contexts
 
-## PT Safety
+### 4. Filesystem como IPC
 
-The generated JavaScript must be PT-safe:
-
-- **No ES6+ syntax** (arrow functions, template literals, etc.)
-- **No imports/exports** (all code is bundled)
-- **No console** (use dprint instead)
-- **No process/BigInt/Buffer** (not available in QtScript)
-- **ES5 compatible** (var, function expressions, etc.)
-
-## Build Pipeline
-
-```
-TypeScript Source Files
-    ↓
-Runtime Manifest (files list)
-    ↓
-AST Transform (strip imports, transpile to ES5)
-    ↓
-Post-Processing (const→var, ??→||, ?.→&&)
-    ↓
-Validation (PT safety check)
-    ↓
-Bundle (runtime.js)
-```
-
-## Version Compatibility
-
-The runtime supports PT 7.x through 8.x via:
-
-1. **Capability probing** - Detects available methods at runtime
-2. **Feature flags** - Enables/disables features based on PT version
-3. **Graceful degradation** - Falls back when methods unavailable
-
-## Security
-
-- All payloads validated before dispatch
-- IOS commands sanitized against injection patterns
-- Prototype pollution blocked via safe JSON parsing
-- Rate limiting prevents DoS
+FileBridge usa el filesystem (`~/pt-dev/`) como medio de comunicación con Packet Tracer:
+- No requiere configuración de red
+- Sobrevive a reinicios
+- Auditoría completa vía NDJSON
+- Single-instance con lease manager

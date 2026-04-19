@@ -84,7 +84,7 @@ bun run scripts/topologia-apply.ts --config topology-config.json --dry-run --ver
 
 ## 🏁 Flujo Recomendado
 
-1. Instala y configura el módulo de scripting en Packet Tracer (ver [PT_CONTROL_QUICKSTART.md](../../docs/PT_CONTROL_QUICKSTART.md)).
+1. Instala y configura el módulo de scripting en Packet Tracer (ver [Guía de Inicio Rápido](./docs/quickstart.md)).
 2. Usa los comandos `pt vlan apply`, `pt trunk apply`, `pt ssh setup` para configurar dispositivos individuales.
 3. Para automatización total:
    - Copia `topology-config.example.json` → `topology-config.json`
@@ -98,7 +98,7 @@ bun run scripts/topologia-apply.ts --config topology-config.json --dry-run --ver
 
 - El soporte para YAML y .pka es solo para migraciones puntuales. Para nuevos flujos, usa pt-control y scripts.
 - Todos los comandos pueden ejecutarse desde cualquier terminal compatible con Bun.
-- Consulta la [guía rápida](../../docs/PT_CONTROL_QUICKSTART.md) para instalación y troubleshooting.
+- Consulta la [guía rápida](./docs/quickstart.md) para instalación y troubleshooting.
 
 ---
 

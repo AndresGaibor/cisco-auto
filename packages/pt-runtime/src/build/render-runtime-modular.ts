@@ -317,11 +317,34 @@ export class ModularRuntimeGenerator {
 
 (function() {
   var ipc = (typeof ipc !== "undefined") ? ipc : null;
-  var dprint = (typeof dprint !== "undefined") ? dprint : function() {};
   var DEV_DIR = (typeof DEV_DIR !== "undefined") ? DEV_DIR : "${this.config.devDir}";
   var fm = ipc ? ipc.systemFileManager() : null;
 
   var _g = (typeof self !== "undefined") ? self : this;
+
+  var __ptDebugEvents = [];
+  var __ptDebugSeq = 0;
+  function __writeDebugLog(scope, message, level) {
+    try {
+      if (!fm || !fm.writePlainTextToFile) return;
+      __ptDebugSeq += 1;
+      __ptDebugEvents.push(JSON.stringify({
+        seq: __ptDebugSeq,
+        timestamp: new Date().toISOString(),
+        scope: scope,
+        message: String(message),
+        level: level || "debug",
+      }));
+      if (__ptDebugEvents.length > 500) {
+        __ptDebugEvents = __ptDebugEvents.slice(-500);
+      }
+      fm.writePlainTextToFile(DEV_DIR + "/logs/pt-debug.current.ndjson", __ptDebugEvents.join("\\n") + "\\n");
+    } catch (e) {}
+  }
+
+  var dprint = function(msg) {
+    __writeDebugLog("loader", msg, "debug");
+  };
 
   // Module registry
   if (!_g._RUNTIME_MODULES) _g._RUNTIME_MODULES = {};

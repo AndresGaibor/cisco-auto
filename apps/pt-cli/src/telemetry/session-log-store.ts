@@ -1,7 +1,7 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { getSessionLogsDir } from '../system/paths.js';
-import { redactObject } from './trace-redaction.js';
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { dirname } from "node:path";
+import { getSessionLogsDir } from "../system/paths.js";
+import { redactObject } from "./trace-redaction.js";
 
 export interface SessionLogEvent {
   session_id: string;
@@ -17,6 +17,10 @@ export class SessionLogStore {
 
   constructor(customDir?: string) {
     this.sessionsDir = customDir ?? getSessionLogsDir();
+  }
+
+  get dir(): string {
+    return this.sessionsDir;
   }
 
   async ensureDirs(): Promise<void> {
@@ -38,11 +42,11 @@ export class SessionLogStore {
       metadata: event.metadata ? redactObject(event.metadata) : undefined,
     };
 
-    const line = JSON.stringify(redactedEvent) + '\n';
+    const line = JSON.stringify(redactedEvent) + "\n";
     const filePath = this.getSessionPath(event.session_id);
 
     try {
-      appendFileSync(filePath, line, 'utf-8');
+      appendFileSync(filePath, line, "utf-8");
     } catch (err) {
       console.error(`Error writing session log: ${err}`);
     }
@@ -56,16 +60,18 @@ export class SessionLogStore {
     }
 
     try {
-      const content = readFileSync(filePath, 'utf-8');
-      const lines = content.split('\n').filter((line) => line.trim() !== '');
+      const content = readFileSync(filePath, "utf-8");
+      const lines = content.split("\n").filter((line) => line.trim() !== "");
 
-      return lines.map((line) => {
-        try {
-          return JSON.parse(line) as SessionLogEvent;
-        } catch {
-          return null;
-        }
-      }).filter((event): event is SessionLogEvent => event !== null);
+      return lines
+        .map((line) => {
+          try {
+            return JSON.parse(line) as SessionLogEvent;
+          } catch {
+            return null;
+          }
+        })
+        .filter((event): event is SessionLogEvent => event !== null);
     } catch {
       return [];
     }

@@ -1,11 +1,15 @@
-import type { HandlerDeps, HandlerResult } from "../utils/helpers";
+// ============================================================================
+// Device CRUD Handlers (ES5 Strict) - V3 Resilient
+// ============================================================================
+
+import type { HandlerDeps, HandlerResult } from "../utils/helpers.js";
 import {
   resolveModel,
   getDeviceTypeCandidates,
   createDeviceWithFallback,
   getDeviceTypeString,
   collectPorts,
-} from "../utils/helpers";
+} from "../utils/helpers.js";
 
 export interface AddDevicePayload {
   type: "addDevice";
@@ -21,63 +25,27 @@ export interface RemoveDevicePayload {
   name: string;
 }
 
-export interface RenameDevicePayload {
-  type: "renameDevice";
-  oldName: string;
-  newName: string;
-}
-
-export interface MoveDevicePayload {
-  type: "moveDevice";
-  name: string;
-  x: number;
-  y: number;
-}
-
-/**
- * Add a new device to the canvas
- */
 export function handleAddDevice(payload: AddDevicePayload, deps: HandlerDeps): HandlerResult {
-  const { getLW, getNet, dprint } = deps;
-  const lw = getLW();
-  const net = getNet();
+  var lw = deps.getLW();
+  var net = deps.getNet();
+  var model = resolveModel(payload.model);
+  var name = payload.name || model;
+  var x = payload.x ?? 100;
+  var y = payload.y ?? 100;
 
-  dprint(
-    `[handler:addDevice] starting model=${payload.model} name=${payload.name} x=${payload.x} y=${payload.y}`,
-  );
-
-  let model: string;
-  try {
-    model = resolveModel(payload.model);
-  } catch (error) {
-    const errMsg = String(error);
-    dprint(`[handler:addDevice] ERROR resolveModel: ${errMsg}`);
-    return { ok: false, error: errMsg, code: "INVALID_INPUT" };
-  }
-
-  const name = payload.name || model;
-  const x = payload.x ?? 100;
-  const y = payload.y ?? 100;
-
-  const typeList =
+  var typeList =
     payload.deviceType !== undefined ? [payload.deviceType] : getDeviceTypeCandidates(model);
-  dprint(`[handler:addDevice] trying model=${model} typeList=${typeList.join(",")}`);
+  var created = createDeviceWithFallback(model, x, y, typeList, lw, net);
 
-  const created = createDeviceWithFallback(model, x, y, typeList, lw, net);
-  if (!created) {
-    dprint(`[handler:addDevice] ERROR createDeviceWithFallback failed for ${model}`);
-    return { ok: false, error: "Failed to add device: " + model, code: "DEVICE_CREATION_FAILED" };
-  }
+  if (!created) return { ok: false, error: "Creation failed", code: "DEVICE_CREATION_FAILED" };
 
   created.device.setName(name);
   if (created.device.skipBoot) created.device.skipBoot();
 
-  dprint(`[handler:addDevice] SUCCESS name=${name} typeId=${created.typeId}`);
-
   return {
     ok: true,
-    name,
-    model,
+    name: name,
+    model: model,
     type: getDeviceTypeString(created.typeId),
     power: true,
     x: x,
@@ -86,75 +54,53 @@ export function handleAddDevice(payload: AddDevicePayload, deps: HandlerDeps): H
   };
 }
 
-/**
- * Remove a device from the canvas
- */
 export function handleRemoveDevice(payload: RemoveDevicePayload, deps: HandlerDeps): HandlerResult {
-  const { getLW, getNet, dprint } = deps;
-  const lw = getLW();
-  const net = getNet();
+  var net = deps.getNet();
+  var lw = deps.getLW();
+  var dprint = deps.dprint;
 
-  dprint(`[handler:removeDevice] starting name=${payload.name}`);
+  if (payload.name === "ALL" || !payload.name) {
+    try {
+      var count = net.getDeviceCount();
+      dprint("[handler:removeDevice] Bulk remove started. Count: " + count);
+      for (var i = count - 1; i >= 0; i--) {
+        try {
+          var d = net.getDeviceAt(i);
+          if (d) lw.removeDevice(d.getName());
+        } catch (inner) {
+          dprint("[handler:removeDevice] Skip device at " + i);
+        }
+      }
+      return { ok: true, result: "CLEAN_ATTEMPT_FINISHED" };
+    } catch (e) {
+      return { ok: false, error: String(e) };
+    }
+  }
 
   try {
-    if ((lw as any).removeDevice) lw.removeDevice(payload.name);
-    else if ((lw as any).deleteDevice) (lw as any).deleteDevice(payload.name);
-    else if ((net as any).removeDevice) (net as any).removeDevice(payload.name);
+    lw.removeDevice(payload.name);
+    return { ok: true, name: payload.name };
   } catch (e) {
-    dprint(`[handler:removeDevice] ERROR: ${String(e)}`);
+    return { ok: false, error: "Device not found or busy: " + payload.name };
   }
-
-  dprint(`[handler:removeDevice] SUCCESS name=${payload.name}`);
-
-  return { ok: true, name: payload.name };
 }
 
-/**
- * Rename a device
- */
-export function handleRenameDevice(payload: RenameDevicePayload, deps: HandlerDeps): HandlerResult {
-  const { dprint } = deps;
-  const device = deps.getNet().getDevice(payload.oldName);
-  if (!device) {
-    dprint(`[handler:renameDevice] ERROR Device not found: ${payload.oldName}`);
-    return { ok: false, error: "Device not found", code: "DEVICE_NOT_FOUND" };
-  }
+export function handleRenameDevice(payload: any, deps: HandlerDeps): HandlerResult {
+  var device = deps.getNet().getDevice(payload.oldName);
+  if (!device) return { ok: false, error: "Not found" };
   device.setName(payload.newName);
-  dprint(`[handler:renameDevice] SUCCESS ${payload.oldName} -> ${payload.newName}`);
   return { ok: true, oldName: payload.oldName, newName: payload.newName };
 }
 
-/**
- * Move a device to a new position on the canvas
- */
-export function handleMoveDevice(payload: MoveDevicePayload, deps: HandlerDeps): HandlerResult {
-  const { dprint } = deps;
-  const device = deps.getNet().getDevice(payload.name);
-  if (!device) {
-    dprint(`[handler:moveDevice] ERROR Device not found: ${payload.name}`);
-    return { ok: false, error: "Device not found", code: "DEVICE_NOT_FOUND" };
-  }
-
-  const x = Math.round(payload.x);
-  const y = Math.round(payload.y);
-  let moved = false;
-
-  dprint(`[handler:moveDevice] trying ${payload.name} -> (${x}, ${y})`);
-
+export function handleMoveDevice(payload: any, deps: HandlerDeps): HandlerResult {
+  var device = deps.getNet().getDevice(payload.name);
+  if (!device) return { ok: false, error: "Not found" };
+  var x = Math.round(payload.x);
+  var y = Math.round(payload.y);
   try {
-    if ((device as any).moveToLocation) {
-      moved = !!(device as any).moveToLocation(x, y);
-    } else if ((device as any).moveToLocationCentered) {
-      moved = !!(device as any).moveToLocationCentered(x, y);
-    }
-  } catch (error) {
-    dprint(`[handler:moveDevice] ERROR: ${String(error)}`);
+    if (device.moveToLocation) device.moveToLocation(x, y);
+    return { ok: true, name: payload.name, x: x, y: y };
+  } catch (e) {
+    return { ok: false, error: "Move failed" };
   }
-
-  if (!moved) {
-    dprint(`[handler:moveDevice] ERROR Move rejected for ${payload.name}`);
-    return { ok: false, error: "Move rejected", code: "INTERNAL_ERROR" };
-  }
-  dprint(`[handler:moveDevice] SUCCESS ${payload.name} -> (${x}, ${y})`);
-  return { ok: true, name: payload.name, x, y };
 }

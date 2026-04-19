@@ -19,8 +19,14 @@ export function createProgram(): Command {
 
   addGlobalFlags(program);
 
+  const registeredNames = new Set<string>();
   for (const factory of COMMAND_FACTORIES) {
-    program.addCommand(factory());
+    const cmd = factory();
+    const name = cmd.name();
+    if (!registeredNames.has(name)) {
+      program.addCommand(cmd);
+      registeredNames.add(name);
+    }
   }
 
   return program;

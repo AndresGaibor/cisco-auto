@@ -346,7 +346,7 @@ export class FileBridgeV2 extends EventEmitter {
     let pollMs = 25;
     debugLog(`waiting result id=${envelope.id} path=${resultPath}`);
 
-    return new Promise((resolve, reject) => {
+    const result = await new Promise<BridgeResultEnvelope<TResult>>((resolve, reject) => {
       let resolved = false;
       let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -398,6 +398,40 @@ export class FileBridgeV2 extends EventEmitter {
       timer = setTimeout(checkResult, 0);
       this.resultWatcher.watch(envelope.id, checkResult);
     });
+
+    if (this.isDeferredBridgeValue(result.value)) {
+      const remainingTimeout = timeout - (Date.now() - started);
+      if (remainingTimeout <= 0) {
+        throw new Error(
+          `Timeout waiting for deferred result for ${envelope.id} after ${timeout}ms`,
+        );
+      }
+
+      const followUp = await this.sendCommandAndWait(
+        "__pollDeferred",
+        { ticket: result.value.ticket },
+        remainingTimeout,
+      );
+      return {
+        ...result,
+        ok: followUp.ok,
+        status: followUp.status,
+        completedAt: followUp.completedAt,
+        value: followUp.value as TResult,
+        error: followUp.error,
+      };
+    }
+
+    return result;
+  }
+
+  private isDeferredBridgeValue(value: unknown): value is { deferred: true; ticket: string } {
+    return (
+      typeof value === "object" &&
+      value !== null &&
+      (value as { deferred?: unknown }).deferred === true &&
+      typeof (value as { ticket?: unknown }).ticket === "string"
+    );
   }
 
   async waitForCapacity(timeoutMs?: number): Promise<void> {

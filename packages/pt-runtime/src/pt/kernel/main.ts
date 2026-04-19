@@ -81,10 +81,11 @@ export function createKernel(config: KernelConfig) {
   });
   const executionEngine = createExecutionEngine(terminal);
 
-  function kernelLog(message: string): void {
+  function kernelLog(message: string, level: "debug" | "info" | "warn" | "error" = "debug"): void {
     try {
-      writeDebugLog("kernel", message);
+      writeDebugLog("kernel", message, level);
     } catch {}
+    if (!isDebugEnabled()) return;
     try {
       dprint("[kernel] " + message);
     } catch {}
@@ -92,7 +93,7 @@ export function createKernel(config: KernelConfig) {
 
   function kernelLogSubsystem(name: string, message: string): void {
     if (!isDebugEnabled()) return;
-    kernelLog("[" + name + "] " + message);
+    kernelLog("[" + name + "] " + message, "debug");
   }
 
   const subsystems = {

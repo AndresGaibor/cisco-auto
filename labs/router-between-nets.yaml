@@ -1,0 +1,74 @@
+name: Router Between Nets - 1 Router y 2 PCs en redes diferentes
+description: Laboratorio para validar routing entre dos redes distintas
+
+devices:
+  - name: R1
+    type: router
+    model: 2911
+    x: 300
+    y: 100
+
+  - name: PC1
+    type: pc
+    model: PC
+    x: 100
+    y: 300
+
+  - name: PC2
+    type: pc
+    model: PC
+    x: 500
+    y: 300
+
+links:
+  - from: PC1
+    fromPort: Fa0
+    to: R1
+    toPort: Gi0/0
+
+  - from: PC2
+    fromPort: Fa0
+    to: R1
+    toPort: Gi0/1
+
+configs:
+  - device: R1
+    type: router
+    ports:
+      - name: Gi0/0
+        ip: 192.168.10.1
+        mask: 255.255.255.0
+      - name: Gi0/1
+        ip: 192.168.20.1
+        mask: 255.255.255.0
+
+  - device: PC1
+    type: host
+    ip: 192.168.10.10
+    mask: 255.255.255.0
+    gateway: 192.168.10.1
+
+  - device: PC2
+    type: host
+    ip: 192.168.20.10
+    mask: 255.255.255.0
+    gateway: 192.168.20.1
+
+validation:
+  - type: ping
+    from: PC1
+    to: 192.168.20.10
+    expect: success
+
+  - type: ping
+    from: PC2
+    to: 192.168.10.10
+    expect: success
+
+  - type: routing_table
+    device: R1
+    expect:
+      route_count: 2
+      networks:
+        - network: 192.168.10.0
+        - network: 192.168.20.0

@@ -1,0 +1,68 @@
+name: Mask Misconfiguration - 1 Router y 2 PCs misma red con mascara incorrecta
+description: Laboratorio para detectar errores de subnetting con mascara incorrecta
+
+devices:
+  - name: R1
+    type: router
+    model: 2911
+    x: 300
+    y: 100
+
+  - name: PC1
+    type: pc
+    model: PC
+    x: 100
+    y: 300
+
+  - name: PC2
+    type: pc
+    model: PC
+    x: 500
+    y: 300
+
+links:
+  - from: PC1
+    fromPort: Fa0
+    to: R1
+    toPort: Gi0/0
+
+  - from: PC2
+    fromPort: Fa0
+    to: R1
+    toPort: Gi0/1
+
+configs:
+  - device: R1
+    type: router
+    ports:
+      - name: Gi0/0
+        ip: 192.168.10.1
+        mask: 255.255.255.0
+
+  - device: PC1
+    type: host
+    ip: 192.168.10.10
+    mask: 255.255.255.0
+    gateway: 192.168.10.1
+
+  - device: PC2
+    type: host
+    ip: 192.168.10.20
+    mask: 255.255.255.128
+
+validation:
+  - type: ping
+    from: PC1
+    to: 192.168.10.10
+    expect: success
+
+  - type: ping
+    from: PC1
+    to: 192.168.10.20
+    expect: fail
+
+  - type: mask_mismatch
+    device: PC2
+    expect:
+      configured_mask: 255.255.255.128
+      expected_mask: 255.255.255.0

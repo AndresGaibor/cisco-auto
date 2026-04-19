@@ -1,0 +1,59 @@
+name: Switch Documented - Switch con hostname y descripciones en puertos
+description: Laboratorio para validar documentacion de switch (hostname, descripciones)
+
+devices:
+  - name: SW-ACCESO
+    type: switch
+    model: 2960
+    x: 300
+    y: 200
+
+  - name: PC1
+    type: pc
+    model: PC
+    x: 100
+    y: 350
+
+  - name: PC2
+    type: pc
+    model: PC
+    x: 500
+    y: 350
+
+links:
+  - from: PC1
+    fromPort: Fa0
+    to: SW-ACCESO
+    toPort: Fa0/1
+
+  - from: PC2
+    fromPort: Fa0
+    to: SW-ACCESO
+    toPort: Fa0/2
+
+configs:
+  - device: SW-ACCESO
+    type: switch
+    hostname: SW-ACCESO
+    port_descriptions:
+      Fa0/1: Puerto de acceso PC1
+      Fa0/2: Puerto de acceso PC2
+
+  - device: PC1
+    type: host
+    ip: 192.168.10.10
+    mask: 255.255.255.0
+
+  - device: PC2
+    type: host
+    ip: 192.168.10.20
+    mask: 255.255.255.0
+
+validation:
+  - type: running_config
+    device: SW-ACCESO
+    expect:
+      contains:
+        - hostname SW-ACCESO
+        - description Puerto de acceso PC1
+        - description Puerto de acceso PC2

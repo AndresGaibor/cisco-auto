@@ -1114,3 +1114,51 @@ cd packages/pt-runtime
 bun run deploy  # Genera main.js, runtime.js, catalog.js → ~/pt-dev/
 bun run build  # Genera a dist-qtscript/
 ```
+
+---
+
+## Debugging — PT_DEBUG Flag
+
+Por defecto, `dprint()` solo va a Activity Log y al archivo NDJSON. La ventana de PT Debug está silenciada.
+
+### Habilitar output en ventana PT Debug
+
+```javascript
+// En la consola de PT:
+self.PT_DEBUG = 1; // Habilita — ahora dprint() escribe en PT Debug window
+self.PT_DEBUG = 0; // Deshabilita
+```
+
+### Flujo de logs
+
+```
+dprint("msg")
+  ├── appWindow.writeToPT()  ──→ PT Debug window  (solo si PT_DEBUG=1)
+  ├── native dprint()        ──→ PT Activity Log   (siempre)
+  └── print()               ──→ Terminal PT        (siempre)
+  + writeDebugLog()         ──→ logs/pt-debug.current.ndjson (siempre)
+```
+
+### Ver logs en CLI
+
+```bash
+bun run pt log --live        # Follow logs en tiempo real
+bun run pt log --live --n 50 # Ultimos 50 entries
+bun run pt log --lines 100   # Ultimos 100 logs (snapshot)
+```
+
+### Módulos de debug
+
+- `src/pt/kernel/debug-log.ts` — Buffer rotativo NDJSON (últimos 500 eventos)
+- `src/pt/kernel/main.ts` — `kernelLog()` y `kernelLogSubsystem()`
+- `src/pt/kernel/runtime-loader.ts` — `visibleLog()` para runtime
+- `src/pt/kernel/queue-claim.ts` — `dprint()` directo para claim operations
+
+### Build/Debug de main.js
+
+```bash
+# Regenerar y deployar (después de cambiar kernel o runtime)
+cd packages/pt-runtime && bun run deploy
+
+# Recargar en PT: File > Open > ~/pt-dev/main.js
+```

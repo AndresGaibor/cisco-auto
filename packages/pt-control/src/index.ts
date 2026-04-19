@@ -92,7 +92,11 @@ export {
   LayoutPlannerService,
   PortPlannerService,
   LinkFeasibilityService,
+  OmniscienceService,
+  ScenarioService,
 } from "./application/services/index.js";
+
+export * from "./contracts/omniscience.js";
 
 // PT feature modules - canonical stack
 export * from "./pt/terminal/index.js";

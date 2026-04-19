@@ -1,0 +1,76 @@
+name: ARP Learning - 3 PCs y 1 Switch
+description: Laboratorio para validar aprendizaje ARP y flooding en switches
+
+devices:
+  - name: Switch1
+    type: switch
+    model: 2960
+    x: 300
+    y: 200
+
+  - name: PC1
+    type: pc
+    model: PC
+    x: 100
+    y: 350
+
+  - name: PC2
+    type: pc
+    model: PC
+    x: 300
+    y: 350
+
+  - name: PC3
+    type: pc
+    model: PC
+    x: 500
+    y: 350
+
+links:
+  - from: PC1
+    fromPort: Fa0
+    to: Switch1
+    toPort: Fa0/1
+
+  - from: PC2
+    fromPort: Fa0
+    to: Switch1
+    toPort: Fa0/2
+
+  - from: PC3
+    fromPort: Fa0
+    to: Switch1
+    toPort: Fa0/3
+
+configs:
+  - device: PC1
+    type: host
+    ip: 192.168.10.10
+    mask: 255.255.255.0
+
+  - device: PC2
+    type: host
+    ip: 192.168.10.11
+    mask: 255.255.255.0
+
+  - device: PC3
+    type: host
+    ip: 192.168.10.12
+    mask: 255.255.255.0
+
+validation:
+  - type: ping
+    from: PC1
+    to: 192.168.10.11
+    expect: success
+
+  - type: ping
+    from: PC1
+    to: 192.168.10.12
+    expect: success
+
+  - type: mac_table
+    device: Switch1
+    expect:
+      mac_count: 3
+      ports_different: true

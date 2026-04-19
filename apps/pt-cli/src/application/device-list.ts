@@ -159,6 +159,17 @@ export function buildDeviceListFromSnapshot(snapshot: {
   const connectionsByDevice: Record<string, ConnectionInfo[]> = {};
   const unresolvedLinks: UnresolvedLink[] = [];
 
+  const deviceCount = Object.keys(snapshot.devices ?? {}).length;
+
+  if (deviceCount === 0) {
+    return {
+      devices: [],
+      count: 0,
+      connectionsByDevice: {},
+      unresolvedLinks: [],
+    };
+  }
+
   for (const link of Object.values(snapshot.links ?? {})) {
     const arr = connectionsByDevice[link.device1] ?? [];
     arr.push({

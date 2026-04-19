@@ -39,6 +39,8 @@ import { ControllerIosService } from "./ios-service.js";
 import { BridgeService } from "./bridge-service.js";
 import { ControllerCanvasService } from "./canvas-service.js";
 import { ControllerTopologyService } from "./topology-service.js";
+import { OmniscienceService } from "../application/services/omniscience-service.js";
+import { LabService } from "../application/services/lab-service.js";
 
 export { FileBridgeV2 } from "@cisco-auto/file-bridge";
 
@@ -68,6 +70,8 @@ export class PTController {
   private readonly commandTraceService: CommandTraceService;
   private readonly controllerIosService: ControllerIosService;
   private readonly bridgeService: BridgeService;
+  public readonly omniscience: OmniscienceService;
+  public readonly labService: LabService;
   private readonly canvasFacade: ControllerCanvasService;
   private readonly topologyFacade: ControllerTopologyService;
 
@@ -83,6 +87,7 @@ export class PTController {
     }
 
     this.topologyCache = new TopologyCache(this.bridge);
+    this.omniscience = new OmniscienceService(this.bridge);
 
     const generateId = () => `ctrl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
@@ -99,6 +104,13 @@ export class PTController {
     this.controllerIosService = new ControllerIosService(this.iosService, this.deviceService);
     this.topologyFacade = new ControllerTopologyService(this.topologyService, this.deviceService);
     this.canvasFacade = new ControllerCanvasService(this.canvasService);
+    this.labService = new LabService(
+      this.bridge,
+      this.topologyCache,
+      this.deviceService,
+      this.iosService,
+      this.topologyService,
+    );
   }
 
   async start(): Promise<void> {

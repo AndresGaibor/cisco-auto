@@ -79,7 +79,7 @@ export function createDebugLogStream(path: string): DebugLogStream {
             onError(err);
           }
         }
-      }, 500);
+      }, 100);
 
       return () => {
         if (intervalId !== null) {

@@ -1,147 +1,146 @@
 # PT Runtime Architecture
 
-> Documented: 2026-04-14
+## Overview
 
-## Two-File Design
+`@cisco-auto/pt-runtime` is a TypeScript library that generates PT-safe JavaScript for execution inside Cisco Packet Tracer's QtScript engine.
 
-PT Runtime splits into three deployed artifacts with strict boundaries:
-
-| Artifact | Source | Size | Responsibility |
-|---|---|---|---|
-| `main.js` | `src/pt/kernel/` | ~45 KB | Lifecycle: queue, terminal, job execution, hot-reload, heartbeat, lease, shutdown |
-| `runtime.js` | `src/handlers/`, `src/runtime/` | ~15 KB | Business logic: dispatch, validation, plan building |
-| `catalog.js` | `src/pt-api/pt-constants.ts` | ~2.5 KB | Static constants: device types, cable types, module catalog |
-
-**Frontera principal**: `main.js` owns lifecycle. `runtime.js` owns business logic. Neither crosses the boundary.
-
-## Kernel (main.js)
-
-### Source files: `src/pt/kernel/`
-
-| File | Responsibility |
-|---|---|
-| `main.ts` | Kernel factory `createKernel(config)`. Boot/shutdown lifecycle. Owns all other components. |
-| `command-queue.ts` | Polls `commands/` → `in-flight/` → `results/`. Atomically claims files. Moves corrupt JSON to `dead-letter/`. |
-| `runtime-loader.ts` | Hot-reloads `runtime.js` when mtime changes. Blocks reload when busy. |
-| `job-executor.ts` | Executes `DeferredJobPlan` steps asynchronously via `TerminalEngine`. |
-| `lease.ts` | Exclusive write lock (`commands/.lease`) for single-instance enforcement. |
-| `heartbeat.ts` | Writes `logs/heartbeat.json` for bridge health monitoring. |
-| `cleanup.ts` | Idempotent shutdown: clears intervals, jobs, terminals. |
-| `directories.ts` | Ensures pt-dev directory structure exists. |
-
-### Entry points
-
-```javascript
-function main()   // Called by PT Script Engine lifecycle
-function cleanUp() // Called on PT shutdown
-function _ptLoadModule(name) // Loads catalog.js / runtime.js at startup
-```
-
-### What main.js does NOT do
-
-- Business logic (handlers, dispatch)
-- Payload validation
-- Plan building
-- IOS command parsing
-
-## Runtime (runtime.js)
-
-### Source files
-
-- `src/handlers/runtime-handlers.ts` — `runtimeDispatcher(payload, api)`. Maps `type` → handler function.
-- `src/handlers/` — device, link, vlan, dhcp, host, canvas, module, inspect
-- `src/handlers/parsers/ios-parsers.ts` — Pure show-command parsers (no PT deps)
-- `src/runtime/` — payload validation, logger, metrics, helpers
-- `src/domain/` — `DeferredJobPlan`, `RuntimeResult` factories
-
-### Entry point
-
-```javascript
-function dispatch(payload, api) // Called by main.js kernel
-```
-
-### What runtime.js does NOT do
-
-- Filesystem (no queue, no commands/, no results/)
-- Terminal events (delegates to main.js via `api.executeCommand`)
-- Interval management
-- Lifecycle
-
-## Catalog (catalog.js)
-
-Static constants from `src/pt-api/pt-constants.ts`:
-
-- `PT_DEVICE_TYPE_MAP` — router=0, switch=1, pc=8, server=9, etc.
-- `PT_CABLE_TYPE_MAP` — copper-straight=0, copper-cross=1, serial=3, etc.
-- `PT_PORT_MAP` — port type by device model
-- `PT_MODULE_CATALOG` — supported HWIC/NM modules per router model
-
-Almost never changes. Regenerated only when Cisco hardware catalog updates.
-
-## Data Flow
+## Architecture Diagram
 
 ```
-Bridge writes command envelopes → commands/
-
-Kernel polls `_queue.json` + `commands/` → atomically moves to `in-flight/`
-Kernel parses JSON envelope
-
-Kernel calls dispatch(payload, api) → runtime.js
-  handler validates payload
-  handler builds DeferredJobPlan (type: "command" | "ensure-mode" | "save-config" | etc.)
-  handler returns DeferredJobPlan to kernel
-
-Kernel writes pending result to results/{id}.pending.json
-Kernel begins async job execution via TerminalEngine
-
-  TerminalEngine.executeCommand(cmd) → PT TerminalLine API
-  Events fire: commandStarted → outputWritten → commandEnded
-  JobExecutor processes step results
-
-Kernel polls `__pollDeferred(ticket)` → returns current job state
-Once jobDone=true → kernel writes results/{id}.json (completed)
-
-Kernel cleans up in-flight/{filename}
+Lab YAML → @cisco-auto/core → Command Files → @cisco-auto/file-bridge
+    ↓
+@cisco-auto/pt-runtime:
+  TypeScript Handlers + Kernel + Terminal Engine
+    ↓ transformToPtSafeAst()
+  ES5-compatible JavaScript (runtime.js + main.js)
+    ↓ deploy()
+  PT Script Module → QtScript Engine → Packet Tracer
 ```
 
-## Directory Structure (pt-dev/)
+## Command Flow
+
+1. **Lab YAML** → `@cisco-auto/core` parses configuration
+2. **Command Files** → Written to filesystem via `@cisco-auto/file-bridge`
+3. **PT Script Module** → Heartbeat detects new command files
+4. **main.js** → Reads command file, calls runtime
+5. **runtime.js** → Dispatcher routes to appropriate handler
+6. **Handler** → Executes PT API calls via IPC
+7. **Result** → Written back via file-bridge
+8. **Return** → Result object returned to PT Script Module
+
+## Directory Structure
 
 ```
-pt-dev/
-├── commands/          # Pending: bridge writes JSON here
-├── in-flight/         # Claimed: kernel atomically moves here
-├── results/           # Completed: kernel writes results here
-│   └── {id}.json      # Result envelope
-├── dead-letter/       # Corrupt: moved here on JSON parse failure
-├── logs/
-│   └── heartbeat.json # Bridge health monitoring
-├── main.js            # Kernel bootstrap (entry: main(), cleanUp())
-├── runtime.js         # Business logic (entry: dispatch(payload, api))
-└── catalog.js         # Static constants (device/cable types)
+packages/pt-runtime/src/
+├── build/              # Build pipeline
+│   ├── ast-transform.ts      # TypeScript → ES5 transpiler
+│   ├── validate-pt-safe.ts    # PT safety validation
+│   ├── render-runtime-v2.ts   # Bundle generator
+│   └── runtime-manifest.ts   # File manifest
+├── core/               # Core runtime
+│   ├── dispatcher.ts         # Command dispatcher
+│   ├── middleware.ts         # Middleware pipeline
+│   ├── built-in-middleware.ts # Logging, metrics, validation
+│   └── plugin-api.ts         # Plugin system
+├── handlers/           # Command handlers
+│   ├── device.handler.ts    # addDevice, removeDevice, etc.
+│   ├── link.handler.ts      # addLink, removeLink
+│   ├── config.handler.ts     # configIos, execIos
+│   └── runtime-handlers.ts   # Core handlers (dispatcher entry)
+├── runtime/            # Runtime utilities
+│   ├── logger.ts            # Structured logging
+│   ├── metrics.ts           # Metrics collection
+│   ├── payload-validator.ts # Security validation
+│   ├── pt-version.ts        # PT version detection
+│   └── feature-flags.ts     # Feature flags
+├── pt/                 # PT-specific code
+│   ├── kernel/          # PT kernel
+│   └── terminal/        # Terminal emulation
+└── pt-api/             # PT API types
 ```
 
-## Deprecated / Not in Build Path
+## Key Components
 
-| File | Status | Why |
-|---|---|---|
-| `src/handlers/ios-engine.ts` | Deprecated | TerminalEngine + JobExecutor replaced it |
-| `src/handlers/ios-session.ts` | Deprecated | prompt-parser.ts replaced `inferModeFromPrompt` |
-| `src/core/dispatcher.ts` | @legacy | Map-based dispatcher in runtime-handlers.ts used instead |
-| `src/core/registry.ts` | @deprecated | Not used in active build; kept for extensibility |
-| `src/ports.ts` | @deprecated | Not used in active build; dependency inversion not active |
+### Dispatcher
 
-## Model Verification
+The dispatcher (`runtimeDispatcher`) is the entry point for all commands:
 
-`src/verified-models.ts` — single source of truth for PT device models (19 verified models).
+```typescript
+function runtimeDispatcher(payload, api) {
+  const handler = HANDLER_MAP.get(payload.type);
+  if (!handler) {
+    return { ok: false, error: "Unknown command type" };
+  }
+  return handler(payload, api);
+}
+```
 
-When PT adds a new device model:
-1. Add to `src/verified-models.ts`
-2. Run `bun run generate-models`
-3. `src/validated-models.ts` auto-regenerates `PT_MODEL_MAP`
-4. Build → new model available in `catalog.js`
+### Middleware Pipeline
 
-## See Also
+Middleware provides cross-cutting concerns:
 
-- `docs/BUILD.md` — Build pipeline, PT-safe rules, source manifests
-- `docs/PT-API.md` — PT IPC API reference (TerminalLine, PTDevice, PTPort, etc.)
-- `src/README.md` — Model management guide
+1. **errorRecoveryMiddleware** - Catches exceptions
+2. **rateLimitMiddleware** - Prevents command flooding
+3. **loggingMiddleware** - Structured logging
+4. **metricsMiddleware** - Metrics collection
+5. **validationMiddleware** - Payload validation
+
+### PtLogger
+
+Structured JSON logging compatible with QtScript:
+
+```typescript
+const log = getLogger("device").withDevice("Router1");
+log.info("Operation completed", { duration: 123 });
+// Outputs: {"ts":"...","level":"info","logger":"device","msg":"Operation completed","device":"Router1","data":{"duration":123}}
+```
+
+### Payload Validator
+
+Runtime validation prevents injection attacks:
+
+- Size limits (64KB max)
+- Prototype pollution check
+- IOS command sanitization
+- Path traversal prevention
+
+## PT Safety
+
+The generated JavaScript must be PT-safe:
+
+- **No ES6+ syntax** (arrow functions, template literals, etc.)
+- **No imports/exports** (all code is bundled)
+- **No console** (use dprint instead)
+- **No process/BigInt/Buffer** (not available in QtScript)
+- **ES5 compatible** (var, function expressions, etc.)
+
+## Build Pipeline
+
+```
+TypeScript Source Files
+    ↓
+Runtime Manifest (files list)
+    ↓
+AST Transform (strip imports, transpile to ES5)
+    ↓
+Post-Processing (const→var, ??→||, ?.→&&)
+    ↓
+Validation (PT safety check)
+    ↓
+Bundle (runtime.js)
+```
+
+## Version Compatibility
+
+The runtime supports PT 7.x through 8.x via:
+
+1. **Capability probing** - Detects available methods at runtime
+2. **Feature flags** - Enables/disables features based on PT version
+3. **Graceful degradation** - Falls back when methods unavailable
+
+## Security
+
+- All payloads validated before dispatch
+- IOS commands sanitized against injection patterns
+- Prototype pollution blocked via safe JSON parsing
+- Rate limiting prevents DoS
