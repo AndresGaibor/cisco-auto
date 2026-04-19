@@ -5,9 +5,9 @@
  * and finding the next rotated log file.
  * Supports the rotation manifest to recover events from rotated files.
  */
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import type { ConsumerCheckpoint, RotationManifest } from "./shared/protocol.js";
+import type { ConsumerCheckpoint, RotationManifest } from "./shared/local-types.js";
 import { BridgePathLayout } from "./shared/path-layout.js";
 
 export class FileResolver {
@@ -41,7 +41,7 @@ export class FileResolver {
     let currentSize: number;
 
     try {
-      currentSize = require("node:fs").statSync(currentFilePath).size;
+      currentSize = statSync(currentFilePath).size;
     } catch {
       // File doesn't exist — fall back to events.current.ndjson
       const fallback = this.paths.currentEventsFile();

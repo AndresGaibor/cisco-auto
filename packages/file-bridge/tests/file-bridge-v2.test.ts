@@ -246,7 +246,7 @@ describe("FileBridgeV2", () => {
       expect(s.ready).toBe(true);
       expect(s.leaseValid).toBe(true);
       expect(typeof s.queueIndexDrift).toBe("boolean");
-      expect(s.claimMode).toBe("atomic-move");
+      expect(s.claimMode).toBe("unknown");
     });
   });
 

@@ -91,6 +91,35 @@ const PRIMITIVE_REGISTRY: Record<string, PrimitiveMetadata> = {
     description: "Obtener información de hardware del dispositivo",
     supportedPayloadFields: ["device"],
   },
+
+  // Canvas primitives
+  "canvas.listRects": {
+    domain: "canvas",
+    description: "Listar todos los rectángulos de canvas (zonas coloreadas)",
+    supportedPayloadFields: ["id"],
+  },
+  "canvas.devicesInRect": {
+    domain: "canvas",
+    description: "Obtener dispositivos dentro de un rectángulo de canvas",
+    supportedPayloadFields: ["id", "rectId", "includeClusters"],
+  },
+  "canvas.getRect": {
+    domain: "canvas",
+    description: "Obtener datos detallados de un rectángulo de canvas",
+    supportedPayloadFields: ["id", "rectId"],
+  },
+
+  // VLAN primitives
+  "vlan.ensure": {
+    domain: "vlan",
+    description: "Asegurar que las VLANs existen en el dispositivo",
+    supportedPayloadFields: ["device", "vlans"],
+  },
+  "vlan.configInterfaces": {
+    domain: "vlan",
+    description: "Configurar interfaces con VLANs (IP, modo access/trunk)",
+    supportedPayloadFields: ["device", "interfaces"],
+  },
 };
 
 const HANDLER_TYPE_OVERRIDES: Record<string, string> = {
@@ -106,6 +135,11 @@ const HANDLER_TYPE_OVERRIDES: Record<string, string> = {
   "topology.snapshot": "snapshot",
   "topology.list": "listDevices",
   "hardware.info": "inspect",
+  "canvas.listRects": "listCanvasRects",
+  "canvas.devicesInRect": "devicesInRect",
+  "canvas.getRect": "getRect",
+  "vlan.ensure": "ensureVlans",
+  "vlan.configInterfaces": "configVlanInterfaces",
 };
 
 function primitiveIdToHandlerType(primitiveId: string): string {

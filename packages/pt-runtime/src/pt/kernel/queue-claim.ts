@@ -3,7 +3,9 @@
 // Refactor Bloque B: funciones extraídas, detección de copy-delete, validación completa de envelope
 
 // FUENTE DE VERDAD: commands/*.json (filesystem) — scan directo del directorio
-// _queue.json es legacy fallback, NO fuente primary (detrás de flag USE_LEGACY_QUEUE_INDEX)
+// _queue.json es legacy fallback, NO fuente primaria.
+// En PT-side no se usa process.env; si se necesita reactivar este camino,
+// debe hacerse por build-time replacement o constante PT-safe.
 
 import { safeFM } from "./safe-fm";
 import type { CommandEnvelope } from "./types";
@@ -12,7 +14,7 @@ import { QueueDiscovery } from "./queue-discovery";
 import { DeadLetter } from "./dead-letter";
 import { writeDebugLog } from "./debug-log";
 
-const USE_LEGACY_QUEUE_INDEX = process.env.USE_LEGACY_QUEUE_INDEX === "true";
+const USE_LEGACY_QUEUE_INDEX = false;
 
 export interface QueueClaim {
   poll(): CommandEnvelope | null;
@@ -52,7 +54,7 @@ export function createQueueClaim(
     }
 
     files.sort();
-    logQueue("[queue-claim] candidatos vistos: " + files.length + " (fs=" + seen["_"] + ")");
+    logQueue("[queue-claim] candidatos vistos: " + files.length);
     return files;
   }
 

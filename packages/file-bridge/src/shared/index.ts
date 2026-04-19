@@ -9,12 +9,17 @@ export {
   type BridgeResultEnvelope,
   type BridgeErrorDetail,
   type BridgeEvent,
-  type ConsumerCheckpoint,
   type BridgeLease,
-  type CommandStatus,
-  type CommandFileEnvelope,
   BridgeEventSchema,
   type BridgeEventInput,
 } from "./protocol";
+export {
+  type ConsumerCheckpoint,
+  type RotationEntry,
+  type RotationManifest,
+  type InFlightRecovery,
+  type CommandStatus,
+  type CommandFileEnvelope,
+} from "./local-types";
 export { BridgePathLayout } from "./path-layout";
 export { SequenceStore } from "./sequence-store";

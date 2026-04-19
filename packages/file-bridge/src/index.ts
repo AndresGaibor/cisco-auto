@@ -1,10 +1,3 @@
-// ============================================================================
-// @cisco-auto/file-bridge - File-based bridge for CLI ↔ Packet Tracer
-//
-// DEPRECATED: file-bridge-v2-types.ts — Use @cisco-auto/types for protocol
-// types or define domain-specific types inline. That file will be removed.
-// ============================================================================
-
 // Core bridge implementation
 export {
   FileBridgeV2,
@@ -45,6 +38,14 @@ export type {
 
 // Validation
 export { BridgeEventSchema, type BridgeEventInput } from "./shared/protocol.js";
+export type {
+  ConsumerCheckpoint,
+  RotationEntry,
+  RotationManifest,
+  InFlightRecovery,
+  CommandStatus,
+  CommandFileEnvelope,
+} from "./shared/local-types.js";
 
 // Infrastructure
 export { BridgePathLayout } from "./shared/path-layout.js";

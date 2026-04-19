@@ -7,7 +7,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { statSync } from "node:fs";
 import { atomicWriteFile } from "./shared/fs-atomic.js";
-import type { ConsumerCheckpoint } from "./shared/protocol.js";
+import type { ConsumerCheckpoint } from "./shared/local-types.js";
 import { BridgePathLayout } from "./shared/path-layout.js";
 
 export class CheckpointManager {

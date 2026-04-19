@@ -1,4 +1,4 @@
-import { getMemory } from '@cisco-auto/core/memory';
+import { getMemory } from '../memory/index.js';
 import { AuditLogger, type AuditLogEntry } from './audit-log';
 import { Transaction } from './transaction';
 

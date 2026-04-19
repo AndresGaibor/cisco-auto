@@ -62,6 +62,10 @@ export interface LabConnection {
   from: ConnectionEndpoint;
   to: ConnectionEndpoint;
   cableType?: CableType;
+  fromDevice?: string;
+  fromPort?: string;
+  toDevice?: string;
+  toPort?: string;
 }
 
 /**
@@ -78,6 +82,12 @@ export interface LabDevice {
   vlans?: unknown;
   routing?: unknown;
   services?: unknown;
+  model?: string;
+  role?: string;
+  x?: number;
+  y?: number;
+  supported?: string;
+  notes?: string[];
 }
 
 /**

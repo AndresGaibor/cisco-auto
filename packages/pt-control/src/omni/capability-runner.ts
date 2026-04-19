@@ -19,14 +19,14 @@ import type {
   TerminalPlan,
 } from "../ports/index.js";
 import type { Intent } from "../contracts/intent.js";
+import type { OrchestratorContext } from "../application/orchestration/index.js";
+import { executeIntent } from "../application/orchestration/index.js";
 
 export interface CapabilityContext {
   primitivePort: RuntimePrimitivePort;
   terminalPort: RuntimeTerminalPort;
   omniPort: RuntimeOmniPort;
-  workflowPlanner?: {
-    buildPlan(intent: Intent): Promise<{ id: string; intentId: string; strategy: string; steps: any[] } | null>;
-  };
+  orchestrator?: OrchestratorContext;
 }
 
 function createNoOpCapabilityContext(): CapabilityContext {
@@ -268,8 +268,8 @@ async function executeWorkflow(
     return { ok: false, evidence: {}, error: "Workflow plan no especificado en capability", warnings: [] };
   }
 
-  if (!context.workflowPlanner) {
-    return { ok: false, evidence: {}, error: "Workflow planner no disponible en context", warnings: [] };
+  if (!context.orchestrator) {
+    return { ok: false, evidence: {}, error: "Orchestrator no disponible en context", warnings: [] };
   }
 
   const intent: Intent = {
@@ -281,15 +281,21 @@ async function executeWorkflow(
   };
 
   try {
-    const plan = await context.workflowPlanner.buildPlan(intent);
-    if (!plan) {
-      return { ok: false, evidence: {}, error: `No se pudo construir plan para workflow: ${workflowPlanId}`, warnings: [] };
-    }
+    const verdict = await executeIntent(context.orchestrator, intent);
     return {
-      ok: true,
-      evidence: { planId: plan.id, strategy: plan.strategy, stepsCount: plan.steps.length },
-      error: undefined,
-      warnings: [],
+      ok: verdict.ok,
+      evidence: {
+        planId: intent.id,
+        strategy: verdict.status,
+        stepsExecuted: verdict.evidence.rawRuntimeResults.length + verdict.evidence.rawTerminalResults.length + verdict.evidence.rawOmniResults.length,
+        rawRuntimeResults: verdict.evidence.rawRuntimeResults,
+        rawTerminalResults: verdict.evidence.rawTerminalResults,
+        rawOmniResults: verdict.evidence.rawOmniResults,
+        warnings: verdict.evidence.warnings,
+        anomalies: verdict.evidence.anomalies,
+      },
+      error: verdict.ok ? undefined : verdict.reason,
+      warnings: verdict.warnings,
     };
   } catch (e) {
     const error = String(e);

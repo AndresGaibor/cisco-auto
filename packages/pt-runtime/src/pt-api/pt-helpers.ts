@@ -174,7 +174,7 @@ export function resolveModel(maps: PtHelperMaps, model: string): string {
     return maps.PT_MODEL_MAP[key];
   }
   throw new Error(
-    "Invalid device model: '" + model + "'. Check packages/core/src/catalog/ for valid models. " +
+    "Invalid device model: '" + model + "'. Check the validated PT catalog for valid models. " +
     "Available: " + Object.keys(maps.PT_MODEL_MAP).slice(0, 5).join(", ") + "..."
   );
 }

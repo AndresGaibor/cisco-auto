@@ -296,7 +296,9 @@ export class FileBridgeV2 extends EventEmitter {
       if (existing.trim()) {
         const parsed = JSON.parse(existing);
         if (Array.isArray(parsed)) {
-          queue = parsed.map((entry) => String(entry));
+          queue = parsed
+            .map((entry) => String(entry).trim())
+            .filter((entry) => entry !== "" && entry !== "_queue.json" && entry.endsWith(".json"));
         }
       }
     } catch {
@@ -307,12 +309,13 @@ export class FileBridgeV2 extends EventEmitter {
       queue.push(filename);
     }
 
+    queue.sort();
     atomicWriteFile(queueFilePath, JSON.stringify(queue));
   }
 
   /**
-   * Remueve una entrada del índice de cola.
-   * Se usa para mantenimiento y depuración.
+   * Remueve una entrada del índice auxiliar de cola.
+   * NO altera la fuente primaria de verdad, que es commands/*.json.
    */
   static removeQueueEntry(root: string, filename: string): void {
     const queueFilePath = join(root, "commands", "_queue.json");
@@ -781,7 +784,7 @@ export class FileBridgeV2 extends EventEmitter {
       queuedCount,
       inFlightCount,
       queueIndexDrift,
-      claimMode: "atomic-move",
+      claimMode: "unknown",
       warnings,
     };
   }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { parseAddLinkPayload, AddLinkPayloadRawSchema, ExecIosPayloadSchema } from "../src/contracts/commands.js";
+import { parseAddLinkPayload, AddLinkPayloadRawSchema, ExecIosPayloadSchema } from "@cisco-auto/types/schemas/pt-commands";
 
 describe("Bridge Contract - Legacy & v2 Compatibility", () => {
   describe("addLink payload normalization", () => {

@@ -2,7 +2,7 @@
 // DeviceService - Device inspection and module management
 // ============================================================================
 
-import type { FileBridgePort } from "../ports/file-bridge.port.js";
+import type { RuntimePrimitivePort } from "../../ports/runtime-primitive-port.js";
 import type { TopologyCachePort } from "../ports/topology-cache.port.js";
 import { DeviceQueryService } from "./device-query-service.js";
 import { DeviceMutationService } from "./device-mutation-service.js";
@@ -12,12 +12,12 @@ export class DeviceService {
   private readonly mutation: DeviceMutationService;
 
   constructor(
-    bridge: FileBridgePort,
+    primitivePort: RuntimePrimitivePort,
     cache: TopologyCachePort,
     generateId: () => string,
   ) {
-    this.query = new DeviceQueryService(bridge, cache, generateId);
-    this.mutation = new DeviceMutationService(bridge, this.query, generateId);
+    this.query = new DeviceQueryService(primitivePort, cache, generateId);
+    this.mutation = new DeviceMutationService(primitivePort, this.query);
   }
 
   inspect(device: string, includeXml = false) {

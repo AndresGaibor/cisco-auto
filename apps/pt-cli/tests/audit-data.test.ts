@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { rmSync } from 'node:fs';
 import { Database } from 'bun:sqlite';
 
-import { initializeSchema } from '../../../packages/core/src/memory/schema.ts';
+import { initializeSchema } from '../../../packages/ios-domain/src/memory/schema.ts';
 import { listAuditEntries } from '../src/commands/audit-data.ts';
 
 describe('audit data helper', () => {
@@ -24,8 +24,10 @@ describe('audit data helper', () => {
 
     const rows = listAuditEntries({ device: 'R2', failedOnly: true }, dbPath);
     expect(rows).toHaveLength(1);
-    expect(rows[0].command).toBe('show ip int brief');
-    expect(rows[0].status).toBe('failed');
+    const row = rows[0];
+    expect(row).toBeDefined();
+    expect(row!.command).toBe('show ip int brief');
+    expect(row!.status).toBe('failed');
 
     rmSync(dbPath, { force: true });
   });

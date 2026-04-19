@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { rmSync } from 'node:fs';
 import { Database } from 'bun:sqlite';
-import { initializeSchema } from '../../../packages/core/src/memory/schema.ts';
-import { AuditMemory } from '../../../packages/core/src/memory/audit.ts';
+import { initializeSchema } from '../../../packages/ios-domain/src/memory/index.ts';
+import { AuditMemory } from '../../../packages/ios-domain/src/memory/audit.ts';
 import { mapHistoryEntryToAuditRecord } from '../src/application/memory-persistence.ts';
 
 describe('memory persistence', () => {

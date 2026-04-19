@@ -60,21 +60,6 @@ export class TopologyQueryService {
       return this.cache.getSnapshot();
     }
 
-    const diskState = this.bridge.readState<TopologySnapshot>();
-    if (
-      diskState &&
-      typeof diskState === "object" &&
-      "devices" in diskState &&
-      "links" in diskState
-    ) {
-      this.cache.applySnapshot(diskState);
-      return diskState;
-    }
-
-    if (!this.bridge.isReady()) {
-      return null;
-    }
-
     try {
       const result = await this.primitivePort.runPrimitive(
         "topology.snapshot",
@@ -126,60 +111,57 @@ export class TopologyQueryService {
 
     if (cachedDevices.length > 0) {
       try {
-        const result = await this.bridge.sendCommandAndWait<
-          DeviceState[] | ListDevicesResultWithLinks
-        >(
-          "listDevices",
-          {
-            id: this.generateId(),
-            filter,
-          },
-          15000,
+        const result = await this.primitivePort.runPrimitive(
+          "topology.list",
+          { filter },
+          { timeoutMs: 15000 },
         );
 
-        const value = result.value;
-        // console.error("[DEBUG] Fast path resolved successfully");
-        if (Array.isArray(value)) {
-          const devices = filterDevices(
-            value.filter((device) => {
-              const model = String(device.model || "").toLowerCase();
-              return !PT_NON_CREATABLE_MODELS.some((item: string) => item.toLowerCase() === model);
-            }),
-          );
-          return {
-            devices,
-            connectionsByDevice: {},
-            unresolvedLinks: [],
-            count: devices.length,
-          };
-        }
-        if (value && typeof value === "object") {
-          const devices = Array.isArray(value.devices)
-            ? filterDevices(
-                value.devices.filter((device) => {
-                  const model = String(device.model || "").toLowerCase();
-                  return !PT_NON_CREATABLE_MODELS.some(
-                    (item: string) => item.toLowerCase() === model,
-                  );
-                }),
-              )
-            : [];
-          console.error(
-            "[DEBUG] value.connectionsByDevice:",
-            Object.keys(value.connectionsByDevice || {}).length,
-            "keys",
-          );
-          return {
-            devices,
-            connectionsByDevice: value.connectionsByDevice || {},
-            unresolvedLinks: value.unresolvedLinks || [],
-            count: value.count || devices.length,
-            ptLinkDebug: (value as ListDevicesResultWithLinks).ptLinkDebug,
-          };
+        if (!result.ok) {
+          console.error("[DEBUG] PT fast-path failed. Falling back to cache. Error:", result.error);
+        } else {
+          const value = result.value;
+          if (Array.isArray(value)) {
+            const devices = filterDevices(
+              value.filter((device) => {
+                const model = String(device.model || "").toLowerCase();
+                return !PT_NON_CREATABLE_MODELS.some((item: string) => item.toLowerCase() === model);
+              }),
+            );
+            return {
+              devices,
+              connectionsByDevice: {},
+              unresolvedLinks: [],
+              count: devices.length,
+            };
+          }
+          if (value && typeof value === "object") {
+            const devices = Array.isArray(value.devices)
+              ? filterDevices(
+                  value.devices.filter((device) => {
+                    const model = String(device.model || "").toLowerCase();
+                    return !PT_NON_CREATABLE_MODELS.some(
+                      (item: string) => item.toLowerCase() === model,
+                    );
+                  }),
+                )
+              : [];
+            console.error(
+              "[DEBUG] value.connectionsByDevice:",
+              Object.keys(value.connectionsByDevice || {}).length,
+              "keys",
+            );
+            return {
+              devices,
+              connectionsByDevice: value.connectionsByDevice || {},
+              unresolvedLinks: value.unresolvedLinks || [],
+              count: value.count || devices.length,
+              ptLinkDebug: (value as ListDevicesResultWithLinks).ptLinkDebug,
+            };
+          }
         }
       } catch (e) {
         console.error("[DEBUG] PT fast-path failed. Falling back to cache. Error:", e);
-        // PT no respondió; usar caché
       }
 
       const cachedLinks = this.cache.getLinks();
@@ -215,50 +197,56 @@ export class TopologyQueryService {
       };
     }
 
-    const result = await this.bridge.sendCommandAndWait<DeviceState[] | ListDevicesResultWithLinks>(
-      "listDevices",
-      {
-        id: this.generateId(),
-        filter,
-      },
-    );
-    const value = result.value;
-    // console.error("[DEBUG] Slow path resolved successfully");
+    try {
+      const result = await this.primitivePort.runPrimitive(
+        "topology.list",
+        { filter },
+        { timeoutMs: 60000 },
+      );
 
-    if (Array.isArray(value)) {
-      return {
-        devices: filterDevices(
-          value.filter((device) => {
-            const model = String(device.model || "").toLowerCase();
-            return !PT_NON_CREATABLE_MODELS.some((item: string) => item.toLowerCase() === model);
-          }),
-        ),
-        connectionsByDevice: {},
-        unresolvedLinks: [],
-        count: filterDevices(
-          value.filter((device) => {
-            const model = String(device.model || "").toLowerCase();
-            return !PT_NON_CREATABLE_MODELS.some((item: string) => item.toLowerCase() === model);
-          }),
-        ).length,
-      };
-    }
-    if (value && typeof value === "object") {
-      const devices = Array.isArray(value.devices)
-        ? filterDevices(
-            value.devices.filter((device) => {
+      if (!result.ok) {
+        return { devices: [], connectionsByDevice: {}, unresolvedLinks: [], count: 0 };
+      }
+
+      const value = result.value;
+
+      if (Array.isArray(value)) {
+        return {
+          devices: filterDevices(
+            value.filter((device) => {
               const model = String(device.model || "").toLowerCase();
               return !PT_NON_CREATABLE_MODELS.some((item: string) => item.toLowerCase() === model);
             }),
-          )
-        : [];
-      return {
-        devices,
-        connectionsByDevice: value.connectionsByDevice || {},
-        unresolvedLinks: value.unresolvedLinks || [],
-        count: typeof value.count === "number" ? value.count : devices.length,
-        ptLinkDebug: (value as ListDevicesResultWithLinks).ptLinkDebug,
-      };
+          ),
+          connectionsByDevice: {},
+          unresolvedLinks: [],
+          count: filterDevices(
+            value.filter((device) => {
+              const model = String(device.model || "").toLowerCase();
+              return !PT_NON_CREATABLE_MODELS.some((item: string) => item.toLowerCase() === model);
+            }),
+          ).length,
+        };
+      }
+      if (value && typeof value === "object") {
+        const devices = Array.isArray(value.devices)
+          ? filterDevices(
+              value.devices.filter((device) => {
+                const model = String(device.model || "").toLowerCase();
+                return !PT_NON_CREATABLE_MODELS.some((item: string) => item.toLowerCase() === model);
+              }),
+            )
+          : [];
+        return {
+          devices,
+          connectionsByDevice: value.connectionsByDevice || {},
+          unresolvedLinks: value.unresolvedLinks || [],
+          count: typeof value.count === "number" ? value.count : devices.length,
+          ptLinkDebug: (value as ListDevicesResultWithLinks).ptLinkDebug,
+        };
+      }
+    } catch {
+      // PT no responde
     }
     return { devices: [], connectionsByDevice: {}, unresolvedLinks: [], count: 0 };
   }

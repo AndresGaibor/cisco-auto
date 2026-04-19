@@ -1,4 +1,4 @@
-import type { LabSpec } from '../packages/pt-control/src/contracts/lab-spec.js';
+import type { LabSpec } from '../apps/pt-cli/src/contracts/lab-spec.js';
 
 const CORE_NAME = 'CORE3650';
 const SERVER_NAME = 'SRV1';

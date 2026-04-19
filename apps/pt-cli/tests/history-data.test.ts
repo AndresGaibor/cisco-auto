@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { rmSync } from 'node:fs';
 import { Database } from 'bun:sqlite';
 
-import { initializeSchema } from '../../../packages/core/src/memory/schema.ts';
+import { initializeSchema } from '../../../packages/ios-domain/src/memory/schema.ts';
 import { listFailedHistoryEntriesWithDb, searchHistoryEntriesWithDb } from '../src/commands/history-data.ts';
 
 describe('history data helper', () => {
@@ -24,11 +24,15 @@ describe('history data helper', () => {
 
     const matches = searchHistoryEntriesWithDb('ip int', 'R2', 20, dbPath);
     expect(matches).toHaveLength(1);
-    expect(matches[0].command).toBe('show ip int brief');
+    const match = matches[0];
+    expect(match).toBeDefined();
+    expect(match!.command).toBe('show ip int brief');
 
     const failed = listFailedHistoryEntriesWithDb('R2', 20, dbPath);
     expect(failed).toHaveLength(1);
-    expect(failed[0].status).toBe('failed');
+    const failedRow = failed[0];
+    expect(failedRow).toBeDefined();
+    expect(failedRow!.status).toBe('failed');
 
     rmSync(dbPath, { force: true });
   });

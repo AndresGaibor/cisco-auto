@@ -173,10 +173,12 @@ export class PTController {
     return deviceState;
   }
 
+  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
   async configIos(device: string, commands: string[], options?: { save?: boolean }): Promise<void> {
     await this._composition.iosService.configIos(device, commands, options).then(() => undefined);
   }
 
+  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
   async execIos<T = ParsedOutput>(
     device: string,
     command: string,
@@ -186,34 +188,42 @@ export class PTController {
     return this._composition.iosService.execIos<T>(device, command, parse, timeout);
   }
 
+  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
   async show(device: string, command: string): Promise<ParsedOutput> {
     return this._composition.iosService.show(device, command);
   }
 
+  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
   async showIpInterfaceBrief(device: string): Promise<ShowIpInterfaceBrief> {
     return this._composition.iosService.showIpInterfaceBrief(device);
   }
 
+  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
   async showVlan(device: string): Promise<ShowVlan> {
     return this._composition.iosService.showVlan(device);
   }
 
+  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
   async showIpRoute(device: string): Promise<ShowIpRoute> {
     return this._composition.iosService.showIpRoute(device);
   }
 
+  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
   async showRunningConfig(device: string): Promise<ShowRunningConfig> {
     return this._composition.iosService.showRunningConfig(device);
   }
 
+  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
   async showMacAddressTable(device: string): Promise<ShowMacAddressTable> {
     return this._composition.iosService.show(device, "show mac address-table") as Promise<ShowMacAddressTable>;
   }
 
+  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
   async showCdpNeighbors(device: string): Promise<ShowCdpNeighbors> {
     return this._composition.iosService.showCdpNeighbors(device);
   }
 
+  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
   async execInteractive(
     device: string,
     command: string,
@@ -226,6 +236,7 @@ export class PTController {
     return this._composition.iosService.execInteractive(device, command, options);
   }
 
+  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
   async execIosWithEvidence<T = ParsedOutput>(
     device: string,
     command: string,
@@ -235,6 +246,7 @@ export class PTController {
     return this._composition.iosService.execIos<T>(device, command, parse, timeout);
   }
 
+  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
   async configIosWithResult(
     device: string,
     commands: string[],
@@ -243,6 +255,7 @@ export class PTController {
     return this._composition.iosService.configIos(device, commands, options);
   }
 
+  /** @deprecated Usar orchestrator o primitivas RuntimePrimitivePort en vez de controllerIosService. */
   async configureDhcpServer(
     device: string,
     options: {
@@ -259,6 +272,7 @@ export class PTController {
     return this._composition.controllerIosService.configureDhcpServer(device, options);
   }
 
+  /** @deprecated Usar orchestrator o primitivas RuntimePrimitivePort en vez de controllerIosService. */
   async inspectDhcpServer(device: string): Promise<{
     ok: boolean;
     device: string;
@@ -278,6 +292,7 @@ export class PTController {
     return this._composition.controllerIosService.inspectDhcpServer(device);
   }
 
+  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
   async showParsed<T = ParsedOutput>(
     device: string,
     command: string,
@@ -286,6 +301,7 @@ export class PTController {
     return this._composition.iosService.showParsed<T>(device, command, options);
   }
 
+  /** @deprecated Usar orchestrator o RuntimeTerminalPort en vez de iosService directo. */
   async getIosConfidence(
     device: string,
     evidence: { source: string; status?: number; mode?: string },
@@ -298,6 +314,7 @@ export class PTController {
     );
   }
 
+  /** @deprecated Usar orchestrator o primitivas RuntimePrimitivePort en vez de iosService directo. */
   async configureDhcpPool(
     device: string,
     poolName: string,
@@ -318,6 +335,7 @@ export class PTController {
     );
   }
 
+  /** @deprecated Usar orchestrator o primitivas RuntimePrimitivePort en vez de iosService directo. */
   async configureOspfNetwork(
     device: string,
     processId: number,
@@ -329,6 +347,7 @@ export class PTController {
     await this._composition.iosService.configureOspfNetwork(device, processId, network, wildcard, area, options);
   }
 
+  /** @deprecated Usar orchestrator o primitivas RuntimePrimitivePort en vez de iosService directo. */
   async configureSshAccess(
     device: string,
     domainName: string,
@@ -339,6 +358,7 @@ export class PTController {
     await this._composition.iosService.configureSshAccess(device, domainName, username, password, options);
   }
 
+  /** @deprecated Usar orchestrator o primitivas RuntimePrimitivePort en vez de iosService directo. */
   async configureAccessListStandard(
     device: string,
     aclNumber: number,
@@ -348,6 +368,7 @@ export class PTController {
     await this._composition.iosService.configureAccessListStandard(device, aclNumber, entries, options);
   }
 
+  /** @deprecated Usar orchestrator o domain capabilities en vez de iosService directo. */
   async resolveCapabilities(device: string): Promise<DeviceCapabilities> {
     return this._composition.iosService.resolveCapabilities(device);
   }
@@ -388,10 +409,15 @@ export class PTController {
     return this._composition.deviceService.deepInspect(path, method, args);
   }
 
+  /**
+   * @deprecated Usar orchestrator, workflows o ports/adapters en vez de bypass directo.
+   * Este método existe solo para backward compatibility y será removido.
+   */
   async send(type: string, payload: Record<string, any>): Promise<any> {
-    const result = await (this._composition.bridge as any).sendCommandAndWait(type, payload);
-    if (!result.ok) throw result.error || result;
-    return result.value;
+    throw new Error(
+      "PTController.send() está deprecated. Usar orchestrator, RuntimePrimitivePort, " +
+      "RuntimeTerminalPort o RuntimeOmniPort directamente."
+    );
   }
 
   on<E extends PTEventType>(eventType: E, handler: (event: PTEvent) => void): this {

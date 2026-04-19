@@ -17,6 +17,7 @@
     "./capabilities": "./src/capabilities/index.ts",
     "./capabilities/*": "./src/capabilities/*",
     "./errors": "./src/errors.ts",
+    "./memory": "./src/memory/index.ts",
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -24,7 +25,6 @@
     "build": "echo no build needed"
   },
   "dependencies": {
-    "@cisco-auto/core": "workspace:*",
     "@cisco-auto/types": "workspace:*",
     "zod": "^4.3.6"
   },

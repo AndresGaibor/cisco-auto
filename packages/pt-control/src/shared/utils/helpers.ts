@@ -95,7 +95,7 @@ export function validatePTModel(model: string): string {
   if (!(key in PT_MODEL_MAP)) {
     throw new Error(
       `Invalid device model: "${model}". ` +
-        `Check packages/core/src/catalog/ for valid models. ` +
+        `Check the validated PT catalog for valid models. ` +
         `Available aliases: pc, server, cloud, ap, router, switch, 1941, 2960, ...`,
     );
   }

@@ -28,9 +28,8 @@ import { EventEmitter } from "node:events";
 import { ensureDir, ensureFile } from "./shared/fs-atomic.js";
 import type {
   BridgeEvent,
-  ConsumerCheckpoint,
-  RotationManifest,
 } from "./shared/protocol.js";
+import type { ConsumerCheckpoint, RotationManifest } from "./shared/local-types.js";
 import { BridgeEventSchema } from "./shared/protocol.js";
 import { BridgePathLayout } from "./shared/path-layout.js";
 import { CheckpointManager } from "./consumer-checkpoint.js";

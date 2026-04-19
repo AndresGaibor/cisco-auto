@@ -15,7 +15,7 @@ export function resolveModel(model: string | undefined): string {
     return validatePTModel(model);
   } catch (error) {
     throw new Error(
-      `Invalid device model: "${model}". Check packages/core/src/catalog/ for valid models.`,
+      `Invalid device model: "${model}". Check the validated PT catalog for valid models.`,
     );
   }
 }

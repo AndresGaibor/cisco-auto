@@ -14,7 +14,8 @@
  */
 import { existsSync, readFileSync, statSync, renameSync } from "node:fs";
 import { join } from "node:path";
-import type { BridgeEvent, RotationEntry, RotationManifest } from "./shared/protocol.js";
+import type { BridgeEvent } from "./shared/protocol.js";
+import type { RotationEntry, RotationManifest } from "./shared/local-types.js";
 import { BridgePathLayout } from "./shared/path-layout.js";
 import { appendLine, atomicWriteFile, ensureDir, ensureFile } from "./shared/fs-atomic.js";
 

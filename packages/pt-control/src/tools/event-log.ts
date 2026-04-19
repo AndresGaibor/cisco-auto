@@ -1,6 +1,5 @@
 import { readFileSync, existsSync } from "node:fs";
-import type { PTEvent } from "../contracts/index.js";
-import { PTEventSchema } from "../contracts/events.js";
+import { PTEventSchema, type PTEvent } from "@cisco-auto/types/schemas/pt-events";
 
 export interface EventReadOptions {
   /** Skip invalid lines instead of throwing */

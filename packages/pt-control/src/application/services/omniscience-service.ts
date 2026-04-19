@@ -5,11 +5,18 @@
 
 import type { RuntimeOmniPort } from "../../ports/runtime-omni-port.js";
 import type {
-    PortIntelligence, DeviceGenome,
-    AuditReport, NetworkTopology,
-    DeepDeviceContext
+  PortIntelligence,
+  DeviceGenome,
+  AuditReport,
+  NetworkTopology,
+  DeepDeviceContext,
 } from "../../contracts/omniscience.js";
 
+/**
+ * @deprecated Usar RuntimeOmniPort directamente o a través del Orchestrator.
+ * Este servicio es un wrapper legacy sin lógica propia. Será removido cuando
+ * los consumidores migren a usar omniPort directamente.
+ */
 export class OmniscienceService {
   constructor(private readonly omniPort: RuntimeOmniPort) {}
 

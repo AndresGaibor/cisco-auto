@@ -142,8 +142,8 @@ export function createControlComposition(
 
   // Servicios de aplicación
   const topologyService = new TopologyService(bridge, topologyCache, generateId);
-  const deviceService = new DeviceService(bridge, topologyCache, generateId);
-  const canvasService = new CanvasService(bridge, generateId);
+  const deviceService = new DeviceService(primitiveAdapter, topologyCache, generateId);
+  const canvasService = new CanvasService(primitiveAdapter, generateId);
   const contextService = new ControllerContextService(bridge, topologyCache);
   const snapshotService = new SnapshotService(topologyService, topologyCache);
   const commandTraceService = new CommandTraceService(bridge);
@@ -158,6 +158,7 @@ export function createControlComposition(
 
   const labService = new LabService(
     bridge,
+    primitiveAdapter,
     topologyCache,
     deviceService,
     iosService,

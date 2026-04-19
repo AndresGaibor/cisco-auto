@@ -3,7 +3,7 @@
 // Setup → Action → Verify → Cleanup con snapshot y verificación
 // ============================================================================
 
-import type { FileBridgePort } from "../ports/file-bridge.port.js";
+import type { RuntimePrimitivePort } from "../../ports/runtime-primitive-port.js";
 import type { TopologyCache } from "../../infrastructure/pt/topology-cache.js";
 import type { DeviceService } from "./device-service.js";
 import type { IosService } from "./ios-service.js";
@@ -253,7 +253,7 @@ function parseDeviceXml(xml: string): ParsedDeviceXml {
 
 export class LabService {
   constructor(
-    private readonly bridge: FileBridgePort,
+    private readonly primitivePort: RuntimePrimitivePort,
     private readonly topologyCache: TopologyCache,
     private readonly deviceService: DeviceService,
     private readonly iosService: IosService,
@@ -325,14 +325,14 @@ export class LabService {
 
   private async obtenerXmlDispositivo(deviceName: string): Promise<string | null> {
     try {
-      const envelope = await this.bridge.sendCommandAndWait("inspect", {
+      const resultado = await this.primitivePort.runPrimitive("device.inspect", {
         device: deviceName,
         includeXml: true,
       });
-      if (!envelope.ok) {
+      if (!resultado.ok) {
         return null;
       }
-      return (envelope.value as { xml?: string }).xml ?? null;
+      return (resultado.value as { xml?: string }).xml ?? null;
     } catch {
       return null;
     }

@@ -146,9 +146,17 @@ export class CommandProcessor {
     } catch (err) {
       const error = err as NodeJS.ErrnoException;
       if (error.code === "ENOENT") {
-        return { ok: false, path: null, reason: "File already claimed (race)", errorCode: "ENOENT" };
+        return { ok: false, path: null, reason: "file-not-found-or-already-claimed", errorCode: error.code };
       }
-      return { ok: false, path: null, reason: String(err), errorCode: error.code };
+
+      this.eventWriter.append({
+        seq: this.seq.next(),
+        ts: Date.now(),
+        type: "command-claim-error",
+        note: `${filename}: ${String(err)}`,
+      });
+
+      return { ok: false, path: null, reason: "rename-failed", errorCode: error.code };
     }
   }
 

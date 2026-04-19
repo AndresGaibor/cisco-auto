@@ -35,7 +35,6 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "@cisco-auto/core": "workspace:*",
     "@cisco-auto/file-bridge": "workspace:*",
     "@cisco-auto/ios-domain": "workspace:*",
     "@cisco-auto/kernel": "workspace:*",

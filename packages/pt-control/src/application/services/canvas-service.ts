@@ -2,27 +2,24 @@
 // CanvasService - Canvas rectangle operations
 // ============================================================================
 
-import type { FileBridgePort } from "../ports/file-bridge.port.js";
+import type { RuntimePrimitivePort } from "../../ports/runtime-primitive-port.js";
 import type { DevicesInRectResult, GetRectResult } from "../../contracts/index.js";
 
 export class CanvasService {
   constructor(
-    private bridge: FileBridgePort,
-    private generateId: () => string
+    private readonly primitivePort: RuntimePrimitivePort,
+    private generateId: () => string,
   ) {}
 
   /**
    * List all canvas rectangle IDs (colored zones)
    */
   async listCanvasRects(): Promise<{ rects: string[]; count: number }> {
-    const result = await this.bridge.sendCommandAndWait<{ rects: string[]; count: number }>(
-      "listCanvasRects",
-      {
-        id: this.generateId(),
-      },
-    );
+    const result = await this.primitivePort.runPrimitive("canvas.listRects", {
+      id: this.generateId(),
+    });
 
-    return result.value ?? { rects: [], count: 0 };
+    return result.value as { rects: string[]; count: number } ?? { rects: [], count: 0 };
   }
 
   /**
@@ -30,32 +27,26 @@ export class CanvasService {
    */
   async devicesInRect(
     rectId: string,
-    includeClusters = false
+    includeClusters = false,
   ): Promise<DevicesInRectResult> {
-    const result = await this.bridge.sendCommandAndWait<DevicesInRectResult>(
-      "devicesInRect",
-      {
-        id: this.generateId(),
-        rectId,
-        includeClusters,
-      },
-    );
+    const result = await this.primitivePort.runPrimitive("canvas.devicesInRect", {
+      id: this.generateId(),
+      rectId,
+      includeClusters,
+    });
 
-    return result.value ?? { ok: false, rectId, devices: [], count: 0 };
+    return result.value as DevicesInRectResult ?? { ok: false, rectId, devices: [], count: 0 };
   }
 
   /**
    * Get detailed data for a specific canvas rectangle
    */
   async getRect(rectId: string): Promise<GetRectResult> {
-    const result = await this.bridge.sendCommandAndWait<GetRectResult>(
-      "getRect",
-      {
-        id: this.generateId(),
-        rectId,
-      },
-    );
+    const result = await this.primitivePort.runPrimitive("canvas.getRect", {
+      id: this.generateId(),
+      rectId,
+    });
 
-    return result.value ?? { ok: false, rectId, error: "Rect not found" };
+    return result.value as GetRectResult ?? { ok: false, rectId, error: "Rect not found" };
   }
 }

@@ -59,15 +59,27 @@ function createTopologyService() {
   } as any;
 }
 
+function createPrimitivePort() {
+  return {
+    runPrimitive: async (id: string, payload: unknown) => {
+      if (id === "device.inspect") {
+        return { ok: true, value: { xml: "<device></device>" } };
+      }
+      return { ok: false, error: "Unknown primitive" };
+    },
+  } as any;
+}
+
 describe("LabService", () => {
   test("runScenario ejecuta setup → action → verify → cleanup", async () => {
     const bridge = createBridge();
+    const primitivePort = createPrimitivePort();
     const cache = createCache();
     const deviceService = createDeviceService();
     const iosService = createIosService();
     const topologyService = createTopologyService();
 
-    const labService = new LabService(bridge, cache, deviceService, iosService, topologyService);
+    const labService = new LabService(bridge, primitivePort, cache, deviceService, iosService, topologyService);
 
     const ordenInvocacion: string[] = [];
 
@@ -106,12 +118,13 @@ describe("LabService", () => {
 
   test("cleanup se ejecuta aunque verify falle", async () => {
     const bridge = createBridge();
+    const primitivePort = createPrimitivePort();
     const cache = createCache();
     const deviceService = createDeviceService();
     const iosService = createIosService();
     const topologyService = createTopologyService();
 
-    const labService = new LabService(bridge, cache, deviceService, iosService, topologyService);
+    const labService = new LabService(bridge, primitivePort, cache, deviceService, iosService, topologyService);
 
     let cleanupEjecutada = false;
 
@@ -138,6 +151,7 @@ describe("LabService", () => {
 
   test("inspectDeviceXml retorna null si device no existe", async () => {
     const bridge = createBridge();
+    const primitivePort = createPrimitivePort();
     const cache = createCache();
     const deviceService = createDeviceService();
     const iosService = createIosService();
@@ -155,6 +169,7 @@ describe("LabService", () => {
 
     const labService = new LabService(
       bridge,
+      primitivePort,
       cache,
       deviceServiceMock as any,
       iosService,
@@ -168,12 +183,13 @@ describe("LabService", () => {
 
   test("runScenario captura errores de setup y action", async () => {
     const bridge = createBridge();
+    const primitivePort = createPrimitivePort();
     const cache = createCache();
     const deviceService = createDeviceService();
     const iosService = createIosService();
     const topologyService = createTopologyService();
 
-    const labService = new LabService(bridge, cache, deviceService, iosService, topologyService);
+    const labService = new LabService(bridge, primitivePort, cache, deviceService, iosService, topologyService);
 
     const escenario: LabScenario = {
       id: "test-3",
@@ -202,12 +218,13 @@ describe("LabService", () => {
 
   test("getSnapshot retorna snapshot del cache", async () => {
     const bridge = createBridge();
+    const primitivePort = createPrimitivePort();
     const cache = createCache();
     const deviceService = createDeviceService();
     const iosService = createIosService();
     const topologyService = createTopologyService();
 
-    const labService = new LabService(bridge, cache, deviceService, iosService, topologyService);
+    const labService = new LabService(bridge, primitivePort, cache, deviceService, iosService, topologyService);
 
     const snapshot = await labService.getSnapshot();
 

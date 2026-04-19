@@ -2,6 +2,10 @@ import type { DeviceService } from "../application/services/device-service.js";
 import type { TopologyService } from "../application/services/topology-service.js";
 import type { DeviceState, LinkState, DeviceListResult } from "../contracts/index.js";
 
+/**
+ * @deprecated Wrapper legacy. Usar topologyService y deviceService directamente desde PTController
+ * en vez de este facade. Será removido cuando PTController migre completamente a los ports/adapters.
+ */
 export class ControllerTopologyService {
   constructor(
     private readonly topologyService: TopologyService,

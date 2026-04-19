@@ -19,9 +19,9 @@
     "clean": "rm -rf dist build generated",
     "validate:api": "bun run src/build/validate-pt-api.ts",
     "generate-models": "bun run src/scripts/generate-model-map.ts",
-    "generate": "bun run src/index.ts generate",
-    "validate": "bun run src/index.ts validate",
-    "deploy": "bun run src/index.ts deploy",
+    "generate": "bun run src/cli.ts generate",
+    "validate": "bun run src/cli.ts validate",
+    "deploy": "bun run src/cli.ts deploy",
     "test": "bun test"
   },
   "dependencies": {

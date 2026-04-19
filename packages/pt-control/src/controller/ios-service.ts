@@ -18,6 +18,10 @@ import type {
 } from "../contracts/ios-execution-evidence.js";
 import type { DeviceCapabilities } from "../domain/ios/capabilities/pt-capability-resolver.js";
 
+/**
+ * @deprecated Wrapper legacy. Usar iosService y deviceService directamente desde PTController
+ * en vez de este facade. Será removido cuando PTController migre completamente a los ports/adapters.
+ */
 export class ControllerIosService {
   constructor(
     private readonly iosService: IosService,

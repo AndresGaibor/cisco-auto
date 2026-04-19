@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { rmSync } from 'node:fs';
 import { Transaction } from './transaction.ts';
 import { executeTransactionWithMemory } from './integration.ts';
-import { getMemory } from '@cisco-auto/core/memory';
+import { getMemory } from '../memory/index.js';
 import type { CommandHandler } from './command-handler.js';
 
 describe('executeTransactionWithMemory', () => {

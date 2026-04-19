@@ -1,5 +1,5 @@
-// AUTO-GENERATED FROM CORE CATALOG
-// Source: packages/core/src/catalog/
+// AUTO-GENERATED FROM VALIDATED PT CATALOG
+// Source: PT validation pipeline
 // DO NOT EDIT MANUALLY - Run: bun packages/pt-runtime/src/scripts/generate-validated-model-map.ts
 
 export const PT_MODEL_MAP: Record<string, string> = {

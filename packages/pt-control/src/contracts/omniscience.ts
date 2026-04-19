@@ -1,7 +1,3 @@
-// ============================================================================
-// Omniscience Contracts V10 - THE INTELLIGENCE DASHBOARD
-// ============================================================================
-
 export interface DeviceGenome {
   name: string;
   model: string;
@@ -24,7 +20,7 @@ export interface PortIntelligence {
   physical: { mac: string; bia: string; bandwidth: number; duplex: string };
   logical: { ip: string; mask: string; ipv6: string[]; aclIn?: string; aclOut?: string };
   routing: { ospfHello?: number; ospfCost?: number };
-  neighbor?: string; // "Router1:Gig0/0"
+  neighbor?: string;
 }
 
 export interface DeepDeviceContext {
@@ -34,12 +30,12 @@ export interface DeepDeviceContext {
 
 export interface NetworkTopology {
   devices: string[];
-  links: Array<{ id: string; from: string; to: string; }>;
+  links: { id: string; from: string; to: string }[];
 }
 
 export interface AuditReport {
-  score: { current: number; total: number; percentage: number; };
-  time: { elapsedSeconds: number; formatted: string; };
+  score: { current: number; total: number; percentage: number };
+  time: { elapsedSeconds: number; formatted: string };
   instructions: string;
   checks: any[];
 }
