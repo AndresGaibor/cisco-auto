@@ -45,6 +45,7 @@ export interface FileBridgeV2Options {
   enableBackpressure?: boolean;
   autoSnapshotIntervalMs?: number; // Intervalo para auto-snapshot (default: 5000ms)
   heartbeatIntervalMs?: number; // Intervalo para monitorear heartbeat (default: 2000ms)
+  skipQueueIndex?: boolean; // Si true, no escribe _queue.json (fs es fuente primary)
 }
 
 export class FileBridgeV2 extends EventEmitter {
@@ -203,6 +204,8 @@ export class FileBridgeV2 extends EventEmitter {
     payload: TPayload,
     expiresAtMs?: number,
   ): BridgeCommandEnvelope<TPayload> {
+    if (!this.isReady()) throw new Error("[bridge] sendCommand: bridge is not ready");
+
     if (typeof type !== "string" || type.trim() === "") {
       throw new Error("[bridge] sendCommand: type must be a non-empty string");
     }
@@ -250,11 +253,17 @@ export class FileBridgeV2 extends EventEmitter {
 
     ensureDir(this.paths.commandsDir());
     atomicWriteFile(commandFile, JSON.stringify(envelope, null, 2));
-    try {
-      this.appendQueueIndex(this.paths.commandFileName(seq, type));
-    } catch (queueErr) {
-      console.warn(`[bridge] failed to update queue index: ${String(queueErr)}`);
+
+    // _queue.json es legacy fallback — no escribir si skipQueueIndex=true
+    // Fuente primary: commands/*.json (filesystem)
+    if (!this.options.skipQueueIndex) {
+      try {
+        this.appendQueueIndex(this.paths.commandFileName(seq, type));
+      } catch (queueErr) {
+        console.warn(`[bridge] failed to update queue index: ${String(queueErr)}`);
+      }
     }
+
     debugLog(`wrote command id=${id} seq=${seq}`);
 
     // Nuevo: escribir a commands/ en lugar de command.json (Fase 5)
@@ -275,6 +284,8 @@ export class FileBridgeV2 extends EventEmitter {
   /**
    * Agrega un archivo de comando al índice de cola.
    * PT usa este archivo porque no puede enumerar confiablemente la carpeta commands.
+   * NOTA: Este índice es best-effort y NO es fuente de verdad.
+   * El estado real se deriva de los archivos físicos en commands/.
    */
   private appendQueueIndex(filename: string): void {
     const queueFilePath = join(this.paths.commandsDir(), "_queue.json");
@@ -328,13 +339,8 @@ export class FileBridgeV2 extends EventEmitter {
     debugLog(
       `sendCommandAndWait type=${type} timeoutMs=${String(timeoutMs ?? this.options.resultTimeoutMs ?? 120_000)}`,
     );
-    if (this.options.enableBackpressure ?? true) {
-      debugLog(`waitForCapacity start type=${type}`);
-      await this.backpressure.waitForCapacity();
-      debugLog(`waitForCapacity done type=${type}`);
-    }
 
-    // NUEVO: escribir a commands/ (Fase 5) - ya no hay slot único
+    // La política de admisión (backpressure) queda solo en sendCommand()
     const envelope = this.sendCommand(
       type,
       payload,
@@ -724,14 +730,14 @@ export class FileBridgeV2 extends EventEmitter {
   /**
    * Obtiene estado general del bridge
    */
-  /**
-   * Obtiene estado general del bridge
-   */
   getBridgeStatus(): {
     ready: boolean;
     state: string;
+    leaseValid?: boolean;
     queuedCount?: number;
     inFlightCount?: number;
+    queueIndexDrift?: boolean;
+    claimMode?: "atomic-move" | "copy-delete" | "unknown" | string;
     warnings?: string[];
   } {
     const warnings: string[] = [];
@@ -755,11 +761,27 @@ export class FileBridgeV2 extends EventEmitter {
       warnings.push("No se pudo leer el estado de la cola");
     }
 
+    let queueIndexDrift = false;
+    try {
+      const health = this._diagnostics.collectHealth();
+      queueIndexDrift = health.queues.queueIndexDrift;
+      if (queueIndexDrift) {
+        warnings.push(
+          `Queue index drift detected (missing=${health.queues.queueIndexMissingEntries}, extra=${health.queues.queueIndexExtraEntries})`,
+        );
+      }
+    } catch {
+      warnings.push("No se pudo leer el estado de cola index");
+    }
+
     return {
       ready,
       state: this.lifecycle.state,
+      leaseValid: this.leaseManager.isLeaseValid(),
       queuedCount,
       inFlightCount,
+      queueIndexDrift,
+      claimMode: "atomic-move",
       warnings,
     };
   }

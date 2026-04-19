@@ -1,10 +1,10 @@
 /**
  * Diagnostics - Health and diagnostics for FileBridge V2
- * Collects queue stats, lease info, and detects issues
+ * Collects queue stats, lease info, journal info, and detects issues.
  */
 
 import { join } from "node:path";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { BridgePathLayout } from "../shared/path-layout.js";
 import { SequenceStore } from "../shared/sequence-store.js";
 import type { BridgeLease } from "../shared/protocol.js";
@@ -21,6 +21,12 @@ export interface BridgeHealth {
     inFlight: number;
     results: number;
     deadLetters: number;
+    queueIndexEntries: number;
+    queueIndexDrift: boolean;
+    queueIndexMissingEntries: number;
+    queueIndexExtraEntries: number;
+    oldestPendingAgeMs: number;
+    oldestInFlightAgeMs: number;
   };
   journal: {
     currentFileSize: number;
@@ -65,20 +71,43 @@ export class BridgeDiagnostics {
     const deadLetters = this.countFilesInDir(this.paths.deadLetterDir());
     const rotatedLogs = this.countRotatedLogs();
 
+    const queueIndex = this.readQueueIndex();
+    const commandFiles = this.listCommandFiles();
+    const queueIndexDrift = this.hasQueueIndexDrift(queueIndex, commandFiles);
+    const queueIndexMissingEntries = this.countQueueIndexMissingEntries(queueIndex, commandFiles);
+    const queueIndexExtraEntries = this.countQueueIndexExtraEntries(queueIndex, commandFiles);
+
+    const oldestPendingAgeMs = this.oldestFileAgeMs(this.paths.commandsDir());
+    const oldestInFlightAgeMs = this.oldestFileAgeMs(this.paths.inFlightDir());
+
     const consumers = this.getConsumerLag();
 
+    if (!leaseActive) issues.push("Bridge lease is not active for current owner");
     if (inFlight > 10) issues.push(`${inFlight} commands stuck in-flight`);
     if (pendingCommands > 100) issues.push(`Command queue backing up: ${pendingCommands} pending`);
+    if (queueIndexDrift) {
+      issues.push(
+        `Queue index drift detected (missing=${queueIndexMissingEntries}, extra=${queueIndexExtraEntries})`,
+      );
+    }
+    if (oldestInFlightAgeMs > 5 * 60 * 1000) {
+      issues.push(`Oldest in-flight command is ${oldestInFlightAgeMs}ms old`);
+    }
+    if (oldestPendingAgeMs > 5 * 60 * 1000) {
+      issues.push(`Oldest queued command is ${oldestPendingAgeMs}ms old`);
+    }
+
     for (const c of consumers) {
-      if (c.lagEvents > 1000)
+      if (c.lagEvents > 1000) {
         issues.push(`Consumer ${c.consumerId} lagging by ${c.lagEvents} events`);
+      }
     }
 
     let currentFileSize = 0;
     try {
       currentFileSize = statSync(this.paths.currentEventsFile()).size;
     } catch {
-      // ignore
+      currentFileSize = 0;
     }
 
     return {
@@ -88,7 +117,18 @@ export class BridgeDiagnostics {
         ownerId: lease?.ownerId ?? null,
         ageMs: lease ? now - lease.startedAt : 0,
       },
-      queues: { pendingCommands, inFlight, results, deadLetters },
+      queues: {
+        pendingCommands,
+        inFlight,
+        results,
+        deadLetters,
+        queueIndexEntries: queueIndex.length,
+        queueIndexDrift,
+        queueIndexMissingEntries,
+        queueIndexExtraEntries,
+        oldestPendingAgeMs,
+        oldestInFlightAgeMs,
+      },
       journal: {
         currentFileSize,
         rotatedFiles: rotatedLogs,
@@ -107,10 +147,91 @@ export class BridgeDiagnostics {
     }
   }
 
+  private listCommandFiles(): string[] {
+    try {
+      return readdirSync(this.paths.commandsDir())
+        .filter((f) => f.endsWith(".json") && f !== "_queue.json")
+        .sort();
+    } catch {
+      return [];
+    }
+  }
+
+  private readQueueIndex(): string[] {
+    try {
+      const queueFile = join(this.paths.commandsDir(), "_queue.json");
+      if (!existsSync(queueFile)) return [];
+      const raw = JSON.parse(readFileSync(queueFile, "utf8"));
+      if (!Array.isArray(raw)) return [];
+      return raw
+        .map((entry) => String(entry).trim())
+        .filter((entry) => entry !== "" && entry !== "_queue.json" && entry.endsWith(".json"))
+        .sort();
+    } catch {
+      return [];
+    }
+  }
+
+  private hasQueueIndexDrift(indexEntries: string[], commandFiles: string[]): boolean {
+    if (indexEntries.length !== commandFiles.length) return true;
+
+    const commandSet = new Set(commandFiles);
+    const indexSet = new Set(indexEntries);
+
+    for (const name of commandSet) {
+      if (!indexSet.has(name)) return true;
+    }
+    for (const name of indexSet) {
+      if (!commandSet.has(name)) return true;
+    }
+
+    return false;
+  }
+
+  private countQueueIndexMissingEntries(indexEntries: string[], commandFiles: string[]): number {
+    const indexSet = new Set(indexEntries);
+    let missing = 0;
+    for (const name of commandFiles) {
+      if (!indexSet.has(name)) missing++;
+    }
+    return missing;
+  }
+
+  private countQueueIndexExtraEntries(indexEntries: string[], commandFiles: string[]): number {
+    const commandSet = new Set(commandFiles);
+    let extra = 0;
+    for (const name of indexEntries) {
+      if (!commandSet.has(name)) extra++;
+    }
+    return extra;
+  }
+
+  private oldestFileAgeMs(dir: string): number {
+    try {
+      const files = readdirSync(dir).filter((f) => f.endsWith(".json") && f !== "_queue.json");
+      if (files.length === 0) return 0;
+
+      let oldestMtime = Number.MAX_SAFE_INTEGER;
+      for (const file of files) {
+        const fullPath = join(dir, file);
+        const stat = statSync(fullPath);
+        oldestMtime = Math.min(oldestMtime, stat.mtimeMs);
+      }
+
+      if (oldestMtime === Number.MAX_SAFE_INTEGER) return 0;
+      return Math.max(0, Date.now() - oldestMtime);
+    } catch {
+      return 0;
+    }
+  }
+
   private countRotatedLogs(): number {
     try {
       return readdirSync(this.paths.logsDir()).filter(
-        (f) => f.startsWith("events.") && f.endsWith(".ndjson"),
+        (f) =>
+          f.startsWith("events.") &&
+          f.endsWith(".ndjson") &&
+          f !== "events.current.ndjson",
       ).length;
     } catch {
       return 0;
@@ -123,6 +244,7 @@ export class BridgeDiagnostics {
       const consumerFiles = readdirSync(this.paths.consumerStateDir()).filter((f) =>
         f.endsWith(".json"),
       );
+
       for (const cf of consumerFiles) {
         const cp = JSON.parse(readFileSync(join(this.paths.consumerStateDir(), cf), "utf8"));
         const seqStore = this.seq.peek();

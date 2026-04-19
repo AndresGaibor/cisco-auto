@@ -68,8 +68,11 @@ export interface FileBridgePort {
    */
   getBridgeStatus(): {
     ready: boolean;
+    leaseValid?: boolean;
     queuedCount?: number;
     inFlightCount?: number;
+    queueIndexDrift?: boolean;
+    claimMode?: "atomic-move" | "copy-delete" | "unknown" | string;
     warnings?: string[];
   };
 

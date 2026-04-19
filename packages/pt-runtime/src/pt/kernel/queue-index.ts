@@ -1,27 +1,41 @@
 // packages/pt-runtime/src/pt/kernel/queue-index.ts
-// Lectura y escritura del índice _queue.json
-// El índice es la fuente primaria de verdad para comandos pendientes
+// Índice auxiliar _queue.json.
+// NO es la fuente primaria de verdad.
+// Si contradice a commands/*.json, gana commands/*.json.
 
 import { safeFM } from "./safe-fm";
 
 export interface QueueIndex {
   read(): string[];
   remove(filename: string): void;
+  add(filename: string): void;
+  rebuildFromFiles(files: string[]): void;
 }
 
-function toStringArray(value: unknown): string[] {
+function normalizeFileList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  const values: string[] = [];
+
+  const out: string[] = [];
+  const seen: Record<string, boolean> = {};
+
   for (const item of value) {
-    values.push(String(item));
+    const name = String(item || "").trim();
+    if (!name) continue;
+    if (name === "_queue.json") continue;
+    if (name.indexOf(".json") === -1) continue;
+    if (seen[name]) continue;
+    seen[name] = true;
+    out.push(name);
   }
-  return values;
+
+  out.sort();
+  return out;
 }
 
 export function createQueueIndex(commandsDir: string): QueueIndex {
   const queuePath = commandsDir + "/_queue.json";
 
-  function read(): string[] {
+  function readRaw(): string[] {
     const s = safeFM();
     if (!s.available || !s.fm) return [];
 
@@ -32,31 +46,36 @@ export function createQueueIndex(commandsDir: string): QueueIndex {
       if (!content || content.trim().length === 0) return [];
 
       const parsed = JSON.parse(content);
-      return toStringArray(parsed).filter(
-        (file) => file.indexOf(".json") !== -1 && file.indexOf("_queue.json") === -1,
-      );
+      return normalizeFileList(parsed);
     } catch (e) {
       dprint("[queue-index] read error: " + String(e));
       return [];
     }
   }
 
-  function remove(filename: string): void {
+  function writeRaw(files: string[]): void {
     const s = safeFM();
     if (!s.available || !s.fm) return;
 
     try {
-      if (!s.fm.fileExists(queuePath)) return;
+      const normalized = normalizeFileList(files);
+      s.fm.writePlainTextToFile(queuePath, JSON.stringify(normalized));
+    } catch (e) {
+      dprint("[queue-index] write error: " + String(e));
+    }
+  }
 
-      const content = s.fm.getFileContents(queuePath);
-      if (!content || content.trim().length === 0) return;
+  function read(): string[] {
+    return readRaw();
+  }
 
-      const parsed = JSON.parse(content);
-      const queue = toStringArray(parsed);
-      let changed = false;
+  function remove(filename: string): void {
+    try {
+      const current = readRaw();
       const filtered: string[] = [];
+      let changed = false;
 
-      for (const entry of queue) {
+      for (const entry of current) {
         if (entry === filename) {
           changed = true;
           continue;
@@ -64,14 +83,40 @@ export function createQueueIndex(commandsDir: string): QueueIndex {
         filtered.push(entry);
       }
 
-      if (changed) {
-        s.fm.writePlainTextToFile(queuePath, JSON.stringify(filtered));
-        dprint("[queue-index] removed: " + filename);
-      }
+      if (!changed) return;
+      writeRaw(filtered);
+      dprint("[queue-index] removed: " + filename);
     } catch (e) {
       dprint("[queue-index] remove error: " + String(e));
     }
   }
 
-  return { read, remove };
+  function add(filename: string): void {
+    try {
+      const name = String(filename || "").trim();
+      if (!name || name === "_queue.json" || name.indexOf(".json") === -1) return;
+
+      const current = readRaw();
+      for (const entry of current) {
+        if (entry === name) return;
+      }
+
+      current.push(name);
+      writeRaw(current);
+      dprint("[queue-index] added: " + name);
+    } catch (e) {
+      dprint("[queue-index] add error: " + String(e));
+    }
+  }
+
+  function rebuildFromFiles(files: string[]): void {
+    try {
+      writeRaw(files);
+      dprint("[queue-index] rebuilt from commands scan (" + String(files.length) + " files)");
+    } catch (e) {
+      dprint("[queue-index] rebuild error: " + String(e));
+    }
+  }
+
+  return { read, remove, add, rebuildFromFiles };
 }

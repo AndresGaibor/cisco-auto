@@ -51,7 +51,15 @@ export interface DurableNdjsonConsumerOptions {
   /** Called when a line fails to parse */
   onParseError?: (line: string, error: unknown) => void;
   /** Called when data loss is detected (e.g., rotated file not found) */
-  onDataLoss?: (info: { reason: string; lostFromOffset: number; checkpoint: ConsumerCheckpoint }) => void;
+  onDataLoss?: (info: {
+    reason: string;
+    lostFromOffset: number;
+    checkpoint: ConsumerCheckpoint;
+    file?: string;
+    offset?: number;
+    seq?: number;
+    timestamp?: number;
+  }) => void;
 }
 
 export class DurableNdjsonConsumer extends EventEmitter {
@@ -65,12 +73,33 @@ export class DurableNdjsonConsumer extends EventEmitter {
   private leftover = "";
   private running = false;
   private consecutiveParseErrors = 0;
+  private usingPollingFallback = false;
+  private lastWatchError: string | null = null;
+  private totalParseErrors = 0;
+  private totalDataLossEvents = 0;
 
   private readonly checkpointManager: CheckpointManager;
   private readonly fileResolver: FileResolver;
   private decoder = new StringDecoder("utf8");
 
+  private watcherFailed = false;
+  private recentParseErrors: Array<{
+    fragment: string;
+    offsetStart: number;
+    offsetEnd: number;
+    count: number;
+  }> = [];
+  private recentDataLossEvents: Array<{
+    reason: string;
+    file: string;
+    offset: number;
+    seq?: number;
+    timestamp: number;
+  }> = [];
+
   private static readonly MAX_CONSECUTIVE_ERRORS = 50;
+  private static readonly MAX_RECENT_PARSE_ERRORS = 10;
+  private static readonly MAX_RECENT_DATA_LOSS = 10;
 
   constructor(
     private readonly paths: BridgePathLayout,
@@ -103,8 +132,16 @@ export class DurableNdjsonConsumer extends EventEmitter {
       this.watcher = watch(this.paths.logsDir(), () => {
         this.poll();
       });
+      this.usingPollingFallback = false;
+      this.lastWatchError = null;
     } catch (err) {
-      this.emit("error", err);
+      this.watcher = null;
+      this.usingPollingFallback = true;
+      this.lastWatchError = String(err);
+      this.emit("warning", {
+        type: "watch-fallback",
+        error: String(err),
+      });
     }
 
     this.timer = setInterval(() => {
@@ -139,6 +176,9 @@ export class DurableNdjsonConsumer extends EventEmitter {
 
     this.currentFilePath = null;
     this.leftover = "";
+    this.decoder.end();
+    this.usingPollingFallback = false;
+    this.lastWatchError = null;
   }
 
   /** Trigger a poll manually */
@@ -249,6 +289,20 @@ export class DurableNdjsonConsumer extends EventEmitter {
         } catch (err) {
           // JSON parse error — increment error counter
           this.consecutiveParseErrors++;
+          this.totalParseErrors++;
+
+          // Guardar contexto del error para diagnostics
+          const offsetStart = checkpoint.byteOffset;
+          const offsetEnd = offsetStart + bytesRead;
+          this.recentParseErrors.push({
+            fragment: line.slice(0, 200),
+            offsetStart,
+            offsetEnd,
+            count: this.consecutiveParseErrors,
+          });
+          if (this.recentParseErrors.length > DurableNdjsonConsumer.MAX_RECENT_PARSE_ERRORS) {
+            this.recentParseErrors.shift();
+          }
 
           const parseError = {
             type: "parse-error" as const,
@@ -257,16 +311,29 @@ export class DurableNdjsonConsumer extends EventEmitter {
             error: String(err),
             recoverable: true,
             consecutiveErrors: this.consecutiveParseErrors,
+            totalParseErrors: this.totalParseErrors,
+            filePath: this.currentFilePath,
+            offset,
           };
           this.emit("parse-error", parseError);
           this.options.onParseError?.(line, err);
 
           // If too many consecutive errors, the file is likely corrupted
           if (this.consecutiveParseErrors >= DurableNdjsonConsumer.MAX_CONSECUTIVE_ERRORS) {
+            this.totalDataLossEvents++;
+
             this.emit("data-loss", {
               reason: "too many consecutive parse errors",
               errorCount: this.consecutiveParseErrors,
+              totalDataLossEvents: this.totalDataLossEvents,
               lastError: String(err),
+              lostFromOffset: checkpoint.byteOffset,
+              currentFilePath: this.currentFilePath,
+              checkpoint,
+            });
+
+            this.options.onDataLoss?.({
+              reason: "too many consecutive parse errors",
               lostFromOffset: checkpoint.byteOffset,
               checkpoint,
             });
@@ -338,5 +405,21 @@ export class DurableNdjsonConsumer extends EventEmitter {
     this.currentFilePath = filePath;
     this.leftover = "";
     this.decoder = new StringDecoder("utf8");
+  }
+
+  isUsingPollingFallback(): boolean {
+    return this.usingPollingFallback;
+  }
+
+  getLastWatchError(): string | null {
+    return this.lastWatchError;
+  }
+
+  getTotalParseErrors(): number {
+    return this.totalParseErrors;
+  }
+
+  getTotalDataLossEvents(): number {
+    return this.totalDataLossEvents;
   }
 }

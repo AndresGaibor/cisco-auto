@@ -232,30 +232,134 @@ var __rest = function(s, e) {
   // PT 9.0: fm is NOT a global — must use ipc.systemFileManager() or _ScriptModule shim
   var fm = null;
   try {
-    if (typeof ipc !== "undefined" && ipc !== null && typeof ipc.systemFileManager === "function") {
-      fm = ipc.systemFileManager();
+  if (typeof ipc !== "undefined" && ipc !== null && typeof ipc.systemFileManager === "function") {
+    fm = ipc.systemFileManager();
+    if (fm) {
+      try {
+        fm.__claimMode = "atomic-move";
+      } catch(_claimModeErr) {}
+      _g.PT_FILE_CLAIM_MODE = "atomic-move";
     }
+  }
   } catch (_fmErr) {}
   if (!fm) {
     try {
       if (typeof _ScriptModule !== "undefined" && _ScriptModule !== null) {
         fm = {
-          fileExists: function(p) { try { var sz = _ScriptModule.getFileSize(p); return sz >= 0; } catch(e) { return false; } },
-          directoryExists: function(p) { try { return _ScriptModule.getFileSize(p) >= 0; } catch(e) { return false; } },
-          getFileContents: function(p) { return _ScriptModule.getFileContents(p); },
-          writePlainTextToFile: function(p, c) { _ScriptModule.writeTextToFile(p, c); },
-          makeDirectory: function(p) { try { _ScriptModule.writeTextToFile(p + "/.keep", ""); } catch(e) {} return true; },
-          getFilesInDirectory: function(p) { try { return _ScriptModule.getFilesInDirectory ? _ScriptModule.getFilesInDirectory(p) : []; } catch(e) { return []; } },
-          removeFile: function(p) { try { _ScriptModule.removeFile ? _ScriptModule.removeFile(p) : void 0; } catch(e) {} },
-          moveSrcFileToDestFile: function(s, d, o) { try { var c = _ScriptModule.getFileContents(s); _ScriptModule.writeTextToFile(d, c); } catch(e) {} },
-          getFileModificationTime: function(p) { try { return _ScriptModule.getFileModificationTime(p); } catch(e) { return 0; } },
-          getFileSize: function(p) { try { return _ScriptModule.getFileSize(p); } catch(e) { return -1; } },
+          __claimMode: "copy-delete",
+          fileExists: function(p) {
+            try {
+              var sz = _ScriptModule.getFileSize(p);
+              return sz >= 0;
+            } catch(e) {
+              return false;
+            }
+          },
+          directoryExists: function(p) {
+            try {
+              return _ScriptModule.getFileSize(p) >= 0;
+            } catch(e) {
+              return false;
+            }
+          },
+          getFileContents: function(p) {
+            return _ScriptModule.getFileContents(p);
+          },
+          writePlainTextToFile: function(p, c) {
+            _ScriptModule.writeTextToFile(p, c);
+          },
+          makeDirectory: function(p) {
+            try {
+              _ScriptModule.writeTextToFile(p + "/.keep", "");
+            } catch(e) {}
+            return true;
+          },
+          getFilesInDirectory: function(p) {
+            try {
+              return _ScriptModule.getFilesInDirectory ? _ScriptModule.getFilesInDirectory(p) : [];
+            } catch(e) {
+              return [];
+            }
+          },
+          removeFile: function(p) {
+            try {
+              if (_ScriptModule.removeFile) {
+                _ScriptModule.removeFile(p);
+                return true;
+              }
+            } catch(e) {}
+            return false;
+          },
+          moveSrcFileToDestFile: function(s, d, o) {
+            try {
+              var c = _ScriptModule.getFileContents(s);
+              _ScriptModule.writeTextToFile(d, c);
+
+              if (_ScriptModule.removeFile) {
+                try { _ScriptModule.removeFile(s); } catch(_removeErr) {}
+              }
+
+              return true;
+            } catch(e) {
+              return false;
+            }
+          },
+          moveOrCopyDelete: function(s, d, o) {
+            var ok = false;
+            var sourceStillExists = true;
+
+            try {
+              var c = _ScriptModule.getFileContents(s);
+              _ScriptModule.writeTextToFile(d, c);
+              ok = true;
+            } catch(e) {
+              ok = false;
+            }
+
+            try {
+              if (_ScriptModule.removeFile) {
+                _ScriptModule.removeFile(s);
+              }
+            } catch(_removeErr) {}
+
+            try {
+              var sz = _ScriptModule.getFileSize(s);
+              sourceStillExists = sz >= 0;
+            } catch(_sizeErr) {
+              sourceStillExists = false;
+            }
+
+            return {
+              ok: ok,
+              mode: "copy-delete",
+              sourceStillExists: sourceStillExists
+            };
+          },
+          getFileModificationTime: function(p) {
+            try {
+              return _ScriptModule.getFileModificationTime(p);
+            } catch(e) {
+              return 0;
+            }
+          },
+          getFileSize: function(p) {
+            try {
+              return _ScriptModule.getFileSize(p);
+            } catch(e) {
+              return -1;
+            }
+          }
         };
+        _g.PT_FILE_CLAIM_MODE = "copy-delete";
       }
     } catch (_smErr) {}
   }
   if (!fm) {
     if (typeof dprint === "function") dprint("[KERNEL-IIFE] WARNING: fm not available — file ops disabled");
+  }
+
+  if (!_g.PT_FILE_CLAIM_MODE) {
+    _g.PT_FILE_CLAIM_MODE = "unknown";
   }
 
   function safeFM() {

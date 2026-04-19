@@ -17,6 +17,27 @@ import {
   safeUnlink,
 } from "../shared/fs-atomic.js";
 
+export interface ClaimResult {
+  ok: boolean;
+  path: string | null;
+  reason?: string;
+  errorCode?: string;
+}
+
+export interface BridgeResultMeta {
+  attempt: number;
+  queuedAt: number;
+  claimedAt: number;
+  completedAtMs: number;
+  queueLatencyMs: number;
+  execLatencyMs: number;
+  claimedFile?: string;
+}
+
+export interface BridgeResultEnvelopeWithMeta<T = unknown> extends BridgeResultEnvelope<T> {
+  meta: BridgeResultMeta;
+}
+
 export class CommandProcessor {
   constructor(
     private readonly paths: BridgePathLayout,
@@ -51,8 +72,8 @@ export class CommandProcessor {
         continue;
       }
 
-      const claimedPath = this.claimCommandFile(file);
-      if (!claimedPath) continue;
+      const claimResult = this.claimCommandFile(file);
+      if (!claimResult.ok || !claimResult.path) continue;
 
       this.eventWriter.append({
         seq: this.seq.next(),
@@ -63,7 +84,7 @@ export class CommandProcessor {
       });
 
       try {
-        const content = readFileSync(claimedPath, "utf8");
+        const content = readFileSync(claimResult.path, "utf8");
         const envelope = JSON.parse(content) as BridgeCommandEnvelope<T>;
 
         if (envelope.expiresAt && Date.now() > envelope.expiresAt) {
@@ -107,27 +128,28 @@ export class CommandProcessor {
 
         return envelope;
       } catch (err) {
-        this.moveToDeadLetter(claimedPath, err);
+        this.moveToDeadLetter(claimResult.path, err);
       }
     }
 
     return null;
   }
 
-  private claimCommandFile(filename: string): string | null {
+  private claimCommandFile(filename: string): ClaimResult {
     const srcPath = join(this.paths.commandsDir(), filename);
     const dstPath = join(this.paths.inFlightDir(), filename);
 
     try {
       ensureDir(this.paths.inFlightDir());
       renameSync(srcPath, dstPath);
+      return { ok: true, path: dstPath };
     } catch (err) {
       const error = err as NodeJS.ErrnoException;
-      if (error.code === "ENOENT") return null;
-      return null;
+      if (error.code === "ENOENT") {
+        return { ok: false, path: null, reason: "File already claimed (race)", errorCode: "ENOENT" };
+      }
+      return { ok: false, path: null, reason: String(err), errorCode: error.code };
     }
-
-    return dstPath;
   }
 
   publishResult<TResult = unknown>(
@@ -138,13 +160,30 @@ export class CommandProcessor {
       ok: boolean;
       value?: TResult;
       error?: BridgeResultEnvelope["error"];
+      attempt?: number;
+      queuedAt?: number;
+      claimedAt?: number;
+      completedAtMs?: number;
+      queueLatencyMs?: number;
+      execLatencyMs?: number;
+      claimedFile?: string;
     },
   ): void {
-    const finalResult: BridgeResultEnvelope<TResult> = {
+    const completedAtMs = Date.now();
+    const finalResult: BridgeResultEnvelopeWithMeta<TResult> = {
       protocolVersion: 2,
       id: cmd.id,
       seq: cmd.seq,
-      completedAt: Date.now(),
+      completedAt: completedAtMs,
+      meta: {
+        attempt: result.attempt ?? cmd.attempt ?? 1,
+        queuedAt: result.queuedAt ?? cmd.createdAt,
+        claimedAt: result.claimedAt ?? completedAtMs,
+        completedAtMs,
+        queueLatencyMs: result.queueLatencyMs ?? (result.claimedAt ?? completedAtMs) - (result.queuedAt ?? cmd.createdAt),
+        execLatencyMs: result.execLatencyMs ?? completedAtMs - (result.claimedAt ?? completedAtMs),
+        claimedFile: result.claimedFile,
+      },
       ...result,
     };
 
@@ -177,6 +216,8 @@ export class CommandProcessor {
         this.paths.deadLetterErrorFile(deadLetterBase),
         JSON.stringify({
           originalFile: basename(filePath),
+          originalPath: filePath,
+          deadLetterPath,
           error: String(error),
           movedAt: Date.now(),
         }, null, 2),

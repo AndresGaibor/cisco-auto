@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { FileBridgeV2 } from "../src/file-bridge-v2.js";
 import { join } from "node:path";
-import { mkdtempSync, rmSync, existsSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, writeFileSync, readFileSync, readdirSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 
 describe("FileBridgeV2", () => {
@@ -244,7 +244,9 @@ describe("FileBridgeV2", () => {
       bridge.start();
       const s = bridge.getBridgeStatus();
       expect(s.ready).toBe(true);
-      expect("leaseValid" in s).toBe(false);
+      expect(s.leaseValid).toBe(true);
+      expect(typeof s.queueIndexDrift).toBe("boolean");
+      expect(s.claimMode).toBe("atomic-move");
     });
   });
 
@@ -330,5 +332,135 @@ describe("FileBridgeV2 - SequenceStore persistence", () => {
 
     expect(env3.seq).toBe(env2.seq + 1);
     expect(env1.seq + 1).toBe(env2.seq); // Sanity check
+  });
+});
+
+describe("sendCommand", () => {
+  let testDir: string;
+  let bridge: FileBridgeV2;
+
+  beforeEach(() => {
+    testDir = join(
+      tmpdir(),
+      `file-bridge-v2-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+  });
+
+  afterEach(async () => {
+    if (bridge) {
+      await bridge.stop();
+    }
+    if (existsSync(testDir)) {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it("falla si bridge no está ready", () => {
+    bridge = new FileBridgeV2({ root: testDir });
+    expect(() => bridge.sendCommand("addDevice", { name: "Router1" })).toThrow(
+      /bridge is not ready/i,
+    );
+  });
+
+  it("sendCommandAndWait no llama waitForCapacity antes de sendCommand", async () => {
+    bridge = new FileBridgeV2({ root: testDir });
+    bridge.start();
+
+    let sendCommandCalled = false;
+    const originalSendCommand = (bridge as any).sendCommand.bind(bridge);
+    (bridge as any).sendCommand = (...args: any[]) => {
+      sendCommandCalled = true;
+      return originalSendCommand(...args);
+    };
+
+    const resultPromise = bridge.sendCommandAndWait("addDevice", { name: "R1" }, 50);
+
+    expect(sendCommandCalled).toBe(true);
+    await expect(resultPromise).rejects.toThrow(/timeout/i);
+  });
+});
+
+describe("sendCommandAndWait", () => {
+  let testDir: string;
+  let bridge: FileBridgeV2;
+
+  beforeEach(() => {
+    testDir = join(
+      tmpdir(),
+      `file-bridge-v2-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    bridge = new FileBridgeV2({ root: testDir });
+  });
+
+  afterEach(async () => {
+    await bridge.stop();
+    if (existsSync(testDir)) {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it("result incluye meta con latencias", async () => {
+    bridge.start();
+
+    const resultPath = join(testDir, "results");
+    mkdirSync(resultPath, { recursive: true });
+
+    const bridgeAny = bridge as any;
+    const originalSendCommand = bridgeAny.sendCommand.bind(bridge);
+
+    bridgeAny.sendCommand = (type: string, payload: any, expiresAtMs?: number) => {
+      const envelope = originalSendCommand(type, payload, expiresAtMs);
+
+      if (type === "execPc") {
+        const filePath = join(testDir, "results", `${envelope.id}.json`);
+        writeFileSync(
+          filePath,
+          JSON.stringify({
+            protocolVersion: 2,
+            id: envelope.id,
+            seq: envelope.seq,
+            startedAt: envelope.createdAt,
+            completedAt: Date.now(),
+            status: "completed",
+            ok: true,
+            value: {
+              ok: true,
+              raw: "Success rate is 100 percent",
+              status: 0,
+            },
+          }),
+          "utf-8",
+        );
+      }
+
+      if (type === "__pollDeferred") {
+        const filePath = join(testDir, "results", `${envelope.id}.json`);
+        writeFileSync(
+          filePath,
+          JSON.stringify({
+            protocolVersion: 2,
+            id: envelope.id,
+            seq: envelope.seq,
+            startedAt: envelope.createdAt,
+            completedAt: Date.now(),
+            status: "completed",
+            ok: true,
+            value: {
+              ok: true,
+              raw: "Success rate is 100 percent",
+              status: 0,
+            },
+          }),
+          "utf-8",
+        );
+      }
+
+      return envelope;
+    };
+
+    const result = await bridge.sendCommandAndWait("execPc", { device: "PC1", command: "ping" });
+
+    expect(result).toHaveProperty("completedAt");
+    expect(result).toHaveProperty("startedAt");
   });
 });

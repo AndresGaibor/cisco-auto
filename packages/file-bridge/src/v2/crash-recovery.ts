@@ -69,12 +69,13 @@ export class CrashRecovery {
 
       if (!parsed) {
         this.moveToDeadLetter(filePath, new Error("Invalid command filename"));
-        continue;
-      }
-
-      const cmd = readJsonFile<{ attempt?: number; seq?: number; type?: string }>(filePath);
-      if (!cmd) {
-        this.moveToDeadLetter(filePath, new Error("Corrupted command JSON"));
+        this.eventWriter.append({
+          seq: this.seq.next(),
+          ts: Date.now(),
+          type: "command-corrupted",
+          id: undefined,
+          note: "invalid filename format",
+        });
         continue;
       }
 
@@ -88,8 +89,22 @@ export class CrashRecovery {
           ts: Date.now(),
           type: "command-purged-duplicate",
           id: cmdId,
-          note: "duplicate in commands/ queue",
+          note: "result already existed for queued command",
         });
+        continue;
+      }
+
+      const cmd = readJsonFile<{ attempt?: number; seq?: number; type?: string; id?: string }>(filePath);
+      if (!cmd) {
+        this.moveToDeadLetter(filePath, new Error("Corrupted command JSON"));
+        this.eventWriter.append({
+          seq: this.seq.next(),
+          ts: Date.now(),
+          type: "command-corrupted",
+          id: cmdId,
+          note: "could not parse JSON",
+        });
+        continue;
       }
     }
   }
@@ -103,6 +118,13 @@ export class CrashRecovery {
 
       if (!parsed) {
         this.moveToDeadLetter(filePath, new Error("Invalid in-flight filename"));
+        this.eventWriter.append({
+          seq: this.seq.next(),
+          ts: Date.now(),
+          type: "command-corrupted",
+          id: undefined,
+          note: "invalid in-flight filename",
+        });
         continue;
       }
 
@@ -116,23 +138,55 @@ export class CrashRecovery {
           ts: Date.now(),
           type: "command-recovered",
           id: cmdId,
-          note: "result existed but in-flight was not cleaned",
+          note: "result existed, in-flight cleaned",
         });
         continue;
       }
 
-      const cmd = readJsonFile<{ attempt?: number; seq?: number; type?: string }>(filePath);
+      const cmd = readJsonFile<{ attempt?: number; seq?: number; type?: string; id?: string }>(filePath);
       if (!cmd) {
         this.moveToDeadLetter(filePath, new Error("Corrupted in-flight JSON"));
+        this.eventWriter.append({
+          seq: this.seq.next(),
+          ts: Date.now(),
+          type: "command-corrupted",
+          id: cmdId,
+          note: "could not parse in-flight JSON",
+        });
         continue;
       }
 
       const currentAttempt = cmd.attempt ?? 1;
+      const existingCommandPath = this.paths.commandFilePath(cmd.seq!, cmd.type!);
+
+      if (existsSync(existingCommandPath)) {
+        const existingCmd = readJsonFile<{ id?: string }>(existingCommandPath);
+        if (existingCmd && existingCmd.id === cmd.id) {
+          safeUnlink(filePath);
+          this.eventWriter.append({
+            seq: this.seq.next(),
+            ts: Date.now(),
+            type: "command-purged-duplicate",
+            id: cmdId,
+            note: "duplicate in-flight vs commands/",
+          });
+          continue;
+        } else {
+          this.moveToDeadLetter(filePath, new Error("ID conflict between in-flight and commands/"));
+          this.eventWriter.append({
+            seq: this.seq.next(),
+            ts: Date.now(),
+            type: "command-recovery-conflict",
+            id: cmdId,
+            note: "ID mismatch - possible conflict",
+          });
+          continue;
+        }
+      }
 
       if (currentAttempt < this.maxAttempts) {
         cmd.attempt = currentAttempt + 1;
-        const requeuePath = this.paths.commandFilePath(cmd.seq!, cmd.type!);
-        atomicWriteFile(requeuePath, JSON.stringify(cmd, null, 2));
+        atomicWriteFile(existingCommandPath, JSON.stringify(cmd, null, 2));
         safeUnlink(filePath);
 
         this.eventWriter.append({
