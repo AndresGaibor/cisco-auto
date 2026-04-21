@@ -116,17 +116,17 @@ export function createRuntimeTerminalAdapter(
       const stepTimeout = step.timeout ?? timeoutMs;
 
       const bridgeResult = await bridge.sendCommandAndWait<{ value?: ExecInteractiveValue }>(
-        "execInteractive",
+        "execIos",
         {
-          id: generateId(),
+          type: "execIos",
           device: plan.device,
           command,
-          options: {
-            timeout: stepTimeout,
-            parse: false,
-            ensurePrivileged: false,
-          },
+          parse: false,
+          ensurePrivileged: false,
+          commandTimeoutMs: stepTimeout,
+          stallTimeoutMs: stepTimeout,
         },
+        stepTimeout,
       );
 
       const value = (bridgeResult?.value ?? {}) as ExecInteractiveValue;
