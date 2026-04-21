@@ -1,6 +1,9 @@
 // ============================================================================
 // IOS Execution Handlers - V13 Event-Based
 // ============================================================================
+// Ejecuta comandos IOS en dispositivos PT via terminal engine.
+// Soporta execIos (comando único), configIos (múltiples comandos),
+// ping, execPc, y polling de jobs deferidos.
 
 import type { PtRuntimeApi } from "../pt-api/pt-deps.js";
 import type { PtResult } from "../pt-api/pt-results.js";
@@ -41,6 +44,23 @@ function getTerminalDevice(api: PtRuntimeApi, deviceName: string): PTTerminal | 
   return cli;
 }
 
+/**
+ * Ejecuta un comando único IOS en un dispositivo.
+ * Wrapper async sobre createCommandExecutor que maneja el ciclo completo:
+ * 1. Obtiene terminal del dispositivo
+ * 2. Registra listeners para eventos PT
+ * 3. Envía comando via enterCommand()
+ * 4. Espera commandEnded o timeout
+ * 5. Retorna output sanitizado y parsed
+ * 
+ * @param payload - ExecIosPayload con device, command, y options
+ * @param api - PtRuntimeApi con acceso a IPC y device registry
+ * @returns PtResult con output, status, y parsed metadata
+ * 
+ * @example
+ * handleExecIos({ type: "execIos", device: "R1", command: "show ip int brief" }, api)
+ * // → { ok: true, raw: "...", status: 0, parsed: { command: "show ip int brief", durationMs: 234 } }
+ */
 export async function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi): Promise<PtResult> {
   const deviceName = payload.device;
   const device = api.getDeviceByName(deviceName);
@@ -106,6 +126,23 @@ export async function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi):
   );
 }
 
+/**
+ * Ejecuta una secuencia de comandos IOS de configuración.
+ * Cada comando se ejecuta en orden, con soporte para stopOnError.
+ * Opcionalmente guarda la configuración al final con "copy run start".
+ * 
+ * @param payload - ConfigIosPayload con device, commands[], y options
+ * @param api - PtRuntimeApi con acceso a IPC y device registry
+ * @returns PtResult con output acumulado si todos succeed o error si falló
+ * 
+ * @example
+ * handleConfigIos({
+ *   type: "configIos",
+ *   device: "R1",
+ *   commands: ["interface GigabitEthernet0/0", "ip address 192.168.1.1 255.255.255.0", "no shutdown"],
+ *   save: true
+ * }, api)
+ */
 export async function handleConfigIos(payload: ConfigIosPayload, api: PtRuntimeApi): Promise<PtResult> {
   const deviceName = payload.device;
   const device = api.getDeviceByName(deviceName);
@@ -188,6 +225,15 @@ export function handleDeferredPoll(pollPayload: PollDeferredPayload, api: PtRunt
   return { ok: true, done: true, raw: sanitizeTerminalOutput(undefined, rawOutput) || rawOutput, source: "terminal" };
 }
 
+/**
+ * Ejecuta comando ping en un dispositivo IOS o PC.
+ * Usa CommandExecutor unificado para todos los tipos de dispositivo.
+ * Detecta completion estructuralmente via detectHostBusy().
+ * 
+ * @param payload - Payload con device, target, y timeoutMs opcional
+ * @param api - PtRuntimeApi con acceso a IPC y device registry
+ * @returns PtResult con output completo del ping
+ */
 export async function handlePing(payload: { device: string; target: string; timeoutMs?: number }, api: PtRuntimeApi): Promise<PtResult> {
   try {
     const deviceName = payload.device;
@@ -195,12 +241,26 @@ export async function handlePing(payload: { device: string; target: string; time
     if (!device) return createErrorResult("Device not found", "DEVICE_NOT_FOUND");
 
     const type = device.getType ? device.getType() : -1;
-    const isPc = (type === 8 || type === 9);
+    const model = device.getModel ? String(device.getModel()).toLowerCase() : "";
+    const typeStr = String(type).toLowerCase();
+    
+    // Detección robusta de PC/Server (por ID, tipo de string o modelo)
+    const isPc = (
+        type === 8 || 
+        type === 9 || 
+        typeStr.indexOf("pc") !== -1 || 
+        typeStr.indexOf("server") !== -1 || 
+        model.indexOf("pc") !== -1 ||
+        model.indexOf("server") !== -1
+    );
+
+    // Un solo comando para todos los dispositivos - CommandExecutor maneja completion
     const cmd = isPc ? "ping " + payload.target : "ping " + payload.target + " repeat 4";
 
     const terminal = getTerminalDevice(api, deviceName);
     if (!terminal) return createErrorResult("Terminal engine inaccessible", "NO_TERMINAL");
 
+    // Usa CommandExecutor unificado para todos los dispositivos (incluyendo PC)
     const executor = createCommandExecutor({
       commandTimeoutMs: payload.timeoutMs ?? 15000,
       stallTimeoutMs: payload.timeoutMs ?? 15000,
@@ -251,8 +311,21 @@ export async function handleExecPc(payload: ExecPcPayload, api: PtRuntimeApi): P
 
 export function handleExecPcDirect(payload: ExecPcPayload, api: PtRuntimeApi): PtResult {
   try {
-    const device = api.getDeviceByName(payload.device);
-    if (device && (device as any).getCommandLine) (device as any).getCommandLine().enterCommand(payload.command);
+    const device = api.ipc.network().getDevice(payload.device);
+    if (device && (device as any).getCommandLine) {
+      const cli = (device as any).getCommandLine();
+      const prompt = cli.getPrompt();
+
+      // Bypass simple para inyección raw
+      if (prompt && prompt.indexOf("initial configuration dialog") !== -1) {
+        cli.enterCommand("no");
+        // Ctrl+C (char 3) para estabilizar
+        if (cli.enterChar) cli.enterChar(3, 0);
+      }
+
+      cli.enterCommand(payload.command);
+    }
     return { ok: true, result: "Injected" } as any;
   } catch(e) { return createErrorResult(String(e), "EXEC_FAILED"); }
+
 }
