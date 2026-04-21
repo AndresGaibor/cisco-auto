@@ -1,6 +1,8 @@
 // ============================================================================
 // Prompt Detector - Detecta modo, wizard, confirmaciones, paginación e idioma de sesión
 // ============================================================================
+// Utilizado por el terminal engine para inferir estado IOS desde prompts.
+// Trabaja sobre output sanitizado (sin ANSI, sin \r).
 
 import type { TerminalMode, TerminalSessionKind } from "./session-state";
 
@@ -24,10 +26,24 @@ function lastNonEmptyLine(input: string): string {
   return lines.length > 0 ? lines[lines.length - 1]! : "";
 }
 
+/**
+ * Normaliza un prompt eliminando ANSI y whitespace extra.
+ * Para uso en matching y logging.
+ * 
+ * @param prompt - Prompt raw del terminal
+ * @returns Prompt normalizado sin colores ni espacios extras
+ */
 export function normalizePrompt(prompt: string): string {
   return normalizeWhitespace(prompt);
 }
 
+/**
+ * Compara un prompt contra un patrón.
+ * 
+ * @param pattern - String o RegExp a buscar
+ * @param prompt - Prompt normalizado
+ * @returns true si el patrón matches
+ */
 export function promptMatches(pattern: string | RegExp, prompt: string): boolean {
   const normalized = normalizePrompt(prompt);
   if (!normalized) return false;
@@ -35,6 +51,18 @@ export function promptMatches(pattern: string | RegExp, prompt: string): boolean
   return pattern.test(normalized);
 }
 
+/**
+ * Detecta qué tipo de sesión está corriendo: IOS CLI, host prompt, o desconocido.
+ * Analiza el prompt/output para determinar si es un router/switch (IOS) o PC/Server (host).
+ * 
+ * @param promptOrOutput - Prompt actual o output del terminal
+ * @returns "ios", "host", o "unknown"
+ * 
+ * @example
+ * detectSessionKind("Router#") // → "ios"
+ * detectSessionKind("PC>") // → "host"
+ * detectSessionKind("something else") // → "unknown"
+ */
 export function detectSessionKind(promptOrOutput: string): TerminalSessionKind {
   const text = normalizeWhitespace(promptOrOutput);
 
@@ -59,6 +87,20 @@ export function detectSessionKind(promptOrOutput: string): TerminalSessionKind {
   return "unknown";
 }
 
+/**
+ * Detecta el modo IOS desde un prompt normalizado.
+ * Analiza sufijos del prompt para determinar modo: user-exec, privileged-exec,
+ * config (y submodes como config-if, config-router, etc.), wizard, pager, boot.
+ * 
+ * @param prompt - Prompt normalizado del terminal
+ * @returns TerminalMode detectado o "unknown"
+ * 
+ * @example
+ * detectModeFromPrompt("Router#") // → "privileged-exec"
+ * detectModeFromPrompt("Router(config-if)#") // → "config-if"
+ * detectModeFromPrompt("Router>") // → "user-exec"
+ * detectModeFromPrompt("PC>") // → "host-prompt"
+ */
 export function detectModeFromPrompt(prompt: string): TerminalMode {
   const p = normalizePrompt(prompt);
 
@@ -99,6 +141,13 @@ export function detectModeFromPrompt(prompt: string): TerminalMode {
   return "unknown";
 }
 
+/**
+ * Detecta si el output contiene el diálogo de initial configuration wizard.
+ * Este diálogo bloquea la terminal hasta que se responda "no".
+ * 
+ * @param output - Output del terminal
+ * @returns true si se detectó el wizard
+ */
 export function detectWizardFromOutput(output: string): boolean {
   const text = normalizeWhitespace(output).toLowerCase();
   if (!text) return false;
@@ -111,6 +160,13 @@ export function detectWizardFromOutput(output: string): boolean {
   );
 }
 
+/**
+ * Detecta prompts de confirmación del IOS.
+ * Incluye [confirm], [yes/no]:, overwrite, destination filename.
+ * 
+ * @param output - Output del terminal
+ * @returns true si se detectó prompt de confirmación
+ */
 export function detectConfirmPrompt(output: string): boolean {
   const line = lastNonEmptyLine(output);
   if (!line) return false;
@@ -123,11 +179,25 @@ export function detectConfirmPrompt(output: string): boolean {
   );
 }
 
+/**
+ * Detecta si el output contiene paging (--More--).
+ * El pager aparece en outputs largos y requiere SPACE para continuar.
+ * 
+ * @param output - Output del terminal
+ * @returns true si se detectó pager
+ */
 export function detectPager(output: string): boolean {
   const text = stripAnsi(output);
   return /--More--/i.test(text) || /\bMore\b/i.test(text);
 }
 
+/**
+ * Detecta output de boot de router (ROMMON, bootstrap).
+ * Usado para identificar si el dispositivo está en proceso de booteo.
+ * 
+ * @param output - Output del terminal
+ * @returns true si parece output de boot
+ */
 export function detectBootOutput(output: string): boolean {
   const text = normalizeWhitespace(output).toLowerCase();
   return (
@@ -138,6 +208,13 @@ export function detectBootOutput(output: string): boolean {
   );
 }
 
+/**
+ * Detecta output de comandos host busy (ping, traceroute).
+ * Reconoce respuestas de ping, timeouts, unreachables, y trace complete.
+ * 
+ * @param output - Output del terminal
+ * @returns true si parece output de ping/traceroute
+ */
 export function detectHostBusy(output: string): boolean {
   const text = normalizeWhitespace(output).toLowerCase();
   if (!text) return false;

@@ -1,6 +1,10 @@
 // ============================================================================
 // Command Executor - Ejecución interactiva robusta para IOS y Host Prompt
 // ============================================================================
+// Ejecuta comandos en terminals IOS/Host via eventos PT (commandStarted,
+// outputWritten, commandEnded, modeChanged, promptChanged, moreDisplayed).
+// Maneja automaticamente: wizards iniciales, paginación, confirm prompts,
+// stall detection, y modo host busy detection.
 
 import type { TerminalMode } from "./session-state";
 import { ensureSession } from "./session-registry";
@@ -106,6 +110,31 @@ function computeConfidence(
   return confidence;
 }
 
+/**
+ * Crea un executor de comandos que maneja el ciclo completo de ejecución.
+ * El executor retorna una Promise que resuelve cuando el comando termina
+ * (por eventos de PT, timeout, o error).
+ * 
+ * Opciones de ejecución:
+ * - autoAdvancePager: SPACE para continuar cuando hay --More-- (default: true)
+ * - autoDismissWizard: "no" automático para initial config dialog (default: true)
+ * - autoConfirm: ENTER automático para confirm prompts (default: false)
+ * - commandTimeoutMs: timeout total del comando (default: 15000)
+ * - stallTimeoutMs: timeout sin output nuevo (default: 5000)
+ * 
+ * @param config - Configuración opcional con timeouts default
+ * @returns Executor con método executeCommand(deviceName, command, terminal, options)
+ * 
+ * @example
+ * const executor = createCommandExecutor({ commandTimeoutMs: 20000 });
+ * const result = await executor.executeCommand(
+ *   "Router1",
+ *   "show ip interface brief",
+ *   terminal,
+ *   { autoAdvancePager: true }
+ * );
+ * // result.ok === true, result.output tiene el output del comando
+ */
 export function createCommandExecutor(config?: { commandTimeoutMs?: number; stallTimeoutMs?: number }) {
   const defaultCommandTimeout = config?.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT;
   const defaultStallTimeout = config?.stallTimeoutMs ?? DEFAULT_STALL_TIMEOUT;
@@ -337,8 +366,12 @@ export function createCommandExecutor(config?: { commandTimeoutMs?: number; stal
           if (options.autoDismissWizard !== false && !wizardDismissed) {
             wizardDismissed = true;
             try {
+              // Send 'no' and then Ctrl+C (\x03) to force a stable prompt
               terminal.enterCommand("no");
-              pushEvent(events, session.sessionId, deviceName, "wizardDismissed", "no", "no");
+              setTimeout(() => {
+                try { terminal.enterChar(3, 0); } catch(e) {}
+              }, 500);
+              pushEvent(events, session.sessionId, deviceName, "wizardDismissed", "no + CtrlC", "no");
             } catch {
               warnings.push("Failed to auto-dismiss initial configuration dialog");
             }
