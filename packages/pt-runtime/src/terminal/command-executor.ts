@@ -24,7 +24,8 @@ import { TerminalErrors, type TerminalErrorCode } from "./terminal-errors";
 
 export interface PTCommandLine {
   getPrompt(): string;
-  enterCommand(cmd: string): void;
+  getOutput?: () => string;
+  enterCommand(cmd: string): unknown;
   registerEvent(eventName: string, context: null, handler: (src: unknown, args: unknown) => void): void;
   unregisterEvent(eventName: string, context: null, handler: (src: unknown, args: unknown) => void): void;
   enterChar(charCode: number, modifiers: number): void;
@@ -62,6 +63,9 @@ export interface CommandExecutionResult {
 
 const DEFAULT_COMMAND_TIMEOUT = 15000;
 const DEFAULT_STALL_TIMEOUT = 5000;
+const COMMAND_END_GRACE_MS = 250;
+const COMMAND_END_MAX_WAIT_MS = 1000;
+const PROMPT_STABILIZED_FALLBACK_MS = 2000;
 
 function pushEvent(
   events: TerminalEventRecord[],
@@ -110,6 +114,50 @@ function computeConfidence(
   return confidence;
 }
 
+function extractImmediateCommandResult(
+  value: unknown,
+): { status?: number; output?: string } | null {
+  if (value == null) return null;
+
+  if (typeof value === "string") {
+    return value.length > 0 ? { output: value } : null;
+  }
+
+  if (typeof value === "object") {
+    const candidate = value as Record<string, unknown>;
+    const status =
+      typeof candidate.first === "number"
+        ? candidate.first
+        : typeof candidate.status === "number"
+          ? candidate.status
+          : undefined;
+    const output =
+      typeof candidate.second === "string"
+        ? candidate.second
+        : typeof candidate.output === "string"
+          ? candidate.output
+          : typeof candidate.raw === "string"
+            ? candidate.raw
+            : undefined;
+
+    if (status !== undefined || output !== undefined) {
+      return { status, output };
+    }
+  }
+
+  return null;
+}
+
+function readTerminalOutput(terminal: PTCommandLine): string {
+  if (typeof terminal.getOutput !== "function") return "";
+
+  try {
+    return String(terminal.getOutput() ?? "");
+  } catch {
+    return "";
+  }
+}
+
 /**
  * Crea un executor de comandos que maneja el ciclo completo de ejecución.
  * El executor retorna una Promise que resuelve cuando el comando termina
@@ -151,6 +199,11 @@ export function createCommandExecutor(config?: { commandTimeoutMs?: number; stal
     const promptBefore = normalizePrompt(terminal.getPrompt());
     const modeBefore = detectModeFromPrompt(promptBefore);
     const sessionKindBefore = detectSessionKind(promptBefore);
+    const baselineOutput = readTerminalOutput(terminal);
+    const commandEndMaxWaitMs =
+      isHostMode(modeBefore) || sessionKindBefore === "host"
+        ? Math.max(COMMAND_END_MAX_WAIT_MS, 8000)
+        : COMMAND_END_MAX_WAIT_MS;
 
     if (session.sessionKind === "unknown" && sessionKindBefore !== "unknown") {
       session.sessionKind = sessionKindBefore;
@@ -193,9 +246,14 @@ export function createCommandExecutor(config?: { commandTimeoutMs?: number; stal
       let settled = false;
       let started = false;
       let endedStatus: number | null = null;
+      let commandEndedSeen = false;
+      let commandEndedAt = 0;
       let wizardDismissed = false;
       let confirmHandled = false;
       let hostBusy = false;
+      let lastObservedTerminalOutput = baselineOutput;
+      let lastTerminalOutputAt = startedAt;
+      let commandEndGraceTimer: ReturnType<typeof setTimeout> | null = null;
 
       let startTimer: ReturnType<typeof setTimeout> | null = null;
       let stallTimer: ReturnType<typeof setTimeout> | null = null;
@@ -205,9 +263,11 @@ export function createCommandExecutor(config?: { commandTimeoutMs?: number; stal
         if (startTimer) clearTimeout(startTimer);
         if (stallTimer) clearTimeout(stallTimer);
         if (hardTimer) clearTimeout(hardTimer);
+        if (commandEndGraceTimer) clearTimeout(commandEndGraceTimer);
         startTimer = null;
         stallTimer = null;
         hardTimer = null;
+        commandEndGraceTimer = null;
       }
 
       function resetStallTimer(): void {
@@ -249,7 +309,12 @@ export function createCommandExecutor(config?: { commandTimeoutMs?: number; stal
         const endedAt = Date.now();
         const promptAfter = normalizePrompt(terminal.getPrompt());
         let modeAfter = detectModeFromPrompt(promptAfter);
-        const output = outputBuffer.join("");
+        const bufferedOutput = outputBuffer.join("");
+        const liveOutput = readTerminalOutput(terminal);
+        const liveDelta =
+          liveOutput.length > baselineOutput.length ? liveOutput.slice(baselineOutput.length) : "";
+        const output =
+          bufferedOutput.trim().length >= liveDelta.trim().length ? bufferedOutput : liveDelta;
 
         if (session.sessionKind === "host" && detectHostBusy(output)) {
           hostBusy = true;
@@ -322,6 +387,55 @@ export function createCommandExecutor(config?: { commandTimeoutMs?: number; stal
       function finalizeFailure(errorCode: TerminalErrorCode, errorMessage: string): void {
         const status = (endedStatus ?? guessFailureStatus(outputBuffer.join(""))) || 1;
         finalize(false, status, errorMessage, errorCode);
+      }
+
+      function scheduleFinalizeAfterCommandEnd(): void {
+        if (settled || !commandEndedSeen || endedStatus === null) return;
+
+        const bufferedOutput = outputBuffer.join("");
+        const liveOutput = readTerminalOutput(terminal);
+        const liveDelta =
+          liveOutput.length > baselineOutput.length ? liveOutput.slice(baselineOutput.length) : "";
+        const totalOutput =
+          bufferedOutput.trim().length >= liveDelta.trim().length ? bufferedOutput : liveDelta;
+        const waitedMs = Date.now() - commandEndedAt;
+        const outputChanged = liveOutput.length > lastObservedTerminalOutput.length;
+
+        if (outputChanged) {
+          lastObservedTerminalOutput = liveOutput;
+          lastTerminalOutputAt = Date.now();
+        }
+
+        if (totalOutput.trim().length === 0 && waitedMs < commandEndMaxWaitMs) {
+          if (commandEndGraceTimer) clearTimeout(commandEndGraceTimer);
+          commandEndGraceTimer = setTimeout(() => {
+            commandEndGraceTimer = null;
+            scheduleFinalizeAfterCommandEnd();
+          }, COMMAND_END_GRACE_MS);
+          return;
+        }
+
+        if (Date.now() - lastTerminalOutputAt < COMMAND_END_GRACE_MS) {
+          if (commandEndGraceTimer) clearTimeout(commandEndGraceTimer);
+          commandEndGraceTimer = setTimeout(() => {
+            commandEndGraceTimer = null;
+            scheduleFinalizeAfterCommandEnd();
+          }, COMMAND_END_GRACE_MS);
+          return;
+        }
+
+        if (commandEndGraceTimer) clearTimeout(commandEndGraceTimer);
+        commandEndGraceTimer = setTimeout(() => {
+          commandEndGraceTimer = null;
+          if (settled || !commandEndedSeen || endedStatus === null) return;
+
+          finalize(
+            isStatusOk(endedStatus),
+            endedStatus,
+            isStatusOk(endedStatus) ? undefined : `Command failed with status ${endedStatus}`,
+            isStatusOk(endedStatus) ? undefined : TerminalErrors.COMMAND_END_TIMEOUT,
+          );
+        }, COMMAND_END_GRACE_MS);
       }
 
       function onStarted(_src: unknown, args: unknown): void {
@@ -419,6 +533,7 @@ export function createCommandExecutor(config?: { commandTimeoutMs?: number; stal
         }
 
         resetStallTimer();
+        scheduleFinalizeAfterCommandEnd();
       }
 
       function onModeChanged(_src: unknown, args: unknown): void {
@@ -430,6 +545,7 @@ export function createCommandExecutor(config?: { commandTimeoutMs?: number; stal
         if (isHostMode(normalizedMode)) session.sessionKind = "host";
         pushEvent(events, session.sessionId, deviceName, "modeChanged", to, normalizedMode);
         resetStallTimer();
+        scheduleFinalizeAfterCommandEnd();
       }
 
       function onPromptChanged(_src: unknown, args: unknown): void {
@@ -442,6 +558,7 @@ export function createCommandExecutor(config?: { commandTimeoutMs?: number; stal
         if (isHostMode(mode)) session.sessionKind = "host";
         pushEvent(events, session.sessionId, deviceName, "promptChanged", prompt, prompt);
         resetStallTimer();
+        scheduleFinalizeAfterCommandEnd();
       }
 
       function onMoreDisplayed(_src: unknown, _args: unknown): void {
@@ -464,11 +581,14 @@ export function createCommandExecutor(config?: { commandTimeoutMs?: number; stal
         }
 
         resetStallTimer();
+        scheduleFinalizeAfterCommandEnd();
       }
 
       function onEnded(_src: unknown, args: unknown): void {
         const payload = args as CommandEndedPayload;
         endedStatus = typeof payload?.status === "number" ? payload.status : guessFailureStatus(outputBuffer.join(""));
+        commandEndedSeen = true;
+        commandEndedAt = Date.now();
 
         pushEvent(
           events,
@@ -478,13 +598,7 @@ export function createCommandExecutor(config?: { commandTimeoutMs?: number; stal
           String(endedStatus),
           String(endedStatus),
         );
-
-        finalize(
-          isStatusOk(endedStatus),
-          endedStatus,
-          isStatusOk(endedStatus) ? undefined : `Command failed with status ${endedStatus}`,
-          isStatusOk(endedStatus) ? undefined : TerminalErrors.COMMAND_END_TIMEOUT,
-        );
+        scheduleFinalizeAfterCommandEnd();
       }
 
       const handlers = [
@@ -529,7 +643,16 @@ export function createCommandExecutor(config?: { commandTimeoutMs?: number; stal
       }, commandTimeoutMs);
 
       try {
-        terminal.enterCommand(command);
+        const immediateResult = extractImmediateCommandResult(terminal.enterCommand(command));
+        if (immediateResult?.output) {
+          outputBuffer.push(immediateResult.output);
+        }
+        if (typeof immediateResult?.status === "number") {
+          endedStatus = immediateResult.status;
+          commandEndedSeen = true;
+          commandEndedAt = Date.now();
+          scheduleFinalizeAfterCommandEnd();
+        }
       } catch (e) {
         finalizeFailure(TerminalErrors.UNKNOWN_STATE, `enterCommand() failed: ${String(e)}`);
       }
