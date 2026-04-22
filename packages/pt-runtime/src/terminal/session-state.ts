@@ -16,6 +16,13 @@ export type TerminalMode =
   | "config-router"
   | "config-vlan"
   | "config-subif"
+  | "config-if-range"
+  | "dhcp-config"
+  | "dhcp-pool"
+  | "config-telephony"
+  | "config-ephone"
+  | "config-ephone-dn"
+  | "config-voip"
   | "wizard"
   | "confirm"
   | "pager"
@@ -44,6 +51,7 @@ export interface TerminalSessionState {
   pendingCommand: string | null;
   outputBuffer: string;
   recentOutputs: string[];
+  history: Array<{ command: string; output: string; timestamp: number }>;
   warnings: string[];
   health: TerminalHealth;
   listenersAttached: boolean;
@@ -71,8 +79,9 @@ export function createTerminalSessionState(deviceName: string): TerminalSessionS
     pendingCommand: null,
     outputBuffer: "",
     recentOutputs: [],
+    history: [],
     warnings: [],
-    health: "healthy",
+    health: "stale",
     listenersAttached: false,
   };
 }
@@ -127,10 +136,19 @@ export function setCommandStarted(state: TerminalSessionState, command: string):
 }
 
 export function setCommandEnded(state: TerminalSessionState): TerminalSessionState {
+  const newHistory = [...state.history];
+  if (state.lastCommand) {
+    newHistory.push({
+      command: state.lastCommand,
+      output: state.outputBuffer,
+      timestamp: Date.now()
+    });
+  }
   return {
     ...state,
     lastCommandEndedAt: Date.now(),
     pendingCommand: null,
+    history: newHistory,
   };
 }
 

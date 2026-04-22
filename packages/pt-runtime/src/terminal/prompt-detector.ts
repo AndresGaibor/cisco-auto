@@ -131,6 +131,13 @@ export function detectModeFromPrompt(prompt: string): TerminalMode {
   if (/\(config-line\)#$/i.test(p)) return "config-line";
   if (/\(config-router\)#$/i.test(p)) return "config-router";
   if (/\(config-vlan\)#$/i.test(p)) return "config-vlan";
+  if (/\(config-if-range\)#$/i.test(p)) return "config-if-range";
+  if (/\(dhcp-config\)#$/i.test(p)) return "dhcp-config";
+  if (/\(dhcp-pool\)#$/i.test(p)) return "dhcp-pool";
+  if (/\(config-telephony\)#$/i.test(p)) return "config-telephony";
+  if (/\(config-ephone\)#$/i.test(p)) return "config-ephone";
+  if (/\(config-ephone-dn\)#$/i.test(p)) return "config-ephone-dn";
+  if (/\(config-voip\)#$/i.test(p)) return "config-voip";
 
   // Generic config / unknown config submodes collapse to global-config
   if (/\(config[^)]*\)#$/i.test(p)) return "global-config";
@@ -272,7 +279,14 @@ export function isConfigMode(mode: TerminalMode): boolean {
     mode === "config-line" ||
     mode === "config-router" ||
     mode === "config-vlan" ||
-    mode === "config-subif"
+    mode === "config-subif" ||
+    mode === "config-if-range" ||
+    mode === "dhcp-config" ||
+    mode === "dhcp-pool" ||
+    mode === "config-telephony" ||
+    mode === "config-ephone" ||
+    mode === "config-ephone-dn" ||
+    mode === "config-voip"
   );
 }
 
