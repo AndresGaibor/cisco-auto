@@ -17,7 +17,13 @@ import type {
   IosExecutionSuccess,
   IosConfigApplyResult,
 } from "../../contracts/ios-execution-evidence";
-import type { RuntimeTerminalPort, TerminalPlan } from "../../ports/runtime-terminal-port.js";
+import type {
+  RuntimeTerminalPort,
+  TerminalPlan,
+  TerminalPlanTimeouts,
+  TerminalPlanPolicies,
+  TerminalMode,
+} from "../../ports/runtime-terminal-port.js";
 
 export class IosExecutionService {
   constructor(
@@ -78,16 +84,40 @@ export class IosExecutionService {
     };
   }
 
+  private buildPlanDefaults(): {
+    timeouts: TerminalPlanTimeouts;
+    policies: TerminalPlanPolicies;
+  } {
+    return {
+      timeouts: {
+        commandTimeoutMs: 8000,
+        stallTimeoutMs: 15000,
+      },
+      policies: {
+        autoBreakWizard: true,
+        autoAdvancePager: true,
+        maxPagerAdvances: 50,
+        maxConfirmations: 3,
+        abortOnPromptMismatch: false,
+        abortOnModeMismatch: true,
+      },
+    };
+  }
+
   async execIosRaw(
     device: string,
     command: string,
     _parse = true,
     timeout = 5000,
   ): Promise<{ raw: string; parsed?: unknown }> {
+    const { timeouts, policies } = this.buildPlanDefaults();
     const plan: TerminalPlan = {
       id: this.generateId(),
       device,
-      steps: [{ command, timeout }],
+      targetMode: "privileged-exec",
+      steps: [{ kind: "command", command, timeout }],
+      timeouts,
+      policies,
     };
 
     const result = await this.terminalPort.runTerminalPlan(plan, { timeoutMs: timeout });
@@ -105,10 +135,14 @@ export class IosExecutionService {
     _parse = true,
     timeout = 5000,
   ): Promise<IosExecutionSuccess<T>> {
+    const { timeouts, policies } = this.buildPlanDefaults();
     const plan: TerminalPlan = {
       id: this.generateId(),
       device,
-      steps: [{ command, timeout }],
+      targetMode: "privileged-exec",
+      steps: [{ kind: "command", command, timeout }],
+      timeouts,
+      policies,
     };
 
     const result = await this.terminalPort.runTerminalPlan(plan, { timeoutMs: timeout });
@@ -130,11 +164,17 @@ export class IosExecutionService {
     command: string,
     options?: { timeout?: number; parse?: boolean; ensurePrivileged?: boolean },
   ): Promise<IosExecutionSuccess<ParsedOutput>> {
+    const { timeouts, policies } = this.buildPlanDefaults();
     const timeout = options?.timeout ?? 30000;
+    const targetMode: TerminalMode = options?.ensurePrivileged ? "privileged-exec" : "user-exec";
+
     const plan: TerminalPlan = {
       id: this.generateId(),
       device,
-      steps: [{ command, timeout }],
+      targetMode,
+      steps: [{ kind: "command", command, timeout }],
+      timeouts,
+      policies,
     };
 
     const result = await this.terminalPort.runTerminalPlan(plan, { timeoutMs: timeout });
@@ -158,23 +198,41 @@ export class IosExecutionService {
     commands: string[],
     options?: { save?: boolean },
   ): Promise<IosConfigApplyResult> {
-    const steps = [
-      { command: "configure terminal", timeout: 5000 },
-      ...commands.map((cmd) => ({ command: cmd, timeout: 5000 })),
-      { command: "end", timeout: 5000 },
+    const configStepTimeoutMs = 60000;
+    const saveStepTimeoutMs = 60000;
+    const { timeouts, policies } = this.buildPlanDefaults();
+
+    const steps: TerminalPlan["steps"] = [
+      { kind: "ensureMode" as const, expectMode: "privileged-exec" },
+      { kind: "command" as const, command: "configure terminal", timeout: configStepTimeoutMs },
+      ...commands.map((cmd) => ({ kind: "command" as const, command: cmd, timeout: configStepTimeoutMs })),
+      { kind: "command" as const, command: "end", timeout: configStepTimeoutMs },
     ];
 
     if (options?.save) {
-      steps.push({ command: "copy running-config startup-config", timeout: 10000 });
+      steps.push({
+        kind: "command" as const,
+        command: "copy running-config startup-config",
+        allowConfirm: true,
+        timeout: saveStepTimeoutMs,
+      });
     }
+
+    const timeoutMs = Math.max(
+      30000,
+      steps.reduce((total, step) => total + (step.timeout ?? 5000), 0) + 5000,
+    );
 
     const plan: TerminalPlan = {
       id: this.generateId(),
       device,
+      targetMode: "global-config",
       steps,
+      timeouts,
+      policies,
     };
 
-    const result = await this.terminalPort.runTerminalPlan(plan);
+    const result = await this.terminalPort.runTerminalPlan(plan, { timeoutMs });
 
     if (!result.ok) {
       throw new Error(`IOS configuration failed: command returned status ${result.status}`);
@@ -206,7 +264,7 @@ export class IosExecutionService {
     const result = await this.execInteractive(device, command, {
       parse: false,
       ensurePrivileged: options?.ensurePrivileged ?? true,
-      timeout: options?.timeout ?? 10000,
+      timeout: options?.timeout ?? 30000,
     });
 
     const parser = getParser(command);
