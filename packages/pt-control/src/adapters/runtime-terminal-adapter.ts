@@ -8,7 +8,11 @@ import type {
   TerminalPortOptions,
   TerminalPortResult,
   TerminalPlan,
+  TerminalPlanStep,
+  TerminalPlanTimeouts,
+  TerminalPlanPolicies,
   SessionResult,
+  TerminalMode,
 } from "../ports/runtime-terminal-port.js";
 
 export interface RuntimeTerminalAdapterDeps {
@@ -57,6 +61,34 @@ function detectHostMode(session: ExecInteractiveValue["session"]): boolean {
   if (!session?.mode) return false;
   const mode = session.mode.toLowerCase();
   return mode.includes("host") || mode === "pc" || mode === "server";
+}
+
+async function detectDeviceType(bridge: FileBridgePort, deviceName: string): Promise<"host" | "ios" | "unknown"> {
+  try {
+    const listResult = await bridge.sendCommandAndWait("listDevices", {}, 5000);
+    if (listResult.ok && listResult.value) {
+      const devices = (listResult.value as any)?.devices || [];
+      const device = devices.find((d: any) => d.name === deviceName);
+      if (device) {
+        const model = (device.model || "").toLowerCase();
+        const type = (device.type || "").toLowerCase();
+        if (model.includes("pc") || model.includes("server") || model.includes("laptop") || type === "pc" || type === "server") {
+          return "host";
+        }
+        if (model.includes("router") || model.includes("switch") || type === "router" || type === "switch") {
+          return "ios";
+        }
+      }
+    }
+  } catch {
+    // Fallback: intentar por nombre del dispositivo
+  }
+  
+  if (deviceName.toLowerCase().includes("pc") || deviceName.toLowerCase().includes("server")) {
+    return "host";
+  }
+  
+  return "unknown";
 }
 
 export function createRuntimeTerminalAdapter(
@@ -110,21 +142,82 @@ export function createRuntimeTerminalAdapter(
     const warnings: string[] = [];
     const events: Array<Record<string, unknown>> = [];
 
+    const deviceType = await detectDeviceType(bridge, plan.device);
+    const isHost = deviceType === "host";
+    const handlerName = isHost ? "execPc" : "execIos";
+
+    const defaultTimeouts: TerminalPlanTimeouts = plan.timeouts ?? {
+      commandTimeoutMs: 8000,
+      stallTimeoutMs: 15000,
+    };
+    const defaultPolicies: TerminalPlanPolicies = plan.policies ?? {
+      autoBreakWizard: true,
+      autoAdvancePager: true,
+      maxPagerAdvances: 50,
+      maxConfirmations: 3,
+      abortOnPromptMismatch: false,
+      abortOnModeMismatch: true,
+    };
+
+    if (isHost) {
+      warnings.push(`Dispositivo ${plan.device} detectado como host, usando execPc`);
+    }
+
+    if (plan.targetMode) {
+      warnings.push(`Plan con targetMode: ${plan.targetMode}`);
+    }
+
     for (let i = 0; i < plan.steps.length; i += 1) {
       const step = plan.steps[i]!;
+
+      if (step.kind === "ensureMode") {
+        events.push({
+          stepIndex: i,
+          kind: "ensureMode",
+          expectMode: step.expectMode,
+        });
+        continue;
+      }
+
+      if (step.kind === "expectPrompt") {
+        events.push({
+          stepIndex: i,
+          kind: "expectPrompt",
+          expectPromptPattern: step.expectPromptPattern,
+        });
+        continue;
+      }
+
+      if (step.kind === "confirm") {
+        events.push({
+          stepIndex: i,
+          kind: "confirm",
+        });
+        continue;
+      }
+
       const command = String(step.command ?? "");
-      const stepTimeout = step.timeout ?? timeoutMs;
+      const stepTimeout = step.timeout ?? defaultTimeouts.commandTimeoutMs;
+      const stepStallTimeout = defaultTimeouts.stallTimeoutMs;
+
+      const stepPolicies = {
+        allowPager: step.allowPager ?? defaultPolicies.autoAdvancePager,
+        allowConfirm: step.allowConfirm ?? false,
+      };
 
       const bridgeResult = await bridge.sendCommandAndWait<{ value?: ExecInteractiveValue }>(
-        "execIos",
+        handlerName,
         {
-          type: "execIos",
+          type: handlerName,
           device: plan.device,
           command,
           parse: false,
-          ensurePrivileged: false,
+          ensurePrivileged: plan.targetMode === "privileged-exec" || plan.targetMode === "global-config",
+          targetMode: plan.targetMode,
+          allowPager: stepPolicies.allowPager,
+          allowConfirm: stepPolicies.allowConfirm,
           commandTimeoutMs: stepTimeout,
-          stallTimeoutMs: stepTimeout,
+          stallTimeoutMs: stepStallTimeout,
         },
         stepTimeout,
       );
@@ -132,7 +225,6 @@ export function createRuntimeTerminalAdapter(
       const value = (bridgeResult?.value ?? {}) as ExecInteractiveValue;
       const raw = String(value.raw ?? "");
       const status = normalizeStatus(value);
-      const isHost = detectHostMode(value.session);
 
       if (i === 0) {
         promptBefore = String(value.session?.prompt ?? "");
@@ -146,6 +238,7 @@ export function createRuntimeTerminalAdapter(
 
       events.push({
         stepIndex: i,
+        kind: step.kind ?? "command",
         command,
         status,
         promptAfter,
@@ -155,23 +248,36 @@ export function createRuntimeTerminalAdapter(
         awaitingConfirm: Boolean(value.session?.awaitingConfirm),
         autoDismissedInitialDialog: Boolean(value.session?.autoDismissedInitialDialog),
         sessionKind: isHost ? "host" : "ios",
+        allowPager: stepPolicies.allowPager,
+        allowConfirm: stepPolicies.allowConfirm,
+        expectMode: step.expectMode,
+        expectPromptPattern: step.expectPromptPattern,
+        optional: step.optional,
       });
 
-      if (value.session?.paging) {
+      if (value.session?.paging && stepPolicies.allowPager) {
         warnings.push(`El comando "${command}" activó paginación en ${plan.device}`);
       }
 
-      if (value.session?.awaitingConfirm && !isHost) {
-        warnings.push(`El comando "${command}" dejó confirmación pendiente en ${plan.device}`);
+      if (value.session?.paging && !stepPolicies.allowPager) {
+        warnings.push(`El comando "${command}" activó paginación pero allowPager=false`);
+      }
+
+      if (value.session?.awaitingConfirm && stepPolicies.allowConfirm) {
+        warnings.push(`El comando "${command}" requirió confirmación en ${plan.device}`);
+      }
+
+      if (value.session?.awaitingConfirm && !stepPolicies.allowConfirm && !isHost) {
+        warnings.push(`El comando "${command}" dejó confirmación pendiente en ${plan.device} (allowConfirm=false)`);
       }
 
       if (
-        step.expectedPrompt &&
+        (step.expectedPrompt || step.expectPromptPattern) &&
         promptAfter &&
-        !promptAfter.includes(step.expectedPrompt)
+        !promptAfter.includes(step.expectedPrompt ?? step.expectPromptPattern ?? "")
       ) {
         warnings.push(
-          `Prompt esperado "${step.expectedPrompt}" no alcanzado tras "${command}". Prompt final: "${promptAfter}"`,
+          `Prompt esperado "${step.expectedPrompt ?? step.expectPromptPattern}" no alcanzado tras "${command}". Prompt final: "${promptAfter}"`,
         );
       }
 
