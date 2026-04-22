@@ -229,6 +229,38 @@ export function detectHostBusy(output: string): boolean {
   );
 }
 
+export function detectDnsLookup(output: string): boolean {
+  const text = normalizeWhitespace(output).toLowerCase();
+  return text.includes("translating") && text.includes("domain");
+}
+
+export function detectAuthPrompt(output: string): boolean {
+  const line = lastNonEmptyLine(output);
+  if (!line) return false;
+
+  return (
+    /^username:/i.test(line) ||
+    /^password:/i.test(line) ||
+    /^login:/i.test(line)
+  );
+}
+
+export function detectReloadPrompt(output: string): boolean {
+  const text = normalizeWhitespace(output).toLowerCase();
+  return (
+    text.includes("reload") &&
+    text.includes("confirm")
+  );
+}
+
+export function detectErasePrompt(output: string): boolean {
+  const text = normalizeWhitespace(output).toLowerCase();
+  return (
+    text.includes("erase") &&
+    text.includes("confirm")
+  );
+}
+
 export function isPrivilegedMode(mode: TerminalMode): boolean {
   return mode === "privileged-exec" || isConfigMode(mode);
 }
