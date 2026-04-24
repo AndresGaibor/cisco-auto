@@ -15,12 +15,11 @@ import type {
 } from "./ios-payloads.js";
 import { createErrorResult, createSuccessResult } from "./result-factories";
 import { sanitizeTerminalOutput } from "./terminal-sanitizer";
-import { createCommandExecutor, type ExecutionOptions, type CommandExecutionResult } from "../terminal/index";
+import { createCommandExecutor, type ExecutionOptions } from "../terminal/index";
 import { ensureSession, getSession } from "../terminal/session-registry";
-import { 
-  detectModeFromPrompt, 
-  readTerminalOutput, 
-  stripBaselineOutput 
+import {
+  detectModeFromPrompt,
+  readTerminalOutput,
 } from "../terminal/prompt-detector";
 import { createModeGuard } from "../terminal/mode-guard";
 
@@ -60,6 +59,36 @@ function getTerminalDevice(api: PtRuntimeApi, deviceName: string): any {
   } catch(e) {
     return null;
   }
+}
+
+function inferExpectedModeAfterCommand(command: string): any {
+  const cmd = command.trim().toLowerCase();
+
+  if (/^(conf|config|configure)(\s+t|\s+terminal)?$/.test(cmd)) {
+    return "global-config";
+  }
+
+  if (/^interface\s+/.test(cmd)) {
+    return "config-if";
+  }
+
+  if (/^line\s+/.test(cmd)) {
+    return "config-line";
+  }
+
+  if (/^router\s+/.test(cmd)) {
+    return "config-router";
+  }
+
+  if (/^vlan\s+\d+/.test(cmd)) {
+    return "config-vlan";
+  }
+
+  if (/^end$/.test(cmd) || /^\^z$/.test(cmd)) {
+    return "privileged-exec";
+  }
+
+  return undefined;
 }
 
 
@@ -116,6 +145,8 @@ export async function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi):
     autoConfirm: payload.allowConfirm ?? false,
     maxPagerAdvances: 50,
     sessionKind: session.sessionKind,
+    expectedMode: payload.expectedMode as any,
+    expectedPromptPattern: payload.expectedPromptPattern,
   };
 
   const executor = createCommandExecutor({
@@ -225,7 +256,10 @@ export async function handleConfigIos(payload: ConfigIosPayload, api: PtRuntimeA
   };
 
   for (const command of payload.commands) {
-    const result = await executor.executeCommand(deviceName, command, terminal, execOptions);
+    const result = await executor.executeCommand(deviceName, command, terminal, {
+      ...execOptions,
+      expectedMode: inferExpectedModeAfterCommand(command),
+    });
     allOutput += result.output;
 
     if (!result.ok) {
@@ -246,7 +280,10 @@ export async function handleConfigIos(payload: ConfigIosPayload, api: PtRuntimeA
       deviceName,
       "end",
       terminal,
-      execOptions
+      {
+        ...execOptions,
+        expectedMode: "privileged-exec" as any,
+      }
     );
     allOutput += saveResult.output;
 

@@ -264,6 +264,7 @@ if (!readyResult.ready) {
     let settled = false;
     let startedSeen = false;
     let commandEndedSeen = false;
+    let commandEndSeenAt: number | null = null;
     let endedStatus: number | null = null;
     let wizardDismissed = false;
     let hostBusy = false;
@@ -340,7 +341,11 @@ if (!readyResult.ready) {
         hostBusy = true;
       }
 
-      if (!cmdOk && status === null) {
+      const semanticStatus = guessFailureStatus(finalOutput);
+      if (semanticStatus !== 0) {
+        cmdOk = false;
+        status = semanticStatus;
+      } else if (!cmdOk && status === null) {
         status = guessFailureStatus(finalOutput);
       }
 
@@ -418,6 +423,15 @@ if (!readyResult.ready) {
 
     function scheduleFinalizeAfterCommandEnd(): void {
       if (settled) return;
+
+      if (commandEndedSeen && commandEndSeenAt) {
+        const waitedAfterEnd = Date.now() - commandEndSeenAt;
+
+        if (waitedAfterEnd >= COMMAND_END_MAX_WAIT_MS) {
+          finalize(true, endedStatus, "command-ended-max-wait");
+          return;
+        }
+      }
 
       const currentPrompt = getPromptSafe(terminal);
       const { finished, reason } = checkIsCommandFinished(currentPrompt, session, commandEndedSeen);
@@ -540,6 +554,7 @@ if (!readyResult.ready) {
     function onEnded(_src: unknown, args: unknown): void {
       const payload = args as CommandEndedPayload;
       commandEndedSeen = true;
+      commandEndSeenAt = Date.now();
       endedStatus = payload.status ?? 0;
       resetStallTimer();
       pushEvent(events, session.sessionId, deviceName, "commandEnded", String(endedStatus), String(endedStatus));

@@ -78,6 +78,19 @@ export class IosExecutionService {
     return undefined;
   }
 
+  private shouldPreserveCurrentModeForCommand(command: string): boolean {
+    const cmd = command.trim().toLowerCase();
+
+    return (
+      /^interface\s+/.test(cmd) ||
+      /^line\s+/.test(cmd) ||
+      /^router\s+/.test(cmd) ||
+      /^vlan\s+\d+/.test(cmd) ||
+      /^exit$/.test(cmd) ||
+      /^end$/.test(cmd)
+    );
+  }
+
   private createTerminalBridgeHandler(device: string) {
     return {
       enterCommand: async (cmd: string): Promise<[number, string]> => {
@@ -188,10 +201,14 @@ export class IosExecutionService {
   ): Promise<{ raw: string; parsed?: unknown }> {
     const { timeouts, policies } = this.buildPlanDefaults();
     const expectedMode = this.inferExpectedModeAfterCommand(command);
+    const targetMode = this.shouldPreserveCurrentModeForCommand(command)
+      ? undefined
+      : "privileged-exec";
+
     const plan: TerminalPlan = {
       id: this.generateId(),
       device,
-      targetMode: "privileged-exec",
+      targetMode,
       steps: [
         {
           kind: "command",
@@ -217,10 +234,14 @@ export class IosExecutionService {
   ): Promise<IosExecutionSuccess<T>> {
     const { timeouts, policies } = this.buildPlanDefaults();
     const expectedMode = this.inferExpectedModeAfterCommand(command);
+    const targetMode = this.shouldPreserveCurrentModeForCommand(command)
+      ? undefined
+      : "privileged-exec";
+
     const plan: TerminalPlan = {
       id: this.generateId(),
       device,
-      targetMode: "privileged-exec",
+      targetMode,
       steps: [
         {
           kind: "command",
@@ -250,7 +271,11 @@ export class IosExecutionService {
   ): Promise<IosExecutionSuccess<ParsedOutput>> {
     const { timeouts, policies } = this.buildPlanDefaults();
     const timeout = options?.timeout ?? 30000;
-    const targetMode: TerminalMode = options?.ensurePrivileged ? "privileged-exec" : "user-exec";
+    const targetMode: TerminalMode | undefined = this.shouldPreserveCurrentModeForCommand(command)
+      ? undefined
+      : options?.ensurePrivileged
+        ? "privileged-exec"
+        : "user-exec";
     const expectedMode = this.inferExpectedModeAfterCommand(command);
 
     const plan: TerminalPlan = {
@@ -380,7 +405,7 @@ export class IosExecutionService {
     }
 
     return {
-      ok: true,
+      ok: result.ok,
       raw: result.raw,
       parsed,
       evidence: result.evidence,
