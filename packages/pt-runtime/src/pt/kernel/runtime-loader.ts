@@ -95,7 +95,7 @@ export function createRuntimeLoader(config: { runtimeFile: string }) {
       const _DEV_DIR = typeof DEV_DIR !== "undefined" ? DEV_DIR : "/pt-dev";
       const _g: any = typeof self !== "undefined" ? self : Function("return this")();
       const _exports: Record<string, unknown> = {};
-      const _module = { exports: _exports };
+      const _moduleExports = _exports;
       const shim = `
 if (typeof Object.fromEntries !== "function") {
   Object.fromEntries = function(entries) {
@@ -123,7 +123,7 @@ if (typeof Object.fromEntries !== "function") {
         shim + code,
       );
       visibleLog("[loader] Evaluating runtime...");
-      fn(_ipc, _fm, _dprint, _DEV_DIR, _exports, _module, _g);
+      fn(_ipc, _fm, _dprint, _DEV_DIR, _exports, { exports: _moduleExports }, _g);
 
       visibleLog("[loader] Checking _ptDispatch registration...");
       const dispatch = _g._ptDispatch;

@@ -296,7 +296,7 @@ function createApplyCommand(): Command {
               })),
               excluded: excludedRanges.map((r) => {
                 const [start, end] = r.split('-');
-                return { start, end };
+                return { start: start || '', end: end || '' };
               }),
             });
 
@@ -410,13 +410,13 @@ function createInspectCommand(): Command {
               device: deviceName,
               port: options.port ?? 'FastEthernet0',
               enabled: inspectResult?.enabled ?? true,
-              pools: (inspectResult?.pools ?? []).map((p) => ({
+              pools: (inspectResult?.pools ?? []).map((p: any) => ({
                 name: p.name,
                 network: p.network,
                 mask: p.mask ?? p.subnetMask ?? '',
                 router: p.defaultRouter ?? '',
               })),
-              excludedRanges: inspectResult?.excludedAddresses?.map((e) => `${e.start}-${e.end}`) ?? [],
+              excludedRanges: (inspectResult?.excludedAddresses ?? []).map((e: any) => `${e.start}-${e.end}`),
             };
 
             return createSuccessResult('dhcp-server.inspect', resultData);

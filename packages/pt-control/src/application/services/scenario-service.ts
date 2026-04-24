@@ -1,225 +1,43 @@
 // ============================================================================
-// Scenario Service - The Lab Orchestrator (CCNA 1-8)
-// Carga labs desde YAML y los inyecta en PT via evaluate/OmniscienceService.
+// Scenario Service - Orquestador de labs (CCNA 1-8)
+// Delega parsing a scenario-parser.ts y resolución a scenario-catalog.ts
 // ============================================================================
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { FileBridgePort } from "../ports/file-bridge.port.js";
-import type { ValidationResult } from "../../contracts/scenarios.js";
 import { OmniscienceService } from "./omniscience-service.js";
 import { RuntimeOmniAdapter } from "../../adapters/runtime-omni-adapter.js";
 import { RuntimePrimitiveAdapter } from "../../adapters/runtime-primitive-adapter.js";
+import {
+  parseYamlRaw,
+  yamlToLab,
+  type ParsedLab,
+} from "./scenario-parser.js";
+import {
+  getScenarioPath,
+  getScenarioMeta,
+  listScenarios,
+} from "./scenario-catalog.js";
 
-const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-// ============================================================================
-// Tipos internos
-// ============================================================================
-
-interface LabDevice {
-  name: string;
-  type: string;
-  model: string;
-  x: number;
-  y: number;
-}
-
-interface LabLink {
-  from: string;
-  fromPort: string;
-  to: string;
-  toPort: string;
-}
-
-interface LabConfig {
-  device: string;
-  type: string;
-  ip?: string;
-  mask?: string;
-  gateway?: string;
-  dns?: string;
-  dhcp?: boolean;
-}
-
-interface LabValidation {
-  type: string;
-  from?: string;
-  to?: string;
-  device?: string;
-  expect?: string | Record<string, unknown>;
-}
-
-interface ParsedLab {
-  name?: string;
-  description?: string;
-  devices: LabDevice[];
-  links: LabLink[];
-  configs: LabConfig[];
-  validation: LabValidation[];
-}
-
-// ============================================================================
-// Mapa de escenarios registrados
-// ============================================================================
-
-const SCENARIOS: Record<number, string> = {
-  1: "labs/lan-basica.yaml",
-  2: "labs/arp-learning.yaml",
-  3: "labs/router-between-nets.yaml",
-  4: "labs/gateway-misconfig.yaml",
-  5: "labs/mask-misconfig.yaml",
-  6: "labs/ip-duplicate.yaml",
-  7: "labs/switch-documented.yaml",
-  8: "labs/subnetting-basic.yaml",
-};
-
-const ESCENARIOS_META: Record<number, { nombre: string; desc: string }> = {
-  1: { nombre: "LAN mínima", desc: "2 PCs + 1 switch, conectividad básica" },
-  2: { nombre: "ARP learning", desc: "3 PCs + 1 switch, tabla ARP" },
-  3: { nombre: "Router entre redes", desc: "Router + 2 PCs, redes separadas" },
-  4: { nombre: "Gateway mal configurado", desc: "Detectar fallo de gateway" },
-  5: { nombre: "Máscara incorrecta", desc: "Detectar error de subnetting" },
-  6: { nombre: "IP duplicada", desc: "Detectar conflicto de IP" },
-  7: { nombre: "Switch documentado", desc: "Hostname y descripciones" },
-  8: { nombre: "Subnetting básico", desc: "Dos LANs con /26" },
-};
-
-// ============================================================================
-// Helpers de parsing YAML mínimo (sin dependencia externa)
-// Usa RegExp para parseo simple de YAML de labs
-// ============================================================================
-
-function parseYamlRaw(content: string): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  const lines = content.split("\n");
-  const stack: Array<{ indent: number; key: string; obj: Record<string, unknown> }> = [];
-  let currentList: unknown[] = [];
-  let listKey = "";
-
-  for (let li = 0; li < lines.length; li++) {
-    const rawLine = lines[li]!;
-    const line = rawLine.replace(/\r$/, "");
-    if (!line.trim() || line.trim().startsWith("#")) continue;
-
-    const indent = line.search(/\S/);
-    const trimmed = line.trim();
-
-    while (stack.length > 0 && indent <= stack[stack.length - 1]!.indent) {
-      stack.pop();
-    }
-
-    if (trimmed === "-") {
-      listKey = stack.length > 0 ? stack[stack.length - 1]!.key : "";
-      currentList = [];
-      continue;
-    }
-
-    const colonIdx = trimmed.indexOf(":");
-    if (colonIdx === -1) {
-      if (currentList.length > 0 && typeof currentList[currentList.length - 1] === "string") {
-        currentList.push(trimmed);
-      }
-      continue;
-    }
-
-    const rawKey = trimmed.slice(0, colonIdx).trim();
-    const rawValue = trimmed
-      .slice(colonIdx + 1)
-      .trim()
-      .replace(/^["']|["']$/g, "");
-
-    if (currentList.length > 0 && listKey) {
-      const last = currentList[currentList.length - 1];
-      if (typeof last === "string" && last.includes(":")) {
-        const obj: Record<string, string> = {};
-        obj[rawKey] = rawValue;
-        currentList[currentList.length - 1] = obj;
-      } else if (typeof last === "object" && last !== null) {
-        (last as Record<string, string>)[rawKey] = rawValue;
-      }
-      continue;
-    }
-
-    if (!rawValue) {
-      const newObj: Record<string, unknown> = { _indent: indent };
-      if (stack.length > 0) {
-        const top = stack[stack.length - 1]!;
-        top.obj[rawKey] = newObj;
-      } else {
-        result[rawKey] = newObj;
-      }
-      stack.push({ indent, key: rawKey, obj: newObj });
-    } else {
-      const value = rawValue;
-      if (stack.length > 0) {
-        const top = stack[stack.length - 1]!;
-        top.obj[rawKey] = value;
-      } else {
-        result[rawKey] = value;
-      }
-    }
-  }
-
-  return result;
-}
-
-function yamlToLab(parsed: Record<string, unknown>): ParsedLab {
-  const devices = ((parsed.devices as Array<Record<string, unknown>>) || []).map(
-    (d): LabDevice => ({
-      name: String(d["name"] || d["id"] || ""),
-      type: String(d["type"] || "unknown"),
-      model: String(d["model"] || "PC-PT"),
-      x: Number(d["x"] ?? 200),
-      y: Number(d["y"] ?? 200),
-    }),
-  );
-
-  const links = ((parsed.links as Array<Record<string, unknown>>) || []).map(
-    (l): LabLink => ({
-      from: String(l["from"] || ""),
-      fromPort: String(l["fromPort"] || l["port"] || "FastEthernet0/1"),
-      to: String(l["to"] || ""),
-      toPort: String(l["toPort"] || l["port"] || "FastEthernet0/1"),
-    }),
-  );
-
-  const configs = ((parsed.configs as Array<Record<string, unknown>>) || []).map(
-    (c): LabConfig => ({
-      device: String(c["device"] || ""),
-      type: String(c["type"] || "host"),
-      ip: c["ip"] as string | undefined,
-      mask: c["mask"] as string | undefined,
-      gateway: c["gateway"] as string | undefined,
-      dns: c["dns"] as string | undefined,
-      dhcp: c["dhcp"] as boolean | undefined,
-    }),
-  );
-
-  const validation = ((parsed.validation as Array<Record<string, unknown>>) || []).map(
-    (v): LabValidation => ({
-      type: String(v["type"] || ""),
-      from: v["from"] as string | undefined,
-      to: v["to"] as string | undefined,
-      device: v["device"] as string | undefined,
-      expect: v["expect"] as Record<string, unknown> | undefined,
-    }),
-  );
-
-  return {
-    name: parsed["name"] as string | undefined,
-    description: parsed["description"] as string | undefined,
-    devices,
-    links,
-    configs,
-    validation,
+interface ValidationResult {
+  scenarioId: number;
+  status: "PASS" | "FAIL";
+  details: {
+    physical: string[];
+    layer2: string[];
+    layer3: string[];
+    services: string[];
   };
 }
 
-// ============================================================================
-// Scenario Service
-// ============================================================================
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Servicio de orquestación de escenarios de laboratorio.
+ * Coordena carga de YAML, inyección en PT, y validación.
+ * Delega parsing y catálogo a módulos especializados.
+ */
 export class ScenarioService {
   private readonly omniPort: RuntimeOmniAdapter;
   private readonly primitivePort: RuntimePrimitiveAdapter;
@@ -232,21 +50,20 @@ export class ScenarioService {
   }
 
   /**
-   * Lista escenarios disponibles
+   * Lista escenarios disponibles en el catálogo.
+   * @returns Array de escenarios con id, nombre y descripción
    */
   listScenarios(): Array<{ id: number; nombre: string; desc: string }> {
-    return Object.keys(SCENARIOS).map((id) => {
-      const num = parseInt(id, 10);
-      const meta = ESCENARIOS_META[num];
-      return { id: num, nombre: meta?.nombre ?? "?", desc: meta?.desc ?? "" };
-    });
+    return listScenarios();
   }
 
   /**
-   * Carga un lab desde YAML
+   * Carga un lab desde YAML usando el path del catálogo.
+   * @param id - ID del escenario
+   * @returns ParsedLab o null si no existe o falla el parsing
    */
   loadLab(id: number): ParsedLab | null {
-    const path = SCENARIOS[id];
+    const path = getScenarioPath(id);
     if (!path) return null;
     try {
       const content = readFileSync(resolve(process.cwd(), path), "utf-8");
@@ -258,13 +75,14 @@ export class ScenarioService {
   }
 
   /**
-   * Inyecta un escenario en PT
+   * Inyecta un escenario en Packet Tracer con delay de convergencia.
+   * @param id - ID del escenario a inyectar
    */
   async startScenario(id: number): Promise<void> {
-    const meta = ESCENARIOS_META[id];
+    const meta = getScenarioMeta(id);
     if (!meta) {
       console.log(`❌ Escenario ${id} no encontrado.`);
-      console.log(`   Disponibles: ${Object.keys(SCENARIOS).join(", ")}`);
+      console.log(`   Disponibles: ${Object.keys(listScenarios()).join(", ")}`);
       return;
     }
 
@@ -294,10 +112,11 @@ export class ScenarioService {
   }
 
   /**
-   * Fuerza un escenario sin delays (inyección atómica)
+   * Fuerza un escenario sin delays (inyección atómica).
+   * @param id - ID del escenario a forzar
    */
   async forceScenario(id: number): Promise<void> {
-    const meta = ESCENARIOS_META[id];
+    const meta = getScenarioMeta(id);
     if (!meta) {
       console.log(`❌ Escenario ${id} no encontrado.`);
       return;
@@ -318,7 +137,9 @@ export class ScenarioService {
   }
 
   /**
-   * Valida un escenario en PT
+   * Valida un escenario en Packet Tracer contra las expectativas del YAML.
+   * @param id - ID del escenario a validar
+   * @returns ValidationResult con status PASS/FAIL y detalles por capa
    */
   async validateScenario(id: number): Promise<ValidationResult> {
     const result: ValidationResult = {
@@ -333,9 +154,9 @@ export class ScenarioService {
       return result;
     }
 
-    console.log(`🔍 Validando Escenario ${id}: ${lab.name || ESCENARIOS_META[id]?.nombre}`);
+    const meta = getScenarioMeta(id);
+    console.log(`🔍 Validando Escenario ${id}: ${lab.name || meta?.nombre}`);
 
-    // Validación capa física
     const snapshotResult = await this.primitivePort.runPrimitive(
       "topology.snapshot",
       {},
@@ -360,7 +181,6 @@ export class ScenarioService {
       );
     }
 
-    // Validaciones del YAML
     for (const v of lab.validation) {
       if (v.type === "ping") {
         const from = v.from || "PC1";
@@ -506,7 +326,6 @@ export class ScenarioService {
       }
     }
 
-    // Status final
     const hasErrors = [
       ...result.details.physical,
       ...result.details.layer2,
@@ -518,33 +337,49 @@ export class ScenarioService {
     return result;
   }
 
-  // ============================================================================
-  // Builder del script de inyección
-  // ============================================================================
-
+  /**
+   * Construye el script de inyección JavaScript para Packet Tracer.
+   * @param lab - Lab parseado con dispositivos, enlaces y configs
+   * @param atomic - Si true, habilita convergencia instantánea
+   * @returns Código JavaScript como string
+   */
   private buildInjectionScript(lab: ParsedLab, atomic = false): string {
     const deviceLines = lab.devices
       .map((d) => `w.createDevice('${d.model}', '${d.name}', ${d.x}, ${d.y});`)
       .join("\n                    ");
 
     const linkLines = lab.links
-      .map((l) => `w.createLink('${l.from}', '${l.fromPort}', '${l.to}', '${l.toPort}', 0);`)
+      .map((l) => `(function() { 
+          var link = w.createLink('${l.from}', '${l.fromPort}', '${l.to}', '${l.toPort}', 0);
+          if(!link && w.autoConnectDevices) w.autoConnectDevices('${l.from}', '${l.to}');
+      })();`)
       .join("\n                    ");
 
     const configLines = lab.configs
       .map((c) => {
         if (c.type === "host" || c.type === "pc" || c.type === "server") {
-          let lines = "";
+          let lines = `var d = n.getDevice('${c.device}'); if(d) {`;
           if (c.ip && c.mask) {
-            lines += `d.getPortAt(0).setIpAddress('${c.ip}', '${c.mask}');`;
+            lines += `
+                    try { 
+                      var p = d.getPortAt(0);
+                      if(p && p.setIpSubnetMask) p.setIpSubnetMask('${c.ip}', '${c.mask}');
+                      else if(d.setIpSubnetMask) d.setIpSubnetMask('${c.ip}', '${c.mask}');
+                      else if(p && p.setIpAddress) p.setIpAddress('${c.ip}', '${c.mask}');
+                    } catch(e) {
+                      if(d.getCommandLine && d.getCommandLine()) {
+                        d.getCommandLine().enterCommand('ipconfig ${c.ip} ${c.mask}');
+                      } else {
+                        throw new Error('Hardware API fail and no CLI available for ${c.device}');
+                      }
+                    }`;
           }
           if (c.gateway) {
-            lines += `\n                    d.setDefaultGateway('${c.gateway}');`;
+            lines += `\n                    try { d.setDefaultGateway('${c.gateway}'); } catch(e) {}`;
           }
+          lines += `\n                    }`;
           return lines;
         } else if (c.type === "router") {
-          // Routers need interface-specific config
-          // We handle this via CLI config after the lab is set up
           return "";
         }
         return "";
@@ -552,24 +387,8 @@ export class ScenarioService {
       .filter(Boolean)
       .join("\n                    ");
 
-    // Config IPs para PCs
-    const pcConfigs = lab.configs
-      .filter((c) => c.type === "host" || c.type === "pc" || c.type === "server")
-      .map((c) => {
-        let lines = `var d = n.getDevice('${c.device}');`;
-        if (c.ip && c.mask) {
-          lines += `\n                    if(d && d.getPortAt) d.getPortAt(0).setIpAddress('${c.ip}', '${c.mask}');`;
-        }
-        if (c.gateway) {
-          lines += `\n                    if(d && d.setDefaultGateway) d.setDefaultGateway('${c.gateway}');`;
-        }
-        return lines;
-      })
-      .join("\n                    ");
-
     const convergeScript = atomic
       ? `
-                // Simulation forwarding (convergencia instantanea)
                 try {
                     var sim = ipc.simulation();
                     if (sim) {
@@ -577,7 +396,7 @@ export class ScenarioService {
                         for(var k=0; k<10; k++) sim.forward();
                         sim.setSimulationMode(false);
                     }
-                } catch(e) { /* sim puede no estar disponible */ }
+                } catch(e) { }
 `
       : "";
 
@@ -588,23 +407,18 @@ export class ScenarioService {
                 var n = g.ipc.network();
                 var w = g.appWindow.getActiveWorkspace().getLogicalWorkspace();
 
-                // 1. Clear canvas (Chainbreaker)
                 var count = n.getDeviceCount();
                 for(var i=count-1; i>=0; i--) {
                     var dev = n.getDeviceAt(i);
                     if (dev) n.removeDevice(dev.getName());
                 }
 
-                // 2. Crear dispositivos
                 ${deviceLines}
 
-                // 3. Crear enlaces
                 ${linkLines}
 
-                // 4. Configurar IPs (PCs y Servers)
-                ${pcConfigs}
+                ${configLines}
 
-                // 5. Convergencia
                 ${convergeScript}
 
                 return "OK";

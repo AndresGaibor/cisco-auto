@@ -411,7 +411,15 @@ bun run pt agent verify
 |-----------|----------------------|---------------|
 | `PTNetwork` | `ipc.network()` | `getDevice(name)`, `getDeviceAt(idx)`, `getDeviceCount()` |
 | `PTDevice` | `net.getDevice(name)` | `getName()`, `setName(n)`, `getModel()`, `getPower()`, `setPower(bool)`, `getCommandLine()`, `getPortCount()`, `getPortAt(idx)`, `getPort(name)`, `addModule(slot, mod)` |
-| `PTCommandLine` | `device.getCommandLine()` | `enterCommand(cmd)`, `getPrompt()`, `getMode()`, `registerEvent(event, null, handler)` |
+#### PTCommandLine | `device.getCommandLine()` | `enterCommand(cmd)`, `getPrompt()`, `getMode()`, `registerEvent(event, null, handler)` |
+
+> **IMPORTANTE: Motor de Ejecución Determinista**
+> - **Mandato**: NUNCA usar `enterCommand` directamente para flujos de red. Usar `CommandExecutor` (kernel) o `configIos`/`execHost` (control).
+> - **Heurísticas**: El sistema detecta el fin de comandos mediante estabilidad de output (250ms) y análisis estructural de prompts.
+> - **Auto-Recuperación**: Rompe bloqueos de DNS (`Translating...`) con Ctrl+C y gestiona Wizards (WLC/IOS) automáticamente.
+> - **Sanitización**: Elimina ruidos (BELL, ANSI) y procesa retrocesos (`\b`) en el origen.
+> - **Alias**: Usar `bun run pt cmd <PC> "comando"` para acceso rápido.
+
 | `PTPort` | `device.getPort(name)` | `getName()`, `getIpAddress()`, `getSubnetMask()`, `setIpSubnetMask(ip, mask)`, `isPortUp()`, `isProtocolUp()`, `getMacAddress()` |
 | `PTLink` | `net.getLinkAt(idx)` | `getConnectionType()`, `getPort1()`, `getPort2()` |
 | `PTLogicalWorkspace` | `appWindow.getActiveWorkspace().getLogicalWorkspace()` | `addDevice(typeId, model, x, y)`, `removeDevice(name)`, `createLink(d1, p1, d2, p2, cableType)`, `deleteLink(d, port)` |

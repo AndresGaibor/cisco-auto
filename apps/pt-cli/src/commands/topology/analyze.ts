@@ -34,8 +34,9 @@ export function createTopologyAnalyzeCommand(): Command {
 
             const deviceConnections = new Map<string, number>();
             for (const device of devices) {
-              deviceConnections.set(device.name || device.id || '', 0);
+              deviceConnections.set(device.name || '', 0);
             }
+
             for (const link of links) {
               const from = typeof link.source === 'object' ? link.source : { deviceId: link.sourceDeviceId || '' };
               const to = typeof link.target === 'object' ? link.target : { deviceId: link.targetDeviceId || '' };
@@ -55,8 +56,9 @@ export function createTopologyAnalyzeCommand(): Command {
 
             const adjacency = new Map<string, Set<string>>();
             for (const device of devices) {
-              adjacency.set(device.name || device.id || '', new Set());
+              adjacency.set(device.name || '', new Set());
             }
+
             for (const link of links) {
               const from = typeof link.source === 'object' ? link.source : { deviceId: link.sourceDeviceId || '' };
               const to = typeof link.target === 'object' ? link.target : { deviceId: link.targetDeviceId || '' };

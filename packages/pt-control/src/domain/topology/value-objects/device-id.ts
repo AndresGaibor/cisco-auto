@@ -12,10 +12,23 @@
 const DEVICE_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]{0,62}$/;
 
 /**
- * Represents a validated device identifier for topology state
- * 
- * Used in VirtualTopology, DeviceState, and related types to ensure
- * device names are valid IOS hostnames at construction time.
+ * Valor obstructor que valida y normaliza un identificador de dispositivo para topología.
+ *
+ * Se utiliza en VirtualTopology, DeviceState y tipos relacionados para asegurar
+ * que los nombres de dispositivo sean IOS hostnames válidos desde el momento de construcción.
+ *
+ * Valida formato: solo caracteres alfanuméricos, guiones y guiones bajos; debe iniciar con letra.
+ * Limitado a 63 caracteres (límite real de IOS para hostnames).
+ *
+ * @example
+ * ```typescript
+ * const deviceId = DeviceId.from("Router1");
+ * console.log(deviceId.toString()); // "Router1"
+ *
+ * // Validación sin excepciones
+ * const result = DeviceId.tryFrom("123-invalid");
+ * console.log(result); // null
+ * ```
  */
 export class DeviceId {
   public readonly value: string;

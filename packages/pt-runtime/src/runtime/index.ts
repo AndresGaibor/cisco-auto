@@ -106,16 +106,18 @@ function runtime(payload: Record<string, unknown>, api: RuntimeApi): RuntimeResu
     if (payload.type === "__pollDeferred") {
       var pollLog = log.withCommand("__pollDeferred");
       pollLog.debug("Runtime entrada __pollDeferred", {
-        ticket: payload.ticket,
+        ticket: payload.ticket as string,
       });
 
       var pollResult = handlePollDeferred(payload, api);
 
-      pollLog.debug("Runtime resultado __pollDeferred", {
-        done: (pollResult as any).done,
-        ok: (pollResult as any).ok,
-        error: (pollResult as any).error,
-      });
+      if ("done" in pollResult) {
+        pollLog.debug("Runtime resultado __pollDeferred", {
+          done: (pollResult as { done: boolean }).done,
+          ok: pollResult.ok,
+          error: "error" in pollResult ? (pollResult as { error?: string }).error : undefined,
+        });
+      }
 
       return pollResult;
     }
@@ -130,7 +132,7 @@ function runtime(payload: Record<string, unknown>, api: RuntimeApi): RuntimeResu
         pending: hasPendingResult.pending,
       });
 
-      return hasPendingResult as unknown as RuntimeResult;
+      return { ok: true, ...hasPendingResult } as unknown as RuntimeResult;
     }
 
     var commandType = String(payload.type || "unknown");

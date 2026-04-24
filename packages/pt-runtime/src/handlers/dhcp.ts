@@ -8,6 +8,28 @@ import type {
 } from "../pt-api/pt-processes.js";
 import { getDhcpServerMainProcess, ptHasMethod, ptSafeGet } from "../pt-api/pt-processes.js";
 
+/**
+ * Payload para configurar el servidor DHCP en un dispositivo.
+ * Soporta múltiples pools, rangos excluidos, y habilitación/deshabilitación.
+ * 
+ * @example
+ * {
+ *   type: "configDhcpServer",
+ *   device: "Router1",
+ *   enabled: true,
+ *   port: "FastEthernet0/0",
+ *   pools: [{
+ *     name: "LAN_POOL",
+ *     network: "192.168.1.0",
+ *     mask: "255.255.255.0",
+ *     defaultRouter: "192.168.1.1",
+ *     dns: "8.8.8.8",
+ *     startIp: "192.168.1.10",
+ *     endIp: "192.168.1.200"
+ *   }],
+ *   excluded: [{ start: "192.168.1.1", end: "192.168.1.9" }]
+ * }
+ */
 export interface ConfigDhcpServerPayload {
   type: "configDhcpServer";
   device: string;
@@ -26,6 +48,10 @@ export interface ConfigDhcpServerPayload {
   excluded?: Array<{ start: string; end: string }>;
 }
 
+/**
+ * Payload para inspeccionar el estado del servidor DHCP.
+ * Devuelve pools configurados, leases activos, y direcciones excluidas.
+ */
 export interface InspectDhcpServerPayload {
   type: "inspectDhcpServer";
   device: string;
@@ -59,6 +85,14 @@ function getPoolByName(dhcpProcess: PTDhcpServerProcess, name: string): PTDhcpPo
   return dhcpProcess.getPoolByName(name) as PTDhcpPoolProcess | null;
 }
 
+/**
+ * Configura el servidor DHCP en un router.
+ * Crea pools, establece opciones de red, y configura rangos excluidos.
+ * 
+ * @param payload - ConfigDhcpServerPayload con device y configuración DHCP
+ * @param deps - PtDeps con acceso a red y fileManager
+ * @returns PtResult con pools configurados y cualquier error
+ */
 export function handleConfigDhcpServer(payload: ConfigDhcpServerPayload, deps: PtDeps): PtResult {
   const device = deps.getDeviceByName(payload.device) as PTDeviceWithProcesses | null;
   if (!device) return ptError(`Device not found: ${payload.device}`, PtErrorCode.DEVICE_NOT_FOUND);
@@ -124,6 +158,24 @@ export function handleConfigDhcpServer(payload: ConfigDhcpServerPayload, deps: P
   return ptSuccess({ device: payload.device, enabled: !!payload.enabled, pools: configuredPools });
 }
 
+/**
+ * Inspecciona el estado actual del servidor DHCP en un dispositivo.
+ * Devuelve información de pools, leases activos, y direcciones excluidas.
+ * 
+ * @param payload - InspectDhcpServerPayload con device y puerto opcional
+ * @param deps - PtDeps con acceso a red y fileManager
+ * @returns PtResult con estado DHCP, pools, y leases
+ * 
+ * @example
+ * handleInspectDhcpServer({ type: "inspectDhcpServer", device: "Router1" }, deps)
+ * // → {
+ * //   ok: true,
+ * //   device: "Router1",
+ * //   enabled: true,
+ * //   pools: [{ name: "LAN_POOL", network: "192.168.1.0", leases: [...] }],
+ * //   excludedAddresses: [{ start: "192.168.1.1", end: "192.168.1.9" }]
+ * // }
+ */
 export function handleInspectDhcpServer(payload: InspectDhcpServerPayload, deps: PtDeps): PtResult {
   const device = deps.getDeviceByName(payload.device) as PTDeviceWithProcesses | null;
   if (!device) return ptError(`Device not found: ${payload.device}`, PtErrorCode.DEVICE_NOT_FOUND);

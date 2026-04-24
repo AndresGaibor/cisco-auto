@@ -9,6 +9,10 @@ import type { IosMode, OutputClassification } from "@cisco-auto/types";
 // Error Codes
 // ============================================================================
 
+/**
+ * Códigos de error estándar para ejecución de comandos IOS.
+ * Categorizados por fase: validación, auth, estado, ejecución, dispositivo, sesión.
+ */
 export const IOS_ERROR_CODES = {
   // Input validation errors
   INVALID_INPUT: "IOS_INVALID_INPUT",
@@ -44,12 +48,14 @@ export const IOS_ERROR_CODES = {
 
 export type IosErrorCode = typeof IOS_ERROR_CODES[keyof typeof IOS_ERROR_CODES];
 
-// ============================================================================
-// Error Classification
-// ============================================================================
-
 /**
- * Map IOS output classification to error code
+ * Clasifica el output de un comando IOS según su tipo de error.
+ * Se usa para mapear outputs a códigos de error accionables.
+ * @param classification - Resultado de classifyOutput del output
+ * @returns Código de error o null si el output indica éxito
+ * @example
+ * // "Invalid input detected" → IOS_ERROR_CODES.INVALID_INPUT
+ * classificationToErrorCode("invalid") // "IOS_INVALID_INPUT"
  */
 export function classificationToErrorCode(
   classification: OutputClassification
@@ -73,7 +79,10 @@ export function classificationToErrorCode(
 }
 
 /**
- * Determine if an error is retryable
+ * Determina si un error puede ser reintentado automáticamente.
+ * Errores como timeout y session stale pueden requerir reintento.
+ * @param code - Código de error IOS
+ * @returns true si el error es retryable
  */
 export function isRetryableError(code: IosErrorCode): boolean {
   const retryableCodes: IosErrorCode[] = [
@@ -86,7 +95,9 @@ export function isRetryableError(code: IosErrorCode): boolean {
 }
 
 /**
- * Determine error phase
+ * Identifica la fase donde ocurrió el error para decidir estrategia de recovery.
+ * @param code - Código de error IOS
+ * @returns Phase donde ocurrió el error
  */
 export function determineErrorPhase(code: IosErrorCode): "preflight" | "execute" | "postflight" | "save" {
   switch (code) {
@@ -116,6 +127,10 @@ export function determineErrorPhase(code: IosErrorCode): "preflight" | "execute"
 // Structured IOS Error
 // ============================================================================
 
+/**
+ * Contexto completo para crear un IosError estructurado.
+ * Incluye información de dispositivo, comando, modo y clasificación.
+ */
 export interface IosErrorContext {
   code: IosErrorCode;
   message: string;
@@ -131,7 +146,10 @@ export interface IosErrorContext {
 }
 
 /**
- * Create a structured IOS error
+ * Crea un IosError estructurado con información de contexto completa.
+ * El error incluye código, mensaje, dispositivo, comando, modo y clasificación.
+ * @param context - Información del error incluyendo código y mensaje requeridos
+ * @returns Error estructurado con todas las propiedades del contexto
  */
 export function createIosError(context: IosErrorContext): Error & IosErrorContext {
   const error = new Error(context.message) as Error & IosErrorContext;
@@ -174,7 +192,14 @@ export const IOS_ERROR_MESSAGES: Record<IosErrorCode, string> = {
 };
 
 /**
- * Get human-readable error message
+ * Obtiene el mensaje legible para un código de error IOS.
+ * Opcionalmente prependea contexto adicional al mensaje base.
+ * @param code - Código de error IOS
+ * @param context - Información adicional para enriquecer el mensaje
+ * @returns Mensaje de error formateado
+ * @example
+ * getIosErrorMessage("IOS_TIMEOUT") // "Command execution timeout"
+ * getIosErrorMessage("IOS_COMMAND_FAILED", "interface Gi0/1") // "Command execution failed: interface Gi0/1"
  */
 export function getIosErrorMessage(code: IosErrorCode, context?: string): string {
   const base = IOS_ERROR_MESSAGES[code] || IOS_ERROR_MESSAGES[IOS_ERROR_CODES.UNKNOWN_ERROR];

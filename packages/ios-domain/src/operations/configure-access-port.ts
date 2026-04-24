@@ -8,7 +8,7 @@ import type { CommandPlan } from "./command-plan.js";
 import { CommandPlanBuilder } from "./command-plan.js";
 
 /**
- * Input for configuring an access port
+ * Input para configurar un puerto access en un switch.
  */
 export interface ConfigureAccessPortInput {
   port: InterfaceName;
@@ -19,7 +19,12 @@ export interface ConfigureAccessPortInput {
 }
 
 /**
- * Plan the commands to configure an access port
+ * Planifica los comandos IOS para configurar un puerto como access.
+ * Incluye switchport mode access, asignación de VLAN, PortFast y BPDU Guard.
+ * Valida capabilities del dispositivo antes de generar comandos.
+ * @param caps - CapabilitySet del dispositivo
+ * @param input - Configuración del puerto access
+ * @returns CommandPlan listo para ejecutar, o null si no soporta access mode
  */
 export function planConfigureAccessPort(
   caps: CapabilitySet,

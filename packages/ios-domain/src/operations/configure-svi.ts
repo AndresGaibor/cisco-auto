@@ -8,7 +8,7 @@ import type { CommandPlan } from "./command-plan.js";
 import { CommandPlanBuilder } from "./command-plan.js";
 
 /**
- * Input for configuring an SVI
+ * Input para configurar una SVI (Switch Virtual Interface) en un L3 switch.
  */
 export interface ConfigureSviInput {
   vlan: VlanId;
@@ -20,7 +20,11 @@ export interface ConfigureSviInput {
 }
 
 /**
- * Plan the commands to configure an SVI (Layer 3 switch)
+ * Planifica los comandos IOS para configurar una SVI (interfaz VLAN).
+ * Solo para switches L3 que soportan SVI y routing IP.
+ * @param caps - CapabilitySet del dispositivo
+ * @param input - Configuración de la SVI
+ * @returns CommandPlan listo para ejecutar, o null si no soporta SVIs
  */
 export function planConfigureSvi(
   caps: CapabilitySet,

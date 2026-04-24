@@ -65,6 +65,7 @@ export function parseEvidenceInput(input: string): IosExecutionEvidence {
   }
   return {
     source: parsed.source as IosExecutionEvidence['source'],
+    raw: parsed.raw || '',
     status: typeof parsed.status === 'number' ? parsed.status : undefined,
     mode: parsed.mode,
     prompt: parsed.prompt,
@@ -77,5 +78,8 @@ export function parseEvidenceInput(input: string): IosExecutionEvidence {
 }
 
 export function evidenceFromResult(result: IosExecutionSuccess): IosExecutionEvidence {
+  if (!result.evidence) {
+    throw new Error('Result does not contain evidence');
+  }
   return result.evidence;
 }

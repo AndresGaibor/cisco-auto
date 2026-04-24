@@ -8,6 +8,12 @@ const ECUADOR_TIME_FORMATTER = new Intl.DateTimeFormat("en-GB", {
   second: "2-digit",
 });
 
+/**
+ * Formatea un timestamp ISO a hora de Ecuador (Guayaquil).
+ * Usa formato 24h sin zona horaria visible.
+ * @param timestamp - Timestamp ISO a formatear
+ * @returns Hora formateada HH:MM:SS
+ */
 export function formatEcuadorTime(timestamp: string): string {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) {

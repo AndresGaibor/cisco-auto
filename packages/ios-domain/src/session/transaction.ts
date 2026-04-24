@@ -1,6 +1,5 @@
 /**
- * Transaction - Sistema de transacciones con rollback para comandos IOS
- * 
+ * Transaction - Sistema de transacciones con rollback para comandos IOS.
  * Permite agrupar comandos con sus comandos de rollback correspondientes,
  * ejecutarlos en orden y revertir en caso de error.
  */
@@ -8,7 +7,7 @@
 import type { CommandHandler } from "./command-handler.js";
 
 /**
- * Representa un comando individual dentro de una transacción
+ * Representa un comando individual dentro de una transacción.
  */
 export interface TransactionCommand {
   /** Comando a ejecutar */
@@ -22,7 +21,7 @@ export interface TransactionCommand {
 }
 
 /**
- * Entrada en el log de la transacción
+ * Entrada en el log de la transacción.
  */
 export interface TransactionLogEntry {
   /** Índice del comando en la transacción */
@@ -40,7 +39,7 @@ export interface TransactionLogEntry {
 }
 
 /**
- * Resultado de la ejecución de una transacción
+ * Resultado de la ejecución de una transacción.
  */
 export interface TransactionResult {
   /** Indica si la transacción se completó exitosamente */
@@ -52,9 +51,8 @@ export interface TransactionResult {
 }
 
 /**
- * Clase Transaction - Agrupa comandos con rollback
- * 
- * Patrón: Unit of Work con soporte para compensación
+ * Clase Transaction - Agrupa comandos con rollback.
+ * Patrón: Unit of Work con soporte para compensación.
  */
 export class Transaction {
   private _commands: TransactionCommand[] = [];
@@ -63,7 +61,11 @@ export class Transaction {
   private _rolledBack = false;
 
   /**
-   * Agregar un comando con su rollback
+   * Agrega un comando con su rollback al final de la transacción.
+   * @param command - Comando IOS a ejecutar
+   * @param rollbackCommand - Comando para deshacer (se ejecuta en orden inverso)
+   * @param options - Opcionales: deviceId y description
+   * @returns this para encadenamiento fluido
    */
   add(command: string, rollbackCommand: string, options?: { deviceId?: string; description?: string }): this {
     this._commands.push({
@@ -76,7 +78,9 @@ export class Transaction {
   }
 
   /**
-   * Agregar múltiples comandos en batch
+   * Agrega múltiples comandos en batch al final de la transacción.
+   * @param commands - Array de TransactionCommand a agregar
+   * @returns this para encadenamiento fluido
    */
   addBatch(commands: TransactionCommand[]): this {
     for (const cmd of commands) {
@@ -103,7 +107,7 @@ export class Transaction {
     this._executed = true;
 
     for (let i = 0; i < this._commands.length; i++) {
-      const cmd = this._commands[i];
+      const cmd = this._commands[i]!;
       const startTime = Date.now();
 
       this._log.push({
@@ -137,9 +141,10 @@ export class Transaction {
         };
 
         for (let j = i + 1; j < this._commands.length; j++) {
+          const pendingCmd = this._commands[j]!;
           this._log.push({
             index: j,
-            command: this._commands[j].command,
+            command: pendingCmd.command,
             status: "pending",
           });
         }
@@ -184,6 +189,7 @@ export class Transaction {
 
     for (const entry of successfulCommands) {
       const cmd = this._commands[entry.index];
+      if (!cmd) continue;
       const startTime = Date.now();
 
       try {

@@ -2,6 +2,10 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { getHistoryDir, getHistoryIndexPath, getHistorySessionsDir, getHistorySessionPath } from '../system/paths.js';
 import type { HistoryEntry, HistoryEntryFilters } from '../contracts/history-entry.js';
 
+/**
+ * Store de historial de comandos ejecutados.
+ * Gestiona persistencia de entradas de historial en archivos NDJSON.
+ */
 export class HistoryStore {
   private historyDir: string;
   private indexPath: string;
@@ -13,6 +17,9 @@ export class HistoryStore {
     this.sessionsDir = getHistorySessionsDir();
   }
 
+  /**
+   * Asegura que los directorios de historial existan.
+   */
   async ensureDirs(): Promise<void> {
     if (!existsSync(this.historyDir)) {
       mkdirSync(this.historyDir, { recursive: true });
@@ -22,6 +29,10 @@ export class HistoryStore {
     }
   }
 
+  /**
+   * Agrega una entrada al historial.
+   * @param entry - Entrada de historial a persistir
+   */
   async append(entry: HistoryEntry): Promise<void> {
     await this.ensureDirs();
 
@@ -42,6 +53,11 @@ export class HistoryStore {
     }
   }
 
+  /**
+   * Lista entradas de historial con filtros opcionales.
+   * @param filters - Filtros de consulta (limit, failedOnly, actionPrefix)
+   * @returns Lista de entradas ordenadas por tiempo descendente
+   */
   async list(filters?: HistoryEntryFilters): Promise<HistoryEntry[]> {
     if (!existsSync(this.indexPath)) {
       return [];
@@ -81,6 +97,11 @@ export class HistoryStore {
     }
   }
 
+  /**
+   * Lee una entrada de historial por sessionId.
+   * @param sessionId - ID de la sesión a buscar
+   * @returns Entrada de historial o null si no existe
+   */
   async read(sessionId: string): Promise<HistoryEntry | null> {
     const sessionPath = getHistorySessionPath(sessionId);
 
@@ -96,6 +117,11 @@ export class HistoryStore {
     }
   }
 
+  /**
+   * Escribe un resumen de sesión (metadata agregada post-ejecución).
+   * @param sessionId - ID de la sesión
+   * @param payload - Resumen a persistir
+   */
   async writeSessionSummary(sessionId: string, payload: unknown): Promise<void> {
     await this.ensureDirs();
 

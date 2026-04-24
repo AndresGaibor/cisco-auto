@@ -23,7 +23,15 @@ export const ShowIpInterfaceBriefSchema = z.object({
   interfaces: z.array(InterfaceBriefSchema),
 });
 
+/**
+ * Entrada de show ip interface brief
+ * Usar para parsing de salida de comando
+ */
 export type InterfaceBrief = z.infer<typeof InterfaceBriefSchema>;
+
+/**
+ * Resultado parseado de show ip interface brief
+ */
 export type ShowIpInterfaceBrief = z.infer<typeof ShowIpInterfaceBriefSchema>;
 
 // ============================================================================
@@ -69,7 +77,14 @@ export const ShowInterfacesSchema = z.object({
   interfaces: z.array(InterfaceDetailSchema),
 });
 
+/**
+ * Detalle de una interfaz de show interfaces
+ */
 export type InterfaceDetail = z.infer<typeof InterfaceDetailSchema>;
+
+/**
+ * Resultado parseado de show interfaces
+ */
 export type ShowInterfaces = z.infer<typeof ShowInterfacesSchema>;
 
 // ============================================================================
@@ -88,7 +103,14 @@ export const ShowVlanSchema = z.object({
   vlans: z.array(VlanEntrySchema),
 });
 
+/**
+ * Entrada de VLAN de show vlan brief
+ */
 export type VlanEntry = z.infer<typeof VlanEntrySchema>;
+
+/**
+ * Resultado parseado de show vlan brief
+ */
 export type ShowVlan = z.infer<typeof ShowVlanSchema>;
 
 // ============================================================================
@@ -111,7 +133,14 @@ export const ShowInterfacesTrunkSchema = z.object({
   trunks: z.array(TrunkPortSchema),
 });
 
+/**
+ * Puerto trunk de show interfaces trunk
+ */
 export type TrunkPort = z.infer<typeof TrunkPortSchema>;
+
+/**
+ * Resultado parseado de show interfaces trunk
+ */
 export type ShowInterfacesTrunk = z.infer<typeof ShowInterfacesTrunkSchema>;
 
 // ============================================================================
@@ -135,7 +164,14 @@ export const ShowInterfacesSwitchportSchema = z.object({
   ports: z.array(SwitchportInfoSchema),
 });
 
+/**
+ * Info de switchport de show interfaces switchport
+ */
 export type SwitchportInfo = z.infer<typeof SwitchportInfoSchema>;
+
+/**
+ * Resultado parseado de show interfaces switchport
+ */
 export type ShowInterfacesSwitchport = z.infer<typeof ShowInterfacesSwitchportSchema>;
 
 // ============================================================================
@@ -161,7 +197,15 @@ export const ShowIpRouteSchema = z.object({
   legend: z.record(z.string(), z.string()).optional(),
 });
 
+/**
+ * Entrada de ruta de show ip route
+ * El campo 'type' indica: C=connected, L=local, S=static, O=OSPF, etc.
+ */
 export type RouteEntry = z.infer<typeof RouteEntrySchema>;
+
+/**
+ * Resultado parseado de show ip route
+ */
 export type ShowIpRoute = z.infer<typeof ShowIpRouteSchema>;
 
 // ============================================================================
@@ -186,7 +230,14 @@ export const ShowIpProtocolsSchema = z.object({
   protocols: z.array(RoutingProtocolSchema),
 });
 
+/**
+ * Protocolo de enrutamiento activo de show ip protocols
+ */
 export type RoutingProtocol = z.infer<typeof RoutingProtocolSchema>;
+
+/**
+ * Resultado parseado de show ip protocols
+ */
 export type ShowIpProtocols = z.infer<typeof ShowIpProtocolsSchema>;
 
 // ============================================================================
@@ -211,7 +262,14 @@ export const ShowRunningConfigSchema = z.object({
   lines: z.array(z.string()).optional(),
 });
 
+/**
+ * Sección de show running-config (interface, router, etc.)
+ */
 export type RunningConfigSection = z.infer<typeof RunningConfigSectionSchema>;
+
+/**
+ * Resultado parseado de show running-config
+ */
 export type ShowRunningConfig = z.infer<typeof ShowRunningConfigSchema>;
 
 // ============================================================================
@@ -232,7 +290,14 @@ export const ShowIpArpSchema = z.object({
   entries: z.array(ArpEntrySchema),
 });
 
+/**
+ * Entrada ARP de show ip arp
+ */
 export type ArpEntry = z.infer<typeof ArpEntrySchema>;
+
+/**
+ * Resultado parseado de show ip arp
+ */
 export type ShowIpArp = z.infer<typeof ShowIpArpSchema>;
 
 // ============================================================================
@@ -251,7 +316,14 @@ export const ShowMacAddressTableSchema = z.object({
   entries: z.array(MacEntrySchema),
 });
 
+/**
+ * Entrada de MAC de show mac address-table
+ */
 export type MacEntry = z.infer<typeof MacEntrySchema>;
+
+/**
+ * Resultado parseado de show mac address-table
+ */
 export type ShowMacAddressTable = z.infer<typeof ShowMacAddressTableSchema>;
 
 // ============================================================================
@@ -280,8 +352,19 @@ export const ShowSpanningTreeSchema = z.object({
   vlans: z.array(StpVlanSchema),
 });
 
+/**
+ * Puerto STP de show spanning-tree
+ */
 export type StpPort = z.infer<typeof StpPortSchema>;
+
+/**
+ * VLAN STP de show spanning-tree
+ */
 export type StpVlan = z.infer<typeof StpVlanSchema>;
+
+/**
+ * Resultado parseado de show spanning-tree
+ */
 export type ShowSpanningTree = z.infer<typeof ShowSpanningTreeSchema>;
 
 // ============================================================================
@@ -300,6 +383,9 @@ export const ShowVersionSchema = z.object({
   configRegister: z.string().optional(),
 });
 
+/**
+ * Resultado parseado de show version
+ */
 export type ShowVersion = z.infer<typeof ShowVersionSchema>;
 
 // ============================================================================
@@ -321,12 +407,20 @@ export const ShowCdpNeighborsSchema = z.object({
 });
 
 export type CdpNeighbor = z.infer<typeof CdpNeighborSchema>;
+
+/**
+ * Resultado parseado de show cdp neighbors
+ */
 export type ShowCdpNeighbors = z.infer<typeof ShowCdpNeighborsSchema>;
 
 // ============================================================================
 // Union Type for all parsed outputs
 // ============================================================================
 
+/**
+ * Unión de todos los outputs parseados
+ * Usar para validación de resultados de parsing
+ */
 export const ParsedOutputSchema = z.union([
   ShowIpInterfaceBriefSchema,
   ShowInterfacesSchema,
@@ -343,14 +437,24 @@ export const ParsedOutputSchema = z.union([
   ShowCdpNeighborsSchema,
 ]);
 
+/**
+ * Output parseado de cualquier comando show
+ */
 export type ParsedOutput = z.infer<typeof ParsedOutputSchema>;
 
 // ============================================================================
 // Parser Registry Type
 // ============================================================================
 
+/**
+ * Función que parsea output de comando IOS
+ */
 export type ParserFunction = (output: string) => ParsedOutput;
 
+/**
+ * Registro de parsers por nombre de comando
+ * Usar para registrar parsers de comandos show
+ */
 export interface ParserRegistry {
   'show ip interface brief': ParserFunction;
   'show interfaces': ParserFunction;

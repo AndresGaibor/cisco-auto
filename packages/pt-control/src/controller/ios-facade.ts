@@ -18,6 +18,32 @@ import type {
   IosExecutionEvidence,
 } from "../contracts/ios-execution-evidence.js";
 
+/**
+ * Fachada de servicios IOS - punto de entrada unificado para operaciones IOS y de dispositivo.
+ *
+ * Combina IosService y DeviceService bajo una sola interfaz. Provee métodos para:
+ * - Ejecutar comandos show y parsear resultados
+ * - Aplicar configuración IOS (configIos, configureDhcpPool, etc.)
+ * - Consultar capacidades del dispositivo
+ * - Gestionar servidores DHCP y configuración de red
+ *
+ * @example
+ * ```typescript
+ * const facade = new IosFacade(iosService, deviceService);
+ *
+ * // Ejecutar comando show
+ * const brief = await facade.showIpInterfaceBrief("R1");
+ *
+ * // Aplicar configuración
+ * await facade.configIos("R1", [
+ *   "interface GigabitEthernet0/0",
+ *   "ip address 192.168.1.1 255.255.255.0"
+ * ]);
+ *
+ * // Configurar DHCP pool
+ * await facade.configureDhcpPool("R1", "POOL1", "192.168.1.0", "255.255.255.0", "192.168.1.1");
+ * ```
+ */
 export class IosFacade {
   constructor(
     private readonly iosService: IosService,

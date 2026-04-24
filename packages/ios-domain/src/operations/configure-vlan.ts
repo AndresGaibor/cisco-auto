@@ -8,15 +8,19 @@ import type { CommandPlan } from "./command-plan.js";
 import { CommandPlanBuilder } from "./command-plan.js";
 
 /**
- * Input for configuring a VLAN
+ * Input para configurar una VLAN en un switch.
  */
 export interface ConfigureVlanInput {
-  vlan: VlanId;        // VLAN number (1-4094)
-  name?: string;       // Optional VLAN name
+  vlan: VlanId;
+  name?: string;
 }
 
 /**
- * Plan the commands to create and configure a VLAN
+ * Planifica los comandos IOS para crear y configurar una VLAN.
+ * Valida que el dispositivo soporte VLANs antes de generar comandos.
+ * @param caps - CapabilitySet del dispositivo
+ * @param input - Configuración de la VLAN a crear
+ * @returns CommandPlan listo para ejecutar, o null si el dispositivo no soporta VLANs
  */
 export function planConfigureVlan(
   caps: CapabilitySet,

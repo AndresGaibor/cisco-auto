@@ -15,8 +15,8 @@ export interface RuntimeState {
   runtimeLoaded: boolean;
   lastRuntimeLoadAt: number;
   tickTimer: number | null;
-  watchers: Map<string, any>;
-  listeners: Map<string, any[]>;
+  watchers: Record<string, any>;
+  listeners: Record<string, any[]>;
   activeQueueItem: string | null;
   heartbeatState: HeartbeatState;
   snapshotState: SnapshotState;
@@ -33,8 +33,8 @@ export function createRuntimeState(version: string, fingerprint: string): Runtim
     runtimeLoaded: false,
     lastRuntimeLoadAt: 0,
     tickTimer: null,
-    watchers: new Map(),
-    listeners: new Map(),
+    watchers: {},
+    listeners: {},
     activeQueueItem: null,
     heartbeatState: {
       active: false,
@@ -58,8 +58,8 @@ export function resetRuntimeState(state: RuntimeState): void {
   state.runtimeLoaded = false;
   state.lastRuntimeLoadAt = 0;
   state.tickTimer = null;
-  state.watchers.clear();
-  state.listeners.clear();
+  state.watchers = {};
+  state.listeners = {};
   state.activeQueueItem = null;
   state.heartbeatState.active = false;
   state.heartbeatState.lastBeatAt = 0;
@@ -75,7 +75,7 @@ export function isValidRuntimeState(state: RuntimeState): boolean {
   if (typeof state.bootstrapped !== "boolean") return false;
   if (typeof state.cleaningUp !== "boolean") return false;
   if (typeof state.runtimeLoaded !== "boolean") return false;
-  if (!(state.watchers instanceof Map)) return false;
-  if (!(state.listeners instanceof Map)) return false;
+  if (!state.watchers || typeof state.watchers !== "object") return false;
+  if (!state.listeners || typeof state.listeners !== "object") return false;
   return true;
 }

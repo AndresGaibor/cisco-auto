@@ -7,6 +7,10 @@ import type {
   SessionStateSnapshot,
 } from "../runtime/contracts.js";
 
+/**
+ * Códigos de error estándar para operaciones PT.
+ * Usados en PtErrorResult para identificar el tipo de falla.
+ */
 export const PtErrorCode = {
   DEVICE_NOT_FOUND: "DEVICE_NOT_FOUND",
   NO_TERMINAL: "NO_TERMINAL",
@@ -35,6 +39,10 @@ interface PtResultBase {
   session?: SessionStateSnapshot;
 }
 
+/**
+ * Resultado exitoso de una operación PT.
+ * Incluye value, raw output, parsed data, y session state.
+ */
 export interface PtSuccessResult extends PtResultBase {
   ok: true;
   value?: unknown;
@@ -45,6 +53,10 @@ export interface PtSuccessResult extends PtResultBase {
   [key: string]: unknown;
 }
 
+/**
+ * Resultado de error de una operación PT.
+ * Incluye mensaje de error, código, y detalles adicionales.
+ */
 export interface PtErrorResult extends PtResultBase {
   ok: false;
   error: string;
@@ -53,6 +65,10 @@ export interface PtErrorResult extends PtResultBase {
   details?: unknown;
 }
 
+/**
+ * Resultado diferido - la operación continúa en background.
+ * El ticket permite hacer polling del estado del job.
+ */
 export interface PtDeferredResult extends PtResultBase {
   ok: true;
   deferred: true;
@@ -62,6 +78,13 @@ export interface PtDeferredResult extends PtResultBase {
 
 export type PtResult = PtSuccessResult | PtErrorResult | PtDeferredResult;
 
+/**
+ * Crea un resultado exitoso con datos opcionales.
+ * Fusiona los datos en el result preserving el ok: true.
+ * 
+ * @param data - Datos opcionales a incluir en el resultado
+ * @returns PtSuccessResult con los datos incluidos
+ */
 export function ptSuccess(data?: Record<string, unknown>): PtSuccessResult {
   var res: PtSuccessResult = { ok: true };
   if (data) {
@@ -74,6 +97,14 @@ export function ptSuccess(data?: Record<string, unknown>): PtSuccessResult {
   return res;
 }
 
+/**
+ * Crea un resultado de error con mensaje y código.
+ * 
+ * @param error - Mensaje de error descriptivo
+ * @param code - Código de error (ej: "DEVICE_NOT_FOUND")
+ * @param extra - Datos adicionales a incluir en el resultado
+ * @returns PtErrorResult con la información de error
+ */
 export function ptError(
   error: string,
   code?: PtErrorCode | string,
@@ -90,14 +121,33 @@ export function ptError(
   return res;
 }
 
+/**
+ * Crea un resultado diferido - la operación se ejecuta en background.
+ * 
+ * @param ticket - ID del job para hacer polling
+ * @param job - Plan de ejecución del job
+ * @returns PtDeferredResult con ticket y job
+ */
 export function ptDeferred(ticket: string, job: DeferredJobPlan): PtDeferredResult {
   return { ok: true, deferred: true, ticket, job };
 }
 
+/**
+ * Type guard para verificar si un resultado es deferred.
+ * 
+ * @param result - Resultado a verificar
+ * @returns true si es PtDeferredResult
+ */
 export function isDeferredResult(result: PtResult): result is PtDeferredResult {
   return result.ok === true && "deferred" in result && result.deferred === true;
 }
 
+/**
+ * Type guard para verificar si un resultado es error.
+ * 
+ * @param result - Resultado a verificar
+ * @returns true si es PtErrorResult
+ */
 export function isErrorResult(result: PtResult): result is PtErrorResult {
   return result.ok === false;
 }

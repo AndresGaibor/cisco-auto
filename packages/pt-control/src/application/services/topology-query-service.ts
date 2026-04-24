@@ -13,6 +13,7 @@ function ptDeviceTypeToString(typeId: number): DeviceState["type"] {
   const map: Record<number, DeviceState["type"]> = {
     0: "router",
     1: "switch",
+    16: "switch_layer3",
     2: "generic",
     3: "pc",
     4: "server",
@@ -112,10 +113,10 @@ export class TopologyQueryService {
       if (result.ok) {
         const value = result.value;
 
-        if (Array.isArray(value)) {
-          const devices = filterDevices(removeNonCreatable(value as DeviceState[]));
-          return {
-            devices,
+      if (Array.isArray(value)) {
+        const devices = filterDevices(removeNonCreatable(value as DeviceState[]));
+        return {
+          devices,
             connectionsByDevice: {},
             unresolvedLinks: [],
             count: devices.length,
@@ -125,7 +126,17 @@ export class TopologyQueryService {
         if (value && typeof value === "object") {
           const typed = value as ListDevicesResultWithLinks;
           const devices = Array.isArray(typed.devices)
-            ? filterDevices(removeNonCreatable(typed.devices))
+            ? filterDevices(
+                removeNonCreatable(
+                  typed.devices.map((device) => ({
+                    ...device,
+                    type:
+                      typeof device.type === "number"
+                        ? ptDeviceTypeToString(device.type)
+                        : String(device.type ?? "unknown"),
+                  })) as DeviceState[],
+                ),
+              )
             : [];
 
           return {

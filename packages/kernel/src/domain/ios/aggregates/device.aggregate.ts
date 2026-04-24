@@ -29,6 +29,11 @@ import type {
 export class DeviceAggregate extends Aggregate<DeviceId> {
   private readonly _device: DeviceEntity;
 
+  /**
+   * @param id - Identificador único del dispositivo
+   * @param deviceType - Tipo de dispositivo (router, switch, etc.)
+   * @param model - Modelo específico del dispositivo
+   */
   constructor(id: DeviceId, deviceType: DeviceType, model: string) {
     super(id);
     this._device = new DeviceEntity(id, deviceType, model);
@@ -37,7 +42,12 @@ export class DeviceAggregate extends Aggregate<DeviceId> {
   // ===== Factory =====
 
   /**
-   * Crea un nuevo dispositivo y registra el evento DeviceAdded
+   * Crea un nuevo dispositivo y registra el evento DeviceAdded.
+   * 
+   * @param id - Identificador único del dispositivo
+   * @param deviceType - Tipo de dispositivo
+   * @param model - Modelo del dispositivo
+   * @returns Nueva instancia del aggregate
    */
   static create(id: DeviceId, deviceType: DeviceType, model: string): DeviceAggregate {
     const aggregate = new DeviceAggregate(id, deviceType, model);
@@ -68,7 +78,10 @@ export class DeviceAggregate extends Aggregate<DeviceId> {
   // ===== Métodos de hostname =====
 
   /**
-   * Renombra el dispositivo
+   * Renombra el dispositivo y registra el evento DeviceRenamed.
+   * 
+   * @param newHostname - Nuevo nombre del dispositivo
+   * @throws DomainError si el hostname es inválido
    */
   rename(newHostname: string): void {
     const oldName = this._device.hostname;
@@ -86,7 +99,10 @@ export class DeviceAggregate extends Aggregate<DeviceId> {
   // ===== Métodos de interfaces =====
 
   /**
-   * Agrega una interfaz al dispositivo
+   * Agrega una interfaz al dispositivo y registra InterfaceAdded.
+   * 
+   * @param name - Nombre de la interfaz (ej: GigabitEthernet0/0)
+   * @returns La entidad de interfaz creada
    */
   addInterface(name: InterfaceName): InterfaceEntity {
     const iface = this._device.addInterface(name);
@@ -100,7 +116,11 @@ export class DeviceAggregate extends Aggregate<DeviceId> {
   }
 
   /**
-   * Remueve una interfaz del dispositivo
+   * Remueve una interfaz del dispositivo y registra InterfaceRemoved.
+   * No permite remover si es la última interfaz.
+   * 
+   * @param name - Nombre de la interfaz a remover
+   * @throws DomainError si es la última interfaz
    */
   removeInterface(name: InterfaceName): void {
     if (this._device.interfaceCount <= 1) {
@@ -118,14 +138,22 @@ export class DeviceAggregate extends Aggregate<DeviceId> {
   }
 
   /**
-   * Obtiene una interfaz por nombre
+   * Obtiene una interfaz por nombre.
+   * 
+   * @param name - Nombre de la interfaz
+   * @returns La interfaz si existe, null si no
    */
   getInterface(name: InterfaceName): InterfaceEntity | null {
     return this._device.getInterface(name);
   }
 
   /**
-   * Configura IP en una interfaz existente
+   * Configura IP en una interfaz existente y registra InterfaceConfigured.
+   * 
+   * @param interfaceName - Nombre de la interfaz
+   * @param ip - Dirección IP a asignar
+   * @param mask - Máscara de subred
+   * @throws DomainError.notFound si la interfaz no existe
    */
   configureInterfaceIp(interfaceName: InterfaceName, ip: Ipv4Address, mask: SubnetMask): void {
     const iface = this._device.getInterface(interfaceName);
@@ -216,7 +244,11 @@ export class DeviceAggregate extends Aggregate<DeviceId> {
   }
 
   /**
-   * Configura una interfaz como trunk
+   * Configura una interfaz como trunk.
+   * 
+   * @param interfaceName - Nombre de la interfaz
+   * @param nativeVlan - VLAN nativa (opcional, default 1)
+   * @throws DomainError.notFound si la interfaz no existe
    */
   setInterfaceTrunk(interfaceName: InterfaceName, nativeVlan?: VlanId): void {
     const iface = this._device.getInterface(interfaceName);

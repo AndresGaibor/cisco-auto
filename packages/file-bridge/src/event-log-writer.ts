@@ -1,16 +1,16 @@
 /**
- * Append-only NDJSON event log writer.
+ * Escritor append-only del journal NDJSON de eventos del bridge.
  *
- * Events are appended line-by-line to events.current.ndjson.
- * When the file exceeds rotateAtBytes, it is rotated to a timestamped file
- * and a new current file is started lazily on the next append.
+ * Los eventos se appendean línea por línea a events.current.ndjson.
+ * Cuando el archivo supera rotateAtBytes, se rota a un archivo timestamped
+ * y se crea uno nuevo lazily en el siguiente append.
  *
- * IMPORTANT:
- * - Rotation uses atomic rename for the completed file.
- * - There may be a short window after rename where events.current.ndjson
- *   does not yet exist; the next append recreates it.
- * - The rotation manifest is updated after rotation so consumers can
- *   recover rotated files safely.
+ * Seguridad en rotación:
+ * - La rotación usa rename atómico para el archivo completado
+ * - Puede haber una ventana corta donde events.current.ndjson no existe;
+ *   el siguiente append lo recrea
+ * - El rotation manifest se actualiza post-rotación para que los consumers
+ *   puedan recuperar eventos de archivos rotados
  */
 import { existsSync, readFileSync, statSync, renameSync } from "node:fs";
 import { join } from "node:path";
@@ -24,6 +24,9 @@ export interface EventLogWriterOptions {
   rotateAtBytes?: number;
 }
 
+/**
+ * Escritor del journal de eventos con soporte de rotación.
+ */
 export class EventLogWriter {
   private readonly rotateAtBytes: number;
   private readonly currentFile: string;
@@ -31,6 +34,10 @@ export class EventLogWriter {
   private lastSeqWritten = 0;
   private rotationCounter = 0;
 
+  /**
+   * @param paths - BridgePathLayout
+   * @param options - Opciones con rotateAtBytes (default 32MB)
+   */
   constructor(
     private readonly paths: BridgePathLayout,
     options: EventLogWriterOptions = {},
@@ -43,6 +50,12 @@ export class EventLogWriter {
     ensureFile(this.currentFile, "");
   }
 
+  /**
+   * Appendea un evento al journal. Si el archivo supera rotateAtBytes,
+   * hace rotación atómica antes de escribir.
+   *
+   * @param event - Evento a escribir (se serializa a JSON)
+   */
   append(event: BridgeEvent): void {
     this.rotateIfNeeded();
     appendLine(this.currentFile, JSON.stringify(event));
@@ -52,6 +65,9 @@ export class EventLogWriter {
     }
   }
 
+  /**
+   * @returns Path absoluto del archivo de eventos actual
+   */
   getCurrentFile(): string {
     return this.currentFile;
   }

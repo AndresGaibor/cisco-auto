@@ -36,6 +36,10 @@ export const OutputClassificationSchema = z.enum([
   "save-failed",
 ]);
 
+/**
+ * Clasificación del output de un comando IOS
+ * Usar para determinar si el comando fue exitoso o falló
+ */
 export type OutputClassification = z.infer<typeof OutputClassificationSchema>;
 
 // ============================================================================
@@ -75,6 +79,10 @@ export const IosModeSchema = z.enum([
   "unknown",
 ]);
 
+/**
+ * Modo de sesión IOS actual
+ * Usar para tracking del estado del CLI
+ */
 export type IosMode = z.infer<typeof IosModeSchema>;
 
 // ============================================================================
@@ -91,12 +99,20 @@ export const SessionStateSchema = z.object({
   deviceName: z.string().optional(),
 });
 
+/**
+ * Estado de la sesión IOS
+ * Usar para tracking de modo, paging, y prompts pendientes
+ */
 export type SessionState = z.infer<typeof SessionStateSchema>;
 
 // ============================================================================
 // Command Result (Single Command)
 // ============================================================================
 
+/**
+ * Resultado de un comando IOS individual
+ * Usar para resultados de execIos
+ */
 export const CommandResultSchema = z.object({
   ok: z.boolean(),
   raw: z.string(),
@@ -116,6 +132,10 @@ export const CommandResultSchema = z.object({
   warnings: z.array(z.string()).optional(),
 });
 
+/**
+ * Resultado de la ejecución de un comando IOS
+ * Incluye raw output, parsing, y clasificación
+ */
 export type CommandResult = z.infer<typeof CommandResultSchema>;
 
 // ============================================================================
@@ -154,6 +174,10 @@ export const ConfigIosResultSchema = z.object({
   saveOutput: z.string().optional(),
 });
 
+/**
+ * Resultado de configuración batch (múltiples comandos)
+ * Usar para configIos que ejecuta múltiples líneas de configuración
+ */
 export type ConfigIosResult = z.infer<typeof ConfigIosResultSchema>;
 
 // ============================================================================
@@ -171,6 +195,10 @@ export const ExecIosResultSchema = z.object({
   error: z.string().optional(),
 });
 
+/**
+ * Resultado de execIos (comando único show/EXEC)
+ * Usar para ejecutar comandos de verificación
+ */
 export type ExecIosResult = z.infer<typeof ExecIosResultSchema>;
 
 // ============================================================================
@@ -187,12 +215,22 @@ export const ExecInteractiveResultSchema = z.object({
   source: z.enum(["terminal", "synthetic", "hybrid"]).optional(),
 });
 
+/**
+ * Resultado de execInteractive (terminal interactivo)
+ * Usar para comandos que requieren interacción (copy, reload, etc.)
+ */
 export type ExecInteractiveResult = z.infer<typeof ExecInteractiveResultSchema>;
 
 // ============================================================================
 // Output Source (real, synthetic, hybrid)
 // ============================================================================
 
+/**
+ * Fuente del output IOS
+ * - terminal: desde CLI real del dispositivo
+ * - synthetic: generado por heurísticas
+ * - hybrid: combinación de ambos
+ */
 export const OutputSourceSchema = z.enum(["terminal", "synthetic", "hybrid"]);
 export type OutputSource = z.infer<typeof OutputSourceSchema>;
 
@@ -229,6 +267,10 @@ export type IosErrorCode = z.infer<typeof IosErrorCodeSchema>;
 // Structured Error
 // ============================================================================
 
+/**
+ * Error estructurado de un comando IOS fallido
+ * Usar para manejo de errores con contexto completo
+ */
 export const IosErrorSchema = z.object({
   code: IosErrorCodeSchema,
   message: z.string(),
@@ -241,4 +283,7 @@ export const IosErrorSchema = z.object({
   retryable: z.boolean().optional(),
 });
 
+/**
+ * Error IOS con código, mensaje y contexto
+ */
 export type IosError = z.infer<typeof IosErrorSchema>;

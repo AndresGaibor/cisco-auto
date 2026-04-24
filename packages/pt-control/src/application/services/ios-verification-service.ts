@@ -413,4 +413,57 @@ export class IosVerificationService {
       return this.makeResult(false, false, checks, [String(err)], sources);
     }
   }
+
+  async verifyStandby(device: string, group: number, expectedActive?: string, expectedVirtualIP?: string): Promise<VerificationResult> {
+    const sources = ["show standby"];
+    const checks: VerificationCheck[] = [];
+    const warnings: string[] = [];
+
+    try {
+      const out = await this.exec(device, `show standby group ${group}`, true, 5000);
+      const raw = out.raw || "";
+
+      if (!raw.includes("Group") || !raw.includes("Standby")) {
+        checks.push({ name: "standby-group-present", ok: false, details: { group } });
+        warnings.push(`HSRP group ${group} not found`);
+        return this.makeResult(true, false, checks, warnings, sources);
+      }
+
+      checks.push({ name: "standby-group-present", ok: true, details: { group } });
+
+      if (expectedVirtualIP) {
+        const vipMatch = raw.match(/Virtual IP(?: address)? is ([\d.]+)/);
+        const foundVip = vipMatch?.[1] ?? "";
+        const vipOk = foundVip === expectedVirtualIP;
+        checks.push({ name: "standby-virtual-ip", ok: vipOk, details: { expected: expectedVirtualIP, found: foundVip } });
+        if (!vipOk) warnings.push(`Virtual IP mismatch: expected ${expectedVirtualIP}, found ${foundVip}`);
+      }
+
+      if (expectedActive) {
+        const activeMatch = raw.match(/Active router is ([\w.-]+)/);
+        const foundActive = activeMatch?.[1] ?? "";
+        const activeOk = foundActive === expectedActive || foundActive === "local";
+        checks.push({ name: "standby-active-router", ok: activeOk, details: { expected: expectedActive, found: foundActive } });
+        if (!activeOk) warnings.push(`Active router mismatch: expected ${expectedActive}, found ${foundActive}`);
+      }
+
+      const hasStandby = raw.includes("Standby router is");
+      if (hasStandby) {
+        const standbyMatch = raw.match(/Standby router is ([\w.-]+)/);
+        const foundStandby = standbyMatch?.[1] ?? "";
+        checks.push({ name: "standby-router-present", ok: !!foundStandby, details: { found: foundStandby } });
+      }
+
+      const isActive = raw.includes("State is Active");
+      const isStandby = raw.includes("State is Standby");
+      if (isActive || isStandby) {
+        checks.push({ name: "standby-state", ok: true, details: { state: isActive ? "Active" : "Standby" } });
+      }
+
+      const verified = checks.every((c) => c.ok);
+      return this.makeResult(true, verified, checks, warnings, sources);
+    } catch (err) {
+      return this.makeResult(false, false, checks, [String(err)], sources);
+    }
+  }
 }

@@ -86,26 +86,30 @@ export function transformToPtSafeAst(
 
   let combined = "";
   const lineMapping: LineMappingEntry[] = [];
+  let currentLine = 0;
 
   for (const [filePath, content] of filesToProcess) {
+    const fileStartLine = currentLine;
     combined += `\n// --- ${filePath} ---\n`;
     lineMapping.push({
-      generatedLine: combined.split("\n").length - 1,
+      generatedLine: currentLine,
       sourceFile: filePath,
       sourceLine: 1,
       sourceColumn: 0,
       isComment: true,
     });
+    currentLine++;
     const stripped = stripModuleSyntax(content);
     const strippedLines = stripped.split("\n");
     for (let i = 0; i < strippedLines.length; i++) {
       lineMapping.push({
-        generatedLine: combined.split("\n").length - 1 + i + 1,
+        generatedLine: currentLine,
         sourceFile: filePath,
         sourceLine: i + 1,
         sourceColumn: 0,
         isComment: false,
       });
+      currentLine++;
     }
     combined += stripped + "\n";
   }
@@ -115,7 +119,7 @@ export function transformToPtSafeAst(
       target: opts.target ?? ts.ScriptTarget.ES5,
       module: ts.ModuleKind.None,
       strict: false,
-      noEmitHelpers: true,
+      noEmitHelpers: false, // Changed from true to false
       sourceMap: false,
       declaration: false,
       removeComments: false,
@@ -533,9 +537,10 @@ function postProcessES5(code: string): string {
     modified = modified.replace(/\blet\s+/g, "var ");
     modified = modified.replace(/for\s*\(\s*const\s+/g, "for (var ");
     modified = modified.replace(/for\s*\(\s*let\s+/g, "for (var ");
-    modified = modified.replace(/\?\?/g, " || ");
-    modified = modified.replace(/\?\./g, " && ");
     modified = modified.replace(/\bPromise\s*<[^>]+>/g, "void");
+
+    modified = replaceNullishCoalescing(modified);
+    modified = replaceOptionalChaining(modified);
 
     modified = modified.replace(/`([^`]*)`/g, (match, content) => {
       if (!content.includes("${")) {
@@ -568,6 +573,84 @@ function postProcessES5(code: string): string {
   }
 
   return result.join("\n");
+}
+
+function replaceNullishCoalescing(code: string): string {
+  let result = "";
+  let i = 0;
+  const len = code.length;
+
+  while (i < len) {
+    const ch = code[i];
+
+    if (ch === "`") {
+      let j = i + 1;
+      while (j < len && code[j] !== "`") {
+        if (code[j] === "\\" && j + 1 < len) j++;
+        j++;
+      }
+      result += code.substring(i, j + 1);
+      i = j + 1;
+      continue;
+    }
+
+    if (ch === "/" && i + 1 < len && code[i + 1] === "/") {
+      result += code.substring(i);
+      break;
+    }
+
+    if (ch === "?" && i + 1 < len && code[i + 1] === "?") {
+      const before = result.trimEnd();
+      const after = code.indexOf(";", i + 2);
+      const segment = after === -1 ? code.substring(i) : code.substring(i, after + 1);
+      const replacement = segment.replace(/\?\?/g, " !== null && " + "undefined ");
+      result += replacement;
+      i += segment.length;
+      continue;
+    }
+
+    result += ch;
+    i++;
+  }
+
+  return result;
+}
+
+function replaceOptionalChaining(code: string): string {
+  let result = "";
+  let i = 0;
+  const len = code.length;
+
+  while (i < len) {
+    const ch = code[i];
+
+    if (ch === "`") {
+      let j = i + 1;
+      while (j < len && code[j] !== "`") {
+        if (code[j] === "\\" && j + 1 < len) j++;
+        j++;
+      }
+      result += code.substring(i, j + 1);
+      i = j + 1;
+      continue;
+    }
+
+    if (ch === "/" && i + 1 < len && code[i + 1] === "/") {
+      result += code.substring(i);
+      break;
+    }
+
+    if (ch === "?" && i + 1 < len && code[i + 1] === ".") {
+      result += " !== null && " + "undefined ?.";
+      i += 2;
+      continue;
+    }
+
+    result += ch;
+    i++;
+  }
+
+  return result;
 }
 
 function createConsoleReplacementTransformer(): ts.TransformerFactory<ts.SourceFile> {

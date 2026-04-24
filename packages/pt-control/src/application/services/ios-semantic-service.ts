@@ -17,7 +17,7 @@ import {
   planConfigureDhcpRelay,
   resolveCapabilitySet,
 } from "@cisco-auto/ios-domain";
-import { IosVerificationService } from "./ios-verification-service.js";
+import { IosVerificationService, type VerificationResult } from "./ios-verification-service.js";
 import { IosExecutionService } from "./ios-execution-service.js";
 import {
   parseIpv4Address as Ipv4Address,
@@ -30,14 +30,14 @@ export class IosSemanticService {
   private readonly verifier: IosVerificationService;
 
   constructor(
-    private bridge: { appendEvent?: (event: any) => void },
+    private bridge: { appendEvent?: (event: Record<string, unknown>) => void },
     private execution: IosExecutionService,
     private inspectDevice: (device: string) => Promise<DeviceState>,
   ) {
     this.verifier = new IosVerificationService(this.execution.execIosRaw.bind(this.execution));
   }
 
-  private recordVerification(device: string, verification: any): void {
+  private recordVerification(device: string, verification: VerificationResult): void {
     try {
       this.bridge?.appendEvent?.({
         type: "verification",
@@ -332,7 +332,7 @@ export class IosSemanticService {
 
     try {
       const [checkName, ...rest] = verificationCheck.split(":");
-      let verification: any;
+      let verification: VerificationResult;
       const first = rest[0] ?? "";
       const second = rest[1] ?? "";
       const third = rest[2] ?? "";

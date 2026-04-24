@@ -2,7 +2,11 @@ import { IOSFamily, getIosFamilyFromModel } from "./device-capabilities.js";
 import { CapabilitySet } from "./capability-set.js";
 
 /**
- * Resolve a rich CapabilitySet for a model.
+ * Resuelve el CapabilitySet completo para un modelId dado.
+ * Usa el catálogo de dispositivos para determinar la familia y luego
+ * construye el conjunto de capabilities apropiado.
+ * @param modelId - Identificador del modelo (e.g., "1941", "2960-24TT")
+ * @returns CapabilitySet con todas las capabilities del dispositivo
  */
 export function resolveCapabilitySet(modelId: string): CapabilitySet {
   const family = getIosFamilyFromModel(modelId);

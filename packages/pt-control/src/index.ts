@@ -95,6 +95,7 @@ export * from "./pt/diagnosis/index.js";
 export {
   PTController,
   createPTController,
+  createDefaultPTController,
 } from "./controller/index.js";
 
 // Virtual DOM
@@ -163,6 +164,9 @@ export { IOSFamily, type IosDeviceModel } from "@cisco-auto/ios-domain";
 // Device Validation
 export { validatePTModel, resolveModel } from "./shared/utils/helpers.js";
 
+// Device Builder
+export * from "./verification/builders/device-builder.js";
+
 // PT Compatibility Contract
 export {
   assertCatalogLoaded,
@@ -178,6 +182,7 @@ export {
   LinkFeasibilityService,
   OmniscienceService,
   ScenarioService,
+  WlcService,
 } from "./application/services/index.js";
 
 // Capability Matrix

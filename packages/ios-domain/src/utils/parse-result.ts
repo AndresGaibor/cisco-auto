@@ -1,25 +1,38 @@
 // ============================================================================
 // IOS Parser Result Framework
-// Provides consistent return type for all IOS parsers
+// Proporciona tipo de retorno consistente para todos los parsers IOS
 // ============================================================================
 
+/**
+ * Indica si el output vino del terminal real, fue generado sintéticamente,
+ * o es una combinación (e.g., output interpolado con datos synth).
+ */
 export type OutputSource = "terminal" | "synthetic" | "hybrid";
 
+/**
+ * Resultado de parsing con metadatos de calidad y fuente.
+ * Todos los parsers IOS retornan este tipo para permitir manejo uniforme.
+ */
 export interface ParseResult<T> {
-  /** Parsed data */
+  /** Datos parseados del output IOS */
   parsed: T;
-  /** Raw (sanitized) output */
+  /** Output (sanitizado) sin parsear para debug */
   raw: string;
-  /** Warnings from partial parsing */
+  /** Warnings de parsing parcial (e.g., líneas no reconocidas) */
   warnings: string[];
-  /** Confidence score 0-1 (1 = full confidence) */
+  /** Score de confianza 0-1 (1 = plena confianza) */
   confidence: number;
-  /** Source of the output */
+  /** Fuente del output */
   source: OutputSource;
 }
 
 /**
- * Create a successful parse result
+ * Crea un resultado de parsing exitoso con confianza plena.
+ * Útil para parsers que pueden parsear todo el input.
+ * @param parsed - Datos ya parseados
+ * @param raw - Output original (sanitizado)
+ * @param options - Configuración opcional: source, warnings, confidence
+ * @returns ParseResult con confidence 1.0 y source default "terminal"
  */
 export function createParseResult<T>(
   parsed: T,
@@ -40,7 +53,13 @@ export function createParseResult<T>(
 }
 
 /**
- * Create a partial parse result with warnings
+ * Crea un resultado de parsing parcial con warnings.
+ * Se usa cuando se puede parsear la mayoría del output pero algunas líneas no se reconocieron.
+ * @param parsed - Datos parcialmente parseados
+ * @param raw - Output original (sanitizado)
+ * @param warnings - Lista de advertencias de parsing
+ * @param source - Fuente del output (default: terminal)
+ * @returns ParseResult con confidence 0.7 si hay warnings, 1.0 si no
  */
 export function createPartialParseResult<T>(
   parsed: T,
@@ -58,7 +77,12 @@ export function createPartialParseResult<T>(
 }
 
 /**
- * Create a failed parse result
+ * Crea un resultado de parsing fallido con datos parciales.
+ * Se usa cuando el parsing falla pero se recuperó algo de información útil.
+ * @param raw - Output original (sin sanitizar)
+ * @param error - Mensaje de error describiendo qué falló
+ * @param partialData - Datos parseados parcialmente (opcional)
+ * @returns ParseResult con confidence 0 y warnings conteniendo el error
  */
 export function createParseErrorResult<T>(
   raw: string,

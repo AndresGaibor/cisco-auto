@@ -42,8 +42,8 @@ function createInitialState(config: BootstrapConfig): RuntimeState {
     runtimeLoaded: false,
     lastRuntimeLoadAt: 0,
     tickTimer: null,
-    watchers: new Map(),
-    listeners: new Map(),
+    watchers: {},
+    listeners: {},
     activeQueueItem: null,
     heartbeatState: {
       active: false,

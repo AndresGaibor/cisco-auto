@@ -2,6 +2,7 @@
 // Omniscience Logical Handlers - L3+ and Assessment (ES5 Strict)
 // ============================================================================
 
+import { createCommandExecutor } from "../terminal/index";
 import type { HandlerDeps, HandlerResult } from "../utils/helpers.js";
 
 export function handleSiphonAllConfigs(_payload: any, deps: HandlerDeps): HandlerResult {
@@ -95,25 +96,35 @@ export function handleGetActivityTreeXml(payload: { deviceName: string }, deps: 
   }
 }
 
-export function handleExecIosOmni(payload: { deviceName: string, commands: string[] }, deps: HandlerDeps): HandlerResult {
-  var dev = deps.ipc.network().getDevice(payload.deviceName) as any;
+
+export async function handleExecIosOmni(payload: { deviceName: string, commands: string[] }, deps: HandlerDeps): Promise<HandlerResult> {
+  const deviceName = payload.deviceName;
+  var dev = deps.ipc.network().getDevice(deviceName) as any;
   if (!dev) return { ok: false, error: "Device not found" };
 
   var cli = (typeof dev.getCommandLine === "function") ? dev.getCommandLine() : null;
   if (!cli) return { ok: false, error: "CLI not available" };
 
   try {
-    var prompt = (typeof cli.getPrompt === "function") ? String(cli.getPrompt()) : "";
-    if (prompt.indexOf("[yes/no]") !== -1) {
-        if (cli.enterCommand) cli.enterCommand("no");
-        if (cli.enterCommand) cli.enterCommand("");
-    }
+    const executor = createCommandExecutor({
+        commandTimeoutMs: 10000,
+        stallTimeoutMs: 5000,
+    });
 
+    let fullOutput = "";
     for (var i = 0; i < payload.commands.length; i++) {
-        if (cli.enterCommand) cli.enterCommand(String(payload.commands[i]));
+        const cmd = String(payload.commands[i]);
+        const result = await executor.executeCommand(deviceName, cmd, cli, {
+            autoAdvancePager: true,
+            autoDismissWizard: true
+        });
+        fullOutput += result.output;
+        if (!result.ok) {
+            return { ok: false, error: result.error || "Command failed: " + cmd, raw: fullOutput };
+        }
     }
 
-    return { ok: true, result: "Commands sent" };
+    return { ok: true, result: fullOutput };
   } catch (e) {
     return { ok: false, error: String(e) };
   }

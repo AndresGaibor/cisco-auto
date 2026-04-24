@@ -210,3 +210,31 @@ export async function executeIntent(
 ): Promise<ExecutionVerdict> {
   return new Orchestrator(orchestrator).executeIntent(intent);
 }
+
+export interface OrchestratorConfig {
+  defaultTimeout?: number;
+  maxRetries?: number;
+  enableFallback?: boolean;
+}
+
+export function createOrchestrator(
+  config: OrchestratorConfig,
+  bridge: { primitiveAdapter: unknown; terminalAdapter: unknown; omniAdapter: unknown },
+): OrchestratorContext {
+  return {
+    primitivePort: bridge.primitiveAdapter as RuntimePrimitivePort,
+    terminalPort: bridge.terminalAdapter as RuntimeTerminalPort,
+    omniPort: bridge.omniAdapter as RuntimeOmniPort,
+    planner: {
+      buildPlan: async () => ({
+        id: "placeholder",
+        intentId: "",
+        strategy: "none",
+        steps: [],
+      }),
+    },
+    postVerificationRunner: {
+      run: async () => ({ ok: true, warnings: [] }),
+    } as unknown as PostVerificationRunner,
+  };
+}

@@ -49,6 +49,19 @@ function generateCorrelationId(): string {
   return `c-${randomUUID().slice(0, 8)}`;
 }
 
+async function waitForBridgeReady(controller: PTController, timeoutMs = 5000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const status = controller.getBridgeStatus?.();
+    if (status?.ready) return;
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  throw new Error("El bridge no quedó listo a tiempo después de iniciar el controller");
+}
+
 export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliResult<T>> {
   const startTime = Date.now();
   const sessionId = options.flags.sessionId ?? generateSessionId();
@@ -86,6 +99,7 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
 
   try {
     await controller.start();
+    await waitForBridgeReady(controller);
     runtimeContext = await inspectCommandContext(controller);
 
     await logPhase("start", {

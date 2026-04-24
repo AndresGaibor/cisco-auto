@@ -17,21 +17,23 @@ export abstract class Aggregate<TId extends ValueObject<unknown>> extends Entity
   private readonly _events: DomainEvent[] = [];
 
   /**
-   * Obtiene los eventos de dominio pendientes de publicar
+   * Obtiene los eventos de dominio pendientes de publicar.
+   * Después de obtenerlos, se limpian con clearEvents().
    */
   get events(): readonly DomainEvent[] {
     return [...this._events];
   }
 
   /**
-   * Registra un evento de dominio en el aggregate
+   * Registra un evento de dominio en el aggregate.
+   * Los eventos se acumulan hasta que se publican.
    */
   protected recordEvent(event: DomainEvent): void {
     this._events.push(event);
   }
 
   /**
-   * Limpia los eventos de dominio después de ser publicados
+   * Limpia los eventos de dominio después de ser publicados.
    */
   clearEvents(): void {
     this._events.length = 0;

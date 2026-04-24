@@ -23,7 +23,20 @@ export const MACAddressSchema = z.string().regex(
   'Debe ser una dirección MAC válida (ej: AA:BB:CC:DD:EE:FF)'
 );
 
-// Type exports
+/**
+ * Dirección IP con máscara CIDR (ej: 192.168.1.1/24)
+ * Usar para configuración de interfaces y redes
+ */
 export type IPCidr = z.infer<typeof IPCidrSchema>;
+
+/**
+ * Dirección IP sin máscara (ej: 192.168.1.1)
+ * Usar para direcciones individuales sin CIDR
+ */
 export type IPAddress = z.infer<typeof IPAddressSchema>;
+
+/**
+ * Dirección MAC (ej: AA:BB:CC:DD:EE:FF)
+ * Usar para direcciones de capa 2
+ */
 export type MACAddress = z.infer<typeof MACAddressSchema>;

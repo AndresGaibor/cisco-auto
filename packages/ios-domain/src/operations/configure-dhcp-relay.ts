@@ -8,7 +8,7 @@ import type { CommandPlan } from "./command-plan.js";
 import { CommandPlanBuilder } from "./command-plan.js";
 
 /**
- * Input for configuring DHCP relay on an interface
+ * Input para configurar DHCP relay en una interfaz.
  */
 export interface ConfigureDhcpRelayInput {
   interface: InterfaceName;
@@ -16,7 +16,11 @@ export interface ConfigureDhcpRelayInput {
 }
 
 /**
- * Plan the commands to configure DHCP relay (ip helper-address)
+ * Planifica los comandos IOS para configurar DHCP relay (ip helper-address).
+ * Habilita el relay DHCP en una interfaz para reenviar broadcasts DHCP.
+ * @param caps - CapabilitySet del dispositivo
+ * @param input - Configuración del relay
+ * @returns CommandPlan listo para ejecutar, o null si no soporta DHCP relay
  */
 export function planConfigureDhcpRelay(
   caps: CapabilitySet,

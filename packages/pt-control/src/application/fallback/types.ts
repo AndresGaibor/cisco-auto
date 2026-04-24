@@ -5,8 +5,8 @@ import type { Intent } from "../../contracts/intent";
 export type Strategy = "primitive" | "terminal-plan" | "omni-capability" | "abort";
 
 export interface FallbackPolicy {
-  selectStrategy(intent: Intent, previousResult: any): Promise<Strategy>;
-  shouldRetry(attempt: number, error: any): boolean;
+  selectStrategy(intent: Intent, previousResult: unknown): Promise<Strategy>;
+  shouldRetry(attempt: number, error: unknown): boolean;
 }
 
 export interface RiskGate {

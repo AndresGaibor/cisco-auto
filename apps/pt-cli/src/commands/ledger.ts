@@ -25,6 +25,7 @@ export const LEDGER_META: CommandMeta = {
   ],
   status: 'experimental',
   requiresPT: false,
+  related: ['audit', 'history'],
 };
 
 export function createLedgerCommand(): Command {

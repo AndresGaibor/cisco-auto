@@ -1,17 +1,56 @@
+/**
+ * Dispatcher del runtime de PT.
+ *
+ * Recibe payloads con `type` y los rutea al handler registrado en el registry.
+ * El registry encapsula el acceso a `_GLOBAL.HANDLER_MAP` para reducir
+ * `@ts-ignore` dispersos y mejorar la seguridad de tipos.
+ *
+ * Comandos soportados:
+ * - addDevice, removeDevice, renameDevice, moveDevice
+ * - listDevices, inspect, snapshot
+ * - addLink, removeLink
+ * - setDeviceIp, setDefaultGateway
+ * - configIos, execIos
+ * - ensureVlans, configVlanInterfaces
+ * - configDhcpServer, inspectDhcpServer
+ * - deepInspect, __evaluate
+ * - Y ~40 comandos más de omniscience y canvas
+ */
 import type { RuntimeApi, RuntimeResult } from "../runtime/contracts";
+import {
+  registerHandler,
+  getHandler,
+  getRegisteredTypes,
+  validateHandlerCoverage,
+  type HandlerFn,
+} from "./handler-registry.js";
 
-export type HandlerFn = (payload: any, api: any) => RuntimeResult;
+export type { HandlerFn };
+export { registerHandler, getHandler, getRegisteredTypes, validateHandlerCoverage };
 
-const HANDLER_MAP: Map<string, HandlerFn> = new Map();
+/**
+ * Alias para backward compatibility.
+ * El registry encapsula el map internamente; este es solo para consumers
+ * que dependen de la referencia pública al mapa de handlers.
+ * @deprecated Use registerHandler/getHandler en vez de mutar HANDLER_MAP directo
+ */
+export { getRegisteredTypes as HANDLER_MAP };
 
-export function registerHandler(type: string, handler: HandlerFn): void {
-  HANDLER_MAP.set(type, handler);
-}
-
-export function getHandler(type: string): HandlerFn | undefined {
-  return HANDLER_MAP.get(type);
-}
-
+/**
+ * Función de dispatch principal del runtime.
+ *
+ * @param payload - Objeto con tipo y datos del comando. Debe tener `payload.type` como string.
+ * @param api - RuntimeApi con acceso a IPC, device registry, y utilidades.
+ * @returns RuntimeResult con ok=true (éxito), ok=false con error, o deferred para jobs largos.
+ *
+ * @example
+ * runtimeDispatcher({ type: "listDevices" }, api)
+ * // → { ok: true, devices: [...], count: 5 }
+ *
+ * @example
+ * runtimeDispatcher({ type: "addDevice", model: "RouterFalso" }, api)
+ * // → { ok: false, error: "Unknown model", code: "INVALID_MODEL" }
+ */
 export function runtimeDispatcher(
   payload: Record<string, unknown>,
   api: RuntimeApi,
@@ -38,13 +77,13 @@ export function runtimeDispatcher(
     } as RuntimeResult;
   }
 
-  const handler = HANDLER_MAP.get(type);
-  api.dprint(`[runtime:${type}] handler=${handler ? "found" : "NOT_FOUND"}`);
+  const handler = getHandler(type);
+  api.dprint("[runtime:" + type + "] handler=" + (handler ? "found" : "NOT_FOUND"));
 
   if (!handler) {
     return {
       ok: false,
-      error: `Unknown command type: ${type}`,
+      error: "Unknown command type: " + type,
       code: "UNKNOWN_COMMAND",
       source: "synthetic",
     } as RuntimeResult;
@@ -52,8 +91,12 @@ export function runtimeDispatcher(
 
   try {
     const result = handler(payload, api);
-    const isDeferred = (result as any)?.deferred === true;
-    api.dprint(`[runtime:${type}] result ok=${result.ok} deferred=${isDeferred}`);
+    if (result && typeof (result as unknown as { then: unknown }).then === "function") {
+      api.dprint(`[runtime:${type}] result is PROMISE (async handler)`);
+      return result;
+    }
+    const isDeferred = result && "deferred" in result && (result as { deferred?: boolean }).deferred === true;
+    api.dprint(`[runtime:${type}] result ok=${result ? result.ok : "null"} deferred=${isDeferred}`);
     return result;
   } catch (e) {
     const errMsg = String(e);
@@ -66,12 +109,3 @@ export function runtimeDispatcher(
     } as RuntimeResult;
   }
 }
-
-export function validateHandlerCoverage(): { missing: string[]; registered: string[] } {
-  return {
-    missing: [],
-    registered: [...HANDLER_MAP.keys()],
-  };
-}
-
-export { HANDLER_MAP };

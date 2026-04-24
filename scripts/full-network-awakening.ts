@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 /**
  * FULL NETWORK AWAKENING & TOPOLOGY MAPPING
- * Despierta todas las interfaces y mapea el 100% de los cables por UUID.
+ * Despierta todas las interfaces y mapea el 100% de los enlaces.
+ * Modernizado para usar el motor de terminal robusto.
  */
 
 import { createDefaultPTController } from "@cisco-auto/pt-control";
@@ -20,50 +21,35 @@ async function awakenAndMap() {
     await controller.start();
     console.log(colors.bold("\n🔥 INICIANDO DESPERTAR GLOBAL DE LA RED..."));
 
-    const awakeningExploit = `
-        (function() {
-            var net = ipc.network();
-            var dCount = net.getDeviceCount();
-            var awakened = 0;
-            
-            for(var i=0; i<dCount; i++) {
-                var dev = net.getDeviceAt(i);
-                var cls = dev.getClassName();
-                
-                if (cls === "Router" || cls === "Switch") {
-                    var cli = dev.getCommandLine();
-                    // Romper wizard y entrar a config
-                    cli.enterCommand(""); 
-                    cli.enterCommand("no");
-                    cli.enterCommand("enable");
-                    cli.enterCommand("conf t");
-                    
-                    // Barrido de las primeras 10 interfaces posibles
-                    var ports = dev.getPortCount();
-                    for(var j=0; j<Math.min(ports, 10); j++) {
-                        var p = dev.getPortAt(j);
-                        var pName = p.getName();
-                        if (pName.indexOf("Gigabit") !== -1 || pName.indexOf("Fast") !== -1) {
-                            cli.enterCommand("interface " + pName);
-                            cli.enterCommand("no shutdown");
-                        }
-                    }
-                    cli.enterCommand("end");
-                    awakened++;
-                }
-            }
-            return awakened;
-        })()
-    `;
+    // 1. Obtener lista de dispositivos
+    const devices = await controller.listDevices();
+    const networkDevices = devices.filter(d => d.type === "router" || d.type === "switch");
 
-    const count = await controller.send("__evaluate", { code: awakeningExploit });
-    console.log(colors.green(`✅ ${count.result} equipos procesados y despertados.`));
+    console.log(colors.cyan(`🔍 Detectados ${networkDevices.length} dispositivos de red.`));
+
+    // 2. Despertar interfaces en cada dispositivo usando el motor robusto
+    for (const dev of networkDevices) {
+        console.log(`⏳ Despertando interfaces en ${dev.name}...`);
+        
+        // Obtenemos info del hardware para saber qué interfaces tiene
+        const info: any = await controller.hardwareInfo(dev.name);
+        const portNames = (info.ports || [])
+            .map((p: any) => p.name)
+            .filter((n: string) => n.includes("Gigabit") || n.includes("Fast"));
+
+        if (portNames.length > 0) {
+            const commands = portNames.flatMap((n: string) => [`interface ${n}`, "no shutdown"]);
+            await controller.configIos(dev.name, commands);
+            console.log(colors.green(`   ✅ ${portNames.length} interfaces levantadas en ${dev.name}.`));
+        }
+    }
 
     console.log(colors.cyan("\n⏳ Esperando 12 segundos para convergencia física y STP..."));
     await new Promise(r => setTimeout(r, 12000));
 
-    console.log(colors.bold("🕵️  RECONSTRUYENDO MAPA DE CABLES POR UUID..."));
+    console.log(colors.bold("🕵️  RECONSTRUYENDO MAPA DE CONECTIVIDAD..."));
     
+    // Para el mapa de red seguimos usando un evaluate prolijo ya que es lectura masiva
     const mappingExploit = `
         (function() {
             var net = ipc.network();
@@ -90,8 +76,8 @@ async function awakenAndMap() {
             for(var id in portMap) {
                 if (portMap[id].length === 2) {
                     links.push(portMap[id][0] + " <───> " + portMap[id][1]);
-                } else {
-                    links.push(portMap[id][0] + " <───> [PENDING/SINGLE]");
+                } else if (portMap[id].length === 1) {
+                    links.push(portMap[id][0] + " <───> [CABLE SUELTO]");
                 }
             }
             return links.join("|||");
@@ -100,18 +86,18 @@ async function awakenAndMap() {
 
     const res = await controller.send("__evaluate", { code: mappingExploit });
     
-    if (res.ok && res.result) {
-        const list = res.result.split("|||");
-        console.log(colors.green(`\n✨ ¡TOPOLOGÍA FINAL HACKEADA! Encontrados ${list.length} enlaces:\n`));
+    if (res && res.length > 0) {
+        const list = res.split("|||");
+        console.log(colors.green(`\n✨ ¡TOPOLOGÍA RECUPERADA! Encontrados ${list.length} enlaces:\n`));
         console.log(colors.magenta("  " + "─".repeat(60)));
         list.forEach((l: string) => console.log(`  🔗 ${l}`));
         console.log(colors.magenta("  " + "─".repeat(60)));
     } else {
-        console.log(colors.yellow("\n⚠️  No se detectaron cables adicionales. Verifique si los puertos están cableados en PT."));
+        console.log(colors.yellow("\n⚠️  No se detectaron cables."));
     }
 
   } catch (error: any) {
-    console.error(`Error: ${error.message}`);
+    console.error(colors.bold(`\n❌ Error: ${error.message}`));
   } finally {
     await controller.stop();
   }

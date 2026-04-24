@@ -12,6 +12,16 @@ interface BackendPluginWithDeviceMethods extends BackendPlugin {
   configureDevice(name: string, commands: string[]): Promise<{ results?: Array<{ command: string; output: string; success: boolean }> }>;
 }
 
+/**
+ * Use case para configurar un dispositivo IOS con comandos.
+ *
+ * Reciba una lista de comandos IOS y los ejecuta en el dispositivo
+ * a través del backend. Valida que el dispositivo exista y que
+ * al menos un comando esté presente.
+ *
+ * @param repository - Puerto de persistencia para verificar existencia del dispositivo
+ * @param backend - Plugin de backend que ejecuta los comandos en PT
+ */
 export class ConfigureDeviceUseCase implements UseCase<ConfigureDeviceInput, UseCaseResult<ConfigureDeviceOutput>> {
   constructor(
     private readonly repository: PersistencePort<DeviceEntity>,

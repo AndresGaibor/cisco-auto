@@ -1,15 +1,17 @@
-// ============================================================================
-// CommandSeq Value Object - Sequence Numbers for FileBridgeV2
-// ============================================================================
-
 /**
- * Represents a validated sequence number for FileBridgeV2 commands
- * Sequence numbers are 12-digit zero-padded integers for proper file ordering
+ * Value Object para números de secuencia del FileBridgeV2.
+ *
+ * Los seq numbers son enteros de 12 dígitos zero-padded para garantizar
+ * ordenamiento correcto de archivos en el filesystem (orden lexicográfico).
  */
 export class CommandSeq {
   public readonly value: number;
   private readonly _padded: string;
 
+  /**
+   * @param value - Número de secuencia (debe ser integer >= 1 y <= 999_999_999_999)
+   * @throws Error si el valor no es válido
+   */
   constructor(value: number) {
     if (!Number.isInteger(value)) {
       throw new Error(`Sequence number must be an integer, got: ${value}`);
@@ -24,88 +26,89 @@ export class CommandSeq {
     this._padded = String(value).padStart(12, "0");
   }
 
+  /**
+   * Deserialize from JSON (number).
+   */
   static fromJSON(value: number): CommandSeq {
     return new CommandSeq(value);
   }
 
+  /**
+   * Serialize to JSON (number).
+   */
   toJSON(): number {
     return this.value;
   }
 
+  /** Valor numérico raw */
   get raw(): number {
     return this.value;
   }
 
-  /**
-   * Get the zero-padded string representation (12 digits)
-   */
+  /** String zero-padded a 12 dígitos */
   get padded(): string {
     return this._padded;
   }
 
-  /**
-   * Get the next sequence number
-   */
+  /** Obtiene el siguiente seq number */
   next(): CommandSeq {
     return new CommandSeq(this.value + 1);
   }
 
   /**
-   * Get the previous sequence number (returns null if this is 1)
+   * Obtiene el seq anterior o null si this.value === 1
    */
   previous(): CommandSeq | null {
     if (this.value === 1) return null;
     return new CommandSeq(this.value - 1);
   }
 
-  /**
-   * Check if this sequence is before another
-   */
+  /** @returns true si this.value < other.value */
   isBefore(other: CommandSeq): boolean {
     return this.value < other.value;
   }
 
-  /**
-   * Check if this sequence is after another
-   */
+  /** @returns true si this.value > other.value */
   isAfter(other: CommandSeq): boolean {
     return this.value > other.value;
   }
 
   /**
-   * Calculate the distance to another sequence
+   * Calcula la distancia absoluta a otro seq
+   * @param other - Otro CommandSeq
+   * @returns Distancia en valores absolutos
    */
   distanceTo(other: CommandSeq): number {
     return Math.abs(other.value - this.value);
   }
 
   /**
-   * Check if this sequence is within a range of another
+   * @param other - Seq de referencia
+   * @param range - Rango a verificar
+   * @returns true si la distancia a other <= range
    */
   isWithinRange(other: CommandSeq, range: number): boolean {
     return this.distanceTo(other) <= range;
   }
 
-  /**
-   * Format for use in filename (padded)
-   */
+  /** @returns Versión padded para usar en filenames */
   toFileName(): string {
     return this._padded;
   }
 
-  /**
-   * Format for logging (unpadded number)
-   */
+  /** @returns String del valor numérico (para logging) */
   toString(): string {
     return String(this.value);
   }
 
+  /** @param other - CommandSeq a comparar @returns true si son iguales */
   equals(other: CommandSeq): boolean {
     return this.value === other.value;
   }
 
   /**
-   * Parse from a padded string (e.g., "000000000042")
+   * Parse desde string padded (ej. "000000000042")
+   * @param padded - String de 12 dígitos
    */
   static fromPadded(padded: string): CommandSeq {
     const num = parseInt(padded, 10);
@@ -116,7 +119,8 @@ export class CommandSeq {
   }
 
   /**
-   * Parse from a command filename (e.g., "000000000042-configIos.json")
+   * Parse desde nombre de archivo de comando (ej. "000000000042-configIos.json")
+   * @param filename - Nombre de archivo con formato <seq>-<type>.json
    */
   static fromFileName(filename: string): CommandSeq {
     const match = filename.match(/^(\d{12})-/);

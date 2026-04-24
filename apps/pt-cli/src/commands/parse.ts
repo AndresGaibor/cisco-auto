@@ -28,33 +28,30 @@ export function createParseCommand(): Command {
         console.log('🔍 Parseando archivo:', file);
 
         const parsedLab = loadLabYaml(file);
-        const devices = parsedLab.lab?.topology?.devices || [];
-        const connections = parsedLab.lab?.topology?.connections || [];
-
-        // Calcular resumen manualmente
+        const labSpec = toLabSpec(parsedLab);
+        
         const deviceTypes: Record<string, number> = {};
-        for (const d of devices) {
-          const type = d.type || 'router';
-          deviceTypes[type] = (deviceTypes[type] || 0) + 1;
+        for (const d of labSpec.devices) {
+          deviceTypes[d.type] = (deviceTypes[d.type] || 0) + 1;
         }
 
         if (options.format === 'json') {
-          console.log(JSON.stringify(parsedLab.lab, null, 2));
+          console.log(JSON.stringify(labSpec, null, 2));
           return;
         }
 
         console.log('\n📋 Resumen del Laboratorio:');
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log(`Nombre: ${parsedLab.lab?.metadata?.name || 'N/A'}`);
-        console.log(`Dispositivos: ${devices.length}`);
-        console.log(`Conexiones: ${connections.length}`);
+        console.log(`Nombre: ${labSpec.metadata.name}`);
+        console.log(`Dispositivos: ${labSpec.devices.length}`);
+        console.log(`Conexiones: ${labSpec.connections.length}`);
         console.log('\nTipos de dispositivos:');
         Object.entries(deviceTypes).forEach(([type, count]) => {
           console.log(`  • ${type}: ${count}`);
         });
 
         console.log('\n📄 Validación:');
-        const validation = validateLabSafe(parsedLab.lab);
+        const validation = validateLabSafe(parsedLab);
         if (validation.success) {
           console.log('  ✅ Lab válido');
         } else {

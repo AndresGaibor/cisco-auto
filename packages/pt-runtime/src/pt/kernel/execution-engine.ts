@@ -204,7 +204,7 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
             job.id,
         );
 
-        job.pendingCommand = terminal.executeCommand(job.device, command, { timeout });
+        job.pendingCommand = terminal.executeCommand(job.device, command, { commandTimeoutMs: timeout });
 
         job.pendingCommand
           .then(function (result) {
@@ -303,23 +303,16 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
     const job = jobs[jobId];
     if (!job || isJobFinished(jobId) || job.pendingCommand !== null) return;
 
-    // Concurrency guard: don't advance if another job is using the same device
-    const allJobs = Object.values(jobs);
-    let otherJobBusy = false;
-    for (let i = 0; i < allJobs.length; i++) {
-      const other = allJobs[i];
-      if (
-        other.id !== job.id &&
-        !isJobFinished(other.id) &&
-        other.device === job.device &&
-        other.pendingCommand !== null
-      ) {
-        otherJobBusy = true;
-        break;
+    const device = job.device;
+    const jobIdStr = job.id;
+
+    for (const key in jobs) {
+      if (key === jobIdStr) continue;
+      const other = jobs[key];
+      if (!isJobFinished(key) && other.device === device && other.pendingCommand !== null) {
+        return;
       }
     }
-
-    if (otherJobBusy) return;
 
     if (job.context.paged) {
       terminal.continuePager(job.device);
@@ -349,9 +342,10 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
     },
     getActiveJobs: function () {
       const active: ActiveJob[] = [];
-      const all = Object.values(jobs);
-      for (let i = 0; i < all.length; i++) {
-        if (!isJobFinished(all[i].id)) active.push(all[i]);
+      for (const key in jobs) {
+        if (!isJobFinished(key)) {
+          active.push(jobs[key]);
+        }
       }
       return active;
     },

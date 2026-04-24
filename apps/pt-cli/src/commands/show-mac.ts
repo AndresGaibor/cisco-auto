@@ -148,7 +148,7 @@ export function createShowMacCommand(): Command {
               raw = execResult.raw || '';
             } catch (iosError: any) {
               const deviceInfo = await ctx.controller.inspectDevice(device);
-              if (deviceInfo?.type === 'switch' || deviceInfo?.type === 'switch-l2' || deviceInfo?.type === 'switch-l3') {
+              if (deviceInfo?.type === 'switch' || deviceInfo?.type === 'switch_layer3' || deviceInfo?.type === 'multilayer_device') {
                 return createErrorResult('show:mac', {
                   message: `No se pudo ejecutar 'show mac' en ${device}. Asegúrate de que el switch tenga enlaces activos.`,
                   details: { error: iosError.message },

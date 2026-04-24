@@ -2,9 +2,30 @@ import { vlanSchema, type VlanConfigInput, type VlanConfig, sviSchema, type SviC
 import { parseVlanName } from '../../domain/ios/value-objects/vlan-name.vo.js';
 import { buildValidationResult } from '../shared/validation.utils.js';
 
+/**
+ * Comandos de verificación para validación de VLAN.
+ */
 export const VLAN_VERIFY_COMMANDS = ['show vlan brief'] as const;
+
+/**
+ * Comandos de verificación para validación de SVIs.
+ */
 export const SVI_VERIFY_COMMANDS = ['show ip interface brief', 'show running-config | include interface Vlan'] as const;
 
+/**
+ * Genera comandos IOS para configurar VLANs, trunks y puertos de acceso.
+ * Transforma la configuración de alto nivel a comandos IOS específicos.
+ * 
+ * @param spec - Configuración de VLANs input
+ * @returns Array de comandos IOS listos para ejecutar
+ * 
+ * @example
+ * const commands = generateVlanCommands({
+ *   switchName: 'SW1',
+ *   vlans: [{ id: 10, name: 'USERS' }],
+ *   accessPorts: [{ port: 'FastEthernet0/1', vlan: 10 }]
+ * });
+ */
 export function generateVlanCommands(spec: VlanConfigInput): string[] {
   const config = vlanSchema.parse(spec);
   const commands: string[] = [];
@@ -100,6 +121,14 @@ export function generateSviCommands(spec: SviConfigInput): string[] {
   return commands;
 }
 
+/**
+ * Verifica el output de 'show ip interface brief' contra la configuración de SVIs.
+ * Valida que cada SVI configurada aparezca con su IP correcta.
+ * 
+ * @param output - Output del comando 'show ip interface brief'
+ * @param spec - Configuración original de SVIs
+ * @returns Resultado de validación con errores si hay SVIs faltantes
+ */
 export function verifyShowIpInterfaceBrief(output: string, spec: SviConfigInput) {
   const config = sviSchema.parse(spec);
   const lines = output.split(/\r?\n/);

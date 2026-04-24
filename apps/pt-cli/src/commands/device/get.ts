@@ -79,6 +79,8 @@ interface DeviceGetResult {
   uuid?: string;
   version?: string;
   configRegister?: string;
+  xml?: string;
+  xmlParsed?: Record<string, unknown>;
 }
 
 export function createDeviceGetCommand(): Command {
@@ -87,6 +89,7 @@ export function createDeviceGetCommand(): Command {
     .argument('<device>', 'Nombre del dispositivo (ej: R1, S1, PC1)')
     .option('--json', 'Salida en formato JSON')
     .option('-v, --verbose', 'Mostrar información detallada')
+    .option('--xml', 'Incluir datos enriquecidos del XML (VLANs, modules, ARP, MAC)')
     .option('--examples', 'Mostrar ejemplos de uso y salir', false)
     .option('--schema', 'Mostrar schema JSON del resultado y salir', false)
     .option('--explain', 'Explicar qué hace el comando y salir', false)
@@ -96,6 +99,7 @@ export function createDeviceGetCommand(): Command {
       const globalExplain = process.argv.includes('--explain');
       const globalJson = process.argv.includes('--json');
       const globalVerbose = process.argv.includes('--verbose');
+      const globalXml = process.argv.includes('--xml');
 
       if (globalExamples) {
         console.log(printExamples(DEVICE_GET_META));
@@ -143,7 +147,7 @@ export function createDeviceGetCommand(): Command {
           await controller.start();
 
           try {
-            const device = await controller.inspectDevice(deviceName);
+            const device = await controller.inspectDevice(deviceName, globalXml);
 
             if (!device || !device.name) {
               return createErrorResult('device.get', {
@@ -168,7 +172,9 @@ export function createDeviceGetCommand(): Command {
               y: device.y,
               uuid: device.uuid,
               version: device.version,
-              configRegister: device.configRegister
+              configRegister: device.configRegister,
+              xml: (device as Record<string, unknown>).xml as string | undefined,
+              xmlParsed: (device as Record<string, unknown>).xmlParsed as Record<string, unknown> | undefined,
             };
 
             return createSuccessResult('device.get', result);

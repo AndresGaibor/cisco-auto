@@ -51,6 +51,7 @@ interface PingResult {
   packetsSent?: number;
   packetsReceived?: number;
   error?: string;
+  raw?: string;
 }
 
 export function createPingCommand(): Command {
@@ -59,7 +60,7 @@ export function createPingCommand(): Command {
     .argument("<from>", "Dispositivo origen del ping")
     .argument("<to>", "IP destino o nombre de dispositivo destino")
     .option("--count <n>", "Número de paquetes a enviar", "4")
-    .option("--timeout <ms>", "Timeout en milisegundos", "5000")
+    .option("--timeout <ms>", "Timeout en milisegundos", "30000")
     .option("--examples", "Mostrar ejemplos de uso")
     .option("--schema", "Mostrar schema del resultado")
     .option("--explain", "Explicar qué hace el comando")
@@ -134,7 +135,7 @@ export function createPingCommand(): Command {
 
           try {
             const count = parseInt(options.count as string) || 4;
-            const timeout = parseInt(options.timeout as string) || 5000;
+            const timeout = parseInt(options.timeout as string) || 30000;
 
             const devices = await fetchDeviceList(ctx.controller);
 
@@ -211,15 +212,15 @@ async function performPing(
   timeout: number,
 ): Promise<PingResult> {
   try {
-    const result = await controller.omniscience.sendPing(fromDevice, toIp);
+    const result = await controller.sendPing(fromDevice, toIp, timeout);
     
     return {
       from: fromDevice,
       to: toIp,
       success: result.success,
-      packetsSent: count,
-      packetsReceived: result.success ? count : 0,
-      packetLoss: result.success ? 0 : 100,
+      packetsSent: result.stats?.sent ?? count,
+      packetsReceived: result.stats?.received ?? (result.success ? count : 0),
+      packetLoss: result.stats?.lossPercent ?? (result.success ? 0 : 100),
       raw: result.raw
     };
   } catch (error: any) {

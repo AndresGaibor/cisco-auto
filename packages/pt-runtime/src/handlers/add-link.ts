@@ -125,8 +125,8 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
   if (device1?.skipBoot) device1.skipBoot();
   if (device2?.skipBoot) device2.skipBoot();
 
-  const resolvedPort1 = resolveDevicePortName(device1, payload.port1);
-  const resolvedPort2 = resolveDevicePortName(device2, payload.port2);
+  let resolvedPort1 = resolveDevicePortName(device1, payload.port1);
+  let resolvedPort2 = resolveDevicePortName(device2, payload.port2);
 
   if (!resolvedPort1 || !resolvedPort2) {
     dprint(
@@ -178,8 +178,44 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
 
   let usedAttempt = tryCreateLink(lw, net, attempts, cableType, dprint);
   let lastError: string | null = null;
+  let usedFallback = false;
 
-  if (!usedAttempt && payload.linkType === "auto") {
+  // FALLBACK para PT 9.0.0.0810: Si createLink falla, intentamos autoConnectDevices
+  if (!usedAttempt) {
+    dprint(`[handler:addLink] createLink failed, trying autoConnectDevices fallback...`);
+    try {
+      if (typeof (lw as any).autoConnectDevices === 'function') {
+        (lw as any).autoConnectDevices(payload.device1, payload.device2);
+        
+        // Verificación exhaustiva: ¿alguno de los puertos de d1 ahora tiene un link hacia d2?
+        const d1 = net.getDevice(payload.device1);
+        const d2 = net.getDevice(payload.device2);
+        
+        if (d1 && d2) {
+            for (let i = 0; i < d1.getPortCount(); i++) {
+                const p = d1.getPortAt(i);
+                if (!p) continue;
+                const l = (p as any)?.getLink ? (p as any).getLink() : null;
+                if (l) {
+                    const ep2 = l.getPort2 ? l.getPort2() : null;
+                    if (ep2 && typeof ep2.getOwnerDevice === "function" && ep2.getOwnerDevice().getName() === payload.device2) {
+                        usedFallback = true;
+                        // ACTUALIZAMOS LOS PUERTOS REALES DESCUBIERTOS
+                        resolvedPort1 = p.getName() || resolvedPort1;
+                        resolvedPort2 = ep2.getName() || resolvedPort2;
+                        dprint(`[handler:addLink] FALLBACK SUCCESS: autoConnectDevices linked ${payload.device1}:${resolvedPort1} to ${payload.device2}:${resolvedPort2}`);
+                        break;
+                    }
+                }
+            }
+        }
+      }
+    } catch (e) {
+      dprint(`[handler:addLink] Fallback failed: ${e}`);
+    }
+  }
+
+  if (!usedAttempt && !usedFallback && payload.linkType === "auto") {
     const autoCableType = getCableTypeId("auto");
     dprint(`[handler:addLink] retrying with cableType=auto`);
     usedAttempt = tryCreateLink(lw, net, attempts, autoCableType, dprint);
@@ -188,7 +224,7 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
     }
   }
 
-  if (!usedAttempt) {
+  if (!usedAttempt && !usedFallback) {
     dprint(`[handler:addLink] ERROR Failed to create link: ${lastError}`);
     return {
       ok: false,
@@ -208,11 +244,11 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
     };
   }
 
-  saveLinkToRegistry(deps, payload.device1, resolvedPort1, payload.device2, resolvedPort2, dprint);
+  saveLinkToRegistry(deps, payload.device1, resolvedPort1 || payload.port1, payload.device2, resolvedPort2 || payload.port2, dprint);
 
-  const linkId = `${payload.device1}:${payload.port1}--${payload.device2}:${payload.port2}`;
+  const linkId = `${payload.device1}:${resolvedPort1 || payload.port1}--${payload.device2}:${resolvedPort2 || payload.port2}`;
 
-  dprint(`[handler:addLink] DONE id=${linkId}`);
+  dprint(`[handler:addLink] DONE id=${linkId} actual1=${resolvedPort1} actual2=${resolvedPort2}`);
 
   return {
     ok: true,
@@ -223,5 +259,6 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
     port2: resolvedPort2,
     cableType: cableTypeName,
     swapped: usedAttempt === swapped,
+    fallbackUsed: usedFallback,
   };
 }

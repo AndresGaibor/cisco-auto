@@ -133,12 +133,24 @@ var __spreadArray = function(to, from, pack) {
 
 ${code}
 
+// --- INITIALIZATION BLOCK ---
 try {
+  if (typeof dprint === "function") dprint("[runtime] initializing handlers...");
+  
+  // Re-verify imports from runtime-handlers.ts are present in 'code'
   var deps = createPtDepsFromGlobals({ ipc: ipc, fm: fm, dprint: dprint, DEV_DIR: DEV_DIR });
+  
   _g._ptDispatch = function(payload) {
     return runtimeDispatcher(payload, deps);
   };
-  if (typeof dprint === "function") dprint("[runtime] dispatch ready (global=" + (typeof _g !== "undefined" ? "OK" : "FAIL") + ")");
+  
+  if (typeof dprint === "function") {
+    var count = 0;
+    if (typeof _g !== 'undefined' && _g.HANDLER_MAP) {
+        for (var k in _g.HANDLER_MAP) { if (Object.prototype.hasOwnProperty.call(_g.HANDLER_MAP, k)) count++; }
+    }
+    dprint("[runtime] dispatch ready. Registered: " + count);
+  }
 } catch (e) {
   if (typeof dprint === "function") dprint("[runtime] INIT ERROR: " + String(e));
 }

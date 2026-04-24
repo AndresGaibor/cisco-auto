@@ -8,7 +8,7 @@ import type { CommandPlan } from "./command-plan.js";
 import { CommandPlanBuilder } from "./command-plan.js";
 
 /**
- * Input for configuring a static route
+ * Input para configurar una ruta estática.
  */
 export interface ConfigureStaticRouteInput {
   network: Ipv4Address;
@@ -19,7 +19,11 @@ export interface ConfigureStaticRouteInput {
 }
 
 /**
- * Plan the commands to configure a static route
+ * Planifica los comandos IOS para configurar una ruta estática.
+ * Opcionalmente incluye distance administrativa y descripción.
+ * @param caps - CapabilitySet del dispositivo
+ * @param input - Configuración de la ruta estática
+ * @returns CommandPlan listo para ejecutar, o null si no soporta routing
  */
 export function planConfigureStaticRoute(
   caps: CapabilitySet,

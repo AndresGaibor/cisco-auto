@@ -4,6 +4,7 @@
  */
 
 import { Command } from 'commander';
+import chalk from 'chalk';
 import type { PTController } from '@cisco-auto/pt-control';
 import { select, input } from '@inquirer/prompts';
 
@@ -15,6 +16,18 @@ import { runCommand } from '../application/run-command.js';
 import { printExamples } from '../ux/examples.js';
 import { formatNextSteps } from '../ux/next-steps.js';
 import { fetchDeviceList, formatDevice } from '../utils/device-utils.js';
+
+const DEVICE_TYPE_MAP: Record<number, string> = {
+  0: 'router',
+  1: 'switch',
+  16: 'switch_layer3',
+};
+
+function normalizeDeviceType(type: string | number | undefined): string {
+  if (typeof type === 'string') return type;
+  if (typeof type === 'number') return DEVICE_TYPE_MAP[type] || 'unknown';
+  return 'unknown';
+}
 
 const HOST_CONFIG_META: CommandMeta = {
   id: 'host.config',
@@ -90,14 +103,266 @@ interface HostInspectResult {
   dhcp?: boolean;
 }
 
+const HOST_EXEC_META: CommandMeta = {
+  id: 'host.exec',
+  summary: 'Ejecutar comando en el Command Prompt del host',
+  longDescription: 'Ejecuta un comando directamente en el Command Prompt de una PC o Servidor y devuelve la salida procesada.',
+  examples: [
+    {
+      command: 'pt host exec PC1 "ipconfig"',
+      description: 'Ver configuración IP de PC1'
+    },
+    {
+      command: 'pt host exec PC1 "nslookup google.com"',
+      description: 'Probar resolución DNS en PC1'
+    },
+    {
+      command: 'pt host exec PC1 "netstat"',
+      description: 'Ver conexiones activas en PC1'
+    }
+  ],
+  related: ['ping', 'host inspect'],
+  nextSteps: ['pt host inspect <device>'],
+  tags: ['host', 'exec', 'command', 'prompt'],
+  supportsVerify: false,
+  supportsJson: true,
+  supportsPlan: false,
+  supportsExplain: true
+};
+
 export function createHostCommand(): Command {
   const host = new Command('host')
     .description('Gestionar dispositivos host (PC/Server-PT)');
 
   host.addCommand(createHostConfigCommand());
   host.addCommand(createHostInspectCommand());
+  host.addCommand(createHostExecCommand());
+  host.addCommand(createHostHistoryCommand());
 
   return host;
+}
+
+/**
+ * Acceso directo 'pt cmd' solicitado por el usuario
+ */
+export function createCmdShortcutCommand(): Command {
+    return createHostExecCommand()
+        .name('cmd')
+        .alias('exec-pc')
+        .description('Acceso rápido para ejecutar comandos en un host');
+}
+
+/**
+ * Acceso directo 'pt history' o 'pt list' solicitado por el usuario
+ */
+export function createHistoryShortcutCommand(): Command {
+    return createHostHistoryCommand()
+        .name('history')
+        .description('Acceso rápido para ver el historial de comandos de un host');
+}
+
+function createHostHistoryCommand(): Command {
+  const cmd = new Command('history')
+    .description('Ver el historial de comandos ejecutados en el host')
+    .argument('<device>', 'Nombre del dispositivo')
+    .action(async (deviceName, _options, cmd) => {
+      const flags = cmd.optsWithGlobals();
+      const result = await runCommand<any>({
+        action: 'host.history',
+        meta: { id: 'host.history', summary: 'Ver historial del host', tags: ['host', 'history'], related: [], nextSteps: [] },
+        flags,
+        execute: async (ctx): Promise<CliResult<any>> => {
+          const { controller } = ctx;
+          const history = await controller.getHostHistory(deviceName);
+
+          return createSuccessResult('host.history', {
+            device: deviceName,
+            entries: history.entries,
+            count: history.count,
+            raw: history.raw,
+            methods: history.methods
+          });
+        }
+      });
+
+      if (result.ok && result.data && !flags.json) {
+        const device = chalk.bold.cyan(result.data.device);
+        console.log(`\n📜 HISTORIAL DE CONSOLA (${device}):`);
+        console.log(chalk.gray('━'.repeat(60)));
+        
+        result.data.entries.forEach((entry: any, i: number) => {
+          console.log(`${chalk.gray(i + 1 + '.')} ${chalk.yellow('>') } ${chalk.bold(entry.command)}`);
+          if (entry.output) {
+            console.log(chalk.white(entry.output));
+          }
+          console.log(chalk.gray('─'.repeat(40)));
+        });
+
+        if (result.data.count === 0) {
+          console.log(chalk.italic('El historial está vacío o no se pudo parsear.'));
+        }
+      } else if (!result.ok) {
+        console.error(`\n❌ Error: ${result.error?.message || 'Error desconocido'}`);
+        process.exit(1);
+      }
+
+      if (flags.json) {
+        console.log(JSON.stringify(result, null, 2));
+      }
+    });
+
+  return cmd;
+}
+
+/**
+ * Ejecuta un comando en un dispositivo detectando automáticamente si es IOS o Host.
+ */
+async function executeDeviceTerminalCommand(
+    controller: PTController,
+    deviceName: string,
+    command: string,
+    flags: any
+): Promise<CliResult<any>> {
+    const device = await controller.inspectDevice(deviceName).catch(() => null);
+    const deviceType = typeof device?.type === 'string' ? device.type : normalizeDeviceType(device?.type);
+    const isIOS = deviceType === 'router' || deviceType === 'switch' || deviceType === 'switch_layer3';
+
+    if (!flags.quiet && !flags.json) {
+        process.stdout.write(chalk.cyan(`\n⏳ Esperando respuesta de ${chalk.bold(deviceName)}... `));
+    }
+
+    if (isIOS) {
+        const timeoutMs = flags.timeout || 45000;
+        const execResult = await controller.execIos(deviceName, command, false, timeoutMs);
+
+        if (!flags.quiet && !flags.json) {
+            process.stdout.write(chalk.green('¡RECIBIDA!\n'));
+        }
+
+        return createSuccessResult('ios.exec', {
+            device: deviceName,
+            command: command,
+            output: execResult.raw || execResult.value?.output || "",
+            success: execResult.ok,
+            verdict: {
+                reason: execResult.ok ? undefined : 'Error en ejecución de comando IOS o timeout',
+                warnings: execResult.ok ? [] : ['Verifica si el dispositivo está ocupado o la salida es muy larga']
+            },
+            parsed: {
+                events: execResult.parsed?.events
+            }
+        });
+    }
+
+    const cmdName = command.split(' ')[0]!.toLowerCase();
+    let capabilityId = 'host.exec';
+    if (cmdName === 'ipconfig') capabilityId = 'host.ipconfig';
+    else if (cmdName === 'ping') capabilityId = 'host.ping';
+    else if (cmdName === 'tracert') capabilityId = 'host.tracert';
+    else if (cmdName === 'arp') capabilityId = 'host.arp';
+    else if (cmdName === 'nslookup') capabilityId = 'host.nslookup';
+    else if (cmdName === 'netstat') capabilityId = 'host.netstat';
+
+    if (flags.verbose) console.log(`[host.exec] Executing "${command}" on ${deviceName} with capability ${capabilityId}`);
+
+    const execResult = await controller.execHost(deviceName, command, capabilityId, {
+        timeoutMs: flags.timeout || 45000
+    });
+    
+    if (!flags.quiet && !flags.json) {
+        process.stdout.write(chalk.green('¡RECIBIDA!\n'));
+    }
+
+    return createSuccessResult('host.exec', {
+        device: deviceName,
+        command: command,
+        output: execResult.raw,
+        success: execResult.success,
+        verdict: execResult.verdict,
+        parsed: execResult.parsed
+    }, formatNextSteps(HOST_EXEC_META.nextSteps));
+}
+
+function createHostExecCommand(): Command {
+  const cmd = new Command('exec')
+    .alias('cmd')
+    .summary(HOST_EXEC_META.summary)
+    .description(HOST_EXEC_META.longDescription)
+    .argument('[device]', 'Nombre del dispositivo')
+    .argument('[command...]', 'Comando a ejecutar')
+    .action(async (deviceName, commandParts, _options, cmd) => {
+      const flags = cmd.optsWithGlobals();
+      const result = await runCommand<any>({
+        action: 'host.exec',
+        meta: HOST_EXEC_META,
+        flags,
+        payloadPreview: { device: deviceName, command: commandParts },
+        execute: async (ctx): Promise<CliResult<any>> => {
+          const { controller } = ctx;
+          let finalDevice = deviceName;
+          let finalCommand = Array.isArray(commandParts) ? commandParts.join(' ') : commandParts;
+
+          try {
+            if (!finalDevice) {
+              const devices = await fetchDeviceList(controller);
+              if (devices.length === 0) {
+                throw new Error('No se encontraron dispositivos en el laboratorio');
+              }
+              finalDevice = await select({
+                message: 'Selecciona el dispositivo:',
+                choices: devices.map(d => ({ name: formatDevice(d), value: d.name }))
+              });
+            }
+
+            if (!finalCommand) {
+              finalCommand = await input({
+                message: 'Introduce el comando a ejecutar (ej: ipconfig, nslookup, netstat, arp -a):',
+                validate: (val) => val.trim().length > 0 || 'El comando no puede estar vacío'
+              });
+            }
+
+            return executeDeviceTerminalCommand(controller, finalDevice, finalCommand, flags);
+          } catch(e: any) {
+              throw e;
+          }
+        }
+      });
+
+      if (result.ok && result.data && !flags.json) {
+        console.log(`\n📟 SALIDA DE CONSOLA (${result.data.device}):`);
+        console.log('━'.repeat(60));
+        if (result.data.output) {
+          console.log(result.data.output);
+        } else {
+          console.log(chalk.italic.gray('  (Salida vacía o filtrada por el sistema)'));
+          if (flags.verbose) {
+              console.log(chalk.yellow('\nDEBUG: Objeto execResult:'));
+              console.log(JSON.stringify(execResult, null, 2));
+          }
+        }
+        console.log('━'.repeat(60));
+        
+        if (result.data.success) {
+          const eventCount = result.data.parsed?.events?.length || 0;
+          console.log(`✅ Ejecución exitosa (${eventCount} eventos capturados)`);
+        } else {
+          const reason = result.data.verdict?.reason || 'Resultado no satisfactorio';
+          console.log(`❌ Fallo detectado: ${reason}`);
+          if (result.data.verdict?.warnings && result.data.verdict.warnings.length > 0) {
+            result.data.verdict.warnings.forEach((w: string) => console.log(`   ⚠️  ${w}`));
+          }
+        }
+      } else if (!result.ok) {
+        console.error(`\n❌ Error: ${result.error?.message || 'Error desconocido'}`);
+        process.exit(1);
+      }
+
+      if (flags.json) {
+        console.log(JSON.stringify(result, null, 2));
+      }
+    });
+
+  return cmd;
 }
 
 function createHostConfigCommand(): Command {
@@ -208,8 +473,6 @@ function createHostConfigCommand(): Command {
         },
         execute: async (ctx): Promise<CliResult<HostConfigResult>> => {
           const { controller } = ctx;
-
-          await controller.start();
 
           try {
             if (!deviceName && !options.interactive) {
@@ -329,8 +592,8 @@ function createHostConfigCommand(): Command {
                 `Ejecuta 'pt host inspect ${deviceName}' para verificar la configuración`,
               ],
             });
-          } finally {
-            await controller.stop();
+          } catch(e: any) {
+              throw e;
           }
         },
       });
@@ -421,8 +684,6 @@ function createHostInspectCommand(): Command {
         execute: async (ctx): Promise<CliResult<HostInspectResult>> => {
           const { controller } = ctx;
 
-          await controller.start();
-
           try {
             const device = await controller.inspectHost(deviceName);
 
@@ -445,8 +706,8 @@ function createHostInspectCommand(): Command {
             };
 
             return createSuccessResult('host.inspect', resultData);
-          } finally {
-            await controller.stop();
+          } catch(e: any) {
+              throw e;
           }
         }
       });

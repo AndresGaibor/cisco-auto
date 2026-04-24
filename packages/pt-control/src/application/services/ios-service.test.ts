@@ -1,5 +1,74 @@
 import { describe, expect, test } from "bun:test";
 import { IosService } from "./ios-service.js";
+import type { RuntimeTerminalPort } from "../../ports/runtime-terminal-port.js";
+
+function createTerminalPort(): RuntimeTerminalPort {
+  return {
+    runTerminalPlan: async (plan) => {
+      const command = (plan as any).steps?.find((step: any) => step.command)?.command ?? "";
+
+      if (command === "show ip interface brief") {
+        return {
+          ok: true,
+          output: "show ip interface brief\nInterface              IP-Address      OK? Method Status                Protocol \nGigabitEthernet0/0     unassigned      YES unset  administratively down down \nGigabitEthernet0/1     unassigned      YES unset  administratively down down \nRouter#",
+          status: 0,
+          promptBefore: "Router>",
+          promptAfter: "Router#",
+          modeBefore: "user-exec",
+          modeAfter: "privileged-exec",
+          events: [],
+          warnings: [],
+          confidence: 1,
+        } as any;
+      }
+
+      if (command === "show ip route") {
+        return {
+          ok: true,
+          output: "show ip route\nCodes: C - connected, S - static\nGateway of last resort is not set\n\nC    192.168.1.0/24 is directly connected, GigabitEthernet0/0\nRouter#",
+          status: 0,
+          promptBefore: "Router>",
+          promptAfter: "Router#",
+          modeBefore: "user-exec",
+          modeAfter: "privileged-exec",
+          events: [],
+          warnings: [],
+          confidence: 1,
+        } as any;
+      }
+
+      if (command === "show running-config") {
+        return {
+          ok: true,
+          output: "show running-config\nBuilding configuration...\n\nCurrent configuration : 693 bytes\n!\nversion 15.1\nhostname Router\n!\ninterface GigabitEthernet0/0\n ip address 192.168.1.1 255.255.255.0\n!\nRouter#",
+          status: 0,
+          promptBefore: "Router>",
+          promptAfter: "Router#",
+          modeBefore: "user-exec",
+          modeAfter: "privileged-exec",
+          events: [],
+          warnings: [],
+          confidence: 1,
+        } as any;
+      }
+
+      return {
+        ok: true,
+        output: "show version\nRouter#",
+        status: 0,
+        promptBefore: "Router>",
+        promptAfter: "Router#",
+        modeBefore: "user-exec",
+        modeAfter: "privileged-exec",
+        events: [],
+        warnings: [],
+        confidence: 1,
+      } as any;
+    },
+    ensureSession: async () => ({ ok: true, sessionId: "s1" }),
+    pollTerminalJob: async () => null,
+  } as RuntimeTerminalPort;
+}
 
 describe("IosService show", () => {
   test("devuelve salida estructurada para show ip interface brief", async () => {
@@ -17,7 +86,7 @@ describe("IosService show", () => {
     const service = new IosService(bridge as any, () => "test-id", async () => ({
       model: "2911",
       name: "R1",
-    } as any));
+    } as any), createTerminalPort());
 
     const result = await service.showIpInterfaceBrief("R1");
 
@@ -43,17 +112,17 @@ describe("IosService show", () => {
     const service = new IosService(bridge as any, () => "test-id", async () => ({
       model: "2911",
       name: "R1",
-    } as any));
+    } as any), createTerminalPort());
 
     const result = await service.execIos("R1", "show version");
 
     expect(result.ok).toBe(true);
-    expect(result.evidence.source).toBe("terminal");
-    expect(result.evidence.status).toBe(0);
-    expect(result.evidence.mode).toBe("privileged-exec");
-    expect(result.evidence.prompt).toBe("Router#");
-    expect(result.evidence.paging).toBe(false);
-    expect(result.evidence.awaitingConfirm).toBe(false);
+    expect(result.evidence!.source).toBe("terminal");
+    expect(result.evidence!.status).toBe(0);
+    expect(result.evidence!.mode).toBe("privileged-exec");
+    expect(result.evidence!.prompt).toBe("Router#");
+    expect(result.evidence!.paging).toBe(false);
+    expect(result.evidence!.awaitingConfirm).toBe(false);
   });
 
   test("devuelve rutas reales para show ip route", async () => {
@@ -71,7 +140,7 @@ describe("IosService show", () => {
     const service = new IosService(bridge as any, () => "test-id", async () => ({
       model: "2911",
       name: "R1",
-    } as any));
+    } as any), createTerminalPort());
 
     const result = await service.showIpRoute("R1");
 
@@ -95,7 +164,7 @@ describe("IosService show", () => {
     const service = new IosService(bridge as any, () => "test-id", async () => ({
       model: "2911",
       name: "R1",
-    } as any));
+    } as any), createTerminalPort());
 
     const result = await service.showRunningConfig("R1");
 
@@ -105,5 +174,48 @@ describe("IosService show", () => {
     expect(result.sections?.length).toBeGreaterThan(0);
     expect(result.interfaces?.["GigabitEthernet0/0"]).toContain("ip address");
     expect(result.lines?.length).toBeGreaterThan(0);
+  });
+
+  test("extrae running-config real cuando el XML usa tags en mayúsculas", async () => {
+    const emptyTerminalPort = {
+      runTerminalPlan: async () => ({
+        ok: true,
+        output: "",
+        status: 0,
+        promptBefore: "SW Core>",
+        promptAfter: "SW Core#",
+        modeBefore: "user-exec",
+        modeAfter: "privileged-exec",
+        events: [],
+        warnings: [],
+        confidence: 1,
+      }),
+      ensureSession: async () => ({ ok: true, sessionId: "s1" }),
+      pollTerminalJob: async () => null,
+    } as RuntimeTerminalPort;
+
+    const bridge = {
+      sendCommandAndWait: async (type: string) => ({
+        ok: true,
+        value: {
+          result: {
+            raw: "<DEVICE><RUNNINGCONFIG>hostname SW Core\ninterface Vlan10\n ip address 192.168.10.1 255.255.255.0</RUNNINGCONFIG></DEVICE>",
+          },
+          status: 0,
+          source: type,
+        },
+      }),
+    };
+
+    const service = new IosService(bridge as any, () => "test-id", async () => ({
+      model: "3650-24PS",
+      name: "SW Core",
+    } as any), emptyTerminalPort);
+
+    const result = await service.showRunningConfig("SW Core");
+
+    expect(result.raw).toContain("hostname SW Core");
+    expect(result.hostname).toBe("SW Core");
+    expect(result.interfaces?.["Vlan10"]).toContain("ip address 192.168.10.1");
   });
 });

@@ -114,6 +114,27 @@ const SWITCH_XML = `<device>
   </macEntry>
 </device>`;
 
+const SWITCH_TRUNK_XML = `<device>
+  <hostname>SW1</hostname>
+  <model>2960-24TT</model>
+  <typeId>1</typeId>
+  <power>on</power>
+  <port>
+    <name>GigabitEthernet1/0/1</name>
+    <type>eCopperGigabitEthernet</type>
+    <macAddress>0030.F300.0001</macAddress>
+    <PORT_VLAN>10</PORT_VLAN>
+    <trunkVlan>10,20,30</trunkVlan>
+  </port>
+  <port>
+    <name>GigabitEthernet1/0/2</name>
+    <type>eCopperGigabitEthernet</type>
+    <macAddress>0030.F300.0002</macAddress>
+    <PORT_VLAN>20</PORT_VLAN>
+    <nativeVlan>1</nativeVlan>
+  </port>
+</device>`;
+
 describe("device-xml-parser", () => {
   describe("parseDeviceXml", () => {
     it("parsea router con hostname, model, ports, modules y vlans", () => {
@@ -215,6 +236,20 @@ describe("device-xml-parser", () => {
       expect(result.hostname).toBe("");
       expect(result.ports).toEqual([]);
     });
+
+    it("parsea puertos trunk con PORT_VLAN, trunkVlan y nativeVlan", () => {
+      const result = parseDeviceXml(SWITCH_TRUNK_XML);
+
+      const trunkPort = result.ports.find((p) => p.name === "GigabitEthernet1/0/1");
+      expect(trunkPort).toBeDefined();
+      expect(trunkPort?.vlanId).toBe(10);
+      expect(trunkPort?.trunkVlan).toBe(10);
+
+      const nativePort = result.ports.find((p) => p.name === "GigabitEthernet1/0/2");
+      expect(nativePort).toBeDefined();
+      expect(nativePort?.vlanId).toBe(20);
+      expect(nativePort?.trunkVlan).toBe(1);
+    });
   });
 
   describe("extractRunningConfig", () => {
@@ -257,8 +292,14 @@ describe("device-xml-parser", () => {
       expect(extractHostname(ROUTER_XML)).toBe("R1");
     });
 
+    it("ignora nombres anidados dentro de puertos", () => {
+      const xml = `<device><hostname>R2</hostname><port><name>GigabitEthernet0/0</name></port></device>`;
+
+      expect(extractHostname(xml)).toBe("R2");
+    });
+
     it("devuelve string vacío si no hay hostname", () => {
-      expect(extractHostname("<device></device>")).toBe("");
+      expect(extractHostname("<device><port><name>GigabitEthernet0/0</name></port></device>")).toBe("");
     });
   });
 
@@ -308,6 +349,15 @@ describe("device-xml-parser", () => {
       expect(result).toContain("port::GigabitEthernet0/0::ip=192.168.1.1");
       expect(result).toContain("vlan::10::DATA::active");
       expect(result).toContain("route::C::192.168.1.0/255.255.255.0::via=none");
+    });
+
+    it("preserva todos los campos de parseDeviceXml", () => {
+      const result = siphonDevice("SW1", SWITCH_XML);
+
+      expect(result).toContain("model:::2960-24TT");
+      expect(result).toContain("vlan::1::default::active");
+      expect(result).toContain("vlan::10::DATA::active");
+      expect(result).toContain("mac::00AA.BBCC.DD11::vlan=1::type=dynamic");
     });
 
     it("funciona con device sin hostname", () => {

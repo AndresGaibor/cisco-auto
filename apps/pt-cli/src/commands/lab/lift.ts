@@ -340,7 +340,7 @@ function makeFlags(overrides: Partial<GlobalFlags> = {}): GlobalFlags {
 
 async function waitForDeviceNames(
   controller: {
-    listDevices: () => Promise<Array<{ name: string }>>;
+    listDevices: () => Promise<{ devices: Array<{ name: string }> }>;
   },
   expectedNames: string[],
   maxAttempts = 20,
@@ -416,10 +416,11 @@ async function waitForTopologyMaterialization(
   let latestDevices: Array<{ name: string }> = [];
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const { devices: latestDevices } = await controller.listDevices();
+    const listResult = await controller.listDevices();
+    latestDevices = listResult.devices;
     latestSnapshot = await controller.snapshot();
 
-    const names = new Set(latestDevices.map((device) => device.name));
+    const names = new Set(latestDevices.map((device: any) => device.name));
     const linkCount = Object.keys(latestSnapshot?.links ?? {}).length;
 
     if (expectedDeviceNames.every((name) => names.has(name)) && linkCount >= expectedLinkCount) {

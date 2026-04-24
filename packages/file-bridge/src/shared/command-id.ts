@@ -1,22 +1,23 @@
-// ============================================================================
-// CommandId Value Object - Unique Command Identifiers
-// ============================================================================
-
+/**
+ * Value Object para identificadores únicos de comandos.
+ *
+ * Usa UUID v4 para correlar comandos con resultados en el bridge.
+ * El formato UUID v4 garantiza unicidad global y aleatoriedad.
+ */
 import { randomUUID } from "node:crypto";
 
-/**
- * Pattern for valid command IDs:
- * - UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
- * - Used for correlating commands with results in FileBridgeV2
- */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
- * Represents a validated command ID (UUID v4)
+ * Comando ID validado como UUID v4.
  */
 export class CommandId {
   public readonly value: string;
 
+  /**
+   * @param value - String UUID v4 a validar
+   * @throws Error si no es UUID v4 válido
+   */
   constructor(value: string) {
     const trimmed = value.trim();
     if (!UUID_PATTERN.test(trimmed)) {
@@ -27,41 +28,39 @@ export class CommandId {
     this.value = trimmed.toLowerCase();
   }
 
-  /**
-   * Generate a new unique command ID (UUID v4)
-   */
+  /** Genera un nuevo CommandId único (UUID v4 random) */
   static generate(): CommandId {
     return new CommandId(randomUUID());
   }
 
+  /** Deserialize from JSON */
   static fromJSON(value: string): CommandId {
     return new CommandId(value);
   }
 
+  /** Serialize to JSON */
   toJSON(): string {
     return this.value;
   }
 
+  /** Valor raw del UUID */
   get raw(): string {
     return this.value;
   }
 
-  /**
-   * Get the short form (first 8 characters)
-   */
+  /** Forma corta (primeros 8 caracteres) */
   get short(): string {
     return this.value.substring(0, 8);
   }
 
-  /**
-   * Get the timestamp component (characters 14-18, indicates UUID v4)
-   */
+  /** Version del UUID (carácter 14, debe ser 4 para v4) */
   get version(): number {
     return parseInt(this.value.charAt(14), 10);
   }
 
   /**
-   * Get the variant (characters 19-20, indicates RFC 4122)
+   * Variant del UUID (caracteres 19-20, indica RFC 4122)
+   * @returns "RFC4122" si es variant válido, "unknown" si no
    */
   get variant(): string {
     const variantChar = this.value.charAt(19);
@@ -71,37 +70,27 @@ export class CommandId {
     return "unknown";
   }
 
-  /**
-   * Check if this is a valid UUID v4
-   */
+  /** @returns true si es UUID v4 válido */
   get isValid(): boolean {
     return UUID_PATTERN.test(this.value);
   }
 
-  /**
-   * Check if this ID is nil (all zeros)
-   */
+  /** @returns true si es el UUID nil (todos ceros) */
   get isNil(): boolean {
     return this.value === "00000000-0000-4000-8000-000000000000";
   }
 
-  /**
-   * Compare with another command ID
-   */
+  /** @param other - CommandId a comparar @returns true si son iguales */
   equals(other: CommandId): boolean {
     return this.value === other.value;
   }
 
-  /**
-   * Get a string representation
-   */
+  /** @returns String del UUID completo */
   toString(): string {
     return this.value;
   }
 
-  /**
-   * Get the result filename for this command ID
-   */
+  /** @returns Nombre de archivo de resultado para este ID */
   toResultFileName(): string {
     return `${this.value}.json`;
   }

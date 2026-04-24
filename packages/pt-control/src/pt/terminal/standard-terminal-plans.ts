@@ -229,6 +229,73 @@ export function createHostArpPlan(
   });
 }
 
+export function createHostNslookupPlan(
+  device: string,
+  target: string,
+  options?: { id?: string; timeout?: number },
+): TerminalPlan {
+  return createHostCommandPlan(device, `nslookup ${target}`, {
+    id: options?.id ?? `host-nslookup-${Date.now()}`,
+    timeout: options?.timeout ?? 15000,
+  });
+}
+
+export function createHostNetstatPlan(
+  device: string,
+  options?: { id?: string; timeout?: number },
+): TerminalPlan {
+  return createHostCommandPlan(device, "netstat", {
+    id: options?.id ?? `host-netstat-${Date.now()}`,
+    timeout: options?.timeout ?? 15000,
+  });
+}
+
+export function createHostHistoryPlan(
+  device: string,
+  options?: { id?: string; timeout?: number },
+): TerminalPlan {
+  // En PCs de PT el historial se ve a menudo solo subiendo (UP arrow) 
+  // pero "history" a veces funciona o se puede simular. 
+  // Aquí usamos el comando 'history' si existe o simplemente un comando genérico.
+  return createHostCommandPlan(device, "history", {
+    id: options?.id ?? `host-history-${Date.now()}`,
+    timeout: options?.timeout ?? 10000,
+  });
+}
+
+export function createHostTelnetPlan(
+  device: string,
+  target: string,
+  options?: { id?: string; timeout?: number },
+): TerminalPlan {
+  return createHostCommandPlan(device, `telnet ${target}`, {
+    id: options?.id ?? `host-telnet-${Date.now()}`,
+    timeout: options?.timeout ?? 15000,
+  });
+}
+
+export function createHostSshPlan(
+  device: string,
+  user: string,
+  target: string,
+  options?: { id?: string; timeout?: number },
+): TerminalPlan {
+  return createHostCommandPlan(device, `ssh -l ${user} ${target}`, {
+    id: options?.id ?? `host-ssh-${Date.now()}`,
+    timeout: options?.timeout ?? 15000,
+  });
+}
+
+export function createHostRoutePlan(
+  device: string,
+  options?: { id?: string; timeout?: number },
+): TerminalPlan {
+  return createHostCommandPlan(device, "route print", {
+    id: options?.id ?? `host-route-${Date.now()}`,
+    timeout: options?.timeout ?? 15000,
+  });
+}
+
 export function createIosShowIpRoutePlan(
   device: string,
   options?: { id?: string; timeout?: number },

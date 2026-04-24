@@ -8,7 +8,7 @@ import type { TerminalPlan } from "../../packages/pt-control/src/ports/runtime-t
 // Handlers registrados en runtime-handlers.ts
 const REGISTERED_HANDLERS = [
   "configHost", "configIos", "execIos", "__pollDeferred", "__ping",
-  "execPc", "execPcDirect", "ensureVlans", "configVlanInterfaces",
+  "execPc", "ensureVlans", "configVlanInterfaces",
   "configDhcpServer", "inspectDhcpServer", "inspectHost", "listDevices",
   "addDevice", "removeDevice", "renameDevice", "moveDevice",
   "setDeviceIp", "setDefaultGateway", "addLink", "removeLink",
@@ -19,7 +19,7 @@ const REGISTERED_HANDLERS = [
 ];
 
 // Handlers que son BYPASSES - NO usar
-const BYPASS_HANDLERS = ["__ping", "execPcDirect", "omni.evaluate.raw", "omni.physical.siphon"];
+const BYPASS_HANDLERS = ["__ping", "omni.evaluate.raw", "omni.physical.siphon"];
 
 describe("RuntimeTerminalAdapter - contrato canónico para host terminal", () => {
   describe("runTerminalPlan para PC (host terminal)", () => {
@@ -96,8 +96,8 @@ describe("RuntimeTerminalAdapter - contrato canónico para host terminal", () =>
         expect(callLog.includes(bypass as string)).toBe(false);
       }
       
-      // Y que se usó execIos (que SÍ está registrado)
-      expect(callLog).toContain("execIos");
+      // Y que se usó execPc (que SÍ está registrado para hosts)
+      expect(callLog).toContain("execPc");
     });
 
     it("debe funcionar para PC Command Prompt (C:\\>)", async () => {

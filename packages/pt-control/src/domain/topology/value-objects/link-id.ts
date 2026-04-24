@@ -12,13 +12,22 @@ import type { PortId } from './port-id.js';
 const LINK_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*:[a-zA-Z0-9/._-]+--[a-zA-Z][a-zA-Z0-9_-]*:[a-zA-Z0-9/._-]+$/;
 
 /**
- * Represents a validated link identifier for topology state
- * 
- * Link IDs are canonical - they are sorted alphabetically to ensure
- * the same ID regardless of link direction (A->B === B->A).
- * 
- * Format: device1:port1--device2:port2
- * Example: R1:GigabitEthernet0/0--SW1:GigabitEthernet0/1
+ * Valor obstructor que representa un identificador de enlace validado para topología.
+ *
+ * Los Link IDs son canónicos: se ordenan alfabéticamente para asegurar el mismo ID
+ * sin importar la dirección del enlace (A->B === B->A).
+ *
+ * Formato: device1:port1--device2:port2
+ *
+ * @example
+ * ```typescript
+ * const linkId = LinkId.from("R1", "GigabitEthernet0/0", "SW1", "GigabitEthernet0/1");
+ * console.log(linkId.toString()); // "R1:GigabitEthernet0/0--SW1:GigabitEthernet0/1"
+ *
+ * // Obtener el otro dispositivo desde uno已知
+ * const other = linkId.getOtherDevice("R1");
+ * console.log(other); // "SW1"
+ * ```
  */
 export class LinkId {
   public readonly value: string;

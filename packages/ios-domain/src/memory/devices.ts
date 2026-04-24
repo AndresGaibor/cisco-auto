@@ -3,6 +3,9 @@
 
 import { Database } from 'bun:sqlite';
 
+/**
+ * Row representation de la tabla devices en SQLite.
+ */
 export interface DeviceRow {
   id: string;
   hostname: string;
@@ -14,7 +17,8 @@ export interface DeviceRow {
 }
 
 /**
- * Clase para manejar la memoria de dispositivos
+ * Clase para manejar la memoria de dispositivos de red.
+ * Proporciona operaciones CRUD con SQLite embebido.
  */
 export class DeviceMemory {
   private db: Database;
@@ -24,7 +28,13 @@ export class DeviceMemory {
   }
 
   /**
-   * Registra o actualiza un dispositivo en la base de datos
+   * Registra o actualiza un dispositivo en la base de datos.
+   * Usa INSERT OR REPLACE para hacer upsert atómico.
+   * @param id - Identificador único del dispositivo
+   * @param hostname - Nombre de host del dispositivo
+   * @param ipAddress - Dirección IP (opcional)
+   * @param deviceType - Tipo de dispositivo (opcional)
+   * @param osVersion - Versión de IOS/OS (opcional)
    */
   registerDevice(
     id: string,
@@ -49,14 +59,19 @@ export class DeviceMemory {
   }
 
   /**
-   * Obtiene un dispositivo por su ID
+   * Obtiene un dispositivo por su ID.
+   * @param id - Identificador del dispositivo
+   * @returns DeviceRow o null si no existe
    */
   getDevice(id: string): DeviceRow | null {
     return this.db.query('SELECT * FROM devices WHERE id = ?').get(id) as DeviceRow | null;
   }
 
   /**
-   * Obtiene los dispositivos más recientemente conectados
+   * Obtiene los dispositivos más recientemente conectados.
+   * Ordena por last_connected DESC para ver cuáles están activos.
+   * @param limit - Límite de resultados (default: 10)
+   * @returns Array de DeviceRow ordenados por última conexión
    */
   getRecentDevices(limit: number = 10): DeviceRow[] {
     return this.db.query(`
@@ -67,7 +82,9 @@ export class DeviceMemory {
   }
 
   /**
-   * Actualiza el timestamp de última conexión de un dispositivo
+   * Actualiza el timestamp de última conexión de un dispositivo.
+   * Se llama cada vez que el dispositivo responde comandos exitosamente.
+   * @param id - Identificador del dispositivo
    */
   updateLastConnected(id: string): void {
     const now = Math.floor(Date.now() / 1000);
@@ -78,14 +95,18 @@ export class DeviceMemory {
   }
 
   /**
-   * Elimina un dispositivo de la base de datos
+   * Elimina un dispositivo de la base de datos.
+   * No elimina comandos relacionados en command_history (ON DELETE CASCADE en schema).
+   * @param id - Identificador del dispositivo
    */
   deleteDevice(id: string): void {
     this.db.run('DELETE FROM devices WHERE id = ?', [id]);
   }
 
   /**
-   * Obtiene todos los dispositivos
+   * Obtiene todos los dispositivos registrados.
+   * Ordena por hostname ASC para listado alfabético.
+   * @returns Array de todos los DeviceRow
    */
   getAllDevices(): DeviceRow[] {
     return this.db.query('SELECT * FROM devices ORDER BY hostname').all() as DeviceRow[];

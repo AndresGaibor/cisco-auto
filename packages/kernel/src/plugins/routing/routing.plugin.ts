@@ -4,6 +4,14 @@ import { routingConfigSchema, type RoutingConfigInput } from './routing.schema.j
 import { toValidationResult } from '../shared/validation.utils.js';
 export { generateRoutingCommands, ROUTING_VERIFY_COMMANDS } from './routing.generator.js';
 
+/**
+ * Valida la configuración de routing.
+ * Verifica que al menos un protocolo esté configurado (static, OSPF, EIGRP o BGP)
+ * y que no haya vecinos BGP duplicados.
+ * 
+ * @param spec - Configuración sin parsear
+ * @returns Resultado de validación con errores si hay
+ */
 export function validateRoutingConfig(spec: unknown): PluginValidationResult {
   const parsed = routingConfigSchema.safeParse(spec);
 

@@ -153,6 +153,64 @@ export async function handleHostArp(
   );
 }
 
+export async function handleHostNslookup(
+  deviceId: string,
+  target: string,
+  port: RuntimeTerminalPort,
+): Promise<HandleExecuteCommandResult> {
+  return port.runTerminalPlan(
+    createHostNslookupPlan(deviceId, target, { id: `host-nslookup-${Date.now()}` }),
+  );
+}
+
+export async function handleHostNetstat(
+  deviceId: string,
+  port: RuntimeTerminalPort,
+): Promise<HandleExecuteCommandResult> {
+  return port.runTerminalPlan(
+    createHostNetstatPlan(deviceId, { id: `host-netstat-${Date.now()}` }),
+  );
+}
+
+export async function handleHostHistory(
+  deviceId: string,
+  port: RuntimeTerminalPort,
+): Promise<HandleExecuteCommandResult> {
+  return port.runTerminalPlan(
+    createHostHistoryPlan(deviceId, { id: `host-history-${Date.now()}` }),
+  );
+}
+
+export async function handleHostTelnet(
+  deviceId: string,
+  target: string,
+  port: RuntimeTerminalPort,
+): Promise<HandleExecuteCommandResult> {
+  return port.runTerminalPlan(
+    createHostTelnetPlan(deviceId, target, { id: `host-telnet-${Date.now()}` }),
+  );
+}
+
+export async function handleHostSsh(
+  deviceId: string,
+  user: string,
+  target: string,
+  port: RuntimeTerminalPort,
+): Promise<HandleExecuteCommandResult> {
+  return port.runTerminalPlan(
+    createHostSshPlan(deviceId, user, target, { id: `host-ssh-${Date.now()}` }),
+  );
+}
+
+export async function handleHostRoute(
+  deviceId: string,
+  port: RuntimeTerminalPort,
+): Promise<HandleExecuteCommandResult> {
+  return port.runTerminalPlan(
+    createHostRoutePlan(deviceId, { id: `host-route-${Date.now()}` }),
+  );
+}
+
 export async function handleHostCommand(
   deviceId: string,
   command: string,

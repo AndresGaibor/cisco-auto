@@ -136,7 +136,7 @@ export function createControlComposition(
 
   // Infraestructura
   const topologyCache = new TopologyCache(bridge);
-  const omniscience = new OmniscienceService(omniAdapter);
+  const omniscience = new OmniscienceService(omniAdapter, terminalAdapter);
 
   const generateId = () => `ctrl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 

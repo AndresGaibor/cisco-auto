@@ -6,8 +6,12 @@
  * NO llama al bridge directamente.
  */
 
-import type { PTController } from "@cisco-auto/pt-control";
-import type { DeviceListResult as ControllerDeviceListResult } from "@cisco-auto/pt-control";
+import type { 
+  PTController, 
+  DeviceListResult as ControllerDeviceListResult,
+  ConnectionInfo,
+  UnresolvedLink
+} from "@cisco-auto/pt-control";
 import { createDefaultPTController } from "./controller-provider.js";
 
 const DEBUG = process.env.PT_DEBUG === "1";
@@ -16,13 +20,7 @@ const log = (...args: unknown[]) => {
   if (DEBUG) console.log("[device-list]", ...args);
 };
 
-export interface ConnectionInfo {
-  localPort: string | null;
-  remoteDevice: string | null;
-  remotePort: string | null;
-  confidence: "exact" | "merged" | "registry" | "ambiguous" | "unknown";
-  evidence?: { localCandidates?: string[]; remoteCandidates?: string[] };
-}
+export type { ConnectionInfo };
 
 export interface PortConnection {
   remoteDevice: string;
@@ -45,6 +43,40 @@ export interface ListedPort {
   mode?: "unknown" | "trunk" | "access" | "dynamic";
   link?: string;
   connection?: PortConnection;
+  portVlan?: number;
+  trunkVlan?: string;
+  nativeVlan?: number;
+}
+
+export interface XmlVlanInfo {
+  id: number;
+  name: string;
+  state: string;
+}
+
+export interface XmlModuleInfo {
+  name: string;
+  ports: number;
+}
+
+export interface XmlWirelessInfo {
+  ssid?: string;
+  mode?: string;
+}
+
+export interface XmlParsedSummary {
+  hostname?: string;
+  version?: string;
+  uptime?: string;
+  serialNumber?: string;
+  configRegister?: string;
+  vlans: XmlVlanInfo[];
+  modules: XmlModuleInfo[];
+  wireless?: XmlWirelessInfo;
+  arpCount?: number;
+  macCount?: number;
+  routingCount?: number;
+  [key: string]: unknown;
 }
 
 export interface TopologyDeviceLike {
@@ -75,16 +107,25 @@ export interface ListedDevice {
   ip?: string;
   mask?: string;
   mac?: string;
+  xmlParsed?: XmlParsedSummary;
 }
 
-export interface UnresolvedLink {
-  port1Name: string;
-  port2Name: string;
-  candidates1: string[];
-  candidates2: string[];
-  confidence: ConnectionInfo["confidence"];
-  evidence: string[];
+export interface TopologyDeviceLike {
+  name: string;
+  model: string;
+  type: string;
+  power: boolean;
+  ports?: Array<unknown>;
+  displayName?: string;
+  x?: number;
+  y?: number;
+  hostname?: string;
+  ip?: string;
+  mask?: string;
+  mac?: string;
 }
+
+export type { UnresolvedLink };
 
 export interface DeviceListResult {
   devices: ListedDevice[];
@@ -232,7 +273,8 @@ function mapControllerResult(result: ControllerDeviceListResult): DeviceListResu
   const connectionsByDevice: Record<string, ConnectionInfo[]> = {};
   const unresolvedLinks: UnresolvedLink[] = [];
 
-  for (const [deviceName, connections] of Object.entries(result.connectionsByDevice)) {
+  const rawConnections = result.connectionsByDevice || {};
+  for (const [deviceName, connections] of Object.entries(rawConnections)) {
     const certainConns: ConnectionInfo[] = [];
 
     for (const conn of connections) {
@@ -258,6 +300,8 @@ function mapControllerResult(result: ControllerDeviceListResult): DeviceListResu
   const devices: ListedDevice[] = result.devices.map((device) => {
     const ports: ListedPort[] = (device.ports ?? []).map((port) => ({
       ...port,
+      status: (port as any).status,
+      protocol: (port as any).protocol,
       macAddress: (port as ListedPort).macAddress ?? (port as ListedPort).mac,
       mac: (port as ListedPort).mac ?? (port as ListedPort).macAddress,
       connection: undefined as PortConnection | undefined,
@@ -277,10 +321,12 @@ function mapControllerResult(result: ControllerDeviceListResult): DeviceListResu
       }
     }
 
+    const xmlp = (device as Record<string, unknown>).xmlParsed as unknown as XmlParsedSummary | undefined;
     return {
       ...device,
       mac: (device as TopologyDeviceLike).mac,
       ports,
+      xmlParsed: xmlp,
     };
   });
 
@@ -378,7 +424,109 @@ export async function loadLiveDeviceList(
   } catch (err) {
     if (err instanceof Error && err.message.includes("no respondió a tiempo")) {
       throw new Error(
-        "Packet Tracer no respondió. Verifica que esté abierto y el runtime generado esté cargado.",
+        "Packet Tracer no respondió. Verifica que PT esté abierto y el runtime cargado.",
+      );
+    }
+    throw err;
+  } finally {
+    try {
+      await controller.stop();
+    } catch {
+      // Ignorar fallos de cierre: ya tenemos el resultado o el error principal.
+    }
+  }
+}
+
+function extractXmlSummary(xmlParsed: Record<string, unknown> | null | undefined): XmlParsedSummary | undefined {
+  if (!xmlParsed) return undefined;
+
+  const vlans = Array.isArray(xmlParsed.vlans)
+    ? xmlParsed.vlans.map((v: Record<string, unknown>) => ({
+        id: Number(v.id) || 0,
+        name: String(v.name ?? ""),
+        state: String(v.state ?? ""),
+      }))
+    : [];
+
+  const modules = Array.isArray(xmlParsed.modules)
+    ? xmlParsed.modules.map((m: Record<string, unknown>) => ({
+        name: String(m.name ?? ""),
+        ports: Number(m.portCount) || Number(m.ports) || 0,
+      }))
+    : [];
+
+  const wireless = xmlParsed.wireless as Record<string, unknown> | undefined;
+  const wirelessInfo: XmlWirelessInfo | undefined = wireless
+    ? {
+        ssid: wireless.ssid as string | undefined,
+        mode: wireless.mode as string | undefined,
+      }
+    : undefined;
+
+  return {
+    hostname: xmlParsed.hostname as string | undefined,
+    version: xmlParsed.version as string | undefined,
+    uptime: xmlParsed.uptime as string | undefined,
+    serialNumber: xmlParsed.serialNumber as string | undefined,
+    configRegister: xmlParsed.configRegister as string | undefined,
+    vlans,
+    modules,
+    wireless: wirelessInfo,
+    arpCount: Array.isArray(xmlParsed.arpTable) ? xmlParsed.arpTable.length : undefined,
+    macCount: Array.isArray(xmlParsed.macTable) ? xmlParsed.macTable.length : undefined,
+    routingCount: Array.isArray(xmlParsed.routingTable) ? xmlParsed.routingTable.length : undefined,
+  };
+}
+
+export async function loadLiveDeviceListXml(
+  type?: string,
+  options?: { refreshCache?: boolean },
+): Promise<DeviceListResult> {
+  let controller: PTController;
+  try {
+    controller = createDefaultPTController();
+  } catch (err) {
+    throw new Error(
+      "No se pudo crear el controller PT. Asegurate de que Packet Tracer esté abierto: " +
+        String(err),
+    );
+  }
+
+  try {
+    await controller.start();
+
+    const baseResult = await loadLiveDeviceListFromController(controller, type, 15000, options);
+
+    const enrichedDevices: ListedDevice[] = [];
+    for (const device of baseResult.devices) {
+      try {
+        const inspected = await controller.inspectDevice(device.name, true);
+        const inspectedAny = inspected as unknown as Record<string, unknown>;
+        const xmlRaw = inspectedAny.xmlParsed as Record<string, unknown> | undefined;
+        const xmlSummary = extractXmlSummary(xmlRaw);
+        const enriched: ListedDevice = { ...device } as ListedDevice;
+        if (xmlSummary) {
+          enriched.xmlParsed = xmlSummary;
+        }
+        enrichedDevices.push(enriched);
+      } catch {
+        enrichedDevices.push(device);
+      }
+    }
+
+    return {
+      ...baseResult,
+      devices: enrichedDevices as ListedDevice[],
+    };
+
+    return {
+      ...baseResult,
+      devices: enrichedDevices,
+    };
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("no respondió a tiempo")) {
+      throw new Error(
+        "Packet Tracer no respondió. Verifica que PT esté abierto y el runtime cargado.",
       );
     }
     throw err;

@@ -32,8 +32,40 @@ function collectNeighborMap(links: Array<{ device1: string; port1: string; devic
 }
 
 export async function inspectNeighbors(controller: PTController, device: string): Promise<NeighborInspectionResult> {
-  const topology = await inspectTopologySnapshot(controller);
-  return collectNeighborMap(topology.links, device);
+  try {
+      // Usar el snapshot global que es el método más robusto y validado
+      const snapshot = await controller.snapshot();
+      const links = Object.values(snapshot.links);
+      
+      const liveNeighbors = new Map<string, Set<string>>();
+      
+      for (const link of links) {
+          const dev1 = link.device1;
+          const port1 = link.port1;
+          const dev2 = link.device2;
+          const port2 = link.port2;
+
+          if (dev1 === device) {
+              if (!liveNeighbors.has(dev2)) liveNeighbors.set(dev2, new Set());
+              liveNeighbors.get(dev2)!.add(port1 + " ↔ " + port2);
+          } else if (dev2 === device) {
+              if (!liveNeighbors.has(dev1)) liveNeighbors.set(dev1, new Set());
+              liveNeighbors.get(dev1)!.add(port2 + " ↔ " + port1);
+          }
+      }
+
+      return {
+          device,
+          neighbors: Array.from(liveNeighbors.entries()).map(([name, ports]) => ({
+              name,
+              ports: Array.from(ports),
+          })),
+      };
+  } catch (e) {
+      // Fallback final: intentar lo que diga el snapshot local
+      const topology = await inspectTopologySnapshot(controller);
+      return collectNeighborMap(topology.links, device);
+  }
 }
 
 export async function runInspectNeighbors(options: { device: string; json?: boolean; deprecationLabel?: string }): Promise<void> {

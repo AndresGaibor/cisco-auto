@@ -24,6 +24,10 @@ export const PortStateSchema = z.object({
   link: z.string().optional(), // Connected device:port
 });
 
+/**
+ * Estado de un puerto de red en Packet Tracer
+ * Usar para representar el estado actual de una interfaz
+ */
 export type PortState = z.infer<typeof PortStateSchema>;
 
 // ============================================================================
@@ -43,8 +47,15 @@ export const DeviceTypeSchema = z.enum([
   'generic',
 ]);
 
+/**
+ * Tipo de dispositivo en Packet Tracer
+ */
 export type DeviceType = z.infer<typeof DeviceTypeSchema>;
 
+/**
+ * Estado completo de un dispositivo en la topología
+ * Usar para snapshots de topología
+ */
 export const DeviceStateSchema = z.object({
   name: z.string(),
   displayName: z.string().optional(),
@@ -71,8 +82,15 @@ export const DeviceStateSchema = z.object({
   // Wireless
   ssid: z.string().optional(),
   wirelessMode: z.string().optional(),
+
+  // XML enrichment (from parseDeviceXml)
+  xml: z.string().optional(),
+  xmlParsed: z.record(z.string(), z.any()).optional(),
 });
 
+/**
+ * Estado de un dispositivo en la topología
+ */
 export type DeviceState = z.infer<typeof DeviceStateSchema>;
 
 // ============================================================================
@@ -99,8 +117,12 @@ export const CableTypeSchema = z.enum([
 
 export type CableType = z.infer<typeof CableTypeSchema>;
 
+/**
+ * Estado de un enlace entre dos dispositivos
+ * Usar para representar conexiones en la topología
+ */
 export const LinkStateSchema = z.object({
-  id: z.string(), // device1:port1-device2:port2
+  id: z.string(),
   device1: z.string(),
   port1: z.string(),
   device2: z.string(),
@@ -108,6 +130,9 @@ export const LinkStateSchema = z.object({
   cableType: CableTypeSchema,
 });
 
+/**
+ * Estado de un enlace entre dos dispositivos
+ */
 export type LinkState = z.infer<typeof LinkStateSchema>;
 
 // ============================================================================
@@ -126,6 +151,10 @@ export const TopologySnapshotSchema = z.object({
   }).optional(),
 });
 
+/**
+ * Snapshot completo de la topología en un momento dado
+ * Usar para capturar el estado de la red
+ */
 export type TopologySnapshot = z.infer<typeof TopologySnapshotSchema>;
 
 // ============================================================================
@@ -138,6 +167,10 @@ export const DeviceDeltaSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('update'), name: z.string(), changes: z.record(z.string(), z.unknown()) }),
 ]);
 
+/**
+ * Cambio en un dispositivo (add, remove, update)
+ * Usar para calcular diferencias entre snapshots
+ */
 export type DeviceDelta = z.infer<typeof DeviceDeltaSchema>;
 
 export const LinkDeltaSchema = z.discriminatedUnion('op', [
@@ -145,6 +178,9 @@ export const LinkDeltaSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('remove'), id: z.string() }),
 ]);
 
+/**
+ * Cambio en un enlace (add, remove)
+ */
 export type LinkDelta = z.infer<typeof LinkDeltaSchema>;
 
 export const TopologyDeltaSchema = z.object({
@@ -154,6 +190,10 @@ export const TopologyDeltaSchema = z.object({
   links: z.array(LinkDeltaSchema).default([]),
 });
 
+/**
+ * Diferencia entre dos snapshots de topología
+ * Usar para tracking de cambios en la red
+ */
 export type TopologyDelta = z.infer<typeof TopologyDeltaSchema>;
 
 // ============================================================================

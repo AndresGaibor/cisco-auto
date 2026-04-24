@@ -54,6 +54,15 @@ function buildTerminalPlan(device: string, commands: string[]): TerminalPlan {
   };
 }
 
+/**
+ * Construye un plan de workflow para crear una VLAN simple en un switch.
+ *
+ * Genera steps de terminal para: crear la VLAN con ID y nombre, y opcionalmente
+ * asignar puertos en modo access a esa VLAN.
+ *
+ * @param input - Datos de la VLAN: deviceId, vlanId (1-4094), vlanName, ports opcionales
+ * @returns Plan de workflow listo para ejecutar via TerminalPort
+ */
 export async function buildVlanSimplePlan(input: VlanSimpleInput): Promise<VlanSimplePlan> {
   const steps: WorkflowStep[] = [];
 

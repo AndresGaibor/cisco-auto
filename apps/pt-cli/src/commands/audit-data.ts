@@ -136,7 +136,7 @@ export function listAuditEntries(filters: AuditEntryFilters = {}, dbPath?: strin
       params.push(filters.limit);
     }
 
-    return db.query(query).all(...params) as AuditEntryRow[];
+    return db.query(query).all(...(params as any[])) as AuditEntryRow[];
   } finally {
     db.close();
   }

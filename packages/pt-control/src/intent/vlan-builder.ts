@@ -10,16 +10,28 @@ export interface VLANConfig {
   shutdown?: boolean;
 }
 
+export interface SVIStandbyConfig {
+  group: number;
+  virtualIP: string;
+  priority?: number;
+  preempt?: boolean;
+  priorityPreempt?: boolean;
+  authentication?: string;
+  helloInterval?: number;
+  holdTime?: number;
+  trackInterface?: string;
+  trackDecrement?: number;
+  useBia?: boolean;
+  version?: 1 | 2;
+  secondary?: string;
+}
+
 export interface SVIConfig {
   vlanId: number;
   ipAddress: string;
   subnetMask: string;
   description?: string;
-  standby?: {
-    group: number;
-    priority: number;
-    virtualIP: string;
-  };
+  standby?: SVIStandbyConfig;
 }
 
 export class VlanBuilder {
@@ -53,10 +65,56 @@ export class VlanBuilder {
       commands.push(`description ${config.description}`);
     }
 
-    // HSRP/Standby configuration
     if (config.standby) {
-      commands.push(`standby ${config.standby.group} ip ${config.standby.virtualIP}`);
-      commands.push(`standby ${config.standby.group} priority ${config.standby.priority}`);
+      const sg = config.standby.group;
+      commands.push(`standby ${sg} ip ${config.standby.virtualIP}`);
+
+      if (config.standby.priority !== undefined) {
+        commands.push(`standby ${sg} priority ${config.standby.priority}`);
+      }
+
+      if (config.standby.preempt !== undefined) {
+        if (config.standby.preempt) {
+          commands.push(`standby ${sg} preempt`);
+        } else {
+          commands.push(`standby ${sg} no preempt`);
+        }
+      }
+
+      if (config.standby.priorityPreempt !== undefined) {
+        if (config.standby.priorityPreempt) {
+          commands.push(`standby ${sg} priority ${config.standby.priority} preempt`);
+        }
+      }
+
+      if (config.standby.authentication) {
+        commands.push(`standby ${sg} authentication ${config.standby.authentication}`);
+      }
+
+      if (config.standby.helloInterval !== undefined && config.standby.holdTime !== undefined) {
+        commands.push(`standby ${sg} timers ${config.standby.helloInterval} ${config.standby.holdTime}`);
+      }
+
+      if (config.standby.trackInterface) {
+        const decrement = config.standby.trackDecrement ?? 10;
+        if (config.standby.trackDecrement !== undefined) {
+          commands.push(`standby ${sg} track ${config.standby.trackInterface} ${decrement}`);
+        } else {
+          commands.push(`standby ${sg} track ${config.standby.trackInterface}`);
+        }
+      }
+
+      if (config.standby.useBia !== undefined) {
+        commands.push(`standby ${sg} use-bia`);
+      }
+
+      if (config.standby.version !== undefined) {
+        commands.push(`standby ${sg} version ${config.standby.version}`);
+      }
+
+      if (config.standby.secondary) {
+        commands.push(`standby ${sg} secondary ${config.standby.secondary}`);
+      }
     }
 
     commands.push('exit');
@@ -113,12 +171,24 @@ export class VlanBuilder {
     }
 
     if (config.standby) {
-      if (config.standby.priority < 1 || config.standby.priority > 255) {
+      if (config.standby.priority !== undefined && (config.standby.priority < 1 || config.standby.priority > 255)) {
         errors.push(`Invalid HSRP priority: ${config.standby.priority} (1-255)`);
       }
 
       if (!this.isValidIP(config.standby.virtualIP)) {
         errors.push(`Invalid virtual IP: ${config.standby.virtualIP}`);
+      }
+
+      if (config.standby.helloInterval !== undefined && (config.standby.helloInterval < 1 || config.standby.helloInterval > 255)) {
+        errors.push(`Invalid hello interval: ${config.standby.helloInterval} (1-255)`);
+      }
+
+      if (config.standby.holdTime !== undefined && (config.standby.holdTime < 1 || config.standby.holdTime > 255)) {
+        errors.push(`Invalid hold time: ${config.standby.holdTime} (1-255)`);
+      }
+
+      if (config.standby.trackDecrement !== undefined && (config.standby.trackDecrement < 1 || config.standby.trackDecrement > 255)) {
+        errors.push(`Invalid track decrement: ${config.standby.trackDecrement} (1-255)`);
       }
     }
 

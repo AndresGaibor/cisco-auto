@@ -8,19 +8,23 @@ import type { CommandPlan } from "./command-plan.js";
 import { CommandPlanBuilder } from "./command-plan.js";
 
 /**
- * Input for configuring a DHCP pool
+ * Input para configurar un pool DHCP en un router.
  */
 export interface ConfigureDhcpPoolInput {
-  poolName: string;          // e.g. "DHCP_POOL"
-  network: Ipv4Address;      // Network address
-  mask: SubnetMask;          // Subnet mask
-  defaultRouter: Ipv4Address;// Default gateway
-  dnsServer?: Ipv4Address;   // Optional DNS
-  lease?: { days: number; hours: number }; // Optional lease
+  poolName: string;
+  network: Ipv4Address;
+  mask: SubnetMask;
+  defaultRouter: Ipv4Address;
+  dnsServer?: Ipv4Address;
+  lease?: { days: number; hours: number };
 }
 
 /**
- * Plan the commands to configure a DHCP pool
+ * Planifica los comandos IOS para configurar un pool DHCP.
+ * Incluye network, default-router, dns-server opcional y lease.
+ * @param caps - CapabilitySet del dispositivo
+ * @param input - Configuración del pool DHCP
+ * @returns CommandPlan listo para ejecutar, o null si no soporta DHCP
  */
 export function planConfigureDhcpPool(
   caps: CapabilitySet,

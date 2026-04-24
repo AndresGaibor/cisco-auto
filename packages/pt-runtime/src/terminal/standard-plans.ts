@@ -131,3 +131,53 @@ export function createHostRoutePlan(deviceName: string) {
     policies: { ...defaultPolicies(), autoAdvancePager: true },
   });
 }
+
+export function createHostNslookupPlan(deviceName: string, target: string) {
+  return createTerminalPlan(deviceName, [
+    createCommandStep(`nslookup ${target}`),
+  ], {
+    targetMode: "host-prompt",
+    timeouts: defaultTimeouts(),
+    policies: { ...defaultPolicies(), autoAdvancePager: true },
+  });
+}
+
+export function createHostNetstatPlan(deviceName: string) {
+  return createTerminalPlan(deviceName, [
+    createCommandStep("netstat"),
+  ], {
+    targetMode: "host-prompt",
+    timeouts: defaultTimeouts(),
+    policies: { ...defaultPolicies(), autoAdvancePager: true },
+  });
+}
+
+export function createHostHistoryPlan(deviceName: string) {
+  return createTerminalPlan(deviceName, [
+    createCommandStep("history"),
+  ], {
+    targetMode: "host-prompt",
+    timeouts: defaultTimeouts(),
+    policies: { ...defaultPolicies(), autoAdvancePager: true },
+  });
+}
+
+export function createHostTelnetPlan(deviceName: string, target: string) {
+  return createTerminalPlan(deviceName, [
+    createCommandStep(`telnet ${target}`),
+  ], {
+    targetMode: "host-prompt",
+    timeouts: { commandTimeoutMs: 20000, stallTimeoutMs: 10000 },
+    policies: { ...defaultPolicies(), autoAdvancePager: true },
+  });
+}
+
+export function createHostSshPlan(deviceName: string, user: string, target: string) {
+  return createTerminalPlan(deviceName, [
+    createCommandStep(`ssh -l ${user} ${target}`),
+  ], {
+    targetMode: "host-prompt",
+    timeouts: { commandTimeoutMs: 20000, stallTimeoutMs: 10000 },
+    policies: { ...defaultPolicies(), autoAdvancePager: true },
+  });
+}

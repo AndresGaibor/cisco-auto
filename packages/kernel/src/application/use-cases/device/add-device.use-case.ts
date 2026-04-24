@@ -12,12 +12,20 @@ interface BackendPluginWithDeviceMethods extends BackendPlugin {
   addDevice(name: string, model: string, options?: { x?: number; y?: number }): Promise<unknown>;
 }
 
+/**
+ * Use Case para agregar un nuevo dispositivo al sistema.
+ * Valida el input, crea el dispositivo en el backend y persiste la información.
+ */
 export class AddDeviceUseCase implements UseCase<AddDeviceInput, UseCaseResult<AddDeviceOutput>> {
   constructor(
     private readonly repository: PersistencePort<DeviceEntity>,
     private readonly backend: BackendPluginWithDeviceMethods,
   ) {}
 
+  /**
+   * Ejecuta el use case de agregar dispositivo.
+   * Valida nombre y modelo, verifica que no exista, crea en backend y persiste.
+   */
   async execute(input: AddDeviceInput): Promise<UseCaseResult<AddDeviceOutput>> {
     const errors: string[] = [];
     const warnings: string[] = [];

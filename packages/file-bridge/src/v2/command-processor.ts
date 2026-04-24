@@ -1,7 +1,12 @@
 /**
- * Command Processor - Processes commands from PT (Fase 8)
- * Handles command dequeuing, expiration checks, deduplication, and result publishing
- * CRITICAL: Race condition safe - claim-by-rename atomically prevents double-processing
+ * Procesador de comandos para PT.
+ *
+ * Maneja dequeuing de comandos, verificación de expiración,
+ * deduplicación, y publicación de resultados.
+ *
+ * CRITICAL: Claim-by-rename previene race conditions y double-processing.
+ * El rename atómico de commands/ -> in-flight/ es la operación clave que
+ * garantiza que solo un PT procesa cada comando.
  */
 
 import { join, basename } from "node:path";
@@ -38,13 +43,30 @@ export interface BridgeResultEnvelopeWithMeta<T = unknown> extends BridgeResultE
   meta: BridgeResultMeta;
 }
 
+/**
+ * Procesa comandos desde la cola y publica resultados.
+ */
 export class CommandProcessor {
+  /**
+   * @param paths - Gestor de paths del bridge
+   * @param eventWriter - Escritor de eventos para logging
+   * @param seq - Generador de secuencias
+   */
   constructor(
     private readonly paths: BridgePathLayout,
     private readonly eventWriter: EventLogWriter,
     private readonly seq: { next: () => number },
   ) {}
 
+  /**
+   * Obtiene el siguiente comando de la cola (FIFO por seq).
+   *
+   * Hace claim atómico via rename de commands/ -> in-flight/.
+   * Verifica expiración y checksum antes de retornar.
+   * Comandos duplicados (con resultado existente) se purgan.
+   *
+   * @returns El envelope del comando o null si cola vacía
+   */
   pickNextCommand<T = unknown>(): BridgeCommandEnvelope<T> | null {
     const files = listJsonFiles(this.paths.commandsDir());
 
@@ -175,6 +197,17 @@ export class CommandProcessor {
     }
   }
 
+  /**
+   * Publica el resultado de un comando y limpia el archivo in-flight.
+   *
+   * Escribe el resultado en results/<id>.json de forma atómica.
+   * Agrega metadata de latencias (queue y exec).
+   * Emite evento de completed/failed.
+   * Finalmente limpia el archivo in-flight.
+   *
+   * @param cmd - Envelope original del comando
+   * @param result - Resultado a publicar
+   */
   publishResult<TResult = unknown>(
     cmd: BridgeCommandEnvelope,
     result: {
@@ -228,6 +261,12 @@ export class CommandProcessor {
     safeUnlink(inFlightPath);
   }
 
+  /**
+   * Mueve un archivo corrupto a dead-letter con metadata de error.
+   *
+   * @param filePath - Path del archivo a mover
+   * @param error - Error asociado al fallo
+   */
   private moveToDeadLetter(filePath: string, error: unknown): void {
     const deadLetterBase = `${Date.now()}-${basename(filePath)}`;
     const deadLetterPath = this.paths.deadLetterFile(deadLetterBase);
@@ -247,6 +286,66 @@ export class CommandProcessor {
       );
     } catch {
       // ignore
+    }
+  }
+
+  /**
+   * Agrega una entrada al índice auxiliar de cola.
+   *
+   * Este índice es best-effort y se usa para tracking rápido.
+   * La fuente primaria de verdad son los archivos físicos en commands/.
+   *
+   * @param filename - Nombre del archivo de comando a agregar
+   */
+  appendQueueIndex(filename: string): void {
+    const queueFilePath = join(this.paths.commandsDir(), "_queue.json");
+    let queue: string[] = [];
+
+    try {
+      const existing = readFileSync(queueFilePath, "utf8");
+      if (existing.trim()) {
+        const parsed = JSON.parse(existing);
+        if (Array.isArray(parsed)) {
+          queue = parsed
+            .map((entry) => String(entry).trim())
+            .filter((entry) => entry !== "" && entry !== "_queue.json" && entry.endsWith(".json"));
+        }
+      }
+    } catch {
+      queue = [];
+    }
+
+    if (!queue.includes(filename)) {
+      queue.push(filename);
+    }
+
+    queue.sort();
+    atomicWriteFile(queueFilePath, JSON.stringify(queue));
+  }
+
+  /**
+   * Remueve una entrada del índice auxiliar de cola.
+   *
+   * Este método es estático porque necesita acceder a un path arbitrario
+   * (útil para garbage collection u otras operaciones batch).
+   *
+   * @param root - Directorio raíz del bridge
+   * @param filename - Nombre del archivo de comando a remover
+   */
+  static removeQueueEntry(root: string, filename: string): void {
+    const queueFilePath = join(root, "commands", "_queue.json");
+
+    try {
+      const existing = readFileSync(queueFilePath, "utf8");
+      if (!existing.trim()) return;
+
+      const parsed = JSON.parse(existing);
+      if (!Array.isArray(parsed)) return;
+
+      const filtered = parsed.map((entry) => String(entry)).filter((entry) => entry !== filename);
+      atomicWriteFile(queueFilePath, JSON.stringify(filtered));
+    } catch {
+      // Índice best-effort.
     }
   }
 }

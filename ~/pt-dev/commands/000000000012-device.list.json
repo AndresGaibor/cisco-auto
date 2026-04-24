@@ -1,0 +1,13 @@
+{
+  "protocolVersion": 2,
+  "id": "cmd_000000000012",
+  "seq": 12,
+  "createdAt": 1776662627797,
+  "type": "device.list",
+  "payload": {
+    "type": "device.list"
+  },
+  "attempt": 1,
+  "expiresAt": 1776662747795,
+  "checksum": "sha256:493821bb06620abcc684f2afe6b5ed95e0de6757ec61a42afe292248dc8c2603"
+}

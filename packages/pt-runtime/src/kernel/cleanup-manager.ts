@@ -79,10 +79,10 @@ export function createCleanupManager(state: RuntimeState): CleanupManager {
       }
 
       this.advance("disconnect-listeners");
-      state.listeners.clear();
+      state.listeners = {};
 
       this.advance("close-watchers");
-      state.watchers.clear();
+      state.watchers = {};
 
       this.advance("release-terminals");
       state.terminalSubsystemReady = false;

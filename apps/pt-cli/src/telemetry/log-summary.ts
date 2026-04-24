@@ -2,7 +2,7 @@
 /**
  * Resumen de eventos para logs --live TUI.
  * Produce una línea corta por evento con todo lo necesario para decidir
- * si expandirlso o no, y сохраняет el contenido completo para la vista expandida.
+ * si expandirlso o no, y guarda el contenido completo para la vista expandida.
  */
 
 import type { SessionLogEvent } from "./session-log-store.js";

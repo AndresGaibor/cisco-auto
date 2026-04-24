@@ -140,6 +140,10 @@ const HANDLER_TYPE_OVERRIDES: Record<string, string> = {
   "canvas.getRect": "getRect",
   "vlan.ensure": "ensureVlans",
   "vlan.configInterfaces": "configVlanInterfaces",
+  "host.configure": "configHost",
+  "omni.evaluate.raw": "__evaluate",
+  "omni.physical.siphon": "omni.physical.siphon",
+  "omni.logical.siphonConfigs": "omni.logical.siphonConfigs",
 };
 
 function primitiveIdToHandlerType(primitiveId: string): string {
@@ -206,6 +210,31 @@ function mapBridgeResultToPrimitiveResult(
   };
 }
 
+/**
+ * Adapter para ejecutar primitivas - operaciones de bajo nivel en Packet Tracer.
+ *
+ * Las primitivas son operaciones fundamentales como addDevice, removeDevice, addLink, etc.
+ * Cada primitiva tiene metadata que describe su dominio, descripción y campos requeridos.
+ *
+ * Este adapter:
+ * - Valida que el payload contenga los campos requeridos por la primitiva
+ * - Traduce el ID de primitiva al tipo de handler del bridge
+ * - Mapea resultados del bridge al formato estándar de PrimitivePortResult
+ *
+ * @example
+ * ```typescript
+ * const adapter = new RuntimePrimitiveAdapter(bridge);
+ *
+ * // Añadir dispositivo
+ * const result = await adapter.runPrimitive("device.add", {
+ *   model: "2911",
+ *   name: "R1",
+ *   x: 100,
+ *   y: 200
+ * });
+ * console.log(result.ok); // true
+ * ```
+ */
 export class RuntimePrimitiveAdapter implements RuntimePrimitivePort {
   constructor(private readonly bridge: FileBridgePort) {}
 

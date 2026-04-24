@@ -1,7 +1,11 @@
 import type { ShowIpInterfaceBrief } from "@cisco-auto/types";
 
 /**
- * Parse "show ip interface brief" output
+ * Parser para output de "show ip interface brief".
+ * Extrae tabla de interfaces con IP, status y protocolo.
+ * El output tiene formato: Interface IP-Address OK? Method Status Protocol
+ * @param output - Output crudo del comando
+ * @returns ShowIpInterfaceBrief con array de interfaces parseadas
  */
 export function parseShowIpInterfaceBrief(output: string): ShowIpInterfaceBrief {
   const lines = output.split("\n");

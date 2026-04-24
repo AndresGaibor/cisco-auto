@@ -46,7 +46,7 @@ import { createAuditFailedCommand } from "./audit-failed";
 import { createAuditQueryCommand } from "./audit-query";
 import { createBridgeCommand } from "./bridge";
 import { createDhcpServerCommand } from "./dhcp-server";
-import { createHostCommand } from "./host";
+import { createHostCommand, createCmdShortcutCommand, createHistoryShortcutCommand } from "./host";
 import { createInspectCommand } from "./inspect/index";
 import { createPingCommand } from "./ping";
 import { createShowMacCommand } from "./show-mac";
@@ -54,6 +54,11 @@ import { createCheckCommand } from "./check";
 import { createLayoutCommand } from "./layout/index";
 import { createVerifyCommand } from "./verify/index";
 import { createAgentCommand } from "./agent/index";
+import { createDeployCommand } from "./deploy";
+import { createInitCommand } from "./init";
+import { createParseCommand } from "./parse";
+import { createTemplateCommand } from "./template";
+import { createValidateCommand } from "./validate";
 
 // Módulos avanzados
 import { createLintCommand } from "./lint";
@@ -61,6 +66,7 @@ import { createCapabilityCommand } from "./capability";
 import { createPlannerCommand } from "./planner";
 import { createLedgerCommand } from "./ledger";
 import { createDiagnoseCommand } from "./diagnose";
+import { createWlcCommand } from "./wlc";
 import { createOmniscienceCommand } from "./omniscience/index";
 import { createLinkCommand } from "./link/index";
 import { createConfigCommand } from "./config/index";
@@ -72,6 +78,8 @@ import { createInspectPortCommand } from "./inspect/port";
 export type CommandFactory = () => Command;
 
 export const COMMAND_FACTORIES: CommandFactory[] = [
+  createCmdShortcutCommand,
+  createHistoryShortcutCommand,
   createOmniscienceCommand,
   createLinkCommand,
   createConfigCommand,
@@ -82,6 +90,11 @@ export const COMMAND_FACTORIES: CommandFactory[] = [
   createLayoutCommand,
   createVerifyCommand,
   createAgentCommand,
+  createDeployCommand,
+  createInitCommand,
+  createParseCommand,
+  createTemplateCommand,
+  createValidateCommand,
   createDeviceCommand,
   createShowCommand,
   createShowRunCommand,
@@ -138,6 +151,7 @@ export const COMMAND_FACTORIES: CommandFactory[] = [
   createPlannerCommand,
   createLedgerCommand,
   createDiagnoseCommand,
+  createWlcCommand,
 ];
 
 export function getRegisteredCommandIds(): string[] {

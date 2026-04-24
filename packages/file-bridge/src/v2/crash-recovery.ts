@@ -1,7 +1,15 @@
 /**
- * Crash Recovery - Recovers inconsistent state from crashes (Fase 8)
- * Handles re-queuing, deduplication, and dead-letter management
- * CRITICAL: Must not execute recovery without valid lease
+ * Recovery de estado inconsistente por crashes.
+ *
+ * Re-queúa, deduplica, y maneja dead letters cuando el bridge
+ * se reinicia tras un crash.
+ *
+ * CRITICAL: No debe ejecutarse sin lease válido.
+ *
+ * Flujo de recovery:
+ * 1. Commands queued: verifica que no existan resultados (dedup)
+ * 2. Commands in-flight: si hay resultado, limpia; si no, re-queue o falla
+ * 3. Archivos con formato inválido van a dead-letter
  */
 
 import { join, basename } from "node:path";
@@ -19,9 +27,19 @@ import {
 } from "../shared/fs-atomic.js";
 import { LeaseManager } from "./lease-manager.js";
 
+/**
+ * Recupera estado inconsistente tras un crash del bridge.
+ */
 export class CrashRecovery {
   private readonly maxAttempts: number;
 
+  /**
+   * @param paths - Gestor de paths
+   * @param seq - Store de secuencias
+   * @param eventWriter - Escritor de eventos
+   * @param leaseManager - Gestor de lease (opcional)
+   * @param maxAttempts - Máximo de reintentos para comandos in-flight (default: 3)
+   */
   constructor(
     private readonly paths: BridgePathLayout,
     private readonly seq: SequenceStore,
@@ -32,6 +50,10 @@ export class CrashRecovery {
     this.maxAttempts = maxAttempts;
   }
 
+  /**
+   * Ejecuta el recovery. Solo corre si hay lease válido.
+   * Procesa commands/ y in-flight/ para dejar el estado consistente.
+   */
   recover(): void {
     if (this.leaseManager && !this.leaseManager.hasValidLease()) {
       this.eventWriter.append({

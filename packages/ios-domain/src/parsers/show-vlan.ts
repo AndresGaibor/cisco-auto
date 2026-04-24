@@ -1,7 +1,11 @@
 import type { ShowVlan } from "@cisco-auto/types";
 
 /**
- * Parse "show vlan" output
+ * Parser para output de "show vlan brief" o "show vlan".
+ * Extrae VLANs con sus nombres, estados y puertos asignados.
+ * Handles continuación de líneas cuando hay muchos puertos.
+ * @param output - Output crudo del comando
+ * @returns ShowVlan con array de VLANs parseadas
  */
 export function parseShowVlan(output: string): ShowVlan {
   const lines = output.split("\n");

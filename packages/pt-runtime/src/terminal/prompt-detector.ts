@@ -5,16 +5,11 @@
 // Trabaja sobre output sanitizado (sin ANSI, sin \r).
 
 import type { TerminalMode, TerminalSessionKind } from "./session-state";
-
-const ANSI_RE = /\x1B\[[0-9;]*[A-Za-z]/g;
-
-function stripAnsi(input: string): string {
-  return String(input ?? "").replace(ANSI_RE, "");
-}
-
-function normalizeWhitespace(input: string): string {
-  return stripAnsi(input).replace(/\r/g, "").replace(/\t/g, " ").replace(/\s+/g, " ").trim();
-}
+import { 
+  stripAnsi, 
+  normalizeWhitespace, 
+  sanitizeCommandOutput as sanitizeOutput 
+} from "./command-sanitizer";
 
 function lastNonEmptyLine(input: string): string {
   const lines = stripAnsi(input)
@@ -65,22 +60,39 @@ export function promptMatches(pattern: string | RegExp, prompt: string): boolean
  */
 export function detectSessionKind(promptOrOutput: string): TerminalSessionKind {
   const text = normalizeWhitespace(promptOrOutput);
-
   if (!text) return "unknown";
 
+  const p = text.toLowerCase();
+
+  // Heurísticas de Host
   if (
-    /\b(pc|server|laptop|printer|tablet)\d*>$/i.test(text) ||
-    /\bpc>$/i.test(text) ||
-    /\bserver>$/i.test(text)
+    /[A-Z]:\\>$/i.test(text) || 
+    /\b(pc|server|laptop|client|tablet|host|station|terminal|workstation|node)[a-zA-Z0-9_-]*>/i.test(text) ||
+    p === "js>" || 
+    p === "python>>>"
   ) {
     return "host";
   }
 
+  // IOS: Termina en # (todos los modos privileged/config) o > (user-exec)
+  if (/#$/.test(text) || /\(config[^)]*\)#$/i.test(text)) {
+    return "ios";
+  }
+
+  // WLC / ASA / Wizards
   if (
-    /\b(router|switch)[^>#$()]*[>#]$/i.test(text) ||
-    /\(config[^)]*\)#$/i.test(text) ||
-    /initial configuration dialog/i.test(text)
+    p.indexOf("cisco controller") !== -1 || 
+    p.indexOf("ciscoasa") !== -1 || 
+    p.indexOf("initial configuration dialog") !== -1
   ) {
+    return "ios";
+  }
+
+  if (/>$/.test(text)) {
+    if (p.indexOf("router") !== -1 || p.indexOf("switch") !== -1) {
+      return "ios";
+    }
+    // Por defecto, si termina en > y no es host conocido, asumimos IOS user-exec
     return "ios";
   }
 
@@ -89,41 +101,19 @@ export function detectSessionKind(promptOrOutput: string): TerminalSessionKind {
 
 /**
  * Detecta el modo IOS desde un prompt normalizado.
- * Analiza sufijos del prompt para determinar modo: user-exec, privileged-exec,
- * config (y submodes como config-if, config-router, etc.), wizard, pager, boot.
- * 
- * @param prompt - Prompt normalizado del terminal
- * @returns TerminalMode detectado o "unknown"
- * 
- * @example
- * detectModeFromPrompt("Router#") // → "privileged-exec"
- * detectModeFromPrompt("Router(config-if)#") // → "config-if"
- * detectModeFromPrompt("Router>") // → "user-exec"
- * detectModeFromPrompt("PC>") // → "host-prompt"
  */
 export function detectModeFromPrompt(prompt: string): TerminalMode {
   const p = normalizePrompt(prompt);
 
   if (!p) return "unknown";
 
+  // WLC Prompt: (Cisco Controller) >
+  if (/\(Cisco Controller\)\s*>$/i.test(p)) {
+    return "user-exec";
+  }
+
   // Boot / ROMMON
   if (/rommon|boot>/i.test(p)) return "boot";
-
-  // Host prompts
-  if (/\b(pc|server|laptop|printer|tablet)\d*>$/i.test(p) || /\bpc>$/i.test(p) || /\bserver>$/i.test(p)) {
-    return "host-prompt";
-  }
-
-  // Wizard / confirmation-ish prompt that blocks terminal usage
-  if (
-    /would you like to enter the initial configuration dialog\?/i.test(p) ||
-    /\[yes\/no\]:?$/i.test(p)
-  ) {
-    return "wizard";
-  }
-
-  if (/\[confirm\]$/i.test(p)) return "confirm";
-  if (/--more--$/i.test(p)) return "pager";
 
   // Specific config submodes first
   if (/\(config-subif\)#$/i.test(p)) return "config-subif";
@@ -142,7 +132,36 @@ export function detectModeFromPrompt(prompt: string): TerminalMode {
   // Generic config / unknown config submodes collapse to global-config
   if (/\(config[^)]*\)#$/i.test(p)) return "global-config";
 
-  if (/>$/.test(p)) return "user-exec";
+  // Pager / Wizard / Confirm
+  if (/--more--/i.test(p) || /\bMore\b/i.test(p)) return "pager";
+  if (/\[confirm\]$/i.test(p)) return "confirm";
+  if (
+    /would you like to enter the initial configuration dialog\?/i.test(p) ||
+    /\[yes\/no\]:?$/i.test(p)
+  ) {
+    return "wizard";
+  }
+
+  // Host prompt
+  if (/>$/.test(p)) {
+    // Si detectamos que es un host (por nombre o heurística)
+    if (/\b(pc|server|laptop|printer|tablet|host|station|client)[a-zA-Z0-9_-]*>/i.test(p)) {
+      return "host-prompt";
+    }
+    
+    // El prompt de Windows C:\> NO es user-exec de IOS
+    if (/[A-Z]:\\>$/i.test(p)) {
+      return "host-prompt";
+    }
+
+    // Sub-shells comunes en PT
+    if (p === "js>" || p === "python>>>") {
+      return "host-prompt";
+    }
+
+    return "user-exec";
+  }
+
   if (/#$/.test(p)) return "privileged-exec";
 
   return "unknown";
@@ -160,10 +179,12 @@ export function detectWizardFromOutput(output: string): boolean {
   if (!text) return false;
 
   return (
-    text.includes("initial configuration dialog") ||
-    text.includes("would you like to enter the initial") ||
-    text.includes("press return to get started") ||
-    text.includes("continue with configuration dialog")
+    text.indexOf("initial configuration dialog") !== -1 ||
+    text.indexOf("would you like to enter the initial") !== -1 ||
+    text.indexOf("press return to get started") !== -1 ||
+    text.indexOf("continue with configuration dialog") !== -1 ||
+    text.indexOf("cisco wireless lan controller setup wizard") !== -1 ||
+    text.indexOf("welcome to the cisco wireless") !== -1
   );
 }
 
@@ -181,8 +202,12 @@ export function detectConfirmPrompt(output: string): boolean {
   return (
     /\[confirm\]$/i.test(line) ||
     /\[yes\/no\]:?$/i.test(line) ||
+    /\(y\/n\)\??:?\s*$/i.test(line) ||
     /destination filename \[[^\]]+\]\??$/i.test(line) ||
-    /overwrite\?? \[confirm\]$/i.test(line)
+    /overwrite\?? \[confirm\]$/i.test(line) ||
+    /erase.*\[confirm\]$/i.test(line) ||
+    /delete.*\[confirm\]$/i.test(line) ||
+    /reload\? \[confirm\]$/i.test(line)
   );
 }
 
@@ -232,13 +257,17 @@ export function detectHostBusy(output: string): boolean {
     text.includes("destination host unreachable") ||
     text.includes("tracing route") ||
     text.includes("trace complete") ||
-    text.includes("ping statistics")
+    text.includes("ping statistics") ||
+    text.includes("connected to") ||
+    text.includes("trying") ||
+    text.includes("escape character is") ||
+    text.includes("connection closed")
   );
 }
 
 export function detectDnsLookup(output: string): boolean {
-  const text = normalizeWhitespace(output).toLowerCase();
-  return text.includes("translating") && text.includes("domain");
+  const text = output.toLowerCase();
+  return text.indexOf("translating") !== -1 && (text.indexOf("domain server") !== -1 || text.indexOf("...") !== -1);
 }
 
 export function detectAuthPrompt(output: string): boolean {
@@ -246,9 +275,9 @@ export function detectAuthPrompt(output: string): boolean {
   if (!line) return false;
 
   return (
-    /^username:/i.test(line) ||
-    /^password:/i.test(line) ||
-    /^login:/i.test(line)
+    /username:/i.test(line) ||
+    /password:/i.test(line) ||
+    /login:/i.test(line)
   );
 }
 
@@ -300,4 +329,109 @@ export function needsEnable(currentMode: TerminalMode): boolean {
 
 export function needsConfigTerminal(currentMode: TerminalMode): boolean {
   return !isConfigMode(currentMode);
+}
+
+/**
+ * Lee el output actual del terminal intentando varios métodos de PT.
+ * Sanitiza caracteres de control BELL, ANSI, Backspace y no imprimibles.
+ */
+export function readTerminalOutput(terminal: any): string {
+  try {
+    const methods = [
+      "getAllOutput", "getBuffer", "getOutput", "getText", 
+      "readAll", "read", "getHistory", "history"
+    ];
+    let raw = "";
+
+    // 1. Probar métodos directos
+    for (let i = 0; i < methods.length; i++) {
+      const m = methods[i]!;
+      if (typeof terminal[m] === "function") {
+        try {
+          const out = terminal[m]();
+          if (out && typeof out === "string" && out.length > 0) {
+            raw = out;
+            break;
+          }
+        } catch(e) {}
+      }
+    }
+
+    // 2. Probar vía getConsole() si existe (común en switches)
+    if (!raw && typeof terminal.getConsole === "function") {
+        try {
+            const consoleObj = terminal.getConsole();
+            if (consoleObj) {
+                for (let i = 0; i < methods.length; i++) {
+                    const m = methods[i]!;
+                    if (typeof consoleObj[m] === "function") {
+                        try {
+                            const out = consoleObj[m]();
+                            if (out && typeof out === "string" && out.length > 0) {
+                                raw = out;
+                                break;
+                            }
+                        } catch(e) {}
+                    }
+                }
+            }
+        } catch(e) {}
+    }
+
+    if (!raw && typeof terminal.toString === "function") {
+        try {
+            const s = terminal.toString();
+            if (s && s.indexOf("Terminal") === -1 && s.indexOf("[object") === -1) raw = s;
+        } catch(e) {}
+    }
+
+    return sanitizeOutput(raw);
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Sanitiza una cadena de output de terminal para detección de prompt.
+ * Elimina \r y caracteres de control pero preserva \n.
+ */
+export function sanitizeOutput(output: string): string {
+    if (!output) return "";
+    return output
+      .replace(/\r/g, "")
+      .replace(/\u0007/g, "") // Bell
+      .replace(/\u001b\[[0-9;]*[a-zA-Z]/g, ""); // ANSI
+}
+/**
+ * Elimina el output base (baseline) de una cadena de output completa.
+ * Desactivado para IOS para evitar pérdida de datos en ráfagas de logs.
+ */
+export function stripBaselineOutput(output: string, baseline: string): string {
+  if (!output) return "";
+  if (!baseline) return output;
+
+  // No recortar NADA en IOS. Devolvemos todo el buffer para máxima visibilidad.
+  // Heurística: si no detectamos un prompt de Host, asumimos que es IOS/Red.
+  const isHost = /^[A-Z]:\\>/i.test(baseline) || /^[A-Z]:\\>/i.test(output);
+  if (!isHost) {
+      return output;
+  }
+
+  // Lógica de recorte solo para Host (PC)
+  if (output.substring(0, baseline.length) === baseline) {
+    return output.substring(baseline.length);
+  }
+
+  const lines = baseline.split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i]?.trim();
+    if (!line || line === "C:\\>") continue;
+
+    const idx = output.lastIndexOf(line);
+    if (idx !== -1) {
+      return output.substring(idx + line.length);
+    }
+  }
+
+  return output;
 }

@@ -84,7 +84,8 @@ async function ejecutarPipeline(archivo: string, _autoFix: boolean = false): Pro
     if (warnings.length > 0) {
       console.log(chalk.yellow(`\n   ⚠️  Warnings encontrados: ${warnings.length}`));
       warnings.forEach((warn, idx) => {
-        console.log(chalk.yellow(`      ${idx + 1}. ${warn.message || warn}`));
+        const msg = typeof warn === 'object' ? (warn as any).message : warn;
+        console.log(chalk.yellow(`      ${idx + 1}. ${msg}`));
       });
     }
 

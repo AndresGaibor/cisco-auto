@@ -26,12 +26,12 @@ describe('runtime-state', () => {
       expect(state.lastError).toBeNull();
     });
 
-    test('crea Maps vacios para watchers y listeners', () => {
+    test('crea objetos vacios para watchers y listeners', () => {
       const state = createRuntimeState('1.0.0', 'fp-abc123');
-      expect(state.watchers).toBeInstanceOf(Map);
-      expect(state.listeners).toBeInstanceOf(Map);
-      expect(state.watchers.size).toBe(0);
-      expect(state.listeners.size).toBe(0);
+      expect(typeof state.watchers).toBe('object');
+      expect(typeof state.listeners).toBe('object');
+      expect(Object.keys(state.watchers).length).toBe(0);
+      expect(Object.keys(state.listeners).length).toBe(0);
     });
 
     test('crea heartbeatState y snapshotState inicializados', () => {

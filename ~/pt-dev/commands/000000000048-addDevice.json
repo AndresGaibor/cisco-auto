@@ -1,0 +1,17 @@
+{
+  "protocolVersion": 2,
+  "id": "cmd_000000000048",
+  "seq": 48,
+  "createdAt": 1776665259374,
+  "type": "addDevice",
+  "payload": {
+    "type": "addDevice",
+    "name": "Switch1",
+    "model": "2960-24TT",
+    "x": 100,
+    "y": 100
+  },
+  "attempt": 1,
+  "expiresAt": 1776665319372,
+  "checksum": "sha256:78fca16a5de7e0aa9a90477d3435b46e63a5174518711100d2b04d04d5be626e"
+}

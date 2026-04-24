@@ -17,7 +17,8 @@ export { PortPlannerService } from "./port-planner-service.js";
 export { LinkFeasibilityService } from "./link-feasibility-service.js";
 export { OmniscienceService } from "./omniscience-service.js";
 export { ScenarioService } from "./scenario-service.js";
-export { LabService } from "./lab-service.js";
+export { WlcService } from "./wlc-service.js";
+export { LabService, LabScenarioRunner } from "./lab-service.js";
 export type { LabScenario, LabCheck, LabVerification, LabContext } from "./lab-service.js";
 export type {
   ParsedDeviceXml,

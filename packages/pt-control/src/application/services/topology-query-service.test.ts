@@ -8,10 +8,10 @@ function createBridge() {
     commands,
     isReady: () => true,
     readState: () => null,
-    sendCommandAndWait: async (type: string, payload: unknown) => {
+    runPrimitive: async (type: string, payload: unknown) => {
       commands.push({ type, payload });
 
-      if (type === "listDevices") {
+      if (type === "topology.list") {
         return {
           ok: true,
           value: {
@@ -45,18 +45,44 @@ function createCache() {
     ],
     getLinks: () => [],
     getSnapshot: () => ({ version: "1", timestamp: 1, devices: {}, links: {} }),
+    applySnapshot: () => {},
   } as any;
 }
 
 describe("TopologyQueryService", () => {
   test("listDevices consulta el bridge aunque exista caché materializada", async () => {
-    const bridge = createBridge();
-    const service = new TopologyQueryService(bridge, createCache(), () => "id-1");
+    const primitivePort = createBridge();
+    const service = new TopologyQueryService(createCache(), primitivePort, () => "id-1");
 
     const result = await service.listDevices();
 
-    expect(bridge.commands[0]?.type).toBe("listDevices");
+    expect(primitivePort.commands[0]?.type).toBe("topology.list");
     expect(result.devices[0]?.name).toBe("LIVE");
     expect(result.connectionsByDevice.LIVE?.[0]?.remoteDevice).toBe("SW1");
+  });
+
+  test("listDevices conserva el tipo multilayer-switch para PT tipo 16", async () => {
+    const primitivePort = createBridge();
+    const service = new TopologyQueryService(createCache(), primitivePort, () => "id-2");
+
+    primitivePort.runPrimitive = (async (type: string) => {
+      if (type === "topology.list") {
+        return {
+          ok: true,
+          value: {
+            devices: [{ name: "SW Core", model: "3650-24PS", type: 16, power: true, ports: [] }],
+            connectionsByDevice: {},
+            unresolvedLinks: [],
+            count: 1,
+          },
+        };
+      }
+
+      return { ok: true, value: null };
+    }) as any;
+
+    const result = await service.listDevices();
+
+    expect(result.devices[0]?.type).toBe("switch_layer3");
   });
 });

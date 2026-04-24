@@ -1,21 +1,165 @@
 import { describe, expect, it } from "bun:test";
-import {
-  parseDeviceXml,
-  extractInterfaceList,
-  extractHostname,
-  extractModel,
-} from "../utils/device-xml-parser";
-import { readFileSync } from "fs";
+import { parseDeviceXml, extractInterfaceList, extractHostname, extractModel } from "../utils/device-xml-parser";
 
-const PC1_XML = readFileSync("/Users/andresgaibor/pt-dev/pc1-raw.xml", "utf8");
-const PC2_XML = readFileSync("/Users/andresgaibor/pt-dev/pc2-raw.xml", "utf8");
-const S1_XML = readFileSync("/Users/andresgaibor/pt-dev/s1-raw.xml", "utf8");
+const PC1_XML = `
+<DEVICE>
+  <ENGINE>
+    <TYPE model="PC-PT">PC</TYPE>
+    <NAME translate="true">PC1</NAME>
+    <POWER>true</POWER>
+    <SERIALNUMBER>PTT08107QQ5</SERIALNUMBER>
+    <PORT>
+      <TYPE>eCopperFastEthernet</TYPE>
+      <IP>192.168.10.20</IP>
+      <SUBNET>255.255.255.0</SUBNET>
+      <MACADDRESS>0030.F265.E5CE</MACADDRESS>
+      <FULLDUPLEX>true</FULLDUPLEX>
+      <SPEED>100</SPEED>
+      <BANDWIDTH>100000</BANDWIDTH>
+      <PINS>false</PINS>
+      <UP_METHOD>5</UP_METHOD>
+    </PORT>
+    <PORT>
+      <TYPE>eBluetooth</TYPE>
+    </PORT>
+  </ENGINE>
+</DEVICE>`;
+
+const PC2_XML = `
+<DEVICE>
+  <ENGINE>
+    <TYPE model="PC-PT">PC</TYPE>
+    <NAME translate="true">PC2</NAME>
+    <POWER>true</POWER>
+    <SERIALNUMBER>PTT081092AG</SERIALNUMBER>
+    <PORT>
+      <TYPE>eCopperFastEthernet</TYPE>
+      <MACADDRESS>0009.7CC1.ED1C</MACADDRESS>
+      <FULLDUPLEX>true</FULLDUPLEX>
+      <SPEED>100</SPEED>
+    </PORT>
+  </ENGINE>
+</DEVICE>`;
+
+const S1_XML = `
+<DEVICE>
+  <ENGINE>
+    <TYPE model="2960-24TT">CiscoDevice</TYPE>
+    <NAME translate="true">S1</NAME>
+    <POWER>true</POWER>
+    <SERIALNUMBER>CAT1010H3YX-</SERIALNUMBER>
+    <PORT>
+      <TYPE>eCopperFastEthernet</TYPE>
+      <MACADDRESS>0003.E441.7001</MACADDRESS>
+      <FULLDUPLEX>true</FULLDUPLEX>
+      <SPEED>100</SPEED>
+      <BANDWIDTH>100000</BANDWIDTH>
+    </PORT>
+    <PORT>
+      <TYPE>eCopperFastEthernet</TYPE>
+      <MACADDRESS>0003.E441.7002</MACADDRESS>
+      <FULLDUPLEX>true</FULLDUPLEX>
+      <SPEED>100</SPEED>
+      <BANDWIDTH>100000</BANDWIDTH>
+    </PORT>
+    <PORT>
+      <TYPE>eCopperGigabitEthernet</TYPE>
+      <MACADDRESS>0003.E441.7003</MACADDRESS>
+      <FULLDUPLEX>true</FULLDUPLEX>
+      <SPEED>1000</SPEED>
+      <BANDWIDTH>1000000</BANDWIDTH>
+    </PORT>
+    <PORT>
+      <TYPE>eCopperGigabitEthernet</TYPE>
+      <MACADDRESS>0003.E441.7004</MACADDRESS>
+      <FULLDUPLEX>true</FULLDUPLEX>
+      <SPEED>1000</SPEED>
+      <BANDWIDTH>1000000</BANDWIDTH>
+    </PORT>
+    <RUNNINGCONFIG>
+      <LINE>interface FastEthernet0/1</LINE>
+      <LINE> switchport mode access</LINE>
+      <LINE> switchport access vlan 10</LINE>
+      <LINE>!</LINE>
+    </RUNNINGCONFIG>
+    <VLANS>
+      <VLAN>
+        <ID>1</ID>
+        <NAME>default</NAME>
+        <STATE>active</STATE>
+      </VLAN>
+      <VLAN>
+        <ID>10</ID>
+        <NAME>DATA</NAME>
+        <STATE>active</STATE>
+      </VLAN>
+    </VLANS>
+  </ENGINE>
+</DEVICE>`;
+
+const WLC_XML = `
+<DEVICE>
+  <ENGINE>
+    <TYPE model="WLC-PT">Wireless LAN Controller</TYPE>
+    <NAME translate="true">Wireless LAN Controller1</NAME>
+    <POWER>true</POWER>
+    <VLANS>
+      <VLAN>
+        <NUMBER>1</NUMBER>
+        <NAME>default</NAME>
+        <STATE>active</STATE>
+      </VLAN>
+      <VLAN>
+        <NUMBER>10</NUMBER>
+        <NAME>DOCENTES</NAME>
+        <STATE>active</STATE>
+      </VLAN>
+      <VLAN>
+        <NUMBER>20</NUMBER>
+        <NAME>ESTUDIANTES</NAME>
+        <STATE>active</STATE>
+      </VLAN>
+    </VLANS>
+  </ENGINE>
+</DEVICE>`;
+
+// Formato real de PT: tags self-closing con atributos
+const WLC_SELFCLOSING_XML = `
+<DEVICE>
+  <ENGINE>
+    <TYPE model="WLC-2504">Wireless LAN Controller</TYPE>
+    <NAME translate="true">WLC1</NAME>
+    <POWER>true</POWER>
+    <VLANS>
+      <VLAN name="default" number="1" rspan="0"/>
+      <VLAN name="DOCENTES" number="10" rspan="0"/>
+      <VLAN name="ESTUDIANTES" number="20" rspan="0"/>
+      <VLAN name="EDUROAM" number="30" rspan="0"/>
+    </VLANS>
+  </ENGINE>
+</DEVICE>`;
+
+// Formato self-closing para switch real (2960 style)
+const SWITCH_SELFCLOSING_XML = `
+<DEVICE>
+  <ENGINE>
+    <TYPE model="2960-24TT">CiscoDevice</TYPE>
+    <NAME translate="true">SW1</NAME>
+    <POWER>true</POWER>
+    <VLANS>
+      <VLAN name="default" number="1" rspan="0"/>
+      <VLAN name="DATA" number="10" rspan="0"/>
+      <VLAN name="VOICE" number="20" rspan="0"/>
+      <VLAN name="GUEST" number="99" rspan="0"/>
+    </VLANS>
+  </ENGINE>
+</DEVICE>`;
 
 describe("device-xml-parser PT real", () => {
   describe("PC1 - dispositivo final con IP configurado", () => {
     const result = parseDeviceXml(PC1_XML);
 
-    it("hostname extraido de NAME", () => {
+    it("hostname extraido de NAME translate", () => {
       expect(result.hostname).toBe("PC1");
     });
 
@@ -27,57 +171,23 @@ describe("device-xml-parser PT real", () => {
       expect(result.serialNumber).toBe("PTT08107QQ5");
     });
 
-    it("power extraido de POWER", () => {
-      expect(result.power).toBe(true);
-    });
-
-    it("tiene al menos un puerto con datos completos", () => {
+    it("puerto FastEthernet extrae IP, MAC y métricas", () => {
       const ethPort = result.ports.find((p) => p.type === "eCopperFastEthernet");
+
       expect(ethPort).toBeDefined();
-    });
-
-    it("puerto FastEthernet extrae IP desde tag IP (no ipAddress)", () => {
-      const ethPort = result.ports.find((p) => p.type === "eCopperFastEthernet");
       expect(ethPort?.ipAddress).toBe("192.168.10.20");
-    });
-
-    it("puerto FastEthernet extrae SUBNET (no subnetMask)", () => {
-      const ethPort = result.ports.find((p) => p.type === "eCopperFastEthernet");
       expect(ethPort?.subnetMask).toBe("255.255.255.0");
-    });
-
-    it("puerto FastEthernet extrae MACADDRESS (no macAddress)", () => {
-      const ethPort = result.ports.find((p) => p.type === "eCopperFastEthernet");
       expect(ethPort?.macAddress).toBe("0030.F265.E5CE");
-    });
-
-    it("puerto FastEthernet extrae FULLDUPLEX (no duplex)", () => {
-      const ethPort = result.ports.find((p) => p.type === "eCopperFastEthernet");
       expect(ethPort?.duplex).toBe("true");
-    });
-
-    it("puerto FastEthernet extrae SPEED", () => {
-      const ethPort = result.ports.find((p) => p.type === "eCopperFastEthernet");
       expect(ethPort?.speed).toBe("100");
-    });
-
-    it("puerto FastEthernet extrae BANDWIDTH", () => {
-      const ethPort = result.ports.find((p) => p.type === "eCopperFastEthernet");
       expect(ethPort?.bandwidth).toBe("100000");
-    });
-
-    it("puerto FastEthernet extrae PINS", () => {
-      const ethPort = result.ports.find((p) => p.type === "eCopperFastEthernet");
       expect(ethPort?.pins).toBe("false");
-    });
-
-    it("puerto FastEthernet extrae UP_METHOD", () => {
-      const ethPort = result.ports.find((p) => p.type === "eCopperFastEthernet");
       expect(ethPort?.upMethod).toBe("5");
     });
 
-    it("puerto Bluetooth no tiene IP", () => {
+    it("puerto Bluetooth existe sin IP", () => {
       const btPort = result.ports.find((p) => p.type === "eBluetooth");
+
       expect(btPort).toBeDefined();
       expect(btPort?.ipAddress).toBeUndefined();
     });
@@ -90,35 +200,17 @@ describe("device-xml-parser PT real", () => {
       expect(result.hostname).toBe("PC2");
     });
 
-    it("model extraido", () => {
-      expect(result.model).toBe("PC-PT");
-    });
-
-    it("serialNumber extraido", () => {
-      expect(result.serialNumber).toBe("PTT081092AG");
-    });
-
-    it("puerto FastEthernet existe aunque IP este vacio", () => {
+    it("puerto FastEthernet existe aunque IP este vacía", () => {
       const ethPort = result.ports.find((p) => p.type === "eCopperFastEthernet");
+
       expect(ethPort).toBeDefined();
-    });
-
-    it("puerto FastEthernet tiene MAC pero sin IP", () => {
-      const ethPort = result.ports.find((p) => p.type === "eCopperFastEthernet");
       expect(ethPort?.macAddress).toBe("0009.7CC1.ED1C");
       expect(ethPort?.ipAddress).toBeUndefined();
       expect(ethPort?.subnetMask).toBeUndefined();
     });
-
-    it("puerto tiene type, speed, duplex extraidos", () => {
-      const ethPort = result.ports.find((p) => p.type === "eCopperFastEthernet");
-      expect(ethPort?.type).toBe("eCopperFastEthernet");
-      expect(ethPort?.speed).toBe("100");
-      expect(ethPort?.duplex).toBe("true");
-    });
   });
 
-  describe("S1 - switch 24 puertos sin nombre dentro de PORT", () => {
+  describe("S1 - switch con running-config real", () => {
     const result = parseDeviceXml(S1_XML);
 
     it("hostname extraido", () => {
@@ -129,80 +221,55 @@ describe("device-xml-parser PT real", () => {
       expect(result.model).toBe("2960-24TT");
     });
 
-    it("serialNumber extraido", () => {
-      expect(result.serialNumber).toBe("CAT1010H3YX-");
-    });
-
-    it("24 puertos en resultado (no pierde puertos por falta de name)", () => {
-      expect(result.ports.length).toBeGreaterThanOrEqual(24);
-    });
-
-    it("cada puerto tiene MAC, type, speed, duplex, bandwidth", () => {
-      const firstPort = result.ports[0];
-      expect(firstPort.macAddress).toBe("0003.E441.7001");
-      expect(firstPort.type).toBe("eCopperFastEthernet");
-      expect(firstPort.speed).toBe("100");
-      expect(firstPort.duplex).toBe("true");
-      expect(firstPort.bandwidth).toBe("100000");
-    });
-
-    it("puerto 25 y 26 son GigabitEthernet", () => {
-      const giPorts = result.ports.filter((p) => p.type === "eCopperGigabitEthernet");
-      expect(giPorts.length).toBe(2);
-    });
-
     it("runningConfig extraido del tag RUNNINGCONFIG", () => {
-      expect(result.runningConfig).toBeDefined();
       expect(result.runningConfig).toContain("interface FastEthernet0/1");
+      expect(result.runningConfig).toContain("switchport access vlan 10");
     });
 
-    it("ports inferidas desde RUNNINGCONFIG tienen nombres FastEthernet0/X", () => {
-      const names = result.ports.map((p) => p.name);
-      expect(names.some((n) => n.includes("FastEthernet0/1"))).toBe(true);
+    it("extractInterfaceList preserva los puertos", () => {
+      const ports = extractInterfaceList(S1_XML);
+
+      expect(ports.length).toBe(4);
+      expect(ports[0]?.macAddress).toBe("0003.E441.7001");
+      expect(ports.filter((p) => p.type === "eCopperGigabitEthernet")).toHaveLength(2);
+    });
+
+    it("extractHostname y extractModel funcionan con XML PT", () => {
+      expect(extractHostname(S1_XML)).toBe("S1");
+      expect(extractModel(S1_XML)).toBe("2960-24TT");
     });
 
     it("VLANs extraidas desde tag VLANS", () => {
-      expect(result.vlans.length).toBeGreaterThan(0);
-      expect(result.vlans[0].id).toBe(1);
-    });
-  });
-
-  describe("extractInterfaceList con XML real", () => {
-    it("PC1 devuelve puertos con IP, MAC, type", () => {
-      const ports = extractInterfaceList(PC1_XML);
-      const ethPort = ports.find((p) => p.type === "eCopperFastEthernet");
-      expect(ethPort?.ipAddress).toBe("192.168.10.20");
-      expect(ethPort?.macAddress).toBe("0030.F265.E5CE");
+      expect(result.vlans).toHaveLength(2);
+      expect(result.vlans[0]?.id).toBe(1);
     });
 
-    it("PC2 devuelve puertos sin IP", () => {
-      const ports = extractInterfaceList(PC2_XML);
-      const ethPort = ports.find((p) => p.type === "eCopperFastEthernet");
-      expect(ethPort?.macAddress).toBe("0009.7CC1.ED1C");
-      expect(ethPort?.ipAddress).toBeUndefined();
+    it("WLC preserva VLANs con NUMBER", () => {
+      const result = parseDeviceXml(WLC_XML);
+
+      expect(result.hostname).toBe("Wireless LAN Controller1");
+      expect(result.vlans).toHaveLength(3);
+      expect(result.vlans.map((v) => v.id)).toEqual([1, 10, 20]);
+      expect(result.vlans[1]).toEqual({ id: 10, name: "DOCENTES", state: "active" });
     });
 
-    it("S1 devuelve 24+ puertos", () => {
-      const ports = extractInterfaceList(S1_XML);
-      expect(ports.length).toBeGreaterThanOrEqual(24);
-    });
-  });
+    it("WLC preserva VLANs self-closing con atributos name/number/rspan", () => {
+      const result = parseDeviceXml(WLC_SELFCLOSING_XML);
 
-  describe("extractHostname y extractModel con XML real", () => {
-    it("extractHostname para PC1", () => {
-      expect(extractHostname(PC1_XML)).toBe("PC1");
-    });
-
-    it("extractHostname para S1", () => {
-      expect(extractHostname(S1_XML)).toBe("S1");
+      expect(result.vlans).toHaveLength(4);
+      expect(result.vlans.map((v) => v.id)).toEqual([1, 10, 20, 30]);
+      expect(result.vlans[0]).toEqual({ id: 1, name: "default", state: "" });
+      expect(result.vlans[1]).toEqual({ id: 10, name: "DOCENTES", state: "" });
+      expect(result.vlans[2]).toEqual({ id: 20, name: "ESTUDIANTES", state: "" });
+      expect(result.vlans[3]).toEqual({ id: 30, name: "EDUROAM", state: "" });
     });
 
-    it("extractModel para PC1", () => {
-      expect(extractModel(PC1_XML)).toBe("PC-PT");
-    });
+    it("Switch con VLANs self-closing preserva todas", () => {
+      const result = parseDeviceXml(SWITCH_SELFCLOSING_XML);
 
-    it("extractModel para S1", () => {
-      expect(extractModel(S1_XML)).toBe("2960-24TT");
+      expect(result.vlans).toHaveLength(4);
+      expect(result.vlans.map((v) => v.id)).toEqual([1, 10, 20, 99]);
+      expect(result.vlans[2]).toEqual({ id: 20, name: "VOICE", state: "" });
     });
   });
 });

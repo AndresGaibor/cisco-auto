@@ -14,6 +14,17 @@ interface BackendPluginWithDeviceMethods extends BackendPlugin {
   configureDevice(name: string, commands: string[]): Promise<{ results?: Array<{ command: string; output: string; success: boolean }> }>;
 }
 
+/**
+ * Use case para aplicar configuración VLAN a un switch.
+ *
+ * Valida los IDs de VLAN, verifica que el switch exista, genera los
+ * comandos IOS correspondientes (vlan N, name, exit) y los ejecuta
+ * en el backend. Utiliza el plugin de VLAN para validación.
+ *
+ * @param repository - Puerto de persistencia para verificar existencia del switch
+ * @param backend - Plugin de backend que ejecuta los comandos en PT
+ * @param registry - Registro de plugins para obtener el plugin de VLAN
+ */
 export class ApplyVlanUseCase implements UseCase<ApplyVlanInput, UseCaseResult<ApplyVlanOutput>> {
   constructor(
     private readonly repository: PersistencePort<DeviceEntity>,

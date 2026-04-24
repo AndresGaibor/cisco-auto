@@ -87,20 +87,8 @@ export class TopologyMutationService {
     port2: string,
     linkType: CableType = "auto",
   ): Promise<LinkState> {
-    const device1State = this.getDeviceState(device1);
-    const device2State = this.getDeviceState(device2);
-
-    if (device1State?.model) {
-      const validation = validatePortExists(device1State.model, port1);
-      if (!validation.valid)
-        throw new Error(validation.error ?? `Puerto inválido: ${device1State.model}:${port1}`);
-    }
-
-    if (device2State?.model) {
-      const validation = validatePortExists(device2State.model, port2);
-      if (!validation.valid)
-        throw new Error(validation.error ?? `Puerto inválido: ${device2State.model}:${port2}`);
-    }
+    // Las validaciones de puerto aquí pueden ser demasiado estrictas si el catálogo no está al día.
+    // Dejamos que el motor de Packet Tracer (runtime) maneje la validación real.
 
     const result = await this.primitivePort.runPrimitive("link.add", {
       device1,

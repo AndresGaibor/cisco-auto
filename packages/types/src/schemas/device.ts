@@ -134,9 +134,32 @@ export const DeviceSchema = z.object({
   }).optional()
 });
 
-// Type exports
+/**
+ * Tipo de dispositivo de red (router, switch, pc, etc.)
+ * Usar para clasificar dispositivos en topologías
+ */
 export type DeviceType = z.infer<typeof DeviceTypeSchema>;
+
+/**
+ * Tipo de interfaz de red (ethernet, serial, loopback, etc.)
+ * Usar para especificar el tipo físico de una interfaz
+ */
 export type InterfaceType = z.infer<typeof InterfaceTypeSchema>;
+
+/**
+ * Configuración de una VLAN
+ * Usar para definir VLANs en switches
+ */
 export type VLAN = z.infer<typeof VLANSchema>;
+
+/**
+ * Configuración de una interfaz de red
+ * Usar para configurar interfaces en dispositivos IOS
+ */
 export type Interface = z.infer<typeof InterfaceSchema>;
+
+/**
+ * Configuración completa de un dispositivo de red
+ * Usar para definir dispositivos en topologías y labs
+ */
 export type Device = z.infer<typeof DeviceSchema>;

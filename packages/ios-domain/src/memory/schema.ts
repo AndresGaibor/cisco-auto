@@ -4,11 +4,12 @@
 import { Database } from 'bun:sqlite';
 
 /**
- * Inicializa el esquema de la base de datos
- * Crea todas las tablas necesarias con sus índices y constraints
+ * Inicializa el esquema de la base de datos.
+ * Crea todas las tablas necesarias con sus índices y constraints.
+ * Solo crea si no existen (IF NOT EXISTS).
+ * @param db - Instancia de Database de bun:sqlite
  */
 export function initializeSchema(db: Database): void {
-  // Tabla de dispositivos
   db.exec(`
     CREATE TABLE IF NOT EXISTS devices (
       id TEXT PRIMARY KEY,
@@ -22,14 +23,12 @@ export function initializeSchema(db: Database): void {
     );
   `);
 
-  // Índices para la tabla de dispositivos
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_devices_hostname ON devices(hostname);
     CREATE INDEX IF NOT EXISTS idx_devices_ip ON devices(ip_address);
     CREATE INDEX IF NOT EXISTS idx_devices_last_connected ON devices(last_connected);
   `);
 
-  // Tabla de historial de comandos
   db.exec(`
     CREATE TABLE IF NOT EXISTS command_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,7 +42,6 @@ export function initializeSchema(db: Database): void {
     );
   `);
 
-  // Índices para la tabla de historial de comandos
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_command_history_device_id ON command_history(device_id);
     CREATE INDEX IF NOT EXISTS idx_command_history_timestamp ON command_history(timestamp);
@@ -51,7 +49,6 @@ export function initializeSchema(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_command_history_session ON command_history(session_id);
   `);
 
-  // Tabla de auditoría de comandos y transacciones
   db.exec(`
     CREATE TABLE IF NOT EXISTS audit_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,7 +65,6 @@ export function initializeSchema(db: Database): void {
     );
   `);
 
-  // Índices para la tabla de auditoría
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_audit_log_session_id ON audit_log(session_id);
     CREATE INDEX IF NOT EXISTS idx_audit_log_device_id ON audit_log(device_id);
@@ -77,7 +73,6 @@ export function initializeSchema(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_audit_log_transaction_id ON audit_log(transaction_id);
   `);
 
-  // Tabla de topología de red
   db.exec(`
     CREATE TABLE IF NOT EXISTS topology (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,14 +88,12 @@ export function initializeSchema(db: Database): void {
     );
   `);
 
-  // Índices para la tabla de topología
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_topology_device_id ON topology(device_id);
     CREATE INDEX IF NOT EXISTS idx_topology_neighbor_id ON topology(neighbor_id);
     CREATE INDEX IF NOT EXISTS idx_topology_discovered_at ON topology(discovered_at);
   `);
 
-  // Tabla de preferencias
   db.exec(`
     CREATE TABLE IF NOT EXISTS preferences (
       key TEXT PRIMARY KEY,
@@ -109,7 +102,6 @@ export function initializeSchema(db: Database): void {
     );
   `);
 
-  // Tabla de sesiones
   db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
@@ -121,14 +113,12 @@ export function initializeSchema(db: Database): void {
     );
   `);
 
-  // Índices para la tabla de sesiones
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_sessions_device_id ON sessions(device_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_start_time ON sessions(start_time);
     CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
   `);
 
-  // Actualizar timestamps automáticamente con triggers
   db.exec(`
     CREATE TRIGGER IF NOT EXISTS update_devices_timestamp 
     AFTER UPDATE ON devices

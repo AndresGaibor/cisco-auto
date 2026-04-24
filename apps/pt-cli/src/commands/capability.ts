@@ -12,7 +12,7 @@ import type { CommandMeta } from '../contracts/command-meta.js';
 import type { GlobalFlags } from '../flags.js';
 
 import { runCommand } from '../application/run-command.js';
-import { createCapabilityMatrixService, getAllModels } from '@cisco-auto/pt-control';
+import { createCapabilityMatrixService, getAllModels, getModelInfo } from '@cisco-auto/pt-control';
 
 export const CAPABILITY_META: CommandMeta = {
   id: 'capability',
@@ -25,6 +25,7 @@ export const CAPABILITY_META: CommandMeta = {
   ],
   status: 'stable',
   requiresPT: false,
+  related: ['device', 'config-ios'],
 };
 
 export function createCapabilityCommand(): Command {
@@ -34,12 +35,17 @@ export function createCapabilityCommand(): Command {
       new Command('list')
         .description('Listar todos los modelos soportados')
         .action(async () => {
-          const models = getAllModels();
+          const modelIds = getAllModels();
           
           console.log('\n═══ Modelos Soportados ═══\n');
-          for (const model of models) {
-            console.log(`  ${chalk.cyan(model.id)} - ${model.name}`);
-            console.log(`     Tipo: ${model.type} | Interfaces: ${model.interfaceCount}`);
+          for (const id of modelIds) {
+            const info = getModelInfo(id);
+            if (info) {
+              console.log(`  ${chalk.cyan(info.model)} - ${info.vendor} ${info.series || ''}`);
+              console.log(`     Tipo: ${info.type}`);
+            } else {
+              console.log(`  ${chalk.cyan(id)}`);
+            }
             console.log('');
           }
         })
@@ -59,16 +65,16 @@ export function createCapabilityCommand(): Command {
               const caps = capService.getCapabilities(model);
               
               if (!caps) {
-                return createErrorResult('Modelo no encontrado');
+                return createErrorResult('capability.model', { message: 'Modelo no encontrado' });
               }
+
               
               return createSuccessResult('capability-model', {
                 model,
                 surfaces: caps.surfaces,
-                operations: Object.entries(caps.operations).map(([op, data]) => ({
+                operations: Object.entries(caps.operations).map(([op, data]: [string, any]) => ({
                   operation: op,
                   supported: data.supported,
-                  surface: data.surface,
                 })),
               });
             }
@@ -90,8 +96,8 @@ export function createCapabilityCommand(): Command {
           
           console.log(`\n═══ Operaciones para ${model} ═══\n`);
           for (const [op, data] of Object.entries(caps.operations)) {
-            const status = data.supported ? chalk.green('✓') : chalk.red('✗');
-            console.log(`  ${status} ${op} (${data.surface})`);
+            const status = (data as any).supported ? chalk.green('✓') : chalk.red('✗');
+            console.log(`  ${status} ${op}`);
           }
         })
     )

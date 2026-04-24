@@ -4,6 +4,14 @@ import { vlanSchema, type VlanConfigInput, sviSchema, type SviConfigInput } from
 import { toValidationResult } from '../shared/validation.utils.js';
 export { generateVlanCommands, VLAN_VERIFY_COMMANDS, verifyShowVlanBriefOutput, generateSviCommands, SVI_VERIFY_COMMANDS, verifyShowIpInterfaceBrief } from './vlan.generator.js';
 
+/**
+ * Valida la configuración de VLANs.
+ * Verifica que haya al menos una VLAN y que no haya IDs duplicados.
+ * También valida que los access ports referencien VLANs válidas.
+ * 
+ * @param spec - Configuración sin parsear
+ * @returns Resultado de validación con errores si hay
+ */
 export function validateVlanConfig(spec: unknown): PluginValidationResult {
   const parsed = vlanSchema.safeParse(spec);
 
@@ -63,6 +71,15 @@ export function validateVlanConfig(spec: unknown): PluginValidationResult {
   return toValidationResult([...duplicateErrors, ...accessPortErrors]);
 }
 
+/**
+ * Valida la configuración de SVIs (Switch Virtual Interfaces).
+ * Verifica que haya al menos un SVI y que los VLAN IDs referenciados
+ * existan en la configuración de VLANs si se proporciona.
+ * 
+ * @param spec - Configuración sin parsear
+ * @param vlanConfig - Configuración opcional de VLANs para validar referencias
+ * @returns Resultado de validación con errores si hay
+ */
 export function validateSviConfig(spec: unknown, vlanConfig?: VlanConfigInput): PluginValidationResult {
   const parsed = sviSchema.safeParse(spec);
 
@@ -111,6 +128,11 @@ export function validateSviConfig(spec: unknown, vlanConfig?: VlanConfigInput): 
   return toValidationResult(sviErrors);
 }
 
+/**
+ * Plugin de VLAN para IOS.
+ * Genera comandos de configuración para VLANs, trunks y puertos de acceso.
+ * También maneja la configuración de SVIs para routing entre VLANs.
+ */
 export const vlanPlugin: ProtocolPlugin = {
   id: 'vlan',
   category: 'switching',

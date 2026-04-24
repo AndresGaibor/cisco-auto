@@ -31,9 +31,6 @@ export interface XmlPort {
   autoNegotiateSpeed?: boolean;
   autoNegotiateDuplex?: boolean;
   upMethod?: string;
-  linkConnected?: boolean;
-  linkRemoteName?: string;
-  linkRemotePort?: string;
   clockRate?: string;
   channel?: string;
   vlanId?: number;
@@ -301,13 +298,21 @@ function parseModuleFromXml(modXml: string, modulePortNames: string[]): XmlModul
 function parseVlanFromXml(vlanXml: string): XmlVlan | null {
   const idEl =
     tagContent(vlanXml, "id") ||
+    tagContent(vlanXml, "number") ||
+    tagContent(vlanXml, "vlanId") ||
     tagAttr(vlanXml, "vlan", "id") ||
     tagAttr(vlanXml, "VLAN", "number");
   if (!idEl) return null;
   return {
     id: parseInt(idEl, 10),
-    name: tagContent(vlanXml, "name") || tagContent(vlanXml, "NAME"),
-    state: tagContent(vlanXml, "state") || tagContent(vlanXml, "STATE"),
+    name:
+      tagContent(vlanXml, "name") ||
+      tagContent(vlanXml, "NAME") ||
+      tagAttr(vlanXml, "VLAN", "name"),
+    state:
+      tagContent(vlanXml, "state") ||
+      tagContent(vlanXml, "STATE") ||
+      tagAttr(vlanXml, "VLAN", "state"),
   };
 }
 
@@ -390,12 +395,11 @@ export function parseDeviceXml(xml: string): ParsedDeviceXml {
   }
 
   let hostname =
-    tagContent(xml, "hostname") || tagContent(xml, "name") || tagContent(xml, "deviceName");
+    tagContent(xml, "hostname") || tagContent(xml, "deviceName");
   if (tagHasAttr(xml, "NAME", "translate")) {
     const translated = tagContentAfterAttr(xml, "NAME", "translate");
     if (translated) hostname = translated;
   }
-  if (!hostname) hostname = tagContent(xml, "NAME");
 
   const model =
     tagAttr(xml, "TYPE", "model") || tagContent(xml, "model") || tagContent(xml, "MODEL");
@@ -542,7 +546,7 @@ export function extractHostname(xml: string): string {
     const val = tagContentAfterAttr(xml, "NAME", "translate");
     if (val) return val;
   }
-  return tagContent(xml, "NAME") || tagContent(xml, "hostname") || tagContent(xml, "name") || "";
+  return tagContent(xml, "hostname") || tagContent(xml, "deviceName") || "";
 }
 
 export function extractModel(xml: string): string {
@@ -583,12 +587,20 @@ export function siphonDevice(name: string, xml: string): string {
   if (parsed.typeId !== undefined) parts.push(`typeId:::${parsed.typeId}`);
   if (parsed.power !== undefined) parts.push(`power:::${parsed.power}`);
   if (parsed.serialNumber) parts.push(`serial:::${parsed.serialNumber}`);
+  if (parsed.version) parts.push(`version:::${parsed.version}`);
+  if (parsed.uptime) parts.push(`uptime:::${parsed.uptime}`);
+  if (parsed.configRegister) parts.push(`configReg:::${parsed.configRegister}`);
   if (parsed.runningConfig) parts.push(`config:::${parsed.runningConfig.slice(0, 200)}...`);
+  if (parsed.rawXml) parts.push(`rawXml:::${parsed.rawXml.slice(0, 100)}...`);
 
   for (const port of parsed.ports) {
     parts.push(
       `port::${port.name}::ip=${port.ipAddress || "none"}::mask=${port.subnetMask || "none"}::mac=${port.macAddress || "none"}::type=${port.type || "none"}::duplex=${port.duplex || "none"}::speed=${port.speed || "none"}`,
     );
+  }
+
+  for (const mod of parsed.modules) {
+    parts.push(`module::${mod.slot}::model=${mod.model || "none"}::type=${mod.type || "none"}::ports=${mod.ports.join(",")}`);
   }
 
   for (const vlan of parsed.vlans) {
@@ -599,6 +611,14 @@ export function siphonDevice(name: string, xml: string): string {
     parts.push(
       `route::${route.type}::${route.network}/${route.mask || ""}::via=${route.nextHop || "none"}::intf=${route.interface || "none"}`,
     );
+  }
+
+  for (const arp of parsed.arpTable) {
+    parts.push(`arp::${arp.ipAddress}::mac=${arp.macAddress}::intf=${arp.interface}::type=${arp.type || "none"}`);
+  }
+
+  for (const mac of parsed.macTable) {
+    parts.push(`mac::${mac.macAddress}::vlan=${mac.vlan}::type=${mac.type}::ports=${mac.ports.join(",")}`);
   }
 
   return parts.join("|||");

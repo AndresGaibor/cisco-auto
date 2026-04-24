@@ -5,6 +5,7 @@ import { getRelatedCommands } from "../../help/related";
 import chalk from "chalk";
 import {
   loadLiveDeviceList,
+  loadLiveDeviceListXml,
   type ConnectionInfo,
   type PortConnection,
 } from "../../application/device-list.js";
@@ -23,6 +24,7 @@ export function createDeviceListCommand(): Command {
     .option("--refresh", "Forzar actualización del cache de puertos (TTL: 5 min)")
     .option("--verbose", "Mostrar todos los puertos y enlaces, sin límite")
     .option("--links", "Vista enfocada en conectividad (todos los peers)")
+    .option("--xml", "Enriquecer con datos del XML (VLANs, modules, ARP, MAC, versión)")
     .action(async (options, thisCmd) => {
       const deviceCmd = thisCmd.parent as Command | undefined;
       const rootCmd = deviceCmd?.parent as Command | undefined;
@@ -30,10 +32,15 @@ export function createDeviceListCommand(): Command {
       const useJson = globalFlags.json || (options.json ?? false);
       const verbose = options.verbose ?? false;
       const linksMode = options.links ?? false;
+      const useXml = options.xml ?? false;
 
       let result;
       try {
-        result = await loadLiveDeviceList(options.type, { refreshCache: options.refresh });
+        if (useXml) {
+          result = await loadLiveDeviceListXml(options.type, { refreshCache: options.refresh });
+        } else {
+          result = await loadLiveDeviceList(options.type, { refreshCache: options.refresh });
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes("no respondió") || msg.includes("no conectado")) {
@@ -57,7 +64,7 @@ export function createDeviceListCommand(): Command {
         return;
       }
 
-      log("rendering", { count: result.count, verbose, linksMode });
+      log("rendering", { count: result.count, verbose, linksMode, useXml });
 
       renderDeviceList({
         devices: result.devices,
@@ -68,6 +75,7 @@ export function createDeviceListCommand(): Command {
         useJson,
         verbose,
         linksMode,
+        useXml,
       });
     });
 
@@ -133,14 +141,13 @@ export function extractDeviceMac(ports: ListedPort[]): string | undefined {
 }
 
 export function getPortLinkLabel(port: ListedPort): string {
+  const isUp = port.status === "up" || port.protocol === "up";
+  const statusLabel = isUp ? "UP" : (port.status === "administratively down" ? "ADM-DOWN" : "DOWN");
+  
   if (port.connection?.remoteDevice && port.connection?.remotePort) {
-    return `${port.connection.remoteDevice}:${port.connection.remotePort}`;
+    const peer = `${port.connection.remoteDevice}:${port.connection.remotePort}`;
+    return `${statusLabel} (${peer})`;
   }
-
-  const isUp =
-    (typeof (port as { up?: boolean }).up === "boolean" && (port as { up?: boolean }).up) ||
-    port.status === "up" ||
-    port.protocol === "up";
 
   if (isUp) return "UP";
   if (port.status === "administratively down") return "ADMIN-DOWN";
@@ -161,6 +168,19 @@ interface RenderDevice {
   hostname?: string;
   ip?: string;
   mask?: string;
+  xmlParsed?: {
+    hostname?: string;
+    version?: string;
+    uptime?: string;
+    serialNumber?: string;
+    configRegister?: string;
+    vlans: Array<{ id: number; name: string; state: string }>;
+    modules: Array<{ name: string; ports: number }>;
+    wireless?: { ssid?: string; mode?: string };
+    arpCount?: number;
+    macCount?: number;
+    routingCount?: number;
+  };
 }
 
 interface RenderOptions {
@@ -178,6 +198,7 @@ interface RenderOptions {
   useJson: boolean;
   verbose: boolean;
   linksMode: boolean;
+  useXml?: boolean;
 }
 
 function renderDeviceList(options: RenderOptions): void {
@@ -310,6 +331,53 @@ function renderDeviceList(options: RenderOptions): void {
 
       if (ip && ip !== "0.0.0.0") {
         console.log(`   ${chalk.green("●")} ${ip}/${mask || "?"}`);
+      }
+
+      if (options.useXml && device.xmlParsed) {
+        const xp = device.xmlParsed;
+        if (xp.hostname || xp.version || xp.uptime || xp.serialNumber) {
+          if (xp.hostname) console.log(`   ${chalk.gray("XML Hostname")}: ${xp.hostname}`);
+          if (xp.version) console.log(`   ${chalk.gray("Version")}: ${xp.version}`);
+          if (xp.uptime) console.log(`   ${chalk.gray("Uptime")}: ${xp.uptime}`);
+          if (xp.serialNumber) console.log(`   ${chalk.gray("Serial")}: ${xp.serialNumber}`);
+          if (xp.configRegister) console.log(`   ${chalk.gray("Config Register")}: ${xp.configRegister}`);
+        }
+
+        if (xp.vlans && xp.vlans.length > 0) {
+          const activeVlans = xp.vlans.filter((v) => v.name || v.id !== 1);
+          if (activeVlans.length > 0) {
+            console.log(`   ${chalk.gray("VLANs")} (${activeVlans.length}):`);
+            activeVlans.slice(0, 10).forEach((v) => {
+              const name = v.name || "(sin nombre)";
+              const state = v.state ? ` [${v.state}]` : "";
+              console.log(`      ${chalk.yellow(String(v.id).padStart(4))} - ${name}${state}`);
+            });
+            if (activeVlans.length > 10) {
+              console.log(`      ${chalk.gray("... y")} ${chalk.gray(String(activeVlans.length - 10))} ${chalk.gray("más")}`);
+            }
+          }
+        }
+
+        if (xp.modules && xp.modules.length > 0) {
+          console.log(`   ${chalk.gray("Módulos")} (${xp.modules.length}):`);
+          xp.modules.forEach((m) => {
+            console.log(`      ${m.name} (${m.ports} ports)`);
+          });
+        }
+
+        const tableParts: string[] = [];
+        if (xp.arpCount !== undefined) tableParts.push(`ARP: ${xp.arpCount}`);
+        if (xp.macCount !== undefined) tableParts.push(`MAC: ${xp.macCount}`);
+        if (xp.routingCount !== undefined) tableParts.push(`Routing: ${xp.routingCount}`);
+        if (tableParts.length > 0) {
+          console.log(`   ${chalk.gray("Tablas")}: ${tableParts.join("  |  ")}`);
+        }
+
+        if (xp.wireless) {
+          const w = xp.wireless;
+          if (w.ssid) console.log(`   ${chalk.gray("SSID")}: ${w.ssid}`);
+          if (w.mode) console.log(`   ${chalk.gray("Wireless Mode")}: ${w.mode}`);
+        }
       }
 
       console.log(

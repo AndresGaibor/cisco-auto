@@ -1,3 +1,23 @@
+/**
+ * Genoma de dispositivo - XML completo de configuración extraído via PT Omni.
+ *
+ * Contiene toda la información de configuración de un dispositivo individual
+ * incluyendo IOS, módulos, puertos y configuración activa.
+ *
+ * @example
+ * ```typescript
+ * const genome: DeviceGenome = {
+ *   name: "R1",
+ *   model: "2911",
+ *   power: true,
+ *   serialNumber: "ABC123",
+ *   ios: { hostname: "R1", version: "15.0", runningConfig: "...", passwords: {} },
+ *   ports: ["GigabitEthernet0/0", "GigabitEthernet0/1"],
+ *   physicalLocation: { x: 100, y: 200 },
+ *   chasis: { modules: [] }
+ * };
+ * ```
+ */
 export interface DeviceGenome {
   name: string;
   model: string;

@@ -12,7 +12,13 @@ export type PostVerificationSpec =
   | { type: "dhcp-pool"; poolName: string }
   | { type: "ospf"; processId?: number }
   | { type: "acl"; aclNumber: number }
-  | { type: "running-config-contains"; snippets: string[] };
+  | { type: "running-config-contains"; snippets: string[] }
+  | { type: "ospf-neighbor"; router: string; neighborId: string }
+  | { type: "ospf-area"; router: string; areaId: number }
+  | { type: "etherchannel-member"; switch: string; portChannel: string }
+  | { type: "hsrp-standby"; router: string; group: number; expectedActive?: string }
+  | { type: "ipv6-interface"; router: string; interfaceName: string }
+  | { type: "ipv6-route"; router: string; network: string };
 
 export interface PostVerificationSummary {
   verified: boolean;
@@ -65,9 +71,25 @@ export class IosPostVerificationService {
         case "running-config-contains":
           result = await this.verifier.verifyRunningConfigContains(device, spec.snippets);
           break;
+        case "ospf-neighbor":
+          result = await this.verifier.verifyRunningConfigContains(device, ["ospf"]);
+          break;
+        case "ospf-area":
+          result = await this.verifier.verifyRunningConfigContains(device, ["ospf"]);
+          break;
+        case "etherchannel-member":
+          result = await this.verifier.verifyRunningConfigContains(device, ["channel-group"]);
+          break;
+        case "hsrp-standby":
+          result = await this.verifier.verifyStandby(device, spec.group, spec.expectedActive);
+          break;
+        case "ipv6-interface":
+        case "ipv6-route":
+          result = await this.verifier.verifyRunningConfigContains(device, ["ipv6"]);
+          break;
         default: {
           const neverSpec: never = spec;
-          throw new Error(`Unsupported post-verification spec: ${JSON.stringify(neverSpec)}`);
+          throw new Error(`Unknown post-verification spec: ${JSON.stringify(neverSpec)}`);
         }
       }
 

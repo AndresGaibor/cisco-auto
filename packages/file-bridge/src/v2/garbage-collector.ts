@@ -1,6 +1,8 @@
 /**
- * Garbage Collector - Cleans up old results and logs
- * Manages TTL-based cleanup with safety checks
+ * Recolector de basura para cleanup de resultados y logs antiguos.
+ *
+ * Limpia archivos basado en TTL (time-to-live) con verificaciones
+ * de seguridad para no eliminar logs que aún necesitan los consumers.
  */
 
 import { join } from "node:path";
@@ -13,12 +15,28 @@ export interface GCReport {
   errors: string[];
 }
 
+/**
+ * Limpia resultados y logs antiguos basado en TTL.
+ */
 export class GarbageCollector {
+  /**
+   * @param paths - Gestor de paths
+   * @param isLogNeededFn - Función para verificar si un log aún es necesario por algún consumer
+   */
   constructor(
     private readonly paths: BridgePathLayout,
     private readonly isLogNeededFn: (logFile: string) => boolean,
   ) {}
 
+  /**
+   * Ejecuta el garbage collection de resultados y logs.
+   *
+   * Resultados: se eliminan si mtime > resultTtlMs
+   * Logs: se eliminan si mtime > logTtlMs Y ningún consumer los necesita
+   *
+   * @param options - TTLs opcionales en ms (default: 24h results, 7d logs)
+   * @returns Reporte con archivos eliminados y errores encontrados
+   */
   collect(options: { resultTtlMs?: number; logTtlMs?: number } = {}): GCReport {
     const resultTtlMs = options.resultTtlMs ?? 24 * 60 * 60 * 1000;
     const logTtlMs = options.logTtlMs ?? 7 * 24 * 60 * 60 * 1000;

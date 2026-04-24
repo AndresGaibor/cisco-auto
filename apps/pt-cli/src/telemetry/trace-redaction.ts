@@ -30,6 +30,12 @@ function isSensitiveKey(key: string): boolean {
   return SENSITIVE_KEYWORDS.some((keyword) => lowerKey.includes(keyword));
 }
 
+/**
+ * Elimina información sensible de un objeto.
+ * Busca keys que contengan palabras sensibles y las reemplaza con [REDACTED].
+ * @param input - Objeto a sanitizar
+ * @returns Objeto sanitizado
+ */
 export function redactObject(input: unknown): unknown {
   if (input === null || input === undefined) {
     return input;
@@ -58,6 +64,12 @@ export function redactObject(input: unknown): unknown {
   return input;
 }
 
+/**
+ * Elimina información sensible de un texto de comando.
+ * Reemplaza passwords, secrets, tokens y otros valores sensibles.
+ * @param command - Texto del comando a sanitizar
+ * @returns Comando sanitizado
+ */
 export function redactCommandText(command: string): string {
   let result = command;
 
@@ -82,6 +94,11 @@ export function redactCommandText(command: string): string {
   return result;
 }
 
+/**
+ * Elimina información sensible de un array de comandos.
+ * @param commands - Lista de comandos a sanitizar
+ * @returns Lista de comandos sanitizados
+ */
 export function redactCommands(commands: string[]): string[] {
   return commands.map(redactCommandText);
 }

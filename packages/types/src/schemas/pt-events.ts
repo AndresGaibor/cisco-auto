@@ -15,6 +15,10 @@ export const PTEventBaseSchema = z.object({
   seq: z.number().optional(),
 });
 
+/**
+ * Base común para todos los eventos PT
+ * Usar como tipo base para eventos del runtime
+ */
 export type PTEventBase = z.infer<typeof PTEventBaseSchema>;
 
 // ============================================================================
@@ -168,9 +172,16 @@ export const PTEventSchema = z.discriminatedUnion('type', [
   LogEventSchema,
 ]);
 
+/**
+ * Unión de todos los eventos de Packet Tracer
+ * Usar para validación de eventos recibidos
+ */
 export type PTEvent = z.infer<typeof PTEventSchema>;
 
-// Event type map for type-safe event handling
+/**
+ * Mapa tipo-seguro de tipos de evento a sus schemas
+ * Usar para obtener el tipo de evento dado un PTEventType
+ */
 export interface PTEventTypeMap {
   'init': z.infer<typeof InitEventSchema>;
   'runtime-loaded': z.infer<typeof RuntimeLoadedEventSchema>;
@@ -189,4 +200,8 @@ export interface PTEventTypeMap {
   'log': z.infer<typeof LogEventSchema>;
 }
 
+/**
+ * Tipo de evento PT válido
+ * Usar para switch/case sobre tipos de evento
+ */
 export type PTEventType = keyof PTEventTypeMap;

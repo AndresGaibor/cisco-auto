@@ -1,0 +1,13 @@
+{
+  "protocolVersion": 2,
+  "id": "cmd_000000000095",
+  "seq": 95,
+  "createdAt": 1776666291306,
+  "type": "__ping",
+  "payload": {
+    "type": "__ping"
+  },
+  "attempt": 1,
+  "expiresAt": 1776666294304,
+  "checksum": "sha256:2053fdf46a10318c58477a3579df6dd6454523dc27e5704acbdfea71120a721a"
+}

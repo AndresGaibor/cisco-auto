@@ -14,7 +14,7 @@ export function createLabValidateCommand(): Command {
         console.log('🔍 Validando archivo:', file);
         
         const parsedLab = loadLabYaml(file);
-        const validation = validateLabSafe(parsedLab.lab);
+        const validation = validateLabSafe(parsedLab);
         
         console.log('\n📋 Resultado de Validación:');
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');

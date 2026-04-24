@@ -22,7 +22,7 @@ export function createAuditExportCommand(): Command {
       switch (options.format) {
         case 'csv': {
           const headers = 'timestamp,device,command,status,output\n';
-          const rows = entries.map((e: Record<string, unknown>) =>
+          const rows = entries.map((e: any) =>
             `${e.timestamp},${e.hostname || e.device_id},"${(e.command as string).replace(/"/g, '""')}",${e.status},"${((e.output as string) || '').replace(/"/g, '""')}"`
           ).join('\n');
           content = headers + rows;

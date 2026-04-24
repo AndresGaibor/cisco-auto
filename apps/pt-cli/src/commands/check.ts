@@ -373,34 +373,8 @@ async function validateLanBasic(ctx: any, _fix: boolean): Promise<CheckResultIte
   }
 
   try {
-    let raw = "";
-    const pc1IsPc = pc1.type === "pc" || pc1.type === 8 || pc1.type === "server";
-
-    if (pc1IsPc) {
-      const bridge = ctx.controller.getBridge();
-      const pcResult = await bridge.sendCommandAndWait("execPc", {
-        device: pc1.name,
-        command: `ping ${pc2Ip}`,
-        timeoutMs: 30000,
-      });
-      raw = pcResult?.value?.raw || "";
-    } else {
-      const pingResult = await ctx.controller.execIos(
-        pc1.name,
-        `ping ${pc2Ip} repeat 4`,
-        true,
-        10000,
-      );
-      raw = pingResult.raw || "";
-    }
-
-    const success =
-      raw.toLowerCase().includes("success") ||
-      raw.includes("Reply from") ||
-      (raw.includes("!") && !raw.includes("U")) ||
-      raw.includes("Paquetes perdidos: 0%") ||
-      raw.includes("0% packet loss") ||
-      (raw.includes("100%") === false && raw.includes("perdidos"));
+    const pingResult = await ctx.controller.sendPing(pc1.name, pc2Ip, 30000);
+    const success = pingResult.success;
 
     if (success) {
       checks.push({
@@ -413,7 +387,7 @@ async function validateLanBasic(ctx: any, _fix: boolean): Promise<CheckResultIte
         name: "ping-pc1-to-pc2",
         status: "fail",
         message: `Ping ${pc1.name} → ${pc2.name} falló`,
-        details: { raw: raw.slice(0, 200) },
+        details: { raw: (pingResult.raw || "").slice(0, 200) },
         fix: "Verificar enlaces físicos y configuración IP",
       });
     }

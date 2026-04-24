@@ -14,6 +14,10 @@ export const CommandBaseSchema = z.object({
   type: z.string(),
 });
 
+/**
+ * Base común para todos los comandos
+ * Usar como tipo base para payloads de comandos
+ */
 export type CommandBase = z.infer<typeof CommandBaseSchema>;
 
 // ============================================================================
@@ -96,6 +100,10 @@ export const AddLinkPayloadSchema = z.object({
   linkType: LinkTypeSchema.default('auto'),
 });
 
+/**
+ * Payload para crear un enlace entre dos dispositivos
+ * Usar con el comando addLink
+ */
 export type AddLinkPayload = z.infer<typeof AddLinkPayloadSchema>;
 
 export const AddLinkPayloadRawSchema = z.object({
@@ -111,6 +119,10 @@ export const AddLinkPayloadRawSchema = z.object({
   cableType: LinkTypeSchema.optional(),
 });
 
+/**
+ * Payload raw para addLink (soporta nombres legacy dev1/dev2)
+ * Usar para backwards compatibility con versiones anteriores
+ */
 export type AddLinkPayloadRaw = z.infer<typeof AddLinkPayloadRawSchema>;
 
 export function parseAddLinkPayload(input: AddLinkPayloadRaw): AddLinkPayload {
@@ -437,9 +449,16 @@ export const CommandPayloadSchema = z.discriminatedUnion('type', [
   ConfigVlanInterfacesPayloadSchema,
 ]);
 
+/**
+ * Unión de todos los payloads de comandos
+ * Usar para validación de comandos recibidos
+ */
 export type CommandPayload = z.infer<typeof CommandPayloadSchema>;
 
-// Payload type map for type-safe command handling
+/**
+ * Mapa tipo-seguro de tipos de comando a sus payloads
+ * Usar para obtener el tipo de payload dado un CommandType
+ */
 export interface CommandPayloadTypeMap {
   'addDevice': z.infer<typeof AddDevicePayloadSchema>;
   'removeDevice': z.infer<typeof RemoveDevicePayloadSchema>;
@@ -470,18 +489,29 @@ export interface CommandPayloadTypeMap {
   'configVlanInterfaces': z.infer<typeof ConfigVlanInterfacesPayloadSchema>;
 }
 
+/**
+ * Tipo de comando válido en el sistema
+ * Usar para switch/case sobre comandos
+ */
 export type CommandType = keyof CommandPayloadTypeMap;
 
 // ============================================================================
 // Command File Structure
 // ============================================================================
 
+/**
+ * Estructura de archivo de comando para persistencia
+ * Usar para guardar comandos en cola de archivo
+ */
 export const CommandFileSchema = z.object({
   id: z.string(),
   timestamp: z.number(),
   payload: CommandPayloadSchema,
 });
 
+/**
+ * Archivo de comando con id, timestamp y payload
+ */
 export type CommandFile = z.infer<typeof CommandFileSchema>;
 
 // ============================================================================

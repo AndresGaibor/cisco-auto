@@ -20,7 +20,7 @@ export function createLabListCommand(): Command {
         for (const file of files) {
           try {
             const lab = loadLabYaml(`${options.directory}/${file}`);
-            const validation = validateLabSafe(lab.lab);
+            const validation = validateLabSafe(lab);
             const isValid = validation.success;
             console.log(`\n📋 ${file}`);
             console.log(`   Nombre: ${lab.lab?.metadata?.name || 'N/A'}`);

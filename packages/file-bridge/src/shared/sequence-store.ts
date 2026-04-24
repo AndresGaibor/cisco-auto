@@ -1,7 +1,11 @@
 /**
- * Persistent sequence number generator.
- * Generates monotonic seq numbers that survive process restarts.
- * Uses advisory file locking to prevent race conditions on next().
+ * Generador persistente de números de secuencia.
+ *
+ * Genera seq numbers monotonic que sobreviven a restarts del proceso.
+ * Usa file locking advisory para prevenir race conditions en next().
+ *
+ * El lock se adquiere con O_EXCL (creación atómica) y tiene retry
+ * con exponential backoff. Lock files stale se limpian automáticamente.
  */
 import { join } from "node:path";
 import {
@@ -24,20 +28,28 @@ const LOCK_RETRY_BASE_MS = 10;
 const LOCK_MAX_MS = 500;
 const LOCK_STALE_THRESHOLD_MS = 10_000;
 
+/**
+ * Store persistente de secuencias con locking para entornos multi-proceso.
+ */
 export class SequenceStore {
   private readonly storeFile: string;
   private readonly lockFile: string;
 
+  /**
+   * @param root - Directorio raíz del bridge
+   */
   constructor(private readonly root: string) {
     this.storeFile = join(root, "protocol.seq.json");
     this.lockFile = `${this.storeFile}.lock`;
   }
 
   /**
-   * Return the next sequence number and advance the counter atomically.
-   * Uses advisory file locking to prevent concurrent processes from
-   * generating the same sequence number.
-   * Seq numbers start at 1.
+   * Obtiene el siguiente número de secuencia de forma atómica.
+   * Usa advisory file locking para prevenir que múltiples procesos
+   * generen el mismo número.
+   *
+   * @returns El siguiente seq number (empieza en 1)
+   * @throws Error si no puede adquirir lock tras máximo de reintentos
    */
   next(): number {
     const lockFd = this.acquireLock();
@@ -55,14 +67,16 @@ export class SequenceStore {
   }
 
   /**
-   * Read the current state without incrementing.
+   * Lee el estado actual sin incrementar.
+   * @returns El próximo seq que se asignaría
    */
   peek(): number {
     return this.read().nextSeq;
   }
 
   /**
-   * Read the current sequence as a value object
+   * Lee el seq actual como value object CommandSeq.
+   * @returns CommandSeq con el seq actual
    */
   peekAsSeq(): CommandSeq {
     return new CommandSeq(this.peek());

@@ -16,14 +16,15 @@ export abstract class Entity<TId extends ValueObject<unknown>> {
   }
 
   /**
-   * Obtiene el identificador de la entidad
+   * Obtiene el identificador de la entidad.
    */
   get id(): TId {
     return this._id;
   }
 
   /**
-   * Compara dos entidades por identidad
+   * Compara dos entidades por identidad.
+   * Dos entidades son iguales si tienen el mismo tipo y el mismo ID.
    */
   equals(other: Entity<TId>): boolean {
     if (other === null || other === undefined) {

@@ -27,6 +27,10 @@ export type BridgeEventInput = z.input<typeof BridgeEventSchema>;
 // Command Envelope
 // ============================================================================
 
+/**
+ * Envelope para comandos CLI -> PT
+ * Usar para enviar comandos al runtime de Packet Tracer
+ */
 export interface BridgeCommandEnvelope<T = unknown> {
   protocolVersion: BridgeProtocolVersion;
   id: string;
@@ -43,6 +47,10 @@ export interface BridgeCommandEnvelope<T = unknown> {
 // Result Envelope
 // ============================================================================
 
+/**
+ * Envelope para resultados PT -> CLI
+ * Usar para recibir resultados del runtime
+ */
 export interface BridgeResultEnvelope<T = unknown> {
   protocolVersion: BridgeProtocolVersion;
   id: string;
@@ -55,6 +63,9 @@ export interface BridgeResultEnvelope<T = unknown> {
   error?: BridgeErrorDetail;
 }
 
+/**
+ * Detalle de error en resultados Bridge
+ */
 export interface BridgeErrorDetail {
   code: string;
   message: string;
@@ -66,6 +77,10 @@ export interface BridgeErrorDetail {
 // Event Interface
 // ============================================================================
 
+/**
+ * Evento del protocolo Bridge
+ * Usar para eventos push desde PT
+ */
 export interface BridgeEvent {
   seq: number;
   ts: number;
@@ -78,6 +93,9 @@ export interface BridgeEvent {
 // Consumer Checkpoint
 // ============================================================================
 
+/**
+ * Checkpoint de consumidor para resume de cola
+ */
 export interface BridgeCheckpoint {
   lastProcessedSeq: number;
   lastProcessedAt: number;
@@ -88,6 +106,9 @@ export interface BridgeCheckpoint {
 // Queue Status
 // ============================================================================
 
+/**
+ * Estado de la cola de comandos Bridge
+ */
 export interface BridgeQueueStatus {
   pendingCount: number;
   processingCount: number;
@@ -119,6 +140,9 @@ export async function calculatePayloadChecksum(payload: unknown): Promise<string
 // Snapshot Types (para auto-snapshot y diff events)
 // ============================================================================
 
+/**
+ * Snapshot de un dispositivo para auto-snapshot
+ */
 export interface DeviceSnapshot {
   name: string;
   model?: string;
@@ -131,6 +155,9 @@ export interface DeviceSnapshot {
   power?: boolean;
 }
 
+/**
+ * Snapshot de un enlace para auto-snapshot
+ */
 export interface LinkSnapshot {
   id: string;
   device1: string;
@@ -140,6 +167,9 @@ export interface LinkSnapshot {
   cableType?: string;
 }
 
+/**
+ * Snapshot completo de la topología para auto-snapshot
+ */
 export interface Snapshot {
   devices: Record<string, DeviceSnapshot>;
   links: Record<string, LinkSnapshot>;
@@ -154,6 +184,10 @@ export interface Snapshot {
 // Bridge Lease - Canonical lease contract for CLI ↔ PT coordination
 // ============================================================================
 
+/**
+ * Lease para coordinación CLI ↔ PT
+ * Usar para adquirir lock sobre el runtime
+ */
 export interface BridgeLease {
   ownerId: string;
   pid: number;
@@ -170,6 +204,10 @@ export interface BridgeLease {
 // Bridge Heartbeat - Written by PT runtime, read by file-bridge
 // ============================================================================
 
+/**
+ * Heartbeat del runtime PT
+ * Usar para monitoreo de salud del runtime
+ */
 export interface BridgeHeartbeat {
   ts: number;
   running: boolean;
@@ -187,6 +225,10 @@ export interface BridgeHeartbeat {
 // Bridge Runtime State - Written by PT runtime, read by file-bridge/CLI
 // ============================================================================
 
+/**
+ * Estado del runtime PT
+ * Usar para sincronización de estado entre CLI y PT
+ */
 export interface BridgeRuntimeState {
   version: string;
   timestamp: number;

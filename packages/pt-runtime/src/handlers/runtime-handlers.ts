@@ -101,18 +101,25 @@ export type {
   ExecPcPayload,
 } from "./ios-payloads.js";
 
-// Host handler
-export { handleConfigHost } from "./host-handler.js";
+import { handleConfigHost } from "./host-handler.js";
+export { handleConfigHost };
 
-// IOS execution handlers
+import {
+  handleConfigIos,
+  handleExecIos,
+  handleDeferredPoll,
+  handlePing,
+  handleExecPc,
+  handleReadTerminal,
+} from "./ios-execution.js";
 export {
   handleConfigIos,
   handleExecIos,
   handleDeferredPoll,
   handlePing,
   handleExecPc,
-  handleExecPcDirect,
-} from "./ios-execution.js";
+  handleReadTerminal,
+};
 
 // Otros handlers de tipos
 export type {
@@ -134,23 +141,13 @@ export type {
 // Handler Registration - Registro único en runtime-handlers.ts
 // ============================================================================
 
-import { handleConfigHost } from "./host-handler.js";
-import {
-  handleConfigIos,
-  handleExecIos,
-  handleDeferredPoll,
-  handlePing,
-  handleExecPc,
-  handleExecPcDirect,
-} from "./ios-execution.js";
-
 registerHandler("configHost", handleConfigHost as unknown as HandlerFn);
 registerHandler("configIos", handleConfigIos as unknown as HandlerFn);
 registerHandler("execIos", handleExecIos as unknown as HandlerFn);
 registerHandler("__pollDeferred", handleDeferredPoll as unknown as HandlerFn);
 registerHandler("__ping", handlePing as unknown as HandlerFn);
 registerHandler("execPc", handleExecPc as unknown as HandlerFn);
-registerHandler("execPcDirect", handleExecPcDirect as unknown as HandlerFn);
+registerHandler("readTerminal", handleReadTerminal as unknown as HandlerFn);
 
 registerHandler("ensureVlans", handleEnsureVlans as unknown as HandlerFn);
 registerHandler("configVlanInterfaces", handleConfigVlanInterfaces as unknown as HandlerFn);
@@ -165,7 +162,7 @@ registerHandler("renameDevice", handleRenameDevice as unknown as HandlerFn);
 registerHandler("moveDevice", handleMoveDevice as unknown as HandlerFn);
 
 // Device Config
-registerHandler("setDeviceIp", handleSetDeviceIp as unknown as HandlerFn);
+registerHandler("setDeviceIp", handleConfigHost as unknown as HandlerFn);
 registerHandler("setDefaultGateway", handleSetDefaultGateway as unknown as HandlerFn);
 
 registerHandler("addLink", handleAddLink as unknown as HandlerFn);
@@ -186,9 +183,9 @@ registerHandler("hardwareCatalog", handleHardwareCatalog as unknown as HandlerFn
 registerHandler("commandLog", handleCommandLog as unknown as HandlerFn);
 registerHandler("deepInspect", handleDeepInspect as unknown as HandlerFn);
 registerHandler("__evaluate", handleEvaluate as unknown as HandlerFn);
-
-// Omniscience Physical
-registerHandler("siphonPhysicalTopology", handleSiphonPhysicalTopology as unknown as HandlerFn);
+registerHandler("omni.evaluate.raw", handleEvaluate as unknown as HandlerFn);
+registerHandler("omni.physical.siphon", handleSiphonPhysicalTopology as unknown as HandlerFn);
+registerHandler("omni.logical.siphonConfigs", handleSiphonAllConfigs as unknown as HandlerFn);
 registerHandler("getDeviceHardwareInfo", handleGetDeviceHardwareInfo as unknown as HandlerFn);
 registerHandler("getPortDeepStats", handleGetPortDeepStats as unknown as HandlerFn);
 

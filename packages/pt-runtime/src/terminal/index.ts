@@ -35,6 +35,9 @@ export {
   isHostMode,
   needsEnable,
   needsConfigTerminal,
+  readTerminalOutput,
+  stripBaselineOutput,
+  detectDnsLookup,
 } from "./prompt-detector";
 
 // Pager
@@ -44,6 +47,26 @@ export {
   createPagerHandler,
   type PagerState,
 } from "./pager-handler";
+
+// Confirm
+export {
+  createConfirmHandler,
+  createConfirmState,
+  isConfirmPrompt,
+  resolveConfirmType,
+  type ConfirmState,
+} from "./confirm-handler";
+
+// Sanitizer
+export {
+  sanitizeCommandOutput,
+  sanitizeCommandOutputSimple,
+  stripAnsi,
+  stripBell,
+  stripNonPrintable,
+  processBackspaces,
+  normalizeWhitespace,
+} from "./command-sanitizer";
 
 // Execution
 export {

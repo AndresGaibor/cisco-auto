@@ -4,6 +4,7 @@
 // ============================================================================
 
 import type { RuntimeOmniPort } from "../../ports/runtime-omni-port.js";
+import type { RuntimeTerminalPort } from "../../ports/runtime-terminal-port.js";
 import type {
   PortIntelligence,
   DeviceGenome,
@@ -11,6 +12,9 @@ import type {
   NetworkTopology,
   DeepDeviceContext,
 } from "../../contracts/omniscience.js";
+import { createHostPingPlan } from "../../pt/terminal/standard-terminal-plans.js";
+import { parseTerminalOutput } from "../../pt/terminal/terminal-output-parsers.js";
+import { verifyTerminalEvidence } from "../../pt/terminal/terminal-evidence-verifier.js";
 
 /**
  * @deprecated Usar RuntimeOmniPort directamente o a través del Orchestrator.
@@ -18,7 +22,10 @@ import type {
  * los consumidores migren a usar omniPort directamente.
  */
 export class OmniscienceService {
-  constructor(private readonly omniPort: RuntimeOmniPort) {}
+  constructor(
+    private readonly omniPort: RuntimeOmniPort,
+    private readonly terminalPort?: RuntimeTerminalPort,
+  ) {}
 
   async getDeepDeviceContext(name: string): Promise<DeepDeviceContext> {
     const genome = await this.getDeviceGenome(name);
@@ -120,50 +127,60 @@ export class OmniscienceService {
     return { devices: [], links };
   }
 
-  async sendPing(sourceDevice: string, targetIp: string): Promise<{ success: boolean, raw: string }> {
-    const res = await this.omniPort.runOmniCapability(
-      "omni.evaluate.raw",
-      { code: `
-        (function() {
-          var net = ipc.network();
-          var dev = net.getDevice('${sourceDevice}');
-          if (!dev) return { error: 'Device not found' };
-          var term = dev.getTerminal ? dev.getTerminal() : null;
-          if (!term) return { error: 'No terminal' };
-          term.clear();
-          term.sendText('ping ${targetIp}\\n');
-          return { sent: true };
-        })()
-      ` }
-    );
-
-    if (!res.ok) return { success: false, raw: "Error en OmniPort: " + res.error };
-
-    await new Promise(r => setTimeout(r, 3000));
-
-    const pollResult = await this.omniPort.runOmniCapability(
-      "omni.evaluate.raw",
-      { code: `
-        (function() {
-          var net = ipc.network();
-          var dev = net.getDevice('${sourceDevice}');
-          if (!dev) return '';
-          var term = dev.getTerminal ? dev.getTerminal() : null;
-          if (!term) return '';
-          return term.getOutput ? term.getOutput() : '';
-        })()
-      ` }
-    );
-
-    const raw = pollResult.ok ? String(pollResult.value || "") : "";
-    const success = raw.includes("Reply from") || raw.includes("!!!!") || (raw.includes("Success rate") && !raw.includes("0 percent"));
-    return { success, raw };
+  async sendPing(sourceDevice: string, targetIp: string): Promise<{ 
+    success: boolean, 
+    raw: string,
+    stats?: { sent: number; received: number; lost: number; lossPercent: number }
+  }> {
+    const plan = createHostPingPlan(sourceDevice, targetIp);
+    const result = await this.terminalPort.runTerminalPlan(plan);
+    
+    const raw = result.output;
+    const parsed = parseTerminalOutput("host.ping", raw);
+    const verdict = verifyTerminalEvidence("host.ping", raw, parsed, result.status);
+    
+    return { 
+      success: verdict.ok, 
+      raw,
+      stats: parsed?.facts ? {
+        sent: Number(parsed.facts.sent ?? 0),
+        received: Number(parsed.facts.received ?? 0),
+        lost: Number(parsed.facts.lost ?? 0),
+        lossPercent: Number(parsed.facts.lossPercent ?? 100),
+      } : undefined
+    };
   }
 
   async evaluate(code: string): Promise<any> {
     const res = await this.omniPort.runOmniCapability("omni.evaluate.raw", { code });
     if (!res.ok) throw new Error(res.error);
     return res.value;
+  }
+
+  async siphonAllConfigs(): Promise<Array<{ deviceName: string, config: string }>> {
+    const devicesResult = await this.omniPort.runOmniCapability(
+      "omni.evaluate.raw",
+      { code: `
+        (function() {
+            var net = ipc.network();
+            var count = net.getDeviceCount();
+            var names = [];
+            for(var i=0; i<count; i++) {
+                var d = net.getDeviceAt(i);
+                if (d) names.push(d.getName());
+            }
+            return names.join('|');
+        })()
+      ` }
+    );
+    
+    const names = String(devicesResult.value || "").split('|').filter(Boolean);
+    const results = [];
+    for (const name of names) {
+        const config = await this.getOneConfig(name);
+        results.push({ deviceName: name, config });
+    }
+    return results;
   }
 
   private async getOneConfig(deviceName: string): Promise<string> {

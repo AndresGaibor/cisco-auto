@@ -26,6 +26,18 @@ import { createTerminalPlanFromInput } from "../pt/terminal/standard-terminal-pl
 import { parseTerminalOutput } from "../pt/terminal/terminal-output-parsers.js";
 import { verifyTerminalEvidence } from "../pt/terminal/terminal-evidence-verifier.js";
 
+/**
+ * Contexto de ejecución para capabilities.
+ * Proporciona los puertos necesarios para ejecutar primitives, terminal y operaciones omni.
+ * @example
+ * ```ts
+ * const context: CapabilityContext = {
+ *   primitivePort: myPrimitivePort,
+ *   terminalPort: myTerminalPort,
+ *   omniPort: myOmniPort,
+ * };
+ * ```
+ */
 export interface CapabilityContext {
   primitivePort: RuntimePrimitivePort;
   terminalPort: RuntimeTerminalPort;
@@ -58,6 +70,18 @@ function generateRunId(): string {
   return `run-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+/**
+ * Ejecuta una capability registrada en el registry.
+ * Maneja todo el lifecycle: ejecución, captura de evidence, cleanup y cálculo de confidence.
+ * @param capabilityId - ID único de la capability a ejecutar
+ * @param input - Parámetros de entrada para la capability
+ * @param context - Contexto de ejecución con puertos (opcional)
+ * @returns Resultado de la ejecución con evidence, confidence y estado de soporte
+ * @example
+ * ```ts
+ * const result = await runCapability("ios:show-ip-int-brief", { device: "R1" });
+ * ```
+ */
 export async function runCapability(
   capabilityId: string,
   input: Record<string, unknown> = {},
@@ -446,6 +470,21 @@ function classifySupport(
   return "supported";
 }
 
+/**
+ * Ejecuta una capability con timeout configurable.
+ * Si la capability no completa en el tiempo especificado, retorna un resultado de timeout error.
+ * @param capabilityId - ID único de la capability a ejecutar
+ * @param input - Parámetros de entrada para la capability
+ * @param timeoutMs - Timeout en milisegundos (por defecto 30000)
+ * @param context - Contexto de ejecución con puertos (opcional)
+ * @returns Resultado de la ejecución o resultado de timeout
+ * @throws Error si la capability no se encuentra
+ * @example
+ * ```ts
+ * // Timeout de 10 segundos
+ * const result = await runCapabilityWithTimeout("ios:ping", { device: "R1", target: "192.168.1.1" }, 10000);
+ * ```
+ */
 export async function runCapabilityWithTimeout(
   capabilityId: string,
   input: Record<string, unknown> = {},

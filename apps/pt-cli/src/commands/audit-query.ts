@@ -169,7 +169,7 @@ export function createAuditQueryCommand(): Command {
             query += ' ORDER BY timestamp DESC, id DESC LIMIT ?';
             params.push(parseInt(options.limit, 10) || 20);
 
-            const entries = db.query(query).all(...params) as AuditQueryRow[];
+            const entries = db.query(query).all(...(params as any[])) as AuditQueryRow[];
             db.close();
 
             return createSuccessResult('audit.query', {

@@ -36,7 +36,20 @@ export const VTPSchema = z.object({
   password: z.string().optional()
 });
 
-// Type exports
+/**
+ * Configuración de enrutamiento OSPF
+ * Usar para configurar OSPF en routers Cisco
+ */
 export type OSPF = z.infer<typeof OSPFSchema>;
+
+/**
+ * Configuración de enrutamiento EIGRP
+ * Usar para configurar EIGRP en routers Cisco
+ */
 export type EIGRP = z.infer<typeof EIGRPSchema>;
+
+/**
+ * Configuración de VTP (VLAN Trunking Protocol)
+ * Usar para sincronizar VLANs entre switches
+ */
 export type VTP = z.infer<typeof VTPSchema>;

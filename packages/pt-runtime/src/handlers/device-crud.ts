@@ -11,6 +11,10 @@ import {
   collectPorts,
 } from "../utils/helpers.js";
 
+/**
+ * Payload para agregar un dispositivo nuevo al workspace de PT.
+ * Resolución de modelo: si no se especifica model, infiere desde deviceType.
+ */
 export interface AddDevicePayload {
   type: "addDevice";
   model?: string;
@@ -20,11 +24,27 @@ export interface AddDevicePayload {
   deviceType?: number;
 }
 
+/**
+ * Payload para eliminar un dispositivo existente.
+ * Soporta eliminación individual por nombre o limpieza total ("ALL").
+ */
 export interface RemoveDevicePayload {
   type: "removeDevice";
   name: string;
 }
 
+/**
+ * Agrega un dispositivo nuevo al workspace de Packet Tracer.
+ * Usa el LogicalWorkspace para crear el dispositivo con modelo y posición.
+ * 
+ * @param payload - AddDevicePayload con model (opcional), name, x, y
+ * @param deps - HandlerDeps con getLW(), getNet() y helpers
+ * @returns HandlerResult con datos del dispositivo creado o error
+ * 
+ * @example
+ * handleAddDevice({ type: "addDevice", model: "2960-24TT", name: "S1", x: 200, y: 300 }, deps)
+ * // → { ok: true, name: "S1", model: "2960-24TT", type: "switch", power: true, ports: [...] }
+ */
 export function handleAddDevice(payload: AddDevicePayload, deps: HandlerDeps): HandlerResult {
   var lw = deps.getLW();
   var net = deps.getNet();
@@ -54,6 +74,14 @@ export function handleAddDevice(payload: AddDevicePayload, deps: HandlerDeps): H
   };
 }
 
+/**
+ * Elimina un dispositivo del workspace de PT.
+ * "ALL" o nombre vacío elimina todos los dispositivos (bulk remove).
+ * 
+ * @param payload - RemoveDevicePayload con name del dispositivo
+ * @param deps - HandlerDeps con acceso a getLW() y getNet()
+ * @returns HandlerResult con éxito o error si no se encontró
+ */
 export function handleRemoveDevice(payload: RemoveDevicePayload, deps: HandlerDeps): HandlerResult {
   var net = deps.getNet();
   var lw = deps.getLW();

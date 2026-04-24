@@ -22,16 +22,16 @@ export interface PluginContext {
 export type HandlerFn = (payload: Record<string, unknown>, api: RuntimeApi) => RuntimeResult;
 
 export class PluginManager {
-  private plugins: Map<string, PtPlugin> = new Map();
+  private plugins: Record<string, PtPlugin> = {};
   private context: PluginContext;
-  private handlerRegistry: Map<string, HandlerFn> = new Map();
+  private handlerRegistry: Record<string, HandlerFn> = {};
   private middlewareRegistry: MiddlewareFn[] = [];
 
   constructor(api: RuntimeApi) {
     var self = this;
     this.context = {
       registerHandler: function(type: string, handler: HandlerFn) {
-        self.handlerRegistry.set(type, handler);
+        self.handlerRegistry[type] = handler;
       },
       useMiddleware: function(middleware: MiddlewareFn) {
         self.middlewareRegistry.push(middleware);
@@ -46,37 +46,40 @@ export class PluginManager {
   }
 
   register(plugin: PtPlugin): void {
-    if (this.plugins.has(plugin.name)) {
+    if (this.plugins[plugin.name]) {
       throw new Error("Plugin already registered: " + plugin.name);
     }
     plugin.init(this.context);
-    this.plugins.set(plugin.name, plugin);
+    this.plugins[plugin.name] = plugin;
   }
 
   unregister(name: string): void {
-    var plugin = this.plugins.get(name);
+    var plugin = this.plugins[name];
     if (plugin) {
       if (plugin.destroy) {
         plugin.destroy();
       }
-      this.plugins.delete(name);
+      delete this.plugins[name];
     }
   }
 
   list(): Array<{ name: string; version: string }> {
     var result: Array<{ name: string; version: string }> = [];
-    this.plugins.forEach(function(plugin) {
-      result.push({ name: plugin.name, version: plugin.version });
-    });
+    for (var name in this.plugins) {
+      if (Object.prototype.hasOwnProperty.call(this.plugins, name)) {
+        var plugin = this.plugins[name];
+        result.push({ name: plugin.name, version: plugin.version });
+      }
+    }
     return result;
   }
 
   has(name: string): boolean {
-    return this.plugins.has(name);
+    return !!this.plugins[name];
   }
 
   getHandler(type: string): HandlerFn | undefined {
-    return this.handlerRegistry.get(type);
+    return this.handlerRegistry[type];
   }
 
   getMiddleware(): MiddlewareFn[] {

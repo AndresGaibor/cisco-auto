@@ -8,18 +8,32 @@
 // Command Visibility
 // ============================================================================
 
+/**
+ * Visibilidad de un comando en el catálogo
+ * - public: expuesto al bridge CLI
+ * - internal: solo para uso interno del runtime
+ */
 export type CommandVisibility = 'public' | 'internal';
 
 // ============================================================================
 // Execution Model
 // ============================================================================
 
+/**
+ * Modelo de ejecución de un comando
+ * - immediate: ejecuta y retorna inmediatamente
+ * - deferred: ejecución diferida (requiere polling)
+ */
 export type ExecutionModel = 'immediate' | 'deferred';
 
 // ============================================================================
 // Command Entry - Definición canónica de un comando
 // ============================================================================
 
+/**
+ * Entrada canónica de un comando en el catálogo
+ * Usar para derivar schemas, handlers, y servicios
+ */
 export interface CommandCatalogEntry {
   type: string;
   visibility: CommandVisibility;
@@ -461,6 +475,10 @@ export function getExecutionModel(type: string): ExecutionModel | undefined {
 // Mapa de comandos por servicio
 // ============================================================================
 
+/**
+ * Mapa de comandos agrupados por servicio
+ * Usar para obtener todos los comandos de un servicio
+ */
 export interface CommandsByService {
   device: string[];
   topology: string[];

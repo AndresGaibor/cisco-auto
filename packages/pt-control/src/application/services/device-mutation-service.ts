@@ -2,12 +2,22 @@ import type { RuntimePrimitivePort } from "../../ports/runtime-primitive-port.js
 import { validateModuleExists, validateModuleSlotCompatible } from "@cisco-auto/pt-runtime";
 import { DeviceQueryService } from "./device-query-service.js";
 
+/**
+ * Servicio de mutación de dispositivos.
+ * Proporciona operaciones de escritura sobre dispositivos PT.
+ */
 export class DeviceMutationService {
   constructor(
     private readonly primitivePort: RuntimePrimitivePort,
     private readonly query: DeviceQueryService,
   ) {}
 
+  /**
+   * Añade un módulo a un dispositivo.
+   * @param device - Nombre del dispositivo
+   * @param slot - Slot donde instalar el módulo
+   * @param module - Tipo de módulo
+   */
   async addModule(device: string, slot: number, module: string): Promise<void> {
     const currentDevice = await this.query.inspect(device, false);
     const moduleValidation = validateModuleExists(module);
@@ -26,6 +36,11 @@ export class DeviceMutationService {
     }
   }
 
+  /**
+   * Remueve un módulo de un dispositivo.
+   * @param device - Nombre del dispositivo
+   * @param slot - Slot del módulo a remover
+   */
   async removeModule(device: string, slot: number): Promise<void> {
     const result = await this.primitivePort.runPrimitive("module.remove", { device, slot });
     if (!result.ok) {
@@ -33,21 +48,54 @@ export class DeviceMutationService {
     }
   }
 
+  /**
+   * Configura los parámetros IP de un host (PC/Server).
+   * @param device - Nombre del dispositivo host
+   * @param options - Opciones de configuración IP
+   */
   async configHost(
     device: string,
     options: { ip?: string; mask?: string; gateway?: string; dns?: string; dhcp?: boolean },
   ): Promise<void> {
     const result = await this.primitivePort.runPrimitive("host.configure", { device, ...options });
-    if (!result.ok) {
-      throw new Error(result.error ?? `Error configurando host ${device}`);
+    
+    if (!result.ok || !(result.value as any)?.ok) {
+        // RESCUE MODE: Si la primitiva falla, intentamos via terminal
+        if (options.ip && options.mask) {
+            try {
+                const cmd = `ipconfig ${options.ip} ${options.mask} ${options.gateway || ""}`;
+                // execPc ahora usa el CommandExecutor robusto, no necesita delays externos
+                await this.primitivePort.runPrimitive("execPc", { device, command: cmd });
+
+                // RE-VERIFICACIÓN: ¿Realmente se puso la IP?
+                const check = await this.primitivePort.runPrimitive("host.configure", { device });
+                const currentIp = (check.value as any)?.ip;
+                
+                if (currentIp !== options.ip) {
+                    throw new Error(`Rescue mode failed: IP in terminal set but hardware still reports ${currentIp}`);
+                }
+                return;
+            } catch (e) {
+                throw new Error(result.error ?? `Error configurando host ${device} incluso en modo rescate: ${String(e)}`);
+            }
+        }
+        throw new Error(result.error ?? `Error configurando host ${device}`);
     }
   }
 
+  /**
+   * Configura un host para usar DHCP.
+   * @param device - Nombre del dispositivo host
+   */
   async configureHostDhcp(device: string): Promise<void> {
-    // TODO: [workflow-migration] Delegar a workflow de DHCP que use primitiva host.setDhcp
     await this.configHost(device, { dhcp: true });
   }
 
+  /**
+   * Configura el servidor DHCP en un dispositivo.
+   * @param device - Nombre del dispositivo
+   * @param options - Configuración del servidor DHCP
+   */
   async configureDhcpServer(
     device: string,
     options: {
@@ -72,6 +120,12 @@ export class DeviceMutationService {
     }
   }
 
+  /**
+   * Inspecciona el estado del servidor DHCP.
+   * @param device - Nombre del dispositivo
+   * @param port - Puerto opcional
+   * @returns Estado del servidor DHCP con pools y leases
+   */
   async inspectDhcpServer(
     device: string,
     port?: string,
@@ -123,6 +177,13 @@ export class DeviceMutationService {
     };
   }
 
+  /**
+   * Mueve un dispositivo a nuevas coordenadas.
+   * @param name - Nombre del dispositivo
+   * @param x - Nueva coordenada X
+   * @param y - Nueva coordenada Y
+   * @returns Resultado con éxito o error
+   */
   async moveDevice(
     name: string,
     x: number,
@@ -141,6 +202,12 @@ export class DeviceMutationService {
     return { ok: true, name: value.name, x: value.x, y: value.y };
   }
 
+  /**
+   * Asegura que las VLANs existan en el dispositivo.
+   * @param device - Nombre del dispositivo
+   * @param vlans - Lista de VLANs a asegurar
+   * @returns Resultado con VLANs creadas y existentes
+   */
   async ensureVlans(
     device: string,
     vlans: Array<{ id: number; name?: string }>,
@@ -162,6 +229,12 @@ export class DeviceMutationService {
     };
   }
 
+  /**
+   * Configura interfaces VLAN con IP y máscara.
+   * @param device - Nombre del dispositivo
+   * @param interfaces - Lista de interfaces VLAN a configurar
+   * @returns Resultado de la configuración
+   */
   async configVlanInterfaces(
     device: string,
     interfaces: Array<{ vlanId: number; ip: string; mask: string }>,

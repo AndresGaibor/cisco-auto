@@ -25,6 +25,7 @@ export const PLANNER_META: CommandMeta = {
   ],
   status: 'experimental',
   requiresPT: true,
+  related: ['agent', 'deploy'],
 };
 
 export function createPlannerCommand(): Command {

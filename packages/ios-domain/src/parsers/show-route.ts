@@ -1,7 +1,11 @@
 import type { ShowIpRoute } from "@cisco-auto/types";
 
 /**
- * Parse "show ip route" output
+ * Parser para output de "show ip route".
+ * Extrae rutas con tipo (C, L, S, O, D, etc.), network, next hop, interface y metric.
+ * También captura el "Gateway of last resort" si está presente.
+ * @param output - Output crudo del comando
+ * @returns ShowIpRoute con array de rutas y gateway de last resort
  */
 export function parseShowIpRoute(output: string): ShowIpRoute {
   const lines = output.split("\n");
@@ -68,7 +72,7 @@ export function parseShowIpRoute(output: string): ShowIpRoute {
         if (parts.length >= 2) {
           const interfacePart = parts[parts.length - 1];
           // Skip if it looks like a timestamp (has :)
-          if (!interfacePart.includes(":")) {
+          if (interfacePart && !interfacePart.includes(":")) {
             route.interface = interfacePart;
           }
         }

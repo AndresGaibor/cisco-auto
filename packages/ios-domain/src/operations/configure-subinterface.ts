@@ -8,7 +8,7 @@ import type { CommandPlan } from "./command-plan.js";
 import { CommandPlanBuilder } from "./command-plan.js";
 
 /**
- * Input for configuring a router subinterface
+ * Input para configurar una subinterfaz en un router.
  */
 export interface ConfigureSubinterfaceInput {
   parent: InterfaceName;
@@ -19,7 +19,12 @@ export interface ConfigureSubinterfaceInput {
 }
 
 /**
- * Plan the commands to configure a router subinterface (for routers only)
+ * Planifica los comandos IOS para configurar una subinterfaz en un router.
+ * Crea la subinterfaz con encapsulación dot1q y le asigna IP.
+ * Solo para routers que soportan subinterfaces.
+ * @param caps - CapabilitySet del dispositivo
+ * @param input - Configuración de la subinterfaz
+ * @returns CommandPlan listo para ejecutar, o null si no soporta subinterfaces
  */
 export function planConfigureSubinterface(
   caps: CapabilitySet,

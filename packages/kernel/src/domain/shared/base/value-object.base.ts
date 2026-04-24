@@ -14,14 +14,15 @@ export abstract class ValueObject<T> {
   }
 
   /**
-   * Obtiene el valor encapsulado
+   * Obtiene el valor encapsulado.
    */
   get value(): T {
     return this._value;
   }
 
   /**
-   * Compara dos Value Objects por igualdad de valor
+   * Compara dos Value Objects por igualdad de valor.
+   * Dos VOs son iguales si tienen el mismo tipo y valor.
    */
   equals(other: ValueObject<T>): boolean {
     if (other === null || other === undefined) {
@@ -34,7 +35,8 @@ export abstract class ValueObject<T> {
   }
 
   /**
-   * Comparación profunda de valores
+   * Comparación profunda de valores.
+   * Maneja objetos anidados y arrays.
    */
   private deepEqual(a: unknown, b: unknown): boolean {
     if (a === b) return true;
@@ -53,7 +55,8 @@ export abstract class ValueObject<T> {
   }
 
   /**
-   * Serializa el Value Object a su representación JSON
+   * Serializa el Value Object a su representación JSON.
+   * Delega a toJSON del valor interno si existe.
    */
   toJSON(): unknown {
     if (this._value === null || this._value === undefined) {
@@ -69,7 +72,7 @@ export abstract class ValueObject<T> {
   }
 
   /**
-   * Representación string del Value Object
+   * Representación string del Value Object.
    */
   toString(): string {
     return String(this._value);

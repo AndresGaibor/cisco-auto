@@ -25,6 +25,7 @@ export const LINT_META: CommandMeta = {
   ],
   status: 'experimental',
   requiresPT: true,
+  related: ['validate', 'topology'],
 };
 
 export function createLintCommand(): Command {
@@ -46,8 +47,8 @@ export function createLintCommand(): Command {
               
               return createSuccessResult('lint', {
                 totalRules: results.length,
-                passed: results.filter(r => r.severity !== 'error').length,
-                failed: results.filter(r => r.severity === 'error').length,
+                passed: results.filter(r => r.severity !== 'critical').length,
+                failed: results.filter(r => r.severity === 'critical').length,
                 results: results.map(r => ({
                   rule: r.rule,
                   severity: r.severity,

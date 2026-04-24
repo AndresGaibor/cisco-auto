@@ -52,6 +52,21 @@ Agent({
 })
 ```
 
+## Protocolo de Terminal (Command Prompt)
+
+**IMPORTANTE:** Nunca asumas que los comandos de terminal en Packet Tracer son síncronos ni uses esperas arbitrarias (`setTimeout`).
+
+1. **Uso de `pt cmd`**: Para diagnósticos rápidos en cualquier dispositivo (PC, Router, Switch, WLC, ASA), usa siempre el alias raíz:
+   ```bash
+   bun run pt cmd "PC1" "ping 192.168.1.1"
+   ```
+2. **Historial Estructurado**: Para auditar comandos pasados con separación clara de output, usa:
+   ```bash
+   bun run pt host history "PC1"
+   ```
+3. **Motor Determinista**: Toda la ejecución de terminal ahora está gobernada por el `CommandExecutor`, el cual detecta la finalización basándose en **estabilidad de output (250ms)** y reconocimiento estructural del prompt, superando la inestabilidad de los eventos nativos de PT. Posee auto-recuperación ante bloqueos de DNS (`Translating...`) mediante `Ctrl+C` proactivo.
+4. **Sanitización**: Los parsers siempre reciben texto limpio (sin `\b`, `BELL`, ni `ANSI`); no intentes limpiar el output manualmente en el frontend.
+
 ## Protocolo de Omnisciencia (Modo Dios)
 
 **IMPORTANTE:** Si un comando oficial de la API (`addDevice`, `addLink`, `setIpAddress`) falla con un error `[object Object]` o un timeout, NO te rindas. El agente debe contraatacar usando la **Omnisciencia de Capa 0**.

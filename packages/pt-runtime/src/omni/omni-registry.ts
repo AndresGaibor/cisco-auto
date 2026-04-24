@@ -1,12 +1,33 @@
 // ============================================================================
 // Omni Registry — Registro único de omni adapters
 // ============================================================================
+// shortcuts de nivel 0 inyectados en el kernel C++ de PT.
+// Cada adapter expone una capability que no está disponible via API IPC normal.
+//
+// shortcut principal: `pt omni raw` para bypass de nombres duplicados,
+// `device.skipBoot()` para bypass de diálogos, y acceso directo a
+// AssessmentModel, scriptEngine, y tables internas (MAC, ARP, routing).
 
 import type { OmniResult } from "./index.js";
 
+/**
+ * Nivel de riesgo de un omni adapter.
+ * - safe: operación de solo lectura
+ * - elevated: modifica estado pero recuperable
+ * - dangerous: puede dejar el sistema en estado inconsistente
+ * - experimental: comportamiento no verificado
+ */
 export type OmniRisk = "safe" | "elevated" | "dangerous" | "experimental";
+
+/**
+ * Dominio del adapter - qué tipo de operación realiza.
+ */
 export type OmniDomain = "script" | "assessment" | "scope" | "process" | "app" | "device";
 
+/**
+ * Contexto compartido para todos los adapters.
+ * Incluye referencias a IPC, globals de PT, y estado de assessment.
+ */
 export interface OmniContext {
   ipc: any;
   global: any;
@@ -15,6 +36,9 @@ export interface OmniContext {
   device?: any;
 }
 
+/**
+ * Entrada de registro de un omni adapter.
+ */
 export interface OmniAdapterEntry {
   id: string;
   domain: OmniDomain;
@@ -27,6 +51,12 @@ export interface OmniAdapterEntry {
 
 const omniRegistry = new Map<string, OmniAdapterEntry>();
 
+/**
+ * Registra un nuevo omni adapter.
+ * Lanza error si el id ya existe.
+ * 
+ * @param entry - Entrada completa del adapter
+ */
 export function registerOmniAdapter(entry: OmniAdapterEntry): void {
   if (omniRegistry.has(entry.id)) {
     throw new Error(`Duplicate omni adapter id: ${entry.id}`);
@@ -34,14 +64,31 @@ export function registerOmniAdapter(entry: OmniAdapterEntry): void {
   omniRegistry.set(entry.id, entry);
 }
 
+/**
+ * Obtiene un omni adapter por su id.
+ * 
+ * @param id - Identificador del adapter
+ * @returns OmniAdapterEntry o undefined si no existe
+ */
 export function getOmniAdapter(id: string): OmniAdapterEntry | undefined {
   return omniRegistry.get(id);
 }
 
+/**
+ * Lista todos los ids de adapters registrados.
+ * 
+ * @returns Array de ids de todos los adapters
+ */
 export function listOmniAdapters(): string[] {
   return Array.from(omniRegistry.keys());
 }
 
+/**
+ * Filtra adapters por dominio (scope, device, app, etc.).
+ * 
+ * @param domain - Dominio a filtrar
+ * @returns Array de ids de adapters del dominio especificado
+ */
 export function getOmniAdaptersByDomain(domain: OmniDomain): string[] {
   const result: string[] = [];
   for (const [id, entry] of omniRegistry) {
@@ -52,6 +99,13 @@ export function getOmniAdaptersByDomain(domain: OmniDomain): string[] {
   return result;
 }
 
+/**
+ * Filtra adapters por nivel de riesgo.
+ * Útil para auditing y seguridad.
+ * 
+ * @param risk - Nivel de riesgo a filtrar
+ * @returns Array de ids de adapters con ese riesgo
+ */
 export function getOmniAdaptersByRisk(risk: OmniRisk): string[] {
   const result: string[] = [];
   for (const [id, entry] of omniRegistry) {
@@ -62,6 +116,25 @@ export function getOmniAdaptersByRisk(risk: OmniRisk): string[] {
   return result;
 }
 
+/**
+ * Ejecuta un omni adapter por id con el payload dado.
+ * Valida que el adapter exista antes de ejecutar.
+ * 
+ * @param id - Identificador del adapter
+ * @param payload - Datos para el adapter
+ * @param context - OmniContext con IPC y globals
+ * @returns OmniResult con el resultado de la ejecución
+ * 
+ * @example
+ * // Bypass de diálogo inicial IOS
+ * executeOmniAdapter("omni.device.skipboot", { deviceName: "Router1" }, context)
+ * // → { ok: true, value: true }
+ * 
+ * @example
+ * // Acceso a tabla MAC
+ * executeOmniAdapter("omni.device.mactable", { deviceName: "Switch1" }, context)
+ * // → { ok: true, value: { count: 127 } }
+ */
 export async function executeOmniAdapter(
   id: string,
   payload: unknown,
@@ -75,8 +148,21 @@ export async function executeOmniAdapter(
 }
 
 // ============================================================================
-// Registro de Omni Adapters
+// Omni Adapters Registry
 // ============================================================================
+// shortcuts inyectados en el motor C++ via scriptEngine.evaluate().
+// Útiles para debugging, forensics, y operaciones no disponibles via IPC.
+//
+// shortcuts disponibles:
+//   - ipc: Inter-process communication (PTNetwork, PTAppWindow, etc.)
+//   - n: Network (topología en RAM)
+//   - w: LogicalWorkspace (control gráfico, creación de enlaces)
+//   - global: Contexto raíz (AssessmentModel, Simulation, Base64)
+//   - privileged: _ScriptModule (acceso archivos macOS/Linux)
+//
+// Ejemplo de uso en PT console:
+//   pt omni raw "n.getDeviceCount()"
+//   pt omni raw "w.deleteDevice(deviceRef)"
 
 // omni.evaluate.raw - Evaluación de código JavaScript raw
 registerOmniAdapter({

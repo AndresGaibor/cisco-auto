@@ -27,11 +27,12 @@ export class RuntimeGenerator {
   }
 
   generateMain(): string {
+    const buildId = Date.now().toString();
     return renderMainV2({
       srcDir: this.resolveSourceDir(),
       outputPath: "",
       injectDevDir: this.config.devDir,
-    });
+    }).replace('runtime.js', 'runtime.js?v=' + buildId);
   }
 
   generateCatalog(): string {

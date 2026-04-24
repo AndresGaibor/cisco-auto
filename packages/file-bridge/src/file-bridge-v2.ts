@@ -1,10 +1,27 @@
 /**
- * FileBridge V2 — Durable Bridge for pt-control
+ * FileBridge V2 — Bridge durable para pt-control.
  *
- * Orchestrates: Lease management, command processing, crash recovery,
- * diagnostics, and garbage collection into a unified durable bridge.
+ * Orchestra lease management, command processing, crash recovery,
+ * diagnostics y garbage collection en un bridge unificado y durable.
  *
- * State machine: stopped -> starting -> leased -> recovering -> running -> stopping
+ * Estado máquina: stopped -> starting -> leased -> recovering -> running -> stopping
+ *
+ * Protocolo de archivos (fuente de verdad: filesystem):
+ * - commands/*.json: cola FIFO de comandos pending (seq = nombre de archivo)
+ * - in-flight/*.json: comandos en proceso por PT (claim via atomic rename)
+ * - results/<id>.json: resultado authoritative de cada comando
+ * - dead-letter/*.json: comandos corruptos que no se pudieron procesar
+ * - logs/events.current.ndjson: journal NDJSON de todos los eventos del bridge
+ *
+ * Flujo de un comando:
+ * 1. CLI escribe commands/<seq>-<type>.json con el envelope del comando
+ * 2. PT hace claim con rename atómico -> in-flight/<seq>-<type>.json
+ * 3. PT escribe resultado -> results/<id>.json
+ * 4. CLI lee resultado, borra in-flight
+ *
+ * El índice _queue.json es auxiliar (legacy fallback para PT que no puede
+ * enumerar directorios). La fuente de verdad es la existencia física de
+ * los archivos en commands/.
  */
 import { existsSync, watch, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -29,25 +46,45 @@ import { GarbageCollector, type GCReport } from "./v2/garbage-collector.js";
 import { BridgeLifecycle } from "./v2/bridge-lifecycle.js";
 import { LeaseManager } from "./v2/lease-manager.js";
 import { CrashRecovery } from "./v2/crash-recovery.js";
+import { MonitoringService } from "./v2/monitoring-service.js";
 
 const DEBUG = process.env.PT_DEBUG === "1";
 const debugLog = (...args: unknown[]) => {
   if (DEBUG) console.log("[bridge]", ...args);
 };
 
+/**
+ * Opciones de configuración para FileBridgeV2.
+ */
 export interface FileBridgeV2Options {
+  /** Directorio raíz del bridge (pt-dev) */
   root: string;
+  /** ID del consumer para tracking de posición (default: "cli-main") */
   consumerId?: string;
+  /** Timeout por defecto para esperar resultados (default: 120000ms) */
   resultTimeoutMs?: number;
+  /** Intervalo de renewal del lease (default: 10000ms) */
   leaseIntervalMs?: number;
+  /** TTL del lease antes de considerarse stale (default: 30000ms) */
   leaseTtlMs?: number;
+  /** Máximo de comandos pending antes de aplicar backpressure (default: 100) */
   maxPendingCommands?: number;
+  /** Habilita verificación de backpressure antes de enviar (default: true) */
   enableBackpressure?: boolean;
-  autoSnapshotIntervalMs?: number; // Intervalo para auto-snapshot (default: 5000ms)
-  heartbeatIntervalMs?: number; // Intervalo para monitorear heartbeat (default: 2000ms)
-  skipQueueIndex?: boolean; // Si true, no escribe _queue.json (fs es fuente primary)
+  /** Intervalo para auto-snapshot de topología (default: 5000ms) */
+  autoSnapshotIntervalMs?: number;
+  /** Intervalo para monitoreo de heartbeat de PT (default: 2000ms) */
+  heartbeatIntervalMs?: number;
+  /** Si true, omite escritura de _queue.json (fs es fuente primary) */
+  skipQueueIndex?: boolean;
+  /** Intervalo para limpieza automática de archivos huérfanos (default: 30000ms) */
+  autoGcIntervalMs?: number;
 }
 
+/**
+ * Bridge V2 que coordina todos los componentes del sistema de archivos
+ * para comunicación CLI <-> PT de forma durable y crash-safe.
+ */
 export class FileBridgeV2 extends EventEmitter {
   private readonly paths: BridgePathLayout;
   private readonly seq: SequenceStore;
@@ -56,15 +93,12 @@ export class FileBridgeV2 extends EventEmitter {
   private readonly resultWatcher: SharedResultWatcher;
   private readonly backpressure: BackpressureManager;
   private readonly commandProcessor: CommandProcessor;
+  private readonly monitoringService: MonitoringService;
   private readonly _diagnostics: BridgeDiagnostics;
   private readonly garbageCollector: GarbageCollector;
   private readonly lifecycle: BridgeLifecycle;
   private readonly leaseManager: LeaseManager;
   private readonly crashRecovery: CrashRecovery;
-
-  private autoSnapshotTimer: ReturnType<typeof setInterval> | null = null;
-  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-  private lastSnapshot: Snapshot | null = null;
 
   constructor(private readonly options: FileBridgeV2Options) {
     super();
@@ -100,6 +134,27 @@ export class FileBridgeV2 extends EventEmitter {
       this._diagnostics.isLogNeededByAnyConsumer(logFile),
     );
 
+    this.monitoringService = new MonitoringService(
+      this.paths,
+      {
+        sendCommandAndWait: async <TPayload = unknown, TResult = unknown>(
+          type: string,
+          payload: TPayload,
+          timeoutMs: number,
+        ) => {
+          return this.sendCommandAndWait<TPayload, TResult>(type, payload, timeoutMs);
+        },
+        appendEvent: (event) => this.appendEvent(event),
+        runGc: (opts) => this.gc(opts),
+        nextSeq: () => this.seq.next(),
+      },
+      {
+        autoSnapshotIntervalMs: options.autoSnapshotIntervalMs ?? 5_000,
+        heartbeatIntervalMs: options.heartbeatIntervalMs ?? 2_000,
+        autoGcIntervalMs: options.autoGcIntervalMs ?? 30_000,
+      },
+    );
+
     this.consumer = new DurableNdjsonConsumer(this.paths, {
       consumerId: options.consumerId ?? "cli-main",
       startFromBeginning: false,
@@ -110,6 +165,12 @@ export class FileBridgeV2 extends EventEmitter {
     });
   }
 
+  /**
+   * Inicia el bridge: crea estructura de directorios, adquiere lease,
+   * ejecuta crash recovery y comienza a consumir eventos.
+   *
+   * @throws Error si no puede adquirir el lease (otra instancia está corriendo)
+   */
   start(): void {
     if (this.lifecycle.state !== "stopped") {
       return;
@@ -143,6 +204,7 @@ export class FileBridgeV2 extends EventEmitter {
       this.lifecycle.transition("running");
 
       this.consumer.start();
+      this.startAutoGc();
     } catch (err) {
       this.eventWriter.append({
         seq: this.seq.next(),
@@ -158,13 +220,19 @@ export class FileBridgeV2 extends EventEmitter {
   }
 
   /**
-   * Check if the bridge is ready to accept commands.
-   * Requires lifecycle in running state and a valid lease.
+   * Indica si el bridge está listo para aceptar comandos.
+   * Requiere que el lifecycle esté en estado "running" y el lease sea válido.
+   * @returns true si el bridge puede aceptar comandos
    */
   isReady(): boolean {
-    return this.lifecycle.isReady;
+    return this.lifecycle.state !== "stopped" && this.lifecycle.isReady;
   }
 
+  /**
+   * Detiene el bridge de forma graceful: para consumers, libera lease,
+   * y transiciona al estado "stopped".
+   * @returns Promise que resuelve cuando el shutdown está completo
+   */
   async stop(): Promise<void> {
     if (this.lifecycle.state === "stopped" || this.lifecycle.state === "stopping") {
       return;
@@ -189,16 +257,39 @@ export class FileBridgeV2 extends EventEmitter {
     }
   }
 
+  /**
+   * Carga código JavaScript como runtime en el directorio del bridge.
+   * El runtime es cargado por main.js en Packet Tracer.
+   *
+   * @param code - Código JavaScript del runtime
+   */
   async loadRuntime(code: string): Promise<void> {
     ensureDir(this.paths.root);
     atomicWriteFile(join(this.paths.root, "runtime.js"), code);
   }
 
+  /**
+   * Carga un archivo existente como runtime del bridge.
+   *
+   * @param filePath - Path al archivo de runtime
+   */
   async loadRuntimeFromFile(filePath: string): Promise<void> {
     const code = readFileSync(filePath, "utf8");
     await this.loadRuntime(code);
   }
 
+  /**
+   * Envía un comando al bridge (no bloquea esperando resultado).
+   *
+   * El comando se escribe atómicamente en commands/<seq>-<type>.json.
+   * Aplica backpressure si enableBackpressure=true y la cola está llena.
+   *
+   * @param type - Tipo del comando (identifica el handler en PT)
+   * @param payload - Datos del comando (debe ser serializable)
+   * @param expiresAtMs - Timestamp opcional tras el cual el comando expira
+   * @returns El envelope del comando creado
+   * @throws Error si el bridge no está listo o el payload es inválido
+   */
   sendCommand<TPayload = unknown>(
     type: string,
     payload: TPayload,
@@ -288,29 +379,7 @@ export class FileBridgeV2 extends EventEmitter {
    * El estado real se deriva de los archivos físicos en commands/.
    */
   private appendQueueIndex(filename: string): void {
-    const queueFilePath = join(this.paths.commandsDir(), "_queue.json");
-    let queue: string[] = [];
-
-    try {
-      const existing = readFileSync(queueFilePath, "utf8");
-      if (existing.trim()) {
-        const parsed = JSON.parse(existing);
-        if (Array.isArray(parsed)) {
-          queue = parsed
-            .map((entry) => String(entry).trim())
-            .filter((entry) => entry !== "" && entry !== "_queue.json" && entry.endsWith(".json"));
-        }
-      }
-    } catch {
-      queue = [];
-    }
-
-    if (!queue.includes(filename)) {
-      queue.push(filename);
-    }
-
-    queue.sort();
-    atomicWriteFile(queueFilePath, JSON.stringify(queue));
+    this.commandProcessor.appendQueueIndex(filename);
   }
 
   /**
@@ -318,22 +387,24 @@ export class FileBridgeV2 extends EventEmitter {
    * NO altera la fuente primaria de verdad, que es commands/*.json.
    */
   static removeQueueEntry(root: string, filename: string): void {
-    const queueFilePath = join(root, "commands", "_queue.json");
-
-    try {
-      const existing = readFileSync(queueFilePath, "utf8");
-      if (!existing.trim()) return;
-
-      const parsed = JSON.parse(existing);
-      if (!Array.isArray(parsed)) return;
-
-      const filtered = parsed.map((entry) => String(entry)).filter((entry) => entry !== filename);
-      atomicWriteFile(queueFilePath, JSON.stringify(filtered));
-    } catch {
-      // Índice best-effort.
-    }
+    CommandProcessor.removeQueueEntry(root, filename);
   }
 
+  /**
+   * Envía un comando y espera su resultado de forma blocking.
+   *
+   * Usa SharedResultWatcher para ser notificado cuando el resultado esté
+   * disponible, con polling exponencial como fallback.
+   *
+   * Si el resultado contiene un valor diferido (deferred ticket),
+   * hace poll adicional para resolver el valor final.
+   *
+   * @param type - Tipo del comando
+   * @param payload - Datos del comando
+   * @param timeoutMs - Timeout opcional (default: resultTimeoutMs de config)
+   * @returns El resultado del comando
+   * @throws Error siexpira el timeout o el bridge no está listo
+   */
   async sendCommandAndWait<TPayload = unknown, TResult = unknown>(
     type: string,
     payload: TPayload,
@@ -443,10 +514,20 @@ export class FileBridgeV2 extends EventEmitter {
     );
   }
 
+  /**
+   * Espera hasta que haya capacidad disponible en la cola.
+   * Wrapper sobre BackpressureManager.waitForCapacity().
+   *
+   * @param timeoutMs - Timeout máximo de espera
+   */
   async waitForCapacity(timeoutMs?: number): Promise<void> {
     return this.backpressure.waitForCapacity(timeoutMs);
   }
 
+  /**
+   * Obtiene estadísticas de uso de la cola de comandos.
+   * @returns Métricas de backpressure (pending, available, utilization%)
+   */
   getBackpressureStats(): {
     maxPending: number;
     currentPending: number;
@@ -456,10 +537,23 @@ export class FileBridgeV2 extends EventEmitter {
     return this.backpressure.getStats();
   }
 
+  /**
+   * PT llama esto para obtener el siguiente comando a procesar.
+   * Hace claim atómico via rename de commands/ -> in-flight/.
+   *
+   * @returns El envelope del comando o null si la cola está vacía
+   */
   pickNextCommand<T = unknown>(): BridgeCommandEnvelope<T> | null {
     return this.commandProcessor.pickNextCommand<T>();
   }
 
+  /**
+   * PT llama esto para publicar el resultado de un comando.
+   * Escribe results/<id>.json y limpia el archivo in-flight.
+   *
+   * @param cmd - El envelope original del comando
+   * @param result - El resultado a publicar
+   */
   publishResult<TResult = unknown>(
     cmd: BridgeCommandEnvelope,
     result: {
@@ -473,6 +567,12 @@ export class FileBridgeV2 extends EventEmitter {
     this.commandProcessor.publishResult(cmd, result);
   }
 
+  /**
+   * Agrega un evento al journal NDJSON del bridge.
+   * El seq se asigna automáticamente si no se provee.
+   *
+   * @param event - Evento a escribir (sin seq ni ts, se agregan automáticamente)
+   */
   appendEvent(
     event: Omit<BridgeEvent, "seq" | "ts"> & Partial<Pick<BridgeEvent, "seq" | "ts">>,
   ): void {
@@ -483,6 +583,10 @@ export class FileBridgeV2 extends EventEmitter {
     } as BridgeEvent);
   }
 
+  /**
+   * Lee el state snapshot del bridge (topología actual).
+   * @returns El state parseado o null si no existe
+   */
   readState<T = unknown>(): T | null {
     try {
       const content = readFileSync(this.paths.stateFile(), "utf8");
@@ -492,246 +596,107 @@ export class FileBridgeV2 extends EventEmitter {
     }
   }
 
+  /**
+   * Registra un handler para TODOS los eventos del bridge.
+   * @param handler - Función llamada con cada evento
+   * @returns Función de cleanup para desregistrar el handler
+   */
   onAll(handler: (event: unknown) => void): () => void {
     this.on("*", handler);
     return () => this.off("*", handler);
   }
 
+  /**
+   * Recopila información de salud del bridge.
+   * Incluye lease, colas, journal y estado de consumers.
+   *
+   * @returns Objeto BridgeHealth con estado general y métricas detalladas
+   */
   diagnostics(): BridgeHealth {
     return this._diagnostics.collectHealth();
   }
 
+  /**
+   * Ejecuta el garbage collector para limpiar resultados y logs antiguos.
+   *
+   * @param options - TTLs opcionales para resultados y logs
+   * @returns Reporte con cantidad de archivos eliminados y errores
+   */
   gc(options: { resultTtlMs?: number; logTtlMs?: number } = {}): GCReport {
     return this.garbageCollector.collect(options);
   }
 
   /**
-   * Inicia auto-snapshot cada X segundos
-   * Toma snapshots automáticamente y detecta diffs para generar eventos
+   * Inicia el auto-snapshot periódico de la topología de red.
+   * Delega a MonitoringService.
    */
   startAutoSnapshot(): void {
-    if (this.autoSnapshotTimer) return;
-
-    const intervalMs = this.options.autoSnapshotIntervalMs ?? 5_000;
-
-    this.autoSnapshotTimer = setInterval(async () => {
-      try {
-        // Solicitar snapshot a PT
-        const result = await this.sendCommandAndWait<{}, Snapshot>("snapshot", {}, 10_000);
-
-        if (result.ok && result.value) {
-          const newSnapshot = result.value;
-
-          // Si tenemos snapshot anterior, calcular diff
-          if (this.lastSnapshot) {
-            const diff = this.calculateSnapshotDiff(this.lastSnapshot, newSnapshot);
-            if (diff.hasChanges) {
-              this.appendEvent({
-                type: "topology-changed",
-                diff,
-                snapshot: newSnapshot,
-              });
-            }
-          } else {
-            // Primer snapshot
-            this.appendEvent({
-              type: "topology-initial",
-              snapshot: newSnapshot,
-            });
-          }
-
-          this.lastSnapshot = newSnapshot;
-        }
-      } catch (error) {
-        this.appendEvent({
-          type: "auto-snapshot-error",
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }, intervalMs);
+    this.monitoringService.startAutoSnapshot();
   }
 
   /**
-   * Inicia monitoreo de heartbeat.json
-   * Detecta cuando PT deja de escribir heartbeat
+   * Inicia monitoreo de heartbeat.json.
+   * Delega a MonitoringService.
    */
   startHeartbeatMonitoring(): void {
-    if (this.heartbeatTimer) return;
-
-    const intervalMs = this.options.heartbeatIntervalMs ?? 2_000;
-    const heartbeatFile = join(this.paths.root, "heartbeat.json");
-
-    this.heartbeatTimer = setInterval(() => {
-      try {
-        const stats = statSync(heartbeatFile);
-        const age = Date.now() - stats.mtime.getTime();
-
-        // Si el heartbeat tiene más de 10 segundos, PT probablemente murió
-        if (age > 10_000) {
-          this.appendEvent({
-            type: "pt-heartbeat-stale",
-            ageMs: age,
-            lastModified: stats.mtime.getTime(),
-          });
-        } else {
-          // Heartbeat OK - leer contenido opcional
-          try {
-            const content = readFileSync(heartbeatFile, "utf8");
-            const heartbeat = JSON.parse(content);
-            this.appendEvent({
-              type: "pt-heartbeat-ok",
-              heartbeat,
-              ageMs: age,
-            });
-          } catch {
-            // Heartbeat file existe pero no es JSON válido
-            this.appendEvent({
-              type: "pt-heartbeat-ok",
-              ageMs: age,
-            });
-          }
-        }
-      } catch (error) {
-        const err = error as NodeJS.ErrnoException;
-        if (err.code === "ENOENT") {
-          this.appendEvent({
-            type: "pt-heartbeat-missing",
-          });
-        } else {
-          this.appendEvent({
-            type: "pt-heartbeat-error",
-            error: err.message,
-          });
-        }
-      }
-    }, intervalMs);
+    this.monitoringService.startHeartbeatMonitoring();
   }
 
   /**
-   * Para auto-snapshot y heartbeat monitoring
+   * Inicia el garbage collector automático.
+   * Delega a MonitoringService.
+   */
+  startAutoGc(): void {
+    this.monitoringService.startAutoGc();
+  }
+
+  /**
+   * Para auto-snapshot y heartbeat monitoring.
+   * Delega a MonitoringService.
    */
   stopMonitoring(): void {
-    if (this.autoSnapshotTimer) {
-      clearInterval(this.autoSnapshotTimer);
-      this.autoSnapshotTimer = null;
-    }
-
-    if (this.heartbeatTimer) {
-      clearInterval(this.heartbeatTimer);
-      this.heartbeatTimer = null;
-    }
+    this.monitoringService.stopMonitoring();
   }
 
   /**
-   * Calcula diferencias entre dos snapshots
-   */
-  private calculateSnapshotDiff(
-    prev: Snapshot,
-    curr: Snapshot,
-  ): {
-    hasChanges: boolean;
-    devicesAdded: string[];
-    devicesRemoved: string[];
-    devicesChanged: string[];
-    linksAdded: string[];
-    linksRemoved: string[];
-  } {
-    const prevDevices = new Set(Object.keys(prev.devices));
-    const currDevices = new Set(Object.keys(curr.devices));
-    const prevLinks = new Set(Object.keys(prev.links));
-    const currLinks = new Set(Object.keys(curr.links));
-
-    const devicesAdded = [...currDevices].filter((d) => !prevDevices.has(d));
-    const devicesRemoved = [...prevDevices].filter((d) => !currDevices.has(d));
-    const linksAdded = [...currLinks].filter((l) => !prevLinks.has(l));
-    const linksRemoved = [...prevLinks].filter((l) => !currLinks.has(l));
-
-    // Detectar dispositivos que cambiaron (mismo nombre, diferentes propiedades)
-    const devicesChanged: string[] = [];
-    for (const deviceName of [...currDevices].filter((d) => prevDevices.has(d))) {
-      const prevDevice = prev.devices[deviceName];
-      const currDevice = curr.devices[deviceName];
-      if (JSON.stringify(prevDevice) !== JSON.stringify(currDevice)) {
-        devicesChanged.push(deviceName);
-      }
-    }
-
-    const hasChanges =
-      devicesAdded.length > 0 ||
-      devicesRemoved.length > 0 ||
-      devicesChanged.length > 0 ||
-      linksAdded.length > 0 ||
-      linksRemoved.length > 0;
-
-    return {
-      hasChanges,
-      devicesAdded,
-      devicesRemoved,
-      devicesChanged,
-      linksAdded,
-      linksRemoved,
-    };
-  }
-
-  /**
-   * Obtiene información de heartbeat si existe
-   */
-  /**
-   * Obtiene información de heartbeat si existe
-   * Devuelve el JSON parseado o null si no existe / no se puede parsear
+   * Obtiene el contenido del heartbeat de PT.
+   * El heartbeat es escrito por PT para indicar que sigue vivo.
+   *
+   * @returns El JSON parseado del heartbeat o null si no existe/válido
    */
   getHeartbeat<T = unknown>(): T | null {
-    try {
-      const heartbeatFile = join(this.paths.root, "heartbeat.json");
-      const content = readFileSync(heartbeatFile, "utf8");
-      return JSON.parse(content) as T;
-    } catch {
-      return null;
-    }
+    return this.monitoringService.getHeartbeat<T>();
   }
 
   /**
-   * Obtiene el estado de salud del heartbeat
-   */
-  /**
-   * Obtiene el estado de salud del heartbeat
+   * Evalúa la salud del heartbeat de PT basado en la edad del archivo.
+   * Delega a MonitoringService.
+   *
+   * @returns Estado (ok/stale/missing/unknown), edad en ms, y timestamp de última modificación
    */
   getHeartbeatHealth(): {
     state: "ok" | "stale" | "missing" | "unknown";
     ageMs?: number;
     lastSeenTs?: number;
   } {
-    try {
-      const heartbeatFile = join(this.paths.root, "heartbeat.json");
-
-      const stats = statSync(heartbeatFile);
-      const ageMs = Date.now() - stats.mtime.getTime();
-      const isStale = ageMs > 10_000; // 10 segundos como umbral por defecto
-
-      return {
-        state: isStale ? "stale" : "ok",
-        ageMs,
-        lastSeenTs: stats.mtime.getTime(),
-      };
-    } catch (err) {
-      const e = err as NodeJS.ErrnoException;
-      if (e && e.code === "ENOENT") return { state: "missing" };
-      return { state: "unknown" };
-    }
+    return this.monitoringService.getHeartbeatHealth();
   }
 
   /**
-   * Obtiene el snapshot de topología más reciente
-   */
-  /**
-   * Obtiene el snapshot de topología más reciente
+   * Obtiene el último snapshot de topología capturado por auto-snapshot.
+   * Delega a MonitoringService.
+   *
+   * @returns El último snapshot o null si no hay snapshot todavía
    */
   getStateSnapshot<T = unknown>(): T | null {
-    return this.lastSnapshot as T | null;
+    return this.monitoringService.getLastSnapshot<T>();
   }
 
   /**
-   * Obtiene estado general del bridge
+   * Obtiene un resumen del estado actual del bridge.
+   * Incluye warnings si hay condiciones anómalas (lease inválido, drift, etc.).
+   *
+   * @returns Objeto con estado listo, lifecycle, y warnings si los hay
    */
   getBridgeStatus(): {
     ready: boolean;
@@ -790,7 +755,10 @@ export class FileBridgeV2 extends EventEmitter {
   }
 
   /**
-   * Minimal aggregated context for CLI/system consumers
+   * Obtiene contexto agregado mínimo para consumidores CLI o sistema.
+   * Versión simplificada de getBridgeStatus + getHeartbeatHealth combinados.
+   *
+   * @returns Contexto con bridgeReady, lifecycleState, y estado de heartbeat
    */
   getContext(): {
     bridgeReady: boolean;

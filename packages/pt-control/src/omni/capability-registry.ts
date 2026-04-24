@@ -571,6 +571,27 @@ register({
 });
 
 register({
+  id: "host.command",
+  title: "Host Command",
+  domain: "host",
+  kind: "primitive",
+  risk: "safe",
+  description: "Ejecutar un comando genérico en un host",
+  tags: ["terminal", "host", "command"],
+  prerequisites: [{ type: "device", constraint: "Host device must exist" }],
+  setup: NOOP_ACTION,
+  execute: { type: "terminal", handler: "handleHostCommand" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: {
+    fields: {
+      output: { required: true, type: "string" },
+      status: { required: true, type: "number" },
+    },
+  },
+  supportPolicy: { minRunsForSupported: 3, flakinessThreshold: 0.1, timeoutMs: 20000 },
+});
+
+register({
   id: "host.ipconfig",
   title: "Host Ipconfig",
   domain: "host",
@@ -580,7 +601,7 @@ register({
   tags: ["terminal", "host", "ipconfig"],
   prerequisites: [{ type: "device", constraint: "Host device must exist" }],
   setup: NOOP_ACTION,
-  execute: { type: "terminal", handler: "ipconfig /all", code: "ipconfig /all" },
+  execute: { type: "terminal", handler: "handleHostIpconfig", code: "ipconfig /all" },
   cleanup: NOOP_ACTION,
   expectedEvidence: {
     fields: {
@@ -601,7 +622,7 @@ register({
   tags: ["terminal", "host", "ping"],
   prerequisites: [{ type: "device", constraint: "Host device must exist" }],
   setup: NOOP_ACTION,
-  execute: { type: "terminal", handler: "ping", code: "ping" },
+  execute: { type: "terminal", handler: "handleHostPing", code: "ping" },
   cleanup: NOOP_ACTION,
   expectedEvidence: {
     fields: {
@@ -622,7 +643,7 @@ register({
   tags: ["terminal", "host", "tracert", "traceroute"],
   prerequisites: [{ type: "device", constraint: "Host device must exist" }],
   setup: NOOP_ACTION,
-  execute: { type: "terminal", handler: "tracert", code: "tracert" },
+  execute: { type: "terminal", handler: "handleHostTracert", code: "tracert" },
   cleanup: NOOP_ACTION,
   expectedEvidence: {
     fields: {
@@ -643,7 +664,133 @@ register({
   tags: ["terminal", "host", "arp"],
   prerequisites: [{ type: "device", constraint: "Host device must exist" }],
   setup: NOOP_ACTION,
-  execute: { type: "terminal", handler: "arp -a", code: "arp -a" },
+  execute: { type: "terminal", handler: "handleHostArp", code: "arp -a" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: {
+    fields: {
+      output: { required: true, type: "string" },
+      status: { required: true, type: "number" },
+    },
+  },
+  supportPolicy: { minRunsForSupported: 3, flakinessThreshold: 0.1, timeoutMs: 15000 },
+});
+
+register({
+  id: "host.nslookup",
+  title: "Host DNS Lookup",
+  domain: "host",
+  kind: "primitive",
+  risk: "safe",
+  description: "Ejecutar nslookup en un host",
+  tags: ["terminal", "host", "nslookup", "dns"],
+  prerequisites: [{ type: "device", constraint: "Host device must exist" }],
+  setup: NOOP_ACTION,
+  execute: { type: "terminal", handler: "handleHostNslookup", code: "nslookup" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: {
+    fields: {
+      output: { required: true, type: "string" },
+      status: { required: true, type: "number" },
+    },
+  },
+  supportPolicy: { minRunsForSupported: 3, flakinessThreshold: 0.1, timeoutMs: 20000 },
+});
+
+register({
+  id: "host.netstat",
+  title: "Host Network Statistics",
+  domain: "host",
+  kind: "primitive",
+  risk: "safe",
+  description: "Ejecutar netstat en un host",
+  tags: ["terminal", "host", "netstat"],
+  prerequisites: [{ type: "device", constraint: "Host device must exist" }],
+  setup: NOOP_ACTION,
+  execute: { type: "terminal", handler: "handleHostNetstat", code: "netstat" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: {
+    fields: {
+      output: { required: true, type: "string" },
+      status: { required: true, type: "number" },
+    },
+  },
+  supportPolicy: { minRunsForSupported: 3, flakinessThreshold: 0.1, timeoutMs: 15000 },
+});
+
+register({
+  id: "host.history",
+  title: "Host Command History",
+  domain: "host",
+  kind: "primitive",
+  risk: "safe",
+  description: "Ejecutar history en un host",
+  tags: ["terminal", "host", "history"],
+  prerequisites: [{ type: "device", constraint: "Host device must exist" }],
+  setup: NOOP_ACTION,
+  execute: { type: "terminal", handler: "handleHostHistory", code: "history" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: {
+    fields: {
+      output: { required: true, type: "string" },
+      status: { required: true, type: "number" },
+    },
+  },
+  supportPolicy: { minRunsForSupported: 3, flakinessThreshold: 0.1, timeoutMs: 15000 },
+});
+
+register({
+  id: "host.telnet",
+  title: "Host Telnet Client",
+  domain: "host",
+  kind: "primitive",
+  risk: "safe",
+  description: "Ejecutar telnet desde un host",
+  tags: ["terminal", "host", "telnet"],
+  prerequisites: [{ type: "device", constraint: "Host device must exist" }],
+  setup: NOOP_ACTION,
+  execute: { type: "terminal", handler: "handleHostTelnet", code: "telnet" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: {
+    fields: {
+      output: { required: true, type: "string" },
+      status: { required: true, type: "number" },
+    },
+  },
+  supportPolicy: { minRunsForSupported: 3, flakinessThreshold: 0.2, timeoutMs: 20000 },
+});
+
+register({
+  id: "host.ssh",
+  title: "Host SSH Client",
+  domain: "host",
+  kind: "primitive",
+  risk: "safe",
+  description: "Ejecutar ssh desde un host",
+  tags: ["terminal", "host", "ssh"],
+  prerequisites: [{ type: "device", constraint: "Host device must exist" }],
+  setup: NOOP_ACTION,
+  execute: { type: "terminal", handler: "handleHostSsh", code: "ssh" },
+  cleanup: NOOP_ACTION,
+  expectedEvidence: {
+    fields: {
+      output: { required: true, type: "string" },
+      status: { required: true, type: "number" },
+    },
+  },
+  supportPolicy: { minRunsForSupported: 3, flakinessThreshold: 0.2, timeoutMs: 20000 },
+});
+
+register({
+  id: "host.route",
+  title: "Host Route Table",
+  domain: "host",
+  kind: "primitive",
+  risk: "safe",
+  description: "Ejecutar route print en un host",
+  tags: ["terminal", "host", "route"],
+  prerequisites: [{ type: "device", constraint: "Host device must exist" }],
+  setup: NOOP_ACTION,
+  execute: { type: "terminal", handler: "handleHostRoute", code: "route print" },
   cleanup: NOOP_ACTION,
   expectedEvidence: {
     fields: {

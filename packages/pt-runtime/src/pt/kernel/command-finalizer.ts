@@ -28,7 +28,7 @@ export function finishActiveCommand(
       completedAt: Date.now(),
       status: result?.ok === false ? "failed" : "completed",
       ok: result?.ok !== false,
-      value: result?.ok !== false ? result : undefined,
+      value: result, // Siempre incluimos el resultado para no perder raw/parsed
       error:
         result?.ok === false
           ? {

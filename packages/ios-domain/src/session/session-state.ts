@@ -1,6 +1,5 @@
 /**
  * CLI SESSION - HISTORY AND STATE MANAGEMENT
- * 
  * Manejo del historial y estado de sesiones CLI
  */
 

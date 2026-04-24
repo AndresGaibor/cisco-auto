@@ -33,6 +33,11 @@ export function getDeviceTypeForModel(model: string): number {
 export function getDeviceTypeCandidates(model: string): number[] {
   const normalized = (model || "").toLowerCase();
 
+  const exactType = getPTDeviceType(model);
+  if (exactType !== undefined && exactType !== null) {
+    return [exactType, DEVICE_TYPES.router, DEVICE_TYPES.switch, DEVICE_TYPES.pc];
+  }
+
   if (
     normalized.indexOf("2960") === 0 ||
     normalized.indexOf("3560") === 0 ||
@@ -55,6 +60,10 @@ export function getDeviceTypeCandidates(model: string): number[] {
       if (!candidates.includes(t)) candidates.push(t);
     }
     return candidates;
+  }
+
+  if (normalized.indexOf("wlc") >= 0 || normalized.indexOf("lap") >= 0 || normalized.indexOf("3702") >= 0) {
+    return [DEVICE_TYPES.wlc, DEVICE_TYPES.aironet, DEVICE_TYPES.wireless, DEVICE_TYPES.router];
   }
 
   return [DEVICE_TYPES.router, DEVICE_TYPES.switch, DEVICE_TYPES.pc];

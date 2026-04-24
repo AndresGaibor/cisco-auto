@@ -41,6 +41,14 @@ export const NATSchema = z.object({
   acl: z.string().optional().describe('ACL para NAT overload')
 });
 
-// Type exports
+/**
+ * Lista de Control de Acceso (ACL)
+ * Usar para filtrar tráfico en interfaces de router
+ */
 export type ACL = z.infer<typeof ACLSchema>;
+
+/**
+ * Configuración de NAT (Network Address Translation)
+ * Usar para traducir direcciones IP privadas a públicas
+ */
 export type NAT = z.infer<typeof NATSchema>;

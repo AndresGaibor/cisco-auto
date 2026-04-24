@@ -42,14 +42,21 @@ function normalizeStatus(value: ExecInteractiveValue): number {
     return value.diagnostics.commandStatus;
   }
 
-  const raw = String(value?.raw ?? "");
+  const raw = String(value?.raw ?? value?.value ?? value?.output ?? "");
+  if (!raw) return 0;
+
+  // Solo buscar errores en las últimas líneas para evitar falsos positivos con historial viejo
+  const lines = raw.split("\n");
+  const recentLines = lines.slice(-15).join("\n");
+  
   if (
-    raw.includes("% Invalid") ||
-    raw.includes("% Incomplete") ||
-    raw.includes("% Ambiguous") ||
-    raw.includes("% Unknown") ||
-    raw.includes("%Error") ||
-    raw.toLowerCase().includes("invalid command")
+    recentLines.includes("% Invalid") ||
+    recentLines.includes("% Incomplete") ||
+    recentLines.includes("% Ambiguous") ||
+    recentLines.includes("% Unknown") ||
+    recentLines.includes("%Error") ||
+    recentLines.toLowerCase().includes("invalid command") ||
+    recentLines.includes("Command not found")
   ) {
     return 1;
   }
@@ -64,30 +71,55 @@ function detectHostMode(session: ExecInteractiveValue["session"]): boolean {
 }
 
 async function detectDeviceType(bridge: FileBridgePort, deviceName: string): Promise<"host" | "ios" | "unknown"> {
+  // Fuente primaria: listDevices directo desde PT (siemprevivo)
   try {
     const listResult = await bridge.sendCommandAndWait("listDevices", {}, 5000);
     if (listResult.ok && listResult.value) {
-      const devices = (listResult.value as any)?.devices || [];
-      const device = devices.find((d: any) => d.name === deviceName);
+      const devices = Array.isArray((listResult.value as any)?.devices)
+        ? (listResult.value as any).devices
+        : Object.values((listResult.value as any)?.devices ?? {});
+      const device = devices.find((d: any) => d?.name === deviceName);
       if (device) {
-        const model = (device.model || "").toLowerCase();
-        const type = (device.type || "").toLowerCase();
+        const model = String(device.model || "").toLowerCase();
+        const type = String(device.type || "").toLowerCase();
         if (model.includes("pc") || model.includes("server") || model.includes("laptop") || type === "pc" || type === "server") {
           return "host";
         }
-        if (model.includes("router") || model.includes("switch") || type === "router" || type === "switch") {
+        if (model.includes("router") || model.includes("switch") || type === "router" || type === "switch" || type === "switch_layer3") {
           return "ios";
         }
+        return "ios";
       }
     }
   } catch {
-    // Fallback: intentar por nombre del dispositivo
+    // Fallback a snapshot si listDevices falla
   }
-  
+
+  // Fallback: usar snapshot cacheado
+  const state = bridge.getStateSnapshot?.() ?? bridge.readState?.();
+  if (state && typeof state === "object") {
+    const devices = Array.isArray((state as any).devices)
+      ? (state as any).devices
+      : Object.values((state as any).devices ?? {});
+    const device = devices.find((d: any) => d?.name === deviceName);
+    if (device) {
+      const model = String(device.model || "").toLowerCase();
+      const type = String(device.type || "").toLowerCase();
+      if (model.includes("pc") || model.includes("server") || model.includes("laptop") || type === "pc" || type === "server") {
+        return "host";
+      }
+      if (model.includes("router") || model.includes("switch") || type === "router" || type === "switch" || type === "switch_layer3") {
+        return "ios";
+      }
+      return "ios";
+    }
+  }
+
+  // Fallback heurístico por nombre
   if (deviceName.toLowerCase().includes("pc") || deviceName.toLowerCase().includes("server")) {
     return "host";
   }
-  
+
   return "unknown";
 }
 
@@ -159,14 +191,6 @@ export function createRuntimeTerminalAdapter(
       abortOnModeMismatch: true,
     };
 
-    if (isHost) {
-      warnings.push(`Dispositivo ${plan.device} detectado como host, usando execPc`);
-    }
-
-    if (plan.targetMode) {
-      warnings.push(`Plan con targetMode: ${plan.targetMode}`);
-    }
-
     for (let i = 0; i < plan.steps.length; i += 1) {
       const step = plan.steps[i]!;
 
@@ -205,7 +229,7 @@ export function createRuntimeTerminalAdapter(
         allowConfirm: step.allowConfirm ?? false,
       };
 
-      const bridgeResult = await bridge.sendCommandAndWait<{ value?: ExecInteractiveValue }>(
+      const bridgeResult = await bridge.sendCommandAndWait<any>(
         handlerName,
         {
           type: handlerName,
@@ -222,19 +246,22 @@ export function createRuntimeTerminalAdapter(
         stepTimeout,
       );
 
-      const value = (bridgeResult?.value ?? {}) as ExecInteractiveValue;
-      const raw = String(value.raw ?? "");
-      const status = normalizeStatus(value);
+      const res = bridgeResult?.value ?? bridgeResult ?? {};
+      const raw = String(res.raw ?? res.value ?? res.output ?? "");
+      const status = normalizeStatus(res);
 
       if (i === 0) {
-        promptBefore = String(value.session?.prompt ?? "");
-        modeBefore = String(value.session?.mode ?? "");
+        promptBefore = String(res.session?.prompt ?? "");
+        modeBefore = String(res.session?.mode ?? "");
       }
 
-      promptAfter = String(value.session?.prompt ?? promptAfter);
-      modeAfter = String(value.session?.mode ?? modeAfter);
+      promptAfter = String(res.session?.prompt ?? promptAfter);
+      modeAfter = String(res.session?.mode ?? modeAfter);
       aggregatedOutput += raw.endsWith("\n") ? raw : `${raw}\n`;
       finalStatus = status;
+
+      const diagnostics = res.diagnostics ?? {};
+      const sessionInfo = res.session ?? {};
 
       events.push({
         stepIndex: i,
@@ -243,10 +270,10 @@ export function createRuntimeTerminalAdapter(
         status,
         promptAfter,
         modeAfter,
-        completionReason: value.diagnostics?.completionReason,
-        paging: Boolean(value.session?.paging),
-        awaitingConfirm: Boolean(value.session?.awaitingConfirm),
-        autoDismissedInitialDialog: Boolean(value.session?.autoDismissedInitialDialog),
+        completionReason: diagnostics.completionReason,
+        paging: Boolean(sessionInfo.paging),
+        awaitingConfirm: Boolean(sessionInfo.awaitingConfirm),
+        autoDismissedInitialDialog: Boolean(sessionInfo.autoDismissedInitialDialog),
         sessionKind: isHost ? "host" : "ios",
         allowPager: stepPolicies.allowPager,
         allowConfirm: stepPolicies.allowConfirm,
@@ -255,19 +282,19 @@ export function createRuntimeTerminalAdapter(
         optional: step.optional,
       });
 
-      if (value.session?.paging && stepPolicies.allowPager) {
+      if (sessionInfo.paging && stepPolicies.allowPager) {
         warnings.push(`El comando "${command}" activó paginación en ${plan.device}`);
       }
 
-      if (value.session?.paging && !stepPolicies.allowPager) {
+      if (sessionInfo.paging && !stepPolicies.allowPager) {
         warnings.push(`El comando "${command}" activó paginación pero allowPager=false`);
       }
 
-      if (value.session?.awaitingConfirm && stepPolicies.allowConfirm) {
+      if (sessionInfo.awaitingConfirm && stepPolicies.allowConfirm) {
         warnings.push(`El comando "${command}" requirió confirmación en ${plan.device}`);
       }
 
-      if (value.session?.awaitingConfirm && !stepPolicies.allowConfirm && !isHost) {
+      if (sessionInfo.awaitingConfirm && !stepPolicies.allowConfirm && !isHost) {
         warnings.push(`El comando "${command}" dejó confirmación pendiente en ${plan.device} (allowConfirm=false)`);
       }
 
@@ -311,6 +338,7 @@ export function createRuntimeTerminalAdapter(
       modeAfter,
       events,
       warnings,
+      parsed: res.parsed,
       confidence: warnings.length > 0 ? 0.8 : 1,
     };
   }

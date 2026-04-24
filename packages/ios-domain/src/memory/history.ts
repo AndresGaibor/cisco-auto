@@ -3,6 +3,9 @@
 
 import { Database } from 'bun:sqlite';
 
+/**
+ * Row representation de la tabla command_history en SQLite.
+ */
 export interface CommandHistoryRow {
   id: number;
   device_id: string;
@@ -14,7 +17,8 @@ export interface CommandHistoryRow {
 }
 
 /**
- * Clase para manejar el historial de comandos
+ * Clase para manejar el historial de comandos ejecutados.
+ * Persiste comandos, outputs y statuses en SQLite para auditoría y debugging.
  */
 export class HistoryMemory {
   private db: Database;
@@ -24,7 +28,13 @@ export class HistoryMemory {
   }
 
   /**
-   * Registra un comando en el historial
+   * Registra un comando en el historial.
+   * @param deviceId - ID del dispositivo que ejecutó el comando
+   * @param command - Comando IOS ejecutado
+   * @param output - Output crudo del comando
+   * @param status - Estado: "success", "failed", "rolled_back"
+   * @param sessionId - ID de sesión (opcional)
+   * @returns ID de la fila insertada
    */
   logCommand(
     deviceId: string,

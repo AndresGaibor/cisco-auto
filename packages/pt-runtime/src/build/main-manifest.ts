@@ -39,6 +39,16 @@ export const MAIN_MANIFEST = {
     "pt/terminal/terminal-engine.ts",
     "pt/terminal/terminal-session.ts",
     "pt/terminal/terminal-events.ts",
+    // Dependencies from root terminal/
+    "terminal/command-executor.ts",
+    "terminal/prompt-detector.ts",
+    "terminal/session-registry.ts",
+    "terminal/session-state.ts",
+    "terminal/pager-handler.ts",
+    "terminal/confirm-handler.ts",
+    "terminal/command-sanitizer.ts",
+    "terminal/stability-heuristic.ts",
+    "terminal/terminal-errors.ts",
   ],
 
   // main.ts MUST be last — it depends on createTerminalEngine (terminal) and all kernel modules

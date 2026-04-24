@@ -32,7 +32,8 @@ export function createTopologyExportCommand(): Command {
             const lines: string[] = ['graph TD'];
 
             for (const device of devices) {
-              const name = device.name || device.id || 'unknown';
+              const name = device.name || 'unknown';
+
               const shape = device.type === 'switch' ? `[{{${name}}}]` :
                             device.type === 'pc' ? `[(${name})]` :
                             `[${name}]`;

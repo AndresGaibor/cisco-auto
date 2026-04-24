@@ -16,8 +16,12 @@ import type {
 import { createErrorResult, createSuccessResult } from "./result-factories";
 import { sanitizeTerminalOutput } from "./terminal-sanitizer";
 import { createCommandExecutor, type ExecutionOptions, type CommandExecutionResult } from "../terminal/index";
-import { ensureSession, getSession } from "../terminal/session-registry";
-import { detectModeFromPrompt } from "../terminal/prompt-detector";
+import { ensureSession } from "../terminal/session-registry";
+import { 
+  detectModeFromPrompt, 
+  readTerminalOutput, 
+  stripBaselineOutput 
+} from "../terminal/prompt-detector";
 import { createModeGuard } from "../terminal/mode-guard";
 
 const DEFAULT_COMMAND_TIMEOUT = 8000;
@@ -47,216 +51,6 @@ function getTerminalDevice(api: PtRuntimeApi, deviceName: string): PTTerminal | 
   return cli;
 }
 
-function readTerminalOutput(terminal: PTTerminal): string {
-  try {
-    // Brute force: intentar varios nombres comunes en PT para el buffer de terminal
-    const methods = ["getOutput", "getAllOutput", "getBuffer", "getText"];
-    for (let i = 0; i < methods.length; i++) {
-      const m = methods[i]!;
-      try {
-        const out = (terminal as any)[m]();
-        if (typeof out === "string" && out.length > 0) return out;
-      } catch(e) {}
-    }
-    return "";
-  } catch {
-    return "";
-  }
-}
-
-function stripBaselineOutput(output: string, baseline: string): string {
-  if (!output) return "";
-  if (!baseline) return output;
-  
-  if (output.startsWith(baseline)) {
-    return output.slice(baseline.length);
-  }
-
-  // Si el buffer hizo scroll, buscar el punto de divergencia
-  // O buscar la última línea del baseline en el output
-  const lines = baseline.split("\n");
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i]?.trim();
-    if (!line || line === "C:\\>") continue;
-    
-    const idx = output.lastIndexOf(line);
-    if (idx !== -1) {
-      return output.slice(idx + line.length);
-    }
-  }
-
-  return output;
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function guessHostCommandStatus(output: string): number {
-  const text = String(output ?? "");
-  if (
-    text.includes("% Invalid") ||
-    text.includes("% Incomplete") ||
-    text.includes("% Ambiguous") ||
-    text.includes("% Unknown") ||
-    text.includes("%Error") ||
-    text.toLowerCase().includes("invalid command") ||
-    text.toLowerCase().includes("unknown host") ||
-    text.toLowerCase().includes("could not find host") ||
-    text.toLowerCase().includes("timed out") && !text.toLowerCase().includes("ping statistics")
-  ) {
-    return 1;
-  }
-
-  return 0;
-}
-
-async function recoverTerminalOutput(
-  terminal: PTTerminal,
-  baseline: string,
-  timeoutMs: number,
-): Promise<string> {
-  const deadline = Date.now() + timeoutMs;
-  let last = "";
-  let stableSince = Date.now();
-
-  while (Date.now() < deadline) {
-    const snapshot = stripBaselineOutput(readTerminalOutput(terminal), baseline);
-    if (snapshot !== last) {
-      last = snapshot;
-      stableSince = Date.now();
-    }
-
-    if (last.trim().length > 0 && Date.now() - stableSince >= 250) {
-      return last;
-    }
-
-    await delay(250);
-  }
-
-  return last;
-}
-
-async function runHostTerminalCommand(
-  terminal: PTTerminal,
-  command: string,
-  timeoutMs: number,
-  api: PtRuntimeApi,
-): Promise<{
-  output: string;
-  status: number;
-  debug: {
-    baselineLength: number;
-    finalLength: number;
-    iterations: number;
-    elapsedMs: number;
-  };
-}> {
-  const baseline = readTerminalOutput(terminal);
-  const baselineLength = baseline.length;
-  const startedAt = Date.now();
-  let iterations = 0;
-
-  try {
-    // LIMPIEZA PREVIA: Si hay texto escrito pero no enviado, o estamos en un sub-shell,
-    // intentamos cancelar con Ctrl+C (3) antes de enviar nuestro comando.
-    if (terminal.getCommandInput && terminal.getCommandInput().length > 0) {
-      if (terminal.enterChar) terminal.enterChar(3, 0); // Ctrl+C
-      await delay(200);
-    }
-
-    // Si el prompt no es el estándar de PC (C:\>) o está vacío (proceso colgado), intentamos salir
-    const currentPrompt = terminal.getPrompt ? terminal.getPrompt() : "";
-    if (currentPrompt === "" || currentPrompt.indexOf("C:\\>") === -1) {
-       // Podríamos estar en 'js>', 'python>>>' o con un ping infinito corriendo
-       if (terminal.enterCommand && currentPrompt) terminal.enterCommand("quit");
-       if (terminal.enterChar) terminal.enterChar(3, 0);
-       await delay(200);
-    }
-
-    terminal.enterCommand(command);
-  } catch {    return {
-      output: "",
-      status: 1,
-      debug: {
-        baselineLength,
-        finalLength: baselineLength,
-        iterations,
-        elapsedMs: Date.now() - startedAt,
-      },
-    };
-  }
-
-  const deadline = Date.now() + Math.max(500, Math.min(timeoutMs, 30000));
-  const normalizedCommand = String(command ?? "").toLowerCase();
-  const waitsForCompletionMarker =
-    normalizedCommand.startsWith("ping ") ||
-    normalizedCommand.startsWith("tracert") ||
-    normalizedCommand.startsWith("trace") ||
-    normalizedCommand.startsWith("nslookup") ||
-    normalizedCommand.startsWith("netstat");
-  let lastSnapshot = baseline;
-  let lastChangeAt = Date.now();
-
-  while (Date.now() < deadline) {
-    iterations += 1;
-    const current = readTerminalOutput(terminal);
-
-    // Extraer solo la parte nueva para evitar falsos positivos con el historial
-    const currentNewOutput = stripBaselineOutput(current, baseline);
-    const lowerNewOutput = currentNewOutput.toLowerCase();
-
-    if (current !== lastSnapshot) {
-      lastSnapshot = current;
-      lastChangeAt = Date.now();
-      
-      // Auto-avance de paginación si se detecta --More--
-      if (current.toLowerCase().includes("--more--")) {
-        try {
-          // Presionar espacio (32) para avanzar página
-          if (terminal.enterChar) terminal.enterChar(32, 0);
-        } catch(e) {}
-      }
-    }
-
-    const quietForLongEnough = Date.now() - lastChangeAt >= 500;
-    const currentPrompt = terminal.getPrompt ? terminal.getPrompt() : "";
-    const hasFinalPrompt = currentPrompt && current.endsWith(currentPrompt);
-
-    const hasCompletionMarker =
-      !waitsForCompletionMarker ||
-      lowerNewOutput.includes("ping statistics") ||
-      lowerNewOutput.includes("trace complete") ||
-      lowerNewOutput.includes("address:") ||
-      lowerNewOutput.includes("unknown host") ||
-      lowerNewOutput.includes("can't find") ||
-      lowerNewOutput.includes("non-existent");
-
-    if (quietForLongEnough && (hasFinalPrompt || hasCompletionMarker) && lastSnapshot.trim().length > 0) {
-      break;
-    }
-
-    await delay(250);
-  }
-
-  const output = stripBaselineOutput(lastSnapshot, baseline);
-  const finalOutput = output.trim().length > 0 ? output : lastSnapshot;
-
-  return {
-    output: finalOutput,
-    status: guessHostCommandStatus(finalOutput),
-    session: {
-      prompt: terminal.getPrompt ? terminal.getPrompt() : "",
-      mode: terminal.getMode ? terminal.getMode() : "",
-    },
-    debug: {
-      baselineLength,
-      finalLength: finalOutput.length,
-      iterations,
-      elapsedMs: Date.now() - startedAt,
-    },
-  };
-}
 
 /**
  * Ejecuta un comando único IOS en un dispositivo.
@@ -283,10 +77,10 @@ export async function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi):
   const terminal = getTerminalDevice(api, deviceName);
   if (!terminal) return createErrorResult("Terminal engine inaccessible", "NO_TERMINAL");
 
-  ensureSession(deviceName);
+  const session = ensureSession(deviceName);
+  session.sessionKind = "ios";
 
   const currentMode = detectModeFromPrompt(terminal.getPrompt());
-
   if (payload.ensurePrivileged && currentMode !== "privileged-exec") {
     const modeGuard = createModeGuard();
     const privResult = await modeGuard.ensurePrivilegedExec(deviceName, terminal);
@@ -310,45 +104,23 @@ export async function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi):
   };
 
   const executor = createCommandExecutor({
-    commandTimeoutMs: payload.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT,
-    stallTimeoutMs: payload.stallTimeoutMs ?? DEFAULT_STALL_TIMEOUT,
+    commandTimeoutMs: options.commandTimeoutMs,
+    stallTimeoutMs: options.stallTimeoutMs,
   });
-  const baselineOutput = readTerminalOutput(terminal);
 
   const execResult = await executor.executeCommand(
     deviceName,
     payload.command,
-    terminal,
-    options
+    terminal as any,
+    options,
   );
 
-  if (typeof (api as any).dprint === "function") {
-    (api as any).dprint(
-      `[handler:execIos] ok=${execResult.ok} status=${execResult.status} outputLen=${execResult.output.length} preview=${JSON.stringify(execResult.output.slice(0, 120))}`,
-    );
-  }
-
-  const normalizedOutput = stripBaselineOutput(execResult.output, baselineOutput);
-  const liveSnapshot = readTerminalOutput(terminal);
-  const recoveredOutput =
-    normalizedOutput.trim().length === 0
-      ? await recoverTerminalOutput(
-          terminal,
-          baselineOutput,
-          Math.max(payload.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT, 5000),
-        )
-      : "";
-  const finalOutput =
-    normalizedOutput.trim().length > 0
-      ? normalizedOutput
-      : recoveredOutput.trim().length > 0
-        ? recoveredOutput
-        : liveSnapshot;
-
-  if (execResult.ok) {
-    return createSuccessResult(finalOutput, {
-      raw: sanitizeTerminalOutput(undefined, finalOutput) || finalOutput,
+  if (execResult.ok || execResult.output.trim().length > 0) {
+    return createSuccessResult({
+      output: execResult.output,
       status: execResult.status,
+      confidence: execResult.confidence,
+      raw: sanitizeTerminalOutput(undefined, execResult.output) || execResult.output,
       parsed: {
         command: execResult.command,
         startedAt: execResult.startedAt,
@@ -360,11 +132,9 @@ export async function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi):
         modeAfter: execResult.modeAfter,
         events: execResult.events,
         warnings: execResult.warnings,
-        confidence: execResult.confidence,
       },
     });
   }
-
   return createErrorResult(
     execResult.error || `Command failed with status ${execResult.status}`,
     execResult.code,
@@ -479,15 +249,6 @@ export function handleDeferredPoll(pollPayload: PollDeferredPayload, api: PtRunt
   return { ok: true, done: true, raw: sanitizeTerminalOutput(undefined, rawOutput) || rawOutput, source: "terminal" };
 }
 
-/**
- * Ejecuta comando ping en un dispositivo IOS o PC.
- * Usa CommandExecutor unificado para todos los tipos de dispositivo.
- * Detecta completion estructuralmente via detectHostBusy().
- * 
- * @param payload - Payload con device, target, y timeoutMs opcional
- * @param api - PtRuntimeApi con acceso a IPC y device registry
- * @returns PtResult con output completo del ping
- */
 export async function handlePing(payload: { device: string; target: string; timeoutMs?: number }, api: PtRuntimeApi): Promise<PtResult> {
   try {
     const deviceName = payload.device;
@@ -514,47 +275,21 @@ export async function handlePing(payload: { device: string; target: string; time
     const terminal = getTerminalDevice(api, deviceName);
     if (!terminal) return createErrorResult("Terminal engine inaccessible", "NO_TERMINAL");
 
-    if (isPc) {
-      const hostPing = await runHostTerminalCommand(terminal, cmd, payload.timeoutMs ?? 15000, api);
-
-      if (typeof (api as any).dprint === "function") {
-        (api as any).dprint(
-          `[handler:ping-host] device=${deviceName} status=${hostPing.status} outputLen=${hostPing.output.length} preview=${JSON.stringify(hostPing.output.slice(0, 120))}`,
-        );
-      }
-
-      if (hostPing.output.trim().length > 0) {
-        return createSuccessResult(
-          {
-            output: hostPing.output,
-            outputLength: hostPing.output.length,
-            preview: hostPing.output.slice(0, 200),
-            status: hostPing.status,
-            debug: hostPing.debug,
-          },
-          { 
-            raw: hostPing.output, 
-            status: hostPing.status, 
-            session: hostPing.session 
-          },
-        );
-      }
-
-      return createErrorResult("Ping failed", "COMMAND_FAILED", { raw: hostPing.output });
-    }
-
     // Usa CommandExecutor unificado para todos los dispositivos (incluyendo PC)
     const executor = createCommandExecutor({
       commandTimeoutMs: payload.timeoutMs ?? 15000,
-      stallTimeoutMs: payload.timeoutMs ?? 15000,
+      stallTimeoutMs: 15000,
     });
-    const baselineOutput = readTerminalOutput(terminal);
 
     const result = await executor.executeCommand(
       deviceName,
       cmd,
       terminal,
-      { commandTimeoutMs: payload.timeoutMs ?? 15000, stallTimeoutMs: payload.timeoutMs ?? 15000 }
+      { 
+        commandTimeoutMs: payload.timeoutMs ?? 15000, 
+        stallTimeoutMs: 15000,
+        autoAdvancePager: true
+      }
     );
 
     if (typeof (api as any).dprint === "function") {
@@ -563,25 +298,18 @@ export async function handlePing(payload: { device: string; target: string; time
       );
     }
 
-    const normalizedOutput = stripBaselineOutput(result.output, baselineOutput);
-    const liveSnapshot = readTerminalOutput(terminal);
-    const recoveredOutput =
-      normalizedOutput.trim().length === 0
-        ? await recoverTerminalOutput(
-            terminal,
-            baselineOutput,
-            Math.max(payload.timeoutMs ?? 15000, 5000),
-          )
-        : "";
-    const finalOutput =
-      normalizedOutput.trim().length > 0
-        ? normalizedOutput
-        : recoveredOutput.trim().length > 0
-          ? recoveredOutput
-          : liveSnapshot;
-
-    if (result.ok) {
-      return createSuccessResult(finalOutput, { raw: finalOutput, status: result.status });
+    if (result.ok || result.output.trim().length > 0) {
+      return createSuccessResult(result.output, { 
+        raw: result.output, 
+        status: result.status,
+        parsed: {
+          command: result.command,
+          durationMs: result.durationMs,
+          promptAfter: result.promptAfter,
+          modeAfter: result.modeAfter,
+          confidence: result.confidence
+        }
+      });
     }
 
     return createErrorResult(result.error || "Ping failed", result.code, { raw: result.output });
@@ -591,61 +319,58 @@ export async function handlePing(payload: { device: string; target: string; time
 }
 
 export async function handleExecPc(payload: ExecPcPayload, api: PtRuntimeApi): Promise<PtResult> {
-  const deviceRef = api.getDeviceByName(payload.device);
-  if (!deviceRef) return createErrorResult(`Device not found: ${payload.device}`, "DEVICE_NOT_FOUND");
+  const deviceName = payload.device;
+  const deviceRef = api.getDeviceByName(deviceName);
+  if (!deviceRef) return createErrorResult(`Device not found: ${deviceName}`, "DEVICE_NOT_FOUND");
 
-  const terminal = getTerminalDevice(api, payload.device);
+  const terminal = getTerminalDevice(api, deviceName);
   if (!terminal) return createErrorResult("Terminal engine inaccessible", "NO_TERMINAL");
 
-  const hostResult = await runHostTerminalCommand(terminal, payload.command, payload.timeoutMs ?? 30000, api);
+  const executor = createCommandExecutor({
+    commandTimeoutMs: payload.timeoutMs ?? 30000,
+    stallTimeoutMs: 15000,
+  });
+
+  const result = await executor.executeCommand(
+    deviceName,
+    payload.command,
+    terminal,
+    { 
+      commandTimeoutMs: payload.timeoutMs ?? 30000,
+      autoAdvancePager: true
+    }
+  );
 
   if (typeof (api as any).dprint === "function") {
     (api as any).dprint(
-      `[handler:execPc-host] device=${payload.device} status=${hostResult.status} outputLen=${hostResult.output.length} preview=${JSON.stringify(hostResult.output.slice(0, 120))}`,
+      `[handler:execPc] device=${deviceName} status=${result.status} outputLen=${result.output.length} preview=${JSON.stringify(result.output.slice(0, 120))}`,
     );
   }
 
-  if (hostResult.output.trim().length > 0) {
+  if (result.ok || result.output.trim().length > 0) {
     return createSuccessResult(
       {
-        output: hostResult.output,
-        outputLength: hostResult.output.length,
-        preview: hostResult.output.slice(0, 200),
-        status: hostResult.status,
-        debug: hostResult.debug,
+        output: result.output,
+        outputLength: result.output.length,
+        preview: result.output.slice(0, 200),
+        status: result.status,
       },
       { 
-        raw: hostResult.output, 
-        status: hostResult.status, 
-        session: hostResult.session 
+        raw: result.output, 
+        status: result.status, 
+        session: {
+          prompt: result.promptAfter,
+          mode: result.modeAfter,
+          paging: false,
+          awaitingConfirm: false,
+        }
       },
     );
   }
 
-  return createErrorResult("PC execution failed", hostResult.status > 0 ? "COMMAND_FAILED" : "NO_OUTPUT", {
-    raw: hostResult.output,
+  return createErrorResult("PC execution failed", result.status > 0 ? "COMMAND_FAILED" : "NO_OUTPUT", {
+    raw: result.output,
   });
-}
-
-export function handleExecPcDirect(payload: ExecPcPayload, api: PtRuntimeApi): PtResult {
-  try {
-    const device = api.ipc.network().getDevice(payload.device);
-    if (device && (device as any).getCommandLine) {
-      const cli = (device as any).getCommandLine();
-      const prompt = cli.getPrompt();
-
-      // Bypass simple para inyección raw
-      if (prompt && prompt.indexOf("initial configuration dialog") !== -1) {
-        cli.enterCommand("no");
-        // Ctrl+C (char 3) para estabilizar
-        if (cli.enterChar) cli.enterChar(3, 0);
-      }
-
-      cli.enterCommand(payload.command);
-    }
-    return { ok: true, result: "Injected" } as any;
-  } catch(e) { return createErrorResult(String(e), "EXEC_FAILED"); }
-
 }
 
 export function handleReadTerminal(payload: { device: string }, api: PtRuntimeApi): PtResult {

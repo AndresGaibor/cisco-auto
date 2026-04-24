@@ -13,9 +13,9 @@ import {
 import { parsePrompt, type IosMode } from "./prompt-parser";
 import {
   createCommandExecutor,
-  type ExecuteOptions,
-  type TerminalResult,
-} from "./command-executor";
+  type ExecutionOptions as ExecuteOptions,
+  type CommandExecutionResult,
+} from "../../terminal/command-executor";
 
 export interface TerminalEngineConfig {
   commandTimeoutMs: number;
@@ -23,7 +23,15 @@ export interface TerminalEngineConfig {
   pagerTimeoutMs: number;
 }
 
-export type { ExecuteOptions, TerminalResult };
+export interface TerminalResult {
+  ok: boolean;
+  output: string;
+  status: number;
+  session: SessionStateSnapshot;
+  mode: IosMode;
+}
+
+export type { ExecuteOptions };
 
 interface PTCommandLine {
   getPrompt(): string;
@@ -86,8 +94,10 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
       const current = sessions[device];
       if (!current) return;
       const inputMode = (args as { inputMode?: string })?.inputMode || "";
-      if (inputMode) {
-        sessions[device] = updateMode(current, inputMode as IosMode);
+      if (inputMode && typeof inputMode === "string") {
+        const validModes = ["user-exec", "privileged-exec", "config", "config-if", "config-line", "config-router", "config-subif", "config-vlan", "unknown"] as const;
+        const normalizedMode = validModes.includes(inputMode as typeof validModes[number]) ? inputMode : "unknown";
+        sessions[device] = updateMode(current, normalizedMode);
       }
     });
     try {
@@ -128,7 +138,7 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
     return false;
   }
 
-  function executeCmd(
+  async function executeCmd(
     device: string,
     command: string,
     options?: ExecuteOptions,
@@ -141,7 +151,21 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
       return Promise.reject(new Error(`No terminal attached to ${device}`));
     }
 
-    return executeCommand(device, command, term, sessions, options);
+    const execResult = await executeCommand(device, command, term as any, options);
+    
+    // Mapear al formato antiguo esperado por ExecutionEngine
+    return {
+      ok: execResult.ok,
+      output: execResult.output,
+      status: execResult.status,
+      session: {
+        mode: execResult.modeAfter as any,
+        prompt: execResult.promptAfter,
+        paging: execResult.warnings.some(w => w.toLowerCase().includes("paginación")),
+        awaitingConfirm: execResult.warnings.some(w => w.toLowerCase().includes("confirmación")),
+      },
+      mode: execResult.modeAfter as IosMode,
+    };
   }
 
   function continuePager(device: string): void {

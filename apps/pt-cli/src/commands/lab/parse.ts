@@ -41,7 +41,7 @@ export function createLabParseCommand(): Command {
         });
         
         console.log('\n📄 Validación:');
-        const validation = validateLabSafe(parsedLab.lab);
+        const validation = validateLabSafe(parsedLab);
         if (validation.success) {
           console.log('  ✅ Lab válido');
         } else {

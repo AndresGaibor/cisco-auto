@@ -25,6 +25,7 @@ export const DIAGNOSE_META: CommandMeta = {
   ],
   status: 'experimental',
   requiresPT: true,
+  related: ['ping', 'omniscience'],
 };
 
 const SYMPTOM_TYPES = ['ping-fails', 'no-dhcp', 'no-access', 'slow-performance', 'packet-loss', 'acl-block'];

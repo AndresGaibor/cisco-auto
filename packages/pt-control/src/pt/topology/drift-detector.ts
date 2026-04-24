@@ -261,7 +261,7 @@ export class DriftDetector {
         results.push({
           rule: 'vlanNameConflict',
           severity: 'warning',
-          message: `Nombre de VLAN ${vlan.id}不一致: blueprint=${vlan.name}, observed=${obsVlan.name}`,
+          message: `Nombre de VLAN ${vlan.id} no coincide: blueprint=${vlan.name}, observed=${obsVlan.name}`,
           entity: `VLAN ${vlan.id}`,
         });
       }

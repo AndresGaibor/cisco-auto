@@ -1,6 +1,14 @@
 /**
- * Diagnostics - Health and diagnostics for FileBridge V2
- * Collects queue stats, lease info, journal info, and detects issues.
+ * Recopilador de salud y diagnóstico del FileBridge V2.
+ *
+ * Recopila estadísticas de colas, lease, journal, y detecta issues.
+ * El health check evalúa:
+ * - Lease activo y su edad
+ * - Commands stuck in-flight (>10 commands)
+ * - Cola respaldándose (>100 pending)
+ * - Drift entre queue index y archivos físicos
+ * - Comandos oldest in-flight/pending (>5 min)
+ * - Consumers con lag excesivo (>1000 events)
  */
 
 import { join } from "node:path";
@@ -42,7 +50,16 @@ export interface BridgeHealth {
   issues: string[];
 }
 
+/**
+ * Recopila métricas de salud del bridge.
+ */
 export class BridgeDiagnostics {
+  /**
+   * @param paths - Gestor de paths
+   * @param seq - Store de secuencias para consultar lastSeq
+   * @param getOwnerId - Callback para obtener el ownerId actual
+   * @param readLease - Callback para leer el lease actual
+   */
   constructor(
     private readonly paths: BridgePathLayout,
     private readonly seq: SequenceStore,
@@ -50,6 +67,12 @@ export class BridgeDiagnostics {
     private readonly readLease: () => BridgeLease | null,
   ) {}
 
+  /**
+   * Recopila información completa de salud del bridge.
+   * Evalúa múltiples condiciones y genera lista de issues.
+   *
+   * @returns Objeto BridgeHealth con métricas y estado general
+   */
   collectHealth(): BridgeHealth {
     const issues: string[] = [];
     const now = Date.now();

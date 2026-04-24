@@ -95,6 +95,14 @@ dist/
 *.js.map
 *.d.ts.map
 
+# PT Real Verification artifacts
+artifacts/pt-real/runs/
+artifacts/pt-real/latest/
+artifacts/pt-real/**/*.raw.txt
+artifacts/pt-real/**/*.log
+artifacts/pt-real/**/*.snapshot.json
+artifacts/pt-real/**/*.ndjson
+
 # Skills lock
 skills-lock.json
 

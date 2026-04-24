@@ -12,6 +12,11 @@ export interface EventSummary {
   latest: PTEvent | null;
 }
 
+/**
+ * Parsea una línea NDJSON de evento.
+ * @param line - Línea de texto a parsear
+ * @returns El evento parseado o null si es inválido
+ */
 export function parseEventLine(line: string): PTEvent | null {
   try {
     const parsed = JSON.parse(line);
@@ -21,6 +26,12 @@ export function parseEventLine(line: string): PTEvent | null {
   }
 }
 
+/**
+ * Lee y parsea eventos desde un archivo NDJSON de eventos.
+ * @param filePath - Ruta al archivo de eventos
+ * @param options - Opciones de lectura (skipInvalid para saltar líneas inválidas)
+ * @returns Array de eventos parseados
+ */
 export function readEvents(filePath: string, options: EventReadOptions = {}): PTEvent[] {
   if (!existsSync(filePath)) {
     return [];
@@ -42,6 +53,11 @@ export function readEvents(filePath: string, options: EventReadOptions = {}): PT
   return events;
 }
 
+/**
+ * Genera un resumen de eventos por tipo.
+ * @param events - Array de eventos a resumir
+ * @returns Resumen con totales, conteos por tipo y último evento
+ */
 export function summarizeEvents(events: PTEvent[]): EventSummary {
   const counts: Record<string, number> = {};
   for (const event of events) {
@@ -52,6 +68,12 @@ export function summarizeEvents(events: PTEvent[]): EventSummary {
   return { total: events.length, counts, latest };
 }
 
+/**
+ * Obtiene los últimos N eventos de un array.
+ * @param events - Array de eventos
+ * @param limit - Número de eventos a retornar desde el final
+ * @returns Array con los últimos N eventos
+ */
 export function tailEvents(events: PTEvent[], limit: number): PTEvent[] {
   if (limit <= 0) return events;
   return events.slice(-limit);

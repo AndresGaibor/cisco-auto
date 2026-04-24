@@ -10,7 +10,7 @@ import { select, input } from '@inquirer/prompts';
 import chalk from 'chalk';
 
 import type { CliResult } from '../../contracts/cli-result.js';
-import { createSuccessResult, createVerifiedResult } from '../../contracts/cli-result.js';
+import { createSuccessResult, createVerifiedResult, createErrorResult } from '../../contracts/cli-result.js';
 import type { GlobalFlags } from '../../flags.js';
 
 import { runCommand } from '../../application/run-command.js';
@@ -85,6 +85,7 @@ export function createLinkAddCommand(): Command {
       let dev2 = device2;
       let p2 = port2;
       const linkType = options.type ?? 'auto';
+      const warnings: string[] = [];
 
       const flags: GlobalFlags = {
         json: false,
@@ -226,47 +227,47 @@ export function createLinkAddCommand(): Command {
               linkType,
             });
 
-            await controller.addLink(dev1, p1, dev2, p2, linkType);
+            const linkState = await controller.addLink(dev1, p1, dev2, p2, linkType);
             
-            await logPhase('refresh', { message: 'Refrescando topología después de agregar enlace' });
-            const cache = controller.getTopologyCache();
-            if (cache) {
-              cache.refreshFromState();
-            }
+            // ACTUALIZAR PUERTOS REALES (Inteligencia contra PT 9.0)
+            const actualP1 = linkState.port1 || p1;
+            const actualP2 = linkState.port2 || p2;
 
-            if (verifyEnabled) {
-              await logPhase('verify', { device1: dev1, port1: p1, device2: dev2, port2: p2 });
-
-              const verificationData = await verifyLink(controller, dev1, p1, dev2, p2);
-              const checks = buildLinkVerificationChecks(verificationData);
-              const allPassed = checks.every((check) => check.ok);
-
-              const resultData: LinkAddResult = {
-                endpointA: `${dev1}:${p1}`,
-                portA: p1,
-                endpointB: `${dev2}:${p2}`,
-                portB: p2,
-                linkType,
-              };
-
-              return createVerifiedResult('link.add', resultData, {
-                verified: allPassed,
-                checks: checks.map((c) => ({ name: c.name, ok: c.ok, details: c.details })),
+            if (actualP1.toLowerCase() !== p1.toLowerCase() || actualP2.toLowerCase() !== p2.toLowerCase()) {
+              // ERROR FATAL DE DESVIACIÓN: PT usó otros puertos
+              return createErrorResult('link.add', {
+                  message: `Packet Tracer rechazó los puertos solicitados (${p1}, ${p2}) y usó puertos alternativos (${actualP1}, ${actualP2}).`,
+                  details: { requested: [p1, p2], actual: [actualP1, actualP2], status: 'REJECTED_BY_PT_API' }
               });
             }
 
             const resultData: LinkAddResult = {
-              endpointA: `${dev1}:${p1}`,
-              portA: p1,
-              endpointB: `${dev2}:${p2}`,
-              portB: p2,
+              endpointA: dev1,
+              portA: actualP1,
+              endpointB: dev2,
+              portB: actualP2,
               linkType,
             };
+
+            if (verifyEnabled) {
+              await logPhase('verify', { device1: dev1, port1: actualP1, device2: dev2, port2: actualP2 });
+
+              const verificationData = await verifyLink(controller, dev1, actualP1, dev2, actualP2);
+              const checks = buildLinkVerificationChecks(verificationData);
+              const allPassed = checks.every((check) => check.ok);
+
+              return createVerifiedResult('link.add', resultData, {
+                verified: allPassed,
+                checks: checks.map((c) => ({ name: c.name, ok: c.ok, details: c.details })),
+                warnings: warnings.length > 0 ? warnings : undefined,
+              });
+            }
 
             return createSuccessResult('link.add', resultData, {
               advice: [
                 'Ejecuta bun run pt link list para verificar la conexión',
               ],
+              warnings: warnings.length > 0 ? warnings : undefined,
             });
           } finally {
             await controller.stop();

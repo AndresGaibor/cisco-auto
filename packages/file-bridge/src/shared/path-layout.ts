@@ -1,19 +1,16 @@
 /**
- * Path layout for Bridge V2 directory structure.
+ * Estructura de directorios del FileBridge V2.
  *
- * NOTE: FileBridge V2 uses a durable queue-based command protocol.
- * The primary path is:
- *   - commands/*.json: pending commands queue (FIFO by seq)
- *   - in-flight/*.json: commands claimed by PT for processing
- *   - results/<id>.json: authoritative result for each command
- *   - dead-letter/*.json: corrupted commands that couldn't be processed
- *   - logs/events.current.ndjson: event journal
+ * Utiliza una cola basada en archivos para comandos durables.
  *
- * Legacy compatibility:
- *   - command.json at root is DEPRECATED - only used for transition period
- *   - It will be converted to commands/ on first use
+ * Estructura primaria:
+ *   - commands/*.json: cola FIFO de comandos pendientes (ordenados por seq)
+ *   - in-flight/*.json: comandos en proceso por PT (claim via rename)
+ *   - results/<id>.json: resultado authoritative de cada comando
+ *   - dead-letter/*.json: comandos corruptos que no se pudieron procesar
+ *   - logs/events.current.ndjson: journal de eventos NDJSON
  *
- * All paths are derived from a single root (pt-dev directory).
+ * Todos los paths se derivan de un único root (directorio pt-dev).
  */
 import { join } from "node:path";
 
@@ -45,109 +42,116 @@ function sanitizeName(input: string): string {
   return input.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
+/**
+ * Gestor de paths del filesystem del bridge.
+ * Centraliza la estructura de directorios en un solo lugar.
+ */
 export class BridgePathLayout {
+  /**
+   * @param root - Directorio raíz del bridge (pt-dev)
+   */
   constructor(readonly root: string) {}
 
-  /** Bridge lease file for single-instance enforcement */
+  /** Archivo de lease para enforce de instancia única */
   leaseFile(): string {
     return join(this.root, "bridge-lease.json");
   }
 
-  /** Current topology/state snapshot */
+  /** Archivo de snapshot de topología/estado */
   stateFile(): string {
     return join(this.root, "state.json");
   }
 
-  /** Queue of pending commands */
+  /** Directorio de comandos pendientes (cola FIFO) */
   commandsDir(): string {
     return join(this.root, "commands");
   }
 
-  /** Commands currently being processed by PT */
+  /** Directorio de comandos en proceso por PT */
   inFlightDir(): string {
     return join(this.root, "in-flight");
   }
 
-  /** Authoritative results for each command */
+  /** Directorio de resultados de comandos */
   resultsDir(): string {
     return join(this.root, "results");
   }
 
-  /** NDJSON event journal directory */
+  /** Directorio del journal NDJSON de eventos */
   logsDir(): string {
     return join(this.root, "logs");
   }
 
-  /** Current NDJSON events file (active for writing) */
+  /** Archivo actual de eventos NDJSON (activo para escritura) */
   currentEventsFile(): string {
     return join(this.logsDir(), "events.current.ndjson");
   }
 
-  /** Consumer checkpoint directory */
+  /** Directorio de checkpoints de consumers */
   consumerStateDir(): string {
     return join(this.root, "consumer-state");
   }
 
-  /** Path to a consumer checkpoint file */
+  /** Path al archivo de checkpoint de un consumer específico */
   consumerCheckpointFile(consumerId: string): string {
     return join(this.consumerStateDir(), `${consumerId}.json`);
   }
 
-  /** Rotation manifest file (tracks rotated log files) */
+  /** Archivo manifest de rotación de logs */
   rotationManifestFile(): string {
     return join(this.logsDir(), "rotation-manifest.json");
   }
 
-  /** Dead letter directory for corrupted command files */
+  /** Directorio de dead letters (comandos corruptos) */
   deadLetterDir(): string {
     return join(this.root, "dead-letter");
   }
 
-  /** Dead letter file for a specific command */
+  /** Path a un archivo de dead letter específico */
   deadLetterFile(basename: string): string {
     return join(this.deadLetterDir(), basename);
   }
 
-  /** Garbage collector state file */
+  /** Archivo de estado del garbage collector */
   gcStateFile(): string {
     return join(this.root, "gc-state.json");
   }
 
-  /** Sequence number store file */
+  /** Archivo del store de números de secuencia */
   sequenceStoreFile(): string {
     return join(this.root, "protocol.seq.json");
   }
 
   /**
-   * Generate a command filename from seq and type.
-   * Format: "<seq>-<sanitized_type>.json"
-   * Example: "000000000042-configIos.json"
+   * Genera nombre de archivo de comando desde seq y type.
+   * Formato: "<seq>-<type_sanitized>.json"
+   * Ejemplo: "000000000042-configIos.json"
    */
   commandFileName(seq: number, type: string): string {
     return `${String(seq).padStart(12, "0")}-${sanitizeName(type)}.json`;
   }
 
-  /** Full path to a command file in the commands/ queue directory */
+  /** Path completo a archivo de comando en commands/ */
   commandFilePath(seq: number, type: string): string {
     return join(this.commandsDir(), this.commandFileName(seq, type));
   }
 
-  /** Full path to a command file in the in-flight/ directory */
+  /** Path completo a archivo de comando en in-flight/ */
   inFlightFilePath(seq: number, type: string): string {
     return join(this.inFlightDir(), this.commandFileName(seq, type));
   }
 
-  /** Full path to a result file for a given command ID */
+  /** Path completo a archivo de resultado para un commandId */
   resultFilePath(id: string): string {
     return join(this.resultsDir(), `${id}.json`);
   }
 
-  /** Generate a command ID from a sequence number */
+  /** Genera commandId desde número de secuencia */
   commandIdFromSeq(seq: number): string {
     return `cmd_${String(seq).padStart(12, "0")}`;
   }
 
-  /** Full path to a dead-letter error metadata file */
+  /** Path a archivo de metadata de error de dead letter */
   deadLetterErrorFile(basename: string): string {
     return join(this.deadLetterDir(), `${basename}.error.json`);
   }

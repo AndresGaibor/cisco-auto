@@ -4,9 +4,15 @@ import { toValidationResult } from '../../plugins/shared/validation.utils.js';
 import {
   createPacketTracerAdapter,
   type PacketTracerBackendAdapter,
-  type PacketTracerAdapterDependencies,
 } from "./packet-tracer.adapter.js";
 
+/**
+ * Valida la configuración del plugin de Packet Tracer.
+ * Requiere que devDir sea un string no vacío.
+ * 
+ * @param config - Configuración a validar
+ * @returns Resultado de validación
+ */
 function validateConfig(config: unknown): PluginValidationResult {
   if (typeof config !== "object" || config === null) {
     return toValidationResult([
@@ -14,10 +20,11 @@ function validateConfig(config: unknown): PluginValidationResult {
     ]);
   }
 
+  const cfg = config as { devDir?: unknown };
   if (
-    !("devDir" in config) ||
-    typeof (config as { devDir?: unknown }).devDir !== "string" ||
-    (config as { devDir?: string }).devDir.trim() === ""
+    !("devDir" in cfg) ||
+    typeof cfg.devDir !== "string" ||
+    cfg.devDir.trim() === ""
   ) {
     return toValidationResult([
       { path: "devDir", message: "devDir is required", code: "missing_dev_dir" },
@@ -27,6 +34,10 @@ function validateConfig(config: unknown): PluginValidationResult {
   return toValidationResult([]);
 }
 
+/**
+ * Interface extendida del plugin de backend para Packet Tracer.
+ * Incluye todos los métodos específicos de PT.
+ */
 export interface PacketTracerBackendPlugin extends BackendPlugin {
   id: "packet-tracer";
   description: string;
@@ -39,6 +50,13 @@ export interface PacketTracerBackendPlugin extends BackendPlugin {
   getTopology(): Promise<unknown>;
 }
 
+/**
+ * Factory para crear el plugin de backend de Packet Tracer.
+ * Envuelve el adapter con la interfaz de plugin correcta.
+ * 
+ * @param adapter - Adapter de Packet Tracer
+ * @returns Plugin listo para registrar en el sistema
+ */
 export function createPacketTracerBackendPlugin(
   adapter: PacketTracerBackendAdapter,
 ): PacketTracerBackendPlugin {

@@ -1,10 +1,10 @@
 // packages/pt-runtime/src/pt/kernel/runtime-api.ts
 // Factory para el objeto RuntimeApi inyectado en los handlers del runtime
 
-import type { RuntimeApi, DeviceRef } from "../../runtime/contracts";
+import type { RuntimeApi, DeviceRef, DeferredJobPlan } from "../../runtime/contracts";
 import type { KernelSubsystems } from "./kernel-lifecycle";
 import type { KernelState } from "./kernel-state";
-import { toKernelJobState } from "./execution-engine";
+import { toKernelJobState, type ActiveJob } from "./execution-engine";
 import type { PTNetwork } from "../../pt-api/pt-api-registry.js";
 
 export function createRuntimeApi(subsystems: KernelSubsystems): RuntimeApi {
@@ -80,15 +80,15 @@ export function createRuntimeApi(subsystems: KernelSubsystems): RuntimeApi {
         dprint("[runtime] " + msg);
       } catch {}
     },
-    createJob: function (plan: any): string {
+    createJob: function (plan: DeferredJobPlan): string {
       return executionEngine.startJob(plan).id;
     },
     getJobState: function (id: string) {
       const job = executionEngine.getJob(id);
       return job ? toKernelJobState(job.context) : null;
     },
-    getActiveJobs: function () {
-      return executionEngine.getActiveJobs().map(function (j: any) {
+    getActiveJobs: function (): Array<{ id: string; device: string; finished: boolean; state: string }> {
+      return executionEngine.getActiveJobs().map(function (j: ActiveJob) {
         return {
           id: j.id,
           device: j.device,

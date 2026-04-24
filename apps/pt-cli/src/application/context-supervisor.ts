@@ -16,7 +16,7 @@ export async function collectContextStatus(controller: PTController): Promise<Co
   // Use the cached snapshot only — never send a new command to PT here.
   // This runs in the finally block of runCommand(), after execute() already queried PT.
   // Calling controller.snapshot() again would add another 30s timeout when PT is offline.
-  const liveSnapshot = controller.getCachedSnapshot?.() ?? null;
+  let liveSnapshot = controller.getCachedSnapshot?.() ?? null;
 
   // Prefer the consolidated system context exposed by PTController (Phase 5)
   const sys = controller.getSystemContext?.() ?? {
@@ -33,6 +33,11 @@ export async function collectContextStatus(controller: PTController): Promise<Co
     inFlightCount: 0,
     warnings: [],
   };
+
+  if (!liveSnapshot && bridge.ready && typeof controller.snapshot === "function") {
+    liveSnapshot = await controller.snapshot().catch(() => null);
+  }
+
   const deviceCount = liveSnapshot?.devices
     ? Object.keys(liveSnapshot.devices).length
     : sys.deviceCount;
@@ -40,10 +45,13 @@ export async function collectContextStatus(controller: PTController): Promise<Co
   const bridgeReady = bridge.ready && sys.bridgeReady;
   const warnings: string[] = Array.isArray(sys.warnings) ? [...sys.warnings] : [];
 
+  // FORCE MATERIALIZATION: Si hay dispositivos, la topología está materializada aunque el flag diga warming
+  const isMaterialized = sys.topologyMaterialized || deviceCount > 0 || Boolean(liveSnapshot);
+
   const topologyHealth = computeTopologyHealth({
-    topologyMaterialized: sys.topologyMaterialized,
-    deviceCount: sys.deviceCount,
-    linkCount: sys.linkCount,
+    topologyMaterialized: isMaterialized,
+    deviceCount,
+    linkCount,
     warnings,
   });
 
@@ -70,7 +78,7 @@ export async function collectContextStatus(controller: PTController): Promise<Co
       warnings: bridge.warnings ?? [],
     },
     topology: {
-      materialized: sys.topologyMaterialized || Boolean(liveSnapshot),
+      materialized: isMaterialized,
       deviceCount,
       linkCount,
       health: topologyHealth,

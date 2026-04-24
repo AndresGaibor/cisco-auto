@@ -45,23 +45,31 @@ export var validationMiddleware: MiddlewareFn = function(ctx, next) {
   return next();
 };
 
-export var rateLimitMiddleware: MiddlewareFn = (function() {
-  var commandCounts: Record<string, number> = {};
-  var lastReset = 0;
-  var WINDOW_MS = 60000;
-  var MAX_COMMANDS_PER_WINDOW = 300;
+// Rate limit state
+interface RateLimitState {
+  commandCounts: Record<string, number>;
+  lastReset: number;
+}
 
-  return function(ctx, next) {
-    var now = Date.now();
-    if (now - lastReset > WINDOW_MS) {
-      commandCounts = {};
-      lastReset = now;
+function createRateLimitMiddleware() {
+  const state: RateLimitState = {
+    commandCounts: {},
+    lastReset: Date.now(),
+  };
+  const WINDOW_MS = 60000;
+  const MAX_COMMANDS_PER_WINDOW = 300;
+
+  return function rateLimitMiddleware(ctx: MiddlewareContext, next: () => RuntimeResult): RuntimeResult {
+    const now = Date.now();
+    if (now - state.lastReset > WINDOW_MS) {
+      state.commandCounts = {};
+      state.lastReset = now;
     }
 
-    var key = ctx.type;
-    commandCounts[key] = (commandCounts[key] || 0) + 1;
+    const key = ctx.type;
+    state.commandCounts[key] = (state.commandCounts[key] || 0) + 1;
 
-    if (commandCounts[key] > MAX_COMMANDS_PER_WINDOW) {
+    if (state.commandCounts[key] > MAX_COMMANDS_PER_WINDOW) {
       return {
         ok: false,
         error: "Rate limit exceeded for command: " + ctx.type,
@@ -71,7 +79,9 @@ export var rateLimitMiddleware: MiddlewareFn = (function() {
 
     return next();
   };
-})();
+}
+
+export const rateLimitMiddleware: MiddlewareFn = createRateLimitMiddleware();
 
 export var errorRecoveryMiddleware: MiddlewareFn = function(ctx, next) {
   try {

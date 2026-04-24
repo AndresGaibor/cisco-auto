@@ -11,13 +11,24 @@ import type { DeviceId } from './device-id.js';
 const PORT_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*:[a-zA-Z0-9/._-]+$/;
 
 /**
- * Represents a validated port identifier for topology state
- * 
- * Combines device ID and port name into a single reference that can be
- * used for link endpoints, port lookups, and topology queries.
- * 
- * Format: device:port
- * Example: R1:GigabitEthernet0/0
+ * Valor obstructor que representa un identificador de puerto validado para topología.
+ *
+ * Combina device ID y nombre de puerto en una referencia única para usar en
+ * extremos de enlace, lookups de puerto y consultas de topología.
+ *
+ * Formato: device:port
+ *
+ * @example
+ * ```typescript
+ * const portId = PortId.from("R1", "GigabitEthernet0/0");
+ * console.log(portId.toString()); // "R1:GigabitEthernet0/0"
+ * console.log(portId.device); // "R1"
+ * console.log(portId.port); // "GigabitEthernet0/0"
+ *
+ * // Crear desde string
+ * const fromString = PortId.fromString("SW1:GigabitEthernet0/1");
+ * console.log(fromString.isOnDevice("SW1")); // true
+ * ```
  */
 export class PortId {
   public readonly value: string;

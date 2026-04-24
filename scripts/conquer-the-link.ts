@@ -7,35 +7,18 @@ async function globalWakeUp() {
     await controller.start();
     console.log("\n🔥 DESPERTANDO TODA LA INFRAESTRUCTURA...");
 
-    const wakeup = `
-        (function() {
-            var net = ipc.network();
-            var dCount = net.getDeviceCount();
-            var logs = [];
-            
-            for(var i=0; i<dCount; i++) {
-                var dev = net.getDeviceAt(i);
-                if (dev.getClassName() === "Router" || dev.getClassName() === "Switch") {
-                    var cli = dev.getCommandLine();
-                    cli.enterCommand("enable");
-                    cli.enterCommand("conf t");
-                    // Levantamos las primeras 3 interfaces Gigabit
-                    cli.enterCommand("interface GigabitEthernet0/0");
-                    cli.enterCommand("no shutdown");
-                    cli.enterCommand("interface GigabitEthernet0/1");
-                    cli.enterCommand("no shutdown");
-                    cli.enterCommand("interface GigabitEthernet0/2");
-                    cli.enterCommand("no shutdown");
-                    cli.enterCommand("end");
-                    logs.push(dev.getName() + ": AWAKE");
-                }
-            }
-            return logs.join(", ");
-        })()
-    `;
+    const devices = await controller.listDevices();
+    const targets = devices.filter(d => d.type === "router" || d.type === "switch");
 
-    const res = await controller.send("__evaluate", { code: wakeup });
-    console.log(`✅ Equipos despertados: ${res.result}`);
+    for (const dev of targets) {
+        console.log(`⏳ Despertando ${dev.name}...`);
+        await controller.configIos(dev.name, [
+            "interface GigabitEthernet0/0", "no shutdown",
+            "interface GigabitEthernet0/1", "no shutdown",
+            "interface GigabitEthernet0/2", "no shutdown"
+        ]);
+    }
+    console.log(`✅ ${targets.length} equipos despertados.`);
 
     console.log("\n⏳ Esperando 10 segundos para que los enlaces se activen...");
     await new Promise(r => setTimeout(r, 10000));

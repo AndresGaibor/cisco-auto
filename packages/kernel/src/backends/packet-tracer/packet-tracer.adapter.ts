@@ -1,3 +1,6 @@
+/**
+ * Información de un dispositivo en Packet Tracer.
+ */
 export interface DeviceInfo {
   name: string;
   model: string;
@@ -6,6 +9,9 @@ export interface DeviceInfo {
   ports: Array<Record<string, unknown>>;
 }
 
+/**
+ * Información de un enlace entre dispositivos.
+ */
 export interface LinkInfo {
   id: string;
   device1: string;
@@ -15,6 +21,10 @@ export interface LinkInfo {
   cableType: string;
 }
 
+/**
+ * Resultado de snapshot de la topología.
+ * Contiene el estado completo de la simulación.
+ */
 export interface SnapshotResult {
   version: string;
   timestamp: number;
@@ -23,10 +33,17 @@ export interface SnapshotResult {
   metadata?: { deviceCount: number; linkCount: number };
 }
 
+/**
+ * Configuración para conectar al backend de Packet Tracer.
+ */
 export interface PacketTracerBackendConfig {
   devDir: string;
 }
 
+/**
+ * Interface del controlador de Packet Tracer.
+ * Abstrae la comunicación con el proceso de PT.
+ */
 export interface PacketTracerControllerLike {
   start(): Promise<void>;
   stop(): Promise<void>;
@@ -50,6 +67,10 @@ export interface PacketTracerControllerLike {
   snapshot(): Promise<SnapshotResult>;
 }
 
+/**
+ * Adapter que implementa la interfaz de backend para Packet Tracer.
+ * Delega toda la lógica al controlador proporcionado por dependencias.
+ */
 export interface PacketTracerBackendAdapter {
   connect(config: unknown): Promise<void>;
   disconnect(): Promise<void>;
@@ -63,10 +84,17 @@ export interface PacketTracerBackendAdapter {
   getTopology(): Promise<unknown>;
 }
 
+/**
+ * Dependencias requeridas por el adapter.
+ * Proveen la factory para crear controladores de PT.
+ */
 export interface PacketTracerAdapterDependencies {
   createController(config: PacketTracerBackendConfig): PacketTracerControllerLike;
 }
 
+/**
+ * Verifica si el config es un PacketTracerBackendConfig válido.
+ */
 function isPacketTracerBackendConfig(config: unknown): config is PacketTracerBackendConfig {
   return (
     typeof config === "object" &&
@@ -76,6 +104,9 @@ function isPacketTracerBackendConfig(config: unknown): config is PacketTracerBac
   );
 }
 
+/**
+ * Resuelve el controlador o lanza si no está conectado.
+ */
 function resolveController(
   controller: PacketTracerControllerLike | null,
 ): PacketTracerControllerLike {
@@ -86,6 +117,19 @@ function resolveController(
   return controller;
 }
 
+/**
+ * Factory que crea el adapter de Packet Tracer.
+ * Recibe dependencias que proporcionan el controlador.
+ * 
+ * @param dependencies - Factory para crear controladores de PT
+ * @returns Adapter listo para usar con connect/disconnect
+ * 
+ * @example
+ * const adapter = createPacketTracerAdapter({
+ *   createController: (config) => new PacketTracerController(config)
+ * });
+ * await adapter.connect({ devDir: '/path/to/pt-dev' });
+ */
 export function createPacketTracerAdapter(
   dependencies: PacketTracerAdapterDependencies,
 ): PacketTracerBackendAdapter {

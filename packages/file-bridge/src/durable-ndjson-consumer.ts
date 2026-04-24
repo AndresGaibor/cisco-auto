@@ -1,18 +1,27 @@
 /**
- * Durable NDJSON Consumer
+ * Consumer durable de eventos NDJSON del bridge.
  *
- * Reads NDJSON events from the log directory without losing data.
- * Key features:
- * - Persists byteOffset + lastSeq checkpoint to disk
- * - Handles file truncation and rotation
- * - Uses watcher + poll for resilience
- * - Maintains leftover buffer for partial lines
- * - Detects sequence gaps
- * - Uses StringDecoder for proper UTF-8 multibyte handling
- * - Supports rotation manifest to recover events from rotated files
+ * Lee eventos del journal NDJSON sin perder datos incluso ante crashes.
  *
- * This replaces the v1 FastEventStream which had no checkpointing
- * and relied solely on tail-from-end behavior.
+ * Protocolo de archivos:
+ * - logs/events.current.ndjson: archivo activo de escritura (append)
+ * - logs/events.<timestamp>.ndjson: archivos rotados (solo lectura)
+ * - logs/rotation-manifest.json: índice de archivos rotados
+ * - consumer-state/<consumerId>.json: checkpoint de posición (byteOffset + lastSeq)
+ *
+ * Flujo de recuperación ante rotación:
+ * 1. Checkpoint guarda: currentFile, byteOffset, lastSeq, updatedAt
+ * 2. Si al leer, byteOffset > tamaño actual del archivo → archivo fue rotado
+ * 3. Se consulta rotation-manifest.json para encontrar el archivo rotado correcto
+ * 4. Se ajusta offset si el archivo rotado aún contiene datos del checkpoint
+ *
+ * Características:
+ * - Checkpointing eachimétrico: solo se Persiste byteOffset y lastSeq
+ * - StringDecoder para manejo correcto de caracteres multibyte UTF-8
+ * - Buffer de leftover para líneas parciales entre reads
+ * - Detección de gaps de secuencia
+ * - Watcher + polling para resiliencia (fallback a polling si watch falla)
+ * - Throttled writes del checkpoint para evitar I/O excesivo
  */
 import {
   closeSync,
@@ -61,6 +70,15 @@ export interface DurableNdjsonConsumerOptions {
   }) => void;
 }
 
+/**
+ * Consumer durable que persiste su posición parano perder eventos.
+ *
+ * Soporta:
+ * - Reanudación exacta tras crashes (checkpoint de byteOffset + lastSeq)
+ * - Recuperación de archivos rotados via rotation-manifest.json
+ * - Handling de caracteres multibyte UTF-8 via StringDecoder
+ * - Polling con fallback automático si fs.watch falla
+ */
 export class DurableNdjsonConsumer extends EventEmitter {
   private readonly pollIntervalMs: number;
   private readonly bufferSize: number;
@@ -100,6 +118,10 @@ export class DurableNdjsonConsumer extends EventEmitter {
   private static readonly MAX_RECENT_PARSE_ERRORS = 10;
   private static readonly MAX_RECENT_DATA_LOSS = 10;
 
+  /**
+   * @param paths - BridgePathLayout para acceder a la estructura de directorios
+   * @param options - Configuración del consumer (consumerId, pollIntervalMs, callbacks, etc.)
+   */
   constructor(
     private readonly paths: BridgePathLayout,
     private readonly options: DurableNdjsonConsumerOptions,
@@ -116,7 +138,10 @@ export class DurableNdjsonConsumer extends EventEmitter {
     this.fileResolver = new FileResolver(paths);
   }
 
-  /** Start consuming events */
+  /**
+   * Inicia el consumo de eventos. Crea directorios necesarios,
+   * restaura posición desde checkpoint, e inicia watcher + timer de polling.
+   */
   start(): void {
     if (this.running) return;
     this.running = true;
@@ -150,7 +175,10 @@ export class DurableNdjsonConsumer extends EventEmitter {
     this.poll();
   }
 
-  /** Stop consuming and release resources */
+  /**
+   * Detiene el consumo, libera file descriptors y cierra watcher/timer.
+   * El último checkpoint escrito queda persisted para la próxima ejecución.
+   */
   stop(): void {
     this.running = false;
 
@@ -180,7 +208,13 @@ export class DurableNdjsonConsumer extends EventEmitter {
     this.lastWatchError = null;
   }
 
-  /** Trigger a poll manually */
+  /**
+   * Fuerza un poll manual. Lee eventos desde la posición del checkpoint
+   * hasta el final del archivo actual. Si el archivo fue rotado, busca
+   * el siguiente archivo rotado disponible.
+   *
+   * El checkpoint se escribe al final de cada poll (throttled).
+   */
   poll(): void {
     if (!this.running) return;
 
@@ -406,18 +440,30 @@ export class DurableNdjsonConsumer extends EventEmitter {
     this.decoder = new StringDecoder("utf8");
   }
 
+  /**
+   * @returns true si el watcher de filesystem falló y se usa polling en su lugar
+   */
   isUsingPollingFallback(): boolean {
     return this.usingPollingFallback;
   }
 
+  /**
+   * @returns Mensaje de error del último intento de crear el watcher, o null si no hubo error
+   */
   getLastWatchError(): string | null {
     return this.lastWatchError;
   }
 
+  /**
+   * @returns Cantidad total de errores de parseo JSON encontrados desde el inicio
+   */
   getTotalParseErrors(): number {
     return this.totalParseErrors;
   }
 
+  /**
+   * @returns Cantidad total de eventos de pérdida de datos detectados desde el inicio
+   */
   getTotalDataLossEvents(): number {
     return this.totalDataLossEvents;
   }

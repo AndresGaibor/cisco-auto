@@ -60,6 +60,15 @@ function buildTerminalPlan(device: string, commands: string[]): TerminalPlan {
   };
 }
 
+/**
+ * Construye un plan de workflow para diagnosticar problemas DHCP en un dispositivo.
+ *
+ * Genera steps de terminal para: verificar configuración DHCP en running-config,
+ * inspeccionar pool específico (si se provee poolName), bindings y conflictos.
+ *
+ * @param input - Datos del diagnóstico: device, poolName opcional
+ * @returns Plan de workflow listo para ejecutar via TerminalPort
+ */
 export async function buildDHCPDiagnosisPlan(input: DHCPDiagnosisInput): Promise<DHCPDiagnosisPlan> {
   const steps: WorkflowStep[] = [];
 

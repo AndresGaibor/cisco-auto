@@ -25,10 +25,22 @@ import type {
   TerminalMode,
 } from "../../ports/runtime-terminal-port.js";
 
+/**
+ * Servicio de ejecución de comandos IOS.
+ *
+ * Maneja sesiones CLI, sanitización de output, ejecución de planes
+ * terminales con políticas de retry/confirm/pager, y generación
+ * de evidence para verificación.
+ *
+ * @param generateId - Generador de IDs único para tracking de sesiones
+ * @param terminalPort - Puerto para ejecutar planes terminal en PT
+ * @param readRunningConfig - Función opcional para leer configuración directamente desde PT
+ */
 export class IosExecutionService {
   constructor(
     private readonly generateId: () => string,
     private readonly terminalPort: RuntimeTerminalPort,
+    private readonly readRunningConfig?: (device: string) => Promise<string>,
   ) {}
 
   private readonly sessions = new Map<string, CliSession>();
@@ -60,9 +72,44 @@ export class IosExecutionService {
         };
 
         const result = await this.terminalPort.runTerminalPlan(plan, { timeoutMs: 30000 });
-        return [result.ok ? 0 : 1, result.output];
+        
+        // IMPORTANTE: Sanitizar la salida antes de devolverla a CliSession.
+        // CommandExecutor ya manejó la paginación, wizards, etc.
+        // Si le pasamos la salida cruda con "--More--", CliSession intentará manejarla de nuevo.
+        const rawOutput = result.output;
+        const sanitized = this.sanitizeForCliSession(cmd, rawOutput);
+        
+        return [result.ok ? 0 : 1, sanitized];
       },
     };
+  }
+
+  private sanitizeForCliSession(command: string, output: string): string {
+    const lines = output.split(/\r?\n/);
+    const cleaned: string[] = [];
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) continue;
+
+      // Eliminar el eco del comando
+      if (line === command.trim()) continue;
+      
+      // Eliminar indicadores de paginación (ya procesados por CommandExecutor)
+      if (/^--More--$/i.test(line) || /^More$/i.test(line)) continue;
+      
+      // Eliminar indicadores de wizards ya resueltos
+      if (/Would you like to enter the initial configuration dialog/i.test(line)) continue;
+      if (/% Please answer 'yes' or 'no'\./i.test(line)) continue;
+      
+      // Eliminar ruido de DNS hangups ya rotos por el executor
+      if (/Translating\s+["']?.+["']?\.\.\./i.test(line)) continue;
+      if (/Unknown host or address/i.test(line)) continue;
+      
+      cleaned.push(rawLine);
+    }
+
+    return cleaned.join("\n").trim();
   }
 
   private buildEvidence(result: {
@@ -71,6 +118,7 @@ export class IosExecutionService {
     promptAfter: string;
     warnings: string[];
     raw?: string;
+    events?: any[];
   }): IosExecutionEvidence {
     return {
       source: "terminal",
@@ -78,6 +126,7 @@ export class IosExecutionService {
       status: result.status,
       mode: result.modeAfter,
       prompt: result.promptAfter,
+      events: result.events,
       completionReason: result.status === 0 ? "command-ended" : undefined,
       paging: result.warnings.some((w) => w.toLowerCase().includes("paginación")),
       awaitingConfirm: result.warnings.some((w) => w.toLowerCase().includes("confirmación")),
@@ -122,11 +171,7 @@ export class IosExecutionService {
 
     const result = await this.terminalPort.runTerminalPlan(plan, { timeoutMs: timeout });
 
-    if (!result.ok) {
-      return { raw: result.output || "", parsed: undefined };
-    }
-
-    return { raw: result.output || "", parsed: undefined };
+    return { raw: result.output || "", parsed: result.parsed };
   }
 
   async execIos<T = ParsedOutput>(
@@ -147,14 +192,10 @@ export class IosExecutionService {
 
     const result = await this.terminalPort.runTerminalPlan(plan, { timeoutMs: timeout });
 
-    if (!result.ok) {
-      throw new Error(`execIos failed: command '${command}' returned status ${result.status}`);
-    }
-
     return {
-      ok: true,
+      ok: result.ok,
       raw: result.output || "",
-      parsed: undefined,
+      parsed: result.parsed as T,
       evidence: this.buildEvidence(result),
     };
   }
@@ -179,16 +220,10 @@ export class IosExecutionService {
 
     const result = await this.terminalPort.runTerminalPlan(plan, { timeoutMs: timeout });
 
-    if (!result.ok) {
-      throw new Error(
-        `execInteractive failed: command '${command}' returned status ${result.status}`,
-      );
-    }
-
     return {
-      ok: true,
+      ok: result.ok,
       raw: result.output || "",
-      parsed: undefined,
+      parsed: result.parsed as ParsedOutput,
       evidence: this.buildEvidence(result),
     };
   }
@@ -313,11 +348,31 @@ export class IosExecutionService {
       timeout: 15000,
     });
 
-    const raw = result.raw || "";
-    const marker = raw.lastIndexOf("show running-config");
-    const normalizedRaw = marker >= 0 ? raw.slice(marker) : raw;
+    let raw = result.raw || "";
+    let normalizedRaw = raw;
+    let parsed = parseShowRunningConfig(normalizedRaw);
 
-    return parseShowRunningConfig(normalizedRaw);
+    if ((!this.hasMeaningfulRunningConfig(parsed) || !raw.trim()) && this.readRunningConfig) {
+      raw = await this.readRunningConfig(device).catch(() => "");
+      normalizedRaw = raw;
+      parsed = parseShowRunningConfig(normalizedRaw);
+    }
+
+    const marker = normalizedRaw.lastIndexOf("show running-config");
+    const finalRaw = marker >= 0 ? normalizedRaw.slice(marker) : normalizedRaw;
+
+    return parseShowRunningConfig(finalRaw);
+  }
+
+  private hasMeaningfulRunningConfig(result: ShowRunningConfig): boolean {
+    return (result.lines ?? []).some((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return false;
+      if (trimmed === "!" || trimmed === "--More--") return false;
+      if (trimmed.startsWith("show running-config")) return false;
+      if (trimmed.startsWith("Building configuration...")) return false;
+      return !/^[A-Za-z0-9_.-]+(?:\s+[A-Za-z0-9_.-]+)*[>#]$/.test(trimmed);
+    });
   }
 
   async showCdpNeighbors(device: string): Promise<ShowCdpNeighbors> {

@@ -2,55 +2,10 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
+import { loadLabYaml, toLabSpec } from '../contracts/lab-spec.js';
 import type { DeviceConfigSpecInput } from '@cisco-auto/kernel/plugins/orchestrator';
 import { orchestrateConfig } from '@cisco-auto/kernel/plugins/orchestrator';
-
-interface ParsedDevice {
-  name?: string;
-  type?: string;
-  model?: string;
-  hostname?: string;
-  management?: { ip?: string };
-  interfaces?: Array<{
-    name?: string;
-    ip?: string;
-    subnetMask?: string;
-    description?: string;
-    enabled?: boolean;
-    mode?: string;
-    vlan?: number;
-    [key: string]: unknown;
-  }>;
-  vlans?: Array<{ id?: number | string; name?: string }>;
-  routing?: {
-    ospf?: { processId?: number; areas?: Array<{ areaId?: number | string; networks?: Array<{ network?: string; wildcard?: string }> }> };
-    eigrp?: { asNumber?: number; networks?: string[] };
-    static?: Array<{ network?: string; mask?: string; nextHop?: string }>;
-  };
-  security?: {
-    acls?: Array<{ name?: string; type?: 'standard' | 'extended'; rules?: Array<{ action?: 'permit' | 'deny'; protocol?: string; source?: string; destination?: string; destinationPort?: string }> }>;
-  };
-  services?: {
-    dhcp?: Array<{ name?: string; network?: string; mask?: string; defaultRouter?: string; dnsServers?: string[] }>;
-    ntp?: { servers?: Array<{ ip?: string }> };
-  };
-  [key: string]: unknown;
-}
-
-interface ParsedLabYaml {
-  lab?: {
-    metadata?: { name?: string; version?: string; author?: string };
-    topology?: {
-      devices?: ParsedDevice[];
-      connections?: Array<{
-        from?: string | { device?: string; port?: string };
-        to?: string | { device?: string; port?: string };
-        type?: string;
-        [key: string]: unknown;
-      }>;
-    };
-  };
-}
+import { createDefaultPTController } from '@cisco-auto/pt-control';
 
 interface DeployDeviceResult {
   deviceName: string;
@@ -74,13 +29,7 @@ interface DeployResult {
   success: boolean;
 }
 
-function parseLabYaml(filePath: string): ParsedLabYaml {
-  const content = fs.readFileSync(filePath, 'utf-8');
-  const parsed = yaml.load(content) as ParsedLabYaml;
-  return parsed;
-}
-
-function buildDeviceConfigSpec(device: ParsedDevice): DeviceConfigSpecInput {
+function buildDeviceConfigSpec(device: any): DeviceConfigSpecInput {
   const deviceName = device.name ?? 'unknown';
   const spec: DeviceConfigSpecInput = { deviceName };
 
@@ -91,7 +40,7 @@ function buildDeviceConfigSpec(device: ParsedDevice): DeviceConfigSpecInput {
   if (device.vlans && device.vlans.length > 0) {
     spec.vlan = {
       vlans: device.vlans.map((v: { id?: number | string; name?: string }) => ({
-        id: v.id ?? 1,
+        id: Number(v.id) ?? 1,
         name: v.name ?? `VLAN${v.id}`,
       })),
     };
@@ -232,23 +181,17 @@ export function createDeployCommand(): Command {
       console.log(chalk.cyan('🚀 Despliegue de configuraciones Cisco (Kernel)'));
       console.log(`📄 Archivo: ${file}`);
 
-      let parsed: ParsedLabYaml;
-      try {
-        parsed = parseLabYaml(file);
-      } catch (error) {
-        console.error(chalk.red(`❌ Error parseando archivo: ${(error as Error).message}`));
-        process.exit(1);
-      }
+      const parsedLab = loadLabYaml(file);
+      const labSpec = toLabSpec(parsedLab);
 
-      const devices = parsed.lab?.topology?.devices ?? [];
-      if (devices.length === 0) {
+      if (labSpec.devices.length === 0) {
         console.error(chalk.red('❌ No se encontraron dispositivos en el archivo YAML'));
         process.exit(1);
       }
 
-      let filteredDevices = devices;
+      let filteredDevices = labSpec.devices;
       if (options.device) {
-        filteredDevices = devices.filter((d) => d.name === options.device);
+        filteredDevices = labSpec.devices.filter((d) => d.name === options.device);
         if (filteredDevices.length === 0) {
           console.error(chalk.red(`❌ Dispositivo "${options.device}" no encontrado`));
           process.exit(1);
@@ -263,36 +206,68 @@ export function createDeployCommand(): Command {
       const results: DeployDeviceResult[] = [];
       let totalCommands = 0;
 
-      for (const device of filteredDevices) {
-        const deviceName = device.name ?? 'unknown';
-        try {
-          const spec = buildDeviceConfigSpec(device);
-          const commands = await orchestrateConfig(spec);
+      let controller: ReturnType<typeof createDefaultPTController> | undefined;
+      if (!options.dryRun) {
+        controller = createDefaultPTController();
+        await controller.start();
+      }
 
-          results.push({
-            deviceName,
-            commandsGenerated: commands.length,
-            success: true,
-            errors: [],
-            warnings: commands.length === 0 ? ['No se generaron comandos para este dispositivo'] : [],
-          });
+      try {
+        for (const device of filteredDevices) {
+          const deviceName = device.name ?? 'unknown';
+          try {
+            const spec = buildDeviceConfigSpec(device);
+            const commands = await orchestrateConfig(spec);
 
-          totalCommands += commands.length;
+            let success = true;
+            let errors: string[] = [];
 
-          if (options.verbose || options.dryRun) {
-            console.log(chalk.blue(`\n📝 Comandos para ${chalk.bold(deviceName)}:`));
-            commands.forEach((cmd: string, i: number) => {
-              console.log(`  ${i + 1}. ${chalk.green(cmd)}`);
+            if (commands.length > 0 && controller) {
+              try {
+                if (device.type === 'pc' || device.type === 'server') {
+                  const opts: any = {};
+                  if (device.interfaces?.[0]?.ip) opts.ip = device.interfaces[0].ip.split('/')[0];
+                  if (device.interfaces?.[0]?.subnetMask) opts.mask = device.interfaces[0].subnetMask;
+                  
+                  await controller.configHost(deviceName, opts);
+                } else {
+                  await controller.configIos(deviceName, commands);
+                }
+              } catch (e: any) {
+                success = false;
+                errors = [e.message];
+              }
+            }
+
+            results.push({
+              deviceName,
+              commandsGenerated: commands.length,
+              success,
+              errors,
+              warnings: commands.length === 0 ? ['No se generaron comandos para este dispositivo'] : [],
+            });
+
+            totalCommands += commands.length;
+
+            if (options.verbose || options.dryRun) {
+              console.log(chalk.blue(`\n📝 Comandos para ${chalk.bold(deviceName)}:`));
+              commands.forEach((cmd: string, i: number) => {
+                console.log(`  ${i + 1}. ${chalk.green(cmd)}`);
+              });
+            }
+          } catch (error) {
+            results.push({
+              deviceName,
+              commandsGenerated: 0,
+              success: false,
+              errors: [(error as Error).message],
+              warnings: [],
             });
           }
-        } catch (error) {
-          results.push({
-            deviceName,
-            commandsGenerated: 0,
-            success: false,
-            errors: [(error as Error).message],
-            warnings: [],
-          });
+        }
+      } finally {
+        if (controller) {
+          await controller.stop();
         }
       }
 

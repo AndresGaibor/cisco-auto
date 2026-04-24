@@ -42,6 +42,11 @@ La skill pt-cli está ubicada en `.skills/pt-cli/SKILL.md` y provee:
 - Ejemplos de uso para cada categoría
 - Flags globales y opciones de salida
 
+## Protocolo de Terminal Determinista
+Toda la ejecución de terminal en PT (IOS o Host) está gobernada por el `CommandExecutor`, que usa estabilización de output (250ms) y es inmune a bloqueos DNS o Power OFF.
+- **Acceso rápido a comandos:** Usa siempre `bun run pt cmd <device> "<command>"` para ejecutar comandos individuales de forma robusta.
+- **Historial:** Usa `bun run pt history <device>` para ver la bitácora de la consola con los comandos y outputs separados.
+
 ## Real-Time Packet Tracer Control
 
 ### Setup

@@ -65,6 +65,12 @@ function buildPlan(suggestions: LayoutSuggestion[], warnings: string[] = []): La
 }
 
 export class LayoutPlannerService {
+  /**
+   * Sugiere una nueva posición para un dispositivo basada en una relación con otro dispositivo.
+   * @param snapshot - Snapshot de topología actual
+   * @param intent - Intent con el dispositivo a mover y su relación
+   * @returns Plan de layout con la sugerencia de posición
+   */
   suggestPlacement(snapshot: TopologySnapshot, intent: LayoutPlacementIntent): LayoutPlan {
     const device = getDevice(snapshot, intent.device);
     if (!device) {
@@ -101,6 +107,14 @@ export class LayoutPlannerService {
     ]);
   }
 
+  /**
+   * Alinea múltiples dispositivos en una línea horizontal o vertical.
+   * @param snapshot - Snapshot de topología actual
+   * @param devices - Lista de nombres de dispositivos a alinear
+   * @param orientation - Orientación de la alineación ('horizontal' o 'vertical')
+   * @param gap - Espacio entre dispositivos en píxeles
+   * @returns Plan de layout con posiciones alineadas
+   */
   alignDevices(snapshot: TopologySnapshot, devices: string[], orientation: 'horizontal' | 'vertical' = 'horizontal', gap = 160): LayoutPlan {
     const resolved = devices.map((deviceName) => getDevice(snapshot, deviceName)).filter(Boolean);
     if (resolved.length === 0) {
@@ -129,6 +143,12 @@ export class LayoutPlannerService {
     return buildPlan(suggestions);
   }
 
+  /**
+   * Coloca dispositivos en una grilla rectangular.
+   * @param snapshot - Snapshot de topología actual
+   * @param intent - Intent con dispositivos y parámetros de grilla
+   * @returns Plan de layout con posiciones en grilla
+   */
   gridDevices(snapshot: TopologySnapshot, intent: LayoutGridIntent): LayoutPlan {
     const devices = intent.devices.map((deviceName) => getDevice(snapshot, deviceName)).filter(Boolean);
     if (devices.length === 0) {
@@ -157,6 +177,12 @@ export class LayoutPlannerService {
     return buildPlan(suggestions);
   }
 
+  /**
+   * Asigna dispositivos a una zona específica.
+   * @param snapshot - Snapshot de topología actual
+   * @param intent - Intent con zona y dispositivos a asignar
+   * @returns Plan de layout con dispositivos asignados a la zona
+   */
   assignZone(snapshot: TopologySnapshot, intent: LayoutZoneIntent): LayoutPlan {
     const devices = intent.devices.map((deviceName) => getDevice(snapshot, deviceName)).filter(Boolean);
     if (devices.length === 0) {

@@ -42,7 +42,7 @@ export function createKernelLifecycle(
     kernelLogSubsystem,
   } = subsystems;
 
-  let commandPollInterval: any = null;
+  let commandPollInterval: ReturnType<typeof setInterval> | null = null;
 
   function boot(): void {
     kernelLog("=== KERNEL BOOT STARTING ===", "info");

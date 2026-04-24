@@ -12,6 +12,15 @@ interface BackendPluginWithDeviceMethods extends BackendPlugin {
   removeDevice(name: string): Promise<void>;
 }
 
+/**
+ * Use case para eliminar un dispositivo de la topología.
+ *
+ * Verifica que el dispositivo exista en el repositorio, lo elimina
+ * del backend (Packet Tracer) y luego lo borra del repositorio local.
+ *
+ * @param repository - Puerto de persistencia para verificar y eliminar el dispositivo
+ * @param backend - Plugin de backend que elimina el dispositivo en PT
+ */
 export class RemoveDeviceUseCase implements UseCase<RemoveDeviceInput, UseCaseResult<RemoveDeviceOutput>> {
   constructor(
     private readonly repository: PersistencePort<DeviceEntity>,

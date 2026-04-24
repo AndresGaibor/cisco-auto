@@ -8,7 +8,7 @@ import type { CommandPlan } from "./command-plan.js";
 import { CommandPlanBuilder } from "./command-plan.js";
 
 /**
- * Input for configuring a trunk port
+ * Input para configurar un puerto trunk en un switch.
  */
 export interface ConfigureTrunkPortInput {
   port: InterfaceName;
@@ -19,7 +19,12 @@ export interface ConfigureTrunkPortInput {
 }
 
 /**
- * Plan the commands to configure a trunk port
+ * Planifica los comandos IOS para configurar un puerto como trunk.
+ * Configura encapsulación dot1q, modo trunk, y VLANs permitidas.
+ * Valida que el dispositivo pueda ser trunk (soporta trunking).
+ * @param caps - CapabilitySet del dispositivo
+ * @param input - Configuración del trunk
+ * @returns CommandPlan listo para ejecutar, o null si no puede ser trunk
  */
 export function planConfigureTrunkPort(
   caps: CapabilitySet,

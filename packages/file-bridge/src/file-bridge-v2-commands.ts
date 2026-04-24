@@ -1,20 +1,35 @@
 /**
- * FileBridge V2 - IOS Command Pusher
+ * Command Pusher para IOS via FileBridge V2.
  *
- * Sends IOS configuration commands to Packet Tracer via FileBridge V2.
- * Replaces the HTTP-based pushCommands from packages/bridge.
+ * Envía comandos IOS a Packet Tracer a través del bridge de archivos.
+ * Reemplaza el pushCommands basado en HTTP del paquete anterior.
  *
- * Architecture: CLI → commands/*.json → PT → results/*.json → CLI
+ * Arquitectura: CLI → commands/*.json → PT → results/*.json → CLI
  */
 
 import { FileBridgeV2 } from "./file-bridge-v2.js";
 
+/**
+ * Resultado de una operación de push de comandos.
+ */
 export interface PushResult {
+  /** Indica si el comando fue exitoso */
   success: boolean;
+  /** ID del comando si fue aceptado */
   commandId?: string;
+  /** Mensaje de error si falló */
   error?: string;
 }
 
+/**
+ * Espera hasta que el bridge esté listo o expire el timeout.
+ * Polls el estado del bridge con intervalo fijo.
+ *
+ * @param bridge - Instancia del bridge con método isReady()
+ * @param timeoutMs - Tiempo máximo de espera
+ * @param pollMs - Intervalo de polling (default: 50ms)
+ * @returns true si el bridge quedó listo antes del timeout
+ */
 export async function waitForBridgeReady(
   bridge: { isReady(): boolean },
   timeoutMs: number,
@@ -38,11 +53,22 @@ function getDevDir(): string {
 }
 
 /**
- * Send IOS configuration commands to a device via FileBridge V2.
+ * Envía comandos de configuración IOS a un dispositivo via FileBridge V2.
  *
- * @param deviceId - Device name in Packet Tracer
- * @param commands - Array of IOS commands to execute
- * @param timeoutMs - Timeout in milliseconds (default: 120000)
+ * Crea un bridge temporal, lo inicia, envía el comando configIos,
+ * y espera el resultado con el timeout especificado.
+ *
+ * @param deviceId - Nombre del dispositivo en Packet Tracer
+ * @param commands - Array de comandos IOS a ejecutar
+ * @param timeoutMs - Timeout en ms (default: 120000)
+ * @returns PushResult con éxito/error
+ * @example
+ * ```ts
+ * const result = await pushCommands("Router0", ["hostname MiRouter", "ip address 192.168.1.1 255.255.255.0"]);
+ * if (result.success) {
+ *   console.log(`Comandos aplicados en ${result.commandId}`);
+ * }
+ * ```
  */
 export async function pushCommands(
   deviceId: string,
@@ -88,8 +114,12 @@ export async function pushCommands(
 }
 
 /**
- * Send a raw code string to PT for evaluation.
- * Uses the "code" handler in the runtime.
+ * Envía código JavaScript raw a PT para evaluación.
+ * Usa el handler "code" en el runtime de PT.
+ *
+ * @param code - Código JavaScript a ejecutar en PT
+ * @param timeoutMs - Timeout en ms (default: 120000)
+ * @returns PushResult con éxito/error
  */
 export async function pushCode(code: string, timeoutMs = 120_000): Promise<PushResult> {
   const devDir = getDevDir();

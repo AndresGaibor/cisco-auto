@@ -424,6 +424,21 @@ var __rest = function(s, e) {
   };
   _g.dprint = dprint;
 
+  // DIAGNOSTIC AUTO-RUN
+  try {
+    var diag_fm = safeFM();
+    if (diag_fm.available) {
+        var diag = {
+            ts: new Date().getTime(),
+            dir: DEV_DIR,
+            files: diag_fm.fm.getFilesInDirectory(DEV_DIR),
+            createKernel_exists: typeof createKernel !== "undefined",
+            handler_map: _g.HANDLER_MAP ? Object.keys(_g.HANDLER_MAP) : "NULL"
+        };
+        diag_fm.fm.writePlainTextToFile(DEV_DIR + "/diagnostic.json", JSON.stringify(diag));
+    }
+  } catch(e) {}
+
   // SANITY CHECK: if this doesn't print, the IIFE itself is crashing
   if (typeof dprint === "function") dprint("[KERNEL-IIFE] running, ipc=" + (ipc ? "OK" : "NULL"));
   if (typeof dprint === "function") dprint("[KERNEL-IIFE] typeof createKernel=" + typeof createKernel);
@@ -484,14 +499,26 @@ function _ptLoadModule(modulePath, label) {
       if (typeof dprint === "function") dprint("[main] Empty: " + label);
       return false;
     }
+    if (typeof dprint === "function") dprint("[main] loading " + label + " from " + modulePath);
     // Pass globals explicitly so catalog.js can use them (Fase 7 fix)
-    new Function("ipc", "fm", "dprint", "DEV_DIR", "_ScriptModule", code)(
-      (typeof ipc !== "undefined") ? ipc : null,
-      (typeof fm !== "undefined") ? fm : null,
-      (typeof dprint !== "undefined") ? dprint : function() {},
-      (typeof DEV_DIR !== "undefined") ? DEV_DIR : devDir,
-      (typeof _ScriptModule !== "undefined") ? _ScriptModule : null
-    );
+    try {
+        var loader = new Function("ipc", "fm", "dprint", "DEV_DIR", "_ScriptModule", "_g", code);
+        if (typeof dprint === "function") dprint("[main] executing loader for " + label);
+        loader(
+          (typeof ipc !== "undefined") ? ipc : null,
+          (typeof fm !== "undefined") ? fm : null,
+          (typeof dprint !== "undefined") ? dprint : function() {},
+          (typeof DEV_DIR !== "undefined") ? DEV_DIR : devDir,
+          (typeof _ScriptModule !== "undefined") ? _ScriptModule : null,
+          _g
+        );
+    } catch(syntaxErr) {
+        if (typeof dprint === "function") dprint("[main] FATAL SYNTAX ERROR in " + label + ": " + String(syntaxErr));
+        if (_fm.writePlainTextToFile) {
+            _fm.writePlainTextToFile(modulePath + ".error.txt", String(syntaxErr) + "\\n\\n" + code.substring(0, 1000));
+        }
+        return false;
+    }
     if (typeof dprint === "function") dprint("[main] Loaded: " + label);
     return true;
   } catch (e) {

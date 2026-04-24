@@ -31,6 +31,10 @@ export const CompletionReasonSchema = z.enum([
   'unknown',                 // Unknown completion reason
 ]);
 
+/**
+ * Razón de finalización de comando interactivo
+ * Usar para determinar si el comando completó exitosamente
+ */
 export type CompletionReason = z.infer<typeof CompletionReasonSchema>;
 
 // ============================================================================
@@ -45,6 +49,10 @@ export const InteractionMetricsSchema = z.object({
   modesChanged: z.number().int().min(0).default(0),
 });
 
+/**
+ * Métricas de interacción con prompts IOS
+ * Tracking de pages, confirms, passwords, etc.
+ */
 export type InteractionMetrics = z.infer<typeof InteractionMetricsSchema>;
 
 // ============================================================================
@@ -62,6 +70,9 @@ export const SessionInfoSchema = z.object({
   deviceName: z.string().optional(),
 });
 
+/**
+ * Info del estado de la sesión IOS después de ejecutar comando
+ */
 export type SessionInfo = z.infer<typeof SessionInfoSchema>;
 
 // ============================================================================
@@ -92,6 +103,10 @@ export const DiagnosticsSchema = z.object({
   reliabilityScore: z.number().int().min(0).max(100).optional(),
 });
 
+/**
+ * Diagnósticos de ejecución de comando interactivo
+ * Incluye fuente, razón de completación, errores y confiabilidad
+ */
 export type Diagnostics = z.infer<typeof DiagnosticsSchema>;
 
 // ============================================================================
@@ -115,6 +130,10 @@ export const TranscriptEntrySchema = z.object({
   payload: z.record(z.string(), z.unknown()).describe('Event-specific data'),
 });
 
+/**
+ * Entrada del transcript de sesión IOS
+ * Usar para registrar eventos durante la ejecución interactiva
+ */
 export type TranscriptEntry = z.infer<typeof TranscriptEntrySchema>;
 
 // ============================================================================
@@ -152,6 +171,10 @@ export const IosInteractiveResultSchema = z.object({
   classification: OutputClassificationSchema.optional(),
 });
 
+/**
+ * Resultado completo de comando IOS interactivo (Fase 6)
+ * Incluye session state, metrics, diagnostics, y transcript
+ */
 export type IosInteractiveResult = z.infer<typeof IosInteractiveResultSchema>;
 
 // ============================================================================

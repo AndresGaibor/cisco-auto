@@ -1,12 +1,17 @@
 import type { ShowRunningConfig } from "@cisco-auto/types";
 
 /**
- * Parse "show running-config" output
+ * Parser para output de "show running-config".
+ * Extrae hostname, version, secciones de configuración e interfaces.
+ * Agrupa líneas en secciones basadas en keywords (interface, router, vlan, etc.).
+ * Skip headers como "Building configuration..." y prompts de sesión.
+ * @param output - Output crudo del comando
+ * @returns ShowRunningConfig con hostname, version, secciones e interfaces
  */
 export function parseShowRun(output: string): ShowRunningConfig {
   const lines = output.split("\n");
-  const sections: ShowRunningConfig["sections"] = [];
-  const interfaces: ShowRunningConfig["interfaces"] = {};
+  const sections: { section: string; content: string }[] = [];
+  const interfaces: Record<string, string> = {};
   const configLines: string[] = [];
   
   let hostname: string | undefined;

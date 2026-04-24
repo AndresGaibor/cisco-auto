@@ -1,12 +1,24 @@
 /**
- * Backpressure manager for command queue.
+ * Backpressure Manager para la cola de comandos.
  *
- * Prevents the queue from growing unbounded by tracking
- * pending commands and blocking when capacity is reached.
+ * Implementa un algoritmo de "ventana deslizante" que limita la cantidad
+ * máxima de comandos pending (en cola + in-flight) para evitar que PT se
+ * sature. Cuando se alcanza el límite, se lanza BackpressureError o se
+ * bloquea hasta que haya capacidad disponible.
+ *
+ * Algoritmo:
+ * 1. getPendingCount() = count(commands/*.json) + count(in-flight/*.json)
+ * 2. checkCapacity() lanza error si pending >= maxPending
+ * 3. waitForCapacity() hace polling con exponential backoff hasta timeout
+ *
+ * El threshold es configurable para ajustar según la capacidad de PT.
  */
 import { readdirSync } from "node:fs";
 import type { BridgePathLayout } from "./shared/path-layout.js";
 
+/**
+ * Configuración para el BackpressureManager.
+ */
 export interface BackpressureConfig {
   /** Maximum number of pending commands (commands + in-flight) */
   maxPending: number;
@@ -27,9 +39,16 @@ export class BackpressureError extends Error {
   }
 }
 
+/**
+ * Gestor de backpressure que previene saturación de la cola de comandos.
+ */
 export class BackpressureManager {
   private readonly config: Required<BackpressureConfig>;
 
+  /**
+   * @param paths - BridgePathLayout para acceder a los directorios de cola
+   * @param config - Configuración opcional con maxPending, checkIntervalMs, maxWaitMs
+   */
   constructor(
     private readonly paths: BridgePathLayout,
     config: Partial<BackpressureConfig> = {},
@@ -41,6 +60,11 @@ export class BackpressureManager {
     };
   }
 
+  /**
+   * Verifica si hay capacidad disponible en la cola.
+   * Lanza BackpressureError si pending >= maxPending.
+   * @throws BackpressureError cuando la cola está llena
+   */
   checkCapacity(): void {
     const pending = this.getPendingCount();
     if (pending >= this.config.maxPending) {
@@ -53,6 +77,13 @@ export class BackpressureManager {
     }
   }
 
+  /**
+   * Bloquea hasta que haya capacidad disponible o expire el timeout.
+   * Usa polling con intervalo configurable para revisar la cola.
+   * @param timeoutMs - Tiempo máximo de espera (default: maxWaitMs de config)
+   * @returns Promise que resuelve cuando hay capacidad
+   * @throws BackpressureError si expira el timeout
+   */
   async waitForCapacity(timeoutMs?: number): Promise<void> {
     const deadline = Date.now() + (timeoutMs ?? this.config.maxWaitMs);
 
@@ -75,6 +106,11 @@ export class BackpressureManager {
     );
   }
 
+  /**
+   * Cuenta comandos pending = comandos en cola + comandos in-flight.
+   * Excluye _queue.json (índice auxiliar).
+   * @returns Cantidad total de comandos en proceso
+   */
   getPendingCount(): number {
     try {
       const commandsDir = this.paths.commandsDir();
@@ -93,11 +129,19 @@ export class BackpressureManager {
     }
   }
 
+  /**
+   * Calcula cuántos comandos más se pueden enviar sin backpressure.
+   * @returns Cantidad de slots disponibles (mínimo 0)
+   */
   getAvailableCapacity(): number {
     const pending = this.getPendingCount();
     return Math.max(0, this.config.maxPending - pending);
   }
 
+  /**
+   * Obtiene métricas básicas de uso de la cola.
+   * @returns Objeto con maxPending, currentPending, availableCapacity, utilizationPercent
+   */
   getStats(): {
     maxPending: number;
     currentPending: number;
@@ -113,6 +157,11 @@ export class BackpressureManager {
     };
   }
 
+  /**
+   * Obtiene métricas detalladas separando comandos en cola e in-flight.
+   * Útil para debugging y monitoreo granular.
+   * @returns Objeto detallado con métricas de ambos tipos de cola
+   */
   getDetailedStats(): {
     maxPending: number;
     queuedCount: number;

@@ -24,6 +24,41 @@ import type { RuntimeTerminalPort } from "../../ports/runtime-terminal-port.js";
 import { IosExecutionService } from "./ios-execution-service.js";
 import { IosSemanticService } from "./ios-semantic-service.js";
 
+function extractDeviceConfigFromXml(input: unknown): string {
+  const xml = unwrapXmlString(input);
+
+  const patterns = [
+    /<runningConfig[^>]*>([\s\S]*?)<\/runningConfig>/i,
+    /<RUNNINGCONFIG[^>]*>([\s\S]*?)<\/RUNNINGCONFIG>/i,
+    /<startupConfig[^>]*>([\s\S]*?)<\/startupConfig>/i,
+    /<STARTUPCONFIG[^>]*>([\s\S]*?)<\/STARTUPCONFIG>/i,
+    /<config[^>]*>([\s\S]*?)<\/config>/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = xml.match(pattern);
+    const content = match?.[1]?.trim();
+    if (content) return content;
+  }
+
+  return xml.trim();
+}
+
+function unwrapXmlString(input: unknown, depth = 0): string {
+  if (typeof input === "string") return input;
+  if (!input || depth > 4 || typeof input !== "object") return "";
+
+  const record = input as Record<string, unknown>;
+  for (const key of ["raw", "result", "value", "xml", "output"]) {
+    const candidate = record[key];
+    if (typeof candidate === "string") return candidate;
+    const nested = unwrapXmlString(candidate, depth + 1);
+    if (nested) return nested;
+  }
+
+  return "";
+}
+
 export class IosService {
   private readonly execution: IosExecutionService;
   private readonly semantic: IosSemanticService;
@@ -34,7 +69,23 @@ export class IosService {
     inspectDevice: (device: string) => Promise<DeviceState>,
     terminalPort: RuntimeTerminalPort,
   ) {
-    this.execution = new IosExecutionService(generateId, terminalPort);
+    this.execution = new IosExecutionService(
+      generateId,
+      terminalPort,
+      async (device) => {
+        try {
+          const result = await bridge.sendCommandAndWait("getNetworkGenoma", {
+            deviceName: device,
+          }, 15000);
+
+          if (!result.ok) return "";
+
+          return extractDeviceConfigFromXml(result.value as string | { raw?: unknown; result?: unknown; value?: unknown; xml?: unknown });
+        } catch {
+          return "";
+        }
+      },
+    );
     const eventBridge: {
       appendEvent?: (event: {
         type: string;

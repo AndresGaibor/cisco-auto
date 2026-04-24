@@ -10,10 +10,23 @@ const MIN_COORDINATE = -100000;
 const MAX_COORDINATE = 100000;
 
 /**
- * Represents a validated 2D coordinate for device positioning
- * 
- * Used for tracking device positions on the PT canvas, zone boundaries,
- * and spatial relationships in VirtualTopology.
+ * Valor obstructor que representa una coordenada 2D validada para posicionamiento de dispositivos.
+ *
+ * Se utiliza para rastrear posiciones de dispositivos en el canvas de PT, límites de zonas,
+ * y relaciones espaciales en VirtualTopology.
+ *
+ * Rangos válidos: -100000 a 100000 en ambos ejes.
+ * Redondea a 2 decimales para evitar errores de punto flotante.
+ *
+ * @example
+ * ```typescript
+ * const coord = Coordinate2D.from(100, 200);
+ * console.log(coord.toString()); // "(100, 200)"
+ *
+ * // Calcular distancia
+ * const other = Coordinate2D.from(150, 250);
+ * console.log(coord.distanceTo(other)); // ~70.71
+ * ```
  */
 export class Coordinate2D {
   public readonly x: number;

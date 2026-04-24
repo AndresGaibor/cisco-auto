@@ -1,0 +1,13 @@
+{
+  "protocolVersion": 2,
+  "id": "cmd_000000000096",
+  "seq": 96,
+  "createdAt": 1776666323598,
+  "type": "topology.list",
+  "payload": {
+    "type": "topology.list"
+  },
+  "attempt": 1,
+  "expiresAt": 1776666331597,
+  "checksum": "sha256:7a62f567d128cabb80452a3208cee42be5a82d3e7256dafdf6380b39cc8a708f"
+}

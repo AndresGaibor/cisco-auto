@@ -96,7 +96,7 @@ export interface FileBridgePort {
   /**
    * Subscribe to all events
    */
-  onAll(handler: (event: any) => void): () => void;
+  onAll(handler: EventHandler): () => void;
 
   /**
    * Load runtime JavaScript code into PT

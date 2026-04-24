@@ -1,7 +1,16 @@
 /**
- * Lease Manager - Manages FileBridge V2 leases (Fase 8)
- * Handles lease acquisition, renewal, and staleness detection
- * CRITICAL: Recovery and consumer operations MUST NOT proceed without valid lease
+ * Gestor de leases del FileBridge V2.
+ *
+ * Maneja adquisición, renovación, y detección de stale del lease.
+ * Solo una instancia del bridge puede estar activa a la vez.
+ *
+ * CRITICAL: Recovery y operaciones de consumer NO deben proceder sin lease válido.
+ *
+ * El lease incluye:
+ * - ownerId: UUID único de la instancia
+ * - pid, hostname: para verificar si el proceso sigue vivo
+ * - ttlMs: tiempo de vida del lease
+ * - expiresAt: timestamp de expiración
  */
 
 import { readFileSync, writeFileSync, unlinkSync, mkdirSync } from "node:fs";
@@ -11,12 +20,19 @@ import { randomUUID } from "node:crypto";
 import type { BridgeLease } from "../shared/protocol.js";
 import { debug } from "node:util";
 
+/**
+ * Gestor de lease para enforce de instancia única.
+ */
 export class LeaseManager {
   private readonly ownerId: string;
   private leaseFilePath: string;
   private leaseTtlMs: number;
   private logger: (msg: string) => void;
 
+  /**
+   * @param leaseFilePath - Path al archivo de lease
+   * @param leaseTtlMs - TTL del lease en ms (default: 30000)
+   */
   constructor(leaseFilePath: string, leaseTtlMs: number = 30000) {
     this.leaseFilePath = leaseFilePath;
     this.leaseTtlMs = leaseTtlMs;
@@ -24,13 +40,14 @@ export class LeaseManager {
     this.logger = debug('bridge:lease');
   }
 
+  /** @returns El ownerId de esta instancia */
   getOwnerId(): string {
     return this.ownerId;
   }
 
   /**
-   * Check if this instance holds a valid (non-stale) lease
-   * FASE 8: Explicit predicate for lease validation gates
+   * Verifica si esta instancia tiene un lease válido (no stale).
+   * Lease válido = existe, ownerId coincide, y no ha expirado.
    */
   hasValidLease(): boolean {
     const existing = this.readLease();
@@ -39,13 +56,17 @@ export class LeaseManager {
     return !this.isLeaseStale(existing);
   }
 
-  /**
-   * Alias for hasValidLease() - semantic clarity for Fase 8
-   */
+  /** Alias semántico para hasValidLease() */
   isLeaseValid(): boolean {
     return this.hasValidLease();
   }
 
+  /**
+   * Intenta adquirir el lease. Si ya existe uno válido de otra instancia,
+   * no lo sobreescribe. Si es stale o nuestro, lo renovamos/adquirimos.
+   *
+   * @returns true si se adquirió el lease
+   */
   acquireLease(): boolean {
     const existing = this.readLease();
 
@@ -61,11 +82,18 @@ export class LeaseManager {
     return this.tryAcquireLease();
   }
 
+  /**
+   * Renueva el lease existente (extiende expiresAt).
+   * Solo renueva si somos el owner actual.
+   */
   renewLease(): void {
     this.writeLease(this.buildLease());
     this.logger(`Lease renewed (ownerId=${this.ownerId.substring(0, 8)}..., expires_in=${this.leaseTtlMs}ms)`);
   }
 
+  /**
+   * Libera el lease si lo tenemos. Best effort - errores se ignoran.
+   */
   releaseLease(): void {
     try {
       const current = this.readLease();
@@ -78,6 +106,10 @@ export class LeaseManager {
     }
   }
 
+  /**
+   * Lee el lease actual desde el archivo.
+   * @returns El lease o null si no existe/está corrupto
+   */
   readLease(): BridgeLease | null {
     try {
       const content = readFileSync(this.leaseFilePath, "utf8");

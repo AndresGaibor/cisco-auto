@@ -17,52 +17,44 @@ const colors = {
 async function dhcpExperiment() {
   const controller = createDefaultPTController();
   const routerName = "Router0";
-  const cliPath = `network().getDevice('${routerName}').getCommandLine()`;
-  const dhcpPath = `network().getDevice('${routerName}').getProcess('DhcpServerMainProcess')`;
 
   try {
     await controller.start();
     console.log(colors.bold("\n🧪 EXPERIMENTO: SINCRONIZACIÓN CLI -> IPC (DHCP)"));
 
-    // 1. CONFIGURAR POR CLI
-    const dhcpCommands = [
-        "enable",
-        "configure terminal",
+    // 1. CONFIGURAR POR CLI USANDO MOTOR ROBUSTO
+    console.log(colors.yellow(`\n⚙️ Configurando Pool DHCP en ${routerName}...`));
+    await controller.configIos(routerName, [
         "ip dhcp pool LAN-POOL",
         "network 192.168.1.0 255.255.255.0",
         "default-router 192.168.1.1",
         "dns-server 8.8.8.8",
-        "end"
-    ];
-
-    console.log(colors.yellow(`\n⚙️ Inyectando Pool DHCP en ${routerName}...`));
-    for(const cmd of dhcpCommands) {
-        process.stdout.write(`  -> ${cmd}... `);
-        await controller.deepInspect(cliPath, "enterCommand", [cmd]);
-        await new Promise(r => setTimeout(r, 600));
-        console.log(colors.green("OK"));
-    }
+        "exit"
+    ], { save: true });
+    
+    console.log(colors.green("   ✅ Comandos enviados y confirmados."));
 
     // 2. VALIDAR POR IPC (OMNISCIENCIA)
-    console.log(colors.cyan("\n🔍 Interrogando al objeto 'DhcpServerMainProcess'..."));
-    await new Promise(r => setTimeout(r, 2000)); // Espera de sincronización
+    console.log(colors.cyan("\n🔍 Interrogando al motor de omnisciencia..."));
+    // Damos un tiempo mínimo para que el motor C++ actualice sus objetos internos
+    await new Promise(r => setTimeout(r, 2000)); 
 
+    const dhcpPath = `network().getDevice('${routerName}').getProcess('DhcpServerMainProcess')`;
     const poolCount = await controller.deepInspect(dhcpPath, "getPoolCount", []);
     
-    if (poolCount.ok) {
+    if (poolCount.ok && poolCount.result > 0) {
         console.log(colors.bold.green(`\n✅ CONTEO DE POOLS DETECTADO POR IPC: ${poolCount.result}`));
-        if (poolCount.result > 0) {
-            const poolInfo = await controller.deepInspect(dhcpPath, "getPoolAt", [0]);
-            console.log(`Datos del Pool [0]: ${JSON.stringify(poolInfo.result)}`);
-        }
+        const poolInfo = await controller.deepInspect(dhcpPath, "getPoolAt", [0]);
+        console.log(`   Datos del Pool [0]: ${JSON.stringify(poolInfo.result)}`);
     } else {
-        console.log(colors.red(`\n❌ No se pudo acceder al proceso DHCP por IPC: ${poolCount.error}`));
-        console.log(colors.gray("Nota: Es probable que los Routers bloqueen el acceso IPC a procesos configurados por CLI."));
+        console.log(colors.red(`\n❌ No se detectaron pools por IPC.`));
+        console.log(colors.gray("   Nota: Es común que PT no sincronice instantáneamente la CLI con el modelo de objetos C++."));
     }
 
-    // 3. VERIFICACIÓN DE LED (DEBERÍA ESTAR VERDE YA)
-    const led = await controller.deepInspect(`network().getDevice('${routerName}').getPort('GigabitEthernet0/0')`, "getLightStatus", []);
-    console.log(`\nEstado final del LED Físico: ${led.result === 1 ? colors.green("🟢 VERDE (UP)") : colors.orange("🟠 NARANJA (STP)")}`);
+    // 3. VERIFICACIÓN DE LED
+    const portPath = `network().getDevice('${routerName}').getPortAt(0)`;
+    const led = await controller.deepInspect(portPath, "getLightStatus", []);
+    console.log(`\nEstado final del LED Físico: ${led.result === 1 ? colors.green("🟢 VERDE (UP)") : colors.yellow("🟠 NARANJA/ROJO")}`);
 
   } catch (error: any) {
     console.error(colors.red(`\n💥 Error: ${error.message}`));

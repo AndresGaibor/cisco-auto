@@ -64,7 +64,29 @@ export interface ClassifiedError {
 }
 
 /**
- * Classify an IOS execution result into structured error categories
+ * Clasificador de errores IOS (Fase 6).
+ *
+ * Proporciona categorización formal de errores a partir de output de terminal
+ * y diagnósticos de ejecución. Reemplaza el manejo difuso de errores con
+ * clasificación estructurada.
+ *
+ * Las categorías principales incluyen:
+ * - Errores de sintaxis/validación (SYNTAX_ERROR, AMBIGUOUS_COMMAND)
+ * - Errores de permiso/modo (PRIVILEGE_ERROR, PERMISSION_DENIED)
+ * - Errores de recurso/configuración (INTERFACE_NOT_FOUND, VLAN_NOT_FOUND)
+ * - Timeouts de interacción (PAGING_TIMEOUT, CONFIRM_TIMEOUT)
+ * - Problemas de sesión (SESSION_DESYNC, TERMINAL_UNAVAILABLE)
+ *
+ * @example
+ * ```typescript
+ * const result = await iosService.execInteractive("R1", "show ip route");
+ * const error = classifyIosError(result);
+ * if (error) {
+ *   console.log(error.category); // e.g. "EXECUTION_TIMEOUT"
+ *   console.log(error.severity); // "error"
+ *   console.log(error.retryable); // true
+ * }
+ * ```
  */
 export function classifyIosError(result: IosInteractiveResult): ClassifiedError | null {
   if (result.ok && result.diagnostics.source === 'terminal') {
@@ -332,14 +354,39 @@ export function classifyIosError(result: IosInteractiveResult): ClassifiedError 
 }
 
 /**
- * Determine if an error is retryable
+ * Determina si un error clasificado puede ser reintentado.
+ *
+ * @param error - Error clasificado por classifyIosError
+ * @returns true si el error es retryable (timeout, sesión desincronizada, etc.)
+ *
+ * @example
+ * ```typescript
+ * const error = classifyIosError(result);
+ * if (error && isRetryable(error)) {
+ *   // Reintentar comando
+ * }
+ * ```
  */
 export function isRetryable(error: ClassifiedError): boolean {
   return error.retryable;
 }
 
 /**
- * Get human-readable error description
+ * Obtiene descripción legible de un error clasificado.
+ *
+ * @param error - Error clasificado por classifyIosError
+ * @returns String con mensaje formateado incluyendo categoría, mensaje y detalles
+ *
+ * @example
+ * ```typescript
+ * const error = classifyIosError(result);
+ * if (error) {
+ *   console.log(getErrorDescription(error));
+ *   // Imprime: [SYNTAX_ERROR] Invalid or unknown command
+ *   //         Command: show ip routee
+ *   //         Output: % Invalid command
+ * }
+ * ```
  */
 export function getErrorDescription(error: ClassifiedError): string {
   let description = `[${error.category}] ${error.message}`;

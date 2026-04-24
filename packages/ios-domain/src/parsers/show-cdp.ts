@@ -1,9 +1,11 @@
 import type { ShowCdpNeighbors } from "@cisco-auto/types";
 
 /**
- * Parse "show cdp neighbors" output
- * Uses fixed-width column parsing based on the header format:
+ * Parser para output de "show cdp neighbors".
+ * Usa parsing de columnas fixed-width basado en el header format:
  * Device ID(0-16), Local Intrfce(16-30), Holdtime(30-39), Capability(39-56), Platform(56-66), Port ID(66+)
+ * @param output - Output crudo del comando
+ * @returns ShowCdpNeighbors con array de vecinos descubiertos
  */
 export function parseShowCdpNeighbors(output: string): ShowCdpNeighbors {
   const lines = output.split("\n");

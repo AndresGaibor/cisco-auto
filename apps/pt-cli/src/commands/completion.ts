@@ -221,6 +221,8 @@ const POWERSHELL_INSTALL = `
 # pt completion powershell >> $PROFILE
 `;
 
+type ShellType = 'bash' | 'zsh' | 'fish' | 'powershell';
+
 /**
  * Lista de comandos disponibles en la CLI
  */

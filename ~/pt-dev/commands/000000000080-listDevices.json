@@ -1,0 +1,14 @@
+{
+  "protocolVersion": 2,
+  "id": "cmd_000000000080",
+  "seq": 80,
+  "createdAt": 1776665964910,
+  "type": "listDevices",
+  "payload": {
+    "type": "listDevices",
+    "id": "ctrl_1776665964908_uc3k"
+  },
+  "attempt": 1,
+  "expiresAt": 1776666024908,
+  "checksum": "sha256:52e890164e697b6309269b3377cc6546b7efea22409000a1137d6a88f11b48e3"
+}

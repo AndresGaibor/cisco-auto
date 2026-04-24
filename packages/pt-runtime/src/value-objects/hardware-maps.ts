@@ -60,6 +60,15 @@ export function validatePortExists(deviceModel: string, portName: string): { val
   const ports = modelKeys.map((key) => PT_PORT_MAP[key]).find((value) => value);
 
   if (!ports) {
+    const normalized = requestedModel.toLowerCase();
+    const hostFallbackModels = new Set(["pc-pt", "server-pt", "laptop-pt"]);
+    if (hostFallbackModels.has(normalized)) {
+      const requested = (portName || '').replace(/\s+/g, '').toLowerCase();
+      if (requested === "fastethernet0" || requested === "ethernet0" || requested === "gigabitethernet0") {
+        return { valid: true, connector: "rj45" };
+      }
+    }
+
     return { valid: false, error: `Modelo '${deviceModel}' no encontrado en PT_PORT_MAP` };
   }
 

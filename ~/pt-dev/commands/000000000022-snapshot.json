@@ -1,0 +1,13 @@
+{
+  "protocolVersion": 2,
+  "id": "cmd_000000000022",
+  "seq": 22,
+  "createdAt": 1776663709565,
+  "type": "snapshot",
+  "payload": {
+    "type": "snapshot"
+  },
+  "attempt": 1,
+  "expiresAt": 1776663769562,
+  "checksum": "sha256:0ceac3ae9690e2cf1626d129883da3bfe6db001edaaaab9a97155a9384d5fe71"
+}

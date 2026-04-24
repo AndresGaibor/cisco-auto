@@ -30,6 +30,7 @@ export interface CommandMeta {
   supportsExplain?: boolean;
   requiresPT?: boolean;
   requiresContext?: boolean;
+  status?: "stable" | "partial" | "experimental" | "deprecated";
 }
 
 /**

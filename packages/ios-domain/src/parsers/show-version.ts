@@ -1,7 +1,11 @@
 import type { ShowVersion } from "@cisco-auto/types";
 
 /**
- * Parse "show version" output
+ * Parser para output de "show version".
+ * Extrae version IOS, uptime, hostname, imagen, processor y config register.
+ * Solo captura la primera versión encontrada (descarta BOOTLDR/ROM versions).
+ * @param output - Output crudo del comando
+ * @returns ShowVersion con campos extraídos
  */
 export function parseShowVersion(output: string): ShowVersion {
   const result: ShowVersion = { raw: output };

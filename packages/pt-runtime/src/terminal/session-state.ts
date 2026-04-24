@@ -55,6 +55,7 @@ export interface TerminalSessionState {
   warnings: string[];
   health: TerminalHealth;
   listenersAttached: boolean;
+  initialized: boolean;
 }
 
 export function createTerminalSessionState(deviceName: string): TerminalSessionState {
@@ -83,6 +84,7 @@ export function createTerminalSessionState(deviceName: string): TerminalSessionS
     warnings: [],
     health: "stale",
     listenersAttached: false,
+    initialized: false,
   };
 }
 

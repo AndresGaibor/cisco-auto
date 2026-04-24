@@ -75,8 +75,32 @@ export function pollCommandQueue(subsystems: KernelSubsystems, state: KernelStat
     }
 
     const runtimeApi = createRuntimeApi(subsystems);
-    const result = runtimeFn(claimed.payload, runtimeApi);
-    finishActiveCommand(subsystems, state, result);
+    Promise.resolve(runtimeFn(claimed.payload, runtimeApi))
+      .then((result) => {
+        try {
+          const keys = result && typeof result === "object" ? Object.keys(result as Record<string, unknown>) : [];
+          kernelLogSubsystem(
+            "queue",
+            "runtime result resolved type=" +
+              typeof result +
+              " keys=" +
+              keys.join(",") +
+              " ok=" +
+              String((result as any)?.ok),
+          );
+        } catch (debugError) {
+          kernelLogSubsystem("queue", "runtime result debug failed: " + String(debugError));
+        }
+        finishActiveCommand(subsystems, state, result);
+      })
+      .catch((e) => {
+        kernelLog("RUNTIME ASYNC ERROR: " + String(e), "error");
+        finishActiveCommand(subsystems, state, {
+          ok: false,
+          error: "Runtime async error: " + String(e),
+          code: "EXEC_ERROR",
+        });
+      });
   } catch (e) {
     kernelLog("RUNTIME FATAL ERROR: " + String(e), "error");
     finishActiveCommand(subsystems, state, {

@@ -87,7 +87,20 @@ export function validateLabSafe(data: unknown): { success: boolean; data?: Lab; 
   }
 }
 
-// Type exports
+/**
+ * Conexión entre dos dispositivos en una topología
+ * Usar para definir enlaces físicos en labs
+ */
 export type Connection = z.infer<typeof ConnectionSchema>;
+
+/**
+ * Reglas de validación para un laboratorio
+ * Usar para definir checks de conectividad y routing
+ */
 export type Validation = z.infer<typeof ValidationSchema>;
+
+/**
+ * Configuración completa de un laboratorio Packet Tracer
+ * Usar para definir labs de práctica o evaluación
+ */
 export type Lab = z.infer<typeof LabSchema>;

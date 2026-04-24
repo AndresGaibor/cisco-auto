@@ -13,8 +13,8 @@ describe('cleanup-manager', () => {
     state.bootstrapped = true;
     state.tickTimer = 123;
     state.activeQueueItem = 'job-123';
-    state.watchers.set('w1', {});
-    state.listeners.set('l1', []);
+    state.watchers['w1'] = {};
+    state.listeners['l1'] = [];
     state.terminalSubsystemReady = true;
     return state;
   };
@@ -77,8 +77,8 @@ describe('cleanup-manager', () => {
       manager.execute();
 
       expect(state.tickTimer).toBeNull();
-      expect(state.watchers.size).toBe(0);
-      expect(state.listeners.size).toBe(0);
+      expect(Object.keys(state.watchers).length).toBe(0);
+      expect(Object.keys(state.listeners).length).toBe(0);
       expect(state.terminalSubsystemReady).toBe(false);
       expect(state.activeQueueItem).toBeNull();
       expect(state.bootstrapped).toBe(false);

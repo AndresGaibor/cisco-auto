@@ -42,10 +42,18 @@ const CABLE_TYPE_TO_MEDIA: Record<string, CableMediaType> = {
 };
 
 /**
- * Represents the physical media type of a cable/connection
- * 
- * Derived from CableType but provides a simpler categorization
- * for topology analysis and validation.
+ * Valor obstructor que representa el tipo de medio físico de un cable/conexión.
+ *
+ * Deriva de CableType pero provee una categorización más simple para
+ * análisis de topología y validación.
+ *
+ * @example
+ * ```typescript
+ * const media = CableMedia.fromCableType("fiber");
+ * console.log(media.isFiber); // true
+ * console.log(media.typicalMaxDistance); // 2000
+ * console.log(media.typicalSpeed); // 10000
+ * ```
  */
 export class CableMedia {
   public readonly value: CableMediaType;

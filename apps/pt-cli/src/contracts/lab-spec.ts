@@ -142,6 +142,14 @@ export interface ParsedConnection {
  * Estructura mínima de un archivo YAML de laboratorio parsed
  */
 export interface ParsedLabYaml {
+  name?: string;
+  devices?: ParsedDevice[];
+  links?: ParsedConnection[];
+  metadata?: { name?: string; version?: string; author?: string };
+  topology?: {
+    devices?: ParsedDevice[];
+    connections?: ParsedConnection[];
+  };
   lab?: {
     metadata?: { name?: string; version?: string; author?: string };
     topology?: {
@@ -224,14 +232,25 @@ export function loadLabYaml(filePath: string): ParsedLabYaml {
  * Convierte un ParsedLabYaml a LabSpec
  */
 export function toLabSpec(parsed: ParsedLabYaml): LabSpec {
+  const metadata = parsed.lab?.metadata || parsed.metadata || {};
+  const name = metadata.name || parsed.name || 'Lab';
+  
+  const devices = parsed.lab?.topology?.devices || 
+                  parsed.topology?.devices || 
+                  parsed.devices || [];
+                  
+  const connections = parsed.lab?.topology?.connections || 
+                      parsed.topology?.connections || 
+                      parsed.links || [];
+
   return {
     metadata: {
-      name: parsed.lab?.metadata?.name ?? 'Lab',
-      version: parsed.lab?.metadata?.version ?? '1.0',
-      author: parsed.lab?.metadata?.author ?? 'unknown',
+      name,
+      version: metadata.version ?? '1.0',
+      author: metadata.author ?? 'unknown',
       createdAt: new Date(),
     },
-    devices: (parsed.lab?.topology?.devices || []).map((d) => ({
+    devices: devices.map((d) => ({
       id: d.name ?? '',
       name: d.name ?? '',
       type: toDeviceType(d.type),
@@ -251,7 +270,7 @@ export function toLabSpec(parsed: ParsedLabYaml): LabSpec {
       routing: d.routing,
       services: d.services,
     })),
-    connections: (parsed.lab?.topology?.connections || []).map((c) => {
+    connections: connections.map((c) => {
       const fromDevice = typeof c.from === 'string' ? c.from : c.from?.device ?? '';
       const fromPort = typeof c.from === 'string' ? c.fromInterface ?? 'unknown' : c.from?.port ?? c.fromInterface ?? 'unknown';
       const toDevice = typeof c.to === 'string' ? c.to : c.to?.device ?? '';
@@ -270,20 +289,17 @@ export function toLabSpec(parsed: ParsedLabYaml): LabSpec {
 /**
  * Valida un laboratorio de forma segura
  */
-export function validateLabSafe(lab: ParsedLabYaml['lab']): LabValidationResult {
+export function validateLabSafe(parsed: ParsedLabYaml): LabValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  if (!lab) {
-    return { success: false, errors: ['Estructura del lab no encontrada'] };
-  }
-
-  if (!lab.topology) {
-    return { success: false, errors: ['Sección topology requerida'] };
-  }
-
-  const devices = lab.topology.devices || [];
-  const connections = lab.topology.connections || [];
+  const devices = parsed.lab?.topology?.devices || 
+                  parsed.topology?.devices || 
+                  parsed.devices || [];
+                  
+  const connections = parsed.lab?.topology?.connections || 
+                      parsed.topology?.connections || 
+                      parsed.links || [];
 
   if (devices.length === 0) {
     errors.push('No hay dispositivos definidos');

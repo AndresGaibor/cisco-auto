@@ -70,8 +70,36 @@ export const RUNTIME_MANIFEST = {
     "core/dispatcher.ts",
   ],
 
+  terminal: [
+    "terminal/index.ts",
+    "terminal/prompt-detector.ts",
+    "terminal/session-registry.ts",
+    "terminal/session-state.ts",
+    "terminal/command-executor.ts",
+    "terminal/pager-handler.ts",
+    "terminal/confirm-handler.ts",
+    "terminal/command-sanitizer.ts",
+    "terminal/stability-heuristic.ts",
+    "terminal/mode-guard.ts",
+    "terminal/plan-engine.ts",
+    "terminal/terminal-plan.ts",
+    "terminal/standard-plans.ts",
+    "terminal/ios-evidence.ts",
+    "terminal/terminal-errors.ts",
+  ],
+
+  ptTerminal: [
+    "pt/terminal/prompt-parser.ts",
+    "pt/terminal/terminal-events.ts",
+    "pt/terminal/terminal-session.ts",
+    "pt/terminal/terminal-engine.ts",
+    "pt/terminal/command-executor.ts",
+    "pt/terminal/index.ts",
+  ],
+
   handlers: [
     // Handler implementations
+    "handlers/handler-registry.ts",
     "handlers/dispatcher.ts",
     "handlers/device-crud.ts",
     "handlers/device-discovery.ts",

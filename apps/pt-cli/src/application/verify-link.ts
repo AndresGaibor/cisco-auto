@@ -18,11 +18,14 @@ export interface LinkVerificationData {
     exists: boolean;
   };
   linkVisible: boolean;
+  linkUp: boolean;
   linkDetails?: {
     device1: string;
     port1: string;
     device2: string;
     port2: string;
+    status1?: string;
+    status2?: string;
   };
 }
 
@@ -69,12 +72,18 @@ export async function verifyLink(
     // El enlace está visible si ambos puertos tienen link
     data.linkVisible = port1HasLink && port2HasLink;
     
+    const isUp1 = dev1Port?.status === 'up' || (dev1Port as any)?.up === true;
+    const isUp2 = dev2Port?.status === 'up' || (dev2Port as any)?.up === true;
+    data.linkUp = isUp1 && isUp2;
+
     if (data.linkVisible) {
       data.linkDetails = {
-        device1: dev1Port?.link?.includes(device2) ? device1 : device2,
+        device1: device1,
         port1: port1,
-        device2: dev2Port?.link?.includes(device1) ? device2 : device1,
+        device2: device2,
         port2: port2,
+        status1: dev1Port?.status || 'unknown',
+        status2: dev2Port?.status || 'unknown',
       };
     }
   } catch {
@@ -111,6 +120,12 @@ export function buildLinkVerificationChecks(
     name: 'link-visible',
     ok: data.linkVisible,
     details: data.linkDetails,
+  });
+
+  checks.push({
+    name: 'link-up',
+    ok: data.linkUp,
+    details: data.linkUp ? { status: 'Operational' } : { status: 'Electrical Down (Red)' },
   });
 
   return checks;

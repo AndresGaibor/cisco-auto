@@ -7,6 +7,17 @@ import type { TopologyCachePort } from "../ports/topology-cache.port.js";
 import { DeviceQueryService } from "./device-query-service.js";
 import { DeviceMutationService } from "./device-mutation-service.js";
 
+/**
+ * Servicio para inspección y gestión de dispositivos de red.
+ *
+ * Delega a DeviceQueryService para lecturas (inspect, show) y a
+ * DeviceMutationService para escrituras (addModule, removeModule,
+ * configureDhcpServer, deepInspect).
+ *
+ * @param primitivePort - Puerto para ejecutar operaciones primitivas en PT
+ * @param cache - Cache de topología para estados de dispositivos
+ * @param generateId - Generador de IDs único para tracking de comandos
+ */
 export class DeviceService {
   private readonly query: DeviceQueryService;
   private readonly mutation: DeviceMutationService;
@@ -48,10 +59,6 @@ export class DeviceService {
     return this.query.commandLog(device, limit);
   }
 
-  configureHostDhcp(device: string) {
-    return this.mutation.configureHostDhcp(device);
-  }
-
   configureDhcpServer(
     device: string,
     options: {
@@ -68,7 +75,7 @@ export class DeviceService {
         maxUsers?: number;
       }>;
       excluded?: Array<{ start: string; end: string }>;
-    }
+    },
   ) {
     return this.mutation.configureDhcpServer(device, options);
   }
@@ -77,11 +84,15 @@ export class DeviceService {
     return this.mutation.inspectDhcpServer(device, port);
   }
 
+  configureHostDhcp(device: string) {
+    return this.mutation.configureHostDhcp(device);
+  }
+
   moveDevice(name: string, x: number, y: number) {
     return this.mutation.moveDevice(name, x, y);
   }
 
-  deepInspect(path: string, method?: string, args?: any[]) {
+  deepInspect(path: string, method?: string, args?: unknown[]) {
     return this.query.deepInspect(path, method, args);
   }
 }

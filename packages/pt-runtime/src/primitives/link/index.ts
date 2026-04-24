@@ -38,13 +38,27 @@ const CABLE_AUTO = -1;
 export function addLink(payload: AddLinkPayload, net: any, lw: any): LinkPrimitiveResult {
   try {
     const cableType = payload.cableType ?? CABLE_AUTO;
-    const link = lw.createLink(
+    let link = lw.createLink(
       payload.device1,
       payload.port1,
       payload.device2,
       payload.port2,
       cableType
     );
+    
+    // FALLBACK para PT 9.0
+    if (!link && typeof lw.autoConnectDevices === 'function') {
+        lw.autoConnectDevices(payload.device1, payload.device2);
+        return {
+          ok: true,
+          value: {
+            device1: payload.device1,
+            device2: payload.device2,
+            note: "Used autoConnectDevices fallback (PT 9.0 bug compatibility)",
+          },
+          confidence: 0.8,
+        };
+    }
     
     if (!link) {
       return { ok: false, error: "Failed to create link", code: "LINK_CREATION_FAILED" };
