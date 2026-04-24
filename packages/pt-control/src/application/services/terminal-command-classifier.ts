@@ -52,7 +52,8 @@ function baseProfile(): CommandProfile {
 }
 
 export function classifyIosCommand(command: string): CommandProfile {
-  const cmd = command.trim();
+  const raw = command.trim();
+  const cmd = raw.toLowerCase();
   const profile = baseProfile();
   profile.deviceKind = "ios";
 
@@ -67,7 +68,8 @@ export function classifyIosCommand(command: string): CommandProfile {
   if (cmd.startsWith("interface ")) {
     profile.intent = "config-submode";
     profile.expectedMode = "config-if";
-    profile.ensurePrivileged = true;
+    profile.preserveCurrentMode = true;
+    profile.ensurePrivileged = false;
     profile.risk = "changes-state";
     return profile;
   }
@@ -75,7 +77,8 @@ export function classifyIosCommand(command: string): CommandProfile {
   if (cmd.startsWith("line ")) {
     profile.intent = "config-submode";
     profile.expectedMode = "config-line";
-    profile.ensurePrivileged = true;
+    profile.preserveCurrentMode = true;
+    profile.ensurePrivileged = false;
     profile.risk = "changes-state";
     return profile;
   }
@@ -83,7 +86,8 @@ export function classifyIosCommand(command: string): CommandProfile {
   if (cmd.startsWith("router ")) {
     profile.intent = "config-submode";
     profile.expectedMode = "config-router";
-    profile.ensurePrivileged = true;
+    profile.preserveCurrentMode = true;
+    profile.ensurePrivileged = false;
     profile.risk = "changes-state";
     return profile;
   }
@@ -91,7 +95,8 @@ export function classifyIosCommand(command: string): CommandProfile {
   if (/^vlan \d+$/.test(cmd)) {
     profile.intent = "config-submode";
     profile.expectedMode = "config-vlan";
-    profile.ensurePrivileged = true;
+    profile.preserveCurrentMode = true;
+    profile.ensurePrivileged = false;
     profile.risk = "changes-state";
     return profile;
   }
@@ -99,15 +104,16 @@ export function classifyIosCommand(command: string): CommandProfile {
   if (cmd === "exit") {
     profile.intent = "config-exit";
     profile.preserveCurrentMode = true;
-    profile.ensurePrivileged = true;
+    profile.ensurePrivileged = false;
     profile.risk = "changes-state";
     return profile;
   }
 
-  if (cmd === "end" || cmd === "^z" || cmd === "Ctrl+z") {
+  if (cmd === "end" || cmd === "^z" || cmd === "ctrl+z") {
     profile.intent = "config-exit";
     profile.expectedMode = "privileged-exec";
-    profile.ensurePrivileged = true;
+    profile.preserveCurrentMode = true;
+    profile.ensurePrivileged = false;
     profile.risk = "changes-state";
     return profile;
   }
@@ -132,11 +138,10 @@ export function classifyIosCommand(command: string): CommandProfile {
       "show logg",
     ];
 
-    const lowerCmd = cmd.toLowerCase();
     if (
-      runningConfigCommands.some((c) => lowerCmd === c || lowerCmd.startsWith(c + " ")) ||
-      techCommands.some((c) => lowerCmd === c || lowerCmd.startsWith(c + " ")) ||
-      loggingCommands.some((c) => lowerCmd === c || lowerCmd.startsWith(c + " "))
+      runningConfigCommands.some((c) => cmd === c || cmd.startsWith(c + " ")) ||
+      techCommands.some((c) => cmd === c || cmd.startsWith(c + " ")) ||
+      loggingCommands.some((c) => cmd === c || cmd.startsWith(c + " "))
     ) {
       profile.timeoutMs = 60000;
       profile.stallTimeoutMs = 15000;

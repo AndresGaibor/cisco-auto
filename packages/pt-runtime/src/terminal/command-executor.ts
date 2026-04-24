@@ -24,6 +24,9 @@ import { type CommandEndedPayload, type TerminalEventRecord } from "../pt/termin
 import { TerminalErrors, type TerminalErrorCode } from "./terminal-errors";
 import { ensureSession } from "./session-registry";
 import { checkIsCommandFinished } from "./stability-heuristic";
+import { checkCommandCompletion } from "./stability-heuristic";
+import { verifyIosOutput, verifyHostOutput } from "./terminal-semantic-verifier";
+import { recoverTerminalSync } from "./terminal-recovery";
 import {
   getPromptSafe,
   getModeSafe,
@@ -279,6 +282,10 @@ if (!readyResult.ready) {
     let startTimer: any = null;
     let outputPollTimer: any = null;
 
+    let lastOutputAt = Date.now();
+    let previousPrompt = promptBefore;
+    let promptStableSince: number | null = null;
+
     function clearTimers(): void {
       if (commandEndGraceTimer) clearTimeout(commandEndGraceTimer);
       if (stallTimer) clearTimeout(stallTimer);
@@ -345,14 +352,6 @@ if (!readyResult.ready) {
         hostBusy = true;
       }
 
-      const semanticStatus = guessFailureStatus(finalOutput);
-      if (semanticStatus !== 0) {
-        cmdOk = false;
-        status = semanticStatus;
-      } else if (!cmdOk && status === null) {
-        status = guessFailureStatus(finalOutput);
-      }
-
       const promptMatched = !options.expectedPromptPattern || promptAfter.includes(options.expectedPromptPattern);
       const modeMatched = !options.expectedMode || modeAfter === options.expectedMode;
 
@@ -370,6 +369,20 @@ if (!readyResult.ready) {
       }
 
       const finalWarnings = [...warnings, ...extractResult.warnings];
+
+      const semantic = sessionKind === "host"
+        ? verifyHostOutput(finalOutput)
+        : verifyIosOutput(finalOutput);
+
+      if (!semantic.ok) {
+        cmdOk = false;
+        status = semantic.status;
+        finalError = semantic.message || finalError;
+        finalCode = (semantic.code as TerminalErrorCode) || finalCode;
+        finalWarnings.push(...semantic.warnings);
+      } else if (!cmdOk && status === null) {
+        status = guessFailureStatus(finalOutput);
+      }
       if (!promptMatched) finalWarnings.push(`Expected prompt "${options.expectedPromptPattern}" not reached.`);
       if (!modeMatched) finalWarnings.push(`Expected mode "${options.expectedMode}" not reached.`);
       if (wizardDismissed) finalWarnings.push("Initial configuration dialog was auto-dismissed");
@@ -435,6 +448,22 @@ if (!readyResult.ready) {
     }
 
     function finalizeFailure(code: TerminalErrorCode, message: string): void {
+      const recoverable =
+        code === TerminalErrors.COMMAND_START_TIMEOUT ||
+        code === TerminalErrors.COMMAND_END_TIMEOUT ||
+        code === TerminalErrors.PROMPT_MISMATCH ||
+        code === TerminalErrors.MODE_MISMATCH ||
+        message.includes("No output received");
+
+      if (recoverable && terminal) {
+        try {
+          const recovery = recoverTerminalSync(terminal, sessionKind === "host" ? "host" : "ios");
+          warnings.push(
+            `Recovery attempted: ${recovery.actions.join(", ")}; prompt=${recovery.prompt}; mode=${recovery.mode}`,
+          );
+        } catch {}
+      }
+
       finalize(false, 1, message, code);
     }
 
@@ -451,28 +480,24 @@ if (!readyResult.ready) {
       }
 
       const currentPrompt = getPromptSafe(terminal);
-      const { finished, reason } = checkIsCommandFinished(currentPrompt, session, commandEndedSeen);
 
-      const gracePeriodMs = sessionKind === "host" ? HOST_COMMAND_END_GRACE_MS : COMMAND_END_GRACE_MS;
+      const verdict = checkCommandCompletion({
+        currentPrompt: currentPrompt,
+        previousPrompt: previousPrompt,
+        commandEndedSeen: commandEndedSeen,
+        lastOutputAt: lastOutputAt,
+        now: Date.now(),
+        promptStableSince: promptStableSince,
+        sessionKind: sessionKind,
+        pagerActive: session.pagerActive,
+        confirmPromptActive: session.confirmPromptActive,
+        expectedMode: options.expectedMode,
+        currentMode: getModeSafe(terminal) as TerminalMode,
+      });
 
-      if (finished) {
-        if (!promptFirstSeenAt) {
-          promptFirstSeenAt = Date.now();
-        }
-
-        const graceElapsed = Date.now() - promptFirstSeenAt;
-
-        // IMPORTANTE:
-        // No finalizar inmediatamente solo porque commandEndedSeen=true.
-        // En Packet Tracer, commandEnded puede llegar antes de que getOutput()
-        // incluya el mensaje completo y el prompt nuevo, especialmente en comandos
-        // que cambian de modo: conf t, interface, line, router, vlan, end, exit.
-        if (graceElapsed >= gracePeriodMs) {
-          finalize(true, endedStatus, reason);
-          return;
-        }
-      } else {
-        promptFirstSeenAt = null;
+      if (verdict.finished) {
+        finalize(true, endedStatus, verdict.reason);
+        return;
       }
 
       if (commandEndGraceTimer) clearTimeout(commandEndGraceTimer);
@@ -489,6 +514,7 @@ if (!readyResult.ready) {
 
       outputEventsCount++;
       outputBuffer += chunk;
+      lastOutputAt = Date.now();
 
       const currentRaw = readTerminalSnapshot(terminal);
       if (currentRaw.raw.length >= lastTerminalSnapshot.raw.length) {
@@ -580,10 +606,12 @@ if (!readyResult.ready) {
 
     function onPromptChanged(_src: unknown, args: unknown): void {
       const p = String((args as any).prompt || "");
+      previousPrompt = session.lastPrompt || previousPrompt;
       session.lastPrompt = normalizePrompt(p);
       const mode = detectModeFromPrompt(session.lastPrompt);
       session.lastMode = mode;
       if (isHostMode(mode)) session.sessionKind = "host";
+      promptStableSince = Date.now();
       resetStallTimer();
       scheduleFinalizeAfterCommandEnd();
     }

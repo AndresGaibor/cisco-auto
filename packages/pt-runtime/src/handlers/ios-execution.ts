@@ -23,6 +23,7 @@ import {
 } from "../terminal/prompt-detector";
 import { createModeGuard } from "../terminal/mode-guard";
 import { verifyHostOutput } from "../terminal/terminal-semantic-verifier.js";
+import type { TerminalExecutionResult } from "../terminal/terminal-execution-result.js";
 
 const DEFAULT_COMMAND_TIMEOUT = 8000;
 const DEFAULT_STALL_TIMEOUT = 15000;
@@ -101,11 +102,11 @@ function inferExpectedModeAfterCommand(command: string): any {
  * 3. Envía comando via enterCommand()
  * 4. Espera commandEnded o timeout
  * 5. Retorna output sanitizado y parsed
- * 
+ *
  * @param payload - ExecIosPayload con device, command, y options
  * @param api - PtRuntimeApi con acceso a IPC y device registry
  * @returns PtResult con output, status, y parsed metadata
- * 
+ *
  * @example
  * handleExecIos({ type: "execIos", device: "R1", command: "show ip int brief" }, api)
  * // → { ok: true, raw: "...", status: 0, parsed: { command: "show ip int brief", durationMs: 234 } }
@@ -119,7 +120,7 @@ export async function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi):
   if (!terminal) return createErrorResult("Terminal engine inaccessible", "NO_TERMINAL");
 
   const session = ensureSession(deviceName);
-  
+
   const deviceModel = (device as any)?.getModel?.() ?? "";
   const isHost = deviceModel.toLowerCase().includes("pc") || deviceModel.toLowerCase().includes("server");
   session.sessionKind = isHost ? "host" : "ios";
@@ -136,6 +137,31 @@ export async function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi):
         { raw: privResult.warnings?.join("\n") ?? "" }
       );
     }
+  }
+
+  if (!payload.command || !String(payload.command).trim()) {
+    return createSuccessResult({
+      output: "",
+      raw: "",
+      status: 0,
+      confidence: 1,
+      parsed: {
+        command: "",
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+        durationMs: 0,
+        promptBefore: terminal.getPrompt(),
+        promptAfter: terminal.getPrompt(),
+        modeBefore: currentMode,
+        modeAfter: currentMode,
+        startedSeen: true,
+        endedSeen: true,
+        outputEvents: [],
+        confidence: 1,
+        events: [],
+        warnings: [],
+      },
+    });
   }
 
   const options: ExecutionOptions = {
@@ -182,34 +208,54 @@ export async function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi):
     warnings: execResult.warnings,
   };
 
-  if (execResult.ok) {
-    return createSuccessResult({
-      output: sanitized,
-      raw: sanitized,
-      status: execResult.status,
-      confidence: execResult.confidence,
-      parsed,
-    });
+  const terminalResult: TerminalExecutionResult = {
+    ok: execResult.ok,
+    device: deviceName,
+    command: payload.command,
+    output: sanitized,
+    raw: execResult.rawOutput || sanitized,
+    error: execResult.ok ? undefined : {
+      code: execResult.code ?? "TERMINAL_UNKNOWN_STATE",
+      message: execResult.error ?? `Command failed with status ${execResult.status}`,
+      phase: "execution",
+      details: { status: execResult.status },
+    },
+    diagnostics: {
+      status: execResult.ok ? "completed" : "failed",
+      statusCode: execResult.status ?? (execResult.ok ? 0 : 1),
+      completionReason: execResult.error,
+      outputSource: "event",
+      confidence: execResult.confidence as any,
+      startedSeen: execResult.startedSeen,
+      endedSeen: execResult.endedSeen,
+      outputEvents: execResult.outputEvents,
+      promptMatched: !payload.expectedPromptPattern || execResult.promptAfter?.includes(payload.expectedPromptPattern),
+      modeMatched: !payload.expectedMode || execResult.modeAfter === payload.expectedMode,
+      semanticOk: execResult.status === 0,
+      durationMs: execResult.durationMs,
+    },
+    session: {
+      kind: session.sessionKind,
+      promptBefore: execResult.promptBefore,
+      promptAfter: execResult.promptAfter,
+      modeBefore: execResult.modeBefore as any,
+      modeAfter: execResult.modeAfter as any,
+      paging: false,
+      awaitingConfirm: false,
+      autoDismissedInitialDialog: execResult.warnings?.includes("Initial configuration dialog was auto-dismissed") ?? false,
+    },
+    events: execResult.events,
+    warnings: execResult.warnings,
+  };
+
+  if (terminalResult.ok) {
+    return createSuccessResult(terminalResult as unknown as Record<string, unknown>);
   }
 
   return createErrorResult(
-    execResult.error || `Command failed with status ${execResult.status}`,
-    execResult.code,
-    {
-      raw: sanitized || raw,
-      status: execResult.status ?? undefined,
-      parsed,
-      details: {
-        command: execResult.command,
-        status: execResult.status ?? undefined,
-        promptBefore: execResult.promptBefore,
-        promptAfter: execResult.promptAfter,
-        modeBefore: execResult.modeBefore,
-        modeAfter: execResult.modeAfter,
-        events: execResult.events,
-        warnings: execResult.warnings,
-      },
-    },
+    terminalResult.error?.message ?? "Terminal execution failed",
+    terminalResult.error?.code,
+    { raw: terminalResult.raw, status: terminalResult.diagnostics.statusCode, parsed: terminalResult as unknown as Record<string, unknown> },
   );
 }
 
@@ -395,6 +441,9 @@ export async function handleExecPc(payload: ExecPcPayload, api: PtRuntimeApi): P
   const terminal = getTerminalDevice(api, deviceName);
   if (!terminal) return createErrorResult("Terminal engine inaccessible", "NO_TERMINAL");
 
+  const session = ensureSession(deviceName);
+  session.sessionKind = "host";
+
   const cmd = payload.command.trim().toLowerCase();
   const isLongRunningCommand = cmd.startsWith("ping") || cmd.startsWith("tracert") || cmd.startsWith("trace");
   const commandTimeoutMs = isLongRunningCommand ? (payload.timeoutMs ?? 60000) : (payload.timeoutMs ?? 30000);
@@ -408,7 +457,7 @@ export async function handleExecPc(payload: ExecPcPayload, api: PtRuntimeApi): P
     deviceName,
     payload.command,
     terminal,
-    { 
+    {
       commandTimeoutMs,
       autoAdvancePager: true
     }
@@ -421,44 +470,56 @@ export async function handleExecPc(payload: ExecPcPayload, api: PtRuntimeApi): P
   }
 
   const semantic = verifyHostOutput(result.output);
-  const ok = result.ok && semantic.ok;
+  const execOk = result.ok && semantic.ok;
 
-  if (ok) {
-    return createSuccessResult(
-      {
-        output: result.output,
-        outputLength: result.output.length,
-        preview: result.output.slice(0, 200),
-        status: result.status ?? undefined,
-      },
-      { 
-        raw: result.output, 
-        status: result.status ?? undefined, 
-        session: {
-          prompt: result.promptAfter,
-          mode: result.modeAfter,
-          paging: false,
-          awaitingConfirm: false,
-        }
-      },
-    );
+  const terminalResult: TerminalExecutionResult = {
+    ok: execOk,
+    device: deviceName,
+    command: payload.command,
+    output: result.output,
+    raw: result.output,
+    error: execOk ? undefined : {
+      code: (semantic.code ?? result.code ?? "TERMINAL_UNKNOWN_STATE") as any,
+      message: semantic.message ?? result.error ?? `PC execution failed with status ${result.status}`,
+      phase: "execution",
+      details: { status: result.status },
+    },
+    diagnostics: {
+      status: execOk ? "completed" : "failed",
+      statusCode: result.status ?? (execOk ? 0 : 1),
+      completionReason: semantic.message,
+      outputSource: "event",
+      confidence: result.confidence as any,
+      startedSeen: result.startedSeen,
+      endedSeen: result.endedSeen,
+      outputEvents: result.outputEvents,
+      promptMatched: true,
+      modeMatched: true,
+      semanticOk: result.status === 0,
+      durationMs: result.durationMs,
+    },
+    session: {
+      kind: "host",
+      promptBefore: result.promptBefore,
+      promptAfter: result.promptAfter,
+      modeBefore: result.modeBefore as any,
+      modeAfter: result.modeAfter as any,
+      paging: false,
+      awaitingConfirm: false,
+      autoDismissedInitialDialog: result.warnings?.includes("Initial configuration dialog was auto-dismissed") ?? false,
+    },
+    events: result.events,
+    warnings: [...result.warnings, ...semantic.warnings],
+  };
+
+  if (terminalResult.ok) {
+    return createSuccessResult(terminalResult as unknown as Record<string, unknown>);
   }
 
   return createErrorResult(
-    semantic.message ?? result.error ?? "PC execution failed",
-    semantic.code ?? result.code,
-    {
-      raw: result.output,
-      status: semantic.status,
-      parsed: {
-        command: result.command,
-        durationMs: result.durationMs,
-        promptAfter: result.promptAfter,
-        modeAfter: result.modeAfter,
-        confidence: result.confidence,
-        warnings: [...result.warnings, ...semantic.warnings],
-      },
-    },
+    terminalResult.error?.message ?? "PC execution failed",
+    terminalResult.error?.code,
+    { raw: terminalResult.raw, status: terminalResult.diagnostics.statusCode, parsed: terminalResult as unknown as Record<string, unknown> },
   );
 }
 

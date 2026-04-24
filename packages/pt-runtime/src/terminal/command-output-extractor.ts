@@ -55,12 +55,12 @@ export function extractCommandOutput(input: ExtractOptions): ExtractResult {
       promptAfter: input.promptAfter,
     });
     if (sliced) {
+      output = sliced;
       raw = sliced;
       source = "event-sliced";
+      confidence = input.commandEndedSeen ? "high" : "medium";
     }
-  }
-
-  if (!raw && hasEventOutput) {
+  } else if (!raw && hasEventOutput) {
     output = input.eventOutput!;
     raw = input.eventOutput!;
     source = "event";

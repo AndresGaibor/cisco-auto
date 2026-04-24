@@ -84,10 +84,31 @@ function isConfigureTerminalCommand(command: string): boolean {
   return /^(conf|config|configure)(\s+t|\s+terminal)?$/.test(cmd);
 }
 
-function buildEnsureModeCommand(expectMode?: TerminalMode): string | null {
+interface EnsureModeAction {
+  command: string;
+  ensurePrivileged: boolean;
+  expectedMode?: TerminalMode;
+}
+
+function buildEnsureModeAction(expectMode?: TerminalMode): EnsureModeAction | null {
   if (!expectMode) return null;
-  if (expectMode === "privileged-exec") return "__ensure_privileged__";
-  if (expectMode === "global-config") return "configure terminal";
+
+  if (expectMode === "privileged-exec") {
+    return {
+      command: "",
+      ensurePrivileged: true,
+      expectedMode: "privileged-exec",
+    };
+  }
+
+  if (expectMode === "global-config") {
+    return {
+      command: "configure terminal",
+      ensurePrivileged: true,
+      expectedMode: "global-config",
+    };
+  }
+
   return null;
 }
 
@@ -244,15 +265,15 @@ export function createRuntimeTerminalAdapter(
           continue;
         }
 
-        const ensureCommand = buildEnsureModeCommand(step.expectMode);
+        const ensureAction = buildEnsureModeAction(step.expectMode);
 
-        if (!ensureCommand) {
+        if (!ensureAction) {
           events.push({
             stepIndex: i,
             kind: "ensureMode",
             expectMode: step.expectMode,
             skipped: true,
-            reason: "no-command-needed",
+            reason: "no-action-needed",
           });
           continue;
         }
@@ -262,11 +283,11 @@ export function createRuntimeTerminalAdapter(
           {
             type: handlerName,
             device: plan.device,
-            command: ensureCommand,
+            command: ensureAction.command,
             parse: false,
-            ensurePrivileged: false,
+            ensurePrivileged: ensureAction.ensurePrivileged,
             targetMode: plan.targetMode,
-            expectedMode: step.expectMode,
+            expectedMode: ensureAction.expectedMode,
             allowPager: false,
             allowConfirm: false,
             commandTimeoutMs: defaultTimeouts.commandTimeoutMs,
@@ -282,7 +303,7 @@ export function createRuntimeTerminalAdapter(
         events.push({
           stepIndex: i,
           kind: "ensureMode",
-          command: ensureCommand,
+          command: ensureAction.command || "(mode-only)",
           expectMode: step.expectMode,
           status,
           output: raw,
@@ -299,7 +320,7 @@ export function createRuntimeTerminalAdapter(
             modeBefore,
             modeAfter,
             events,
-            warnings: [...warnings, `ensureMode falló con status ${status}: ${ensureCommand}`],
+            warnings: [...warnings, `ensureMode falló con status ${status}: ${ensureAction.command || "(mode-only)"}`],
             parsed: res.parsed,
             confidence: 0,
           };
@@ -384,8 +405,29 @@ export function createRuntimeTerminalAdapter(
       );
 
       const res = bridgeResult?.value ?? bridgeResult ?? {};
-      const raw = String(res.output ?? res.raw ?? (typeof res.value === "string" ? res.value : "") ?? "");
-      const status = normalizeStatus(res);
+
+      // Detectar contrato unificado TerminalExecutionResult
+      const hasUnifiedContract =
+        typeof res?.ok === "boolean" &&
+        res?.diagnostics &&
+        res?.session &&
+        typeof res?.output === "string";
+
+      let raw: string;
+      let status: number;
+
+      if (hasUnifiedContract) {
+        const tr = res as any;
+        raw = tr.output;
+        status = tr.diagnostics?.statusCode ?? 0;
+        promptBefore = tr.session?.promptBefore ?? promptBefore;
+        promptAfter = tr.session?.promptAfter ?? promptAfter;
+        modeBefore = tr.session?.modeBefore ?? modeBefore;
+        modeAfter = tr.session?.modeAfter ?? modeAfter;
+      } else {
+        raw = String(res.output ?? res.raw ?? (typeof res.value === "string" ? res.value : "") ?? "");
+        status = normalizeStatus(res);
+      }
 
       // Detectar errores del bridge/runtime antes de procesar output
       const bridgeFailed =
