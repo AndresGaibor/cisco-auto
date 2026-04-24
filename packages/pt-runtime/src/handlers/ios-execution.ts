@@ -244,12 +244,38 @@ export async function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi):
     stallTimeoutMs: options.stallTimeoutMs,
   });
 
-  const execResult = await executor.executeCommand(
-    deviceName,
-    payload.command,
-    terminal as any,
-    options,
-  );
+  let execResult;
+
+  try {
+    execResult = await withTimeout(
+      executor.executeCommand(
+        deviceName,
+        payload.command,
+        terminal as any,
+        options,
+      ),
+      (options.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT) + 3000,
+      `Timed out while executing IOS command "${payload.command}"`,
+    );
+  } catch (error) {
+    const raw = (terminal as any).getOutput?.() ?? "";
+
+    return createErrorResult(
+      error instanceof Error ? error.message : String(error),
+      "IOS_COMMAND_EXECUTION_TIMEOUT",
+      {
+        raw,
+        status: 1,
+        details: {
+          device: deviceName,
+          command: payload.command,
+          phase: "execute-command",
+          prompt: (terminal as any).getPrompt?.() ?? "",
+          mode: detectModeFromPrompt((terminal as any).getPrompt?.() ?? ""),
+        },
+      },
+    );
+  }
 
   const raw = execResult.output;
   const sanitized = sanitizeTerminalOutput(undefined, raw) || raw;
