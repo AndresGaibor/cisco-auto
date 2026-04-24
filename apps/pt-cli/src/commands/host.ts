@@ -236,17 +236,31 @@ async function executeDeviceTerminalCommand(
         const execResult = await controller.execIos(deviceName, command, false, timeoutMs);
 
         if (!flags.quiet && !flags.json) {
-            process.stdout.write(chalk.green('¡RECIBIDA!\n'));
+            process.stdout.write(execResult.ok ? chalk.green('¡RECIBIDA!\n') : chalk.red('¡FALLÓ!\n'));
+        }
+
+        const output = execResult.output ?? execResult.raw ?? execResult.evidence?.raw ?? "";
+
+        if (!execResult.ok) {
+            return createErrorResult('ios.exec', {
+                code: String(execResult.evidence?.status ?? 'IOS_EXEC_FAILED'),
+                message: 'Error en ejecución de comando IOS',
+                details: {
+                    device: deviceName,
+                    command,
+                    output,
+                    evidence: execResult.evidence,
+                }
+            });
         }
 
         return createSuccessResult('ios.exec', {
             device: deviceName,
             command: command,
-            output: execResult.output ?? execResult.raw ?? execResult.evidence?.raw ?? "",
-            success: execResult.ok,
+            output,
+            success: true,
             verdict: {
-                reason: execResult.ok ? undefined : 'Error en ejecución de comando IOS o timeout',
-                warnings: execResult.ok ? [] : ['Verifica si el dispositivo está ocupado o la salida es muy larga']
+                warnings: []
             },
             parsed: {
                 events: execResult.evidence?.events || []
@@ -336,8 +350,8 @@ function createHostExecCommand(): Command {
         } else {
           console.log(chalk.italic.gray('  (Salida vacía o filtrada por el sistema)'));
           if (flags.verbose) {
-              console.log(chalk.yellow('\nDEBUG: Objeto execResult:'));
-              console.log(JSON.stringify(execResult, null, 2));
+              console.log(chalk.yellow('\nDEBUG: Objeto result:'));
+              console.log(JSON.stringify(result, null, 2));
           }
         }
         console.log('━'.repeat(60));

@@ -248,17 +248,102 @@ export function createRuntimeTerminalAdapter(
       );
 
       const res = bridgeResult?.value ?? bridgeResult ?? {};
-      // Priorizar 'output' que es el campo canónico de texto en nuestro kernel
       const raw = String(res.output ?? res.raw ?? (typeof res.value === "string" ? res.value : "") ?? "");
       const status = normalizeStatus(res);
 
-      if (i === 0) {
-        promptBefore = String(res.session?.prompt ?? "");
-        modeBefore = String(res.session?.mode ?? "");
+      // Detectar errores del bridge/runtime antes de procesar output
+      const bridgeFailed =
+        bridgeResult?.ok === false ||
+        bridgeResult?.status === "failed" ||
+        res?.ok === false ||
+        typeof res?.error === "string";
+
+      if (bridgeFailed) {
+        const errorMessage = String(
+          res?.error ??
+          bridgeResult?.error?.message ??
+          bridgeResult?.error ??
+          "Runtime terminal command failed"
+        );
+
+        const errorCode = String(
+          res?.code ??
+          bridgeResult?.error?.code ??
+          "RUNTIME_TERMINAL_FAILED"
+        );
+
+        const errorStatus = res?.status ?? 1;
+
+        events.push({
+          stepIndex: i,
+          kind: step.kind ?? "command",
+          command,
+          status: errorStatus,
+          promptAfter,
+          modeAfter,
+          error: errorMessage,
+          code: errorCode,
+          sessionKind: isHost ? "host" : "ios",
+          allowPager: stepPolicies.allowPager,
+          allowConfirm: stepPolicies.allowConfirm,
+        });
+
+        return {
+          ok: false,
+          output: raw,
+          status: errorStatus,
+          promptBefore,
+          promptAfter,
+          modeBefore,
+          modeAfter,
+          events,
+          warnings: [...warnings, `${errorCode}: ${errorMessage}`],
+          parsed: res?.parsed,
+          confidence: 0,
+        };
       }
 
-      promptAfter = String(res.session?.prompt ?? promptAfter);
-      modeAfter = String(res.session?.mode ?? modeAfter);
+      const parsedInfo = (res.parsed ?? {}) as {
+  promptBefore?: string;
+  promptAfter?: string;
+  modeBefore?: string;
+  modeAfter?: string;
+  warnings?: string[];
+};
+
+const resolvedPromptBefore = String(
+  parsedInfo.promptBefore ??
+  res.session?.prompt ??
+  ""
+);
+
+const resolvedModeBefore = String(
+  parsedInfo.modeBefore ??
+  res.session?.mode ??
+  ""
+);
+
+const resolvedPromptAfter = String(
+  parsedInfo.promptAfter ??
+  res.session?.prompt ??
+  promptAfter ??
+  ""
+);
+
+const resolvedModeAfter = String(
+  parsedInfo.modeAfter ??
+  res.session?.mode ??
+  modeAfter ??
+  ""
+);
+
+if (i === 0) {
+  promptBefore = resolvedPromptBefore;
+  modeBefore = resolvedModeBefore;
+}
+
+promptAfter = resolvedPromptAfter;
+modeAfter = resolvedModeAfter;
       aggregatedOutput += raw.endsWith("\n") ? raw : `${raw}\n`;
       finalStatus = status;
       finalParsed = res.parsed;

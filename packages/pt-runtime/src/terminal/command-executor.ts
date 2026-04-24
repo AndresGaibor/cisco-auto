@@ -90,7 +90,7 @@ export interface CommandExecutionResult {
 const DEFAULT_COMMAND_TIMEOUT = 15000;
 const DEFAULT_STALL_TIMEOUT = 5000;
 const DEFAULT_READY_TIMEOUT = 3000;
-const COMMAND_END_GRACE_MS = 250;
+const COMMAND_END_GRACE_MS = 900;
 const COMMAND_END_MAX_WAIT_MS = 1000;
 const HOST_COMMAND_END_GRACE_MS = 1500;
 
@@ -421,12 +421,18 @@ if (!readyResult.ready) {
       const gracePeriodMs = sessionKind === "host" ? HOST_COMMAND_END_GRACE_MS : COMMAND_END_GRACE_MS;
 
       if (finished) {
-        if (!commandEndedSeen && !promptFirstSeenAt) {
+        if (!promptFirstSeenAt) {
           promptFirstSeenAt = Date.now();
         }
 
-        const graceElapsed = promptFirstSeenAt ? (Date.now() - promptFirstSeenAt) : 0;
-        if (commandEndedSeen || graceElapsed > gracePeriodMs) {
+        const graceElapsed = Date.now() - promptFirstSeenAt;
+
+        // IMPORTANTE:
+        // No finalizar inmediatamente solo porque commandEndedSeen=true.
+        // En Packet Tracer, commandEnded puede llegar antes de que getOutput()
+        // incluya el mensaje completo y el prompt nuevo, especialmente en comandos
+        // que cambian de modo: conf t, interface, line, router, vlan, end, exit.
+        if (graceElapsed >= gracePeriodMs) {
           finalize(true, endedStatus, reason);
           return;
         }
@@ -438,7 +444,7 @@ if (!readyResult.ready) {
       commandEndGraceTimer = setTimeout(() => {
         commandEndGraceTimer = null;
         scheduleFinalizeAfterCommandEnd();
-      }, sessionKind === "host" ? 800 : 500);
+      }, sessionKind === "host" ? 800 : 250);
     }
 
     function onOutput(_src: unknown, args: unknown): void {
