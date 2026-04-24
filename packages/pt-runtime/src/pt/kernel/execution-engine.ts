@@ -145,8 +145,30 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
         break;
       }
 
+      case "release-session":
       case "close-session": {
-        execLog("CLOSE SESSION id=" + job.id + " device=" + job.device);
+        execLog("RELEASE SESSION id=" + job.id + " device=" + job.device);
+        terminal.detach(job.device);
+        ctx.phase = "completed";
+        ctx.finished = true;
+        break;
+      }
+
+      case "logout-session": {
+        execLog("LOGOUT SESSION id=" + job.id + " device=" + job.device);
+        try {
+          // Obtener el terminal directamente y enviar exit
+          var net = typeof ipc !== "undefined" ? ipc.network() : null;
+          if (net) {
+            var dev = net.getDevice(job.device);
+            if (dev && dev.getCommandLine) {
+              var term = dev.getCommandLine();
+              if (term && term.enterCommand) {
+                term.enterCommand("exit");
+              }
+            }
+          }
+        } catch (e) {}
         terminal.detach(job.device);
         ctx.phase = "completed";
         ctx.finished = true;

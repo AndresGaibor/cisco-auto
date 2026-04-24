@@ -36,7 +36,9 @@ export type DeferredStepType =
   | "expect-prompt"
   | "save-config"
   | "delay"
-  | "close-session";
+  | "close-session"
+  | "release-session"
+  | "logout-session";
 
 /** A single step in a deferred job plan */
 export interface DeferredStep {

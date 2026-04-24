@@ -242,7 +242,7 @@ async function executeDeviceTerminalCommand(
         return createSuccessResult('ios.exec', {
             device: deviceName,
             command: command,
-            output: execResult.raw || execResult.evidence?.raw || "",
+            output: execResult.output ?? execResult.raw ?? execResult.evidence?.raw ?? "",
             success: execResult.ok,
             verdict: {
                 reason: execResult.ok ? undefined : 'Error en ejecución de comando IOS o timeout',

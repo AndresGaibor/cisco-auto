@@ -333,64 +333,129 @@ export function needsConfigTerminal(currentMode: TerminalMode): boolean {
 
 /**
  * Lee el output actual del terminal intentando varios métodos de PT.
- * Sanitiza caracteres de control BELL, ANSI, Backspace y no imprimibles.
+ * Devuelve el output junto con el método que funcionó.
  */
-export function readTerminalOutput(terminal: any): string {
+export interface TerminalSnapshot {
+  raw: string;
+  source: string;
+}
+
+/**
+ * Lee el output actual del terminal intentando múltiples métodos de PT.
+ * Devuelve el output junto con el método que funcionó.
+ */
+export function readTerminalSnapshot(terminal: any): TerminalSnapshot {
   try {
     const methods = [
-      "getAllOutput", "getBuffer", "getOutput", "getText", 
-      "readAll", "read", "getHistory", "history"
+      { name: "getAllOutput", fn: (t: any) => t.getAllOutput?.() },
+      { name: "getBuffer", fn: (t: any) => t.getBuffer?.() },
+      { name: "getOutput", fn: (t: any) => t.getOutput?.() },
+      { name: "getText", fn: (t: any) => t.getText?.() },
+      { name: "readAll", fn: (t: any) => t.readAll?.() },
+      { name: "read", fn: (t: any) => t.read?.() },
+      { name: "getHistory", fn: (t: any) => t.getHistory?.() },
+      { name: "history", fn: (t: any) => t.history?.() },
     ];
-    let raw = "";
 
-    // 1. Probar métodos directos
-    for (let i = 0; i < methods.length; i++) {
-      const m = methods[i]!;
-      if (typeof terminal[m] === "function") {
-        try {
-          const out = terminal[m]();
-          if (out && typeof out === "string" && out.length > 0) {
-            // @ts-ignore
-            if (typeof dprint === "function") dprint("[readTerminalOutput] method=" + m + " len=" + out.length);
-            raw = out;
-            break;
+    for (const m of methods) {
+      try {
+        const out = m.fn(terminal);
+        if (out && typeof out === "string" && out.length > 0) {
+          return { raw: out, source: m.name };
+        }
+      } catch (e) {}
+    }
+
+    if (typeof terminal.getConsole === "function") {
+      try {
+        const consoleObj = terminal.getConsole();
+        if (consoleObj) {
+          for (const m of methods) {
+            try {
+              const out = m.fn(consoleObj);
+              if (out && typeof out === "string" && out.length > 0) {
+                return { raw: out, source: m.name + " (console)" };
+              }
+            } catch (e) {}
           }
-        } catch(e) {}
+        }
+      } catch (e) {}
+    }
+
+    if (typeof terminal.toString === "function") {
+      try {
+        const s = terminal.toString();
+        if (s && s.indexOf("Terminal") === -1 && s.indexOf("[object") === -1) {
+          return { raw: s, source: "toString" };
+        }
+      } catch (e) {}
+    }
+
+    return { raw: "", source: "none" };
+  } catch {
+    return { raw: "", source: "error" };
+  }
+}
+
+/**
+ * Sanitiza texto del terminal eliminando backspaces, ANSI, Bell y caracteres de control.
+ */
+export function sanitizeTerminalText(output: string): string {
+  if (!output) return "";
+
+  let result = output;
+
+  result = result.replace(/\u0007/g, "");
+
+  result = result.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, "");
+
+  result = result.replace(/[\b]+\x08/g, "");
+
+  result = result.replace(/[\b]/g, "");
+
+  result = result.replace(/[\r\n]+/g, "\n");
+
+  return result.trim();
+}
+
+/**
+ * Calcula el delta entre dos snapshots del terminal.
+ * Busca los sufijos del output anterior en el nuevo para encontrar qué parte es nueva.
+ */
+export function diffSnapshotStrict(before: string, after: string): { delta: string; matched: boolean } {
+  if (!before || !after) {
+    return { delta: after || "", matched: false };
+  }
+
+  const beforeClean = sanitizeTerminalText(before);
+  const afterClean = sanitizeTerminalText(after);
+
+  if (afterClean.startsWith(beforeClean)) {
+    const delta = after.substring(before.length);
+    return { delta: sanitizeTerminalText(delta), matched: true };
+  }
+
+  const beforeLines = beforeClean.split("\n");
+  const afterLines = afterClean.split("\n");
+
+  let matchIndex = -1;
+  for (let i = beforeLines.length - 1; i >= 0; i--) {
+    const lineToFind = beforeLines[i];
+    if (lineToFind && lineToFind.trim()) {
+      const foundIdx = afterLines.lastIndexOf(lineToFind);
+      if (foundIdx !== -1) {
+        matchIndex = foundIdx;
+        break;
       }
     }
-
-    // 2. Probar vía getConsole() si existe (común en switches)
-    if (!raw && typeof terminal.getConsole === "function") {
-        try {
-            const consoleObj = terminal.getConsole();
-            if (consoleObj) {
-                for (let i = 0; i < methods.length; i++) {
-                    const m = methods[i]!;
-                    if (typeof consoleObj[m] === "function") {
-                        try {
-                            const out = consoleObj[m]();
-                            if (out && typeof out === "string" && out.length > 0) {
-                                raw = out;
-                                break;
-                            }
-                        } catch(e) {}
-                    }
-                }
-            }
-        } catch(e) {}
-    }
-
-    if (!raw && typeof terminal.toString === "function") {
-        try {
-            const s = terminal.toString();
-            if (s && s.indexOf("Terminal") === -1 && s.indexOf("[object") === -1) raw = s;
-        } catch(e) {}
-    }
-
-    return sanitizeOutput(raw);
-  } catch {
-    return "";
   }
+
+  if (matchIndex !== -1) {
+    const newLines = afterLines.slice(matchIndex + 1);
+    return { delta: newLines.join("\n"), matched: true };
+  }
+
+  return { delta: afterClean, matched: false };
 }
 
 /**
@@ -403,6 +468,15 @@ export function sanitizeOutput(output: string): string {
       .replace(/\r/g, "")
       .replace(/\u0007/g, "") // Bell
       .replace(/\u001b\[[0-9;]*[a-zA-Z]/g, ""); // ANSI
+}
+
+/**
+ * Lee el output del terminal para compatibilidad hacia atrás.
+ * Usa readTerminalSnapshot internamente.
+ */
+export function readTerminalOutput(terminal: any): string {
+  const snapshot = readTerminalSnapshot(terminal);
+  return sanitizeTerminalText(snapshot.raw);
 }
 /**
  * Elimina el output base (baseline) de una cadena de output completa.

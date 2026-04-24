@@ -36,6 +36,9 @@ export {
   needsEnable,
   needsConfigTerminal,
   readTerminalOutput,
+  readTerminalSnapshot,
+  sanitizeTerminalText,
+  diffSnapshotStrict,
   stripBaselineOutput,
   detectDnsLookup,
 } from "./prompt-detector";
@@ -71,10 +74,33 @@ export {
 // Execution
 export {
   createCommandExecutor,
+  executeTerminalCommand,
   type CommandExecutionResult,
   type ExecutionOptions,
   type PTCommandLine,
 } from "./command-executor";
+
+// Output Extractor
+export {
+  extractCommandOutput,
+  sliceAroundCommand,
+  finalClean,
+  preferCommandSlice,
+  type CommandSessionKind,
+  type ExtractOptions,
+  type ExtractResult,
+} from "./command-output-extractor";
+
+// Terminal Ready
+export {
+  getPromptSafe,
+  getModeSafe,
+  isTerminalReadyForCommand,
+  wakeTerminal,
+  ensureTerminalReady,
+  ensureTerminalReadySync,
+  type TerminalReadyOptions,
+} from "./terminal-ready";
 
 export { createModeGuard, type ModeTransitionResult } from "./mode-guard";
 

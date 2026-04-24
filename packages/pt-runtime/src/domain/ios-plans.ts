@@ -26,6 +26,7 @@ export function buildConfigIosPlan(
     dismissInitialDialog: boolean;
     commandTimeoutMs: number;
     stallTimeoutMs: number;
+    closeSession?: boolean;
   },
 ): DeferredJobPlan {
   const plan: DeferredStep[] = [];
@@ -56,7 +57,9 @@ export function buildConfigIosPlan(
     plan.push({ type: "save-config", options: { stopOnError: false } });
   }
 
-  plan.push({ type: "close-session" });
+  if (options.closeSession === true) {
+    plan.push({ type: "close-session" });
+  }
 
   return {
     id: "",
@@ -80,6 +83,7 @@ export function buildExecIosPlan(
     ensurePrivileged: boolean;
     commandTimeoutMs: number;
     stallTimeoutMs: number;
+    closeSession?: boolean;
   },
 ): DeferredJobPlan {
   const plan: DeferredStep[] = [];
@@ -97,7 +101,9 @@ export function buildExecIosPlan(
     },
   });
 
-  plan.push({ type: "close-session" });
+  if (options.closeSession === true) {
+    plan.push({ type: "close-session" });
+  }
 
   return {
     id: "",

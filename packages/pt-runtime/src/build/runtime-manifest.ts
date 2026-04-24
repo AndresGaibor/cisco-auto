@@ -86,6 +86,8 @@ export const RUNTIME_MANIFEST = {
     "terminal/standard-plans.ts",
     "terminal/ios-evidence.ts",
     "terminal/terminal-errors.ts",
+    "terminal/terminal-ready.ts",
+    "terminal/command-output-extractor.ts",
   ],
 
   ptTerminal: [

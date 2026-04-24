@@ -4,7 +4,7 @@
 // Maneja el ciclo de vida de un comando: envío, eventos, timeouts y finalización.
 // Implementa heurísticas de robustez para DNS hangups, Power check y Estabilización.
 
-import type { TerminalMode } from "./session-state";
+import type { TerminalMode, TerminalSessionKind } from "./session-state";
 import {
   detectConfirmPrompt,
   detectPager,
@@ -14,18 +14,24 @@ import {
   detectModeFromPrompt,
   isHostMode,
   normalizePrompt,
-  readTerminalOutput,
-  stripBaselineOutput,
+  readTerminalSnapshot,
+  diffSnapshotStrict,
 } from "./prompt-detector";
 import { createPagerHandler } from "./pager-handler";
 import { createConfirmHandler } from "./confirm-handler";
 import { sanitizeCommandOutput } from "./command-sanitizer";
 import { type CommandEndedPayload, type TerminalEventRecord } from "../pt/terminal/terminal-events";
 import { TerminalErrors, type TerminalErrorCode } from "./terminal-errors";
-
-// Importación estática para asegurar persistencia global de sesiones en el kernel
 import { ensureSession } from "./session-registry";
 import { checkIsCommandFinished } from "./stability-heuristic";
+import {
+  getPromptSafe,
+  getModeSafe,
+  isTerminalReadyForCommand,
+  wakeTerminal,
+  ensureTerminalReadySync,
+} from "./terminal-ready";
+import { extractCommandOutput, type CommandSessionKind } from "./command-output-extractor";
 
 export interface PTCommandLine {
   getPrompt(): string;
@@ -44,53 +50,48 @@ export interface PTCommandLine {
   getConsole?(): any;
 }
 
-function detectDnsHangup(chunk: string): boolean {
-  return /Translating\s+["']?.+["']?\.\.\./i.test(chunk);
-}
-
-function detectWizardFromOutput(output: string): boolean {
-  return (
-    output.includes("initial configuration dialog?") ||
-    output.includes("[yes/no]") ||
-    output.includes("continuar con la configuración")
-  );
-}
-
 export interface ExecutionOptions {
   commandTimeoutMs?: number;
   stallTimeoutMs?: number;
+  readyTimeoutMs?: number;
   expectedMode?: TerminalMode;
   expectedPromptPattern?: string;
   autoAdvancePager?: boolean;
   autoDismissWizard?: boolean;
   autoConfirm?: boolean;
   maxPagerAdvances?: number;
+  allowEmptyOutput?: boolean;
+  sendEnterFallback?: boolean;
+  sessionKind?: TerminalSessionKind;
 }
 
 export interface CommandExecutionResult {
   ok: boolean;
   command: string;
-  status: number;
+  output: string;
+  rawOutput: string;
+  status: number | null;
   startedAt: number;
   endedAt: number;
   durationMs: number;
   promptBefore: string;
   promptAfter: string;
-  modeBefore: TerminalMode;
-  modeAfter: TerminalMode;
-  output: string;
-  events: TerminalEventRecord[];
+  modeBefore: string;
+  modeAfter: string;
+  startedSeen: boolean;
+  endedSeen: boolean;
+  outputEvents: number;
+  confidence: string;
   warnings: string[];
   error?: string;
   code?: TerminalErrorCode;
-  confidence: number;
 }
 
 const DEFAULT_COMMAND_TIMEOUT = 15000;
 const DEFAULT_STALL_TIMEOUT = 5000;
+const DEFAULT_READY_TIMEOUT = 3000;
 const COMMAND_END_GRACE_MS = 250;
 const COMMAND_END_MAX_WAIT_MS = 1000;
-const PROMPT_STABILIZED_FALLBACK_MS = 2000;
 
 function pushEvent(
   events: TerminalEventRecord[],
@@ -110,6 +111,18 @@ function pushEvent(
   });
 }
 
+function detectDnsHangup(chunk: string): boolean {
+  return /Translating\s+["']?.+["']?\.\.\./i.test(chunk);
+}
+
+function detectWizardFromOutput(output: string): boolean {
+  return (
+    output.includes("initial configuration dialog?") ||
+    output.includes("[yes/no]") ||
+    output.includes("continuar con la configuración")
+  );
+}
+
 function guessFailureStatus(output: string): number {
   const text = String(output ?? "");
   if (
@@ -125,451 +138,490 @@ function guessFailureStatus(output: string): number {
   return 0;
 }
 
-function computeConfidence(
+function computeConfidenceString(
   cmdOk: boolean,
   warnings: string[],
   output: string,
   modeMatched: boolean,
   promptMatched: boolean,
-): number {
-  let confidence = cmdOk ? 1 : 0;
-  if (warnings.length > 0 && confidence > 0) confidence = 0.8;
-  if (!modeMatched || !promptMatched) confidence = Math.min(confidence, 0.6);
-  if (!output.trim()) confidence = Math.min(confidence, 0.5);
-  return confidence;
+  startedSeen: boolean,
+  endedSeen: boolean,
+  outputEvents: number,
+): string {
+  if (!cmdOk) return "failure";
+
+  const factors: string[] = [];
+
+  if (!startedSeen) factors.push("no-started");
+  if (!endedSeen) factors.push("no-ended");
+  if (outputEvents === 0) factors.push("no-events");
+  if (!output.trim()) factors.push("empty-output");
+  if (!modeMatched) factors.push("mode-mismatch");
+  if (!promptMatched) factors.push("prompt-mismatch");
+  if (warnings.length > 0) factors.push("warnings");
+
+  if (factors.length === 0 && startedSeen && endedSeen && output.trim()) {
+    return "high";
+  }
+
+  if (factors.length <= 2 && (startedSeen || endedSeen) && output.trim()) {
+    return "medium";
+  }
+
+  return "low";
 }
 
-function extractImmediateCommandResult(ptRes: unknown): { status?: number; output?: string } | null {
-  if (Array.isArray(ptRes) && ptRes.length >= 2) {
-    return { status: Number(ptRes[0]), output: String(ptRes[1]) };
-  }
-  if (ptRes && typeof ptRes === "object") {
-    const candidate = ptRes as any;
-    const status = typeof candidate.status === "number" ? candidate.status : undefined;
-    const output =
-      typeof candidate.output === "string"
-        ? candidate.output
-        : typeof candidate.raw === "string"
-          ? candidate.raw
-          : undefined;
+function isOnlyPrompt(output: string, prompt: string): boolean {
+  if (!output || !prompt) return false;
+  const normalizedOutput = output.trim();
+  const normalizedPrompt = prompt.trim();
+  return normalizedOutput === normalizedPrompt || normalizedOutput === normalizedPrompt.replace(/#|>/, "").trim();
+}
 
-    if (status !== undefined || output !== undefined) {
-      return { status, output };
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Ejecuta un comando en un terminal IOS o Host.
+ * Función standalone que puede ser llamada directamente.
+ */
+export async function executeTerminalCommand(
+  deviceName: string,
+  command: string,
+  terminal: PTCommandLine,
+  options: ExecutionOptions = {},
+): Promise<CommandExecutionResult> {
+  const startedAt = Date.now();
+  const commandTimeoutMs = options.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT;
+  const stallTimeoutMs = options.stallTimeoutMs ?? DEFAULT_STALL_TIMEOUT;
+  const readyTimeoutMs = options.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT;
+  const sessionKind = options.sessionKind ?? "ios";
+
+  const session = ensureSession(deviceName);
+  const events: TerminalEventRecord[] = [];
+  const warnings: string[] = [...(session.warnings || [])];
+
+  const promptBefore = getPromptSafe(terminal);
+  const modeBefore = getModeSafe(terminal);
+
+  try {
+    const net = (typeof ipc !== "undefined") ? (ipc as any).network?.() : null;
+    if (net) {
+      const dev = net.getDevice?.(deviceName);
+      if (dev && typeof dev.getPower === "function" && !dev.getPower()) {
+        return {
+          ok: false, command, output: "", rawOutput: "", status: 1,
+          startedAt, endedAt: Date.now(), durationMs: 0,
+          promptBefore, promptAfter: promptBefore,
+          modeBefore, modeAfter: modeBefore,
+          startedSeen: false, endedSeen: false, outputEvents: 0,
+          confidence: "failure", warnings: ["Device is powered off"],
+          error: "Device is powered off", code: TerminalErrors.SESSION_BROKEN,
+        };
+      }
     }
+  } catch (e) {}
+
+  if (session.health === "broken") {
+    return {
+      ok: false, command, output: "", rawOutput: "", status: 1,
+      startedAt, endedAt: Date.now(), durationMs: 0,
+      promptBefore, promptAfter: promptBefore,
+      modeBefore, modeAfter: modeBefore,
+      startedSeen: false, endedSeen: false, outputEvents: 0,
+      confidence: "failure", warnings: [...session.warnings],
+      error: "Session is broken", code: TerminalErrors.SESSION_BROKEN,
+    };
   }
-  return null;
+
+  const readyResult = ensureTerminalReadySync(terminal, sessionKind, {
+    maxRetries: 3,
+    wakeUpOnFail: options.sendEnterFallback ?? true,
+  });
+
+  if (!readyResult.ready) {
+    warnings.push("Terminal not ready after retries: " + readyResult.prompt);
+  }
+
+  const baselineSnapshot = readTerminalSnapshot(terminal);
+  const baselineOutput = baselineSnapshot.raw;
+
+  const pagerHandler = createPagerHandler({
+    maxAdvances: options.maxPagerAdvances ?? 50,
+  });
+
+  const confirmHandler = createConfirmHandler({
+    autoConfirm: options.autoConfirm ?? true,
+  });
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let startedSeen = false;
+    let commandEndedSeen = false;
+    let endedStatus: number | null = null;
+    let wizardDismissed = false;
+    let hostBusy = false;
+    let outputBuffer = "";
+    let outputEventsCount = 0;
+    let lastTerminalSnapshot = baselineSnapshot;
+    let promptFirstSeenAt: number | null = null;
+
+    let commandEndGraceTimer: any = null;
+    let stallTimer: any = null;
+    let globalTimeoutTimer: any = null;
+    let startTimer: any = null;
+    let outputPollTimer: any = null;
+
+    function clearTimers(): void {
+      if (commandEndGraceTimer) clearTimeout(commandEndGraceTimer);
+      if (stallTimer) clearTimeout(stallTimer);
+      if (globalTimeoutTimer) clearTimeout(globalTimeoutTimer);
+      if (startTimer) clearTimeout(startTimer);
+      if (outputPollTimer) clearInterval(outputPollTimer);
+    }
+
+    function resetStallTimer(): void {
+      if (stallTimer) clearTimeout(stallTimer);
+      stallTimer = setTimeout(() => {
+        if (settled) return;
+
+        const currentPrompt = getPromptSafe(terminal);
+        const { finished } = checkIsCommandFinished(currentPrompt, session, true);
+
+        if (finished) {
+          scheduleFinalizeAfterCommandEnd();
+        } else {
+          finalizeFailure(TerminalErrors.COMMAND_END_TIMEOUT, "Command stalled before completion");
+        }
+      }, stallTimeoutMs);
+    }
+
+    function cleanup(): void {
+      try {
+        terminal.unregisterEvent?.("commandStarted", null, onStarted);
+        terminal.unregisterEvent?.("outputWritten", null, onOutput);
+        terminal.unregisterEvent?.("commandEnded", null, onEnded);
+        terminal.unregisterEvent?.("promptChanged", null, onPromptChanged);
+        terminal.unregisterEvent?.("moreDisplayed", null, onMoreDisplayed);
+
+        if (typeof terminal.unregisterObjectEvent === "function") {
+          terminal.unregisterObjectEvent("commandStarted", onStarted);
+          terminal.unregisterObjectEvent("outputWritten", onOutput);
+          terminal.unregisterObjectEvent("commandEnded", onEnded);
+          terminal.unregisterObjectEvent("promptChanged", onPromptChanged);
+          terminal.unregisterObjectEvent("moreDisplayed", onMoreDisplayed);
+        }
+      } catch {}
+    }
+
+    function finalize(cmdOk: boolean, status: number | null, error?: string, code?: TerminalErrorCode): void {
+      if (settled) return;
+      settled = true;
+      clearTimers();
+      cleanup();
+
+      const endedAt = Date.now();
+      const promptAfter = getPromptSafe(terminal);
+      const modeAfter = getModeSafe(terminal);
+
+      const snapshotAfter = readTerminalSnapshot(terminal);
+      const { delta: snapshotDelta, matched } = diffSnapshotStrict(baselineOutput, snapshotAfter.raw);
+
+      const extractResult = extractCommandOutput({
+        eventOutput: outputBuffer,
+        snapshotDelta: snapshotDelta,
+        snapshotAfter: snapshotAfter,
+        commandEndedSeen: commandEndedSeen,
+        outputEventsCount: outputEventsCount,
+      });
+
+      let finalOutput = extractResult.output;
+      let finalRaw = extractResult.raw;
+
+      if (sessionKind === "host" && detectHostBusy(finalOutput)) {
+        hostBusy = true;
+      }
+
+      if (!cmdOk && status === null) {
+        status = guessFailureStatus(finalOutput);
+      }
+
+      const promptMatched = !options.expectedPromptPattern || promptAfter.includes(options.expectedPromptPattern);
+      const modeMatched = !options.expectedMode || modeAfter === options.expectedMode;
+
+      const finalWarnings = [...warnings, ...extractResult.warnings];
+      if (!promptMatched) finalWarnings.push(`Expected prompt "${options.expectedPromptPattern}" not reached.`);
+      if (!modeMatched) finalWarnings.push(`Expected mode "${options.expectedMode}" not reached.`);
+      if (wizardDismissed) finalWarnings.push("Initial configuration dialog was auto-dismissed");
+      if (hostBusy) finalWarnings.push("Host command produced long-running output");
+
+      const isOnlyPromptResult = isOnlyPrompt(finalOutput, promptAfter);
+      const emptyWithoutEnded = !finalOutput.trim() && !commandEndedSeen;
+      if (!options.allowEmptyOutput && (isOnlyPromptResult || emptyWithoutEnded)) {
+        cmdOk = false;
+        if (!finalWarnings.includes("No output received")) {
+          finalWarnings.push("No output received");
+        }
+      }
+
+      const confidence = computeConfidenceString(
+        cmdOk, finalWarnings, finalOutput, modeMatched, promptMatched,
+        startedSeen, commandEndedSeen, outputEventsCount
+      );
+
+      session.lastActivityAt = endedAt;
+      session.lastCommandEndedAt = endedAt;
+      session.pendingCommand = null;
+      session.lastPrompt = promptAfter;
+      session.lastMode = modeAfter;
+      session.outputBuffer = finalOutput;
+      session.pagerActive = false;
+      session.confirmPromptActive = false;
+
+      session.history.push({ command, output: finalOutput, timestamp: endedAt });
+      if (session.history.length > 100) session.history.splice(0, 20);
+
+      if (!cmdOk) session.health = "desynced";
+
+      resolve({
+        ok: cmdOk && promptMatched && modeMatched,
+        command,
+        output: finalOutput,
+        rawOutput: finalRaw,
+        status,
+        startedAt,
+        endedAt,
+        durationMs: endedAt - startedAt,
+        promptBefore,
+        promptAfter,
+        modeBefore,
+        modeAfter,
+        startedSeen,
+        endedSeen: commandEndedSeen,
+        outputEvents: outputEventsCount,
+        confidence,
+        warnings: finalWarnings,
+        error,
+        code,
+      });
+    }
+
+    function finalizeFailure(code: TerminalErrorCode, message: string): void {
+      finalize(false, 1, message, code);
+    }
+
+    function scheduleFinalizeAfterCommandEnd(): void {
+      if (settled) return;
+
+      const currentPrompt = getPromptSafe(terminal);
+      const { finished, reason } = checkIsCommandFinished(currentPrompt, session, commandEndedSeen);
+
+      if (finished) {
+        if (!commandEndedSeen && !promptFirstSeenAt) {
+          promptFirstSeenAt = Date.now();
+        }
+
+        const graceElapsed = promptFirstSeenAt ? (Date.now() - promptFirstSeenAt) : 0;
+        if (commandEndedSeen || graceElapsed > COMMAND_END_GRACE_MS) {
+          finalize(true, endedStatus, reason);
+          return;
+        }
+      } else {
+        promptFirstSeenAt = null;
+      }
+
+      if (commandEndGraceTimer) clearTimeout(commandEndGraceTimer);
+      commandEndGraceTimer = setTimeout(() => {
+        commandEndGraceTimer = null;
+        scheduleFinalizeAfterCommandEnd();
+      }, 500);
+    }
+
+    function onOutput(_src: unknown, args: unknown): void {
+      const payload = args as any;
+      const chunk = String(payload?.newOutput ?? payload?.data ?? payload?.output ?? payload?.chunk ?? "");
+      if (!chunk) return;
+
+      outputEventsCount++;
+      outputBuffer += chunk;
+
+      const currentRaw = readTerminalSnapshot(terminal);
+      if (currentRaw.raw.length >= lastTerminalSnapshot.raw.length) {
+        lastTerminalSnapshot = currentRaw;
+      }
+
+      pushEvent(events, session.sessionId, deviceName, "outputWritten", chunk, chunk.trim());
+
+      if (detectDnsHangup(chunk)) {
+        try {
+          terminal.enterChar(3, 0);
+          warnings.push("DNS Hangup detected (Translating...). Breaking with Ctrl+C");
+          pushEvent(events, session.sessionId, deviceName, "dnsBreak", "Ctrl+C", "Ctrl+C");
+        } catch (e) {}
+      }
+
+      if (detectWizardFromOutput(chunk)) {
+        session.wizardDetected = true;
+        if (options.autoDismissWizard !== false && !wizardDismissed) {
+          wizardDismissed = true;
+          try { terminal.enterCommand("no"); resetStallTimer(); } catch {}
+        }
+      }
+
+      if (detectConfirmPrompt(chunk)) {
+        session.confirmPromptActive = true;
+        confirmHandler.handleOutput(chunk);
+        if (options.autoConfirm && confirmHandler.shouldAutoConfirm()) {
+          try {
+            const lower = chunk.toLowerCase();
+            if (lower.indexOf("[yes/no]") !== -1 || lower.indexOf("(y/n)") !== -1) {
+              terminal.enterCommand("y");
+            } else {
+              terminal.enterChar(13, 0);
+            }
+            confirmHandler.confirm();
+            resetStallTimer();
+          } catch {}
+        }
+      }
+
+      if (detectAuthPrompt(chunk)) {
+        warnings.push("Authentication required");
+        if (commandEndGraceTimer) clearTimeout(commandEndGraceTimer);
+        commandEndGraceTimer = setTimeout(() => {
+          if (!settled) finalize(true, 0);
+        }, COMMAND_END_GRACE_MS);
+        return;
+      }
+
+      if (detectPager(chunk)) {
+        session.pagerActive = true;
+        pagerHandler.handleOutput(chunk);
+        if (options.autoAdvancePager !== false && pagerHandler.canContinue()) {
+          try { terminal.enterChar(32, 0); resetStallTimer(); } catch {}
+        }
+      }
+
+      resetStallTimer();
+      scheduleFinalizeAfterCommandEnd();
+    }
+
+    function onStarted(): void {
+      startedSeen = true;
+      if (startTimer) { clearTimeout(startTimer); startTimer = null; }
+      session.lastActivityAt = Date.now();
+      resetStallTimer();
+      pushEvent(events, session.sessionId, deviceName, "commandStarted", command, command);
+    }
+
+    function onEnded(_src: unknown, args: unknown): void {
+      const payload = args as CommandEndedPayload;
+      commandEndedSeen = true;
+      endedStatus = payload.status ?? 0;
+      resetStallTimer();
+      pushEvent(events, session.sessionId, deviceName, "commandEnded", String(endedStatus), String(endedStatus));
+      scheduleFinalizeAfterCommandEnd();
+    }
+
+    function onPromptChanged(_src: unknown, args: unknown): void {
+      const p = String((args as any).prompt || "");
+      session.lastPrompt = normalizePrompt(p);
+      const mode = detectModeFromPrompt(session.lastPrompt);
+      session.lastMode = mode;
+      if (isHostMode(mode)) session.sessionKind = "host";
+      resetStallTimer();
+      scheduleFinalizeAfterCommandEnd();
+    }
+
+    function onMoreDisplayed(_src: unknown, args: unknown): void {
+      session.pagerActive = true;
+      pushEvent(events, session.sessionId, deviceName, "moreDisplayed", "--More--", "--More--");
+
+      if (options.autoAdvancePager !== false) {
+        try { terminal.enterChar(32, 0); resetStallTimer(); } catch {}
+      }
+    }
+
+    try {
+      terminal.registerEvent?.("commandStarted", null, onStarted);
+      terminal.registerEvent?.("outputWritten", null, onOutput);
+      terminal.registerEvent?.("commandEnded", null, onEnded);
+      terminal.registerEvent?.("promptChanged", null, onPromptChanged);
+      terminal.registerEvent?.("moreDisplayed", null, onMoreDisplayed);
+    } catch {}
+
+    // registerObjectEvent fue removido - causaba errores en PT 9.0
+    // El polling fallback en setInterval captura output si eventos fallan
+
+    outputPollTimer = setInterval(function() {
+      if (settled) return;
+      const currentRaw = readTerminalSnapshot(terminal);
+      if (currentRaw.raw.length > lastTerminalSnapshot.raw.length) {
+        const delta = currentRaw.raw.substring(lastTerminalSnapshot.raw.length);
+        lastTerminalSnapshot = currentRaw;
+        onOutput(null, { chunk: delta, newOutput: delta });
+      }
+    }, 250);
+
+    globalTimeoutTimer = setTimeout(() => {
+      if (settled) return;
+      finalizeFailure(TerminalErrors.COMMAND_END_TIMEOUT, `Global timeout reached (${commandTimeoutMs}ms)`);
+    }, commandTimeoutMs);
+
+    startTimer = setTimeout(() => {
+      if (!startedSeen && !settled) {
+        const currentPrompt = getPromptSafe(terminal);
+        if (currentPrompt) {
+          startedSeen = true;
+          scheduleFinalizeAfterCommandEnd();
+        } else {
+          finalizeFailure(TerminalErrors.COMMAND_START_TIMEOUT, "Command did not start");
+        }
+      }
+    }, 2000);
+
+    try {
+      if (sessionKind === "ios") {
+        try { terminal.enterChar(13, 0); } catch (e) {}
+      }
+
+      terminal.enterCommand(command);
+
+      sleep(100).then(() => {
+        if (!settled && startedSeen) {
+          scheduleFinalizeAfterCommandEnd();
+        }
+      });
+    } catch (e) {
+      finalizeFailure(TerminalErrors.UNKNOWN_STATE, "Failed to send command: " + String(e));
+    }
+  });
 }
 
 /**
  * Crea una instancia del motor de ejecución de comandos.
- * 
- * El CommandExecutor orquestra el ciclo de vida de un comando en el terminal de Packet Tracer,
- * manejando timeouts, eventos asíncronos y heurísticas de finalización para garantizar
- * una ejecución determinista tanto en IOS como en Host Prompt.
  */
 export function createCommandExecutor(config: { commandTimeoutMs?: number; stallTimeoutMs?: number } = {}) {
   const defaultCommandTimeout = config.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT;
   const defaultStallTimeout = config.stallTimeoutMs ?? DEFAULT_STALL_TIMEOUT;
 
-  /**
-   * Ejecuta un comando en un dispositivo específico.
-   * 
-   * @param deviceName - Nombre del dispositivo en PT
-   * @param command - Comando a ejecutar (ej: 'show version' o 'ipconfig')
-   * @param terminal - Interfaz de terminal del dispositivo
-   * @param options - Opciones específicas para esta ejecución
-   */
   async function executeCommand(
     deviceName: string,
     command: string,
     terminal: PTCommandLine,
     options: ExecutionOptions = {},
   ): Promise<CommandExecutionResult> {
-    const startedAt = Date.now();
-    const commandTimeoutMs = options.commandTimeoutMs ?? defaultCommandTimeout;
-    const stallTimeoutMs = options.stallTimeoutMs ?? defaultStallTimeout;
-    
-    // Obtener sesión del registro global para persistencia entre comandos
-    const session = ensureSession(deviceName);
-
-    const events: TerminalEventRecord[] = [];
-    const warnings: string[] = [...(session.warnings || [])];
-    const outputBuffer: string[] = [];
-
-    const promptBefore = normalizePrompt(terminal.getPrompt());
-    const modeBefore = detectModeFromPrompt(promptBefore);
-    const sessionKindBefore = session.sessionKind;
-
-    // 0. Power Check
-    try {
-        // @ts-ignore
-        const net = (typeof ipc !== 'undefined') ? ipc.network() : null;
-        const dev = net ? net.getDevice(deviceName) : null;
-        if (dev && typeof dev.getPower === "function" && !dev.getPower()) {
-            return {
-                ok: false, command, status: 1, startedAt, endedAt: Date.now(),
-                durationMs: 0, promptBefore, promptAfter: promptBefore,
-                modeBefore, modeAfter: modeBefore, output: "",
-                events: [], warnings: ["Device is powered off"],
-                error: "Device is powered off", code: TerminalErrors.SESSION_BROKEN,
-                confidence: 0,
-            };
-        }
-    } catch(e) {}
-
-    if (session.health === "broken") {
-      return {
-        ok: false, command, status: 1, startedAt, endedAt: Date.now(),
-        durationMs: 0, promptBefore, promptAfter: promptBefore,
-        modeBefore, modeAfter: modeBefore, output: "",
-        events: [], warnings: [...session.warnings],
-        error: "Session is broken", code: TerminalErrors.SESSION_BROKEN,
-        confidence: 0,
-      };
-    }
-
-    const pagerHandler = createPagerHandler({
-      maxAdvances: options.maxPagerAdvances ?? 50,
-    });
-
-    const confirmHandler = createConfirmHandler({
-      autoConfirm: options.autoConfirm ?? true,
-    });
-
-    const baselineOutput = readTerminalOutput(terminal);
-    const commandEndMaxWaitMs =
-      isHostMode(modeBefore) || sessionKindBefore === "host"
-        ? Math.max(COMMAND_END_MAX_WAIT_MS, 8000)
-        : COMMAND_END_MAX_WAIT_MS;
-
-    return new Promise((resolve) => {
-      let settled = false;
-      let started = false;
-      let commandEndedSeen = false;
-      let endedStatus: number | null = null;
-      let wizardDismissed = false;
-      let hostBusy = false;
-      let lastObservedTerminalOutput = "";
-      let lastTerminalOutputAt = startedAt;
-      let commandEndGraceTimer: any = null;
-      let stallTimer: any = null;
-      let globalTimeoutTimer: any = null;
-      let startTimer: any = null;
-      let outputPollTimer: any = null;
-
-      function clearTimers() {
-        if (commandEndGraceTimer) clearTimeout(commandEndGraceTimer);
-        if (stallTimer) clearTimeout(stallTimer);
-        if (globalTimeoutTimer) clearTimeout(globalTimeoutTimer);
-        if (startTimer) clearTimeout(startTimer);
-        if (outputPollTimer) clearInterval(outputPollTimer);
-      }
-
-      function resetStallTimer() {
-        if (stallTimer) clearTimeout(stallTimer);
-        stallTimer = setTimeout(() => {
-          if (settled) return;
-          
-          const currentPrompt = terminal.getPrompt();
-          const { finished } = checkIsCommandFinished(currentPrompt, session, true); // Forzamos true para ver si el prompt es válido
-          
-          if (finished) {
-              finalize(true, 0, "Stall timeout reached with valid prompt (assumed finished)");
-          } else {
-              finalizeFailure(TerminalErrors.COMMAND_END_TIMEOUT, "Command stalled before completion");
-          }
-        }, stallTimeoutMs);
-      }
-
-      function finalize(cmdOk: boolean, status: number, error?: string, code?: TerminalErrorCode): void {
-        if (settled) return;
-        settled = true;
-        clearTimers();
-        cleanup();
-
-        const endedAt = Date.now();
-        const promptAfter = normalizePrompt(terminal.getPrompt());
-        let modeAfter = detectModeFromPrompt(promptAfter);
-        const bufferedOutput = outputBuffer.join("");
-        const liveOutput = readTerminalOutput(terminal);
-        
-        // Unificación agresiva de buffers
-        var rawOutput = "";
-        if (bufferedOutput.length > 0) {
-            rawOutput = bufferedOutput;
-        } else {
-            rawOutput = liveOutput;
-        }
-
-        // Restar el output base para ver solo lo nuevo
-        // DESHABILITADO PARA IOS EN ESTA FASE
-        const newRawOutput = session.sessionKind === "ios" ? rawOutput : stripBaselineOutput(rawOutput, baselineOutput);
-
-        // Sanitizar el output final
-        // DESHABILITADO PARA IOS PARA VER RAW
-        const output = session.sessionKind === "ios" ? newRawOutput : sanitizeCommandOutput(newRawOutput);
-        
-        if (session.sessionKind === "host" && detectHostBusy(output)) hostBusy = true;
-        if (hostBusy && modeAfter === "unknown") modeAfter = "host-busy";
-
-        session.lastActivityAt = endedAt;
-        session.lastCommandEndedAt = endedAt;
-        session.pendingCommand = null;
-        session.lastPrompt = promptAfter;
-        session.lastMode = modeAfter;
-        session.outputBuffer = output;
-        session.pagerActive = false;
-        session.confirmPromptActive = false;
-
-        session.history.push({ command, output, timestamp: endedAt });
-        if (session.history.length > 100) session.history.splice(0, 20);
-
-        if (!cmdOk) session.health = "desynced";
-
-        const promptMatched = !options.expectedPromptPattern || promptAfter.includes(options.expectedPromptPattern);
-        const modeMatched = !options.expectedMode || modeAfter === options.expectedMode;
-
-        const finalWarnings = [...warnings];
-        if (!promptMatched) finalWarnings.push(`Expected prompt "${options.expectedPromptPattern}" not reached.`);
-        if (!modeMatched) finalWarnings.push(`Expected mode "${options.expectedMode}" not reached.`);
-        if (wizardDismissed) finalWarnings.push("Initial configuration dialog was auto-dismissed");
-        if (hostBusy) finalWarnings.push("Host command produced long-running output");
-
-        const confidence = computeConfidence(cmdOk, finalWarnings, output, modeMatched, promptMatched);
-
-        resolve({
-          ok: cmdOk && promptMatched && modeMatched,
-          command, status, startedAt, endedAt,
-          durationMs: endedAt - startedAt,
-          promptBefore, promptAfter, modeBefore, modeAfter,
-          output, events, warnings: finalWarnings, error, code, confidence,
-        });
-      }
-
-      function finalizeFailure(code: TerminalErrorCode, message: string): void {
-        finalize(false, 1, message, code);
-      }
-
-
-// ... (dentro de la función executeCommand) ...
-
-      let promptFirstSeenAt: number | null = null;
-      function scheduleFinalizeAfterCommandEnd(): void {
-        if (settled) return;
-
-        const currentPrompt = terminal.getPrompt();
-        
-        const { finished, reason } = checkIsCommandFinished(currentPrompt, session, commandEndedSeen);
-        
-        if (finished) {
-            // Si terminamos por prompt pero no hemos visto commandEnded nativo,
-            // damos un margen de 1s para asegurar que no hay más chunks llegando.
-            if (!commandEndedSeen && !promptFirstSeenAt) {
-                promptFirstSeenAt = Date.now();
-            }
-
-            const graceElapsed = promptFirstSeenAt ? (Date.now() - promptFirstSeenAt) : 0;
-            if (commandEndedSeen || graceElapsed > 1000) {
-                // Capturar la salida completa y sanitizar
-                const fullOutput = sanitizeCommandOutput(outputBuffer.join(""));
-                lastObservedTerminalOutput = fullOutput;
-                finalize(true, 0, reason);
-                return;
-            }
-        } else {
-            promptFirstSeenAt = null;
-        }
-
-        // Si no hay prompt o estamos en periodo de gracia, programamos re-chequeo
-        if (commandEndGraceTimer) clearTimeout(commandEndGraceTimer);
-        commandEndGraceTimer = setTimeout(() => {
-          commandEndGraceTimer = null;
-          scheduleFinalizeAfterCommandEnd();
-        }, 500);
-      }
-
-      function onOutput(_src: unknown, args: unknown): void {
-        const payload = args as any;
-        const chunk = String(payload?.newOutput ?? payload?.data ?? payload?.output ?? payload?.chunk ?? "");
-        if (!chunk) return;
-
-        lastTerminalOutputAt = Date.now();
-        outputBuffer.push(chunk);
-        
-        // Actualizar marca de agua si el chunk vino de un evento (para evitar duplicados en el poll)
-        // Solo lo hacemos si el poll está activo y el chunk parece coincidir con el final del buffer real
-        const currentRaw = readTerminalOutput(terminal);
-        if (currentRaw.length >= lastObservedTerminalOutput.length) {
-            lastObservedTerminalOutput = currentRaw;
-        }
-
-        pushEvent(events, session.sessionId, deviceName, "outputWritten", chunk, chunk.trim());
-
-        if (detectDnsHangup(chunk)) {
-          try {
-            terminal.enterChar(3, 0); 
-            warnings.push("DNS Hangup detected (Translating...). Breaking with Ctrl+C");
-            pushEvent(events, session.sessionId, deviceName, "dnsBreak", "Ctrl+C", "Ctrl+C");
-          } catch(e) {}
-        }
-
-        if (detectWizardFromOutput(chunk)) {
-          session.wizardDetected = true;
-          if (options.autoDismissWizard !== false && !wizardDismissed) {
-            wizardDismissed = true;
-            try { terminal.enterCommand("no"); resetStallTimer(); } catch {}
-          }
-        }
-
-        if (detectConfirmPrompt(chunk)) {
-          session.confirmPromptActive = true;
-          confirmHandler.handleOutput(chunk);
-          if (options.autoConfirm && confirmHandler.shouldAutoConfirm()) {
-            try {
-              const lower = chunk.toLowerCase();
-              if (lower.indexOf("[yes/no]") !== -1 || lower.indexOf("(y/n)") !== -1) terminal.enterCommand("y");
-              else terminal.enterChar(13, 0);
-              confirmHandler.confirm();
-              resetStallTimer();
-            } catch {}
-          }
-        }
-
-        if (detectAuthPrompt(chunk)) {
-            warnings.push("Authentication required");
-            if (commandEndGraceTimer) clearTimeout(commandEndGraceTimer);
-            commandEndGraceTimer = setTimeout(() => { if (!settled) finalize(true, 0); }, COMMAND_END_GRACE_MS);
-            return;
-        }
-
-        if (detectPager(chunk)) {
-          session.pagerActive = true;
-          pagerHandler.handleOutput(chunk);
-          if (options.autoAdvancePager !== false && pagerHandler.canContinue()) {
-            try { terminal.enterChar(32, 0); resetStallTimer(); } catch {}
-          }
-        }
-
-        resetStallTimer();
-        scheduleFinalizeAfterCommandEnd();
-      }
-
-      function onStarted(): void {
-        started = true;
-        if (startTimer) { clearTimeout(startTimer); startTimer = null; }
-        session.lastActivityAt = Date.now();
-        resetStallTimer();
-      }
-
-      function onEnded(_src: unknown, args: unknown): void {
-        const payload = args as CommandEndedPayload;
-        commandEndedSeen = true;
-        endedStatus = payload.status ?? 0;
-        resetStallTimer();
-        scheduleFinalizeAfterCommandEnd();
-      }
-
-      function onPromptChanged(_src: unknown, args: unknown): void {
-        const p = String((args as any).prompt || "");
-        session.lastPrompt = normalizePrompt(p);
-        const mode = detectModeFromPrompt(session.lastPrompt);
-        session.lastMode = mode;
-        if (isHostMode(mode)) session.sessionKind = "host";
-        resetStallTimer();
-        scheduleFinalizeAfterCommandEnd();
-      }
-
-      function cleanup(): void {
-        try {
-          terminal.unregisterEvent("commandStarted", null, onStarted);
-          terminal.unregisterEvent("outputWritten", null, onOutput);
-          terminal.unregisterEvent("commandEnded", null, onEnded);
-          terminal.unregisterEvent("promptChanged", null, onPromptChanged);
-          
-          if (typeof terminal.unregisterObjectEvent === "function") {
-            terminal.unregisterObjectEvent("commandStarted", onStarted);
-            terminal.unregisterObjectEvent("outputWritten", onOutput);
-            terminal.unregisterObjectEvent("commandEnded", onEnded);
-            terminal.unregisterObjectEvent("promptChanged", onPromptChanged);
-          }
-        } catch {}
-      }
-
-      try {
-        terminal.registerEvent("commandStarted", null, onStarted);
-        terminal.registerEvent("outputWritten", null, onOutput);
-        terminal.registerEvent("commandEnded", null, onEnded);
-        terminal.registerEvent("promptChanged", null, onPromptChanged);
-
-        if (typeof terminal.registerObjectEvent === "function") {
-          terminal.registerObjectEvent("commandStarted", onStarted);
-          terminal.registerObjectEvent("outputWritten", onOutput);
-          terminal.registerObjectEvent("commandEnded", onEnded);
-          terminal.registerObjectEvent("promptChanged", onPromptChanged);
-        }
-      } catch {}
-
-      // Activar polling de output para mayor robustez (especialmente en switches con muchos logs)
-      outputPollTimer = setInterval(function() {
-        if (settled) return;
-        var currentRaw = readTerminalOutput(terminal);
-        if (currentRaw.length > lastObservedTerminalOutput.length) {
-            var delta = currentRaw.substring(lastObservedTerminalOutput.length);
-            lastObservedTerminalOutput = currentRaw;
-            onOutput(null, { chunk: delta, newOutput: delta });
-        }
-      }, 250);
-
-      globalTimeoutTimer = setTimeout(() => {
-        if (settled) return;
-        finalizeFailure(TerminalErrors.COMMAND_END_TIMEOUT, `Global timeout reached (${commandTimeoutMs}ms)`);
-      }, commandTimeoutMs);
-
-      startTimer = setTimeout(() => {
-        if (!started && !settled) {
-          const currentPrompt = terminal.getPrompt();
-          if (currentPrompt) { started = true; scheduleFinalizeAfterCommandEnd(); }
-          else finalizeFailure(TerminalErrors.COMMAND_START_TIMEOUT, "Command did not start");
-        }
-      }, 2000);
-
-      function runExecutionFlowSync(): void {
-        if (settled) return;
-        
-        try {
-            session.lastMode = modeBefore;
-            if (sessionKindBefore !== "unknown") session.sessionKind = sessionKindBefore;
-
-            // 1. Despertar (IOS)
-            if (session.sessionKind === "ios") {
-                try { terminal.enterChar(13, 0); } catch(e) {}
-            }
-            
-            // 2. Esperar a que se limpie el buffer
-            var t0 = Date.now(); while(Date.now() - t0 < 100) {}
-
-            // 3. Enviar comando
-            terminal.enterCommand(command);
-            terminal.enterChar(13, 0);
-            
-            // 4. ESPERAR RESULTADO (Bloqueo corto de 1s para asegurar captura)
-            var t1 = Date.now(); while(Date.now() - t1 < 1000) {}
-            
-            // 5. CAPTURA TOTAL DIRECTA
-            const finalRaw = readTerminalOutput(terminal);
-            
-            // Forzar eventos para que la CLI sea feliz
-            onOutput(null, { chunk: finalRaw, newOutput: finalRaw });
-            
-            started = true;
-            finalize(true, 0, "Direct capture completed");
-        } catch(e) {
-            finalizeFailure(TerminalErrors.UNKNOWN_STATE, "Direct flow failed: " + String(e));
-        }
-      }
-
-      runExecutionFlowSync();
-    });
+    return executeTerminalCommand(
+      deviceName,
+      command,
+      terminal,
+      {
+        ...options,
+        commandTimeoutMs: options.commandTimeoutMs ?? defaultCommandTimeout,
+        stallTimeoutMs: options.stallTimeoutMs ?? defaultStallTimeout,
+      },
+    );
   }
 
   return { executeCommand };
