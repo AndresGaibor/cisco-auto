@@ -306,18 +306,39 @@ async function executeDeviceTerminalCommand(
     const execResult = await controller.execHost(deviceName, command, capabilityId, {
         timeoutMs: flags.timeout || 45000
     });
-    
+
     if (!flags.quiet && !flags.json) {
         process.stdout.write(chalk.green('¡RECIBIDA!\n'));
     }
 
+    const hostOutput = execResult.raw ?? "";
+    const hostCode =
+      hostOutput.toLowerCase().includes("invalid command") ||
+      hostOutput.toLowerCase().includes("not recognized")
+        ? "HOST_INVALID_COMMAND"
+        : "HOST_EXEC_FAILED";
+
+    if (!execResult.success || execResult.verdict?.ok === false) {
+      return createErrorResult('host.exec', {
+        code: String(execResult.verdict?.code ?? hostCode),
+        message: String(execResult.verdict?.reason ?? "Error en ejecución de comando Host"),
+        details: {
+          device: deviceName,
+          command,
+          output: hostOutput,
+          verdict: execResult.verdict,
+          parsed: execResult.parsed,
+        },
+      });
+    }
+
     return createSuccessResult('host.exec', {
         device: deviceName,
-        command: command,
-        output: execResult.raw,
-        success: execResult.success,
+        command,
+        output: hostOutput,
+        success: true,
         verdict: execResult.verdict,
-        parsed: execResult.parsed
+        parsed: execResult.parsed,
     }, formatNextSteps(HOST_EXEC_META.nextSteps));
 }
 

@@ -119,7 +119,38 @@ export function classifyIosCommand(command: string): CommandProfile {
   }
 
   if (cmd.startsWith("show ") || cmd.startsWith("do show ")) {
-    // Caso especial: show privilege NO auto-eleva porque sirve para diagnosticar nivel actual
+    // show privilege ya был обработан выше, проверим ещё раз
+    // Команды show которые безопасно работают в user EXEC
+    const safeUserExecShows = [
+      "show clock",
+      "show version",
+      "show interfaces",
+      "show ip interface brief",
+      "show cdp neighbors",
+      "show mac address-table",
+      "show ip route",
+      "show protocols",
+      "show users",
+      "show sessions",
+      "show line",
+    ];
+
+    const isSafeUserExecShow = safeUserExecShows.some(
+      (safe) => cmd === safe || cmd.startsWith(safe + " "),
+    );
+
+    if (isSafeUserExecShow) {
+      profile.intent = "show";
+      profile.allowPager = true;
+      profile.ensurePrivileged = false;
+      profile.preserveCurrentMode = true;
+      profile.risk = "safe";
+      profile.timeoutMs = 30000;
+      profile.stallTimeoutMs = 15000;
+      return profile;
+    }
+
+    // show privilege - специальный случай, диагностика уровня привилегий
     if (cmd === "show privilege") {
       profile.intent = "show";
       profile.allowPager = false;

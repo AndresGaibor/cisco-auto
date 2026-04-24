@@ -145,16 +145,42 @@ export function createModeGuard() {
     };
   }
 
-  async function ensurePrivilegedExec(deviceName: string, terminal: PTCommandLine): Promise<ModeTransitionResult> {
+async function ensurePrivilegedExec(deviceName: string, terminal: PTCommandLine): Promise<ModeTransitionResult> {
     await ensureNotInWizard(deviceName, terminal);
 
     const session = ensureSession(deviceName);
     const before = currentMode(terminal, deviceName);
-    
+
+    async function enterEnableMode(
+      deviceName: string,
+      terminal: PTCommandLine,
+      fromMode: TerminalMode,
+    ): Promise<ModeTransitionResult> {
+      const result = await executor.executeCommand(deviceName, "enable", terminal, {
+        commandTimeoutMs: 5000,
+        stallTimeoutMs: 2000,
+        expectedMode: "privileged-exec",
+        allowEmptyOutput: true,
+      });
+
+      const after = currentMode(terminal, deviceName);
+      const reachedPrivileged = isPrivilegedMode(after);
+
+      return {
+        ok: reachedPrivileged,
+        fromMode,
+        toMode: after,
+        error: reachedPrivileged
+          ? undefined
+          : result.error ?? `Failed to enter privileged exec mode; current mode is "${after}"`,
+        warnings: result.warnings,
+      };
+    }
+
     if (String(before) === "logout") {
       return { ok: true, fromMode: "user-exec" as TerminalMode, toMode: "user-exec" as TerminalMode };
     }
-    
+
     if (before === "unknown" && session.lastMode !== "unknown") {
       const effectiveBefore = session.lastMode;
       if (effectiveBefore === "privileged-exec" || isHostMode(effectiveBefore)) {
@@ -168,19 +194,7 @@ export function createModeGuard() {
       }
       const modeNow = currentMode(terminal, deviceName);
       if (modeNow === "user-exec") {
-const result = await executor.executeCommand(deviceName, "enable", terminal, {
-          commandTimeoutMs: 5000,
-          stallTimeoutMs: 2000,
-          allowEmptyOutput: true,
-        });
-        const after = detectModeFromPrompt(terminal.getPrompt());
-        return {
-          ok: result.ok && isPrivilegedMode(after),
-          fromMode: effectiveBefore,
-          toMode: after,
-          error: result.ok && isPrivilegedMode(after) ? undefined : result.error ?? "Failed to enter privileged exec mode",
-          warnings: result.warnings,
-        };
+        return enterEnableMode(deviceName, terminal, effectiveBefore);
       }
     }
 
@@ -197,23 +211,7 @@ const result = await executor.executeCommand(deviceName, "enable", terminal, {
 
     const modeNow = currentMode(terminal, deviceName);
     if (modeNow === "user-exec") {
-      const result = await executor.executeCommand(deviceName, "enable", terminal, {
-        commandTimeoutMs: 5000,
-        stallTimeoutMs: 2000,
-        allowEmptyOutput: true,
-      });
-      const after = detectModeFromPrompt(terminal.getPrompt());
-
-      return {
-        ok: result.ok && isPrivilegedMode(after),
-        fromMode: before,
-        toMode: after,
-        error:
-          result.ok && isPrivilegedMode(after)
-            ? undefined
-            : result.error ?? "Failed to enter privileged exec mode",
-        warnings: result.warnings,
-      };
+      return enterEnableMode(deviceName, terminal, before);
     }
 
     if (modeNow === "privileged-exec") {
