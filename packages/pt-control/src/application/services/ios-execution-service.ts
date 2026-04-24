@@ -137,8 +137,14 @@ export class IosExecutionService {
       source: "terminal",
       raw: result.raw ?? result.output ?? "",
       status: result.status,
-      mode: result.modeAfter,
-      prompt: result.promptAfter,
+      mode:
+        result.modeAfter ||
+        result.parsed?.session?.modeAfter ||
+        "",
+      prompt:
+        result.promptAfter ||
+        result.parsed?.session?.promptAfter ||
+        "",
       events,
       completionReason: result.status === 0 ? "command-ended" : undefined,
       paging: result.warnings.some((w) => w.toLowerCase().includes("paginación")),

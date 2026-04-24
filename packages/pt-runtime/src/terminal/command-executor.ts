@@ -183,6 +183,44 @@ function isOnlyPrompt(output: string, prompt: string): boolean {
   return normalizedOutput === normalizedPrompt || normalizedOutput === normalizedPrompt.replace(/#|>/, "").trim();
 }
 
+function compactTerminalEvents(events: TerminalEventRecord[]): TerminalEventRecord[] {
+  const compacted: TerminalEventRecord[] = [];
+  let buffer = "";
+
+  for (const event of events) {
+    if (event.eventType === "outputWritten") {
+      buffer += event.raw;
+      continue;
+    }
+
+    if (buffer) {
+      compacted.push({
+        ...event,
+        eventType: "outputWritten",
+        raw: buffer,
+        normalized: buffer.trim(),
+        timestamp: event.timestamp,
+      });
+      buffer = "";
+    }
+
+    compacted.push(event);
+  }
+
+  if (buffer) {
+    compacted.push({
+      sessionId: events[events.length - 1]?.sessionId ?? "",
+      deviceName: events[events.length - 1]?.deviceName ?? "",
+      eventType: "outputWritten",
+      timestamp: events[events.length - 1]?.timestamp ?? Date.now(),
+      raw: buffer,
+      normalized: buffer.trim(),
+    });
+  }
+
+  return compacted;
+}
+
 async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -442,7 +480,7 @@ if (!readyResult.ready) {
         outputEvents: outputEventsCount,
         confidence,
         warnings: finalWarnings,
-        events,
+        events: compactTerminalEvents(events),
         error: finalError,
         code: finalCode,
       });

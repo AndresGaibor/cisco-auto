@@ -253,11 +253,20 @@ async function executeDeviceTerminalCommand(
                 ? execResult.evidence.events
                 : [];
 
+            const parsedError = (execResult.parsed as any)?.error;
             const failureEvent = events.find((event: any) => event?.error || event?.code);
 
             return createErrorResult('ios.exec', {
-                code: String(failureEvent?.code ?? 'IOS_EXEC_FAILED'),
-                message: String(failureEvent?.error ?? 'Error en ejecución de comando IOS'),
+                code: String(
+                    parsedError?.code ??
+                      failureEvent?.code ??
+                      'IOS_EXEC_FAILED',
+                ),
+                message: String(
+                    parsedError?.message ??
+                      failureEvent?.error ??
+                      'Error en ejecución de comando IOS',
+                ),
                 details: {
                     device: deviceName,
                     command,
