@@ -16,7 +16,7 @@ import type {
 import { createErrorResult, createSuccessResult } from "./result-factories";
 import { sanitizeTerminalOutput } from "./terminal-sanitizer";
 import { createCommandExecutor, type ExecutionOptions, type CommandExecutionResult } from "../terminal/index";
-import { ensureSession } from "../terminal/session-registry";
+import { ensureSession, getSession } from "../terminal/session-registry";
 import { 
   detectModeFromPrompt, 
   readTerminalOutput, 
@@ -40,15 +40,26 @@ interface PTTerminal {
   unregisterEvent(eventName: string, context: null, handler: (src: unknown, args: unknown) => void): void;
 }
 
-function getTerminalDevice(api: PtRuntimeApi, deviceName: string): PTTerminal | null {
-  const device = api.getDeviceByName(deviceName);
-  if (!device) return null;
-  const cli = (device as any).getCommandLine?.();
-  if (!cli) {
-    const ipcTerminal = (api as any).ipc?.terminal;
-    return ipcTerminal ? ipcTerminal(deviceName) : null;
+function getTerminalDevice(api: PtRuntimeApi, deviceName: string): any {
+  try {
+    // Intentar acceso directo vía ipc.network (más fiable en PT v9)
+    // @ts-ignore
+    const net = (typeof ipc !== "undefined") ? ipc.network() : null;
+    if (net) {
+        const dev = net.getDevice(deviceName);
+        if (dev && dev.getCommandLine) {
+            return dev.getCommandLine();
+        }
+    }
+
+    // Fallback al api wrapper
+    const device = api.getDeviceByName(deviceName);
+    if (!device) return null;
+    const cli = (device as any).getCommandLine?.();
+    return cli || null;
+  } catch(e) {
+    return null;
   }
-  return cli;
 }
 
 
@@ -115,12 +126,15 @@ export async function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi):
     options,
   );
 
-  if (execResult.ok || execResult.output.trim().length > 0) {
+  const raw = execResult.output;
+  const sanitized = sanitizeTerminalOutput(undefined, raw) || raw;
+
+  if (execResult.ok || raw.trim().length > 0) {
     return createSuccessResult({
-      output: execResult.output,
+      output: sanitized,
+      raw: sanitized,
       status: execResult.status,
       confidence: execResult.confidence,
-      raw: sanitizeTerminalOutput(undefined, execResult.output) || execResult.output,
       parsed: {
         command: execResult.command,
         startedAt: execResult.startedAt,
@@ -139,7 +153,7 @@ export async function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi):
     execResult.error || `Command failed with status ${execResult.status}`,
     execResult.code,
     {
-      raw: execResult.output,
+      raw: raw,
       details: {
         command: execResult.command,
         status: execResult.status,

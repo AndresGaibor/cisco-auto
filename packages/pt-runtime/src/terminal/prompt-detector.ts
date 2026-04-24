@@ -8,7 +8,7 @@ import type { TerminalMode, TerminalSessionKind } from "./session-state";
 import { 
   stripAnsi, 
   normalizeWhitespace, 
-  sanitizeCommandOutput as sanitizeOutput 
+  sanitizeCommandOutput as internalSanitizeOutput 
 } from "./command-sanitizer";
 
 function lastNonEmptyLine(input: string): string {
@@ -350,6 +350,8 @@ export function readTerminalOutput(terminal: any): string {
         try {
           const out = terminal[m]();
           if (out && typeof out === "string" && out.length > 0) {
+            // @ts-ignore
+            if (typeof dprint === "function") dprint("[readTerminalOutput] method=" + m + " len=" + out.length);
             raw = out;
             break;
           }

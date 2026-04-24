@@ -302,13 +302,12 @@ export function createCommandExecutor(config: { commandTimeoutMs?: number; stall
         }
 
         // Restar el output base para ver solo lo nuevo
-        // En IOS, si el output es excesivamente largo, evitamos strip para no perder datos
-        const newRawOutput = (session.sessionKind === "ios" && rawOutput.length > 5000) 
-            ? rawOutput 
-            : stripBaselineOutput(rawOutput, baselineOutput);
+        // DESHABILITADO PARA IOS EN ESTA FASE
+        const newRawOutput = session.sessionKind === "ios" ? rawOutput : stripBaselineOutput(rawOutput, baselineOutput);
 
         // Sanitizar el output final
-        const output = sanitizeCommandOutput(newRawOutput);
+        // DESHABILITADO PARA IOS PARA VER RAW
+        const output = session.sessionKind === "ios" ? newRawOutput : sanitizeCommandOutput(newRawOutput);
         
         if (session.sessionKind === "host" && detectHostBusy(output)) hostBusy = true;
         if (hostBusy && modeAfter === "unknown") modeAfter = "host-busy";
@@ -534,64 +533,42 @@ export function createCommandExecutor(config: { commandTimeoutMs?: number; stall
         }
       }, 2000);
 
-      function runExecutionFlow(): void {
+      function runExecutionFlowSync(): void {
         if (settled) return;
         
         try {
             session.lastMode = modeBefore;
             if (sessionKindBefore !== "unknown") session.sessionKind = sessionKindBefore;
 
-            // FASE 1: Despertar terminal (solo IOS)
+            // 1. Despertar (IOS)
             if (session.sessionKind === "ios") {
-                // Mandar un Enter para limpiar la línea de posibles logs previos
-                terminal.enterChar(13, 0);
-                setTimeout(function() {
-                    if (settled) return;
-                    
-                    // FASE 2: Inicialización (si es necesaria)
-                    if (!session.initialized) {
-                        session.initialized = true;
-                        terminal.enterCommand("terminal length 0");
-                        terminal.enterChar(13, 0);
-                        setTimeout(function() {
-                            if (settled) return;
-                            terminal.enterCommand("logging synchronous");
-                            terminal.enterChar(13, 0);
-                            setTimeout(function() { dispatchCommand(); }, 200);
-                        }, 200);
-                    } else {
-                        setTimeout(function() { dispatchCommand(); }, 200);
-                    }
-                }, 200);
-            } else {
-                // Host: Envío inmediato
-                dispatchCommand();
+                try { terminal.enterChar(13, 0); } catch(e) {}
             }
-        } catch(e) {
-            finalizeFailure(TerminalErrors.UNKNOWN_STATE, "Flow setup failed: " + String(e));
-        }
-      }
+            
+            // 2. Esperar a que se limpie el buffer
+            var t0 = Date.now(); while(Date.now() - t0 < 100) {}
 
-      function dispatchCommand(): void {
-        if (settled) return;
-        try {
-            // Mandar el comando real
+            // 3. Enviar comando
             terminal.enterCommand(command);
-            // Mandar Enter extra para asegurar ejecución en switches lentos
-            setTimeout(function() {
-                if (settled) return;
-                terminal.enterChar(13, 0);
-                
-                started = true;
-                resetStallTimer();
-                scheduleFinalizeAfterCommandEnd();
-            }, 100);
+            terminal.enterChar(13, 0);
+            
+            // 4. ESPERAR RESULTADO (Bloqueo corto de 1s para asegurar captura)
+            var t1 = Date.now(); while(Date.now() - t1 < 1000) {}
+            
+            // 5. CAPTURA TOTAL DIRECTA
+            const finalRaw = readTerminalOutput(terminal);
+            
+            // Forzar eventos para que la CLI sea feliz
+            onOutput(null, { chunk: finalRaw, newOutput: finalRaw });
+            
+            started = true;
+            finalize(true, 0, "Direct capture completed");
         } catch(e) {
-            finalizeFailure(TerminalErrors.UNKNOWN_STATE, "Command dispatch failed: " + String(e));
+            finalizeFailure(TerminalErrors.UNKNOWN_STATE, "Direct flow failed: " + String(e));
         }
       }
 
-      runExecutionFlow();
+      runExecutionFlowSync();
     });
   }
 

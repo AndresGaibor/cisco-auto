@@ -119,14 +119,18 @@ export class IosExecutionService {
     warnings: string[];
     raw?: string;
     events?: any[];
+    parsed?: any;
   }): IosExecutionEvidence {
+    // Los eventos reales del kernel están en result.parsed.events
+    const kernelEvents = result.parsed?.events || [];
+    
     return {
       source: "terminal",
       raw: result.raw ?? "",
       status: result.status,
       mode: result.modeAfter,
       prompt: result.promptAfter,
-      events: result.events,
+      events: kernelEvents.length > 0 ? kernelEvents : result.events,
       completionReason: result.status === 0 ? "command-ended" : undefined,
       paging: result.warnings.some((w) => w.toLowerCase().includes("paginación")),
       awaitingConfirm: result.warnings.some((w) => w.toLowerCase().includes("confirmación")),

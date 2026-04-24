@@ -85,26 +85,26 @@ export function normalizeWhitespace(input: string): string {
 export function sanitizeCommandOutput(raw: string): string {
   if (!raw) return "";
 
-  // 1. Procesar backspaces (\b) de forma lógica
+  // 1. Procesar backspaces (\b) de forma lógica (SIN UNDERFLOW)
   let processed = "";
   for (let i = 0; i < raw.length; i++) {
     if (raw[i] === BACKSPACE_CHAR) {
-      processed = processed.slice(0, -1);
+      if (processed.length > 0) {
+        processed = processed.substring(0, processed.length - 1);
+      }
     } else {
       processed += raw[i];
     }
   }
 
-  // 2. Limpieza de ruidos
+  // 2. Limpieza de ruidos (Preservamos \n y caracteres útiles)
+  // No usamos NON_PRINTABLE_RE aquí porque es muy agresivo con IOS
   const result = processed
     .replace(BELL_RE, "")
     .replace(ANSI_ESCAPE_RE, "")
-    .replace(NON_PRINTABLE_RE, "")
-    .replace(/\r/g, "")
-    .replace(/\t/g, " ")
-    .trim();
+    .replace(/\r/g, "");
   
-  return result;
+  return result.trim();
 }
 
 /**

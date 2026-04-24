@@ -242,14 +242,14 @@ async function executeDeviceTerminalCommand(
         return createSuccessResult('ios.exec', {
             device: deviceName,
             command: command,
-            output: execResult.raw || execResult.value?.output || "",
+            output: execResult.raw || execResult.evidence?.raw || "",
             success: execResult.ok,
             verdict: {
                 reason: execResult.ok ? undefined : 'Error en ejecución de comando IOS o timeout',
                 warnings: execResult.ok ? [] : ['Verifica si el dispositivo está ocupado o la salida es muy larga']
             },
             parsed: {
-                events: execResult.parsed?.events
+                events: execResult.evidence?.events || []
             }
         });
     }
@@ -344,7 +344,8 @@ function createHostExecCommand(): Command {
         
         if (result.data.success) {
           const eventCount = result.data.parsed?.events?.length || 0;
-          console.log(`✅ Ejecución exitosa (${eventCount} eventos capturados)`);
+          const outputLen = result.data.output?.length || 0;
+          console.log(`✅ Ejecución exitosa (${eventCount} eventos, ${outputLen} chars capturados)`);
         } else {
           const reason = result.data.verdict?.reason || 'Resultado no satisfactorio';
           console.log(`❌ Fallo detectado: ${reason}`);

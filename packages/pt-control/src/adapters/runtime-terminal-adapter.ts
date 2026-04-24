@@ -170,6 +170,7 @@ export function createRuntimeTerminalAdapter(
     let modeAfter = "";
     let aggregatedOutput = "";
     let finalStatus = 0;
+    let finalParsed: any = undefined;
 
     const warnings: string[] = [];
     const events: Array<Record<string, unknown>> = [];
@@ -247,7 +248,8 @@ export function createRuntimeTerminalAdapter(
       );
 
       const res = bridgeResult?.value ?? bridgeResult ?? {};
-      const raw = String(res.raw ?? res.value ?? res.output ?? "");
+      // Priorizar 'output' que es el campo canónico de texto en nuestro kernel
+      const raw = String(res.output ?? res.raw ?? (typeof res.value === "string" ? res.value : "") ?? "");
       const status = normalizeStatus(res);
 
       if (i === 0) {
@@ -259,6 +261,7 @@ export function createRuntimeTerminalAdapter(
       modeAfter = String(res.session?.mode ?? modeAfter);
       aggregatedOutput += raw.endsWith("\n") ? raw : `${raw}\n`;
       finalStatus = status;
+      finalParsed = res.parsed;
 
       const diagnostics = res.diagnostics ?? {};
       const sessionInfo = res.session ?? {};
@@ -311,36 +314,36 @@ export function createRuntimeTerminalAdapter(
       if (isHost && (raw.includes("request timed out") || raw.includes("reply from"))) {
         warnings.push(`Comando host "${command}" produjo output de red (ping/tracert)`);
       }
+if (status !== 0) {
+  return {
+    ok: false,
+    output: aggregatedOutput.trim(),
+    status,
+    promptBefore,
+    promptAfter,
+    modeBefore,
+    modeAfter,
+    events,
+    warnings,
+    parsed: finalParsed,
+    confidence: warnings.length > 0 ? 0.5 : 0.6,
+  };
+}
+}
 
-      if (status !== 0) {
-        return {
-          ok: false,
-          output: aggregatedOutput.trim(),
-          status,
-          promptBefore,
-          promptAfter,
-          modeBefore,
-          modeAfter,
-          events,
-          warnings,
-          confidence: warnings.length > 0 ? 0.5 : 0.6,
-        };
-      }
-    }
-
-    return {
-      ok: true,
-      output: aggregatedOutput.trim(),
-      status: finalStatus,
-      promptBefore,
-      promptAfter,
-      modeBefore,
-      modeAfter,
-      events,
-      warnings,
-      parsed: res.parsed,
-      confidence: warnings.length > 0 ? 0.8 : 1,
-    };
+return {
+ok: true,
+output: aggregatedOutput.trim(),
+status: finalStatus,
+promptBefore,
+promptAfter,
+modeBefore,
+modeAfter,
+events,
+warnings,
+parsed: finalParsed,
+confidence: warnings.length > 0 ? 0.8 : 1,
+};
   }
 
   async function ensureSession(device: string): Promise<SessionResult> {
