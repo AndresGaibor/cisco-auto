@@ -25,6 +25,19 @@ import { createModeGuard } from "../terminal/mode-guard";
 import { verifyHostOutput } from "../terminal/terminal-semantic-verifier.js";
 import type { TerminalExecutionResult } from "../terminal/terminal-execution-result.js";
 
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  return await Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(message)), timeoutMs);
+    }),
+  ]);
+}
+
 const DEFAULT_COMMAND_TIMEOUT = 8000;
 const DEFAULT_STALL_TIMEOUT = 15000;
 
@@ -128,7 +141,20 @@ export async function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi):
   const currentMode = detectModeFromPrompt(terminal.getPrompt());
   if (payload.ensurePrivileged && currentMode !== "privileged-exec") {
     const modeGuard = createModeGuard();
-    const privResult = await modeGuard.ensurePrivilegedExec(deviceName, terminal);
+    let privResult;
+    try {
+      privResult = await withTimeout(
+        modeGuard.ensurePrivilegedExec(deviceName, terminal),
+        7000,
+        "Timed out while ensuring privileged exec mode",
+      );
+    } catch (error) {
+      return createErrorResult(
+        error instanceof Error ? error.message : String(error),
+        "MODE_TRANSITION_TIMEOUT",
+        { raw: (terminal as any).getOutput?.() ?? "" }
+      );
+    }
 
     if (!privResult.ok) {
       return createErrorResult(

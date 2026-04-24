@@ -168,9 +168,10 @@ export function createModeGuard() {
       }
       const modeNow = currentMode(terminal, deviceName);
       if (modeNow === "user-exec") {
-        const result = await executor.executeCommand(deviceName, "enable", terminal, {
+const result = await executor.executeCommand(deviceName, "enable", terminal, {
           commandTimeoutMs: 5000,
           stallTimeoutMs: 2000,
+          allowEmptyOutput: true,
         });
         const after = detectModeFromPrompt(terminal.getPrompt());
         return {
@@ -182,7 +183,7 @@ export function createModeGuard() {
         };
       }
     }
-    
+
     if (before === "privileged-exec" || isHostMode(before)) {
       return { ok: true, fromMode: before, toMode: before };
     }
@@ -199,6 +200,7 @@ export function createModeGuard() {
       const result = await executor.executeCommand(deviceName, "enable", terminal, {
         commandTimeoutMs: 5000,
         stallTimeoutMs: 2000,
+        allowEmptyOutput: true,
       });
       const after = detectModeFromPrompt(terminal.getPrompt());
 

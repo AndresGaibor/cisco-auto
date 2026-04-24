@@ -119,6 +119,18 @@ export function classifyIosCommand(command: string): CommandProfile {
   }
 
   if (cmd.startsWith("show ") || cmd.startsWith("do show ")) {
+    // Caso especial: show privilege NO auto-eleva porque sirve para diagnosticar nivel actual
+    if (cmd === "show privilege") {
+      profile.intent = "show";
+      profile.allowPager = false;
+      profile.ensurePrivileged = false;
+      profile.preserveCurrentMode = true;
+      profile.risk = "safe";
+      profile.timeoutMs = 15000;
+      profile.stallTimeoutMs = 8000;
+      return profile;
+    }
+
     profile.intent = "show";
     profile.allowPager = true;
     profile.ensurePrivileged = !cmd.startsWith("do ");
