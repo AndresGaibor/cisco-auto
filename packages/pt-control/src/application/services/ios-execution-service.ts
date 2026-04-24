@@ -119,6 +119,7 @@ export class IosExecutionService {
     promptAfter: string;
     warnings: string[];
     raw?: string;
+    output?: string;
     events?: any[];
     parsed?: any;
   }): IosExecutionEvidence {
@@ -134,7 +135,7 @@ export class IosExecutionService {
 
     return {
       source: "terminal",
-      raw: result.raw ?? "",
+      raw: result.raw ?? result.output ?? "",
       status: result.status,
       mode: result.modeAfter,
       prompt: result.promptAfter,

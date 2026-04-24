@@ -185,13 +185,21 @@ function createHostHistoryCommand(): Command {
         }
       });
 
-      if (result.ok && result.data && !flags.json) {
+      if (flags.json) {
+        console.log(JSON.stringify(result, null, 2));
+        if (!result.ok) {
+          process.exitCode = 1;
+        }
+        return;
+      }
+
+      if (result.ok && result.data) {
         const device = chalk.bold.cyan(result.data.device);
         console.log(`\n📜 HISTORIAL DE CONSOLA (${device}):`);
         console.log(chalk.gray('━'.repeat(60)));
-        
+
         result.data.entries.forEach((entry: any, i: number) => {
-          console.log(`${chalk.gray(i + 1 + '.')} ${chalk.yellow('>') } ${chalk.bold(entry.command)}`);
+          console.log(`${chalk.gray(i + 1 + '.')} ${chalk.yellow('>')} ${chalk.bold(entry.command)}`);
           if (entry.output) {
             console.log(chalk.white(entry.output));
           }
@@ -201,13 +209,12 @@ function createHostHistoryCommand(): Command {
         if (result.data.count === 0) {
           console.log(chalk.italic('El historial está vacío o no se pudo parsear.'));
         }
-      } else if (!result.ok) {
-        console.error(`\n❌ Error: ${result.error?.message || 'Error desconocido'}`);
-        process.exit(1);
+        return;
       }
 
-      if (flags.json) {
-        console.log(JSON.stringify(result, null, 2));
+      if (!result.ok) {
+        console.error(`\n❌ Error: ${result.error?.message || 'Error desconocido'}`);
+        process.exit(1);
       }
     });
 
@@ -350,7 +357,15 @@ function createHostExecCommand(): Command {
         }
       });
 
-      if (result.ok && result.data && !flags.json) {
+      if (flags.json) {
+        console.log(JSON.stringify(result, null, 2));
+        if (!result.ok) {
+          process.exitCode = 1;
+        }
+        return;
+      }
+
+      if (result.ok && result.data) {
         console.log(`\n📟 SALIDA DE CONSOLA (${result.data.device}):`);
         console.log('━'.repeat(60));
         if (result.data.output) {
@@ -363,7 +378,7 @@ function createHostExecCommand(): Command {
           }
         }
         console.log('━'.repeat(60));
-        
+
         if (result.data.success) {
           const eventCount = result.data.parsed?.events?.length || 0;
           const outputLen = result.data.output?.length || 0;
@@ -375,13 +390,12 @@ function createHostExecCommand(): Command {
             result.data.verdict.warnings.forEach((w: string) => console.log(`   ⚠️  ${w}`));
           }
         }
-      } else if (!result.ok) {
-        console.error(`\n❌ Error: ${result.error?.message || 'Error desconocido'}`);
-        process.exit(1);
+        return;
       }
 
-      if (flags.json) {
-        console.log(JSON.stringify(result, null, 2));
+      if (!result.ok) {
+        console.error(`\n❌ Error: ${result.error?.message || 'Error desconocido'}`);
+        process.exit(1);
       }
     });
 
