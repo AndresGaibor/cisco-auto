@@ -327,6 +327,10 @@ if (!readyResult.ready) {
       const { delta: snapshotDelta, matched } = diffSnapshotStrict(baselineOutput, snapshotAfter.raw);
 
       const extractResult = extractCommandOutput({
+        command,
+        sessionKind: sessionKind === "unknown" ? "ios" : sessionKind,
+        promptBefore,
+        promptAfter,
         eventOutput: outputBuffer,
         snapshotDelta: snapshotDelta,
         snapshotAfter: snapshotAfter,

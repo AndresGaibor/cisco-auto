@@ -88,6 +88,9 @@ export const RUNTIME_MANIFEST = {
     "terminal/terminal-errors.ts",
     "terminal/terminal-ready.ts",
     "terminal/command-output-extractor.ts",
+    "terminal/terminal-semantic-verifier.ts",
+    "terminal/terminal-execution-result.ts",
+    "terminal/terminal-recovery.ts",
   ],
 
   ptTerminal: [

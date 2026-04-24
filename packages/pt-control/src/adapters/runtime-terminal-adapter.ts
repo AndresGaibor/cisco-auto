@@ -23,6 +23,8 @@ export interface RuntimeTerminalAdapterDeps {
 
 type ExecInteractiveValue = {
   raw?: string;
+  value?: string;
+  output?: string;
   parsed?: unknown;
   session?: {
     mode?: string;
@@ -80,6 +82,13 @@ function normalizeRuntimeErrorStatus(status: unknown): number {
 function isConfigureTerminalCommand(command: string): boolean {
   const cmd = command.trim().toLowerCase();
   return /^(conf|config|configure)(\s+t|\s+terminal)?$/.test(cmd);
+}
+
+function buildEnsureModeCommand(expectMode?: TerminalMode): string | null {
+  if (!expectMode) return null;
+  if (expectMode === "privileged-exec") return "__ensure_privileged__";
+  if (expectMode === "global-config") return "configure terminal";
+  return null;
 }
 
 function shouldEnsurePrivilegedForStep(args: {
@@ -224,11 +233,77 @@ export function createRuntimeTerminalAdapter(
       const step = plan.steps[i]!;
 
       if (step.kind === "ensureMode") {
+        if (isHost) {
+          events.push({
+            stepIndex: i,
+            kind: "ensureMode",
+            expectMode: step.expectMode,
+            skipped: true,
+            reason: "host-session",
+          });
+          continue;
+        }
+
+        const ensureCommand = buildEnsureModeCommand(step.expectMode);
+
+        if (!ensureCommand) {
+          events.push({
+            stepIndex: i,
+            kind: "ensureMode",
+            expectMode: step.expectMode,
+            skipped: true,
+            reason: "no-command-needed",
+          });
+          continue;
+        }
+
+        const bridgeResult = await bridge.sendCommandAndWait<any>(
+          handlerName,
+          {
+            type: handlerName,
+            device: plan.device,
+            command: ensureCommand,
+            parse: false,
+            ensurePrivileged: false,
+            targetMode: plan.targetMode,
+            expectedMode: step.expectMode,
+            allowPager: false,
+            allowConfirm: false,
+            commandTimeoutMs: defaultTimeouts.commandTimeoutMs,
+            stallTimeoutMs: defaultTimeouts.stallTimeoutMs,
+          },
+          defaultTimeouts.commandTimeoutMs,
+        );
+
+        const res = bridgeResult?.value ?? bridgeResult ?? {};
+        const raw = String(res.output ?? res.raw ?? (typeof res.value === "string" ? res.value : "") ?? "");
+        const status = normalizeStatus(res);
+
         events.push({
           stepIndex: i,
           kind: "ensureMode",
+          command: ensureCommand,
           expectMode: step.expectMode,
+          status,
+          output: raw,
+          sessionKind: isHost ? "host" : "ios",
         });
+
+        if (status !== 0) {
+          return {
+            ok: false,
+            output: raw,
+            status,
+            promptBefore,
+            promptAfter,
+            modeBefore,
+            modeAfter,
+            events,
+            warnings: [...warnings, `ensureMode falló con status ${status}: ${ensureCommand}`],
+            parsed: res.parsed,
+            confidence: 0,
+          };
+        }
         continue;
       }
 
@@ -242,9 +317,33 @@ export function createRuntimeTerminalAdapter(
       }
 
       if (step.kind === "confirm") {
+        const confirmResult = await bridge.sendCommandAndWait<any>(
+          handlerName,
+          {
+            type: handlerName,
+            device: plan.device,
+            command: "y",
+            parse: false,
+            ensurePrivileged: false,
+            allowPager: false,
+            allowConfirm: false,
+            commandTimeoutMs: defaultTimeouts.commandTimeoutMs,
+            stallTimeoutMs: defaultTimeouts.stallTimeoutMs,
+          },
+          defaultTimeouts.commandTimeoutMs,
+        );
+
+        const res = confirmResult?.value ?? confirmResult ?? {};
+        const raw = String(res.output ?? res.raw ?? (typeof res.value === "string" ? res.value : "") ?? "");
+        const status = normalizeStatus(res);
+
         events.push({
           stepIndex: i,
           kind: "confirm",
+          command: "y",
+          status,
+          output: raw,
+          sessionKind: isHost ? "host" : "ios",
         });
         continue;
       }

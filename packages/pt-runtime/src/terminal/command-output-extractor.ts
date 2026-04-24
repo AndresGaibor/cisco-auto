@@ -9,6 +9,10 @@ import { sanitizeTerminalText, diffSnapshotStrict, type TerminalSnapshot } from 
 export type CommandSessionKind = "ios" | "host";
 
 export interface ExtractOptions {
+  command: string;
+  sessionKind: CommandSessionKind;
+  promptBefore: string;
+  promptAfter: string;
   eventOutput?: string;
   snapshotDelta?: string;
   snapshotAfter?: TerminalSnapshot;
@@ -23,14 +27,17 @@ export interface ExtractResult {
   source: string;
   confidence: "high" | "medium" | "low";
   warnings: string[];
+  asyncNoise: string[];
 }
 
 /**
  * Extrae output del comando actual usando múltiples fuentes.
  * Combina output de eventos y delta de snapshots.
+ * Usa delimitadores de comando para slice preciso y separa syslogs async.
  */
 export function extractCommandOutput(input: ExtractOptions): ExtractResult {
   const warnings: string[] = [];
+  const asyncNoise: string[] = [];
   let output = "";
   let raw = "";
   let source = "";
@@ -38,45 +45,37 @@ export function extractCommandOutput(input: ExtractOptions): ExtractResult {
 
   const hasEventOutput = input.eventOutput && input.eventOutput.trim().length > 0;
   const hasSnapshotDelta = input.snapshotDelta && input.snapshotDelta.trim().length > 0;
+  const hasCommand = Boolean(input.command?.trim());
 
-  if (hasEventOutput && hasSnapshotDelta) {
-    const eventLen = input.eventOutput!.length;
-    const snapLen = input.snapshotDelta!.length;
-
-    if (Math.abs(eventLen - snapLen) < 50) {
-      output = input.eventOutput!;
-      raw = input.eventOutput!;
-      source = "event+delta";
-      confidence = "high";
-    } else if (snapLen > eventLen) {
-      output = input.snapshotDelta!;
-      raw = input.snapshotDelta!;
-      source = "delta-preferred";
-      confidence = "medium";
-      warnings.push("Snapshot delta longer than event output, using delta");
-    } else {
-      output = input.eventOutput!;
-      raw = input.eventOutput!;
-      source = "event-preferred";
-      confidence = "medium";
-      warnings.push("Event output longer than snapshot delta, using event");
+  if (hasCommand && hasEventOutput) {
+    const sliced = sliceByCommandBoundaries({
+      text: input.eventOutput!,
+      command: input.command,
+      promptBefore: input.promptBefore,
+      promptAfter: input.promptAfter,
+    });
+    if (sliced) {
+      raw = sliced;
+      source = "event-sliced";
     }
-  } else if (hasEventOutput) {
+  }
+
+  if (!raw && hasEventOutput) {
     output = input.eventOutput!;
     raw = input.eventOutput!;
     source = "event";
     confidence = input.commandEndedSeen ? "high" : "medium";
-  } else if (hasSnapshotDelta) {
+  } else if (!raw && hasSnapshotDelta) {
     output = input.snapshotDelta!;
     raw = input.snapshotDelta!;
     source = "delta";
     confidence = input.outputEventsCount && input.outputEventsCount > 0 ? "medium" : "low";
-  } else if (input.snapshotAfter) {
+  } else if (!raw && input.snapshotAfter) {
     output = sanitizeTerminalText(input.snapshotAfter.raw);
     raw = input.snapshotAfter.raw;
     source = "snapshot-after (" + input.snapshotAfter.source + ")";
     confidence = "low";
-  } else {
+  } else if (!raw) {
     output = "";
     raw = "";
     source = "none";
@@ -84,12 +83,20 @@ export function extractCommandOutput(input: ExtractOptions): ExtractResult {
     warnings.push("No output available from any source");
   }
 
+  const { commandOutput, noise } = splitAsyncNoise(output);
+  asyncNoise.push(...noise);
+
+  if (noise.length > 0) {
+    warnings.push(`Syslog lines detected: ${noise.length}`);
+  }
+
   return {
-    output: finalClean(output, input.snapshotAfter?.raw || ""),
+    output: finalClean(commandOutput, input.snapshotAfter?.raw || ""),
     raw,
     source,
     confidence,
     warnings,
+    asyncNoise,
   };
 }
 
@@ -157,6 +164,51 @@ export function finalClean(output: string, fullRaw: string = ""): string {
   result = lines.join("\n");
 
   return result;
+}
+
+function sliceByCommandBoundaries(args: {
+  text: string;
+  command: string;
+  promptBefore: string;
+  promptAfter: string;
+}): string | null {
+  const text = args.text.replace(/\r/g, "");
+  const command = args.command.trim();
+
+  if (!text || !command) return null;
+
+  const commandIndex = text.lastIndexOf(command);
+  if (commandIndex === -1) return null;
+
+  let sliced = text.slice(commandIndex);
+
+  const promptAfter = args.promptAfter.trim();
+  if (promptAfter) {
+    const lastPromptIndex = sliced.lastIndexOf(promptAfter);
+    if (lastPromptIndex !== -1) {
+      sliced = sliced.slice(0, lastPromptIndex + promptAfter.length);
+    }
+  }
+
+  return sliced.trim();
+}
+
+function splitAsyncNoise(output: string): { commandOutput: string; noise: string[] } {
+  const noise: string[] = [];
+  const commandLines: string[] = [];
+
+  for (const line of output.split("\n")) {
+    if (/^%[A-Z0-9_-]+-\d+-[A-Z0-9_-]+:/.test(line.trim())) {
+      noise.push(line);
+    } else {
+      commandLines.push(line);
+    }
+  }
+
+  return {
+    commandOutput: commandLines.join("\n").trim(),
+    noise,
+  };
 }
 
 /**

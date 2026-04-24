@@ -181,3 +181,21 @@ export function createHostSshPlan(deviceName: string, user: string, target: stri
     policies: { ...defaultPolicies(), autoAdvancePager: true },
   });
 }
+
+export function buildIosBootstrapPlan(deviceName: string) {
+  return createTerminalPlan(deviceName, [
+    createCommandStep("terminal length 0", { expectMode: "privileged-exec" }),
+    createCommandStep("terminal width 512", { expectMode: "privileged-exec", optional: true }),
+    createCommandStep("configure terminal", { expectMode: "global-config" }),
+    createCommandStep("line console 0", { expectMode: "config-line" }),
+    createCommandStep("exec-timeout 0 0", { expectMode: "config-line" }),
+    createCommandStep("logging synchronous", { expectMode: "config-line" }),
+    createCommandStep("exit", { expectMode: "global-config" }),
+    createCommandStep("no ip domain-lookup", { expectMode: "global-config", optional: true }),
+    createCommandStep("end", { expectMode: "privileged-exec" }),
+  ], {
+    targetMode: "privileged-exec",
+    timeouts: defaultTimeouts(),
+    policies: defaultPolicies(),
+  });
+}

@@ -1,5 +1,19 @@
 import { detectModeFromPrompt, isHostMode, normalizePrompt } from "./prompt-detector";
-import type { TerminalSessionState } from "./session-state";
+import type { TerminalSessionState, TerminalSessionKind, TerminalMode } from "./session-state";
+
+export interface CompletionContext {
+  currentPrompt: string;
+  previousPrompt: string;
+  commandEndedSeen: boolean;
+  lastOutputAt: number;
+  now: number;
+  promptStableSince: number | null;
+  sessionKind: TerminalSessionKind;
+  pagerActive: boolean;
+  confirmPromptActive: boolean;
+  expectedMode?: TerminalMode;
+  currentMode: TerminalMode;
+}
 
 /**
  * Resultado del chequeo de finalización de comando.
@@ -60,4 +74,54 @@ export function checkIsCommandFinished(
     }
 
     return { finished: false };
+}
+
+/**
+ * Verifica si un comando ha finalizado usando el contexto deCompletionContext.
+ * 
+ * Esta función implementa la heurística de quiet window: espera que la terminal
+ * permanezca estable (sin nuevo output y con prompt estable) antes de decidir
+ * que el comando terminó.
+ * 
+ * @param ctx - Contexto de completado con toda la información de estado
+ * @returns Veredicto con estado de finalización y motivo
+ */
+export function checkCommandCompletion(ctx: CompletionContext): CommandFinishedVerdict {
+  if (ctx.pagerActive) return { finished: false };
+  if (ctx.confirmPromptActive) return { finished: false };
+
+  const quietFor = ctx.now - ctx.lastOutputAt;
+  const promptStableFor = ctx.promptStableSince
+    ? ctx.now - ctx.promptStableSince
+    : 0;
+
+  const hasPrompt = /[>#]\s*$/.test(ctx.currentPrompt) || /[A-Z]:\\>\s*$/i.test(ctx.currentPrompt);
+
+  if (!hasPrompt) return { finished: false };
+
+  if (ctx.expectedMode && ctx.currentMode !== ctx.expectedMode) {
+    if (ctx.commandEndedSeen && quietFor > 1000) {
+      return {
+        finished: true,
+        reason: "ended-but-expected-mode-not-reached",
+      };
+    }
+    return { finished: false };
+  }
+
+  if (ctx.commandEndedSeen && quietFor >= 500 && promptStableFor >= 500) {
+    return {
+      finished: true,
+      reason: "command-ended-and-terminal-stable",
+    };
+  }
+
+  if (quietFor >= 1200 && promptStableFor >= 800) {
+    return {
+      finished: true,
+      reason: "terminal-stable-without-ended-event",
+    };
+  }
+
+  return { finished: false };
 }

@@ -22,6 +22,7 @@ import {
   readTerminalOutput,
 } from "../terminal/prompt-detector";
 import { createModeGuard } from "../terminal/mode-guard";
+import { verifyHostOutput } from "../terminal/terminal-semantic-verifier.js";
 
 const DEFAULT_COMMAND_TIMEOUT = 8000;
 const DEFAULT_STALL_TIMEOUT = 15000;
@@ -394,8 +395,12 @@ export async function handleExecPc(payload: ExecPcPayload, api: PtRuntimeApi): P
   const terminal = getTerminalDevice(api, deviceName);
   if (!terminal) return createErrorResult("Terminal engine inaccessible", "NO_TERMINAL");
 
+  const cmd = payload.command.trim().toLowerCase();
+  const isLongRunningCommand = cmd.startsWith("ping") || cmd.startsWith("tracert") || cmd.startsWith("trace");
+  const commandTimeoutMs = isLongRunningCommand ? (payload.timeoutMs ?? 60000) : (payload.timeoutMs ?? 30000);
+
   const executor = createCommandExecutor({
-    commandTimeoutMs: payload.timeoutMs ?? 30000,
+    commandTimeoutMs,
     stallTimeoutMs: 15000,
   });
 
@@ -404,7 +409,7 @@ export async function handleExecPc(payload: ExecPcPayload, api: PtRuntimeApi): P
     payload.command,
     terminal,
     { 
-      commandTimeoutMs: payload.timeoutMs ?? 30000,
+      commandTimeoutMs,
       autoAdvancePager: true
     }
   );
@@ -415,30 +420,46 @@ export async function handleExecPc(payload: ExecPcPayload, api: PtRuntimeApi): P
     );
   }
 
-if (result.ok || result.output.trim().length > 0) {
-      return createSuccessResult(
-        {
-          output: result.output,
-          outputLength: result.output.length,
-          preview: result.output.slice(0, 200),
-          status: result.status ?? undefined,
-        },
-        { 
-          raw: result.output, 
-          status: result.status ?? undefined, 
-          session: {
-            prompt: result.promptAfter,
-            mode: result.modeAfter,
-            paging: false,
-            awaitingConfirm: false,
-          }
-        },
-      );
-    }
+  const semantic = verifyHostOutput(result.output);
+  const ok = result.ok && semantic.ok;
 
-  return createErrorResult("PC execution failed", (result.status ?? -1) > 0 ? "COMMAND_FAILED" : "NO_OUTPUT", {
-    raw: result.output,
-  });
+  if (ok) {
+    return createSuccessResult(
+      {
+        output: result.output,
+        outputLength: result.output.length,
+        preview: result.output.slice(0, 200),
+        status: result.status ?? undefined,
+      },
+      { 
+        raw: result.output, 
+        status: result.status ?? undefined, 
+        session: {
+          prompt: result.promptAfter,
+          mode: result.modeAfter,
+          paging: false,
+          awaitingConfirm: false,
+        }
+      },
+    );
+  }
+
+  return createErrorResult(
+    semantic.message ?? result.error ?? "PC execution failed",
+    semantic.code ?? result.code,
+    {
+      raw: result.output,
+      status: semantic.status,
+      parsed: {
+        command: result.command,
+        durationMs: result.durationMs,
+        promptAfter: result.promptAfter,
+        modeAfter: result.modeAfter,
+        confidence: result.confidence,
+        warnings: [...result.warnings, ...semantic.warnings],
+      },
+    },
+  );
 }
 
 export function handleReadTerminal(payload: { device: string }, api: PtRuntimeApi): PtResult {
