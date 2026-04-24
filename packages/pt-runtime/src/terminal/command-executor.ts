@@ -352,6 +352,19 @@ if (!readyResult.ready) {
       const promptMatched = !options.expectedPromptPattern || promptAfter.includes(options.expectedPromptPattern);
       const modeMatched = !options.expectedMode || modeAfter === options.expectedMode;
 
+      let finalError = error;
+      let finalCode = code;
+
+      if (cmdOk && !modeMatched) {
+        finalError = `Expected mode "${options.expectedMode}" not reached; got "${modeAfter}" at prompt "${promptAfter}".`;
+        finalCode = TerminalErrors.PROMPT_MISMATCH;
+      }
+
+      if (cmdOk && !promptMatched) {
+        finalError = `Expected prompt "${options.expectedPromptPattern}" not reached; got "${promptAfter}".`;
+        finalCode = TerminalErrors.PROMPT_MISMATCH;
+      }
+
       const finalWarnings = [...warnings, ...extractResult.warnings];
       if (!promptMatched) finalWarnings.push(`Expected prompt "${options.expectedPromptPattern}" not reached.`);
       if (!modeMatched) finalWarnings.push(`Expected mode "${options.expectedMode}" not reached.`);
@@ -412,8 +425,8 @@ if (!readyResult.ready) {
         confidence,
         warnings: finalWarnings,
         events,
-        error,
-        code,
+        error: finalError,
+        code: finalCode,
       });
     }
 

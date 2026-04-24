@@ -38,20 +38,71 @@ export function getPromptSafe(terminal: any): string {
 }
 
 /**
+ * Canonicaliza el modo nativo de Packet Tracer al nombre canónico del proyecto.
+ * PT devuelve: "global", "enable", "interface" etc.
+ * El proyecto usa: "global-config", "privileged-exec", "config-if" etc.
+ */
+function canonicalizeTerminalMode(mode: string): TerminalMode {
+  const normalized = mode.trim().toLowerCase();
+
+  if (normalized === "enable") return "privileged-exec";
+  if (normalized === "privileged") return "privileged-exec";
+  if (normalized === "privileged-exec") return "privileged-exec";
+
+  if (normalized === "user") return "user-exec";
+  if (normalized === "user-exec") return "user-exec";
+
+  if (normalized === "global") return "global-config";
+  if (normalized === "config") return "global-config";
+  if (normalized === "global-config") return "global-config";
+
+  if (normalized === "interface") return "config-if";
+  if (normalized === "config-if") return "config-if";
+
+  if (normalized === "line") return "config-line";
+  if (normalized === "config-line") return "config-line";
+
+  if (normalized === "router") return "config-router";
+  if (normalized === "config-router") return "config-router";
+
+  if (normalized === "vlan") return "config-vlan";
+  if (normalized === "config-vlan") return "config-vlan";
+
+  if (normalized === "config-subif") return "config-subif";
+  if (normalized === "config-if-range") return "config-if-range";
+  if (normalized === "dhcp-config") return "dhcp-config";
+  if (normalized === "dhcp-pool") return "dhcp-pool";
+  if (normalized === "host-prompt") return "host-prompt";
+  if (normalized === "host-busy") return "host-busy";
+  if (normalized === "wizard") return "wizard";
+  if (normalized === "pager") return "pager";
+  if (normalized === "confirm") return "confirm";
+  if (normalized === "boot") return "boot";
+
+  return "unknown";
+}
+
+/**
  * Lee el modo del terminal de forma segura, sin lanzar excepciones.
+ * Usa el prompt como fuente canónica (contiene el modo real del dispositivo).
+ * Si el prompt no es concluyente, cae a terminal.getMode() y canonicaliza el resultado.
  */
 export function getModeSafe(terminal: any): string {
   try {
-    if (typeof terminal.getMode === "function") {
-      const m = terminal.getMode();
-      if (m && typeof m === "string") {
-        return m;
+    const prompt = getPromptSafe(terminal);
+
+    if (prompt) {
+      const promptMode = detectModeFromPrompt(prompt);
+      if (promptMode !== "unknown") {
+        return promptMode;
       }
     }
 
-    const prompt = getPromptSafe(terminal);
-    if (prompt) {
-      return detectModeFromPrompt(prompt);
+    if (typeof terminal.getMode === "function") {
+      const rawMode = terminal.getMode();
+      if (rawMode && typeof rawMode === "string") {
+        return canonicalizeTerminalMode(rawMode);
+      }
     }
 
     return "unknown";
