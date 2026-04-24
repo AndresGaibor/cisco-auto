@@ -297,33 +297,97 @@ export function createRuntimeTerminalAdapter(
         );
 
         const res = bridgeResult?.value ?? bridgeResult ?? {};
-        const raw = String(res.output ?? res.raw ?? (typeof res.value === "string" ? res.value : "") ?? "");
-        const status = normalizeStatus(res);
 
-        events.push({
-          stepIndex: i,
-          kind: "ensureMode",
-          command: ensureAction.command || "(mode-only)",
-          expectMode: step.expectMode,
-          status,
-          output: raw,
-          sessionKind: isHost ? "host" : "ios",
-        });
+        const hasUnifiedContract =
+          typeof res?.ok === "boolean" &&
+          res?.diagnostics &&
+          res?.session &&
+          typeof res?.output === "string";
 
-        if (status !== 0) {
-          return {
-            ok: false,
-            output: raw,
+        let raw: string;
+        let status: number;
+
+        if (hasUnifiedContract) {
+          const tr = res as any;
+          raw = String(tr.output ?? "");
+          status = Number(tr.diagnostics?.statusCode ?? (tr.ok ? 0 : 1));
+
+          if (i === 0) {
+            promptBefore = String(tr.session?.promptBefore ?? "");
+            modeBefore = String(tr.session?.modeBefore ?? "");
+          }
+
+          promptAfter = String(tr.session?.promptAfter ?? "");
+          modeAfter = String(tr.session?.modeAfter ?? "");
+          finalParsed = tr;
+
+          const sessionInfo = tr.session ?? {};
+
+          events.push({
+            stepIndex: i,
+            kind: "ensureMode",
+            command: ensureAction.command || "(mode-only)",
+            expectMode: step.expectMode,
             status,
-            promptBefore,
-            promptAfter,
-            modeBefore,
-            modeAfter,
-            events,
-            warnings: [...warnings, `ensureMode falló con status ${status}: ${ensureAction.command || "(mode-only)"}`],
-            parsed: res.parsed,
-            confidence: 0,
-          };
+            output: raw,
+            sessionKind: sessionInfo.kind ?? (isHost ? "host" : "ios"),
+            completionReason: tr.diagnostics?.completionReason,
+            paging: Boolean(sessionInfo.paging),
+            awaitingConfirm: Boolean(sessionInfo.awaitingConfirm),
+          });
+
+          const ensureFailed =
+            tr.ok === false ||
+            status !== 0 ||
+            tr.diagnostics?.status === "failed";
+
+          if (ensureFailed) {
+            return {
+              ok: false,
+              output: raw,
+              status: status || 1,
+              promptBefore,
+              promptAfter,
+              modeBefore,
+              modeAfter,
+              events,
+              warnings: [
+                ...warnings,
+                `ensureMode falló (unified): ${tr.error?.code ?? "RUNTIME_TERMINAL_FAILED"} — ${tr.error?.message ?? tr.output ?? "(sin output)"}`,
+              ],
+              parsed: finalParsed,
+              confidence: 0,
+            };
+          }
+        } else {
+          raw = String(res.output ?? res.raw ?? (typeof res.value === "string" ? res.value : "") ?? "");
+          status = normalizeStatus(res);
+
+          events.push({
+            stepIndex: i,
+            kind: "ensureMode",
+            command: ensureAction.command || "(mode-only)",
+            expectMode: step.expectMode,
+            status,
+            output: raw,
+            sessionKind: isHost ? "host" : "ios",
+          });
+
+          if (status !== 0) {
+            return {
+              ok: false,
+              output: raw,
+              status,
+              promptBefore,
+              promptAfter,
+              modeBefore,
+              modeAfter,
+              events,
+              warnings: [...warnings, `ensureMode falló con status ${status}: ${ensureAction.command || "(mode-only)"}`],
+              parsed: res.parsed,
+              confidence: 0,
+            };
+          }
         }
         continue;
       }
@@ -416,70 +480,105 @@ export function createRuntimeTerminalAdapter(
       let raw: string;
       let status: number;
 
+        // Contrato unificado: extraer output y session info directamente
       if (hasUnifiedContract) {
         const tr = res as any;
-        raw = tr.output;
-        status = tr.diagnostics?.statusCode ?? 0;
-        promptBefore = tr.session?.promptBefore ?? promptBefore;
-        promptAfter = tr.session?.promptAfter ?? promptAfter;
-        modeBefore = tr.session?.modeBefore ?? modeBefore;
-        modeAfter = tr.session?.modeAfter ?? modeAfter;
-      } else {
-        raw = String(res.output ?? res.raw ?? (typeof res.value === "string" ? res.value : "") ?? "");
-        status = normalizeStatus(res);
-      }
+        raw = String(tr.output ?? "");
+        status = Number(tr.diagnostics?.statusCode ?? (tr.ok ? 0 : 1));
 
-      // Detectar errores del bridge/runtime antes de procesar output
-      const bridgeFailed =
-        bridgeResult?.ok === false ||
-        bridgeResult?.status === "failed" ||
-        res?.ok === false ||
-        typeof res?.error === "string";
+        if (i === 0) {
+          promptBefore = String(tr.session?.promptBefore ?? "");
+          modeBefore = String(tr.session?.modeBefore ?? "");
+        }
 
-      if (bridgeFailed) {
-        const errorMessage = String(
-          res?.error ??
-          bridgeResult?.error?.message ??
-          bridgeResult?.error ??
-          "Runtime terminal command failed"
-        );
+        promptAfter = String(tr.session?.promptAfter ?? "");
+        modeAfter = String(tr.session?.modeAfter ?? "");
 
-        const errorCode = String(
-          res?.code ??
-          bridgeResult?.error?.code ??
-          "RUNTIME_TERMINAL_FAILED"
-        );
+        finalParsed = tr;
 
-        const errorStatus = normalizeRuntimeErrorStatus(res?.status);
+        aggregatedOutput += raw.endsWith("\n") ? raw : `${raw}\n`;
+        finalStatus = status;
+
+        const sessionInfo = tr.session ?? {};
+
+        if (tr.warnings && Array.isArray(tr.warnings)) {
+          warnings.push(...tr.warnings);
+        }
 
         events.push({
           stepIndex: i,
           kind: step.kind ?? "command",
           command,
-          status: errorStatus,
+          status,
+          ok: tr.ok,
           promptAfter,
           modeAfter,
-          error: errorMessage,
-          code: errorCode,
-          sessionKind: isHost ? "host" : "ios",
+          completionReason: tr.diagnostics?.completionReason,
+          paging: Boolean(sessionInfo.paging),
+          awaitingConfirm: Boolean(sessionInfo.awaitingConfirm),
+          autoDismissedInitialDialog: Boolean(sessionInfo.autoDismissedInitialDialog),
+          sessionKind: sessionInfo.kind ?? (isHost ? "host" : "ios"),
           allowPager: stepPolicies.allowPager,
           allowConfirm: stepPolicies.allowConfirm,
+          expectMode: step.expectMode,
+          expectPromptPattern: step.expectPromptPattern,
+          optional: step.optional,
+          error: tr.error,
+          diagnostics: tr.diagnostics,
         });
 
-        return {
-          ok: false,
-          output: raw,
-          status: errorStatus,
-          promptBefore,
-          promptAfter,
-          modeBefore,
-          modeAfter,
-          events,
-          warnings: [...warnings, `${errorCode}: ${errorMessage}`],
-          parsed: res?.parsed,
-          confidence: 0,
-        };
+        if (sessionInfo.paging && stepPolicies.allowPager) {
+          warnings.push(`El comando "${command}" activó paginación en ${plan.device}`);
+        }
+
+        if (sessionInfo.paging && !stepPolicies.allowPager) {
+          warnings.push(`El comando "${command}" activó paginación pero allowPager=false`);
+        }
+
+        if (sessionInfo.awaitingConfirm && stepPolicies.allowConfirm) {
+          warnings.push(`El comando "${command}" requirió confirmación en ${plan.device}`);
+        }
+
+        if (sessionInfo.awaitingConfirm && !stepPolicies.allowConfirm && !isHost) {
+          warnings.push(`El comando "${command}" dejó confirmación pendiente en ${plan.device} (allowConfirm=false)`);
+        }
+
+        if (
+          (step.expectedPrompt || step.expectPromptPattern) &&
+          promptAfter &&
+          !promptAfter.includes(step.expectedPrompt ?? step.expectPromptPattern ?? "")
+        ) {
+          warnings.push(
+            `Prompt esperado "${step.expectedPrompt ?? step.expectPromptPattern}" no alcanzado tras "${command}". Prompt final: "${promptAfter}"`,
+          );
+        }
+
+        if (isHost && (raw.includes("request timed out") || raw.includes("reply from"))) {
+          warnings.push(`Comando host "${command}" produjo output de red (ping/tracert)`);
+        }
+
+        if (!tr.ok || status !== 0) {
+          return {
+            ok: false,
+            output: aggregatedOutput.trim(),
+            status: status || 1,
+            promptBefore,
+            promptAfter,
+            modeBefore,
+            modeAfter,
+            events,
+            warnings,
+            parsed: finalParsed,
+            confidence: 0,
+          };
+        }
+
+        continue;
       }
+
+      // Legacy fallback: contrato anterior (sin contrato unificado)
+      raw = String(res.output ?? res.raw ?? (typeof res.value === "string" ? res.value : "") ?? "");
+      status = normalizeStatus(res);
 
       const parsedInfo = (res.parsed ?? {}) as {
         promptBefore?: string;
@@ -577,24 +676,24 @@ export function createRuntimeTerminalAdapter(
       if (isHost && (raw.includes("request timed out") || raw.includes("reply from"))) {
         warnings.push(`Comando host "${command}" produjo output de red (ping/tracert)`);
       }
-if (status !== 0) {
-  return {
-    ok: false,
-    output: aggregatedOutput.trim(),
-    status,
-    promptBefore,
-    promptAfter,
-    modeBefore,
-    modeAfter,
-    events,
-    warnings,
-    parsed: finalParsed,
-    confidence: warnings.length > 0 ? 0.5 : 0.6,
-  };
-}
-}
+      if (status !== 0) {
+        return {
+          ok: false,
+          output: aggregatedOutput.trim(),
+          status,
+          promptBefore,
+          promptAfter,
+          modeBefore,
+          modeAfter,
+          events,
+          warnings,
+          parsed: finalParsed,
+          confidence: warnings.length > 0 ? 0.5 : 0.6,
+        };
+      }
+      }
 
-return {
+      return {
 ok: true,
 output: aggregatedOutput.trim(),
 status: finalStatus,

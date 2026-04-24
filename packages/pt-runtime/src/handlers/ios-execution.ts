@@ -140,28 +140,65 @@ export async function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi):
   }
 
   if (!payload.command || !String(payload.command).trim()) {
-    return createSuccessResult({
+    const now = Date.now();
+    const prompt = terminal.getPrompt?.() ?? "";
+    const mode = detectModeFromPrompt(prompt);
+    const modeMatched = !payload.expectedMode || mode === (payload.expectedMode as string);
+
+    const terminalResult = {
+      ok: modeMatched,
+      device: deviceName,
+      command: "",
       output: "",
       raw: "",
-      status: 0,
-      confidence: 1,
-      parsed: {
-        command: "",
-        startedAt: Date.now(),
-        endedAt: Date.now(),
+      error: modeMatched
+        ? undefined
+        : {
+            code: "TERMINAL_MODE_MISMATCH" as const,
+            message: `Expected mode "${payload.expectedMode}" not reached; got "${mode}" at prompt "${prompt}".`,
+            phase: "postcondition" as const,
+          },
+      diagnostics: {
+        status: modeMatched ? ("completed" as const) : ("failed" as const),
+        statusCode: modeMatched ? 0 : 1,
+        completionReason: "ensure-mode-only",
+        outputSource: "none" as const,
+        confidence: "high" as const,
+        startedSeen: false,
+        endedSeen: false,
+        outputEvents: 0,
+        promptMatched: true,
+        modeMatched,
+        semanticOk: true,
         durationMs: 0,
-        promptBefore: terminal.getPrompt(),
-        promptAfter: terminal.getPrompt(),
-        modeBefore: currentMode,
-        modeAfter: currentMode,
-        startedSeen: true,
-        endedSeen: true,
-        outputEvents: [],
-        confidence: 1,
-        events: [],
-        warnings: [],
       },
-    });
+      session: {
+        kind: session.sessionKind,
+        promptBefore: prompt,
+        promptAfter: prompt,
+        modeBefore: mode as any,
+        modeAfter: mode as any,
+        paging: false,
+        awaitingConfirm: false,
+        autoDismissedInitialDialog: false,
+      },
+      events: [] as any[],
+      warnings: [] as string[],
+    };
+
+    if (terminalResult.ok) {
+      return createSuccessResult(terminalResult as unknown as Record<string, unknown>);
+    }
+
+    return createErrorResult(
+      terminalResult.error?.message ?? "Ensure mode failed",
+      terminalResult.error?.code,
+      {
+        raw: terminalResult.raw,
+        status: terminalResult.diagnostics.statusCode,
+        parsed: terminalResult as unknown as Record<string, unknown>,
+      },
+    );
   }
 
   const options: ExecutionOptions = {
@@ -413,7 +450,7 @@ export async function handlePing(payload: { device: string; target: string; time
       );
     }
 
-    if (result.ok || result.output.trim().length > 0) {
+    if (result.ok) {
       return createSuccessResult(result.output, { 
         raw: result.output, 
         status: result.status ?? undefined,

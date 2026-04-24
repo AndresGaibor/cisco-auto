@@ -211,6 +211,7 @@ options: ExecutionOptions = {},
   const modeBefore = getModeSafe(terminal);
 
   try {
+    // @ts-ignore ipc es global inyectado por PT kernel
     const net = (typeof ipc !== "undefined") ? (ipc as any).network?.() : null;
     if (net) {
       const dev = net.getDevice?.(deviceName);

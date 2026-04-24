@@ -193,7 +193,8 @@ export function classifyIosCommand(command: string): CommandProfile {
 }
 
 export function classifyHostCommand(command: string): CommandProfile {
-  const cmd = command.trim();
+  const raw = command.trim();
+  const cmd = raw.toLowerCase();
   const profile = baseProfile();
   profile.deviceKind = "host";
 

@@ -47,20 +47,23 @@ export function extractCommandOutput(input: ExtractOptions): ExtractResult {
   const hasSnapshotDelta = input.snapshotDelta && input.snapshotDelta.trim().length > 0;
   const hasCommand = Boolean(input.command?.trim());
 
-  if (hasCommand && hasEventOutput) {
+if (hasCommand && hasEventOutput) {
     const sliced = sliceByCommandBoundaries({
       text: input.eventOutput!,
       command: input.command,
       promptBefore: input.promptBefore,
       promptAfter: input.promptAfter,
     });
+
     if (sliced) {
       output = sliced;
       raw = sliced;
       source = "event-sliced";
       confidence = input.commandEndedSeen ? "high" : "medium";
     }
-  } else if (!raw && hasEventOutput) {
+  }
+
+  if (!raw && hasEventOutput) {
     output = input.eventOutput!;
     raw = input.eventOutput!;
     source = "event";
@@ -69,7 +72,7 @@ export function extractCommandOutput(input: ExtractOptions): ExtractResult {
     output = input.snapshotDelta!;
     raw = input.snapshotDelta!;
     source = "delta";
-    confidence = input.outputEventsCount && input.outputEventsCount > 0 ? "medium" : "low";
+    confidence = "medium";
   } else if (!raw && input.snapshotAfter) {
     output = sanitizeTerminalText(input.snapshotAfter.raw);
     raw = input.snapshotAfter.raw;
