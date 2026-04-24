@@ -89,7 +89,10 @@ export async function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi):
   if (!terminal) return createErrorResult("Terminal engine inaccessible", "NO_TERMINAL");
 
   const session = ensureSession(deviceName);
-  session.sessionKind = "ios";
+  
+  const deviceModel = (device as any)?.getModel?.() ?? "";
+  const isHost = deviceModel.toLowerCase().includes("pc") || deviceModel.toLowerCase().includes("server");
+  session.sessionKind = isHost ? "host" : "ios";
 
   const currentMode = detectModeFromPrompt(terminal.getPrompt());
   if (payload.ensurePrivileged && currentMode !== "privileged-exec") {
@@ -108,10 +111,11 @@ export async function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi):
   const options: ExecutionOptions = {
     commandTimeoutMs: payload.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT,
     stallTimeoutMs: payload.stallTimeoutMs ?? DEFAULT_STALL_TIMEOUT,
-    autoAdvancePager: payload.allowPager ?? true,
+    autoAdvancePager: isHost ? false : (payload.allowPager ?? true),
     autoDismissWizard: true,
     autoConfirm: payload.allowConfirm ?? false,
     maxPagerAdvances: 50,
+    sessionKind: session.sessionKind,
   };
 
   const executor = createCommandExecutor({

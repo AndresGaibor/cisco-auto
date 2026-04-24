@@ -42,8 +42,6 @@ export interface PTCommandLine {
   enterCommand(cmd: string): unknown;
   registerEvent(eventName: string, context: null, handler: (src: unknown, args: unknown) => void): void;
   unregisterEvent(eventName: string, context: null, handler: (src: unknown, args: unknown) => void): void;
-  registerObjectEvent?(eventName: string, handler: (src: unknown, args: unknown) => void): void;
-  unregisterObjectEvent?(eventName: string, handler: (src: unknown, args: unknown) => void): void;
   enterChar(charCode: number, modifiers: number): void;
   println?(text: string): void;
   flush?(): void;
@@ -63,6 +61,8 @@ export interface ExecutionOptions {
   allowEmptyOutput?: boolean;
   sendEnterFallback?: boolean;
   sessionKind?: TerminalSessionKind;
+  ensurePrivileged?: boolean;
+  allowPager?: boolean;
 }
 
 export interface CommandExecutionResult {
@@ -92,6 +92,7 @@ const DEFAULT_STALL_TIMEOUT = 5000;
 const DEFAULT_READY_TIMEOUT = 3000;
 const COMMAND_END_GRACE_MS = 250;
 const COMMAND_END_MAX_WAIT_MS = 1000;
+const HOST_COMMAND_END_GRACE_MS = 1500;
 
 function pushEvent(
   events: TerminalEventRecord[],
@@ -190,17 +191,17 @@ export async function executeTerminalCommand(
   deviceName: string,
   command: string,
   terminal: PTCommandLine,
-  options: ExecutionOptions = {},
-): Promise<CommandExecutionResult> {
-  const startedAt = Date.now();
-  const commandTimeoutMs = options.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT;
-  const stallTimeoutMs = options.stallTimeoutMs ?? DEFAULT_STALL_TIMEOUT;
-  const readyTimeoutMs = options.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT;
-  const sessionKind = options.sessionKind ?? "ios";
+options: ExecutionOptions = {},
+  ): Promise<CommandExecutionResult> {
+    const startedAt = Date.now();
+    const commandTimeoutMs = options.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT;
+    const stallTimeoutMs = options.stallTimeoutMs ?? DEFAULT_STALL_TIMEOUT;
+    const readyTimeoutMs = options.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT;
 
-  const session = ensureSession(deviceName);
-  const events: TerminalEventRecord[] = [];
-  const warnings: string[] = [...(session.warnings || [])];
+    const session = ensureSession(deviceName);
+    const events: TerminalEventRecord[] = [];
+    const warnings: string[] = [...(session.warnings || [])];
+    const sessionKind = options.sessionKind ?? session.sessionKind ?? "ios";
 
   const promptBefore = getPromptSafe(terminal);
   const modeBefore = getModeSafe(terminal);
@@ -238,9 +239,10 @@ export async function executeTerminalCommand(
   const readyResult = ensureTerminalReadySync(terminal, sessionKind, {
     maxRetries: 3,
     wakeUpOnFail: options.sendEnterFallback ?? true,
+    ensurePrivileged: options.ensurePrivileged ?? false,
   });
 
-  if (!readyResult.ready) {
+if (!readyResult.ready) {
     warnings.push("Terminal not ready after retries: " + readyResult.prompt);
   }
 
@@ -304,14 +306,6 @@ export async function executeTerminalCommand(
         terminal.unregisterEvent?.("commandEnded", null, onEnded);
         terminal.unregisterEvent?.("promptChanged", null, onPromptChanged);
         terminal.unregisterEvent?.("moreDisplayed", null, onMoreDisplayed);
-
-        if (typeof terminal.unregisterObjectEvent === "function") {
-          terminal.unregisterObjectEvent("commandStarted", onStarted);
-          terminal.unregisterObjectEvent("outputWritten", onOutput);
-          terminal.unregisterObjectEvent("commandEnded", onEnded);
-          terminal.unregisterObjectEvent("promptChanged", onPromptChanged);
-          terminal.unregisterObjectEvent("moreDisplayed", onMoreDisplayed);
-        }
       } catch {}
     }
 
@@ -356,6 +350,13 @@ export async function executeTerminalCommand(
       if (wizardDismissed) finalWarnings.push("Initial configuration dialog was auto-dismissed");
       if (hostBusy) finalWarnings.push("Host command produced long-running output");
 
+      if (sessionKind !== "ios" && sessionKind !== "unknown") {
+        const hasPager = /--More--/i.test(finalOutput) || /--More--/i.test(outputBuffer);
+        if (hasPager) {
+          finalWarnings.push("Output truncated (pager detected, auto-advance disabled)");
+        }
+      }
+
       const isOnlyPromptResult = isOnlyPrompt(finalOutput, promptAfter);
       const emptyWithoutEnded = !finalOutput.trim() && !commandEndedSeen;
       if (!options.allowEmptyOutput && (isOnlyPromptResult || emptyWithoutEnded)) {
@@ -374,7 +375,7 @@ export async function executeTerminalCommand(
       session.lastCommandEndedAt = endedAt;
       session.pendingCommand = null;
       session.lastPrompt = promptAfter;
-      session.lastMode = modeAfter;
+      session.lastMode = modeAfter as TerminalMode;
       session.outputBuffer = finalOutput;
       session.pagerActive = false;
       session.confirmPromptActive = false;
@@ -417,13 +418,15 @@ export async function executeTerminalCommand(
       const currentPrompt = getPromptSafe(terminal);
       const { finished, reason } = checkIsCommandFinished(currentPrompt, session, commandEndedSeen);
 
+      const gracePeriodMs = sessionKind === "host" ? HOST_COMMAND_END_GRACE_MS : COMMAND_END_GRACE_MS;
+
       if (finished) {
         if (!commandEndedSeen && !promptFirstSeenAt) {
           promptFirstSeenAt = Date.now();
         }
 
         const graceElapsed = promptFirstSeenAt ? (Date.now() - promptFirstSeenAt) : 0;
-        if (commandEndedSeen || graceElapsed > COMMAND_END_GRACE_MS) {
+        if (commandEndedSeen || graceElapsed > gracePeriodMs) {
           finalize(true, endedStatus, reason);
           return;
         }
@@ -435,7 +438,7 @@ export async function executeTerminalCommand(
       commandEndGraceTimer = setTimeout(() => {
         commandEndGraceTimer = null;
         scheduleFinalizeAfterCommandEnd();
-      }, 500);
+      }, sessionKind === "host" ? 800 : 500);
     }
 
     function onOutput(_src: unknown, args: unknown): void {
@@ -498,6 +501,15 @@ export async function executeTerminalCommand(
       if (detectPager(chunk)) {
         session.pagerActive = true;
         pagerHandler.handleOutput(chunk);
+        
+        if (sessionKind !== "ios" && sessionKind !== "unknown") {
+          const hasPager = /--More--/i.test(chunk);
+          if (hasPager) {
+            finalize(true, endedStatus, "Pager detected in non-IOS session");
+            return;
+          }
+        }
+        
         if (options.autoAdvancePager !== false && pagerHandler.canContinue()) {
           try { terminal.enterChar(32, 0); resetStallTimer(); } catch {}
         }
@@ -612,15 +624,17 @@ export function createCommandExecutor(config: { commandTimeoutMs?: number; stall
     terminal: PTCommandLine,
     options: ExecutionOptions = {},
   ): Promise<CommandExecutionResult> {
+    const execOptions = {
+      ...options,
+      commandTimeoutMs: options.commandTimeoutMs ?? defaultCommandTimeout,
+      stallTimeoutMs: options.stallTimeoutMs ?? defaultStallTimeout,
+    };
+    
     return executeTerminalCommand(
       deviceName,
       command,
       terminal,
-      {
-        ...options,
-        commandTimeoutMs: options.commandTimeoutMs ?? defaultCommandTimeout,
-        stallTimeoutMs: options.stallTimeoutMs ?? defaultStallTimeout,
-      },
+      execOptions,
     );
   }
 
