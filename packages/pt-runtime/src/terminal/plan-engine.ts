@@ -142,7 +142,7 @@ export function createPlanEngine() {
           command: step.command,
           ok: result.ok,
           output: result.output,
-          status: result.status,
+          status: result.status ?? 0,
           durationMs: result.durationMs,
           error: result.error,
         });

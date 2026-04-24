@@ -55,6 +55,8 @@ export interface ExecIosPayload {
   parse?: boolean;
   ensurePrivileged?: boolean;
   targetMode?: string;
+  expectedMode?: string;
+  expectedPromptPattern?: string;
   allowPager?: boolean;
   allowConfirm?: boolean;
   dismissInitialDialog?: boolean;

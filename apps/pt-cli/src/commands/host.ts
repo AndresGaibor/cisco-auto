@@ -239,24 +239,31 @@ async function executeDeviceTerminalCommand(
             process.stdout.write(execResult.ok ? chalk.green('¡RECIBIDA!\n') : chalk.red('¡FALLÓ!\n'));
         }
 
-        const output = execResult.output ?? execResult.raw ?? execResult.evidence?.raw ?? "";
+        const output = execResult.raw ?? execResult.evidence?.raw ?? "";
 
         if (!execResult.ok) {
+            const events = Array.isArray(execResult.evidence?.events)
+                ? execResult.evidence.events
+                : [];
+
+            const failureEvent = events.find((event: any) => event?.error || event?.code);
+
             return createErrorResult('ios.exec', {
-                code: String(execResult.evidence?.status ?? 'IOS_EXEC_FAILED'),
-                message: 'Error en ejecución de comando IOS',
+                code: String(failureEvent?.code ?? 'IOS_EXEC_FAILED'),
+                message: String(failureEvent?.error ?? 'Error en ejecución de comando IOS'),
                 details: {
                     device: deviceName,
                     command,
                     output,
                     evidence: execResult.evidence,
+                    parsed: execResult.parsed,
                 }
             });
         }
 
         return createSuccessResult('ios.exec', {
             device: deviceName,
-            command: command,
+            command,
             output,
             success: true,
             verdict: {
@@ -264,7 +271,8 @@ async function executeDeviceTerminalCommand(
             },
             parsed: {
                 events: execResult.evidence?.events || []
-            }
+            },
+            evidence: execResult.evidence,
         });
     }
 

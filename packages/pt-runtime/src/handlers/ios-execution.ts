@@ -133,17 +133,43 @@ export async function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi):
   const raw = execResult.output;
   const sanitized = sanitizeTerminalOutput(undefined, raw) || raw;
 
-  if (execResult.ok || raw.trim().length > 0) {
+  const parsed = {
+    command: execResult.command,
+    startedAt: execResult.startedAt,
+    endedAt: execResult.endedAt,
+    durationMs: execResult.durationMs,
+    promptBefore: execResult.promptBefore,
+    promptAfter: execResult.promptAfter,
+    modeBefore: execResult.modeBefore,
+    modeAfter: execResult.modeAfter,
+    startedSeen: execResult.startedSeen,
+    endedSeen: execResult.endedSeen,
+    outputEvents: execResult.outputEvents,
+    confidence: execResult.confidence,
+    events: execResult.events,
+    warnings: execResult.warnings,
+  };
+
+  if (execResult.ok) {
     return createSuccessResult({
       output: sanitized,
       raw: sanitized,
       status: execResult.status,
       confidence: execResult.confidence,
-      parsed: {
+      parsed,
+    });
+  }
+
+  return createErrorResult(
+    execResult.error || `Command failed with status ${execResult.status}`,
+    execResult.code,
+    {
+      raw: sanitized || raw,
+      status: execResult.status ?? undefined,
+      parsed,
+      details: {
         command: execResult.command,
-        startedAt: execResult.startedAt,
-        endedAt: execResult.endedAt,
-        durationMs: execResult.durationMs,
+        status: execResult.status ?? undefined,
         promptBefore: execResult.promptBefore,
         promptAfter: execResult.promptAfter,
         modeBefore: execResult.modeBefore,
@@ -151,20 +177,7 @@ export async function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi):
         events: execResult.events,
         warnings: execResult.warnings,
       },
-    });
-  }
-  return createErrorResult(
-    execResult.error || `Command failed with status ${execResult.status}`,
-    execResult.code,
-    {
-      raw: raw,
-      details: {
-        command: execResult.command,
-        status: execResult.status,
-        events: execResult.events,
-        warnings: execResult.warnings,
-      },
-    }
+    },
   );
 }
 
@@ -319,7 +332,7 @@ export async function handlePing(payload: { device: string; target: string; time
     if (result.ok || result.output.trim().length > 0) {
       return createSuccessResult(result.output, { 
         raw: result.output, 
-        status: result.status,
+        status: result.status ?? undefined,
         parsed: {
           command: result.command,
           durationMs: result.durationMs,
@@ -365,28 +378,28 @@ export async function handleExecPc(payload: ExecPcPayload, api: PtRuntimeApi): P
     );
   }
 
-  if (result.ok || result.output.trim().length > 0) {
-    return createSuccessResult(
-      {
-        output: result.output,
-        outputLength: result.output.length,
-        preview: result.output.slice(0, 200),
-        status: result.status,
-      },
-      { 
-        raw: result.output, 
-        status: result.status, 
-        session: {
-          prompt: result.promptAfter,
-          mode: result.modeAfter,
-          paging: false,
-          awaitingConfirm: false,
-        }
-      },
-    );
-  }
+if (result.ok || result.output.trim().length > 0) {
+      return createSuccessResult(
+        {
+          output: result.output,
+          outputLength: result.output.length,
+          preview: result.output.slice(0, 200),
+          status: result.status ?? undefined,
+        },
+        { 
+          raw: result.output, 
+          status: result.status ?? undefined, 
+          session: {
+            prompt: result.promptAfter,
+            mode: result.modeAfter,
+            paging: false,
+            awaitingConfirm: false,
+          }
+        },
+      );
+    }
 
-  return createErrorResult("PC execution failed", result.status > 0 ? "COMMAND_FAILED" : "NO_OUTPUT", {
+  return createErrorResult("PC execution failed", (result.status ?? -1) > 0 ? "COMMAND_FAILED" : "NO_OUTPUT", {
     raw: result.output,
   });
 }

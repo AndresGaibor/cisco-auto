@@ -70,6 +70,34 @@ function detectHostMode(session: ExecInteractiveValue["session"]): boolean {
   return mode.includes("host") || mode === "pc" || mode === "server";
 }
 
+function normalizeRuntimeErrorStatus(status: unknown): number {
+  if (typeof status === "number" && Number.isFinite(status)) {
+    return status === 0 ? 1 : status;
+  }
+  return 1;
+}
+
+function isConfigureTerminalCommand(command: string): boolean {
+  const cmd = command.trim().toLowerCase();
+  return /^(conf|config|configure)(\s+t|\s+terminal)?$/.test(cmd);
+}
+
+function shouldEnsurePrivilegedForStep(args: {
+  isHost: boolean;
+  planTargetMode?: TerminalMode;
+  command: string;
+  stepIndex: number;
+}): boolean {
+  if (args.isHost) return false;
+  const cmd = args.command.trim().toLowerCase();
+  if (args.planTargetMode === "privileged-exec") return true;
+  if (isConfigureTerminalCommand(cmd)) return true;
+  if (args.planTargetMode === "global-config") {
+    return args.stepIndex === 0 && !isConfigureTerminalCommand(cmd);
+  }
+  return false;
+}
+
 async function detectDeviceType(bridge: FileBridgePort, deviceName: string): Promise<"host" | "ios" | "unknown"> {
   // Fuente primaria: listDevices directo desde PT (siemprevivo)
   try {
@@ -230,6 +258,13 @@ export function createRuntimeTerminalAdapter(
         allowConfirm: step.allowConfirm ?? false,
       };
 
+      const ensurePrivileged = shouldEnsurePrivilegedForStep({
+        isHost,
+        planTargetMode: plan.targetMode,
+        command,
+        stepIndex: i,
+      });
+
       const bridgeResult = await bridge.sendCommandAndWait<any>(
         handlerName,
         {
@@ -237,8 +272,10 @@ export function createRuntimeTerminalAdapter(
           device: plan.device,
           command,
           parse: false,
-          ensurePrivileged: plan.targetMode === "privileged-exec" || plan.targetMode === "global-config",
+          ensurePrivileged,
           targetMode: plan.targetMode,
+          expectedMode: step.expectMode,
+          expectedPromptPattern: step.expectPromptPattern,
           allowPager: stepPolicies.allowPager,
           allowConfirm: stepPolicies.allowConfirm,
           commandTimeoutMs: stepTimeout,
@@ -272,7 +309,7 @@ export function createRuntimeTerminalAdapter(
           "RUNTIME_TERMINAL_FAILED"
         );
 
-        const errorStatus = res?.status ?? 1;
+        const errorStatus = normalizeRuntimeErrorStatus(res?.status);
 
         events.push({
           stepIndex: i,
@@ -304,46 +341,46 @@ export function createRuntimeTerminalAdapter(
       }
 
       const parsedInfo = (res.parsed ?? {}) as {
-  promptBefore?: string;
-  promptAfter?: string;
-  modeBefore?: string;
-  modeAfter?: string;
-  warnings?: string[];
-};
+        promptBefore?: string;
+        promptAfter?: string;
+        modeBefore?: string;
+        modeAfter?: string;
+        warnings?: string[];
+      };
 
-const resolvedPromptBefore = String(
-  parsedInfo.promptBefore ??
-  res.session?.prompt ??
-  ""
-);
+      const resolvedPromptBefore = String(
+        parsedInfo.promptBefore ??
+          res.session?.prompt ??
+          "",
+      );
 
-const resolvedModeBefore = String(
-  parsedInfo.modeBefore ??
-  res.session?.mode ??
-  ""
-);
+      const resolvedModeBefore = String(
+        parsedInfo.modeBefore ??
+          res.session?.mode ??
+          "",
+      );
 
-const resolvedPromptAfter = String(
-  parsedInfo.promptAfter ??
-  res.session?.prompt ??
-  promptAfter ??
-  ""
-);
+      const resolvedPromptAfter = String(
+        parsedInfo.promptAfter ??
+          res.session?.prompt ??
+          promptAfter ??
+          "",
+      );
 
-const resolvedModeAfter = String(
-  parsedInfo.modeAfter ??
-  res.session?.mode ??
-  modeAfter ??
-  ""
-);
+      const resolvedModeAfter = String(
+        parsedInfo.modeAfter ??
+          res.session?.mode ??
+          modeAfter ??
+          "",
+      );
 
-if (i === 0) {
-  promptBefore = resolvedPromptBefore;
-  modeBefore = resolvedModeBefore;
-}
+      if (i === 0) {
+        promptBefore = resolvedPromptBefore;
+        modeBefore = resolvedModeBefore;
+      }
 
-promptAfter = resolvedPromptAfter;
-modeAfter = resolvedModeAfter;
+      promptAfter = resolvedPromptAfter;
+      modeAfter = resolvedModeAfter;
       aggregatedOutput += raw.endsWith("\n") ? raw : `${raw}\n`;
       finalStatus = status;
       finalParsed = res.parsed;

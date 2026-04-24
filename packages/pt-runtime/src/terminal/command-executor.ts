@@ -83,6 +83,7 @@ export interface CommandExecutionResult {
   outputEvents: number;
   confidence: string;
   warnings: string[];
+  events: TerminalEventRecord[];
   error?: string;
   code?: TerminalErrorCode;
 }
@@ -218,6 +219,7 @@ options: ExecutionOptions = {},
           modeBefore, modeAfter: modeBefore,
           startedSeen: false, endedSeen: false, outputEvents: 0,
           confidence: "failure", warnings: ["Device is powered off"],
+          events,
           error: "Device is powered off", code: TerminalErrors.SESSION_BROKEN,
         };
       }
@@ -232,6 +234,7 @@ options: ExecutionOptions = {},
       modeBefore, modeAfter: modeBefore,
       startedSeen: false, endedSeen: false, outputEvents: 0,
       confidence: "failure", warnings: [...session.warnings],
+      events,
       error: "Session is broken", code: TerminalErrors.SESSION_BROKEN,
     };
   }
@@ -403,6 +406,7 @@ if (!readyResult.ready) {
         outputEvents: outputEventsCount,
         confidence,
         warnings: finalWarnings,
+        events,
         error,
         code,
       });

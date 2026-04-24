@@ -157,7 +157,7 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
     return {
       ok: execResult.ok,
       output: execResult.output,
-      status: execResult.status,
+      status: execResult.status ?? 0,
       session: {
         mode: execResult.modeAfter as any,
         prompt: execResult.promptAfter,

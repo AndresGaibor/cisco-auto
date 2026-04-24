@@ -17,8 +17,27 @@ export interface ModeTransitionResult {
 
 function currentMode(terminal: PTCommandLine, deviceName: string): TerminalMode {
   const session = ensureSession(deviceName);
-  const promptMode = detectModeFromPrompt(terminal.getPrompt());
-  return promptMode !== "unknown" ? promptMode : session.lastMode;
+  const rawPrompt = terminal.getPrompt();
+  const rawMode = (terminal as any).getMode?.() ?? "";
+  const promptMode = detectModeFromPrompt(rawPrompt);
+  
+  if (promptMode !== "unknown") {
+    return promptMode;
+  }
+  
+  if (String(rawMode).toLowerCase() === "logout") {
+    return "logout" as TerminalMode;
+  }
+  
+  if (String(rawMode).toLowerCase() === "user") {
+    return "user-exec";
+  }
+  
+  if (String(rawMode).toLowerCase() === "enable") {
+    return "privileged-exec";
+  }
+  
+  return session.lastMode;
 }
 
 export function createModeGuard() {
@@ -129,7 +148,41 @@ export function createModeGuard() {
   async function ensurePrivilegedExec(deviceName: string, terminal: PTCommandLine): Promise<ModeTransitionResult> {
     await ensureNotInWizard(deviceName, terminal);
 
+    const session = ensureSession(deviceName);
     const before = currentMode(terminal, deviceName);
+    
+    if (String(before) === "logout") {
+      return { ok: true, fromMode: "user-exec" as TerminalMode, toMode: "user-exec" as TerminalMode };
+    }
+    
+    if (before === "unknown" && session.lastMode !== "unknown") {
+      const effectiveBefore = session.lastMode;
+      if (effectiveBefore === "privileged-exec" || isHostMode(effectiveBefore)) {
+        return { ok: true, fromMode: effectiveBefore, toMode: effectiveBefore };
+      }
+      if (isConfigMode(effectiveBefore)) {
+        const escaped = await escapeToExec(deviceName, terminal);
+        if (!escaped.ok) return escaped;
+        const after = currentMode(terminal, deviceName);
+        if (after === "privileged-exec") return escaped;
+      }
+      const modeNow = currentMode(terminal, deviceName);
+      if (modeNow === "user-exec") {
+        const result = await executor.executeCommand(deviceName, "enable", terminal, {
+          commandTimeoutMs: 5000,
+          stallTimeoutMs: 2000,
+        });
+        const after = detectModeFromPrompt(terminal.getPrompt());
+        return {
+          ok: result.ok && isPrivilegedMode(after),
+          fromMode: effectiveBefore,
+          toMode: after,
+          error: result.ok && isPrivilegedMode(after) ? undefined : result.error ?? "Failed to enter privileged exec mode",
+          warnings: result.warnings,
+        };
+      }
+    }
+    
     if (before === "privileged-exec" || isHostMode(before)) {
       return { ok: true, fromMode: before, toMode: before };
     }

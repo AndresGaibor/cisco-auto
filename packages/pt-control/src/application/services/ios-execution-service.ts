@@ -62,6 +62,22 @@ export class IosExecutionService {
     this.sessions.delete(device);
   }
 
+  private inferExpectedModeAfterCommand(command: string): TerminalMode | undefined {
+    const cmd = command.trim().toLowerCase();
+
+    if (/^(conf|config|configure)(\s+t|\s+terminal)?$/.test(cmd)) {
+      return "global-config";
+    }
+
+    if (/^interface\s+/.test(cmd)) return "config-if";
+    if (/^line\s+/.test(cmd)) return "config-line";
+    if (/^router\s+/.test(cmd)) return "config-router";
+    if (/^vlan\s+\d+/.test(cmd)) return "config-vlan";
+    if (/^end$/.test(cmd) || /^\^z$/.test(cmd)) return "privileged-exec";
+    if (/^exit$/.test(cmd)) return undefined;
+    return undefined;
+  }
+
   private createTerminalBridgeHandler(device: string) {
     return {
       enterCommand: async (cmd: string): Promise<[number, string]> => {
@@ -121,16 +137,23 @@ export class IosExecutionService {
     events?: any[];
     parsed?: any;
   }): IosExecutionEvidence {
-    // Los eventos reales del kernel están en result.parsed.events
-    const kernelEvents = result.parsed?.events || [];
-    
+    const parsedEvents = Array.isArray(result.parsed?.events)
+      ? result.parsed.events
+      : [];
+
+    const adapterEvents = Array.isArray(result.events)
+      ? result.events
+      : [];
+
+    const events = parsedEvents.length > 0 ? parsedEvents : adapterEvents;
+
     return {
       source: "terminal",
       raw: result.raw ?? "",
       status: result.status,
       mode: result.modeAfter,
       prompt: result.promptAfter,
-      events: kernelEvents.length > 0 ? kernelEvents : result.events,
+      events,
       completionReason: result.status === 0 ? "command-ended" : undefined,
       paging: result.warnings.some((w) => w.toLowerCase().includes("paginación")),
       awaitingConfirm: result.warnings.some((w) => w.toLowerCase().includes("confirmación")),
@@ -164,11 +187,19 @@ export class IosExecutionService {
     timeout = 5000,
   ): Promise<{ raw: string; parsed?: unknown }> {
     const { timeouts, policies } = this.buildPlanDefaults();
+    const expectedMode = this.inferExpectedModeAfterCommand(command);
     const plan: TerminalPlan = {
       id: this.generateId(),
       device,
       targetMode: "privileged-exec",
-      steps: [{ kind: "command", command, timeout }],
+      steps: [
+        {
+          kind: "command",
+          command,
+          timeout,
+          expectMode: expectedMode,
+        },
+      ],
       timeouts,
       policies,
     };
@@ -185,11 +216,19 @@ export class IosExecutionService {
     timeout = 5000,
   ): Promise<IosExecutionSuccess<T>> {
     const { timeouts, policies } = this.buildPlanDefaults();
+    const expectedMode = this.inferExpectedModeAfterCommand(command);
     const plan: TerminalPlan = {
       id: this.generateId(),
       device,
       targetMode: "privileged-exec",
-      steps: [{ kind: "command", command, timeout }],
+      steps: [
+        {
+          kind: "command",
+          command,
+          timeout,
+          expectMode: expectedMode,
+        },
+      ],
       timeouts,
       policies,
     };
@@ -212,12 +251,20 @@ export class IosExecutionService {
     const { timeouts, policies } = this.buildPlanDefaults();
     const timeout = options?.timeout ?? 30000;
     const targetMode: TerminalMode = options?.ensurePrivileged ? "privileged-exec" : "user-exec";
+    const expectedMode = this.inferExpectedModeAfterCommand(command);
 
     const plan: TerminalPlan = {
       id: this.generateId(),
       device,
       targetMode,
-      steps: [{ kind: "command", command, timeout }],
+      steps: [
+        {
+          kind: "command",
+          command,
+          timeout,
+          expectMode: expectedMode,
+        },
+      ],
       timeouts,
       policies,
     };
@@ -243,9 +290,24 @@ export class IosExecutionService {
 
     const steps: TerminalPlan["steps"] = [
       { kind: "ensureMode" as const, expectMode: "privileged-exec" },
-      { kind: "command" as const, command: "configure terminal", timeout: configStepTimeoutMs },
-      ...commands.map((cmd) => ({ kind: "command" as const, command: cmd, timeout: configStepTimeoutMs })),
-      { kind: "command" as const, command: "end", timeout: configStepTimeoutMs },
+      {
+        kind: "command" as const,
+        command: "configure terminal",
+        timeout: configStepTimeoutMs,
+        expectMode: "global-config",
+      },
+      ...commands.map((cmd) => ({
+        kind: "command" as const,
+        command: cmd,
+        timeout: configStepTimeoutMs,
+        expectMode: this.inferExpectedModeAfterCommand(cmd),
+      })),
+      {
+        kind: "command" as const,
+        command: "end",
+        timeout: configStepTimeoutMs,
+        expectMode: "privileged-exec",
+      },
     ];
 
     if (options?.save) {
