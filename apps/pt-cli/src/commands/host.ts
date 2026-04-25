@@ -221,6 +221,35 @@ function createHostHistoryCommand(): Command {
   return cmd;
 }
 
+function getErrorConsoleOutput(result: CliResult<any>): string {
+  const details = result.error?.details as any;
+
+  return String(
+    details?.output ??
+    details?.evidence?.raw ??
+    details?.parsed?.raw ??
+    details?.parsed?.output ??
+    ""
+  );
+}
+
+function printFailedConsoleOutput(result: CliResult<any>): void {
+  const details = result.error?.details as any;
+  const device = details?.device ?? result.data?.device ?? "dispositivo";
+  const output = getErrorConsoleOutput(result);
+
+  console.error(`\n📟 SALIDA DE CONSOLA (${device}):`);
+  console.error('━'.repeat(60));
+
+  if (output.trim()) {
+    console.error(output);
+  } else {
+    console.error(chalk.italic.gray('  (No se capturó salida de consola para este error)'));
+  }
+
+  console.error('━'.repeat(60));
+}
+
 /**
  * Ejecuta un comando en un dispositivo detectando automáticamente si es IOS o Host.
  */
@@ -424,7 +453,8 @@ function createHostExecCommand(): Command {
       }
 
       if (!result.ok) {
-        console.error(`\n❌ Error: ${result.error?.message || 'Error desconocido'}`);
+        printFailedConsoleOutput(result);
+        console.error(`❌ Error: ${result.error?.message || 'Error desconocido'}`);
         process.exit(1);
       }
     });
