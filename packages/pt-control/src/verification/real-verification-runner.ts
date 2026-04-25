@@ -359,17 +359,29 @@ export async function executeScenario(
     }
 
     // Cleanup con timeout (no afecta outcome, solo warnings)
-    const cleanupResult = await withTimeout(
-      harness.cleanupScenario(scenario.id),
-      timeoutForPhase("cleanup"),
-      `cleanup(${scenario.id})`
-    );
-    if (!cleanupResult.ok) {
-      result.warnings.push(`Cleanup timeout/error: ${cleanupResult.error}`);
-      result.contaminated = true;
-    } else if (!cleanupResult.value.ok) {
-      result.warnings.push(...cleanupResult.value.warnings);
-      result.contaminated = true;
+    if (scenario.cleanupMode === "preserve-topology") {
+      try {
+        await scenario.cleanup({
+          controller: harness.getController(),
+          runId: state.runId,
+          runStore: store,
+        } as any);
+      } catch (error) {
+        result.warnings.push(`Scenario cleanup warning: ${String(error)}`);
+      }
+    } else {
+      const cleanupResult = await withTimeout(
+        harness.cleanupScenario(scenario.id),
+        timeoutForPhase("cleanup"),
+        `cleanup(${scenario.id})`
+      );
+      if (!cleanupResult.ok) {
+        result.warnings.push(`Cleanup timeout/error: ${cleanupResult.error}`);
+        result.contaminated = true;
+      } else if (!cleanupResult.value.ok) {
+        result.warnings.push(...cleanupResult.value.warnings);
+        result.contaminated = true;
+      }
     }
   } catch (e) {
     result.outcome = "aborted";

@@ -36,7 +36,8 @@
     "pt:verify:real:ipv6-core": "bun run packages/pt-control/src/verification/cli/pt-real-verify-cli.ts --profile ipv6-core",
     "pt:verify:real:hsrp-core": "bun run packages/pt-control/src/verification/cli/pt-real-verify-cli.ts --profile hsrp-core",
     "pt:verify:real:wireless-core": "bun run packages/pt-control/src/verification/cli/pt-real-verify-cli.ts --profile wireless-core",
-    "pt:verify:real:terminal-regression": "bun run packages/pt-control/src/verification/cli/pt-real-verify-cli.ts --profile terminal-regression"
+    "pt:verify:real:terminal-regression": "bun run packages/pt-control/src/verification/cli/pt-real-verify-cli.ts --profile terminal-regression",
+    "pt:verify:real:terminal-regression-full": "PT_TERMINAL_REGRESSION_FULL=1 bun run packages/pt-control/src/verification/cli/pt-real-verify-cli.ts --profile terminal-regression"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

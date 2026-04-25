@@ -19,6 +19,7 @@ export interface TerminalRegressionCase {
   expectedErrorIncludes?: string[];
   maxDurationMs: number;
   tier?: "smoke" | "full";
+  unstable?: boolean;
 }
 
 export const terminalRegressionCases: TerminalRegressionCase[] = [
@@ -275,10 +276,11 @@ export const terminalRegressionCases: TerminalRegressionCase[] = [
     preCommands: ["enable"],
     command: "copy running-config startup-config",
     expectedOk: true,
-    tags: ["ios", "config", "confirm"],
+    tags: ["ios", "config", "confirm", "unstable"],
     expectedOutputIncludes: ["Destination filename"],
     maxDurationMs: 30000,
     tier: "full",
+    unstable: true,
   },
   {
     id: "ios-write-memory",
@@ -327,17 +329,19 @@ export const terminalRegressionCases: TerminalRegressionCase[] = [
   },
   {
     id: "ios-ambiguous",
-    description: "comando ambiguo genera error",
+    description: "comando ambiguo genera error cuando PT/modelo lo soporte",
     device: "ABEJITA",
     deviceKind: "ios",
     preCommands: ["enable"],
     command: "show i",
     expectedOk: false,
-    tags: ["ios", "semantic-error"],
+    tags: ["ios", "semantic-error", "unstable"],
     expectedErrorCode: "IOS_AMBIGUOUS_COMMAND",
     expectedErrorIncludes: ["% Ambiguous command"],
     postCommands: [],
     maxDurationMs: 10000,
+    tier: "full",
+    unstable: true,
   },
   {
     id: "ios-show-running-config-auto-enable",
@@ -366,7 +370,7 @@ export const terminalRegressionCases: TerminalRegressionCase[] = [
     command: "ipconfig /all",
     expectedOk: true,
     tags: ["host", "show"],
-    expectedOutputIncludes: ["IP Address", "Subnet Mask"],
+    expectedOutputIncludes: ["IPv4 Address", "Subnet Mask"],
     maxDurationMs: 10000,
   },
   {
@@ -410,15 +414,16 @@ export const terminalRegressionCases: TerminalRegressionCase[] = [
   // Edge cases
   // ========================================================================
   {
-    id: "ios-empty-output",
-    description: "comando que devuelve output limpio sin errores",
+    id: "ios-short-output",
+    description: "comando show valido de salida corta en Catalyst 2960",
     device: "ABEJITA",
     deviceKind: "ios",
     preCommands: ["enable"],
-    command: "show processes cpu",
+    command: "show vlan brief",
     expectedOk: true,
     tags: ["ios", "show", "short-output"],
-    maxDurationMs: 10000,
+    expectedOutputIncludes: ["VLAN", "Name", "Status"],
+    maxDurationMs: 15000,
   },
   {
     id: "ios-show-log",

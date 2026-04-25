@@ -522,6 +522,33 @@ export async function handlePing(payload: { device: string; target: string; time
   }
 }
 
+async function stabilizeHostPrompt(terminal: any): Promise<void> {
+  try {
+    terminal.enterChar?.(3, 0);
+  } catch {}
+
+  try {
+    terminal.enterChar?.(13, 0);
+  } catch {}
+
+  try {
+    terminal.flush?.();
+  } catch {}
+
+  await new Promise((resolve) => setTimeout(resolve, 250));
+}
+
+function hostEchoLooksTruncated(output: string, expectedCommand: string): boolean {
+  const expected = expectedCommand.trim().toLowerCase();
+  const text = String(output ?? "").toLowerCase();
+
+  if (expected.length < 2) return false;
+
+  const withoutFirstChar = expected.slice(1);
+
+  return text.includes(withoutFirstChar) && !text.includes(expected);
+}
+
 export async function handleExecPc(payload: ExecPcPayload, api: PtRuntimeApi): Promise<PtResult> {
   const deviceName = payload.device;
   const deviceRef = api.getDeviceByName(deviceName);
@@ -537,20 +564,36 @@ export async function handleExecPc(payload: ExecPcPayload, api: PtRuntimeApi): P
   const isLongRunningCommand = cmd.startsWith("ping") || cmd.startsWith("tracert") || cmd.startsWith("trace");
   const commandTimeoutMs = isLongRunningCommand ? (payload.timeoutMs ?? 60000) : (payload.timeoutMs ?? 30000);
 
+  await stabilizeHostPrompt(terminal);
+
   const executor = createCommandExecutor({
     commandTimeoutMs,
     stallTimeoutMs: 15000,
   });
 
-  const result = await executor.executeCommand(
+  let result = await executor.executeCommand(
     deviceName,
     payload.command,
     terminal,
     {
       commandTimeoutMs,
-      autoAdvancePager: true
+      autoAdvancePager: true,
     }
   );
+
+  if (hostEchoLooksTruncated(result.output, payload.command)) {
+    await stabilizeHostPrompt(terminal);
+
+    result = await executor.executeCommand(
+      deviceName,
+      payload.command,
+      terminal,
+      {
+        commandTimeoutMs,
+        autoAdvancePager: true,
+      }
+    );
+  }
 
   if (typeof (api as any).dprint === "function") {
     (api as any).dprint(

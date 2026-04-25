@@ -31,6 +31,12 @@ export interface RealScenarioDefinition {
   verifyTimeoutMs?: number;
   cleanupTimeoutMs?: number;
 
+  /**
+   * clear-topology: cleanup destructivo, útil para escenarios que crean laboratorios.
+   * preserve-topology: no limpia topología; útil para tests contra labs existentes.
+   */
+  cleanupMode?: "clear-topology" | "preserve-topology";
+
   setup: SetupFn;
   execute: ExecuteFn;
   verify: VerifyFn;

@@ -321,6 +321,8 @@ export const terminalRegressionScenario: RealScenarioDefinition = {
   profile: ["terminal-regression", "smoke"],
   dependsOn: [],
 
+  cleanupMode: "preserve-topology",
+
   timeoutMs: 10 * 60 * 1000,
   executeTimeoutMs: 10 * 60 * 1000,
   setupTimeoutMs: 60 * 1000,
@@ -359,6 +361,15 @@ export const terminalRegressionScenario: RealScenarioDefinition = {
 
     const warnings: string[] = [];
 
+    const isFullRun = process.env.PT_TERMINAL_REGRESSION_FULL === "1";
+
+    const casesToRun = terminalRegressionCases.filter((testCase) => {
+      if (isFullRun) return true;
+      if (testCase.tier === "full") return false;
+      if (testCase.unstable) return false;
+      return true;
+    });
+
     function writePartialResults(): void {
       store.writeStepArtifact(
         ctx.runId,
@@ -369,7 +380,7 @@ export const terminalRegressionScenario: RealScenarioDefinition = {
       );
     }
 
-    for (const testCase of terminalRegressionCases) {
+    for (const testCase of casesToRun) {
       let caseResult: NormalizedCommandResult | null = null;
 
       try {
