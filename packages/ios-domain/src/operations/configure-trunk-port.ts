@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { CapabilitySet } from "../capabilities/capability-set.js";
-import { InterfaceName, VlanId, InterfaceDescription } from '@cisco-auto/kernel/domain/ios/value-objects';
+import { InterfaceName, VlanId, InterfaceDescription } from '@cisco-auto/ios-primitives/value-objects';
 import type { CommandPlan } from "./command-plan.js";
 import { CommandPlanBuilder } from "./command-plan.js";
 

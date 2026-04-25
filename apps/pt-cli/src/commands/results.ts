@@ -1,15 +1,35 @@
 #!/usr/bin/env bun
 /**
  * Comando results - Gestionar resultados de comandos en ~/pt-dev/
- * Migrado al patrón runCommand con CliResult
+ *
+ * CLI delgada:
+ * - parsea flags
+ * - pide confirmación
+ * - renderiza
+ * - delega lectura/parsing/limpieza a pt-control/application/results
  */
 
 import { Command } from "commander";
-import { resolve, join } from "path";
-import { homedir } from "os";
 import chalk from "chalk";
-import { existsSync, readdirSync, statSync, readFileSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { createInterface } from "node:readline/promises";
+import { stdin as input, stdout as output } from "node:process";
+
+import {
+  cleanResults,
+  formatBytes,
+  inspectPendingResults,
+  listFailedResults,
+  listResults,
+  planCleanResults,
+  showResult,
+  viewResult,
+  type ResultsCleanResult,
+  type ResultsFailedResult,
+  type ResultsListResult,
+  type ResultsPendingResult,
+  type ResultsShowResult,
+  type ResultsViewResult,
+} from "@cisco-auto/pt-control/application/results";
 
 import type { CliResult } from "../contracts/cli-result.js";
 import { createSuccessResult, createErrorResult } from "../contracts/cli-result.js";
@@ -19,6 +39,7 @@ import type { GlobalFlags } from "../flags.js";
 import { runCommand } from "../application/run-command.js";
 import { renderCliResult } from "../ux/renderers.js";
 import { printExamples } from "../ux/examples.js";
+import { getDefaultDevDir } from "../system/paths.js";
 
 const RESULTS_EXAMPLES = [
   { command: "pt results list", description: "Listar archivos de resultados" },
@@ -40,41 +61,207 @@ const RESULTS_META: CommandMeta = {
   supportsExplain: false,
 };
 
-interface ResultFileInfo {
-  name: string;
-  mtime: Date;
-  size: number;
+function makeFlags(overrides: Partial<GlobalFlags> = {}): GlobalFlags {
+  const json = overrides.json ?? process.argv.includes("--json") ?? false;
+
+  return {
+    json,
+    jq: null,
+    output: json ? "json" : "text",
+    verbose: process.argv.includes("--verbose"),
+    quiet: process.argv.includes("--quiet"),
+    trace: process.argv.includes("--trace"),
+    tracePayload: false,
+    traceResult: false,
+    traceDir: null,
+    traceBundle: false,
+    traceBundlePath: null,
+    sessionId: null,
+    examples: process.argv.includes("--examples"),
+    schema: false,
+    explain: process.argv.includes("--explain"),
+    plan: process.argv.includes("--plan"),
+    verify: false,
+    ...overrides,
+  };
 }
 
-interface ResultsListResult {
-  files: ResultFileInfo[];
-  total: number;
-}
+function printResultOrExit<T>(result: CliResult<T>, flags: GlobalFlags): void {
+  const rendered = renderCliResult(result, flags.output);
 
-interface ResultsViewResult {
-  content: unknown;
-  file: string;
-}
-
-interface ResultsCleanResult {
-  deleted: number;
-  kept: number;
-}
-
-function getDefaultDevDir(): string {
-  if (process.env.PT_DEV_DIR) {
-    return process.env.PT_DEV_DIR;
+  if (!flags.quiet || !result.ok) {
+    console.log(rendered);
   }
-  const home = homedir();
-  if (process.platform === "win32") {
-    return resolve(process.env.USERPROFILE || home, "pt-dev");
+
+  if (!result.ok) {
+    process.exit(1);
   }
-  return resolve(home, "pt-dev");
 }
 
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes}B`;
-  return `${(bytes / 1024).toFixed(1)}KB`;
+function renderResultsList(result: CliResult<ResultsListResult>, flags: GlobalFlags): void {
+  if (flags.json) {
+    printResultOrExit(result, flags);
+    return;
+  }
+
+  if (!result.ok || !result.data) {
+    printResultOrExit(result, flags);
+    return;
+  }
+
+  console.log(`\n📁 Resultados en ${result.data.resultsDir} (${result.data.total} total):\n`);
+
+  result.data.files.forEach((file, index) => {
+    const date = file.mtimeIso.slice(0, 19).replace("T", " ");
+    console.log(
+      `${index + 1}. ${chalk.cyan(file.name)} ${chalk.gray(date)} ${chalk.yellow(formatBytes(file.size))}`,
+    );
+  });
+
+  console.log("");
+}
+
+function renderShowResult(result: CliResult<ResultsShowResult>, flags: GlobalFlags): void {
+  if (flags.json) {
+    printResultOrExit(result, flags);
+    return;
+  }
+
+  if (!result.ok || !result.data) {
+    printResultOrExit(result, flags);
+    return;
+  }
+
+  const envelope = result.data.envelope;
+  const value =
+    envelope.value && typeof envelope.value === "object"
+      ? (envelope.value as Record<string, unknown>)
+      : undefined;
+
+  console.log("");
+  console.log(`═══ Resultado: ${result.data.commandId} ═══`);
+  console.log(`Archivo   : ${result.data.file}`);
+  console.log(`Status    : ${String(envelope.status ?? "unknown")}`);
+  console.log(`OK        : ${String(envelope.ok)}`);
+
+  if (typeof envelope.startedAt === "number") {
+    console.log(`Inicio    : ${new Date(envelope.startedAt).toISOString()}`);
+  }
+
+  if (typeof envelope.completedAt === "number") {
+    console.log(`Fin       : ${new Date(envelope.completedAt).toISOString()}`);
+  }
+
+  if (typeof envelope.startedAt === "number" && typeof envelope.completedAt === "number") {
+    console.log(`Duración  : ${envelope.completedAt - envelope.startedAt}ms`);
+  }
+
+  if (envelope.protocolVersion) {
+    console.log(`Protocolo : v${String(envelope.protocolVersion)}`);
+  }
+
+  if (value) {
+    if (value.error) console.log(`Error     : ${String(value.error)}`);
+    if (value.code) console.log(`Código    : ${String(value.code)}`);
+    if (value.device) console.log(`Dispositivo: ${String(value.device)}`);
+    if (value.source) console.log(`Fuente    : ${String(value.source)}`);
+
+    const session = value.session && typeof value.session === "object"
+      ? (value.session as Record<string, unknown>)
+      : undefined;
+
+    if (session?.mode) console.log(`Modo IOS  : ${String(session.mode)}`);
+    if (session?.prompt) console.log(`Prompt    : ${String(session.prompt)}`);
+  }
+
+  if (result.data.trace) {
+    console.log("\nPT-Side Trace:");
+    for (const [key, value] of Object.entries(result.data.trace)) {
+      console.log(`  ${key}: ${JSON.stringify(value)}`);
+    }
+  }
+
+  console.log("");
+}
+
+function renderFailedResults(result: CliResult<ResultsFailedResult>, flags: GlobalFlags): void {
+  if (flags.json) {
+    printResultOrExit(result, flags);
+    return;
+  }
+
+  if (!result.ok || !result.data) {
+    printResultOrExit(result, flags);
+    return;
+  }
+
+  console.log("");
+  console.log(`═══ Resultados fallidos (${result.data.count}) ═══`);
+  console.log("");
+
+  for (const failed of result.data.failed) {
+    const date = failed.completedAtIso?.slice(0, 19) ?? "unknown";
+    console.log(`  ✗ ${failed.name}  [${date}]`);
+    if (failed.error) {
+      console.log(`    → ${failed.error.slice(0, 100)}`);
+    }
+  }
+
+  console.log("");
+}
+
+function renderPending(result: CliResult<ResultsPendingResult>, flags: GlobalFlags): void {
+  if (flags.json) {
+    printResultOrExit(result, flags);
+    return;
+  }
+
+  if (!result.ok || !result.data) {
+    printResultOrExit(result, flags);
+    return;
+  }
+
+  console.log("");
+  console.log("═══ Estado de cola ═══");
+  console.log("");
+  console.log(`  En cola (commands/)     : ${result.data.queueCount}`);
+  console.log(`  En vuelo (in-flight/)   : ${result.data.inFlightCount}`);
+  console.log(`  Deferred (journal)      : ${result.data.pendingDeferred}`);
+  console.log(`  Dead-letter             : ${result.data.deadLetterCount}`);
+
+  for (const warning of result.data.warnings) {
+    console.log("");
+    console.log(`  ⚠️  ${warning}`);
+  }
+
+  if (result.advice?.length) {
+    console.log("");
+    result.advice.forEach((item) => console.log(`  → ${item}`));
+  }
+
+  console.log("");
+}
+
+async function confirmDeletion(count: number, names: string[]): Promise<boolean> {
+  console.log(`\n🗑️  Se eliminarán ${count} archivos:`);
+
+  names.slice(0, 5).forEach((name) => console.log(`   - ${name}`));
+
+  if (count > 5) {
+    console.log(`   ... y ${count - 5} más`);
+  }
+
+  console.log("");
+
+  const rl = createInterface({ input, output });
+
+  try {
+    const answer = await rl.question("¿Continuar? (s/n): ");
+    const normalized = answer.trim().toLowerCase();
+    return normalized === "s" || normalized === "si" || normalized === "sí" || normalized === "y";
+  } finally {
+    rl.close();
+  }
 }
 
 export function createResultsCommand(): Command {
@@ -89,48 +276,27 @@ export function createResultsCommand(): Command {
     .option("--explain", "Explicar", false)
     .option("--plan", "Mostrar plan", false)
     .action(async (options) => {
-      const globalExamples = process.argv.includes("--examples");
-      const globalExplain = process.argv.includes("--explain");
-      const globalPlan = process.argv.includes("--plan");
+      const flags = makeFlags({ json: options.json === true });
 
-      if (globalExamples) {
+      if (options.examples) {
         console.log(printExamples(RESULTS_META));
         return;
       }
 
-      if (globalExplain) {
+      if (options.explain) {
         console.log(RESULTS_META.longDescription ?? RESULTS_META.summary);
         return;
       }
 
-      if (globalPlan) {
+      if (options.plan) {
         console.log("Plan de ejecución:");
-        console.log("  1. Leer directorio ~/pt-dev/results");
-        console.log("  2. Filtrar archivos cmd_*.json");
-        console.log("  3. Ordenar por fecha");
-        console.log("  4. Mostrar lista");
+        console.log("  1. Resolver directorio pt-dev desde configuración local");
+        console.log("  2. Leer directorio results/");
+        console.log("  3. Filtrar archivos cmd_*.json");
+        console.log("  4. Ordenar por fecha descendente");
+        console.log("  5. Mostrar lista");
         return;
       }
-
-      const flags: GlobalFlags = {
-        json: false,
-        jq: null,
-        output: "text",
-        verbose: false,
-        quiet: false,
-        trace: false,
-        tracePayload: false,
-        traceResult: false,
-        traceDir: null,
-        traceBundle: false,
-        traceBundlePath: null,
-        sessionId: null,
-        examples: globalExamples,
-        schema: false,
-        explain: globalExplain,
-        plan: globalPlan,
-        verify: false,
-      };
 
       const result = await runCommand<ResultsListResult>({
         action: "results.list",
@@ -138,65 +304,22 @@ export function createResultsCommand(): Command {
         flags,
         payloadPreview: { num: options.num, json: options.json },
         execute: async (): Promise<CliResult<ResultsListResult>> => {
-          try {
-            const devDir = getDefaultDevDir();
-            const resultsDir = resolve(devDir, "results");
+          const execution = await listResults({
+            devDir: getDefaultDevDir(),
+            limit: Number.parseInt(options.num, 10) || 20,
+          });
 
-            let files: string[] = [];
-            try {
-              files = readdirSync(resultsDir);
-            } catch {
-              return createErrorResult("results.list", {
-                message: `Directorio de resultados no encontrado: ${resultsDir}`,
-              }) as CliResult<ResultsListResult>;
-            }
-
-            const fileInfos: ResultFileInfo[] = [];
-            for (const f of files) {
-              if (!f.startsWith("cmd_") || !f.endsWith(".json")) continue;
-              const filePath = resolve(resultsDir, f);
-              try {
-                const stats = statSync(filePath);
-                fileInfos.push({ name: f, mtime: stats.mtime, size: stats.size });
-              } catch {
-                // Skip files we can't statSync
-              }
-            }
-
-            fileInfos.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
-
-            const limit = parseInt(options.num) || 20;
-            const limited = fileInfos.slice(0, limit);
-
-            return createSuccessResult("results.list", {
-              files: limited,
-              total: fileInfos.length,
-            });
-          } catch (error) {
-            return createErrorResult("results.list", {
-              message: error instanceof Error ? error.message : String(error),
-            }) as CliResult<ResultsListResult>;
+          if (!execution.ok) {
+            return createErrorResult("results.list", execution.error);
           }
+
+          return createSuccessResult("results.list", execution.data, {
+            advice: execution.advice,
+          });
         },
       });
 
-      const output = renderCliResult(result, flags.output);
-      if (!flags.quiet || !result.ok) console.log(output);
-
-      if (result.ok && result.data && !options.json) {
-        const devDir = getDefaultDevDir();
-        const resultsDir = resolve(devDir, "results");
-        console.log(`\n📁 Resultados en ${resultsDir} (${result.data.total} total):\n`);
-        result.data.files.forEach((f, i) => {
-          const date = f.mtime.toISOString().slice(0, 19).replace("T", " ");
-          console.log(
-            `${i + 1}. ${chalk.cyan(f.name)} ${chalk.gray(date)} ${chalk.yellow(formatSize(f.size))}`,
-          );
-        });
-        console.log("");
-      }
-
-      if (!result.ok) process.exit(1);
+      renderResultsList(result, flags);
     });
 
   cmd
@@ -209,153 +332,93 @@ export function createResultsCommand(): Command {
     .option("--explain", "Explicar", false)
     .option("--plan", "Mostrar plan", false)
     .action(async (options) => {
-      const globalExamples = process.argv.includes("--examples");
-      const globalExplain = process.argv.includes("--explain");
-      const globalPlan = process.argv.includes("--plan");
+      const flags = makeFlags();
 
-      if (globalExamples) {
+      if (options.examples) {
         console.log(printExamples(RESULTS_META));
         return;
       }
 
-      if (globalPlan) {
-        console.log("Plan de ejecución:");
-        console.log(
-          `  1. Mantener últimos ${options.keep} archivos (o últimos ${options.days} días)`,
-        );
-        console.log("  2. Solicitar confirmación si no es --force");
-        console.log("  3. Eliminar archivos antiguos");
+      if (options.explain) {
+        console.log("Limpia archivos cmd_*.json antiguos del directorio results/.");
         return;
       }
 
-      const flags: GlobalFlags = {
-        json: false,
-        jq: null,
-        output: "text",
-        verbose: false,
-        quiet: false,
-        trace: false,
-        tracePayload: false,
-        traceResult: false,
-        traceDir: null,
-        traceBundle: false,
-        traceBundlePath: null,
-        sessionId: null,
-        examples: globalExamples,
-        schema: false,
-        explain: globalExplain,
-        plan: globalPlan,
-        verify: false,
-      };
+      const keep = Number.parseInt(options.keep, 10) || 50;
+      const days = options.days ? Number.parseInt(options.days, 10) : undefined;
+      const devDir = getDefaultDevDir();
 
-      type CleanResult = { deleted: number; kept: number };
-      const result = await runCommand<CleanResult>({
+      const plan = await planCleanResults({ devDir, keep, days });
+
+      if (!plan.ok) {
+        const result = createErrorResult<ResultsCleanResult>("results.clean", plan.error);
+        printResultOrExit(result, flags);
+        return;
+      }
+
+      if (options.plan) {
+        console.log("Plan de ejecución:");
+        console.log(`  1. Directorio: ${plan.data.resultsDir}`);
+        console.log(`  2. Modo: ${plan.data.mode}`);
+        console.log(`  3. Archivos totales: ${plan.data.total}`);
+        console.log(`  4. Archivos a eliminar: ${plan.data.candidates.length}`);
+        console.log(`  5. Archivos a mantener: ${plan.data.kept}`);
+        return;
+      }
+
+      if (plan.data.candidates.length === 0) {
+        const result = createSuccessResult<ResultsCleanResult>(
+          "results.clean",
+          {
+            deleted: 0,
+            kept: plan.data.total,
+            attempted: 0,
+            skipped: 0,
+            resultsDir: plan.data.resultsDir,
+          },
+          { advice: ["No hay archivos para eliminar"] },
+        );
+
+        printResultOrExit(result, flags);
+        return;
+      }
+
+      if (!options.force) {
+        const confirmed = await confirmDeletion(
+          plan.data.candidates.length,
+          plan.data.candidates.map((candidate) => candidate.name),
+        );
+
+        if (!confirmed) {
+          const result = createErrorResult<ResultsCleanResult>("results.clean", {
+            code: "RESULTS_CLEAN_CANCELLED",
+            message: "Operación cancelada por el usuario",
+          });
+
+          printResultOrExit(result, flags);
+          return;
+        }
+      }
+
+      const result = await runCommand<ResultsCleanResult>({
         action: "results.clean",
         meta: RESULTS_META,
         flags,
-        payloadPreview: { keep: options.keep, days: options.days, force: options.force },
-        execute: async (): Promise<CliResult<CleanResult>> => {
-          try {
-            const devDir = getDefaultDevDir();
-            const resultsDir = resolve(devDir, "results");
+        payloadPreview: { keep, days, force: options.force },
+        execute: async (): Promise<CliResult<ResultsCleanResult>> => {
+          const execution = await cleanResults({ devDir, keep, days });
 
-            let files: string[] = [];
-            try {
-              files = readdirSync(resultsDir);
-            } catch {
-              return createErrorResult("results.clean", {
-                message: `Directorio de resultados no encontrado: ${resultsDir}`,
-              }) as CliResult<CleanResult>;
-            }
-
-            const fileInfos: { name: string; path: string; mtime: Date }[] = [];
-            for (const f of files) {
-              if (!f.startsWith("cmd_") || !f.endsWith(".json")) continue;
-              const filePath = resolve(resultsDir, f);
-              try {
-                const stats = statSync(filePath);
-                fileInfos.push({ name: f, path: filePath, mtime: stats.mtime });
-              } catch {
-                // Skip
-              }
-            }
-
-            fileInfos.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
-
-            let toDelete: string[] = [];
-
-            if (options.days) {
-              const cutoff = Date.now() - parseInt(options.days) * 24 * 60 * 60 * 1000;
-              toDelete = fileInfos.filter((f) => f.mtime.getTime() < cutoff).map((f) => f.path);
-            } else {
-              const keep = parseInt(options.keep) || 50;
-              toDelete = fileInfos.slice(keep).map((f) => f.path);
-            }
-
-            if (toDelete.length === 0) {
-              return createSuccessResult(
-                "results.clean",
-                {
-                  deleted: 0,
-                  kept: fileInfos.length,
-                },
-                { advice: ["No hay archivos para eliminar"] },
-              );
-            }
-
-            if (!options.force) {
-              console.log(`\n🗑️  Se eliminarán ${toDelete.length} archivos:`);
-              toDelete
-                .slice(0, 5)
-                .forEach((p) => console.log(`   - ${require("path").basename(p)}`));
-              if (toDelete.length > 5) {
-                console.log(`   ... y ${toDelete.length - 5} más`);
-              }
-              console.log("");
-
-              const readline = await import("readline");
-              const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-              const answer = await new Promise<string>((resolve) => {
-                rl.question("¿Continuar? (s/n): ", (ans) => {
-                  rl.close();
-                  resolve(ans.toLowerCase());
-                });
-              });
-
-              if (answer !== "s" && answer !== "si" && answer !== "y") {
-                return createErrorResult("results.clean", {
-                  message: "Operación cancelada por el usuario",
-                }) as CliResult<CleanResult>;
-              }
-            }
-
-            let deleted = 0;
-            const { unlink } = await import("node:fs/promises");
-            for (const path of toDelete) {
-              try {
-                await unlink(path);
-                deleted++;
-              } catch {
-                // Skip files we can't delete
-              }
-            }
-
-            return createSuccessResult("results.clean", {
-              deleted,
-              kept: fileInfos.length - deleted,
-            });
-          } catch (error) {
-            return createErrorResult("results.clean", {
-              message: error instanceof Error ? error.message : String(error),
-            }) as CliResult<CleanResult>;
+          if (!execution.ok) {
+            return createErrorResult("results.clean", execution.error);
           }
+
+          return createSuccessResult("results.clean", execution.data, {
+            advice: execution.advice,
+          });
         },
       });
 
-      const output = renderCliResult(result, flags.output);
-      if (!flags.quiet || !result.ok) console.log(output);
-
-      if (!result.ok) process.exit(1);
+      printResultOrExit(result, flags);
     });
 
   cmd
@@ -366,40 +429,26 @@ export function createResultsCommand(): Command {
     .option("--explain", "Explicar", false)
     .option("--plan", "Mostrar plan", false)
     .action(async (file: string, options) => {
-      const globalExamples = process.argv.includes("--examples");
-      const globalPlan = process.argv.includes("--plan");
+      const flags = makeFlags({ json: options.json === true });
 
-      if (globalExamples) {
+      if (options.examples) {
         console.log(printExamples(RESULTS_META));
         return;
       }
 
-      if (globalPlan) {
-        console.log("Plan de ejecución:");
-        console.log(`  1. Leer archivo: ${file}`);
-        console.log("  2. Mostrar contenido");
+      if (options.explain) {
+        console.log("Lee un archivo específico dentro de results/ y muestra su contenido.");
         return;
       }
 
-      const flags: GlobalFlags = {
-        json: false,
-        jq: null,
-        output: "text",
-        verbose: false,
-        quiet: false,
-        trace: false,
-        tracePayload: false,
-        traceResult: false,
-        traceDir: null,
-        traceBundle: false,
-        traceBundlePath: null,
-        sessionId: null,
-        examples: globalExamples,
-        schema: false,
-        explain: false,
-        plan: globalPlan,
-        verify: false,
-      };
+      if (options.plan) {
+        console.log("Plan de ejecución:");
+        console.log(`  1. Validar nombre de archivo: ${file}`);
+        console.log("  2. Leer archivo dentro de results/");
+        console.log("  3. Parsear JSON si es posible");
+        console.log("  4. Mostrar contenido");
+        return;
+      }
 
       const result = await runCommand<ResultsViewResult>({
         action: "results.view",
@@ -407,40 +456,20 @@ export function createResultsCommand(): Command {
         flags,
         payloadPreview: { file },
         execute: async (): Promise<CliResult<ResultsViewResult>> => {
-          try {
-            const devDir = getDefaultDevDir();
-            const filePath = resolve(devDir, "results", file);
+          const execution = await viewResult({
+            devDir: getDefaultDevDir(),
+            file,
+          });
 
-            if (!existsSync(filePath)) {
-              return createErrorResult("results.view", {
-                message: `Archivo no encontrado: ${file}`,
-              }) as CliResult<ResultsViewResult>;
-            }
-
-            const content = await readFile(filePath, "utf-8");
-            let parsed: unknown;
-            try {
-              parsed = JSON.parse(content);
-            } catch {
-              parsed = content;
-            }
-
-            return createSuccessResult("results.view", {
-              content: parsed,
-              file,
-            });
-          } catch (error) {
-            return createErrorResult("results.view", {
-              message: error instanceof Error ? error.message : String(error),
-            }) as CliResult<ResultsViewResult>;
+          if (!execution.ok) {
+            return createErrorResult("results.view", execution.error);
           }
+
+          return createSuccessResult("results.view", execution.data);
         },
       });
 
-      const output = renderCliResult(result, flags.output);
-      if (!flags.quiet || !result.ok) console.log(output);
-
-      if (!result.ok) process.exit(1);
+      printResultOrExit(result, flags);
     });
 
   cmd
@@ -448,164 +477,88 @@ export function createResultsCommand(): Command {
     .description("Ver envelope autoritativo de un resultado")
     .option("--json", "Salida JSON", false)
     .action(async (commandId: string, options) => {
-      const devDir = getDefaultDevDir();
-      const resultsDir = resolve(devDir, "results");
-      const resultPath = resolve(resultsDir, `cmd_${commandId.replace("cmd_", "")}.json`);
-      const directPath = resolve(resultsDir, `${commandId}.json`);
-      const filePath = existsSync(directPath) ? directPath : resultPath;
+      const flags = makeFlags({ json: options.json === true });
 
-      if (!existsSync(filePath)) {
-        console.log(`Resultado no encontrado para: ${commandId}`);
-        return;
-      }
+      const result = await runCommand<ResultsShowResult>({
+        action: "results.show",
+        meta: RESULTS_META,
+        flags,
+        payloadPreview: { commandId },
+        execute: async (): Promise<CliResult<ResultsShowResult>> => {
+          const execution = await showResult({
+            devDir: getDefaultDevDir(),
+            commandId,
+          });
 
-      const content = readFileSync(filePath, "utf-8");
-      const envelope = JSON.parse(content);
+          if (!execution.ok) {
+            return createErrorResult("results.show", execution.error);
+          }
 
-      if (options.json) {
-        console.log(JSON.stringify(envelope, null, 2));
-        return;
-      }
+          return createSuccessResult("results.show", execution.data);
+        },
+      });
 
-      console.log("");
-      console.log(`═══ Resultado: ${commandId} ═══`);
-      console.log(`Status    : ${envelope.status ?? "unknown"}`);
-      console.log(`OK        : ${envelope.ok}`);
-      if (envelope.startedAt)
-        console.log(`Inicio    : ${new Date(envelope.startedAt).toISOString()}`);
-      if (envelope.completedAt)
-        console.log(`Fin       : ${new Date(envelope.completedAt).toISOString()}`);
-      if (envelope.startedAt && envelope.completedAt) {
-        const dur = envelope.completedAt - envelope.startedAt;
-        console.log(`Duración  : ${dur}ms`);
-      }
-      if (envelope.protocolVersion) console.log(`Protocolo: v${envelope.protocolVersion}`);
-
-      if (envelope.value) {
-        const v = envelope.value;
-        if (v.error) console.log(`Error     : ${v.error}`);
-        if (v.code) console.log(`Código    : ${v.code}`);
-        if (v.device) console.log(`Dispositivo: ${v.device}`);
-        if (v.source) console.log(`Fuente    : ${v.source}`);
-        if (v.session) {
-          const s = v.session;
-          if (s.mode) console.log(`Modo IOS  : ${s.mode}`);
-          if (s.prompt) console.log(`Prompt    : ${s.prompt}`);
-        }
-      }
-
-      const commandsTraceDir = join(devDir, "logs", "commands");
-      const tracePath = join(commandsTraceDir, `${commandId.replace("cmd_", "")}.json`);
-      const directTracePath = join(commandsTraceDir, `${commandId}.json`);
-      const traceFilePath = existsSync(directTracePath) ? directTracePath : tracePath;
-      if (existsSync(traceFilePath)) {
-        const trace = JSON.parse(readFileSync(traceFilePath, "utf-8"));
-        console.log("\nPT-Side Trace:");
-        for (const [key, value] of Object.entries(trace)) {
-          console.log(`  ${key}: ${JSON.stringify(value)}`);
-        }
-      }
-      console.log("");
+      renderShowResult(result, flags);
     });
 
   cmd
     .command("failed")
     .description("Listar resultados fallidos")
     .option("-n, --limit <num>", "Máximo a mostrar", "20")
+    .option("--json", "Salida JSON", false)
     .action(async (options) => {
-      const devDir = getDefaultDevDir();
-      const resultsDir = resolve(devDir, "results");
-      const limit = parseInt(options.limit) || 20;
+      const flags = makeFlags({ json: options.json === true });
 
-      if (!existsSync(resultsDir)) {
-        console.log("Directorio de resultados no encontrado.");
-        return;
-      }
+      const result = await runCommand<ResultsFailedResult>({
+        action: "results.failed",
+        meta: RESULTS_META,
+        flags,
+        payloadPreview: { limit: options.limit },
+        execute: async (): Promise<CliResult<ResultsFailedResult>> => {
+          const execution = await listFailedResults({
+            devDir: getDefaultDevDir(),
+            limit: Number.parseInt(options.limit, 10) || 20,
+          });
 
-      const files = readdirSync(resultsDir)
-        .filter((f) => f.startsWith("cmd_") && f.endsWith(".json"))
-        .sort()
-        .reverse()
-        .slice(0, limit * 3);
-
-      const failed: { name: string; status: string; error?: string; completedAt?: number }[] = [];
-
-      for (const f of files) {
-        if (failed.length >= limit) break;
-        try {
-          const content = readFileSync(resolve(resultsDir, f), "utf-8");
-          const envelope = JSON.parse(content);
-          if (!envelope.ok || envelope.status === "failed") {
-            failed.push({
-              name: f,
-              status: envelope.status,
-              error: envelope.value?.error,
-              completedAt: envelope.completedAt,
-            });
+          if (!execution.ok) {
+            return createErrorResult("results.failed", execution.error);
           }
-        } catch {
-          // Archivo de resultado corrupto, saltar
-        }
-      }
 
-      console.log("");
-      console.log(`═══ Resultados fallidos (${failed.length}) ═══`);
-      console.log("");
-      for (const f of failed) {
-        const date = f.completedAt ? new Date(f.completedAt).toISOString().slice(0, 19) : "unknown";
-        console.log(`  ✗ ${f.name}  [${date}]`);
-        if (f.error) console.log(`    → ${f.error.slice(0, 100)}`);
-      }
-      console.log("");
+          return createSuccessResult("results.failed", execution.data);
+        },
+      });
+
+      renderFailedResults(result, flags);
     });
 
   cmd
     .command("pending")
     .description("Ver estado de cola y comandos en proceso")
-    .action(async () => {
-      const devDir = getDefaultDevDir();
-      const commandsDir = resolve(devDir, "commands");
-      const inFlightDir = resolve(devDir, "in-flight");
-      const deadLetterDir = resolve(devDir, "dead-letter");
-      const pendingFile = resolve(devDir, "journal", "pending-commands.json");
+    .option("--json", "Salida JSON", false)
+    .action(async (options) => {
+      const flags = makeFlags({ json: options.json === true });
 
-      const countDir = (dir: string) => {
-        if (!existsSync(dir)) return 0;
-        return readdirSync(dir).filter((f) => f.endsWith(".json")).length;
-      };
+      const result = await runCommand<ResultsPendingResult>({
+        action: "results.pending",
+        meta: RESULTS_META,
+        flags,
+        payloadPreview: {},
+        execute: async (): Promise<CliResult<ResultsPendingResult>> => {
+          const execution = await inspectPendingResults({
+            devDir: getDefaultDevDir(),
+          });
 
-      const queueCount = countDir(commandsDir);
-      const inFlightCount = countDir(inFlightDir);
-      const deadCount = countDir(deadLetterDir);
+          if (!execution.ok) {
+            return createErrorResult("results.pending", execution.error);
+          }
 
-      let pendingDeferred = 0;
-      if (existsSync(pendingFile)) {
-        try {
-          const pending = JSON.parse(readFileSync(pendingFile, "utf-8"));
-          pendingDeferred = Object.keys(pending).length;
-        } catch {
-          // Archivo pending corrupto o no existe, mostrar sin contadores diferidos
-        }
-      }
+          return createSuccessResult("results.pending", execution.data, {
+            advice: execution.advice,
+          });
+        },
+      });
 
-      console.log("");
-      console.log("═══ Estado de cola ═══");
-      console.log("");
-      console.log(`  En cola (commands/)     : ${queueCount}`);
-      console.log(`  En vuelo (in-flight/)   : ${inFlightCount}`);
-      console.log(`  Deferred (journal)      : ${pendingDeferred}`);
-      console.log(`  Dead-letter             : ${deadCount}`);
-
-      if (deadCount > 0) {
-        console.log("");
-        console.log("  ⚠️  Hay comandos en dead-letter. Revisa con:");
-        console.log(`     ls ${deadLetterDir}`);
-      }
-      if (inFlightCount > 5) {
-        console.log("");
-        console.log("  ⚠️  Alta cantidad en in-flight. PT podría estar atascado.");
-      }
-      console.log("");
+      renderPending(result, flags);
     });
 
   return cmd;

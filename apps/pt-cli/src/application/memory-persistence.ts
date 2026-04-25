@@ -1,7 +1,6 @@
-import { getMemory } from '@cisco-auto/ios-domain/memory';
-import type { HistoryEntry } from '../contracts/history-entry.js';
-import { getMemoryDbPath } from '../system/paths.js';
-import type { AuditRecord } from '@cisco-auto/ios-domain/memory';
+import { getMemory, type AuditRecord } from "@cisco-auto/pt-memory";
+import type { HistoryEntry } from "../contracts/history-entry.js";
+import { getMemoryDbPath } from "../system/paths.js";
 
 /**
  * Mapea una entrada de historial del CLI a un registro de auditoría.
@@ -12,7 +11,7 @@ export function mapHistoryEntryToAuditRecord(historyEntry: HistoryEntry) {
     sessionId: historyEntry.sessionId,
     deviceId: historyEntry.targetDevice,
     command: historyEntry.action,
-    status: (historyEntry.ok ? 'success' : 'failed') as AuditRecord['status'],
+    status: (historyEntry.ok ? "success" : "failed") as AuditRecord["status"],
     output: historyEntry.summary ?? (historyEntry.resultSummary ? JSON.stringify(historyEntry.resultSummary) : undefined),
     error: historyEntry.errorMessage ?? historyEntry.error_message,
     durationMs: historyEntry.durationMs,

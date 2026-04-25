@@ -29,7 +29,7 @@ export class AuditLogger {
       this._entries.push({
         timestamp: new Date().toISOString(),
         sessionId,
-        deviceId: cmd.deviceId,
+        deviceId: cmd?.deviceId,
         command: entry.command,
         status: entry.status === "pending" ? "failed" : entry.status,
         output: entry.output,

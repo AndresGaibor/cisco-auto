@@ -1,0 +1,29 @@
+{
+  "name": "@cisco-auto/ios-primitives",
+  "version": "0.1.0",
+  "description": "Shared IOS primitive value objects and domain errors for Cisco automation",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./value-objects": "./src/domain/ios/value-objects/index.ts",
+    "./domain/ios/value-objects": "./src/domain/ios/value-objects/index.ts",
+    "./domain/ios/value-objects/*": "./src/domain/ios/value-objects/*.ts",
+    "./domain/shared/base/value-object.base": "./src/domain/shared/base/value-object.base.ts",
+    "./domain/shared/errors/domain.error": "./src/domain/shared/errors/domain.error.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "echo no build needed"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  },
+  "files": [
+    "/src"
+  ],
+  "license": "MIT"
+}

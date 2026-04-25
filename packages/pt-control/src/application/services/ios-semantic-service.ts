@@ -24,7 +24,7 @@ import {
   parseSubnetMask as SubnetMask,
   parseInterfaceName as InterfaceName,
   parseVlanId as VlanId,
-} from "@cisco-auto/kernel/domain/ios/value-objects";
+} from "@cisco-auto/ios-primitives/value-objects";
 
 export class IosSemanticService {
   private readonly verifier: IosVerificationService;

@@ -4,11 +4,35 @@ import type {
   TerminalCommandResult,
 } from "@cisco-auto/terminal-contracts";
 import type { RuntimeTerminalPort } from "../../ports/runtime-terminal-port.js";
-import type { PTController } from "../../controller/index.js";
+
+export interface TerminalControllerPort {
+  inspectDevice(device: string): Promise<{ type?: string | number } | null | undefined>;
+  execIos(
+    device: string,
+    command: string,
+    parse?: boolean,
+    timeoutMs?: number,
+  ): Promise<unknown>;
+  execHost(
+    device: string,
+    command: string,
+    capabilityId: string,
+    options?: { timeoutMs?: number },
+  ): Promise<{
+    success?: boolean;
+    raw?: string;
+    output?: string;
+    verdict?: {
+      ok?: boolean;
+      reason?: string;
+    };
+    parsed?: unknown;
+  }>;
+}
 
 export interface TerminalCommandServiceDeps {
-  runtimeTerminal: RuntimeTerminalPort;
-  controller: PTController;
+  runtimeTerminal?: RuntimeTerminalPort | null;
+  controller: TerminalControllerPort;
   generateId: () => string;
 }
 

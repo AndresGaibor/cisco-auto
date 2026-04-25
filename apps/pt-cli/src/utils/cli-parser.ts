@@ -5,7 +5,7 @@
  */
 
 import { VlanConfigSchema, type VlanConfig } from '@cisco-auto/kernel/domain/ios/schemas';
-import { VlanId, parseVlanName } from '@cisco-auto/kernel/domain/ios/value-objects';
+import { VlanId, parseVlanName } from '@cisco-auto/ios-primitives/value-objects';
 
 /**
  * Parsea un flag repeatable con formato key=value.

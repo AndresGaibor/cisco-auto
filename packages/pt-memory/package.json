@@ -1,0 +1,36 @@
+{
+  "name": "@cisco-auto/pt-memory",
+  "version": "0.1.0",
+  "description": "SQLite-backed Packet Tracer memory, audit, history, devices and topology store",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./memory": "./src/memory/index.ts",
+    "./schema": "./src/memory/schema.ts",
+    "./audit": "./src/memory/audit.ts",
+    "./devices": "./src/memory/devices.ts",
+    "./history": "./src/memory/history.ts",
+    "./preferences": "./src/memory/preferences.ts",
+    "./topology": "./src/memory/topology.ts",
+    "./session": "./src/session/index.ts",
+    "./session/*": "./src/session/*",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "echo no build needed"
+  },
+  "dependencies": {
+    "@cisco-auto/ios-domain": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  },
+  "files": [
+    "/src"
+  ],
+  "license": "MIT"
+}

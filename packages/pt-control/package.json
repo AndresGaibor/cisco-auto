@@ -11,6 +11,7 @@
   "dependencies": {
     "@cisco-auto/file-bridge": "workspace:*",
     "@cisco-auto/ios-domain": "workspace:*",
+    "@cisco-auto/ios-primitives": "workspace:*",
     "@cisco-auto/kernel": "workspace:*",
     "@cisco-auto/pt-runtime": "workspace:*",
     "@cisco-auto/terminal-contracts": "workspace:*",
@@ -28,6 +29,11 @@
   "exports": {
     ".": "./src/index.ts",
     "./controller": "./src/controller/index.ts",
+    "./application/lab": "./src/application/lab/index.ts",
+    "./application/vlan": "./src/application/vlan/index.ts",
+    "./application/host": "./src/application/host/index.ts",
+    "./application/results": "./src/application/results/index.ts",
+    "./application/history": "./src/application/history/index.ts",
     "./vdom": "./src/vdom/index.ts",
     "./parsers": "./src/parsers/index.ts",
     "./types": "./src/types/index.ts",

@@ -1,7 +1,7 @@
 import { describe, test, expect } from 'bun:test';
 import { CapabilitySet } from '../../src/capabilities/capability-set.js';
 import { planConfigureDhcpPool, type ConfigureDhcpPoolInput } from '../../src/operations/configure-dhcp-pool.js';
-import { Ipv4Address, SubnetMask } from '@cisco-auto/kernel/domain/ios/value-objects';
+import { Ipv4Address, SubnetMask } from '@cisco-auto/ios-primitives/value-objects';
 
 describe('planConfigureDhcpPool', () => {
   const createInput = (overrides?: Partial<ConfigureDhcpPoolInput>): ConfigureDhcpPoolInput => ({

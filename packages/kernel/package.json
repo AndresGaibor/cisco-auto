@@ -43,6 +43,7 @@
     "build": "echo no build needed"
   },
   "dependencies": {
+    "@cisco-auto/ios-primitives": "workspace:*",
     "zod": "^4.3.6"
   },
   "devDependencies": {

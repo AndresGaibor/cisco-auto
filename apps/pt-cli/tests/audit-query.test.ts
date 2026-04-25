@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { rmSync } from 'node:fs';
 import { Database } from 'bun:sqlite';
-import { initializeSchema } from '../../../packages/ios-domain/src/memory/schema.ts';
+import { initializeSchema } from "@cisco-auto/pt-memory/schema";
 import { createAuditQueryCommand } from '../src/commands/audit-query.ts';
 import { getMemoryDbPath } from '../src/system/paths.ts';
 

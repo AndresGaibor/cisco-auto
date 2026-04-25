@@ -6,7 +6,7 @@ import type { NetworkTwin, DeviceTwin } from "../contracts/twin-types.js";
 import type { IntentPattern } from "./intent-parser.js";
 import type { Blueprint, BlueprintStep } from "./blueprint-builder.js";
 import type { CommandPlan } from "@cisco-auto/ios-domain";
-import { InterfaceName, VlanId, Ipv4Address, SubnetMask } from "@cisco-auto/kernel/domain/ios/value-objects";
+import { InterfaceName, VlanId, Ipv4Address, SubnetMask } from "@cisco-auto/ios-primitives/value-objects";
 import { CapabilitySet } from "@cisco-auto/ios-domain";
 import {
   planConfigureAccessPort,

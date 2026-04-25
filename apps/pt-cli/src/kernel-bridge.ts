@@ -19,7 +19,7 @@ import {
   type PacketTracerBackendPlugin,
   type PacketTracerAdapterDependencies,
 } from "@cisco-auto/kernel/backends/packet-tracer";
-import { PTController } from "@cisco-auto/pt-control";
+import { createPTController } from "@cisco-auto/pt-control";
 import { generateVlanCommands, validateVlanConfig } from "@cisco-auto/kernel/plugins/vlan";
 import type { VlanConfigInput } from "@cisco-auto/kernel/plugins/vlan";
 import {
@@ -58,9 +58,11 @@ export function getKernelRegistry(): PluginRegistry {
     registry.register("protocol", portTemplatePlugin);
     registry.register("protocol", configOrchestratorPlugin);
 
-    // Crear backend plugin con factory que usa PTController real
+    // Crear backend plugin con factory pública de pt-control.
+    // No instanciar PTController directamente: el constructor espera ControlComposition,
+    // mientras que el backend entrega PacketTracerBackendConfig { devDir }.
     const deps: PacketTracerAdapterDependencies = {
-      createController: (config) => new PTController(config),
+      createController: (config) => createPTController(config),
     };
     const adapter = createPacketTracerAdapter(deps);
     const ptPlugin = createPacketTracerBackendPlugin(adapter);

@@ -162,7 +162,7 @@ registerHandler("renameDevice", handleRenameDevice as unknown as HandlerFn);
 registerHandler("moveDevice", handleMoveDevice as unknown as HandlerFn);
 
 // Device Config
-registerHandler("setDeviceIp", handleConfigHost as unknown as HandlerFn);
+registerHandler("setDeviceIp", handleSetDeviceIp as unknown as HandlerFn);
 registerHandler("setDefaultGateway", handleSetDefaultGateway as unknown as HandlerFn);
 
 registerHandler("addLink", handleAddLink as unknown as HandlerFn);

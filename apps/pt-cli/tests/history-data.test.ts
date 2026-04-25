@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { rmSync } from 'node:fs';
 import { Database } from 'bun:sqlite';
 
-import { initializeSchema } from '../../../packages/ios-domain/src/memory/schema.ts';
+import { initializeSchema } from "@cisco-auto/pt-memory/schema";
 import { listFailedHistoryEntriesWithDb, searchHistoryEntriesWithDb } from '../src/commands/history-data.ts';
 
 describe('history data helper', () => {

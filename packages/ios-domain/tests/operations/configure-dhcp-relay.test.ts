@@ -1,7 +1,7 @@
 import { describe, test, expect } from 'bun:test';
 import { CapabilitySet } from '../../src/capabilities/capability-set.js';
 import { planConfigureDhcpRelay, type ConfigureDhcpRelayInput } from '../../src/operations/configure-dhcp-relay.js';
-import { InterfaceName, Ipv4Address } from '@cisco-auto/kernel/domain/ios/value-objects';
+import { InterfaceName, Ipv4Address } from '@cisco-auto/ios-primitives/value-objects';
 
 describe('planConfigureDhcpRelay', () => {
   const createInput = (overrides?: Partial<ConfigureDhcpRelayInput>): ConfigureDhcpRelayInput => ({

@@ -8,5 +8,3 @@ export type { SessionTranscript, CommandTranscriptEntry } from "./session-transc
 export { Transaction, type TransactionCommand, type TransactionLogEntry, type TransactionResult } from "./transaction.js";
 export { TransactionBuilder, type InterfaceConfig, type OspfConfig, type EigrpConfig, type AclConfig, type VlanConfig, type DeviceConfig } from "./transaction-builder.js";
 export { AuditLogger, type AuditLogEntry } from "./audit-log.js";
-export { executeTransactionWithMemory, type TransactionMemoryResult } from "./integration";
-export { logTransactionWithMemory, persistAuditLogger } from "./audit-integration";

@@ -18,10 +18,12 @@ import {
 import type { CommandPlan } from "@cisco-auto/ios-domain";
 import {
   parseVlanId as VlanId,
-  parseIpv4Address as Ipv4Address,
-  parseSubnetMask as SubnetMask,
   parseInterfaceName as InterfaceName,
-} from "@cisco-auto/kernel/domain/ios/value-objects";
+  parseIpv4Address,
+  parseSubnetMask,
+  Ipv4Address,
+  SubnetMask,
+} from "@cisco-auto/ios-primitives/value-objects";
 
 export class IosConfigOperations {
   constructor(

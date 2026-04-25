@@ -28,3 +28,6 @@ export * from './pt-safe-validator.js';
 
 // Fase 9: CLI unificado
 export * from './lab-cli.js';
+
+// Fase 10: Caso de uso CORE3650 + 4SW + 4PC + SERVER
+export * from "./core3650-lift.js";

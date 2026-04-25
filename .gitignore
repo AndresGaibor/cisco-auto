@@ -110,3 +110,23 @@ skills-lock.json
 .DS_Store
 .ai/
 .turbo/
+
+# === Packet Tracer local bridge/runtime state ===
+/~/
+/pt-dev/
+**/pt-dev/
+**/commands/*.json
+**/results/*.json
+**/consumer-state/*.json
+**/protocol.seq.json
+**/_queue.json
+**/bridge-lease.json
+**/state.json
+**/heartbeat.json
+
+# === Local Packet Tracer runtime dumps ===
+*.pkt
+*.pka
+*.pkz
+*.ptdump.json
+*.runtime-dump.json
