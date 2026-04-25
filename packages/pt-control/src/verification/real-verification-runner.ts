@@ -41,6 +41,7 @@ export interface RealVerificationRunnerOptions {
   repeat?: number;
   tags?: string[];
   commandTimeoutMs?: number;
+  tier?: "smoke" | "full";
 }
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 20000;
@@ -122,6 +123,13 @@ export async function runRealVerification(
   if (options.excludeScenarioIds?.length) {
     runnerState.scenarios = runnerState.scenarios.filter(
       (s) => !options.excludeScenarioIds!.includes(s.id)
+    );
+  }
+
+  // Filtrar por tier si se especifica (smoke = casos sin tier o tier=smoke; full = todos)
+  if (options.tier === "smoke") {
+    runnerState.scenarios = runnerState.scenarios.filter(
+      (s) => !(s as any).tier || (s as any).tier === "smoke"
     );
   }
 
@@ -251,6 +259,23 @@ export async function executeScenario(
     verificationStrength: "observed",
   };
 
+  const scenarioTimeoutMs = scenario.timeoutMs ?? DEFAULT_SCENARIO_TIMEOUT_MS;
+
+  const timeoutForPhase = (
+    phase: "setup" | "execute" | "verify" | "cleanup",
+  ): number => {
+    if (phase === "setup") {
+      return scenario.setupTimeoutMs ?? scenarioTimeoutMs;
+    }
+    if (phase === "execute") {
+      return scenario.executeTimeoutMs ?? scenarioTimeoutMs;
+    }
+    if (phase === "verify") {
+      return scenario.verifyTimeoutMs ?? scenarioTimeoutMs;
+    }
+    return scenario.cleanupTimeoutMs ?? scenarioTimeoutMs;
+  };
+
   const finalize = (): RealScenarioResult => {
     result.endedAt = Date.now();
     result.durationMs = result.endedAt - startedAt;
@@ -261,7 +286,7 @@ export async function executeScenario(
   try {
     const prepResult = await withTimeout(
       harness.prepareScenario(scenario.id),
-      state.commandTimeoutMs,
+      timeoutForPhase("setup"),
       `prepareScenario(${scenario.id})`
     );
     if (!prepResult.ok) {
@@ -280,7 +305,7 @@ export async function executeScenario(
         runId: state.runId,
         runStore: store,
       } as any),
-      state.commandTimeoutMs,
+      timeoutForPhase("setup"),
       `setup(${scenario.id})`
     );
     if (!setupResult.ok) {
@@ -298,7 +323,7 @@ export async function executeScenario(
         runId: state.runId,
         runStore: store,
       } as any),
-      state.commandTimeoutMs,
+      timeoutForPhase("execute"),
       `execute(${scenario.id})`
     );
     if (!execResult.ok) {
@@ -319,7 +344,7 @@ export async function executeScenario(
         runId: state.runId,
         runStore: store,
       } as any),
-      state.commandTimeoutMs,
+      timeoutForPhase("verify"),
       `verify(${scenario.id})`
     );
     if (!verifyResult.ok) {
@@ -336,7 +361,7 @@ export async function executeScenario(
     // Cleanup con timeout (no afecta outcome, solo warnings)
     const cleanupResult = await withTimeout(
       harness.cleanupScenario(scenario.id),
-      state.commandTimeoutMs,
+      timeoutForPhase("cleanup"),
       `cleanup(${scenario.id})`
     );
     if (!cleanupResult.ok) {

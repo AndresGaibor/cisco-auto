@@ -18,6 +18,7 @@ export interface TerminalRegressionCase {
   expectedErrorCode?: string;
   expectedErrorIncludes?: string[];
   maxDurationMs: number;
+  tier?: "smoke" | "full";
 }
 
 export const terminalRegressionCases: TerminalRegressionCase[] = [
@@ -221,6 +222,7 @@ export const terminalRegressionCases: TerminalRegressionCase[] = [
     expectedModeAfter: "privileged-exec",
     expectedOutputIncludes: ["Building configuration", "Current configuration"],
     maxDurationMs: 70000,
+    tier: "full",
   },
   {
     id: "ios-show-interfaces",
@@ -233,6 +235,7 @@ export const terminalRegressionCases: TerminalRegressionCase[] = [
     tags: ["ios", "show", "pager"],
     expectedOutputIncludes: ["FastEthernet0/1"],
     maxDurationMs: 70000,
+    tier: "full",
   },
   {
     id: "ios-show-spanning-tree",
@@ -245,6 +248,7 @@ export const terminalRegressionCases: TerminalRegressionCase[] = [
     tags: ["ios", "show", "pager"],
     expectedOutputIncludes: ["Spanning Tree"],
     maxDurationMs: 70000,
+    tier: "full",
   },
   {
     id: "ios-show-mac-address-table",
@@ -257,6 +261,7 @@ export const terminalRegressionCases: TerminalRegressionCase[] = [
     tags: ["ios", "show", "pager"],
     expectedOutputIncludes: ["MAC Address"],
     maxDurationMs: 70000,
+    tier: "full",
   },
 
   // ========================================================================
@@ -273,6 +278,7 @@ export const terminalRegressionCases: TerminalRegressionCase[] = [
     tags: ["ios", "config", "confirm"],
     expectedOutputIncludes: ["Destination filename"],
     maxDurationMs: 30000,
+    tier: "full",
   },
   {
     id: "ios-write-memory",
@@ -285,6 +291,7 @@ export const terminalRegressionCases: TerminalRegressionCase[] = [
     tags: ["ios", "config", "confirm"],
     expectedOutputIncludes: ["Building configuration"],
     maxDurationMs: 30000,
+    tier: "full",
   },
 
   // ========================================================================
@@ -345,6 +352,7 @@ export const terminalRegressionCases: TerminalRegressionCase[] = [
     expectedModeAfter: "privileged-exec",
     expectedOutputIncludes: ["Building configuration", "Current configuration"],
     maxDurationMs: 70000,
+    tier: "full",
   },
 
   // ========================================================================
@@ -383,6 +391,7 @@ export const terminalRegressionCases: TerminalRegressionCase[] = [
     expectedErrorCode: "HOST_NETWORK_TIMEOUT",
     expectedErrorIncludes: ["Request timed out"],
     maxDurationMs: 20000,
+    tier: "full",
   },
   {
     id: "host-invalid",

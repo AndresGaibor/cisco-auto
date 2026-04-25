@@ -24,6 +24,13 @@ export interface RealScenarioDefinition {
   tags: string[];
   profile: string[];
   dependsOn: string[];
+
+  timeoutMs?: number;
+  setupTimeoutMs?: number;
+  executeTimeoutMs?: number;
+  verifyTimeoutMs?: number;
+  cleanupTimeoutMs?: number;
+
   setup: SetupFn;
   execute: ExecuteFn;
   verify: VerifyFn;

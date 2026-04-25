@@ -321,6 +321,12 @@ export const terminalRegressionScenario: RealScenarioDefinition = {
   profile: ["terminal-regression", "smoke"],
   dependsOn: [],
 
+  timeoutMs: 10 * 60 * 1000,
+  executeTimeoutMs: 10 * 60 * 1000,
+  setupTimeoutMs: 60 * 1000,
+  verifyTimeoutMs: 60 * 1000,
+  cleanupTimeoutMs: 60 * 1000,
+
   async setup(_ctx) {
     // No setup global. Cada caso debe ser determinista vía preCommands/postCommands.
   },
@@ -353,6 +359,16 @@ export const terminalRegressionScenario: RealScenarioDefinition = {
 
     const warnings: string[] = [];
 
+    function writePartialResults(): void {
+      store.writeStepArtifact(
+        ctx.runId,
+        TERMINAL_REGRESSION_SCENARIO_ID,
+        "execute",
+        "results.json",
+        JSON.stringify(results, null, 2),
+      );
+    }
+
     for (const testCase of terminalRegressionCases) {
       let caseResult: NormalizedCommandResult | null = null;
 
@@ -376,6 +392,8 @@ export const terminalRegressionScenario: RealScenarioDefinition = {
             durationMs: pre.result.durationMs,
           });
 
+          writePartialResults();
+
           continue;
         }
 
@@ -398,6 +416,8 @@ export const terminalRegressionScenario: RealScenarioDefinition = {
           modeAfter: caseResult.modeAfter,
           durationMs: caseResult.durationMs,
         });
+
+        writePartialResults();
       } catch (error) {
         results.push({
           caseId: testCase.id,
@@ -415,6 +435,8 @@ export const terminalRegressionScenario: RealScenarioDefinition = {
           modeAfter: caseResult?.modeAfter,
           durationMs: caseResult?.durationMs,
         });
+
+        writePartialResults();
       } finally {
         await runBestEffortCleanup(controller, testCase, warnings);
       }
@@ -422,13 +444,7 @@ export const terminalRegressionScenario: RealScenarioDefinition = {
 
     const failed = results.filter((r) => !r.ok);
 
-    store.writeStepArtifact(
-      ctx.runId,
-      TERMINAL_REGRESSION_SCENARIO_ID,
-      "execute",
-      "results.json",
-      JSON.stringify(results, null, 2),
-    );
+    writePartialResults();
 
     return {
       outcome: failed.length === 0 ? "passed" : "failed",
