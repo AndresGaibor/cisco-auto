@@ -17,7 +17,6 @@ import { printExamples } from '../ux/examples.js';
 import { formatNextSteps } from '../ux/next-steps.js';
 import { fetchDeviceList, formatDevice } from '../utils/device-utils.js';
 import { createTerminalCommandService } from '@cisco-auto/pt-control';
-import { createTerminalCommandPresenter } from '../presenters/terminal-command-presenter.js';
 
 function createTerminalCommandServiceForCli(controller: PTController) {
     return createTerminalCommandService({

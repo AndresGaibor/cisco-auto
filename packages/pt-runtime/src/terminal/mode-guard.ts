@@ -145,7 +145,63 @@ export function createModeGuard() {
     };
   }
 
-async function ensurePrivilegedExec(deviceName: string, terminal: PTCommandLine): Promise<ModeTransitionResult> {
+  async function wakeFromLogout(
+    deviceName: string,
+    terminal: PTCommandLine,
+    fromMode: TerminalMode,
+  ): Promise<ModeTransitionResult> {
+    try {
+      terminal.enterChar?.(13, 0);
+      terminal.flush?.();
+    } catch {}
+
+    await sleepMs(250);
+
+    const afterWake = currentMode(terminal, deviceName);
+
+    if (afterWake === "privileged-exec") {
+      return {
+        ok: true,
+        fromMode,
+        toMode: afterWake,
+      };
+    }
+
+    if (afterWake === "user-exec") {
+      const result = await executor.executeCommand(deviceName, "enable", terminal, {
+        commandTimeoutMs: 5000,
+        stallTimeoutMs: 2000,
+        expectedMode: "privileged-exec",
+        allowEmptyOutput: true,
+      });
+
+      const afterEnable = currentMode(terminal, deviceName);
+      const reachedPrivileged = isPrivilegedMode(afterEnable);
+
+      return {
+        ok: reachedPrivileged,
+        fromMode,
+        toMode: afterEnable,
+        error: reachedPrivileged
+          ? undefined
+          : result.error ?? `Failed to enter privileged exec mode after logout wake; current mode is "${afterEnable}"`,
+        warnings: result.warnings,
+      };
+    }
+
+    return {
+      ok: false,
+      fromMode,
+      toMode: afterWake,
+      error: `Terminal is in logout mode and could not be woken; current mode is "${afterWake}"`,
+    };
+  }
+
+  async function sleepMs(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async function ensurePrivilegedExec(deviceName: string, terminal: PTCommandLine): Promise<ModeTransitionResult> {
     await ensureNotInWizard(deviceName, terminal);
 
     const session = ensureSession(deviceName);
@@ -178,7 +234,7 @@ async function ensurePrivilegedExec(deviceName: string, terminal: PTCommandLine)
     }
 
     if (String(before) === "logout") {
-      return { ok: true, fromMode: "user-exec" as TerminalMode, toMode: "user-exec" as TerminalMode };
+      return wakeFromLogout(deviceName, terminal, before);
     }
 
     if (before === "unknown" && session.lastMode !== "unknown") {

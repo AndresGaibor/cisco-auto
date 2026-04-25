@@ -52,8 +52,17 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
     const timeoutMs = options?.timeoutMs ?? 45000;
     const execResult = await deps.controller.execIos(device, command, false, timeoutMs);
 
-    const output = execResult.raw ?? "";
-    const ok = execResult.ok ?? false;
+    const output = String(
+      execResult.raw ??
+        execResult.output ??
+        execResult.evidence?.raw ??
+        execResult.parsed?.raw ??
+        execResult.parsed?.output ??
+        execResult.error?.details?.output ??
+        "",
+    );
+
+    const ok = Boolean(execResult.ok ?? false);
 
     if (!ok) {
       const evidence = execResult.evidence as any;
@@ -78,7 +87,7 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
           ),
           phase: "execution",
         },
-        warnings: [],
+        warnings: Array.isArray(execResult.warnings) ? execResult.warnings : [],
         evidence,
       };
     }
@@ -91,7 +100,7 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
       command,
       output,
       status: 0,
-      warnings: [],
+      warnings: Array.isArray(execResult.warnings) ? execResult.warnings : [],
       evidence: execResult.evidence,
     };
   }
@@ -116,7 +125,12 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
       timeoutMs,
     });
 
-    const hostOutput = execResult.raw ?? "";
+    const hostOutput = String(
+      execResult.raw ??
+        (execResult as any).output ??
+        execResult.verdict?.reason ??
+        "",
+    );
     const hostCode =
       hostOutput.toLowerCase().includes("invalid command") ||
       hostOutput.toLowerCase().includes("not recognized")

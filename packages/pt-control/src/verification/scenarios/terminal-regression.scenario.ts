@@ -18,6 +18,8 @@ type NormalizedCommandResult = {
   original: unknown;
 };
 
+const TERMINAL_REGRESSION_SCENARIO_ID = "terminal-regression";
+
 function capabilityIdForHostCommand(command: string): string {
   const cmd = command.trim().toLowerCase();
 
@@ -33,14 +35,32 @@ function capabilityIdForHostCommand(command: string): string {
   return "host.exec";
 }
 
-function extractString(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "string") return value;
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
+function inferSemanticCodeFromOutput(output: string, deviceKind: "ios" | "host"): string {
+  const text = output.toLowerCase();
+
+  if (deviceKind === "ios") {
+    if (text.includes("% invalid input detected")) return "IOS_INVALID_INPUT";
+    if (text.includes("% incomplete command")) return "IOS_INCOMPLETE_COMMAND";
+    if (text.includes("% ambiguous command")) return "IOS_AMBIGUOUS_COMMAND";
+    if (text.includes("translating...")) return "IOS_DNS_LOOKUP_TRIGGERED";
+    return "";
   }
+
+  if (
+    text.includes("invalid command") ||
+    text.includes("bad command or file name") ||
+    text.includes("not recognized")
+  ) {
+    return "HOST_INVALID_COMMAND";
+  }
+
+  if (text.includes("request timed out")) return "HOST_NETWORK_TIMEOUT";
+  if (text.includes("destination host unreachable")) return "HOST_UNREACHABLE";
+  if (text.includes("could not find host") || text.includes("unknown host")) {
+    return "HOST_DNS_FAILURE";
+  }
+
+  return "";
 }
 
 function normalizeResult(result: any, thrown?: unknown): NormalizedCommandResult {
@@ -142,6 +162,8 @@ async function runCommand(
   command: string,
 ): Promise<NormalizedCommandResult> {
   try {
+    let normalized: NormalizedCommandResult;
+
     if (testCase.deviceKind === "host") {
       const result = await controller.execHost(
         testCase.device,
@@ -150,19 +172,37 @@ async function runCommand(
         { timeoutMs: testCase.maxDurationMs },
       );
 
-      return normalizeResult(result);
+      normalized = normalizeResult(result);
+    } else {
+      const result = await controller.execIos(
+        testCase.device,
+        command,
+        false,
+        testCase.maxDurationMs,
+      );
+
+      normalized = normalizeResult(result);
     }
 
-    const result = await controller.execIos(
-      testCase.device,
-      command,
-      false,
-      testCase.maxDurationMs,
-    );
+    if (!normalized.ok && !normalized.errorCode) {
+      normalized.errorCode = inferSemanticCodeFromOutput(
+        normalized.output || normalized.raw || normalized.errorMessage || "",
+        testCase.deviceKind,
+      );
+    }
 
-    return normalizeResult(result);
+    return normalized;
   } catch (error) {
-    return normalizeResult(undefined, error);
+    const normalized = normalizeResult(undefined, error);
+
+    if (!normalized.ok && !normalized.errorCode) {
+      normalized.errorCode = inferSemanticCodeFromOutput(
+        normalized.output || normalized.raw || normalized.errorMessage || "",
+        testCase.deviceKind,
+      );
+    }
+
+    return normalized;
   }
 }
 
@@ -221,15 +261,25 @@ function evaluateCase(
     }
   }
 
-  for (const expected of testCase.expectedErrorIncludes ?? []) {
-    if (!includesCaseInsensitive(output, expected) && !includesCaseInsensitive(result.errorMessage ?? "", expected)) {
-      reasons.push(`error output missing "${expected}"`);
+  if ((testCase.expectedErrorIncludes ?? []).length > 0) {
+    const errorHaystack = `${output}\n${result.errorMessage ?? ""}`;
+
+    const matchedAny = testCase.expectedErrorIncludes!.some((expected) =>
+      includesCaseInsensitive(errorHaystack, expected),
+    );
+
+    if (!matchedAny) {
+      reasons.push(
+        `error output missing one of: ${testCase.expectedErrorIncludes!.map((x) => `"${x}"`).join(", ")}`,
+      );
     }
   }
 
   if (testCase.expectedErrorCode) {
     if (result.errorCode !== testCase.expectedErrorCode) {
-      reasons.push(`expected error code ${testCase.expectedErrorCode}, got ${result.errorCode || "(empty)"}`);
+      reasons.push(
+        `expected error code ${testCase.expectedErrorCode}, got ${result.errorCode || "(empty)"}; message="${result.errorMessage || ""}"`,
+      );
     }
   }
 
@@ -321,7 +371,6 @@ export const terminalRegressionScenario: RealScenarioDefinition = {
             durationMs: pre.result.durationMs,
           });
 
-          await runBestEffortCleanup(controller, testCase, warnings);
           continue;
         }
 
@@ -370,7 +419,7 @@ export const terminalRegressionScenario: RealScenarioDefinition = {
 
     store.writeStepArtifact(
       ctx.runId,
-      this.id,
+      TERMINAL_REGRESSION_SCENARIO_ID,
       "execute",
       "results.json",
       JSON.stringify(results, null, 2),
