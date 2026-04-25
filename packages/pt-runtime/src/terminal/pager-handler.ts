@@ -18,7 +18,12 @@ export function createPagerState(maxAdvances: number = 50): PagerState {
 
 export function detectPager(output: string): boolean {
   if (!output) return false;
-  return /--More--$/i.test(output);
+
+  const text = String(output)
+    .replace(/\r/g, "")
+    .replace(/\u001b\[[0-9;]*[a-zA-Z]/g, "");
+
+  return /--More--\s*$/i.test(text) || /--More--/i.test(text);
 }
 
 export function shouldAdvance(state: PagerState): boolean {

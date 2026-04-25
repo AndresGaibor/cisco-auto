@@ -225,6 +225,77 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function terminalOutputHasPager(terminal: PTCommandLine): boolean {
+  try {
+    const output =
+      terminal.getOutput?.() ??
+      terminal.getAllOutput?.() ??
+      terminal.getBuffer?.() ??
+      "";
+
+    return /--More--/i.test(String(output));
+  } catch {
+    return false;
+  }
+}
+
+function sendPagerAdvance(
+  terminal: PTCommandLine,
+  events: TerminalEventRecord[],
+  sessionId: string,
+  deviceName: string,
+  source: string,
+): boolean {
+  let sent = false;
+
+  try {
+    terminal.enterChar?.(32, 0);
+    sent = true;
+  } catch {}
+
+  try {
+    terminal.flush?.();
+  } catch {}
+
+  pushEvent(
+    events,
+    sessionId,
+    deviceName,
+    sent ? "pagerAdvance" : "pagerAdvanceFailed",
+    "SPACE",
+    sent ? `SPACE sent to pager from ${source}` : `Failed to send SPACE to pager from ${source}`,
+  );
+
+  setTimeout(() => {
+    try {
+      if (!terminalOutputHasPager(terminal)) return;
+
+      terminal.enterCommand?.(" ");
+      terminal.flush?.();
+
+      pushEvent(
+        events,
+        sessionId,
+        deviceName,
+        "pagerAdvanceFallback",
+        "SPACE",
+        `Fallback SPACE command sent to pager from ${source}`,
+      );
+    } catch {
+      pushEvent(
+        events,
+        sessionId,
+        deviceName,
+        "pagerAdvanceFallbackFailed",
+        "SPACE",
+        `Fallback SPACE command failed from ${source}`,
+      );
+    }
+  }, 150);
+
+  return sent;
+}
+
 /**
  * Ejecuta un comando en un terminal IOS o Host.
  * Función standalone que puede ser llamada directamente.
@@ -324,6 +395,16 @@ if (!readyResult.ready) {
     let lastOutputAt = Date.now();
     let previousPrompt = promptBefore;
     let promptStableSince: number | null = null;
+    let lastPagerAdvanceAt = 0;
+
+    function canAdvancePagerNow(): boolean {
+      const now = Date.now();
+      if (now - lastPagerAdvanceAt < 120) {
+        return false;
+      }
+      lastPagerAdvanceAt = now;
+      return true;
+    }
 
     function clearTimers(): void {
       if (commandEndGraceTimer) clearTimeout(commandEndGraceTimer);
@@ -607,7 +688,15 @@ if (!readyResult.ready) {
       if (detectPager(chunk)) {
         session.pagerActive = true;
         pagerHandler.handleOutput(chunk);
-        
+
+        if (pagerHandler.isLoop()) {
+          finalizeFailure(
+            TerminalErrors.COMMAND_END_TIMEOUT,
+            `Pager advance limit reached (${options.maxPagerAdvances ?? 50})`,
+          );
+          return;
+        }
+
         if (sessionKind !== "ios" && sessionKind !== "unknown") {
           const hasPager = /--More--/i.test(chunk);
           if (hasPager) {
@@ -615,9 +704,32 @@ if (!readyResult.ready) {
             return;
           }
         }
-        
-        if (options.autoAdvancePager !== false && pagerHandler.canContinue()) {
-          try { terminal.enterChar(32, 0); resetStallTimer(); } catch {}
+
+        if (
+          options.autoAdvancePager !== false &&
+          pagerHandler.canContinue() &&
+          canAdvancePagerNow()
+        ) {
+          pagerHandler.advance();
+
+          const sent = sendPagerAdvance(
+            terminal,
+            events,
+            session.sessionId,
+            deviceName,
+            "outputWritten",
+          );
+
+          if (!sent) {
+            finalizeFailure(
+              TerminalErrors.COMMAND_END_TIMEOUT,
+              "Pager detected but auto-advance failed",
+            );
+            return;
+          }
+
+          session.pagerActive = false;
+          resetStallTimer();
         }
       }
 
@@ -657,10 +769,50 @@ if (!readyResult.ready) {
 
     function onMoreDisplayed(_src: unknown, args: unknown): void {
       session.pagerActive = true;
-      pushEvent(events, session.sessionId, deviceName, "moreDisplayed", "--More--", "--More--");
+      pagerHandler.handleOutput("--More--");
 
-      if (options.autoAdvancePager !== false) {
-        try { terminal.enterChar(32, 0); resetStallTimer(); } catch {}
+      if (pagerHandler.isLoop()) {
+        finalizeFailure(
+          TerminalErrors.COMMAND_END_TIMEOUT,
+          `Pager advance limit reached (${options.maxPagerAdvances ?? 50})`,
+        );
+        return;
+      }
+
+      pushEvent(
+        events,
+        session.sessionId,
+        deviceName,
+        "moreDisplayed",
+        "--More--",
+        "--More--",
+      );
+
+      if (
+        options.autoAdvancePager !== false &&
+        pagerHandler.canContinue() &&
+        canAdvancePagerNow()
+      ) {
+        pagerHandler.advance();
+
+        const sent = sendPagerAdvance(
+          terminal,
+          events,
+          session.sessionId,
+          deviceName,
+          "moreDisplayed",
+        );
+
+        if (!sent) {
+          finalizeFailure(
+            TerminalErrors.COMMAND_END_TIMEOUT,
+            "Pager displayed but auto-advance failed",
+          );
+          return;
+        }
+
+        session.pagerActive = false;
+        resetStallTimer();
       }
     }
 
