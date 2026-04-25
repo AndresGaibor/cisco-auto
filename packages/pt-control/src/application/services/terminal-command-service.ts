@@ -50,7 +50,48 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
     options?: RunTerminalCommandOptions
   ): Promise<TerminalCommandResult> {
     const timeoutMs = options?.timeoutMs ?? 45000;
-    const execResult = await deps.controller.execIos(device, command, false, timeoutMs);
+
+    let execResult: any;
+
+    try {
+      execResult = await deps.controller.execIos(device, command, false, timeoutMs);
+    } catch (error) {
+      const err = error as any;
+
+      return {
+        ok: false,
+        action: "ios.exec",
+        device,
+        deviceKind: "ios",
+        command,
+        output: String(
+          err?.details?.output ??
+            err?.details?.evidence?.raw ??
+            err?.details?.parsed?.raw ??
+            err?.output ??
+            err?.raw ??
+            ""
+        ),
+        status: 1,
+        error: {
+          code: String(
+            err?.code ??
+              err?.error?.code ??
+              (String(err?.message ?? "").includes("Timeout waiting for result")
+                ? "IOS_RESULT_TIMEOUT"
+                : "IOS_EXEC_FAILED")
+          ),
+          message: String(err?.message ?? err?.error?.message ?? "Error en ejecución de comando IOS"),
+          phase: "execution",
+        },
+        warnings: [],
+        evidence: {
+          thrown: true,
+          details: err?.details ?? null,
+          stack: err?.stack ?? null,
+        },
+      };
+    }
 
     const output = String(
       execResult.raw ??

@@ -196,10 +196,15 @@ async function runCommand(
     const normalized = normalizeResult(undefined, error);
 
     if (!normalized.ok && !normalized.errorCode) {
-      normalized.errorCode = inferSemanticCodeFromOutput(
-        normalized.output || normalized.raw || normalized.errorMessage || "",
-        testCase.deviceKind,
-      );
+      const message = String((error as any)?.message ?? "");
+
+      normalized.errorCode =
+        message.includes("Timeout waiting for result")
+          ? "IOS_RESULT_TIMEOUT"
+          : inferSemanticCodeFromOutput(
+              normalized.output || normalized.raw || normalized.errorMessage || "",
+              testCase.deviceKind,
+            );
     }
 
     return normalized;

@@ -118,8 +118,18 @@ export function classifyIosCommand(command: string): CommandProfile {
     return profile;
   }
 
+  if (cmd === "show privilege") {
+    profile.intent = "show";
+    profile.allowPager = false;
+    profile.ensurePrivileged = false;
+    profile.preserveCurrentMode = true;
+    profile.risk = "safe";
+    profile.timeoutMs = 15000;
+    profile.stallTimeoutMs = 8000;
+    return profile;
+  }
+
   if (cmd.startsWith("show ") || cmd.startsWith("do show ")) {
-    // show privilege ya был обработан выше, проверим ещё раз
     // Команды show которые безопасно работают в user EXEC
     const safeUserExecShows = [
       "show clock",
@@ -147,18 +157,6 @@ export function classifyIosCommand(command: string): CommandProfile {
       profile.risk = "safe";
       profile.timeoutMs = 30000;
       profile.stallTimeoutMs = 15000;
-      return profile;
-    }
-
-    // show privilege - специальный случай, диагностика уровня привилегий
-    if (cmd === "show privilege") {
-      profile.intent = "show";
-      profile.allowPager = false;
-      profile.ensurePrivileged = false;
-      profile.preserveCurrentMode = true;
-      profile.risk = "safe";
-      profile.timeoutMs = 15000;
-      profile.stallTimeoutMs = 8000;
       return profile;
     }
 
