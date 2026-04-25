@@ -23,7 +23,6 @@ import { sanitizeCommandOutput } from "./command-sanitizer";
 import { type CommandEndedPayload, type TerminalEventRecord } from "../pt/terminal/terminal-events";
 import { TerminalErrors, type TerminalErrorCode } from "./terminal-errors";
 import { ensureSession } from "./session-registry";
-import { checkIsCommandFinished } from "./stability-heuristic";
 import { checkCommandCompletion } from "./stability-heuristic";
 import { verifyIosOutput, verifyHostOutput } from "./terminal-semantic-verifier";
 import { recoverTerminalSync } from "./terminal-recovery";
@@ -312,17 +311,42 @@ if (!readyResult.ready) {
 
     function resetStallTimer(): void {
       if (stallTimer) clearTimeout(stallTimer);
+
       stallTimer = setTimeout(() => {
         if (settled) return;
 
         const currentPrompt = getPromptSafe(terminal);
-        const { finished } = checkIsCommandFinished(currentPrompt, session, true);
+        const currentMode = getModeSafe(terminal) as TerminalMode;
+        const now = Date.now();
 
-        if (finished) {
-          scheduleFinalizeAfterCommandEnd();
-        } else {
-          finalizeFailure(TerminalErrors.COMMAND_END_TIMEOUT, "Command stalled before completion");
+        if (currentPrompt !== previousPrompt) {
+          previousPrompt = currentPrompt;
+          promptStableSince = now;
         }
+
+        const verdict = checkCommandCompletion({
+          currentPrompt,
+          previousPrompt,
+          commandEndedSeen,
+          lastOutputAt,
+          now,
+          promptStableSince,
+          sessionKind,
+          pagerActive: session.pagerActive,
+          confirmPromptActive: session.confirmPromptActive,
+          expectedMode: options.expectedMode,
+          currentMode,
+        });
+
+        if (verdict.finished) {
+          finalize(true, endedStatus, verdict.reason);
+          return;
+        }
+
+        finalizeFailure(
+          TerminalErrors.COMMAND_END_TIMEOUT,
+          "Command stalled before completion",
+        );
       }, stallTimeoutMs);
     }
 
