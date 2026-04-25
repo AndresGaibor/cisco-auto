@@ -48,5 +48,6 @@ export { ipv6NdStatelessScenario } from "./ipv6-nd-stateless.scenario.js";
 export { ipv6AclBasicScenario } from "./ipv6-acl-basic.scenario.js";
 export { hsrpBasicScenario } from "./hsrp-basic.scenario.js";
 export { hsrpFailoverScenario } from "./hsrp-failover.scenario.js";
+export { terminalRegressionScenario } from "./terminal-regression.scenario.js";
 export { hsrpLoadBalancingScenario } from "./hsrp-load-balancing.scenario.js";
 export type { RealScenarioDefinition, ScenarioContext, ScenarioStepResult, SetupFn, ExecuteFn, VerifyFn, CleanupFn } from "./real-scenario-types.js";

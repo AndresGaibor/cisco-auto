@@ -15,8 +15,10 @@
   "dependencies": {
     "@cisco-auto/file-bridge": "workspace:*",
     "@cisco-auto/kernel": "workspace:*",
+    "@cisco-auto/network-intent": "workspace:*",
     "@cisco-auto/pt-control": "workspace:*",
     "@cisco-auto/pt-runtime": "workspace:*",
+    "@cisco-auto/terminal-contracts": "workspace:*",
     "@inquirer/prompts": "^8.3.2",
     "chalk": "^5.6.2",
     "commander": "^14.0.3",

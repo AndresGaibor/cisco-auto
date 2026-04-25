@@ -47,6 +47,7 @@ import {
   emailRegressionScenario,
   wirelessBasicScenario,
   wirelessSecurityWpa2Scenario,
+  terminalRegressionScenario,
 } from "./scenarios/index.js";
 
 /**
@@ -99,6 +100,7 @@ registerScenario(emailBasicScenario);
 registerScenario(emailRegressionScenario);
 registerScenario(wirelessBasicScenario);
 registerScenario(wirelessSecurityWpa2Scenario);
+registerScenario(terminalRegressionScenario);
 
 /**
  * Obtiene un escenario por su ID único.
@@ -176,6 +178,7 @@ export const PROFILES = {
   "ipv6-core": ["ipv6-core"],
   "hsrp-core": ["hsrp-core"],
   "wireless-core": ["wireless-core"],
+  "terminal-regression": ["terminal-regression"],
 } as const;
 
 /**

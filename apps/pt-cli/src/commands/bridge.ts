@@ -5,10 +5,19 @@
 
 import { Command } from "commander";
 import { loadContextStatus } from "../application/context-supervisor.js";
+import { runBridgeDoctor, printBridgeDoctorReport, type BridgeDoctorReport } from "@cisco-auto/pt-control";
 
 export function createBridgeCommand(): Command {
   return new Command("bridge")
     .description("Mostrar estado del bridge CLI ↔ Packet Tracer")
+    .addCommand(
+      new Command("doctor")
+        .description("Diagnóstico profundo del bridge CLI ↔ PT")
+        .action(() => {
+          const report = runBridgeDoctor();
+          printBridgeDoctorReport(report);
+        }),
+    )
     .action(async () => {
       const status = await loadContextStatus();
 

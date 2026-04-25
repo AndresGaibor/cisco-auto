@@ -1,0 +1,60 @@
+name: campus-basic
+devices:
+  - name: SW-CORE
+    model: 3650-24PS
+    role: core
+  - name: SW-ACCESS-1
+    model: 2960-24TT
+    role: access
+  - name: R1
+    model: 2911
+    role: edge-router
+  - name: DHCP-SRV
+    model: Server-PT
+    role: services
+
+vlans:
+  - id: 10
+    name: DOCENTES
+    subnet: 192.168.10.0/24
+    gateway: 192.168.10.1
+  - id: 20
+    name: ESTUDIANTES
+    subnet: 192.168.20.0/24
+    gateway: 192.168.20.1
+
+switching:
+  trunks:
+    - device: SW-CORE
+      interface: GigabitEthernet1/0/1
+      allowedVlans: [10, 20]
+  accessPorts:
+    - device: SW-ACCESS-1
+      interface: FastEthernet0/1
+      vlan: 10
+
+routing:
+  interVlan:
+    mode: svi
+    device: SW-CORE
+    svi:
+      - vlan: 10
+        ip: 192.168.10.1/24
+      - vlan: 20
+        ip: 192.168.20.1/24
+
+dhcp:
+  server: DHCP-SRV
+  pools:
+    - name: DOCENTES
+      vlan: 10
+      network: 192.168.10.0/24
+      gateway: 192.168.10.1
+      start: 192.168.10.100
+      end: 192.168.10.200
+
+verification:
+  connectivity:
+    - from: PC-DOCENTES-1
+      to: 192.168.10.1
+      type: ping

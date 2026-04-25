@@ -183,6 +183,7 @@ export {
   OmniscienceService,
   ScenarioService,
   WlcService,
+  createTerminalCommandService,
 } from "./application/services/index.js";
 
 // Capability Matrix
@@ -190,3 +191,10 @@ export * from "@cisco-auto/kernel/domain/ios/capability-matrix";
 
 // Types
 export * from "./types/index.js";
+
+// Commands
+export {
+  runBridgeDoctor,
+  printBridgeDoctorReport,
+  type BridgeDoctorReport,
+} from "./commands/bridge-doctor-command.js";

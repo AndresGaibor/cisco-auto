@@ -35,6 +35,17 @@ import {
   ensureTerminalReadySync,
 } from "./terminal-ready";
 import { extractCommandOutput, type CommandSessionKind } from "./command-output-extractor";
+import {
+  pushEvent,
+  compactTerminalEvents,
+  shouldFinalizeCommand,
+  buildFinalOutput,
+  resolveTerminalError,
+  guessFailureStatus,
+  isOnlyPrompt,
+  detectDnsHangup,
+  computeConfidenceString,
+} from "./engine/index.js";
 
 export interface PTCommandLine {
   getPrompt(): string;
@@ -98,127 +109,12 @@ const COMMAND_END_GRACE_MS = 900;
 const COMMAND_END_MAX_WAIT_MS = 1000;
 const HOST_COMMAND_END_GRACE_MS = 1500;
 
-function pushEvent(
-  events: TerminalEventRecord[],
-  sessionId: string,
-  deviceName: string,
-  eventType: string,
-  raw: string,
-  normalized?: string,
-): void {
-  events.push({
-    sessionId,
-    deviceName,
-    eventType,
-    timestamp: Date.now(),
-    raw,
-    normalized: normalized ?? normalizePrompt(raw),
-  });
-}
-
-function detectDnsHangup(chunk: string): boolean {
-  return /Translating\s+["']?.+["']?\.\.\./i.test(chunk);
-}
-
 function detectWizardFromOutput(output: string): boolean {
   return (
     output.includes("initial configuration dialog?") ||
     output.includes("[yes/no]") ||
     output.includes("continuar con la configuración")
   );
-}
-
-function guessFailureStatus(output: string): number {
-  const text = String(output ?? "");
-  if (
-    text.includes("% Invalid") ||
-    text.includes("% Incomplete") ||
-    text.includes("% Ambiguous") ||
-    text.includes("% Unknown") ||
-    text.includes("%Error") ||
-    text.toLowerCase().includes("invalid command")
-  ) {
-    return 1;
-  }
-  return 0;
-}
-
-function computeConfidenceString(
-  cmdOk: boolean,
-  warnings: string[],
-  output: string,
-  modeMatched: boolean,
-  promptMatched: boolean,
-  startedSeen: boolean,
-  endedSeen: boolean,
-  outputEvents: number,
-): string {
-  if (!cmdOk) return "failure";
-
-  const factors: string[] = [];
-
-  if (!startedSeen) factors.push("no-started");
-  if (!endedSeen) factors.push("no-ended");
-  if (outputEvents === 0) factors.push("no-events");
-  if (!output.trim()) factors.push("empty-output");
-  if (!modeMatched) factors.push("mode-mismatch");
-  if (!promptMatched) factors.push("prompt-mismatch");
-  if (warnings.length > 0) factors.push("warnings");
-
-  if (factors.length === 0 && startedSeen && endedSeen && output.trim()) {
-    return "high";
-  }
-
-  if (factors.length <= 2 && (startedSeen || endedSeen) && output.trim()) {
-    return "medium";
-  }
-
-  return "low";
-}
-
-function isOnlyPrompt(output: string, prompt: string): boolean {
-  if (!output || !prompt) return false;
-  const normalizedOutput = output.trim();
-  const normalizedPrompt = prompt.trim();
-  return normalizedOutput === normalizedPrompt || normalizedOutput === normalizedPrompt.replace(/#|>/, "").trim();
-}
-
-function compactTerminalEvents(events: TerminalEventRecord[]): TerminalEventRecord[] {
-  const compacted: TerminalEventRecord[] = [];
-  let buffer = "";
-
-  for (const event of events) {
-    if (event.eventType === "outputWritten") {
-      buffer += event.raw;
-      continue;
-    }
-
-    if (buffer) {
-      compacted.push({
-        ...event,
-        eventType: "outputWritten",
-        raw: buffer,
-        normalized: buffer.trim(),
-        timestamp: event.timestamp,
-      });
-      buffer = "";
-    }
-
-    compacted.push(event);
-  }
-
-  if (buffer) {
-    compacted.push({
-      sessionId: events[events.length - 1]?.sessionId ?? "",
-      deviceName: events[events.length - 1]?.deviceName ?? "",
-      eventType: "outputWritten",
-      timestamp: events[events.length - 1]?.timestamp ?? Date.now(),
-      raw: buffer,
-      normalized: buffer.trim(),
-    });
-  }
-
-  return compacted;
 }
 
 async function sleep(ms: number): Promise<void> {

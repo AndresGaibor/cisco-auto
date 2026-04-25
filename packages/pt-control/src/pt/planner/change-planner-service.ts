@@ -95,9 +95,13 @@ export class ChangePlannerService implements IChangePlannerService {
     for (let i = rollbackActions.length - 1; i >= 0; i--) {
       const action = rollbackActions[i];
       const step = plan.steps[i];
-      const d = "unknown";
+      if (!step || !step.device) {
+        errors.push(`Step ${i} has no device definition`);
+        continue;
+      }
+      const device = step.device;
       try {
-        await this.rollbackExecutor!(d, action);
+        await this.rollbackExecutor!(device, action);
         rolledBack++;
       } catch (error) {
         errors.push(error instanceof Error ? error.message : String(error));

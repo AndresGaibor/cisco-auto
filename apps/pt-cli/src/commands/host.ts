@@ -16,6 +16,16 @@ import { runCommand } from '../application/run-command.js';
 import { printExamples } from '../ux/examples.js';
 import { formatNextSteps } from '../ux/next-steps.js';
 import { fetchDeviceList, formatDevice } from '../utils/device-utils.js';
+import { createTerminalCommandService } from '@cisco-auto/pt-control';
+import { createTerminalCommandPresenter } from '../presenters/terminal-command-presenter.js';
+
+function createTerminalCommandServiceForCli(controller: PTController) {
+    return createTerminalCommandService({
+        controller,
+        runtimeTerminal: null as any,
+        generateId: () => `cli-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    });
+}
 
 const DEVICE_TYPE_MAP: Record<number, string> = {
   0: 'router',
@@ -259,116 +269,42 @@ async function executeDeviceTerminalCommand(
     command: string,
     flags: any
 ): Promise<CliResult<any>> {
-    const device = await controller.inspectDevice(deviceName).catch(() => null);
-    const deviceType = typeof device?.type === 'string' ? device.type : normalizeDeviceType(device?.type);
-    const isIOS = deviceType === 'router' || deviceType === 'switch' || deviceType === 'switch_layer3';
+    const service = createTerminalCommandServiceForCli(controller);
 
     if (!flags.quiet && !flags.json) {
         process.stdout.write(chalk.cyan(`\n⏳ Esperando respuesta de ${chalk.bold(deviceName)}... `));
     }
 
-    if (isIOS) {
-        const timeoutMs = flags.timeout || 45000;
-        const execResult = await controller.execIos(deviceName, command, false, timeoutMs);
-
-        if (!flags.quiet && !flags.json) {
-            process.stdout.write(execResult.ok ? chalk.green('¡RECIBIDA!\n') : chalk.red('¡FALLÓ!\n'));
-        }
-
-        const output = execResult.raw ?? execResult.evidence?.raw ?? "";
-
-        if (!execResult.ok) {
-            const events = Array.isArray(execResult.evidence?.events)
-                ? execResult.evidence.events
-                : [];
-
-            const parsedError = (execResult.parsed as any)?.error;
-            const failureEvent = events.find((event: any) => event?.error || event?.code);
-
-            return createErrorResult('ios.exec', {
-                code: String(
-                    parsedError?.code ??
-                      failureEvent?.code ??
-                      'IOS_EXEC_FAILED',
-                ),
-                message: String(
-                    parsedError?.message ??
-                      failureEvent?.error ??
-                      'Error en ejecución de comando IOS',
-                ),
-                details: {
-                    device: deviceName,
-                    command,
-                    output,
-                    evidence: execResult.evidence,
-                    parsed: execResult.parsed,
-                }
-            });
-        }
-
-        return createSuccessResult('ios.exec', {
-            device: deviceName,
-            command,
-            output,
-            success: true,
-            verdict: {
-                warnings: []
-            },
-            parsed: {
-                events: execResult.evidence?.events || []
-            },
-            evidence: execResult.evidence,
-        });
-    }
-
-    const cmdName = command.split(' ')[0]!.toLowerCase();
-    let capabilityId = 'host.exec';
-    if (cmdName === 'ipconfig') capabilityId = 'host.ipconfig';
-    else if (cmdName === 'ping') capabilityId = 'host.ping';
-    else if (cmdName === 'tracert') capabilityId = 'host.tracert';
-    else if (cmdName === 'arp') capabilityId = 'host.arp';
-    else if (cmdName === 'nslookup') capabilityId = 'host.nslookup';
-    else if (cmdName === 'netstat') capabilityId = 'host.netstat';
-
-    if (flags.verbose) console.log(`[host.exec] Executing "${command}" on ${deviceName} with capability ${capabilityId}`);
-
-    const execResult = await controller.execHost(deviceName, command, capabilityId, {
-        timeoutMs: flags.timeout || 45000
+    const result = await service.executeCommand(deviceName, command, {
+        timeoutMs: flags.timeout || 45000,
     });
 
     if (!flags.quiet && !flags.json) {
-        process.stdout.write(chalk.green('¡RECIBIDA!\n'));
+        process.stdout.write(result.ok ? chalk.green('¡RECIBIDA!\n') : chalk.red('¡FALLÓ!\n'));
     }
 
-    const hostOutput = execResult.raw ?? "";
-    const hostCode =
-      hostOutput.toLowerCase().includes("invalid command") ||
-      hostOutput.toLowerCase().includes("not recognized")
-        ? "HOST_INVALID_COMMAND"
-        : "HOST_EXEC_FAILED";
+    if (result.ok) {
+        return createSuccessResult(result.action, {
+            device: result.device,
+            command: result.command,
+            output: result.output,
+            success: true,
+            verdict: {
+                warnings: result.warnings,
+            },
+            evidence: result.evidence,
+        });
+    }
 
-    if (!execResult.success || execResult.verdict?.ok === false) {
-      return createErrorResult('host.exec', {
-        code: String(execResult.verdict?.code ?? hostCode),
-        message: String(execResult.verdict?.reason ?? "Error en ejecución de comando Host"),
+    return createErrorResult(result.action, {
+        code: result.error?.code ?? "UNKNOWN_ERROR",
+        message: result.error?.message ?? "Error desconocido en ejecución de comando",
         details: {
-          device: deviceName,
-          command,
-          output: hostOutput,
-          verdict: execResult.verdict,
-          parsed: execResult.parsed,
+            device: result.device,
+            command: result.command,
+            output: result.output,
         },
-      });
-    }
-
-    return createSuccessResult('host.exec', {
-        device: deviceName,
-        command,
-        output: hostOutput,
-        success: true,
-        verdict: execResult.verdict,
-        parsed: execResult.parsed,
-    }, formatNextSteps(HOST_EXEC_META.nextSteps));
+    });
 }
 
 function createHostExecCommand(): Command {

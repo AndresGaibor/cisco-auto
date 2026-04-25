@@ -11,6 +11,9 @@ import { createLabInteractiveCommand } from "./interactive";
 import { createLabParseCommand } from "./parse";
 import { createLabPipelineCommand } from "./pipeline";
 import { createAuditCommand } from "./audit";
+import { createLabApplyCommand } from "./apply";
+import { createLabVerifyCommand } from "./verify";
+import { createLabDiagnoseCommand } from "./lab-diagnose";
 
 export function createLabCommand(): Command {
   const cmd = new Command("lab")
@@ -136,6 +139,9 @@ export function createLabCommand(): Command {
   cmd.addCommand(createLabParseCommand());     // Alias: parse
   cmd.addCommand(createLabPipelineCommand());  // Alias: pipeline
   cmd.addCommand(createAuditCommand());        // Alias: audit
+  cmd.addCommand(createLabApplyCommand());    // Alias: apply
+  cmd.addCommand(createLabVerifyCommand());   // Alias: verify-yaml (avoid conflict with lab verify <id>)
+  cmd.addCommand(createLabDiagnoseCommand()); // Alias: diagnose
 
   return cmd;
 }
