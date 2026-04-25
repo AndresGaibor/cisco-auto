@@ -109,6 +109,21 @@ export function classifyIosCommand(command: string): CommandProfile {
     return profile;
   }
 
+  if (cmd === "disable") {
+    profile.intent = "config-exit";
+    profile.expectedMode = "user-exec";
+    profile.preserveCurrentMode = false;
+    profile.ensurePrivileged = true;
+    profile.allowPager = false;
+    profile.allowConfirm = false;
+    profile.allowEmptyOutput = true;
+    profile.semanticCheck = "ios";
+    profile.risk = "safe";
+    profile.timeoutMs = 15000;
+    profile.stallTimeoutMs = 8000;
+    return profile;
+  }
+
   if (cmd === "end" || cmd === "^z" || cmd === "ctrl+z") {
     profile.intent = "config-exit";
     profile.expectedMode = "privileged-exec";
