@@ -148,10 +148,6 @@ function sendPagerAdvance(
     sent = true;
   } catch {}
 
-  try {
-    terminal.flush?.();
-  } catch {}
-
   pushEvent(
     events,
     sessionId,
@@ -166,7 +162,6 @@ function sendPagerAdvance(
       if (!terminalOutputHasPager(terminal)) return;
 
       terminal.enterCommand?.(" ");
-      terminal.flush?.();
 
       pushEvent(
         events,

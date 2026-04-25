@@ -194,17 +194,19 @@ async function runCommand(
     return normalized;
   } catch (error) {
     const normalized = normalizeResult(undefined, error);
+    const message = String((error as any)?.message ?? normalized.errorMessage ?? "");
 
-    if (!normalized.ok && !normalized.errorCode) {
-      const message = String((error as any)?.message ?? "");
-
+    if (message.includes("Timeout waiting for result")) {
       normalized.errorCode =
-        message.includes("Timeout waiting for result")
-          ? "IOS_RESULT_TIMEOUT"
-          : inferSemanticCodeFromOutput(
-              normalized.output || normalized.raw || normalized.errorMessage || "",
-              testCase.deviceKind,
-            );
+        testCase.deviceKind === "host"
+          ? "HOST_RESULT_TIMEOUT"
+          : "IOS_RESULT_TIMEOUT";
+    } else if (!normalized.errorCode || normalized.errorCode === "THROWN_ERROR") {
+      normalized.errorCode =
+        inferSemanticCodeFromOutput(
+          normalized.output || normalized.raw || normalized.errorMessage || "",
+          testCase.deviceKind,
+        ) || "THROWN_ERROR";
     }
 
     return normalized;
@@ -215,8 +217,19 @@ async function runBestEffortCleanup(
   controller: any,
   testCase: TerminalRegressionCase,
   warnings: string[],
+  lastResult?: NormalizedCommandResult | null,
 ): Promise<void> {
   for (const command of testCase.postCommands ?? []) {
+    const normalizedCommand = command.trim().toLowerCase();
+
+    if (
+      normalizedCommand === "end" &&
+      lastResult?.modeAfter &&
+      !lastResult.modeAfter.startsWith("config")
+    ) {
+      continue;
+    }
+
     const result = await runCommand(controller, testCase, command);
     if (!result.ok) {
       warnings.push(
@@ -348,8 +361,9 @@ export const terminalRegressionScenario: RealScenarioDefinition = {
       device: string;
       deviceKind: string;
       command: string;
-      expectedOk: boolean;
-      ok: boolean;
+      expectedCommandOk: boolean;
+      commandOk: boolean;
+      casePassed: boolean;
       reasons: string[];
       output: string;
       errorCode?: string;
@@ -382,6 +396,7 @@ export const terminalRegressionScenario: RealScenarioDefinition = {
 
     for (const testCase of casesToRun) {
       let caseResult: NormalizedCommandResult | null = null;
+      let preCommandsPassed = false;
 
       try {
         const pre = await runPreCommands(controller, testCase);
@@ -392,8 +407,9 @@ export const terminalRegressionScenario: RealScenarioDefinition = {
             device: testCase.device,
             deviceKind: testCase.deviceKind,
             command: testCase.command,
-            expectedOk: testCase.expectedOk,
-            ok: false,
+            expectedCommandOk: testCase.expectedOk,
+            commandOk: false,
+            casePassed: false,
             reasons: [pre.error],
             output: pre.result.output,
             errorCode: pre.result.errorCode,
@@ -408,6 +424,8 @@ export const terminalRegressionScenario: RealScenarioDefinition = {
           continue;
         }
 
+        preCommandsPassed = true;
+
         caseResult = await runCommand(controller, testCase, testCase.command);
         const evaluation = evaluateCase(testCase, caseResult);
 
@@ -417,8 +435,9 @@ export const terminalRegressionScenario: RealScenarioDefinition = {
           device: testCase.device,
           deviceKind: testCase.deviceKind,
           command: testCase.command,
-          expectedOk: testCase.expectedOk,
-          ok: evaluation.ok,
+          expectedCommandOk: testCase.expectedOk,
+          commandOk: caseResult.ok,
+          casePassed: evaluation.ok,
           reasons: evaluation.reasons,
           output: caseResult.output,
           errorCode: caseResult.errorCode,
@@ -436,8 +455,9 @@ export const terminalRegressionScenario: RealScenarioDefinition = {
           device: testCase.device,
           deviceKind: testCase.deviceKind,
           command: testCase.command,
-          expectedOk: testCase.expectedOk,
-          ok: false,
+          expectedCommandOk: testCase.expectedOk,
+          commandOk: false,
+          casePassed: false,
           reasons: [`unexpected exception: ${String(error)}`],
           output: caseResult?.output ?? "",
           errorCode: caseResult?.errorCode,
@@ -449,11 +469,13 @@ export const terminalRegressionScenario: RealScenarioDefinition = {
 
         writePartialResults();
       } finally {
-        await runBestEffortCleanup(controller, testCase, warnings);
+        if (preCommandsPassed) {
+          await runBestEffortCleanup(controller, testCase, warnings, caseResult);
+        }
       }
     }
 
-    const failed = results.filter((r) => !r.ok);
+    const failed = results.filter((r) => !r.casePassed);
 
     writePartialResults();
 
