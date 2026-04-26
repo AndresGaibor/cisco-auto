@@ -102,6 +102,8 @@ export function createDeviceMoveCommand(): Command {
       const y = parseInt(options.ypos ?? '100', 10);
 
       const flags = buildFlags({
+        json: process.argv.includes('--json'),
+        output: process.argv.includes('--json') ? 'json' : 'text',
         trace: globalTrace,
         traceBundle: globalTraceBundle,
         examples: globalExamples,

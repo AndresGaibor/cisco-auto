@@ -92,6 +92,8 @@ export function createDeviceRemoveCommand(): Command {
       let deviceName = name;
 
       const flags = buildFlags({
+        json: process.argv.includes('--json'),
+        output: process.argv.includes('--json') ? 'json' : 'text',
         trace: globalTrace,
         traceBundle: globalTraceBundle,
         examples: globalExamples,

@@ -9,6 +9,20 @@ import {
 } from '../src/utils/device-utils.js';
 
 describe('device utils', () => {
+  test('fetchDeviceList acepta respuesta con propiedad devices', async () => {
+    const controller = {
+      listDevices: vi.fn().mockResolvedValue({
+        devices: [
+          { name: 'SW Core', type: 'switch', model: '3560', x: 3, y: 4 },
+        ],
+      }),
+    };
+
+    const device = await requireDeviceExists(controller as never, 'SW Core');
+
+    expect(device.name).toBe('SW Core');
+  });
+
   test('requireDeviceExists devuelve el dispositivo cuando existe', async () => {
     const controller = {
       listDevices: vi.fn().mockResolvedValue([

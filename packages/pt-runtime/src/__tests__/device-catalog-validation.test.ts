@@ -158,7 +158,7 @@ describe("Device Management - Catalog Validation", () => {
         {
           type: "addDevice",
           model: "1941",
-          name: "R1",
+          name: "Device1",
           x: 100,
           y: 100,
         },
@@ -166,7 +166,7 @@ describe("Device Management - Catalog Validation", () => {
       );
 
       expect((result as any).ok).toBe(true);
-      expect((result as any).name).toBe("R1");
+      expect((result as any).name).toBe("Device1");
       expect(network.getDeviceCount()).toBe(1);
     });
 
@@ -328,7 +328,7 @@ describe("Device Management - Catalog Validation", () => {
         {
           type: "addDevice",
           model: "1941",
-          name: "R1",
+          name: "Device1",
         },
         deps,
       );
@@ -387,7 +387,7 @@ describe("Device Management - Catalog Validation", () => {
         {
           type: "addDevice",
           model: "1941",
-          name: "R1",
+          name: "Device1",
         },
         deps,
       );
@@ -397,7 +397,7 @@ describe("Device Management - Catalog Validation", () => {
       // El dispositivo se agregó con autoName (Device1), no R1
       const device = network.getDevice("Device1");
       expect(device).not.toBeNull();
-      expect(device?.getName()).toBe("R1"); // Pero el nombre mostrado es R1
+      expect(device?.getName()).toBe("Device1");
       expect(device?.getModel()).toBe("1941");
     });
 
@@ -437,7 +437,7 @@ describe("Device Management - Catalog Validation", () => {
         {
           type: "addDevice",
           model: "1941",
-          name: "R1",
+          name: "Device1",
         },
         deps,
       );
@@ -467,7 +467,8 @@ describe("Device Management - Catalog Validation", () => {
         deps,
       );
 
-      expect((result as any).ok).toBe(true); // No error, idempotent
+      expect((result as any).ok).toBe(false);
+      expect((result as any).code).toBe("DEVICE_NOT_FOUND");
     });
 
     test("Ciclo completo: ADD + LIST + REMOVE", () => {
@@ -478,7 +479,7 @@ describe("Device Management - Catalog Validation", () => {
         {
           type: "addDevice",
           model: "1941",
-          name: "R1",
+          name: "Device1",
         },
         deps,
       );

@@ -13,14 +13,20 @@ type DevicePort = {
   protocol?: string;
   ipAddress?: string;
   subnetMask?: string;
+  ip?: string;
+  mask?: string;
+  portUp?: boolean;
+  protocolUp?: boolean;
   connection?: { remoteDevice?: string; remotePort?: string; confidence?: string };
 };
 
 function formatPortState(port: DevicePort): string {
-  const isUp = port.status === 'up' || port.protocol === 'up';
+  const isUp = port.portUp === true || port.protocolUp === true || port.status === 'up' || port.protocol === 'up';
   const status = isUp ? chalk.green('UP') : chalk.gray(port.status || port.protocol || 'DOWN');
-  const ip = port.ipAddress && port.ipAddress !== '0.0.0.0' ? ` ip=${port.ipAddress}` : '';
-  const mask = port.subnetMask && port.subnetMask !== '0.0.0.0' ? ` mask=${port.subnetMask}` : '';
+  const ipValue = port.ipAddress ?? port.ip;
+  const maskValue = port.subnetMask ?? port.mask;
+  const ip = ipValue && ipValue !== '0.0.0.0' ? ` ip=${ipValue}` : '';
+  const mask = maskValue && maskValue !== '0.0.0.0' ? ` mask=${maskValue}` : '';
   const connection = port.connection?.remoteDevice && port.connection?.remotePort
     ? ` -> ${port.connection.remoteDevice}:${port.connection.remotePort} [${port.connection.confidence || 'unknown'}]`
     : '';
@@ -41,7 +47,7 @@ export function createDevicePortsCommand(): Command {
       const useJson = Boolean(globalFlags.json || options.json);
 
       const result = await loadLiveDeviceList(undefined, { refreshCache: Boolean(options.refresh) });
-      const devices = (result.devices ?? []) as any[];
+      const devices = (result.devices ?? []) as Array<{ name: string; model?: string; type?: string; ports?: DevicePort[] }>;
       const device = devices.find((item) => item.name === deviceName);
 
       if (!device) {

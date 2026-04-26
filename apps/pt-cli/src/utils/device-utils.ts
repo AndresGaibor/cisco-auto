@@ -7,7 +7,13 @@ import { type PTController } from "@cisco-auto/pt-control/controller";
 import { type DeviceState } from "@cisco-auto/pt-control/contracts";
 import chalk from "chalk";
 
-type DeviceSummary = Pick<DeviceState, "name" | "type" | "model" | "x" | "y">;
+type DeviceSummary = {
+  name: string;
+  type?: DeviceState["type"];
+  model?: string;
+  x?: number;
+  y?: number;
+};
 
 function summarizeDevices(devices: readonly DeviceSummary[]): DeviceSummary[] {
   return devices.map((device) => ({
@@ -116,7 +122,16 @@ export const DEVICE_MODELS: Record<string, { name: string; type: string }[]> = {
 export async function fetchDeviceList(controller: PTController): Promise<DeviceState[]> {
   try {
     const devices = await controller.listDevices();
-    return Array.isArray(devices) ? (devices as DeviceState[]) : [];
+    if (Array.isArray(devices)) {
+      return devices as DeviceState[];
+    }
+
+    if (devices && typeof devices === "object" && "devices" in devices) {
+      const listed = (devices as { devices?: unknown }).devices;
+      return Array.isArray(listed) ? (listed as DeviceState[]) : [];
+    }
+
+    return [];
   } catch (error) {
     throw new Error(
       `Failed to fetch devices: ${error instanceof Error ? error.message : "unknown error"}`,

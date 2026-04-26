@@ -48,7 +48,17 @@ export interface RemoveDevicePayload {
 export function handleAddDevice(payload: AddDevicePayload, deps: HandlerDeps): HandlerResult {
   var lw = deps.getLW();
   var net = deps.getNet();
-  var model = resolveModel(payload.model);
+  var model: string;
+
+  try {
+    model = resolveModel(payload.model);
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+      code: "INVALID_INPUT",
+    };
+  }
   var name = payload.name || model;
   var x = payload.x ?? 100;
   var y = payload.y ?? 100;
@@ -87,7 +97,7 @@ export function handleRemoveDevice(payload: RemoveDevicePayload, deps: HandlerDe
   var lw = deps.getLW();
   var dprint = deps.dprint;
 
-  if (payload.name === "ALL" || !payload.name) {
+  if (payload.name === "ALL") {
     try {
       var deviceCount = net.getDeviceCount();
       dprint("[handler:removeDevice] Bulk remove started. Count: " + deviceCount);
@@ -105,30 +115,68 @@ export function handleRemoveDevice(payload: RemoveDevicePayload, deps: HandlerDe
     }
   }
 
+  if (!payload.name) {
+    return { ok: false, error: "Device name is required", code: "INVALID_PAYLOAD" };
+  }
+
   try {
-    lw.removeDevice(payload.name);
+    var beforeCount = net.getDeviceCount();
+    var lwAny = lw as any;
+    var removeFn = lwAny.removeDevice || lwAny.deleteDevice || lwAny.removeObject || lwAny.deleteObject;
+
+    if (!removeFn) {
+      return { ok: false, error: "Remove operation not supported: " + payload.name, code: "UNSUPPORTED_OPERATION" };
+    }
+
+    removeFn.call(lw, payload.name);
+
+    if (net.getDeviceCount() === beforeCount) {
+      return { ok: false, error: "Device not found: " + payload.name, code: "DEVICE_NOT_FOUND" };
+    }
+
+    if (net.getDevice(payload.name)) {
+      return { ok: false, error: "Device still exists after remove: " + payload.name, code: "REMOVE_FAILED" };
+    }
+
     return { ok: true, name: payload.name };
   } catch (e) {
-    return { ok: false, error: "Device not found or busy: " + payload.name };
+    return { ok: false, error: "Device not found or busy: " + payload.name, code: "DEVICE_NOT_FOUND" };
   }
 }
 
 export function handleRenameDevice(payload: any, deps: HandlerDeps): HandlerResult {
-  var device = deps.getNet().getDevice(payload.oldName);
-  if (!device) return { ok: false, error: "Not found" };
-  device.setName(payload.newName);
-  return { ok: true, oldName: payload.oldName, newName: payload.newName };
+  var net = deps.getNet();
+  var device = net.getDevice(payload.oldName);
+  if (!device) return { ok: false, error: "Device not found: " + payload.oldName, code: "DEVICE_NOT_FOUND" };
+  if (net.getDevice(payload.newName)) return { ok: false, error: "Device already exists: " + payload.newName, code: "DEVICE_ALREADY_EXISTS" };
+
+  try {
+    device.setName(payload.newName);
+    return { ok: true, oldName: payload.oldName, newName: payload.newName };
+  } catch (e) {
+    return { ok: false, error: "Rename failed: " + String(e), code: "RENAME_FAILED" };
+  }
 }
 
 export function handleMoveDevice(payload: any, deps: HandlerDeps): HandlerResult {
   var device = deps.getNet().getDevice(payload.name);
-  if (!device) return { ok: false, error: "Not found" };
+  if (!device) return { ok: false, error: "Device not found: " + payload.name, code: "DEVICE_NOT_FOUND" };
   var x = Math.round(payload.x);
   var y = Math.round(payload.y);
   try {
-    if (device.moveToLocation) device.moveToLocation(x, y);
+    if (device.moveToLocation) {
+      if (device.moveToLocation(x, y) === false) {
+        return { ok: false, error: "Move rejected by Packet Tracer: " + payload.name, code: "MOVE_REJECTED" };
+      }
+    } else if (device.moveToLocationCentered) {
+      if (device.moveToLocationCentered(x, y) === false) {
+        return { ok: false, error: "Move rejected by Packet Tracer: " + payload.name, code: "MOVE_REJECTED" };
+      }
+    } else {
+      return { ok: false, error: "Device does not support move operation: " + payload.name, code: "UNSUPPORTED_OPERATION" };
+    }
     return { ok: true, name: payload.name, x: x, y: y };
   } catch (e) {
-    return { ok: false, error: "Move failed" };
+    return { ok: false, error: "Move failed: " + String(e), code: "MOVE_FAILED" };
   }
 }

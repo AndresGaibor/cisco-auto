@@ -120,6 +120,7 @@ export function createDeviceGetCommand(): Command {
 
       const flags = buildFlags({
         json: globalJson,
+        output: globalJson ? 'json' : 'text',
         verbose: globalVerbose,
         examples: globalExamples,
         schema: globalSchema,
@@ -179,8 +180,9 @@ export function createDeviceGetCommand(): Command {
         }
       });
 
-      // Renderizar resultado
-      if (result.ok && result.data && !flags.json) {
+      if (flags.output === 'json') {
+        console.log(JSON.stringify(result, null, 2));
+      } else if (result.ok && result.data) {
         console.log(`\n📱 ${result.data.name}:`);
         console.log('━'.repeat(60));
         console.log(`Tipo: ${result.data.type}`);
@@ -230,10 +232,6 @@ export function createDeviceGetCommand(): Command {
           console.error('Detalles:', result.error.details);
         }
         process.exit(1);
-      }
-
-      if (flags.json) {
-        console.log(JSON.stringify(result, null, 2));
       }
     });
 
