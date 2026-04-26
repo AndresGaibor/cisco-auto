@@ -7,6 +7,79 @@ import { type PTController } from "@cisco-auto/pt-control/controller";
 import { type DeviceState } from "@cisco-auto/pt-control/contracts";
 import chalk from "chalk";
 
+type DeviceSummary = Pick<DeviceState, "name" | "type" | "model" | "x" | "y">;
+
+function summarizeDevices(devices: readonly DeviceSummary[]): DeviceSummary[] {
+  return devices.map((device) => ({
+    name: device.name,
+    type: device.type,
+    model: device.model,
+    x: device.x,
+    y: device.y,
+  }));
+}
+
+function normalizeDeviceName(name: string): string {
+  return name.trim();
+}
+
+export class DeviceNotFoundError extends Error {
+  readonly code = "DEVICE_NOT_FOUND";
+
+  constructor(
+    readonly requested: string,
+    readonly availableDevices: readonly DeviceSummary[],
+  ) {
+    super(
+      availableDevices.length === 0
+        ? `Dispositivo '${requested}' no encontrado. No hay dispositivos en la topología.`
+        : `Dispositivo '${requested}' no encontrado. Dispositivos existentes: ${availableDevices.map((device) => device.name).join(", ")}`,
+    );
+
+    this.name = "DeviceNotFoundError";
+  }
+
+  toDetails(): Record<string, unknown> {
+    return {
+      requested: this.requested,
+      availableDevices: summarizeDevices(this.availableDevices),
+      count: this.availableDevices.length,
+    };
+  }
+
+  toAdvice(): string[] {
+    return ["Ejecuta bun run pt device list --json para ver los nombres exactos."];
+  }
+}
+
+export class DeviceAlreadyExistsError extends Error {
+  readonly code = "DEVICE_ALREADY_EXISTS";
+
+  constructor(
+    readonly requested: string,
+    readonly availableDevices: readonly DeviceSummary[],
+  ) {
+    super(`Dispositivo '${requested}' ya existe. Elige otro nombre.`);
+
+    this.name = "DeviceAlreadyExistsError";
+  }
+
+  toDetails(): Record<string, unknown> {
+    return {
+      requested: this.requested,
+      availableDevices: summarizeDevices(this.availableDevices),
+      count: this.availableDevices.length,
+    };
+  }
+
+  toAdvice(): string[] {
+    return [
+      "Usa otro nombre para el nuevo dispositivo.",
+      "Ejecuta bun run pt device list --json para ver los nombres ya ocupados.",
+    ];
+  }
+}
+
 /**
  * Device model catalog for interactive selection
  */
@@ -42,8 +115,8 @@ export const DEVICE_MODELS: Record<string, { name: string; type: string }[]> = {
  */
 export async function fetchDeviceList(controller: PTController): Promise<DeviceState[]> {
   try {
-    const { devices } = await controller.listDevices();
-    return (Array.isArray(devices) ? devices : []) as DeviceState[];
+    const devices = await controller.listDevices();
+    return Array.isArray(devices) ? (devices as DeviceState[]) : [];
   } catch (error) {
     throw new Error(
       `Failed to fetch devices: ${error instanceof Error ? error.message : "unknown error"}`,
@@ -61,12 +134,14 @@ export async function getDeviceByName(
   controller: PTController,
   name: string,
 ): Promise<DeviceState | undefined> {
-  try {
-    const devices = await fetchDeviceList(controller);
-    return devices.find((d) => d.name === name);
-  } catch {
+  const normalized = normalizeDeviceName(name);
+
+  if (!normalized) {
     return undefined;
   }
+
+  const devices = await fetchDeviceList(controller);
+  return devices.find((d) => d.name === normalized);
 }
 
 /**
@@ -90,10 +165,37 @@ export async function validateDeviceNameNotExists(
   controller: PTController,
   name: string,
 ): Promise<void> {
-  const exists = await deviceExists(controller, name);
-  if (exists) {
-    throw new Error(`Device '${name}' already exists in topology`);
+  const normalized = normalizeDeviceName(name);
+
+  if (!normalized) {
+    throw new Error("El nombre del dispositivo es requerido");
   }
+
+  const devices = await fetchDeviceList(controller);
+
+  if (devices.some((device) => device.name === normalized)) {
+    throw new DeviceAlreadyExistsError(normalized, devices);
+  }
+}
+
+export async function requireDeviceExists(
+  controller: PTController,
+  name: string,
+): Promise<DeviceState> {
+  const normalized = normalizeDeviceName(name);
+
+  if (!normalized) {
+    throw new Error("El nombre del dispositivo es requerido");
+  }
+
+  const devices = await fetchDeviceList(controller);
+  const found = devices.find((device) => device.name === normalized);
+
+  if (!found) {
+    throw new DeviceNotFoundError(normalized, devices);
+  }
+
+  return found;
 }
 
 /**

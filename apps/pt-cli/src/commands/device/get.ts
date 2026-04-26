@@ -13,6 +13,8 @@ import type { GlobalFlags } from '../../flags.js';
 import { runCommand } from '../../application/run-command.js';
 import { printExamples } from '../../ux/examples.js';
 import { formatNextSteps } from '../../ux/next-steps.js';
+import { buildFlags } from '../../flags-utils.js';
+import { DeviceNotFoundError, requireDeviceExists } from '../../utils/device-utils.js';
 
 export const DEVICE_GET_META: CommandMeta = {
   id: 'device.get',
@@ -116,25 +118,14 @@ export function createDeviceGetCommand(): Command {
         return;
       }
 
-      const flags: GlobalFlags = {
+      const flags = buildFlags({
         json: globalJson,
-        jq: null,
-        output: 'text',
         verbose: globalVerbose,
-        quiet: false,
-        trace: false,
-        tracePayload: false,
-        traceResult: false,
-        traceDir: null,
-        traceBundle: false,
-        traceBundlePath: null,
-        sessionId: null,
         examples: globalExamples,
         schema: globalSchema,
         explain: globalExplain,
-        plan: false,
         verify: false,
-      };
+      });
 
       const result = await runCommand<DeviceGetResult>({
         action: 'device.get',
@@ -147,37 +138,41 @@ export function createDeviceGetCommand(): Command {
           await controller.start();
 
           try {
-            const device = await controller.inspectDevice(deviceName, globalXml);
-
-            if (!device || !device.name) {
-              return createErrorResult('device.get', {
-                message: `Dispositivo '${deviceName}' no encontrado`,
-                details: { device: deviceName }
-              }) as CliResult<DeviceGetResult>;
-            }
+            const device = await requireDeviceExists(controller, deviceName);
+            const inspectedDevice = await controller.inspectDevice(device.name, globalXml);
 
             const result: DeviceGetResult = {
-              name: device.name,
-              model: device.model,
-              type: device.type,
-              hostname: device.hostname,
-              power: device.power,
-              dhcp: device.dhcp,
-              ip: device.ip,
-              mask: device.mask,
-              gateway: device.gateway,
-              dns: device.dns,
-              ports: device.ports || [],
-              x: device.x,
-              y: device.y,
-              uuid: device.uuid,
-              version: device.version,
-              configRegister: device.configRegister,
-              xml: (device as Record<string, unknown>).xml as string | undefined,
-              xmlParsed: (device as Record<string, unknown>).xmlParsed as Record<string, unknown> | undefined,
+              name: inspectedDevice.name,
+              model: inspectedDevice.model,
+              type: inspectedDevice.type,
+              hostname: inspectedDevice.hostname,
+              power: inspectedDevice.power,
+              dhcp: inspectedDevice.dhcp,
+              ip: inspectedDevice.ip,
+              mask: inspectedDevice.mask,
+              gateway: inspectedDevice.gateway,
+              dns: inspectedDevice.dns,
+              ports: inspectedDevice.ports || [],
+              x: inspectedDevice.x,
+              y: inspectedDevice.y,
+              uuid: inspectedDevice.uuid,
+              version: inspectedDevice.version,
+              configRegister: inspectedDevice.configRegister,
+              xml: (inspectedDevice as Record<string, unknown>).xml as string | undefined,
+              xmlParsed: (inspectedDevice as Record<string, unknown>).xmlParsed as Record<string, unknown> | undefined,
             };
 
             return createSuccessResult('device.get', result);
+          } catch (error) {
+            if (error instanceof DeviceNotFoundError) {
+              return createErrorResult('device.get', {
+                code: error.code,
+                message: error.message,
+                details: error.toDetails(),
+              }) as CliResult<DeviceGetResult>;
+            }
+
+            throw error;
           } finally {
             await controller.stop();
           }

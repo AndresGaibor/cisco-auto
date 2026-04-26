@@ -17,7 +17,8 @@ import { runCommand } from '../../application/run-command.js';
 import { renderCliResult } from '../../ux/renderers.js';
 import { printExamples } from '../../ux/examples.js';
 import { formatNextSteps } from '../../ux/next-steps.js';
-import { fetchDeviceList, formatDevice } from '../../utils/device-utils.js';
+import { buildFlags } from '../../flags-utils.js';
+import { DeviceNotFoundError, fetchDeviceList, formatDevice, requireDeviceExists } from '../../utils/device-utils.js';
 
 interface DeviceMoveResult {
   name: string;
@@ -96,36 +97,19 @@ export function createDeviceMoveCommand(): Command {
         return;
       }
 
-      if (globalPlan) {
-        console.log('Plan de ejecución:');
-        console.log(`  1. Mover dispositivo ${name ?? '<name>'} a posición (${options.xpos ?? '100'}, ${options.ypos ?? '100'})`);
-        console.log('  2. Verificar que la posición fue actualizada');
-        return;
-      }
-
       let deviceName = name;
       const x = parseInt(options.xpos ?? '100', 10);
       const y = parseInt(options.ypos ?? '100', 10);
 
-      const flags: GlobalFlags = {
-        json: false,
-        jq: null,
-        output: 'text',
-        verbose: false,
-        quiet: false,
+      const flags = buildFlags({
         trace: globalTrace,
-        tracePayload: false,
-        traceResult: false,
-        traceDir: null,
         traceBundle: globalTraceBundle,
-        traceBundlePath: null,
-        sessionId: null,
         examples: globalExamples,
         schema: globalSchema,
         explain: globalExplain,
         plan: globalPlan,
         verify: verifyEnabled,
-      };
+      });
 
       const result = await runCommand<DeviceMoveResult>({
         action: 'device.move',
@@ -171,6 +155,19 @@ export function createDeviceMoveCommand(): Command {
 
             if (!deviceName?.trim()) {
               throw new Error('El nombre del dispositivo es requerido');
+            }
+
+            await requireDeviceExists(controller, deviceName);
+
+            if (globalPlan) {
+              console.log('Plan de ejecución:');
+              console.log(`  1. Mover dispositivo ${deviceName} a posición (${options.xpos ?? '100'}, ${options.ypos ?? '100'})`);
+              console.log('  2. Verificar que la posición fue actualizada');
+              return createSuccessResult('device.move', {
+                name: deviceName,
+                x,
+                y,
+              });
             }
 
             await logPhase('apply', { name: deviceName, x, y });
@@ -240,6 +237,22 @@ export function createDeviceMoveCommand(): Command {
                 `Ejecuta bun run pt device get ${deviceName} para verificar`,
               ],
             });
+          } catch (error) {
+            if (error instanceof DeviceNotFoundError) {
+              return {
+                schemaVersion: '1.0',
+                ok: false,
+                action: 'device.move',
+                error: {
+                  code: error.code,
+                  message: error.message,
+                  details: error.toDetails(),
+                },
+                advice: error.toAdvice(),
+              } as CliResult<DeviceMoveResult>;
+            }
+
+            throw error;
           } finally {
             await controller.stop();
           }

@@ -56,7 +56,17 @@ export function createDeviceListCommand(): Command {
 
       if (result.count === 0) {
         if (useJson) {
-          console.log(JSON.stringify([], null, 2));
+          renderDeviceList({
+            devices: [],
+            count: 0,
+            connectionsByDevice: {},
+            unresolvedLinks: [],
+            ptLinkDebug: (result as any).ptLinkDebug,
+            useJson,
+            verbose,
+            linksMode,
+            useXml,
+          });
         } else {
           console.log(chalk.yellow("No se encontraron dispositivos."));
           console.log(chalk.gray("Verifica que PT esté abierto y el runtime esté activo."));

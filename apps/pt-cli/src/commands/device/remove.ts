@@ -17,7 +17,8 @@ import { runCommand } from '../../application/run-command.js';
 import { renderCliResult } from '../../ux/renderers.js';
 import { printExamples } from '../../ux/examples.js';
 import { formatNextSteps } from '../../ux/next-steps.js';
-import { fetchDeviceList, formatDevice } from '../../utils/device-utils.js';
+import { buildFlags } from '../../flags-utils.js';
+import { DeviceNotFoundError, fetchDeviceList, formatDevice, requireDeviceExists } from '../../utils/device-utils.js';
 
 interface DeviceRemoveResult {
   name: string;
@@ -90,25 +91,15 @@ export function createDeviceRemoveCommand(): Command {
 
       let deviceName = name;
 
-      const flags: GlobalFlags = {
-        json: false,
-        jq: null,
-        output: 'text',
-        verbose: false,
-        quiet: false,
+      const flags = buildFlags({
         trace: globalTrace,
-        tracePayload: false,
-        traceResult: false,
-        traceDir: null,
         traceBundle: globalTraceBundle,
-        traceBundlePath: null,
-        sessionId: null,
         examples: globalExamples,
         schema: globalSchema,
         explain: globalExplain,
         plan: globalPlan,
         verify: true,
-      };
+      });
 
       const result = await runCommand<DeviceRemoveResult>({
         action: 'device.remove',
@@ -152,6 +143,8 @@ export function createDeviceRemoveCommand(): Command {
             if (!deviceName?.trim()) {
               throw new Error('El nombre del dispositivo es requerido');
             }
+
+            await requireDeviceExists(controller, deviceName);
 
             if (globalPlan) {
               console.log('\nPlan de ejecución:');
@@ -205,6 +198,22 @@ export function createDeviceRemoveCommand(): Command {
                 'Ejecuta bun run pt device list para verificar',
               ],
             });
+          } catch (error) {
+            if (error instanceof DeviceNotFoundError) {
+              return {
+                schemaVersion: '1.0',
+                ok: false,
+                action: 'device.remove',
+                error: {
+                  code: error.code,
+                  message: error.message,
+                  details: error.toDetails(),
+                },
+                advice: error.toAdvice(),
+              } as CliResult<DeviceRemoveResult>;
+            }
+
+            throw error;
           } finally {
             await controller.stop();
           }

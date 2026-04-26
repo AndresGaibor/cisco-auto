@@ -192,9 +192,6 @@ export class PTController {
         inspectHost: async (device: string) => ({ name: device, model: 'PC1', type: 'pc' as const, power: true, ports: [] }),
       } as any;
 
-      this.omniscience = {} as any;
-      this.labService = {} as any;
-
       return;
     }
 
@@ -228,9 +225,6 @@ export class PTController {
       composition.deviceService,
     );
   }
-
-  omniscience: any;
-  labService: any;
 
   // -------------------------------------------------------------------------
   // Propiedades de composición

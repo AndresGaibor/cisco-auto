@@ -7,5 +7,6 @@ describe("device command", () => {
     const deviceCommand = createDeviceCommand();
 
     expect(deviceCommand.commands.map((command) => command.name())).toContain("list");
+    expect(deviceCommand.commands.map((command) => command.name())).toContain("ports");
   });
 });

@@ -52,6 +52,28 @@ describe("PTController split", () => {
       expect(typeof controller.getHostHistory).toBe("function");
     });
 
+    test("expone omniscience desde la composición", () => {
+      const mockComposition = {
+        terminalPort: { runTerminalPlan: vi.fn(), ensureSession: vi.fn() },
+        deviceService: { inspect: vi.fn() },
+        bridgeService: { start: vi.fn(), stop: vi.fn(), getBridge: vi.fn(), getTopologyCache: vi.fn(), on: vi.fn(), onAll: vi.fn(), readState: vi.fn() },
+        primitivePort: { runPrimitive: vi.fn() },
+        contextService: { getHeartbeat: vi.fn(), getHeartbeatHealth: vi.fn(), getSystemContext: vi.fn() },
+        omniscience: { runCapability: vi.fn() } as any,
+        labService: {},
+        canvasFacade: { listCanvasRects: vi.fn(), getRect: vi.fn(), devicesInRect: vi.fn() },
+        topologyFacade: { addDevice: vi.fn(), removeDevice: vi.fn(), renameDevice: vi.fn(), moveDevice: vi.fn(), addLink: vi.fn(), removeLink: vi.fn(), clearTopology: vi.fn(), listDevices: vi.fn() },
+        controllerIosService: { configIos: vi.fn(), execIos: vi.fn(), execInteractive: vi.fn(), execIosWithEvidence: vi.fn(), configIosWithResult: vi.fn(), show: vi.fn(), showParsed: vi.fn(), showIpInterfaceBrief: vi.fn(), showVlan: vi.fn(), showIpRoute: vi.fn(), showRunningConfig: vi.fn(), showMacAddressTable: vi.fn(), showCdpNeighbors: vi.fn(), getIosConfidence: vi.fn(), resolveCapabilities: vi.fn() },
+        snapshotService: { snapshot: vi.fn(), getCachedSnapshot: vi.fn(), getTwin: vi.fn() },
+        commandTraceService: { drainCommandTrace: vi.fn() },
+      };
+
+      const controller = new PTController(mockComposition as any);
+
+      expect(controller.omniscience).toBe(mockComposition.omniscience);
+      expect((controller.omniscience as any).runCapability).toBeDefined();
+    });
+
     test("sendPing returns correct shape", async () => {
       const mockTerminalPort = {
         runTerminalPlan: vi.fn().mockResolvedValue({
@@ -302,7 +324,7 @@ describe("PTController split", () => {
       const controller = new PTController(mockComposition as any);
 
       for (const method of expectedMethods) {
-        expect(typeof (controller as any)[method]).toBe("function", `Method ${method} should exist`);
+        expect(typeof (controller as any)[method]).toBe("function");
       }
     });
   });
