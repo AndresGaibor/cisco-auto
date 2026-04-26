@@ -40,6 +40,7 @@ export function renderRootHelp(commands: PtCommandDefinition[]): string {
   lines.push("  pt device   Crea, lista y modifica dispositivos");
   lines.push("  pt link     Crea y valida cableado");
   lines.push("  pt verify   Comprueba si el laboratorio está bien");
+  lines.push("  pt omni     Inspección profunda, fallback experimental y raw eval controlado");
   lines.push("");
 
   for (const group of GROUP_ORDER) {
@@ -64,6 +65,9 @@ export function renderRootHelp(commands: PtCommandDefinition[]): string {
   lines.push("  pt cmd --help");
   lines.push("  pt set --help");
   lines.push("  pt verify --help");
+  lines.push("  pt omni --help");
+  lines.push("  pt omni status");
+  lines.push("  pt omni raw --help");
   lines.push("");
   lines.push(chalk.bold("Salida para agentes/autómatas:"));
   lines.push("  pt device list --json");

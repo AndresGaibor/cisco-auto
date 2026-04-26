@@ -11,6 +11,7 @@ describe("registry público", () => {
       "doctor",
       "lab",
       "link",
+      "omni",
       "runtime",
       "set",
       "verify",

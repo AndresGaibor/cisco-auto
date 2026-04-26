@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { Command } from "commander";
 import type { OmniRisk } from "@cisco-auto/pt-control/ports";
-import { listCapabilities, getCapability, filterCapabilities } from "@cisco-auto/pt-control/omni";
+import { OMNI_CAPABILITY_REGISTRY, getCapabilityDef } from "@cisco-auto/pt-control/adapters";
 import { runCommand } from "../../application/run-command.js";
 import { createSuccessResult, createErrorResult } from "../../contracts/cli-result.js";
 import { getGlobalFlags, type GlobalFlags } from "../../flags.js";
@@ -105,16 +105,16 @@ Ejemplos seguros:
   pt omni inspect env --json
   pt omni topology physical --json
   pt omni device genome R1 --json
-  pt omni raw "n.getDeviceCount()" --yes --json
+  pt omni raw "n.getDeviceCount()" --approve --json
 
 Raw recomendado para agentes:
-  pt omni raw --file probe.js --yes --json
-  pt omni raw --stdin --yes --json < probe.js
+  pt omni raw --file probe.js --approve --json
+  pt omni raw --stdin --approve --json < probe.js
 
 Notas:
   - omni raw ejecuta JavaScript dentro de Packet Tracer.
   - Usa --dry-run antes de scripts complejos.
-  - Usa --unsafe --yes solo si sabes que el código toca APIs peligrosas.
+  - Usa --unsafe --approve solo si sabes que el código toca APIs peligrosas.
 `,
     );
 
@@ -207,7 +207,7 @@ function createOmniRawCommand(): Command {
     .option("--wrap", "Envolver código como (function(){ ... })() para permitir return")
     .option("--parse-json", "Si el resultado es string JSON, parsearlo")
     .option("--dry-run", "Mostrar código final y política sin ejecutar")
-    .option("--yes", "Confirmar ejecución raw")
+    .option("-y, --approve", "Confirmar ejecución raw")
     .option("--unsafe", "Permitir patrones peligrosos detectados por el guard")
     .option("--guard <mode>", "strict|warn|off", "strict")
     .option("--raw", "Imprimir solo el valor resultante")
@@ -217,15 +217,15 @@ function createOmniRawCommand(): Command {
       "after",
       `
 Ejemplos:
-  pt omni raw "n.getDeviceCount()" --yes
-  pt omni raw "Object.keys(ipc).join(',')" --yes --raw
-  pt omni raw --wrap "return n.getDeviceCount();" --yes --json
-  pt omni raw --file scripts/probe.js --yes --json
-  pt omni raw --stdin --yes --json < scripts/probe.js
+  pt omni raw "n.getDeviceCount()" --approve
+  pt omni raw "Object.keys(ipc).join(',')" --approve --raw
+  pt omni raw --wrap "return n.getDeviceCount();" --approve --json
+  pt omni raw --file scripts/probe.js --approve --json
+  pt omni raw --stdin --approve --json < scripts/probe.js
   pt omni raw --file scripts/probe.js --dry-run
 
 Si tu código contiene flags o guiones:
-  pt omni raw -- "n.getDeviceCount()" --yes
+  pt omni raw --approve -- "n.getDeviceCount()"
 
 Variables disponibles en runtime:
   ipc         API interna principal
@@ -257,8 +257,8 @@ Variables disponibles en runtime:
           risk: "dangerous",
           error: { code: "OMNI_RAW_INPUT_ERROR", message },
           nextSteps: [
-            'pt omni raw "n.getDeviceCount()" --yes',
-            "pt omni raw --file scripts/probe.js --yes --json",
+            'pt omni raw "n.getDeviceCount()" --approve',
+            "PT_OMNI_AUTO_APPROVE=1 pt omni raw --file probe.js --json",
           ],
         });
         printOmniResult(data, { json: flags.json, quiet: flags.quiet });
@@ -278,12 +278,12 @@ Variables disponibles en runtime:
           value: {
             code,
             policy,
-            wouldExecute: policy.ok && (hasRawApproval(options) || Boolean(options.yes)),
+            wouldExecute: policy.ok && (hasRawApproval(options) || Boolean(options.approve)),
           },
           warnings: policy.warnings,
           confidence: 1,
           nextSteps: [
-            'pt omni raw --file scripts/probe.js --yes --json',
+            'pt omni raw --file scripts/probe.js --approve --json',
             "pt omni status",
           ],
         });
@@ -306,15 +306,14 @@ Variables disponibles en runtime:
           payload: { codePreview: code.slice(0, 500) },
           error: {
             code: "OMNI_RAW_APPROVAL_REQUIRED",
-            message: "omni raw requiere --yes o PT_OMNI_AUTO_APPROVE=1",
+            message: "omni raw requiere --approve o PT_OMNI_AUTO_APPROVE=1",
           },
           warnings: policy.warnings,
           nextSteps: [
-            'pt omni raw "n.getDeviceCount()" --yes',
+            'pt omni raw "n.getDeviceCount()" --approve',
             "PT_OMNI_AUTO_APPROVE=1 pt omni raw --file probe.js --json",
           ],
         });
-
         printOmniResult(data, { json: flags.json, quiet: flags.quiet });
         process.exitCode = 2;
         return;
@@ -334,7 +333,7 @@ Variables disponibles en runtime:
           warnings: policy.warnings,
           nextSteps: [
             "Revisa el código con: pt omni raw --file script.js --dry-run",
-            "Si realmente quieres ejecutarlo: pt omni raw --file script.js --unsafe --yes",
+            "Si realmente quieres ejecutarlo: pt omni raw --file script.js --unsafe --approve",
           ],
         });
 
@@ -626,12 +625,12 @@ function createOmniEnvCommand(): Command {
     .description("Aplica reglas de entorno")
     .option("--no-anim", "Desactiva animación")
     .option("--no-sound", "Desactiva sonido")
-    .option("--yes", "Confirmar operación experimental")
+    .option("--approve", "Confirmar operación experimental")
     .option("--timeout <ms>", "Timeout local")
     .action(async (options, command) => {
       const flags = getFlags(command);
 
-      if (!options.yes && process.env.PT_OMNI_AUTO_APPROVE !== "1") {
+      if (!options.approve && process.env.PT_OMNI_AUTO_APPROVE !== "1") {
         const data = makeOmniResult({
           ok: false,
           action: "omni.env.set",
@@ -639,9 +638,9 @@ function createOmniEnvCommand(): Command {
           risk: "experimental",
           error: {
             code: "OMNI_ENV_APPROVAL_REQUIRED",
-            message: "Modificar reglas de entorno requiere --yes",
+            message: "Modificar reglas de entorno requiere --approve",
           },
-          nextSteps: ["pt omni env set --no-anim --no-sound --yes"],
+          nextSteps: ["pt omni env set --no-anim --no-sound --approve"],
         });
 
         printOmniResult(data, { json: flags.json, quiet: flags.quiet });
@@ -675,18 +674,17 @@ function createOmniCapabilityCommand(): Command {
     .command("list")
     .description("Lista capabilities registradas")
     .option("--domain <domain>", "Filtrar por dominio")
-    .option("--kind <kind>", "Filtrar por kind")
     .option("--risk <risk>", "Filtrar por riesgo")
     .option("--json", "Salida JSON local")
     .action((options) => {
-      const caps =
-        options.domain || options.kind || options.risk
-          ? filterCapabilities({
-              domain: options.domain,
-              kind: options.kind,
-              risk: options.risk,
-            })
-          : listCapabilities();
+      let caps = Object.values(OMNI_CAPABILITY_REGISTRY);
+
+      if (options.domain) {
+        caps = caps.filter((cap) => cap.domain === options.domain);
+      }
+      if (options.risk) {
+        caps = caps.filter((cap) => cap.risk === options.risk);
+      }
 
       if (options.json) {
         process.stdout.write(`${JSON.stringify(caps, null, 2)}\n`);
@@ -695,7 +693,8 @@ function createOmniCapabilityCommand(): Command {
 
       process.stdout.write(`\nCapabilities (${caps.length})\n`);
       for (const cap of caps) {
-        process.stdout.write(`  ${cap.id.padEnd(36)} ${cap.risk.padEnd(12)} ${cap.domain} — ${cap.title}\n`);
+        const title = cap.description?.split(".")[0] ?? cap.id;
+        process.stdout.write(`  ${cap.id.padEnd(36)} ${cap.risk.padEnd(12)} ${cap.domain} — ${title}\n`);
       }
       process.stdout.write("\nSiguiente:\n");
       process.stdout.write("  pt omni capability show <id>\n");
@@ -708,7 +707,7 @@ function createOmniCapabilityCommand(): Command {
     .argument("<id>", "ID de capability")
     .option("--json", "Salida JSON local")
     .action((id: string, options) => {
-      const cap = getCapability(id);
+      const cap = getCapabilityDef(id);
 
       if (!cap) {
         process.stderr.write(`Capability no encontrada: ${id}\n`);
@@ -722,11 +721,12 @@ function createOmniCapabilityCommand(): Command {
       }
 
       process.stdout.write(`\n${cap.id}\n`);
-      process.stdout.write(`  Título: ${cap.title}\n`);
       process.stdout.write(`  Dominio: ${cap.domain}\n`);
-      process.stdout.write(`  Tipo: ${cap.kind}\n`);
       process.stdout.write(`  Riesgo: ${cap.risk}\n`);
-      process.stdout.write(`  Descripción: ${cap.description}\n`);
+      process.stdout.write(`  Descripción: ${cap.description ?? "N/A"}\n`);
+      if (cap.prerequisites?.length) {
+        process.stdout.write(`  Prerrequisitos: ${cap.prerequisites.join(", ")}\n`);
+      }
       process.stdout.write("\n");
     });
 
@@ -747,7 +747,7 @@ function createOmniCapabilityCommand(): Command {
         payload,
         timeout: options.timeout,
         requireApproval: true,
-        approved: Boolean(options.yes),
+        approved: Boolean(options.approve),
       });
     });
 

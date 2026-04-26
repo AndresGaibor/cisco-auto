@@ -105,18 +105,20 @@ Después de configurar:
           dns: options.dns,
         },
         execute: async (ctx) => {
-          ctx.controller.configHost(device, {
-            ip: parsed.ip,
-            mask: parsed.mask,
-            gateway: options.gateway,
-            dns: options.dns,
-            dhcp: false,
-          }).catch((err: Error) => {
+          try {
+            await ctx.controller.configHost(device, {
+              ip: parsed.ip,
+              mask: parsed.mask,
+              gateway: options.gateway,
+              dns: options.dns,
+              dhcp: false,
+            });
+          } catch (error) {
             return createErrorResult("set.host.ip", {
               code: "HOST_CONFIG_FAILED",
-              message: err.message,
+              message: error instanceof Error ? error.message : String(error),
             });
-          });
+          }
 
           return createSuccessResult("set.host.ip", {
             device,
@@ -185,14 +187,16 @@ Después de configurar:
         },
         payloadPreview: { device, dhcp: true },
         execute: async (ctx) => {
-          ctx.controller.configHost(device, {
-            dhcp: true,
-          }).catch((err: Error) => {
+          try {
+            await ctx.controller.configHost(device, {
+              dhcp: true,
+            });
+          } catch (error) {
             return createErrorResult("set.host.dhcp", {
               code: "HOST_CONFIG_FAILED",
-              message: err.message,
+              message: error instanceof Error ? error.message : String(error),
             });
-          });
+          }
 
           return createSuccessResult("set.host.dhcp", {
             device,

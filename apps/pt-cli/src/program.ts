@@ -20,6 +20,8 @@ const ROOT_COMMAND_NAMES = [
   "cmd",
   "set",
   "verify",
+  "omni",
+  "omniscience",
   "completion",
 ];
 
