@@ -11,6 +11,7 @@ import { createLinkCommand } from "./link/index.js";
 import { createCmdCommand } from "./cmd/index.js";
 import { createSetCommand } from "./set/index.js";
 import { createVerifyCommand } from "./verify/index.js";
+import { createOmniCommand } from "./omni/index.js";
 
 export type CommandFactory = () => Command;
 
@@ -158,6 +159,28 @@ export const PUBLIC_COMMAND_DEFINITIONS: PtCommandDefinition[] = [
       "Si verify falla, lee nextSteps antes de intentar corregir.",
     ],
     factory: createVerifyCommand,
+  },
+  {
+    id: "omni",
+    name: "omni",
+    aliases: ["omniscience"],
+    group: "debug",
+    summary: "Acceso profundo, forense y experimental al motor interno de Packet Tracer",
+    description:
+      "Ejecuta capabilities Omni, inspecciona el motor PT y permite raw eval controlado para casos no cubiertos por cmd/set/device/link.",
+    examples: [
+      { command: "pt omni status", description: "Verificar si Omni está disponible" },
+      { command: "pt omni inspect env", description: "Inspeccionar entorno interno de Packet Tracer" },
+      { command: "pt omni topology physical", description: "Extraer topología física desde el motor PT" },
+      { command: 'pt omni raw "n.getDeviceCount()" --yes', description: "Ejecutar JavaScript raw controlado" },
+    ],
+    related: ["pt cmd", "pt set", "pt verify", "pt doctor"],
+    agentHints: [
+      "Usa pt omni solo cuando cmd/set/device/link no cubren el caso.",
+      "Usa pt omni raw como último recurso y siempre con --json para agentes.",
+      "Antes de raw destructivo, ejecuta --dry-run.",
+    ],
+    factory: createOmniCommand,
   },
   {
     id: "completion",

@@ -3,7 +3,7 @@
 // delegacion pura al adapter, sin ejecutores directos
 // ============================================================================
 
-import type { RuntimeOmniPort } from "../../ports/runtime-omni-port.js";
+import type { RuntimeOmniPort, OmniRisk } from "../../ports/runtime-omni-port.js";
 import type { RuntimeTerminalPort } from "../../ports/runtime-terminal-port.js";
 import type {
   PortIntelligence,
@@ -155,6 +155,18 @@ export class OmniscienceService {
     const res = await this.omniPort.runOmniCapability("omni.evaluate.raw", { code });
     if (!res.ok) throw new Error(res.error);
     return res.value;
+  }
+
+  async runCapability(
+    id: string,
+    payload: unknown,
+    options?: { risk?: OmniRisk; timeoutMs?: number },
+  ): Promise<import("../../ports/runtime-omni-port.js").OmniPortResult> {
+    return this.omniPort.runOmniCapability(id, payload, options);
+  }
+
+  describeCapability(id: string) {
+    return this.omniPort.describeCapability(id);
   }
 
   async siphonAllConfigs(): Promise<Array<{ deviceName: string, config: string }>> {
