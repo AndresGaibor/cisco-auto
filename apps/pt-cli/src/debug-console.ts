@@ -9,9 +9,8 @@
  *   bun debug-console.ts --full              # Full details including IOS config
  */
 
-import { FileBridgeV2 } from "@cisco-auto/file-bridge";
-import { BridgePathLayout } from "@cisco-auto/file-bridge/shared/path-layout.js";
-import { getDefaultDevDir } from "@cisco-auto/pt-cli/system/paths.js";
+import { FileBridgeV2, BridgePathLayout } from "@cisco-auto/file-bridge";
+import { getDefaultDevDir } from "./system/paths.js";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 

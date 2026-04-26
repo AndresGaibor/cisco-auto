@@ -19,9 +19,7 @@ import {
   getLogsDir,
   getCommandLogsDir,
   getResultsDir,
-  getSessionLogsDir,
   getEventsPath,
-  getBundlesDir,
   getPtDebugLogPath,
 } from "../system/paths.js";
 import { createDebugLogStream } from "../telemetry/debug-log-stream.js";

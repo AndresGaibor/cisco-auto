@@ -409,6 +409,81 @@ function scanPtControlRootIndex(): Violation[] {
   return violations;
 }
 
+interface PackageJson {
+  name?: string;
+  exports?: Record<string, string | Record<string, unknown>>;
+}
+
+function scanPackageExportTargets(): Violation[] {
+  const violations: Violation[] = [];
+
+  for (const scope of ["packages", "apps"]) {
+    const scopeDir = join(ROOT, scope);
+    if (!existsSync(scopeDir)) continue;
+
+    for (const entry of readdirSync(scopeDir)) {
+      const pkgJsonPath = join(scopeDir, entry, "package.json");
+      if (!existsSync(pkgJsonPath)) continue;
+
+      let pkg: PackageJson;
+      try {
+        pkg = JSON.parse(readFileSync(pkgJsonPath, "utf8"));
+      } catch {
+        continue;
+      }
+
+      if (!pkg.exports) continue;
+
+      const pkgDir = join(scopeDir, entry);
+
+      for (const [exportKey, exportValue] of Object.entries(pkg.exports)) {
+        if (exportKey === "./package.json") continue;
+
+        let targetFile: string;
+        if (typeof exportValue === "string") {
+          targetFile = exportValue;
+        } else if (
+          exportValue &&
+          typeof exportValue === "object" &&
+          "types" in exportValue &&
+          typeof (exportValue as Record<string, unknown>).types === "string"
+        ) {
+          targetFile = (exportValue as { types: string }).types.replace(/\.d\.ts$/, ".ts");
+        } else if (
+          exportValue &&
+          typeof exportValue === "object" &&
+          "default" in exportValue &&
+          typeof (exportValue as Record<string, unknown>).default === "string"
+        ) {
+          targetFile = (exportValue as { default: string }).default;
+        } else {
+          continue;
+        }
+
+        if (targetFile.startsWith("./")) {
+          targetFile = targetFile.slice(2);
+        }
+
+        if (targetFile.includes("*")) {
+          continue;
+        }
+
+        const resolvedPath = join(pkgDir, targetFile);
+        if (!existsSync(resolvedPath)) {
+          violations.push({
+            file: `${scope}/${entry}/package.json`,
+            rule: "package-export-target-must-exist",
+            message: `Export "${exportKey}" points to non-existent file: ${targetFile}`,
+            match: exportKey,
+          });
+        }
+      }
+    }
+  }
+
+  return violations;
+}
+
 function formatViolation(violation: Violation): string {
   const match = violation.match ? `\n     match: ${violation.match}` : "";
 
@@ -426,6 +501,7 @@ function main(): void {
     ...scanBackupFiles(),
     ...scanExperimentalScriptsInScriptsDir(),
     ...scanPtControlRootIndex(),
+    ...scanPackageExportTargets(),
   ];
 
   if (violations.length === 0) {

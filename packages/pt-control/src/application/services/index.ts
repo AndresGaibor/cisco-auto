@@ -87,12 +87,10 @@ export type {
 export {
   CapabilityMatrixService,
   createCapabilityMatrixService,
-} from "@cisco-auto/kernel/domain/ios/capability-matrix/capability-matrix-service.js";
-export {
   getCapabilitiesForModel,
   getModelInfo,
   getAllModels,
-} from "@cisco-auto/kernel/domain/ios/capability-matrix/model-capabilities.js";
+} from "@cisco-auto/kernel/domain/ios/capability-matrix";
 export type {
   ICapabilityMatrixService,
   DeviceCapabilities,
@@ -101,7 +99,7 @@ export type {
   ParserType,
   ModelInfo,
   CapabilityLookupResult,
-} from "@cisco-auto/kernel/domain/ios/capability-matrix/capability-types.js";
+} from "@cisco-auto/kernel/domain/ios/capability-matrix";
 
 // PT Change Planner Service
 export {

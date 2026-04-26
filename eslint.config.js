@@ -182,10 +182,20 @@ export default [
     ignores: ["**/__tests__/**", "**/*.test.ts"],
     rules: {
       "no-restricted-imports": ["error", {
-        patterns: [{
-          group: ["@cisco-auto/pt-runtime/src/*"],
-          message: "pt-control debe importar desde la API pública, no src interno."
-        }]
+        patterns: [
+          {
+            group: ["@cisco-auto/pt-cli", "@cisco-auto/pt-cli/*"],
+            message: "packages/* no puede depender de apps/pt-cli.",
+          },
+          {
+            group: ["@cisco-auto/*/src/*"],
+            message: "No importes src interno de otro paquete. Usa exports públicos.",
+          },
+          {
+            group: ["@cisco-auto/pt-runtime/src/*"],
+            message: "pt-control debe importar desde la API pública, no src interno.",
+          },
+        ],
       }],
     },
   },
