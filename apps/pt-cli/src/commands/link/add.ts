@@ -18,6 +18,7 @@ import { verifyLink, buildLinkVerificationChecks } from '../../application/verif
 import { renderCliResult } from '../../ux/renderers.js';
 import { printExamples } from '../../ux/examples.js';
 import { formatNextSteps } from '../../ux/next-steps.js';
+import { buildFlags } from '../../flags-utils.js';
 import { fetchDeviceList, formatDevice } from '../../utils/device-utils.js';
 import { parsePortSpec } from '../../utils/port-parser.js';
 import { LINK_ADD_META } from './meta.js';
@@ -87,25 +88,15 @@ export function createLinkAddCommand(): Command {
       const linkType = options.type ?? 'auto';
       const warnings: string[] = [];
 
-      const flags: GlobalFlags = {
-        json: false,
-        jq: null,
-        output: 'text',
-        verbose: false,
-        quiet: false,
+      const flags = buildFlags({
         trace: globalTrace,
-        tracePayload: false,
-        traceResult: false,
-        traceDir: null,
         traceBundle: globalTraceBundle,
-        traceBundlePath: null,
-        sessionId: null,
         examples: globalExamples,
         schema: globalSchema,
         explain: globalExplain,
         plan: globalPlan,
         verify: verifyEnabled,
-      };
+      });
 
       const result = await runCommand<LinkAddResult>({
         action: 'link.add',

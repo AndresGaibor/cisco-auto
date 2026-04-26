@@ -48,6 +48,7 @@ export async function verifyLink(
       exists: false,
     },
     linkVisible: false,
+    linkUp: false,
   };
 
   try {

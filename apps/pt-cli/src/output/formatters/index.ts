@@ -7,4 +7,5 @@
 export { json, jsonFormatter } from "./json.ts";
 export { table, tableFormatter } from "./table.ts";
 export { text, textFormatter } from "./text.ts";
-export type { Formatter, FormatOptions, defaultOptions } from "./types.ts";
+export type { Formatter, FormatOptions } from "./types.ts";
+export { defaultOptions } from "./types.ts";

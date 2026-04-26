@@ -331,7 +331,7 @@ function mapControllerResult(result: ControllerDeviceListResult): DeviceListResu
     count: result.count,
     connectionsByDevice,
     unresolvedLinks,
-  };
+  } as DeviceListResult;
 }
 
 export async function loadLiveDeviceListFromController(

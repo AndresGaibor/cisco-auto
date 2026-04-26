@@ -11,7 +11,6 @@ import { select } from '@inquirer/prompts';
 import type { CliResult } from '../../contracts/cli-result.js';
 import { createSuccessResult, createVerifiedResult } from '../../contracts/cli-result.js';
 import type { CommandMeta } from '../../contracts/command-meta.js';
-import type { GlobalFlags } from '../../flags.js';
 
 import { runCommand } from '../../application/run-command.js';
 import { renderCliResult } from '../../ux/renderers.js';
@@ -61,6 +60,8 @@ export function createDeviceMoveCommand(): Command {
   const cmd = new Command('move')
     .description('Mover un dispositivo a nueva posición')
     .argument('[name]', 'Nombre del dispositivo')
+    .argument('[x]', 'Nueva posición X')
+    .argument('[y]', 'Nueva posición Y')
     .option('-x, --xpos <x>', 'Nueva posición X', '100')
     .option('-y, --ypos <y>', 'Nueva posición Y', '100')
     .option('-i, --interactive', 'Seleccionar el dispositivo de forma interactiva', false)
@@ -72,7 +73,7 @@ export function createDeviceMoveCommand(): Command {
     .option('--no-verify', 'Omitir verificación post-ejecución', false)
     .option('--trace', 'Activar traza estructurada de la ejecución', false)
     .option('--trace-bundle', 'Generar archivo bundle único para debugging', false)
-    .action(async (name, options) => {
+    .action(async (name, xArg, yArg, options) => {
       const globalExamples = process.argv.includes('--examples');
       const globalSchema = process.argv.includes('--schema');
       const globalExplain = process.argv.includes('--explain');
@@ -98,8 +99,12 @@ export function createDeviceMoveCommand(): Command {
       }
 
       let deviceName = name;
-      const x = parseInt(options.xpos ?? '100', 10);
-      const y = parseInt(options.ypos ?? '100', 10);
+      const x = parseInt(xArg ?? options.xpos ?? '100', 10);
+      const y = parseInt(yArg ?? options.ypos ?? '100', 10);
+
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        throw new Error('Las coordenadas X/Y deben ser números válidos');
+      }
 
       const flags = buildFlags({
         json: process.argv.includes('--json'),
@@ -162,13 +167,15 @@ export function createDeviceMoveCommand(): Command {
             await requireDeviceExists(controller, deviceName);
 
             if (globalPlan) {
-              console.log('Plan de ejecución:');
-              console.log(`  1. Mover dispositivo ${deviceName} a posición (${options.xpos ?? '100'}, ${options.ypos ?? '100'})`);
-              console.log('  2. Verificar que la posición fue actualizada');
               return createSuccessResult('device.move', {
                 name: deviceName,
                 x,
                 y,
+              }, {
+                advice: [
+                  `Plan validado: el dispositivo '${deviceName}' existe.`,
+                  `Movería '${deviceName}' a (${x}, ${y}).`,
+                ],
               });
             }
 
@@ -267,7 +274,7 @@ export function createDeviceMoveCommand(): Command {
         console.log(output);
       }
 
-      if (result.ok && result.data) {
+      if (!flags.json && result.ok && result.data) {
         const nextSteps = [
           `bun run pt device get ${name ?? '<device>'}`,
         ];

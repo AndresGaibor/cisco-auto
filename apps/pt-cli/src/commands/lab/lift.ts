@@ -7,6 +7,7 @@ import {
   buildCore3650LiftPlanText,
   buildCore3650LiftScenarioPlan,
   executeCore3650LiftLab,
+  type LabLiftControllerPort,
   type LabLiftResult,
 } from "@cisco-auto/pt-control/application/lab";
 
@@ -19,8 +20,9 @@ import { formatExamples, formatRelatedCommands } from "../../help/formatter.ts";
 import { getExamples } from "../../help/examples.ts";
 import { getRelatedCommands } from "../../help/related.ts";
 import { getCommandsDir, getInFlightDir, getResultsDir } from "../../system/paths.js";
-import { renderCliResult } from "../../ux/renderers.js";
+import { renderCliResult } from "../../ux/renderers.ts";
 import { runCommand } from "../../application/run-command.js";
+import { buildFlags } from "../../flags-utils.js";
 
 const LAB_LIFT_META: CommandMeta = {
   id: "lab.lift",
@@ -43,26 +45,10 @@ const LAB_LIFT_META: CommandMeta = {
 };
 
 function makeFlags(overrides: Partial<GlobalFlags> = {}): GlobalFlags {
-  return {
-    json: false,
-    jq: null,
-    output: "text",
-    verbose: false,
-    quiet: false,
-    trace: false,
-    tracePayload: false,
-    traceResult: false,
-    traceDir: null,
-    traceBundle: false,
-    traceBundlePath: null,
-    sessionId: null,
-    examples: false,
-    schema: false,
-    explain: false,
-    plan: false,
+  return buildFlags({
     verify: true,
     ...overrides,
-  };
+  });
 }
 
 async function clearBridgeQueue(): Promise<void> {
@@ -148,7 +134,7 @@ export function createLabLiftCommand(): Command {
         },
         execute: async (ctx): Promise<CliResult<LabLiftResult>> => {
           const execution = await executeCore3650LiftLab({
-            controller: ctx.controller,
+            controller: ctx.controller as unknown as LabLiftControllerPort,
             logPhase: ctx.logPhase,
             beforeClearBridgeQueue: clearBridgeQueue,
           });

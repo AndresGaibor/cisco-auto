@@ -72,20 +72,14 @@ export function createLintCommand(): Command {
             flags: options,
             execute: async (ctx) => {
               const lintService = createTopologyLintService();
-              const drift = await lintService.queryDrift({ 
-                severity: options.severity as any 
-              });
+              const drift = await lintService.queryDrift(String(options.severity ?? 'all'));
               
               return createSuccessResult('lint-drift', {
-                totalDrift: drift.length,
-                drift: drift.map(d => ({
-                  category: d.category,
-                  severity: d.severity,
-                  description: d.description,
-                  device: d.device,
-                  expected: d.expected,
-                  observed: d.observed,
-                })),
+                entity: drift.entity,
+                severity: drift.severity,
+                missing: drift.missing,
+                conflicts: drift.conflicts,
+                suggestions: drift.suggestions,
               });
             }
           });

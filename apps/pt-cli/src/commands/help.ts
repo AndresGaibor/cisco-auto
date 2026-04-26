@@ -13,6 +13,7 @@ interface CommandInfo {
   longDescription?: string;
   examples?: string[];
   related?: string[];
+  status?: string;
 }
 
 function formatHelpHeader(title: string): string {

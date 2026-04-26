@@ -3,6 +3,7 @@ import chalk from "chalk";
 import { runCommand } from "../../application/run-command.js";
 import { createSuccessResult } from "../../contracts/cli-result.js";
 import { loadLiveDeviceList, type ConnectionInfo } from "../../application/device-list.js";
+import { buildFlags } from "../../flags-utils.js";
 
 export interface ListedLink {
   id: string;
@@ -66,25 +67,7 @@ export function createLinkListCommand(): Command {
       }>({
         action: "link.list",
         meta: { id: "link.list", summary: "Listar conexiones", examples: [], related: [] },
-        flags: {
-          json: Boolean(options.json),
-          jq: null,
-          output: "table",
-          verbose: false,
-          quiet: false,
-          trace: false,
-          tracePayload: false,
-          traceResult: false,
-          traceDir: null,
-          traceBundle: false,
-          traceBundlePath: null,
-          sessionId: null,
-          examples: false,
-          schema: false,
-          explain: false,
-          plan: false,
-          verify: false,
-        },
+        flags: buildFlags({ json: Boolean(options.json), output: "table", verify: false }),
         execute: async ({ controller }) => {
           const { devices, connectionsByDevice } = await loadLiveDeviceList();
 

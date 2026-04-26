@@ -15,7 +15,7 @@ export function createLinkCommand(): Command {
   // Registrar subcomandos desde archivos dedicados
   cmd.addCommand(createLinkAddCommand());
   cmd.addCommand(createLinkListCommand());
-  cmd.addCommand(createLinkRemoveCommand());
+  cmd.addCommand(createLinkRemoveCommand().alias('rm'));
   cmd.addCommand(createLinkSuggestCommand());
   cmd.addCommand(createLinkSyncCommand());
   cmd.addCommand(createLinkVerifyCommand());

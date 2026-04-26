@@ -88,25 +88,15 @@ export function createConfigHostCommand(): Command {
       let dnsServer = dns;
       const dhcpEnabled = options.dhcp ?? false;
 
-      const flags: GlobalFlags = {
-        json: false,
-        jq: null,
-        output: 'text',
-        verbose: false,
-        quiet: false,
-        trace: trace,
-        tracePayload: false,
-        traceResult: false,
-        traceDir: null,
-        traceBundle: traceBundle,
-        traceBundlePath: null,
-        sessionId: null,
-        examples: examples,
-        schema: schema,
-        explain: explain,
-        plan: plan,
+      const flags = buildFlags({
+        trace,
+        traceBundle,
+        examples,
+        schema,
+        explain,
+        plan,
         verify: verifyEnabled,
-      };
+      });
 
       const result = await runCommand<ConfigHostResult>({
         action: 'config-host',

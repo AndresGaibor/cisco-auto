@@ -13,8 +13,9 @@ import type { CommandMeta } from "../contracts/command-meta.js";
 import type { GlobalFlags } from "../flags.js";
 
 import { runCommand } from "../application/run-command.js";
-import { renderCliResult } from "../ux/renderers.js";
+import { renderCliResult } from "../ux/renderers.ts";
 import { printExamples } from "../ux/examples.js";
+import { buildFlags } from "../flags-utils.js";
 import {
   getLogsDir,
   getCommandLogsDir,
@@ -48,6 +49,18 @@ import {
   createCliLogBundleWriter,
   createCliLogSessionRepository,
 } from "../adapters/logs-repository.js";
+import type { SessionLogEvent } from "../telemetry/session-log-store.js";
+
+function toSessionRenderEvent(entry: Record<string, unknown>): SessionLogEvent {
+  return {
+    session_id: String(entry.session_id ?? entry.sessionId ?? ""),
+    correlation_id: String(entry.correlation_id ?? entry.correlationId ?? ""),
+    timestamp: String(entry.timestamp ?? new Date().toISOString()),
+    phase: String(entry.phase ?? "unknown"),
+    action: String(entry.action ?? "unknown"),
+    metadata: entry.metadata && typeof entry.metadata === "object" ? (entry.metadata as Record<string, unknown>) : undefined,
+  };
+}
 
 const SCOPE_COLORS: Record<string, string> = {
   kernel: "\x1b[36m",
@@ -264,25 +277,12 @@ export function createLogsCommand(): Command {
         return;
       }
 
-      const flags: GlobalFlags = {
-        json: false,
-        jq: null,
-        output: "text",
-        verbose: false,
-        quiet: false,
-        trace: false,
-        tracePayload: false,
-        traceResult: false,
-        traceDir: null,
-        traceBundle: false,
-        traceBundlePath: null,
-        sessionId: null,
+      const flags = buildFlags({
         examples: globalExamples,
-        schema: false,
         explain: globalExplain,
         plan: globalPlan,
         verify: false,
-      };
+      });
 
       const result = await runCommand<LogsTailResult>({
         action: "logs.tail",
@@ -319,7 +319,7 @@ export function createLogsCommand(): Command {
         for (const rawEntry of result.data.entries) {
           const entry = rawEntry as Record<string, unknown>;
           if (isSessionLogLike(entry)) {
-            for (const line of renderSessionBlock(entry)) {
+            for (const line of renderSessionBlock(toSessionRenderEvent(entry))) {
               console.log(line);
             }
           } else {
@@ -356,25 +356,12 @@ export function createLogsCommand(): Command {
         return;
       }
 
-      const flags: GlobalFlags = {
-        json: false,
-        jq: null,
-        output: "text",
-        verbose: false,
-        quiet: false,
-        trace: false,
-        tracePayload: false,
-        traceResult: false,
-        traceDir: null,
-        traceBundle: false,
-        traceBundlePath: null,
-        sessionId: null,
+      const flags = buildFlags({
         examples: globalExamples,
-        schema: false,
         explain: globalExplain,
         plan: globalPlan,
         verify: false,
-      };
+      });
 
       const result = await runCommand<LogsSessionResult>({
         action: "logs.session",
@@ -409,7 +396,7 @@ export function createLogsCommand(): Command {
           console.log("  No se encontraron eventos para esta sesión.");
         } else {
           for (const evt of result.data.events) {
-            for (const line of renderSessionBlock(evt)) {
+            for (const line of renderSessionBlock(toSessionRenderEvent(evt as Record<string, unknown>))) {
               console.log(`  ${line}`);
             }
           }
@@ -440,25 +427,12 @@ export function createLogsCommand(): Command {
         return;
       }
 
-      const flags: GlobalFlags = {
-        json: false,
-        jq: null,
-        output: "text",
-        verbose: false,
-        quiet: false,
-        trace: false,
-        tracePayload: false,
-        traceResult: false,
-        traceDir: null,
-        traceBundle: false,
-        traceBundlePath: null,
-        sessionId: null,
+      const flags = buildFlags({
         examples: globalExamples,
-        schema: false,
         explain: globalExplain,
         plan: globalPlan,
         verify: false,
-      };
+      });
 
       const result = await runCommand<LogsCommandResult>({
         action: "logs.command",
@@ -575,25 +549,11 @@ export function createLogsCommand(): Command {
         return;
       }
 
-      const flags: GlobalFlags = {
-        json: false,
-        jq: null,
-        output: "text",
-        verbose: false,
-        quiet: false,
-        trace: false,
-        tracePayload: false,
-        traceResult: false,
-        traceDir: null,
-        traceBundle: false,
-        traceBundlePath: null,
-        sessionId: null,
+      const flags = buildFlags({
         examples: globalExamples,
-        schema: false,
-        explain: false,
         plan: globalPlan,
         verify: false,
-      };
+      });
 
       const limit = parseInt(options.limit) || 10;
       const result = await runCommand<LogsErrorsResult>({
@@ -679,25 +639,12 @@ export function createLogsCommand(): Command {
         return;
       }
 
-      const flags: GlobalFlags = {
-        json: false,
-        jq: null,
-        output: "text",
-        verbose: false,
-        quiet: false,
-        trace: false,
-        tracePayload: false,
-        traceResult: false,
-        traceDir: null,
-        traceBundle: false,
-        traceBundlePath: null,
-        sessionId: null,
+      const flags = buildFlags({
         examples: globalExamples,
-        schema: false,
         explain: globalExplain,
         plan: globalPlan,
         verify: false,
-      };
+      });
 
       const result = await runCommand<LogsBundleResult>({
         action: "logs.bundle",

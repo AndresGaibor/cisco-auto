@@ -8,18 +8,18 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { input, select } from '@inquirer/prompts';
 
-import type { PTController } from '@cisco-auto/pt-control/controller';
 import type { CliResult } from '../../contracts/cli-result.js';
-import { createSuccessResult, createVerifiedResult } from '../../contracts/cli-result.js';
+import { createSuccessResult, createVerifiedResult, createErrorResult } from '../../contracts/cli-result.js';
 import type { CommandMeta } from '../../contracts/command-meta.js';
-import type { GlobalFlags } from '../../flags.js';
 
 import { runCommand } from '../../application/run-command.js';
 import { renderCliResult } from '../../ux/renderers.js';
 import { printExamples } from '../../ux/examples.js';
 import { formatNextSteps } from '../../ux/next-steps.js';
+import { buildFlags } from '../../flags-utils.js';
 import {
   DEVICE_MODELS,
+  DeviceAlreadyExistsError,
   validateDeviceNameNotExists,
   formatDevice,
   formatDeviceType,
@@ -96,6 +96,7 @@ export function createDeviceAddCommand(): Command {
       const globalSchema = process.argv.includes('--schema');
       const globalExplain = process.argv.includes('--explain');
       const globalPlan = process.argv.includes('--plan');
+      const globalJson = process.argv.includes('--json');
       const globalTrace = process.argv.includes('--trace');
       const globalTraceBundle = process.argv.includes('--trace-bundle');
 
@@ -116,38 +117,22 @@ export function createDeviceAddCommand(): Command {
         return;
       }
 
-      if (globalPlan) {
-        console.log('Plan de ejecución:');
-        console.log(`  1. Agregar dispositivo ${name ?? '<name>'}:${model ?? '<model>'}`);
-        console.log(`  2. Posición: (${options.xpos ?? '100'}, ${options.ypos ?? '100'})`);
-        console.log('  3. Verificar que el dispositivo se creó correctamente');
-        return;
-      }
-
       let deviceName = name;
       let deviceModel = model;
       const x = parseInt(options.xpos ?? '100', 10);
       const y = parseInt(options.ypos ?? '100', 10);
 
-      const flags: GlobalFlags = {
-        json: false,
-        jq: null,
-        output: 'text',
-        verbose: false,
-        quiet: false,
+      const flags = buildFlags({
+        json: globalJson,
+        output: globalJson ? 'json' : 'text',
         trace: globalTrace,
-        tracePayload: false,
-        traceResult: false,
-        traceDir: null,
         traceBundle: globalTraceBundle,
-        traceBundlePath: null,
-        sessionId: null,
         examples: globalExamples,
         schema: globalSchema,
         explain: globalExplain,
         plan: globalPlan,
         verify: verifyEnabled,
-      };
+      });
 
       const result = await runCommand<DeviceAddResult>({
         action: 'device.add',
@@ -182,8 +167,37 @@ export function createDeviceAddCommand(): Command {
               throw new Error('El modelo del dispositivo es requerido');
             }
 
-            // Validar que el nombre no exista
-            await validateDeviceNameNotExists(controller, deviceName);
+            try {
+              await validateDeviceNameNotExists(controller, deviceName);
+            } catch (error) {
+              if (error instanceof DeviceAlreadyExistsError) {
+                const result = createErrorResult<DeviceAddResult>('device.add', {
+                  code: error.code,
+                  message: error.message,
+                  details: error.toDetails(),
+                });
+
+                result.advice = error.toAdvice();
+                return result;
+              }
+
+              throw error;
+            }
+
+            if (globalPlan) {
+              return createSuccessResult('device.add', {
+                name: deviceName,
+                model: deviceModel,
+                type: 'unknown',
+                x,
+                y,
+              }, {
+                advice: [
+                  `Plan validado: el nombre '${deviceName}' está disponible.`,
+                  `Crearía '${deviceName}' modelo '${deviceModel}' en (${x}, ${y}).`,
+                ],
+              });
+            }
 
             await logPhase('apply', {
               name: deviceName,
@@ -271,7 +285,7 @@ export function createDeviceAddCommand(): Command {
         console.log(output);
       }
 
-      if (result.ok && result.data) {
+      if (!flags.json && result.ok && result.data) {
         const nextSteps = [
           'bun run pt device list',
           `bun run pt device get ${name ?? '<device>'}`,

@@ -118,8 +118,12 @@ export function evaluateOmniRawPolicy(code: string, guard: OmniGuardMode): OmniP
   };
 }
 
-export function hasRawApproval(options: { yes?: boolean; approve?: boolean }): boolean {
+export function hasRawApproval(
+  options: { yes?: boolean; approve?: boolean },
+  globalYes = false,
+): boolean {
   return Boolean(options.yes) ||
     Boolean(options.approve) ||
+    globalYes ||
     process.env.PT_OMNI_AUTO_APPROVE === "1";
 }

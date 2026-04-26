@@ -26,6 +26,7 @@ import type { GlobalFlags } from "../flags.js";
 import { runCommand } from "../application/run-command.js";
 import { printExamples } from "../ux/examples.js";
 import { fetchDeviceList, formatDevice } from "../utils/device-utils.js";
+import { buildFlags } from "../flags-utils.js";
 
 const HOST_CONFIG_META: CommandMeta = {
   id: "host.config",
@@ -97,26 +98,19 @@ const HOST_HISTORY_META: CommandMeta = {
 };
 
 function makeFlagsFromProcess(overrides: Partial<GlobalFlags> = {}): GlobalFlags {
-  return {
+  return buildFlags({
     json: process.argv.includes("--json"),
-    jq: null,
     output: "text",
     verbose: process.argv.includes("--verbose"),
     quiet: process.argv.includes("--quiet"),
     trace: process.argv.includes("--trace"),
-    tracePayload: false,
-    traceResult: false,
-    traceDir: null,
-    traceBundle: false,
-    traceBundlePath: null,
-    sessionId: null,
     examples: process.argv.includes("--examples"),
     schema: process.argv.includes("--schema"),
     explain: process.argv.includes("--explain"),
     plan: process.argv.includes("--plan"),
     verify: !process.argv.includes("--no-verify"),
     ...overrides,
-  };
+  });
 }
 
 async function promptForHostDevice(controller: unknown): Promise<string> {

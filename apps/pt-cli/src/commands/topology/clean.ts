@@ -14,6 +14,7 @@ import type { GlobalFlags } from "../../flags.js";
 import { runCommand } from "../../application/run-command.js";
 import { renderCliResult } from "../../ux/renderers.js";
 import { printExamples } from "../../ux/examples.js";
+import { buildFlags } from "../../flags-utils.js";
 
 interface TopologyCleanResult {
   devicesRemoved: string[];
@@ -95,25 +96,15 @@ export function createTopologyCleanCommand(): Command {
         return;
       }
 
-      const flags: GlobalFlags = {
-        json: false,
-        jq: null,
-        output: "text",
-        verbose: false,
-        quiet: false,
+      const flags = buildFlags({
         trace: globalTrace,
-        tracePayload: false,
-        traceResult: false,
-        traceDir: null,
         traceBundle: globalTraceBundle,
-        traceBundlePath: null,
-        sessionId: null,
         examples: globalExamples,
         schema: globalSchema,
         explain: globalExplain,
         plan: globalPlan,
         verify: false,
-      };
+      });
 
       const result = await runCommand<TopologyCleanResult>({
         action: "topology.clean",
@@ -132,7 +123,7 @@ export function createTopologyCleanCommand(): Command {
           try {
             await logPhase("discover", {});
 
-            const { devices: allDevices } = await controller.listDevices();
+            const allDevices = await controller.listDevices();
             const devicesToRemove: string[] = [];
 
             if (options.type) {
@@ -144,7 +135,7 @@ export function createTopologyCleanCommand(): Command {
               }
             } else if (devices.length > 0) {
               for (const deviceName of devices) {
-                const exists = allDevices.find((d) => d.name === deviceName);
+                const exists = allDevices.find((d: { name: string }) => d.name === deviceName);
                 if (exists) {
                   devicesToRemove.push(deviceName);
                 }
@@ -170,7 +161,7 @@ export function createTopologyCleanCommand(): Command {
 
             console.log(chalk.cyan(`Dispositivos encontrados: ${devicesToRemove.length}`));
             for (const name of devicesToRemove) {
-              const device = allDevices.find((d) => d.name === name);
+              const device = allDevices.find((d: { name: string; type?: string }) => d.name === name);
               console.log(`  - ${name} (${device?.type ?? "unknown"})`);
             }
 

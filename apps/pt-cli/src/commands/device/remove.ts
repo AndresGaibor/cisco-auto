@@ -11,7 +11,6 @@ import { select, confirm } from '@inquirer/prompts';
 import type { CliResult } from '../../contracts/cli-result.js';
 import { createSuccessResult } from '../../contracts/cli-result.js';
 import type { CommandMeta } from '../../contracts/command-meta.js';
-import type { GlobalFlags } from '../../flags.js';
 
 import { runCommand } from '../../application/run-command.js';
 import { renderCliResult } from '../../ux/renderers.js';
@@ -149,12 +148,14 @@ export function createDeviceRemoveCommand(): Command {
             await requireDeviceExists(controller, deviceName);
 
             if (globalPlan) {
-              console.log('\nPlan de ejecución:');
-              console.log(`  1. Eliminar dispositivo ${deviceName}`);
-              console.log('  2. Verificar que el dispositivo fue eliminado');
               return createSuccessResult('device.remove', {
                 name: deviceName,
                 removed: false,
+              }, {
+                advice: [
+                  `Plan validado: el dispositivo '${deviceName}' existe.`,
+                  `Eliminaría '${deviceName}' de la topología.`,
+                ],
               });
             }
 
@@ -228,7 +229,7 @@ export function createDeviceRemoveCommand(): Command {
         console.log(output);
       }
 
-      if (result.ok && result.data) {
+      if (!flags.json && result.ok && result.data) {
         const nextSteps = [
           'bun run pt device list',
         ];

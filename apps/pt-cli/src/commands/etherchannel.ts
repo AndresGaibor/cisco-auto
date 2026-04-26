@@ -12,7 +12,7 @@ import { createSuccessResult, createErrorResult } from '../contracts/cli-result.
 import type { CommandMeta } from '../contracts/command-meta.js';
 
 import { runCommand } from '../application/run-command.js';
-import { renderCliResult } from '../ux/renderers.js';
+import { renderCliResult } from '../ux/renderers.ts';
 import { printExamples } from '../ux/examples.js';
 import { buildFlags, parseGlobalOptions } from '../flags-utils.js';
 
@@ -44,7 +44,7 @@ const ETHERCHANNEL_META: CommandMeta = {
   supportsExplain: true,
 };
 
-function renderResult(result: CliResult, flags: { quiet: boolean; output: string }): void {
+function renderResult(result: CliResult, flags: { quiet: boolean; output: "text" | "json" | "table" | "raw" }): void {
   const output = renderCliResult(result, flags.output);
   if (!flags.quiet || !result.ok) console.log(output);
   if (!result.ok) process.exit(1);
@@ -91,7 +91,7 @@ export function createEtherchannelCommand(): Command {
           const execution = await createEtherChannel(ctx.controller, {
             deviceName: device,
             groupId: Number(options.groupId) || 1,
-            interfaces: options.interfaces.split(',').map(i => i.trim()),
+            interfaces: options.interfaces.split(',').map((i: string) => i.trim()),
             mode: (options.mode === 'active' ? 'active' : options.mode === 'passive' ? 'passive' : 'active') as "active" | "passive" | "on" | "desirable" | "auto",
             trunkMode: options.trunk ? "trunk" : "access",
             allowedVlans: options.allowedVlans,

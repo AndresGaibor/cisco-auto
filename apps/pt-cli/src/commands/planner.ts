@@ -119,7 +119,7 @@ export function createPlannerCommand(): Command {
             flags: options,
             execute: async (ctx) => {
               const planner = createChangePlannerService();
-              const plan = planner.getPlan(planId);
+              const plan = planner.getPlan(planId, true);
               
               if (!plan) {
                 return createErrorResult(`Plan ${planId} no encontrado`);

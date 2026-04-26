@@ -104,7 +104,7 @@ export function parseBgpNeighbors(
 
     return {
       ip: parts[0]!,
-      remoteAs,
+      remoteAs: remoteAs ?? 0,
       description: parts[2] || undefined,
     };
   });

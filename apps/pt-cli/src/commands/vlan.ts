@@ -12,7 +12,7 @@ import { createSuccessResult, createErrorResult } from "../contracts/cli-result.
 import type { CommandMeta } from "../contracts/command-meta.js";
 
 import { runCommand } from "../application/run-command.js";
-import { renderCliResult } from "../ux/renderers.js";
+import { renderCliResult } from "../ux/renderers.ts";
 import { printExamples } from "../ux/examples.js";
 import { buildFlags, parseGlobalOptions } from "../flags-utils.js";
 
@@ -41,7 +41,7 @@ const VLAN_META: CommandMeta = {
   supportsExplain: true,
 };
 
-function renderResult(result: CliResult, flags: { quiet: boolean; output: string }): void {
+function renderResult(result: CliResult, flags: { quiet: boolean; output: "text" | "json" | "table" | "raw" }): void {
   const output = renderCliResult(result, flags.output);
   if (!flags.quiet || !result.ok) console.log(output);
   if (!result.ok) process.exit(1);
@@ -114,7 +114,7 @@ export function createVlanCommand(): Command {
         payloadPreview: { device: options.device, vlans: options.vlans },
         execute: async (ctx) => {
           try {
-            const vlanIds = options.vlans.split(",").map(v => Number(v.trim())).filter(n => !Number.isNaN(n));
+            const vlanIds = options.vlans.split(",").map((v: string) => Number(v.trim())).filter((n: number) => !Number.isNaN(n));
             const commands = buildVlanApplyCommands(vlanIds as any, {} as any).slice(1);
             await ctx.controller.configIos(options.device, commands);
             return createSuccessResult("vlan.apply", { device: options.device, vlanIds, commands, commandsGenerated: commands.length });
@@ -147,7 +147,7 @@ export function createVlanCommand(): Command {
         payloadPreview: { device: options.device, interface: options.interface, allowed: options.allowed },
         execute: async (ctx) => {
           try {
-            const vlanIds = options.allowed?.split(",").map(v => Number(v.trim())).filter(n => !Number.isNaN(n)) ?? [];
+            const vlanIds = options.allowed?.split(",").map((v: string) => Number(v.trim())).filter((n: number) => !Number.isNaN(n)) ?? [];
             const commands = buildVlanTrunkCommands(options.interface, vlanIds as any, {} as any);
             await ctx.controller.configIos(options.device, commands.slice(1));
             return createSuccessResult("vlan.trunk", { device: options.device, interface: options.interface, allowedVlans: vlanIds, commands: commands.slice(1) });

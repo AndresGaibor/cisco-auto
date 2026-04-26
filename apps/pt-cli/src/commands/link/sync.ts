@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { runCommand } from '../../application/run-command.js';
 import { createSuccessResult, createErrorResult } from '../../contracts/cli-result.js';
+import { buildFlags } from '../../flags-utils.js';
 
 interface SyncLinksResult {
   ok: boolean;
@@ -41,25 +42,7 @@ export function createLinkSyncCommand(): Command {
           ],
           related: ['link list', 'device list'],
         },
-        flags: {
-          json: Boolean(options.json),
-          jq: null,
-          output: 'text',
-          verbose: false,
-          quiet: false,
-          trace: false,
-          tracePayload: false,
-          traceResult: false,
-          traceDir: null,
-          traceBundle: false,
-          traceBundlePath: null,
-          sessionId: null,
-          examples: false,
-          schema: false,
-          explain: false,
-          plan: false,
-          verify: false,
-        },
+        flags: buildFlags({ json: Boolean(options.json), output: 'text', verify: false }),
         execute: async ({ controller }) => {
           await controller.start();
 

@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { describe, expect, test } from "bun:test";
 
-import { attachCommandTiming } from "./program";
+import { attachCommandTiming } from "./program.js";
 
 describe("attachCommandTiming", () => {
   test("imprime la ruta completa del comando", async () => {

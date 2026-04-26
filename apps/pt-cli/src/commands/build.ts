@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { runSubprocess } from "../system/run-subprocess.js";
 import { ExitCodes } from "../errors/index.js";
 import { getGlobalFlags } from "../flags.js";
+import { buildFlags } from "../flags-utils.js";
 import { resolveTimeout } from "../utils/timeout.js";
 
 export function createBuildCommand(): Command {
@@ -17,27 +18,7 @@ export function createBuildCommand(): Command {
       const parent = this.parent as Command;
       const globalFlags = parent
         ? getGlobalFlags(parent)
-        : {
-            json: false,
-            jq: null,
-            output: "text" as const,
-            verbose: false,
-            quiet: false,
-            trace: false,
-            tracePayload: false,
-            traceResult: false,
-            traceDir: null,
-            traceBundle: false,
-            traceBundlePath: null,
-            sessionId: null,
-            examples: false,
-            schema: false,
-            explain: false,
-            plan: false,
-            verify: true,
-            timeout: null,
-            noTimeout: false,
-          };
+        : buildFlags({ verify: true });
       const timeoutMs = resolveTimeout(undefined, globalFlags);
 
       const result = await runSubprocess({

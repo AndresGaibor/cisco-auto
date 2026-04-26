@@ -42,12 +42,13 @@ export function createInspectApiCommand(): Command {
         console.log(chalk.cyan('─'.repeat(60)));
 
         if (result && typeof result === 'object' && !Array.isArray(result)) {
-           if (result.__pt_object__) {
-             console.log(chalk.yellow(`[PT Native Object: ${result.className}]`));
-             console.log(chalk.gray(`UUID: ${result.uuid}`));
-           } else {
-             console.log(JSON.stringify(result, null, 2));
-           }
+          const nativeObject = result as Record<string, unknown>;
+          if (nativeObject.__pt_object__) {
+            console.log(chalk.yellow(`[PT Native Object: ${String(nativeObject.className ?? 'unknown')}]`));
+            console.log(chalk.gray(`UUID: ${String(nativeObject.uuid ?? 'unknown')}`));
+          } else {
+            console.log(JSON.stringify(result, null, 2));
+          }
         } else {
           console.log(chalk.green(JSON.stringify(result, null, 2)));
         }

@@ -67,7 +67,7 @@ async function getNetworkStatus(): Promise<NetworkReport> {
   const jsonMatch = result.match(/🚀 RESULTADO: ([\s\S]*?)$/m);
   if (!jsonMatch) throw new Error('Failed to get network status');
 
-  const devices: DeviceStatus[] = JSON.parse(jsonMatch[1]);
+  const devices: DeviceStatus[] = JSON.parse(jsonMatch[1] ?? "[]");
 
   const allPowered = devices.every(d => d.power);
   const allConnected = devices.every(d => d.portsUp.length > 0);

@@ -18,6 +18,7 @@ import { runCommand } from '../../application/run-command.js';
 import { renderCliResult } from '../../ux/renderers.js';
 import { printExamples } from '../../ux/examples.js';
 import { formatNextSteps } from '../../ux/next-steps.js';
+import { buildFlags } from '../../flags-utils.js';
 import { validateDeviceNameNotExists, formatDevice, formatDeviceType } from '../../utils/device-utils.js';
 
 interface RouterAddResult {
@@ -136,25 +137,15 @@ export function createRouterAddCommand(): Command {
       const x = parseInt(options.xpos ?? '100', 10);
       const y = parseInt(options.ypos ?? '100', 10);
 
-      const flags: GlobalFlags = {
-        json: false,
-        jq: null,
-        output: 'text',
-        verbose: false,
-        quiet: false,
+      const flags = buildFlags({
         trace: globalTrace,
-        tracePayload: false,
-        traceResult: false,
-        traceDir: null,
         traceBundle: globalTraceBundle,
-        traceBundlePath: null,
-        sessionId: null,
         examples: globalExamples,
         schema: globalSchema,
         explain: globalExplain,
         plan: globalPlan,
         verify: verifyEnabled,
-      };
+      });
 
       const result = await runCommand<RouterAddResult>({
         action: 'router.add',

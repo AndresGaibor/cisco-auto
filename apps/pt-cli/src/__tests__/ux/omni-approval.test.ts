@@ -11,6 +11,10 @@ describe("omni raw approval", () => {
     expect(hasRawApproval({ approve: true })).toBe(true);
   });
 
+  test("acepta --yes global", () => {
+    expect(hasRawApproval({}, true)).toBe(true);
+  });
+
   test("rechaza sin aprobación", () => {
     const previous = process.env.PT_OMNI_AUTO_APPROVE;
     delete process.env.PT_OMNI_AUTO_APPROVE;

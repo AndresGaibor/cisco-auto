@@ -37,10 +37,11 @@ import type { CommandMeta } from "../contracts/command-meta.js";
 import type { GlobalFlags } from "../flags.js";
 
 import { runCommand } from "../application/run-command.js";
-import { renderCliResult } from "../ux/renderers.js";
+import { renderCliResult } from "../ux/renderers.ts";
 import { printExamples } from "../ux/examples.js";
 import { renderHistoryBlock } from "../telemetry/render-history-block.js";
 import { createCliHistoryRepository } from "../adapters/history-repository.js";
+import { buildFlags } from "../flags-utils.js";
 
 const HISTORY_EXAMPLES = [
   { command: "pt history list", description: "Listar últimas ejecuciones" },
@@ -93,26 +94,18 @@ function cyan(text: string): string {
 function makeFlags(overrides: Partial<GlobalFlags> = {}): GlobalFlags {
   const json = overrides.json ?? process.argv.includes("--json") ?? false;
 
-  return {
+  return buildFlags({
     json,
-    jq: null,
     output: json ? "json" : "text",
     verbose: process.argv.includes("--verbose"),
     quiet: process.argv.includes("--quiet"),
     trace: process.argv.includes("--trace"),
-    tracePayload: false,
-    traceResult: false,
-    traceDir: null,
-    traceBundle: false,
-    traceBundlePath: null,
-    sessionId: null,
     examples: process.argv.includes("--examples"),
-    schema: false,
     explain: process.argv.includes("--explain"),
     plan: process.argv.includes("--plan"),
     verify: false,
     ...overrides,
-  };
+  });
 }
 
 function printResultOrExit<T>(result: CliResult<T>, flags: GlobalFlags): void {

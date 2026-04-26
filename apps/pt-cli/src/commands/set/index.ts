@@ -216,35 +216,6 @@ Después de configurar:
   return host;
 }
 
-function createSetServerCommand(): Command {
-  const server = new Command("server")
-    .description("Configura servicios de Server-PT")
-    .addHelpText(
-      "after",
-      `
-Subcomandos planeados:
-  pt set server Server1 dhcp on
-  pt set server Server1 dhcp pool VLAN10 --network 192.168.10.0/24 --gateway 192.168.10.1
-  pt set server Server1 dns on
-  pt set server Server1 dns record empresa.local 192.168.10.2
-  pt set server Server1 http on
-  pt set server Server1 email on --domain empresa.local
-
-Nota:
-  Implementar usando las APIs actuales del runtime/pt-control para Server-PT.
-`,
-    );
-
-  server
-    .command("todo")
-    .description("Muestra plan de implementación de server")
-    .action(() => {
-      process.stdout.write("Implementar en la siguiente fase: DHCP/DNS/HTTP/EMAIL Server-PT por API.\n");
-    });
-
-  return server;
-}
-
 export function createSetCommand(): Command {
   const set = new Command("set")
     .description("Configura propiedades/API/GUI que no son terminal")

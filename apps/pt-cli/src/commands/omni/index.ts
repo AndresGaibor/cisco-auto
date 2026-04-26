@@ -105,11 +105,11 @@ Ejemplos seguros:
   pt omni inspect env --json
   pt omni topology physical --json
   pt omni device genome R1 --json
-  pt omni raw "n.getDeviceCount()" --approve --json
+   pt omni raw "n.getDeviceCount()" --yes --json
 
 Raw recomendado para agentes:
-  pt omni raw --file probe.js --approve --json
-  pt omni raw --stdin --approve --json < probe.js
+  pt omni raw --file probe.js --yes --json
+  pt omni raw --stdin --yes --json < probe.js
 
 Notas:
   - omni raw ejecuta JavaScript dentro de Packet Tracer.
@@ -279,7 +279,7 @@ Variables disponibles en runtime:
           value: {
             code,
             policy,
-            wouldExecute: policy.ok && (hasRawApproval(options) || flags.yes),
+            wouldExecute: policy.ok && hasRawApproval(options, flags.yes),
           },
           warnings: policy.warnings,
           confidence: 1,
@@ -298,7 +298,7 @@ Variables disponibles en runtime:
         return;
       }
 
-      if (!hasRawApproval(options)) {
+      if (!hasRawApproval(options, flags.yes)) {
         const data = makeOmniResult({
           ok: false,
           action: "omni.raw",
@@ -307,7 +307,7 @@ Variables disponibles en runtime:
           payload: { codePreview: code.slice(0, 500) },
           error: {
             code: "OMNI_RAW_APPROVAL_REQUIRED",
-            message: "omni raw requiere --yes, --approve o PT_OMNI_AUTO_APPROVE=1",
+            message: "omni raw requiere --yes o PT_OMNI_AUTO_APPROVE=1",
           },
           warnings: policy.warnings,
           nextSteps: [
@@ -334,7 +334,7 @@ Variables disponibles en runtime:
           warnings: policy.warnings,
           nextSteps: [
             "Revisa el código con: pt omni raw --file script.js --dry-run",
-            "Si realmente quieres ejecutarlo: pt omni raw --file script.js --unsafe --approve",
+            "Si realmente quieres ejecutarlo: pt omni raw --file script.js --unsafe --yes",
           ],
         });
 

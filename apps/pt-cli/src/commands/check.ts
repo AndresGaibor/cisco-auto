@@ -25,9 +25,11 @@ import type { CommandMeta } from "../contracts/command-meta.js";
 import type { GlobalFlags } from "../flags.js";
 
 import { runCommand } from "../application/run-command.js";
+import { buildFlags } from "../flags-utils.js";
 import {
   validateLanBasic,
   validateGateway,
+  type CheckControllerPort,
   type CheckResult,
   type CheckResultItem,
 } from "@cisco-auto/pt-control/application/check";
@@ -74,13 +76,6 @@ const SCENARIOS: Record<
     validate: validateGateway,
   },
 };
-
-// Re-export CheckControllerPort for SCENARIOS typing
-interface CheckControllerPort {
-  listDevices(): Promise<{ devices: unknown[] } | unknown[]>;
-  inspectDevice(name: string): Promise<unknown>;
-  sendPing(source: string, target: string, timeoutMs?: number): Promise<{ success: boolean; raw?: string }>;
-}
 
 function getScenarioNames(): string[] {
   return Object.keys(SCENARIOS);
@@ -169,27 +164,11 @@ export function createCheckCommand(): Command {
         process.exit(1);
       }
 
-      const flags: GlobalFlags = {
+      const flags = buildFlags({
         json: Boolean(options.json),
-        jq: null,
         output: (options.output as GlobalFlags["output"]) || "table",
-        verbose: false,
-        quiet: false,
-        trace: false,
-        tracePayload: false,
-        traceResult: false,
-        traceDir: null,
-        traceBundle: false,
-        traceBundlePath: null,
-        sessionId: null,
-        examples: false,
-        schema: false,
-        explain: false,
-        plan: false,
         verify: false,
-        timeout: null,
-        noTimeout: false,
-      };
+      });
 
       const fix = Boolean(options.fix);
 

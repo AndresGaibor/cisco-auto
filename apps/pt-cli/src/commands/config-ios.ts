@@ -13,15 +13,17 @@ import type { CommandMeta } from "../contracts/command-meta.js";
 import type { GlobalFlags } from "../flags.js";
 
 import { runCommand } from "../application/run-command.js";
-import { renderCliResult } from "../ux/renderers.js";
+import { renderCliResult } from "../ux/renderers.ts";
 import { fetchDeviceList, getIOSCapableDevices } from "../utils/device-utils.js";
+import { buildFlags } from "../flags-utils.js";
 
 import {
   buildVerificationPlan,
   detectCommandType,
   applyConfigIOS,
-  type ConfigIOSPayload,
-  type ConfigIOSResult,
+  type ConfigIOSControllerPort as PtControlConfigIOSControllerPort,
+  type ConfigIOSPayload as PtControlConfigIOSPayload,
+  type ConfigIOSResult as PtControlConfigIOSResult,
   type ConfigIOSVerification,
 } from "@cisco-auto/pt-control/application/config-ios";
 
@@ -228,25 +230,7 @@ export function createConfigIOSCommand(): Command {
 
       const verifyEnabled = options.verify ?? true;
 
-      const flags: GlobalFlags = {
-        json: false,
-        jq: null,
-        output: "text",
-        verbose: false,
-        quiet: false,
-        trace: false,
-        tracePayload: false,
-        traceResult: false,
-        traceDir: null,
-        traceBundle: false,
-        traceBundlePath: null,
-        sessionId: null,
-        examples: false,
-        schema: false,
-        explain: false,
-        plan: false,
-        verify: verifyEnabled,
-      };
+      const flags = buildFlags({ verify: verifyEnabled });
 
       const payload: ConfigIOSPayload = {
         device: device || "",
@@ -319,7 +303,7 @@ export function createConfigIOSCommand(): Command {
 
             // Delegate to pt-control use case
             const useCaseResult = await applyConfigIOS(
-              ctx.controller,
+              ctx.controller as unknown as PtControlConfigIOSControllerPort,
               {
                 device: targetDevice,
                 commands: payload.commands,

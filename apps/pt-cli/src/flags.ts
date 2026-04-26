@@ -50,7 +50,7 @@ export function addGlobalFlags(program: Command): Command {
     .option("--plan", "Mostrar plan de ejecución sin ejecutar", false)
     .option("--verify", "Verificar cambios post-ejecución", true)
     .option("--no-verify", "Omitir verificación post-ejecución", false)
-    .option("--timeout <ms>", "Timeout global para operaciones en milisegundos", undefined)
+    .option("--timeout <ms>", "Timeout global para operaciones en milisegundos", (value) => Number(value), undefined)
     .option("--no-timeout", "Desactivar timeout global", false)
     .option("-y, --yes", "Aceptar confirmaciones no destructivas", false)
     .option("--no-input", "No hacer prompts interactivos; fallar si faltan datos", false)
@@ -78,7 +78,10 @@ export function getGlobalFlags(command: Command): GlobalFlags {
     explain: Boolean(opts.explain),
     plan: Boolean(opts.plan),
     verify: Boolean(opts.verify),
-    timeout: typeof opts.timeout === "number" && Number.isFinite(opts.timeout) ? opts.timeout : null,
+    timeout:
+      typeof opts.timeout === "number" && Number.isFinite(opts.timeout) && opts.timeout > 0
+        ? opts.timeout
+        : null,
     noTimeout: Boolean(opts.noTimeout),
     table: Boolean(opts.table),
     raw: Boolean(opts.raw),
