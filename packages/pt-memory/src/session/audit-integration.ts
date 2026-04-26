@@ -10,8 +10,8 @@ import {
  *
  * Esta función vive en pt-memory porque cruza dominio IOS + persistencia.
  */
-export function persistAuditLogger(logger: AuditLogger): number[] {
-  const memory = getMemory();
+export function persistAuditLogger(logger: AuditLogger, dbPath?: string): number[] {
+  const memory = getMemory(dbPath);
 
   return memory.audit.logMany(
     logger.entries.map((entry) => ({
@@ -36,8 +36,9 @@ export function logTransactionWithMemory(
   tx: Transaction,
   sessionId: string,
   transactionId?: string,
+  dbPath?: string,
 ): AuditLogEntry[] {
   logger.logTransaction(tx, sessionId, transactionId);
-  persistAuditLogger(logger);
+  persistAuditLogger(logger, dbPath);
   return logger.entries.filter((entry) => entry.sessionId === sessionId);
 }

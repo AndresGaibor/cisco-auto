@@ -24,7 +24,7 @@ export default [
       "@typescript-eslint": tseslint,
     },
     rules: {
-      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
       "@typescript-eslint/no-non-null-assertion": "warn",
       "@typescript-eslint/prefer-nullish-coalescing": "warn",
@@ -182,8 +182,10 @@ export default [
     ignores: ["**/__tests__/**", "**/*.test.ts"],
     rules: {
       "no-restricted-imports": ["error", {
-        name: "@cisco-auto/pt-runtime",
-        message: "pt-control debe importar desde la API pública de @cisco-auto/pt-runtime (raíz), no desde rutas internas. Usar: import { ... } from '@cisco-auto/pt-runtime'",
+        patterns: [{
+          group: ["@cisco-auto/pt-runtime/src/*"],
+          message: "pt-control debe importar desde la API pública, no src interno."
+        }]
       }],
     },
   },

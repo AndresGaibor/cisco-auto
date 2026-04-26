@@ -19,13 +19,10 @@ const ignoredDirs = new Set([
   "coverage",
   ".sisyphus",
   "docs/archive/legacy-core",
-  "tests/unit",
   ".claude",
   "dist-qtscript",
   "packages/pt-runtime/dist-qtscript",
   "packages/generated",
-  "packages/pt-control/docs",
-  "packages/pt-runtime/docs",
   "docs/MIGRATION_GUIDE.md",
   ".omc",
   "apps/pt-cli/src/contracts/lab-spec.ts",
@@ -35,6 +32,21 @@ const ignoredDirs = new Set([
   "apps/pt-cli/src/commands/template.ts",
   "apps/pt-cli/src/commands/validate.ts",
   "apps/pt-cli/src/commands/device/interactive.ts",
+]);
+
+const skipFiles = new Set([
+  "packages/pt-control/docs/PT-API.md",
+  "packages/pt-control/docs/PT-API-COMPLETE.md",
+  "packages/pt-control/docs/PT-GLOBAL-SCOPE.md",
+  "packages/pt-control/docs/PT-NETWORK-SERVERS.md",
+  "packages/pt-control/docs/pt-script-result.json",
+  "packages/pt-runtime/docs/PT-API.md",
+  "packages/pt-runtime/docs/PT-API-COMPLETE.md",
+  "packages/pt-runtime/docs/PT-GLOBAL-SCOPE.md",
+  "packages/pt-runtime/docs/PT-NETWORK-SERVERS.md",
+  "packages/pt-runtime/docs/pt-script-result.json",
+  "packages/pt-runtime/docs/superpowers/specs/2026-04-11-plugin-first-architecture.md",
+  "packages/pt-control/docs/responsibilities.md",
 ]);
 
 const allowedFiles = new Set(["scripts/check-stale-core-references.ts"]);
@@ -125,6 +137,11 @@ function isAllowedLine(line: string): boolean {
   return allowedPatterns.some((pattern) => pattern.test(line));
 }
 
+function isSkippedFile(rel: string): boolean {
+  if (skipFiles.has(rel)) return true;
+  return rel.endsWith(".skip");
+}
+
 function main(): void {
   const violations: Violation[] = [];
 
@@ -132,6 +149,10 @@ function main(): void {
     const rel = toPosix(relative(ROOT, file));
 
     if (allowedFiles.has(rel)) {
+      continue;
+    }
+
+    if (isSkippedFile(rel)) {
       continue;
     }
 

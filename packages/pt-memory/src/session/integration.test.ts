@@ -24,7 +24,7 @@ describe("executeTransactionWithMemory", () => {
       },
     };
 
-    const result = await executeTransactionWithMemory(tx, handler, "sess-1", "tx-1");
+    const result = await executeTransactionWithMemory(tx, handler, "sess-1", "tx-1", dbPath);
 
     expect(result.transactionResult.success).toBe(true);
     expect(memory.history.getSessionCommands("sess-1")).toHaveLength(2);

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 describe("pt-control package exports", () => {
@@ -42,6 +42,16 @@ describe("pt-control package exports", () => {
     for (const key of required) {
       expect(pkg.exports[key]).toBeDefined();
       expect(pkg.exports[key]).toMatch(/^\.\/.+/);
+    }
+
+    // Validar que los archivos exportados realmente existen en el filesystem
+    for (const [key, target] of Object.entries(pkg.exports)) {
+      if (key === "./package.json") continue;
+      const targetPath = join(import.meta.dir, "../..", target);
+      expect(
+        existsSync(targetPath),
+        `Export ${key} -> ${target} no existe`,
+      ).toBe(true);
     }
   });
 });

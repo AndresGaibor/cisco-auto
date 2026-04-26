@@ -24,9 +24,9 @@ describe("audit integration", () => {
     };
 
     await tx.execute(handler);
-    logTransactionWithMemory(logger, tx, "sess-1", "tx-1");
+    logTransactionWithMemory(logger, tx, "sess-1", "tx-1", dbPath);
 
-    const inserted = persistAuditLogger(logger);
+    const inserted = persistAuditLogger(logger, dbPath);
     expect(inserted.length).toBeGreaterThan(0);
     expect(memory.audit.getSessionLogs("sess-1").length).toBeGreaterThan(0);
 

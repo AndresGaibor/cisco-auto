@@ -10,7 +10,7 @@ export type {
   RuntimePrimitivePort,
   PrimitivePortOptions,
   PrimitivePortResult,
-} from "./ports/runtime-primitive-port.js";
+} from "../ports/runtime-primitive-port.js";
 
 export type {
   RuntimeTerminalPort,
@@ -18,7 +18,7 @@ export type {
   TerminalPortResult,
   TerminalPlan,
   TerminalPlanStep,
-} from "./ports/runtime-terminal-port.js";
+} from "../ports/runtime-terminal-port.js";
 
 export type {
   RuntimeOmniPort,
@@ -27,65 +27,65 @@ export type {
   OmniCapabilityMetadata,
   OmniRisk,
   OmniDomain,
-} from "./ports/runtime-omni-port.js";
+} from "../ports/runtime-omni-port.js";
 
 // ============================================================================
 // ADAPTERS - Implementaciones concretas
 // ============================================================================
 
-export { RuntimePrimitiveAdapter } from "./adapters/runtime-primitive-adapter.js";
-export { createRuntimeTerminalAdapter } from "./adapters/runtime-terminal-adapter.js";
-export { RuntimeOmniAdapter, createOmniAdapter } from "./adapters/runtime-omni-adapter.js";
+export { RuntimePrimitiveAdapter } from "../adapters/runtime-primitive-adapter.js";
+export { createRuntimeTerminalAdapter } from "../adapters/runtime-terminal-adapter.js";
+export { RuntimeOmniAdapter, createOmniAdapter } from "../adapters/runtime-omni-adapter.js";
 
 // ============================================================================
 // ORCHESTRATOR
 // ============================================================================
 
-export { createOrchestrator, executeIntent } from "./application/orchestration/index.js";
-export type { OrchestratorConfig, OrchestratorContext } from "./application/orchestration/index.js";
+export { createOrchestrator, executeIntent } from "../application/orchestration/index.js";
+export type { OrchestratorConfig, OrchestratorContext } from "../application/orchestration/index.js";
 
 // ============================================================================
 // COMPOSITION ROOT (pendiente)
 // ============================================================================
 
 // TODO: Implementar controlComposition que injectable los ports y orchestrator
-// export { controlComposition } from "./application/bootstrap/control-composition";
+// export { controlComposition } from "../application/bootstrap/control-composition";
 
 // ============================================================================
 // CONTRACTS (contratos de negocio)
 // ============================================================================
 
-export * from "./contracts/omniscience.js";
-export * from "./contracts/ios-execution-evidence.js";
+export * from "../contracts/omniscience.js";
+export * from "../contracts/ios-execution-evidence.js";
 
 // ============================================================================
 // OMNI (Capability Harness)
 // ============================================================================
 
-export * from "./omni/index.js";
+export * from "../omni/index.js";
 
 // ============================================================================
 // AGENT (workflows de agentes)
 // ============================================================================
 
-export * from "./agent/index.js";
+export * from "../agent/index.js";
 
 // ============================================================================
 // QUALITY GATES
 // ============================================================================
 
-export * from "./quality/index.js";
+export * from "../quality/index.js";
 
 // ============================================================================
 // PT FEATURE MODULES
 // ============================================================================
 
-export * from "./pt/terminal/index.js";
-export * from "./pt/topology/index.js";
-export * from "./pt/server/index.js";
-export * from "./pt/planner/index.js";
-export * from "./pt/ledger/index.js";
-export * from "./pt/diagnosis/index.js";
+export * from "../pt/terminal/index.js";
+export * from "../pt/topology/index.js";
+export * from "../pt/server/index.js";
+export * from "../pt/planner/index.js";
+export * from "../pt/ledger/index.js";
+export * from "../pt/diagnosis/index.js";
 
 // ============================================================================
 // LEGACY EXPORTS (mantenidos por compatibilidad)
@@ -96,10 +96,10 @@ export {
   PTController,
   createPTController,
   createDefaultPTController,
-} from "./controller/index.js";
+} from "../controller/index.js";
 
 // Virtual DOM
-export { VirtualTopology, createVirtualTopology } from "./vdom/index.js";
+export { VirtualTopology, createVirtualTopology } from "../vdom/index.js";
 
 // Parsers IOS
 export {
@@ -118,16 +118,16 @@ export {
 } from "@cisco-auto/ios-domain";
 
 // Logging
-export { LogManager, getLogManager, resetLogManager } from "./logging/index.js";
+export { LogManager, getLogManager, resetLogManager } from "../logging/index.js";
 export type {
   LogEntry,
   LogSession,
   LogConfig,
   LogQueryOptions,
   LogStats,
-} from "./logging/index.js";
-export { redactSensitive } from "./logging/index.js";
-export type { CommandTraceEntry } from "./controller/index.js";
+} from "../logging/index.js";
+export { redactSensitive } from "../logging/index.js";
+export type { CommandTraceEntry } from "../controller/index.js";
 
 // IOS Session
 export {
@@ -157,15 +157,15 @@ export {
 export {
   resolveCapabilities,
   type DeviceCapabilities,
-} from "./domain/ios/capabilities/pt-capability-resolver.js";
+} from "../domain/ios/capabilities/pt-capability-resolver.js";
 
 export { IOSFamily, type IosDeviceModel } from "@cisco-auto/ios-domain";
 
 // Device Validation
-export { validatePTModel, resolveModel } from "./shared/utils/helpers.js";
+export { validatePTModel, resolveModel } from "../shared/utils/helpers.js";
 
 // Device Builder
-export * from "./verification/builders/device-builder.js";
+export * from "../verification/builders/device-builder.js";
 
 // PT Compatibility Contract
 export {
@@ -184,17 +184,17 @@ export {
   ScenarioService,
   WlcService,
   createTerminalCommandService,
-} from "./application/services/index.js";
+} from "../application/services/index.js";
 
 // Capability Matrix
 export * from "@cisco-auto/kernel/domain/ios/capability-matrix";
 
 // Types
-export * from "./types/index.js";
+export * from "../types/index.js";
 
 // Commands
 export {
   runBridgeDoctor,
   printBridgeDoctorReport,
   type BridgeDoctorReport,
-} from "./commands/bridge-doctor-command.js";
+} from "../commands/bridge-doctor-command.js";

@@ -114,12 +114,7 @@ const rules: BoundaryRule[] = [
     id: "pt-cli-no-pt-control-root",
     description: "pt-cli debe usar subpaths explícitos de pt-control",
     include: ["apps/pt-cli/src"],
-    exclude: [
-      "apps/pt-cli/src/__tests__",
-      "apps/pt-cli/src/commands",
-      "apps/pt-cli/src/telemetry",
-      "apps/pt-cli/src/application",
-    ],
+    exclude: ["apps/pt-cli/src/__tests__"],
     forbidden: [
       {
         pattern: /from\s+["']@cisco-auto\/pt-control["']/g,
