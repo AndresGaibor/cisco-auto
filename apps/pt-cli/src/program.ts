@@ -9,6 +9,28 @@ import { renderRootHelp } from "./cli/help-renderer.js";
 import { renderCliParseError } from "./cli/error-renderer.js";
 import { suggestClosest } from "./cli/suggest.js";
 
+export function attachCommandTiming(
+  program: Command,
+  write: (message: string) => void = (message) => process.stdout.write(message),
+): Command {
+  const startedAt = new Map<string, number>();
+
+  program.hook("preAction", (_thisCommand, actionCommand) => {
+    startedAt.set(actionCommand.commandName(), Date.now());
+  });
+
+  program.hook("postAction", (_thisCommand, actionCommand) => {
+    const started = startedAt.get(actionCommand.commandName());
+    if (!started) return;
+
+    const elapsedSeconds = (Date.now() - started) / 1000;
+    write(`⏱ ${actionCommand.commandPath()} · ${elapsedSeconds.toFixed(1)}s\n`);
+    startedAt.delete(actionCommand.commandName());
+  });
+
+  return program;
+}
+
 const ROOT_COMMAND_NAMES = [
   "doctor",
   "runtime",
@@ -42,6 +64,7 @@ export function createProgram(): Command {
     });
 
   addGlobalFlags(program);
+  attachCommandTiming(program);
 
   program.addHelpText("beforeAll", () => renderRootHelp(PUBLIC_COMMAND_DEFINITIONS));
 
