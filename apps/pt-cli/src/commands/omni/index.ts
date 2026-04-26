@@ -114,7 +114,7 @@ Raw recomendado para agentes:
 Notas:
   - omni raw ejecuta JavaScript dentro de Packet Tracer.
   - Usa --dry-run antes de scripts complejos.
-  - Usa --unsafe --approve solo si sabes que el código toca APIs peligrosas.
+  - Usa --unsafe --yes solo si sabes que el código toca APIs peligrosas.
 `,
     );
 
@@ -207,7 +207,8 @@ function createOmniRawCommand(): Command {
     .option("--wrap", "Envolver código como (function(){ ... })() para permitir return")
     .option("--parse-json", "Si el resultado es string JSON, parsearlo")
     .option("--dry-run", "Mostrar código final y política sin ejecutar")
-    .option("-y, --approve", "Confirmar ejecución raw")
+    .option("-y, --yes", "Confirmar ejecución raw")
+    .option("--approve", "Alias de --yes")
     .option("--unsafe", "Permitir patrones peligrosos detectados por el guard")
     .option("--guard <mode>", "strict|warn|off", "strict")
     .option("--raw", "Imprimir solo el valor resultante")
@@ -217,15 +218,15 @@ function createOmniRawCommand(): Command {
       "after",
       `
 Ejemplos:
-  pt omni raw "n.getDeviceCount()" --approve
-  pt omni raw "Object.keys(ipc).join(',')" --approve --raw
-  pt omni raw --wrap "return n.getDeviceCount();" --approve --json
-  pt omni raw --file scripts/probe.js --approve --json
-  pt omni raw --stdin --approve --json < scripts/probe.js
+  pt omni raw "n.getDeviceCount()" --yes
+  pt omni raw "Object.keys(ipc).join(',')" --yes --raw
+  pt omni raw --wrap "return n.getDeviceCount();" --yes --json
+  pt omni raw --file scripts/probe.js --yes --json
+  pt omni raw --stdin --yes --json < scripts/probe.js
   pt omni raw --file scripts/probe.js --dry-run
 
 Si tu código contiene flags o guiones:
-  pt omni raw --approve -- "n.getDeviceCount()"
+  pt omni raw --yes -- "n.getDeviceCount()"
 
 Variables disponibles en runtime:
   ipc         API interna principal
@@ -257,7 +258,7 @@ Variables disponibles en runtime:
           risk: "dangerous",
           error: { code: "OMNI_RAW_INPUT_ERROR", message },
           nextSteps: [
-            'pt omni raw "n.getDeviceCount()" --approve',
+            'pt omni raw "n.getDeviceCount()" --yes',
             "PT_OMNI_AUTO_APPROVE=1 pt omni raw --file probe.js --json",
           ],
         });
@@ -283,7 +284,7 @@ Variables disponibles en runtime:
           warnings: policy.warnings,
           confidence: 1,
           nextSteps: [
-            'pt omni raw --file scripts/probe.js --approve --json',
+            'pt omni raw --file scripts/probe.js --yes --json',
             "pt omni status",
           ],
         });
@@ -306,11 +307,11 @@ Variables disponibles en runtime:
           payload: { codePreview: code.slice(0, 500) },
           error: {
             code: "OMNI_RAW_APPROVAL_REQUIRED",
-            message: "omni raw requiere --approve o PT_OMNI_AUTO_APPROVE=1",
+            message: "omni raw requiere --yes, --approve o PT_OMNI_AUTO_APPROVE=1",
           },
           warnings: policy.warnings,
           nextSteps: [
-            'pt omni raw "n.getDeviceCount()" --approve',
+            'pt omni raw "n.getDeviceCount()" --yes',
             "PT_OMNI_AUTO_APPROVE=1 pt omni raw --file probe.js --json",
           ],
         });

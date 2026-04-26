@@ -33,7 +33,6 @@ export function renderCliParseError(input: CliErrorRenderInput): string {
     const suggestions = suggestClosest(firstToken, [
       "doctor",
       "runtime",
-      "lab",
       "device",
       "dev",
       "link",
@@ -41,6 +40,8 @@ export function renderCliParseError(input: CliErrorRenderInput): string {
       "cmd",
       "set",
       "verify",
+      "omni",
+      "omniscience",
       "completion",
     ]);
 
@@ -71,7 +72,9 @@ export function renderCliParseError(input: CliErrorRenderInput): string {
   lines.push(chalk.bold("Ayuda útil:"));
   lines.push("  pt --help");
   lines.push("  pt cmd --help");
+  lines.push("  pt set --help");
   lines.push("  pt verify --help");
+  lines.push("  pt omni --help");
   lines.push("  pt doctor");
 
   if (userCommand) {

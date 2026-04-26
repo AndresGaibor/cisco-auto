@@ -59,7 +59,7 @@ export function renderRootHelp(commands: PtCommandDefinition[]): string {
   lines.push("  pt device list");
   lines.push('  pt cmd R1 "show ip interface brief"');
   lines.push('  pt cmd PC1 "ipconfig"');
-  lines.push("  pt verify all");
+  lines.push("  pt verify ping PC1 <gateway>");
   lines.push("");
   lines.push(chalk.bold("Ayuda por comando:"));
   lines.push("  pt cmd --help");
@@ -72,7 +72,7 @@ export function renderRootHelp(commands: PtCommandDefinition[]): string {
   lines.push(chalk.bold("Salida para agentes/autómatas:"));
   lines.push("  pt device list --json");
   lines.push('  pt cmd R1 "show version" --json');
-  lines.push("  pt verify all --json");
+  lines.push("  pt verify ping PC1 <gateway> --json");
   lines.push("");
 
   return lines.join("\n");

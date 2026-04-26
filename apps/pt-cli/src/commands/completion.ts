@@ -221,67 +221,71 @@ const POWERSHELL_INSTALL = `
 type ShellType = 'bash' | 'zsh' | 'fish' | 'powershell';
 
 /**
- * Lista de comandos disponibles en la CLI
- */
-
-// NOTA: 'lab' fue removido porque no está registrado en index.ts
-
-/**
  * Crea el comando de completion
  */
 export function createCompletionCommand(): Command {
-  return new Command('completion')
-    .description('Generar scripts de completion para shell')
-    .argument('<shell>', 'Shell objetivo: bash, zsh, fish, powershell')
-    .action(async (shell: string) => {
-      const { PUBLIC_COMMAND_DEFINITIONS } = await import('./command-registry.js');
+  return new Command("completion")
+    .description("Generar scripts de completion para shell")
+    .argument("<shell>", "Shell objetivo: bash, zsh, fish, powershell")
+    .option("--install-help", "Imprimir instrucciones de instalación en stderr", false)
+    .action(async (shell: string, options: { installHelp?: boolean }) => {
+      const { PUBLIC_COMMAND_DEFINITIONS } = await import("./command-registry.js");
 
-      const AVAILABLE_COMMANDS = PUBLIC_COMMAND_DEFINITIONS.flatMap((cmd) => [
+      const visibleDefinitions = PUBLIC_COMMAND_DEFINITIONS.filter(
+        (cmd) => !cmd.hidden && !cmd.legacy,
+      );
+
+      const AVAILABLE_COMMANDS = visibleDefinitions.flatMap((cmd) => [
         cmd.name,
         ...(cmd.aliases ?? []),
       ]);
 
       const COMMAND_SUMMARIES = Object.fromEntries(
-        PUBLIC_COMMAND_DEFINITIONS.map((cmd) => [cmd.name, cmd.summary ?? '']),
+        visibleDefinitions.map((cmd) => [cmd.name, cmd.summary ?? ""]),
       );
 
       const shellType = shell.toLowerCase() as ShellType;
 
-      const validShells: ShellType[] = ['bash', 'zsh', 'fish', 'powershell'];
+      const validShells: ShellType[] = ["bash", "zsh", "fish", "powershell"];
       if (!validShells.includes(shellType)) {
-        console.error(`❌ Shell no soportado: ${shell}`);
-        console.log('Shells disponibles: bash, zsh, fish, powershell');
+        process.stderr.write(`❌ Shell no soportado: ${shell}\n`);
+        process.stderr.write("Shells disponibles: bash, zsh, fish, powershell\n");
         process.exit(1);
       }
 
-      const programName = 'pt';
-      let script = '';
-      let installMsg = '';
+      const programName = "pt";
+      let script = "";
+      let installMsg = "";
 
       switch (shellType) {
-        case 'bash':
+        case "bash":
           script = generateBashCompletion(programName, AVAILABLE_COMMANDS);
           installMsg = BASH_INSTALL;
           break;
-        case 'zsh':
+        case "zsh":
           script = generateZshCompletion(programName, AVAILABLE_COMMANDS);
           installMsg = ZSH_INSTALL;
           break;
-        case 'fish':
+        case "fish":
           script = generateFishCompletion(programName, AVAILABLE_COMMANDS, COMMAND_SUMMARIES);
           installMsg = FISH_INSTALL;
           break;
-        case 'powershell':
+        case "powershell":
           script = generatePowerShellCompletion(programName, AVAILABLE_COMMANDS, COMMAND_SUMMARIES);
           installMsg = POWERSHELL_INSTALL;
           break;
       }
 
-      console.log(script);
+      process.stdout.write(script.endsWith("\n") ? script : `${script}\n`);
 
-      console.log('\n' + '='.repeat(60));
-      console.log('📝 INSTRUCCIONES DE INSTALACIÓN');
-      console.log('='.repeat(60));
-      console.log(installMsg);
+      if (options.installHelp) {
+        process.stderr.write("\n");
+        process.stderr.write("=".repeat(60));
+        process.stderr.write("\n📝 INSTRUCCIONES DE INSTALACIÓN\n");
+        process.stderr.write("=".repeat(60));
+        process.stderr.write("\n");
+        process.stderr.write(installMsg);
+        process.stderr.write("\n");
+      }
     });
 }

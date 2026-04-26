@@ -1,89 +1,57 @@
 #!/usr/bin/env bun
 /**
- * Módulo principal de salida
- * Gestiona la selección automática de formatters y detección TTY
+ * Módulo principal de salida.
  */
 
-import type { OutputFormat } from '../flags.ts';
-import { json, yaml, table, text } from './formatters/index.ts';
-import type { Formatter, FormatOptions } from './formatters/types.ts';
+import type { OutputFormat } from "../flags.ts";
+import { json, table, text } from "./formatters/index.ts";
+import type { Formatter, FormatOptions } from "./formatters/types.ts";
 
-/**
- * Registry de formatters disponibles
- */
-const formatters: Record<OutputFormat, Formatter> = {
-  json,
-  yaml,
-  table,
-  text,
+const raw: Formatter = {
+  name: "raw",
+  format: (data: unknown) => {
+    if (data === null || data === undefined) return "";
+    if (typeof data === "string") return data;
+    return JSON.stringify(data, null, 2);
+  },
+  canHandle: (data: unknown) => typeof data === "string",
 };
 
-/**
- * Verifica si la salida es un TTY (terminal interactiva)
- * @returns true si stdout es un TTY
- */
+const formatters: Record<OutputFormat, Formatter> = {
+  json,
+  table,
+  text,
+  raw,
+};
+
 export function isTTY(): boolean {
   return process.stdout.isTTY ?? false;
 }
 
-/**
- * Determina el formato por defecto según el contexto
- * - TTY (terminal): table por defecto para mejor legibilidad
- * - Pipe/Redirect: json por defecto para facilitar scripting
- * @param explicitFormat - Formato explícito del usuario (si existe)
- * @returns Formato determinado
- */
 export function getDefaultFormat(explicitFormat?: OutputFormat): OutputFormat {
-  if (explicitFormat) {
-    return explicitFormat;
-  }
-  
-  return isTTY() ? 'table' : 'json';
+  if (explicitFormat) return explicitFormat;
+  return isTTY() ? "table" : "json";
 }
 
-/**
- * Obtiene el formatter apropiado para el formato especificado
- * @param format - Formato de salida
- * @returns Instancia del formatter
- */
 export function getFormatter(format: OutputFormat): Formatter {
   return formatters[format] ?? text;
 }
 
-/**
- * Formatea datos según el formato especificado
- * @param data - Datos a formatear
- * @param format - Formato de salida
- * @param options - Opciones adicionales
- * @returns String formateado
- */
 export function formatOutput(
   data: unknown,
   format: OutputFormat,
-  options?: Partial<FormatOptions>
 ): string {
   const formatter = getFormatter(format);
   return formatter.format(data);
 }
 
-/**
- * Formatea datos con detección automática de formato
- * @param data - Datos a formatear
- * @param explicitFormat - Formato explícito del usuario
- * @param options - Opciones adicionales
- * @returns String formateado
- */
 export function autoFormat(
   data: unknown,
   explicitFormat?: OutputFormat,
-  options?: Partial<FormatOptions>
 ): string {
   const format = getDefaultFormat(explicitFormat);
-  return formatOutput(data, format, options);
+  return formatOutput(data, format);
 }
 
-/**
- * Exporta todos los formatters para uso directo
- */
-export { json, yaml, table, text } from './formatters/index.ts';
-export type { Formatter, FormatOptions } from './formatters/types.ts';
+export { json, table, text };
+export type { Formatter, FormatOptions } from "./formatters/types.ts";

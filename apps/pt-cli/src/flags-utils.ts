@@ -23,6 +23,11 @@ export const DEFAULT_FLAGS: GlobalFlags = {
   verify: false,
   timeout: null,
   noTimeout: false,
+  table: false,
+  raw: false,
+  yes: false,
+  noInput: false,
+  noColor: false,
 };
 
 export function buildFlags(overrides: Partial<GlobalFlags> = {}): GlobalFlags {

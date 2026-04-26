@@ -46,7 +46,7 @@ export function formatGlobalOptions(): string {
   return chalk.bold.cyan('\nGlobal Options:') + chalk.gray(`
   --json              Output in JSON format
   --jq <filter>       Filter JSON output
-  --output <format>   Output format: json, yaml, table, text
+  --output <format>   Output format: json, table, text
   --verbose           Verbose output
   --quiet             Suppress non-essential output
   -h, --help          Show help`);

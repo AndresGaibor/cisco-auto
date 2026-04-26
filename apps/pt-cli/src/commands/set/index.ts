@@ -232,7 +232,6 @@ Subcomandos planeados:
 
 Nota:
   Implementar usando las APIs actuales del runtime/pt-control para Server-PT.
-  No usar YAML.
 `,
     );
 
@@ -259,12 +258,10 @@ Regla:
 Ejemplos:
   pt set host PC1 ip 192.168.10.10/24 --gateway 192.168.10.1
   pt set host PC1 dhcp
-  pt set server Server1 dns record empresa.local 192.168.10.2
 `,
     );
 
   set.addCommand(createSetHostCommand());
-  set.addCommand(createSetServerCommand());
 
   return set;
 }

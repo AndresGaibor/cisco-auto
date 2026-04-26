@@ -22,16 +22,13 @@ function parsePtCmdFile(path: string): string[][] {
 
 export function createLabCommand(): Command {
   const lab = new Command("lab")
-    .description("Gestiona el laboratorio/canvas actual sin YAML")
+    .description("Gestiona el laboratorio/canvas actual con scripts .ptcmd")
     .addHelpText(
       "after",
       `
 Ejemplos:
   pt lab status
-  pt lab clear
-  pt lab run labs/vlan.ptcmd
-  pt lab report
-  pt lab grade
+  pt lab run labs/vlan.ptcmd --dry-run
 
 Formato .ptcmd:
   # Comentarios permitidos
@@ -39,10 +36,10 @@ Formato .ptcmd:
   pt device add SW1 2960-24TT
   pt link add R1:g0/0 SW1:g0/1
   pt cmd R1 "show ip interface brief"
-  pt verify all
+  pt verify ping PC1 192.168.10.1
 
 Regla:
-  .ptcmd contiene comandos reales de la CLI, no YAML.
+  .ptcmd contiene comandos reales de la CLI, uno por línea.
 `,
     );
 
@@ -53,22 +50,7 @@ Regla:
       process.stdout.write("\nUsa estos comandos para inspección detallada:\n");
       process.stdout.write("  pt device list\n");
       process.stdout.write("  pt link list\n");
-      process.stdout.write("  pt verify all\n\n");
-    });
-
-  lab
-    .command("clear")
-    .description("Limpia el canvas/lab actual")
-    .option("--yes", "Confirmar limpieza")
-    .action(async (options: any) => {
-      if (!options.yes) {
-        process.stderr.write("Operación destructiva. Ejecuta: pt lab clear --yes\n");
-        process.exitCode = 2;
-        return;
-      }
-
-      process.stderr.write("TODO: conectar con controller.clearTopology() o bridge equivalente.\n");
-      process.stderr.write("Criterio: debe borrar dispositivos/enlaces y devolver JSON con conteos.\n");
+      process.stdout.write("  pt verify ping PC1 <gateway>\n\n");
     });
 
   lab
@@ -76,7 +58,7 @@ Regla:
     .description("Ejecuta un script .ptcmd con comandos pt reales")
     .argument("<file>", "Archivo .ptcmd")
     .option("--dry-run", "Mostrar comandos sin ejecutar", false)
-    .action(async (file: string, options) => {
+    .action(async (file: string, options: any) => {
       const commands = parsePtCmdFile(file);
 
       if (options.dryRun) {
@@ -88,28 +70,9 @@ Regla:
         return;
       }
 
-      process.stderr.write("Ejecución .ptcmd recomendada para fase siguiente:\n");
-      process.stderr.write("  1. Crear runner interno que invoque createProgram().parseAsync(['bun','pt',...])\n");
-      process.stderr.write("  2. Continuar aunque un comando falle si se pasa --continue-on-error\n");
-      process.stderr.write("  3. Guardar reporte en logs/lab-runs/<timestamp>.json\n");
-      process.stderr.write("\nComandos parseados:\n");
-      for (const argv of commands) {
-        process.stderr.write(`  ${argv.join(" ")}\n`);
-      }
-    });
-
-  lab
-    .command("report")
-    .description("Genera reporte del lab actual")
-    .action(() => {
-      process.stdout.write("TODO: agregar reporte combinando pt device list, pt link list y pt verify all.\n");
-    });
-
-  lab
-    .command("grade")
-    .description("Califica el lab actual con verificaciones disponibles")
-    .action(() => {
-      process.stdout.write("TODO: usar pt verify all y producir score 0-100 con evidencias.\n");
+      process.stderr.write("pt lab run solo soporta --dry-run en esta versión.\n");
+      process.stderr.write("Usa: pt lab run <file.ptcmd> --dry-run\n");
+      process.exitCode = 2;
     });
 
   return lab;

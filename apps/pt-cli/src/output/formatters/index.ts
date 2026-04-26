@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 /**
- * Exporta todos los formatters de salida
+ * Exporta formatters de salida públicos.
+ * La CLI pública soporta text/json/table/raw.
  */
 
-export { json, jsonFormatter } from './json.ts';
-export { yaml, yamlFormatter } from './yaml.ts';
-export { table, tableFormatter } from './table.ts';
-export { text, textFormatter } from './text.ts';
-export type { Formatter, FormatOptions, defaultOptions } from './types.ts';
+export { json, jsonFormatter } from "./json.ts";
+export { table, tableFormatter } from "./table.ts";
+export { text, textFormatter } from "./text.ts";
+export type { Formatter, FormatOptions, defaultOptions } from "./types.ts";

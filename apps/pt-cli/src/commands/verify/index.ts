@@ -36,7 +36,6 @@ Ejemplos:
   pt verify vlan SW1 10
   pt verify dhcp PC1
   pt verify dns PC1 empresa.local
-  pt verify all
 
 Regla para agentes:
   - Ejecuta verify después de cmd/set/device/link.
@@ -248,24 +247,6 @@ Regla para agentes:
 
       printVerifyResult(wrapped, flags);
       if (!wrapped.ok) process.exitCode = 1;
-    });
-
-  verify
-    .command("all")
-    .description("Ejecuta validaciones generales del laboratorio")
-    .action((_options, command) => {
-      const flags = getGlobalFlags(command);
-      const result = {
-        ok: false,
-        message: "verify all debe implementarse agregando checks disponibles: link verify, device list, ping matrix opcional, vlan/routing/services detectados.",
-        nextSteps: [
-          "pt link verify",
-          "pt device list --json",
-          "pt verify ping <source> <target>",
-        ],
-      };
-      printVerifyResult(result, flags);
-      process.exitCode = 1;
     });
 
   return verify;
