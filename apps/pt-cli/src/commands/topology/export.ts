@@ -4,7 +4,7 @@ import { loadLabYaml, toLabSpec, generateMermaidDiagram } from '../../contracts/
 import { formatExamples, formatRelatedCommands } from '../../help/formatter';
 import { getExamples } from '../../help/examples';
 import { getRelatedCommands } from '../../help/related';
-import { createDefaultPTController } from '@cisco-auto/pt-control';
+import { createDefaultPTController } from '@cisco-auto/pt-control/controller';
 
 export function createTopologyExportCommand(): Command {
   const cmd = new Command('export')

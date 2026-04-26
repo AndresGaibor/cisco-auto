@@ -1,24 +1,30 @@
 #!/usr/bin/env bun
 /**
  * Comando routing - Configurar routing en dispositivos Cisco
- * Migrado al patrón runCommand con CliResult
+ * Thin CLI: solo parsea flags y delega a pt-control/use-cases
  */
 
 import { Command } from 'commander';
-import chalk from 'chalk';
 
 import type { CliResult } from '../contracts/cli-result.js';
 import { createSuccessResult, createErrorResult } from '../contracts/cli-result.js';
 import type { CommandMeta } from '../contracts/command-meta.js';
-import type { GlobalFlags } from '../flags.js';
 
 import { runCommand } from '../application/run-command.js';
 import { renderCliResult } from '../ux/renderers.js';
 import { printExamples } from '../ux/examples.js';
-import { generateRoutingCommands, type RoutingConfigInput } from '@cisco-auto/kernel/plugins/routing';
+import { buildFlags, parseGlobalOptions } from '../flags-utils.js';
 
-const IPV4_REGEX = /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
-const CIDR_REGEX = /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}\/(?:[0-9]|[12]\d|3[0-2])$/;
+import {
+  executeStaticRoute,
+  executeOspfEnable,
+  executeOspfAddNetwork,
+  executeEigrpEnable,
+  executeBgpEnable,
+  validarCIDR,
+  parseEnteroObligatorio,
+  type RoutingResult,
+} from '@cisco-auto/pt-control/application/routing';
 
 const ROUTING_EXAMPLES = [
   { command: 'pt routing static add --device R1 --network 192.168.10.0/24 --next-hop 10.0.0.1', description: 'Agregar ruta estática' },
@@ -39,88 +45,6 @@ const ROUTING_META: CommandMeta = {
   supportsExplain: true,
 };
 
-function validarIPv4(valor: string): boolean {
-  return IPV4_REGEX.test(valor);
-}
-
-function validarCIDR(valor: string): boolean {
-  return CIDR_REGEX.test(valor);
-}
-
-function parseEnteroObligatorio(valor: string, etiqueta: string): number {
-  if (!/^\d+$/.test(valor.trim())) {
-    throw new Error(`${etiqueta} debe ser un número entero válido`);
-  }
-  const numero = Number.parseInt(valor, 10);
-  if (!Number.isInteger(numero) || numero < 0) {
-    throw new Error(`${etiqueta} debe ser un número entero válido`);
-  }
-  return numero;
-}
-
-function cidrToSubnetMask(cidr: string): string {
-  if (cidr.includes('/')) {
-    const bits = Number(cidr.split('/')[1]);
-    if (Number.isNaN(bits) || bits < 0 || bits > 32) return '255.255.255.0';
-    const mask = bits === 0 ? 0 : (~((1 << (32 - bits)) - 1) >>> 0);
-    return `${(mask >>> 24) & 255}.${(mask >>> 16) & 255}.${(mask >>> 8) & 255}.${mask & 255}`;
-  }
-  return '255.255.255.0';
-}
-
-export function buildStaticRouteCommands(deviceName: string, network: string, nextHop: string): string[] {
-  const mask = cidrToSubnetMask(network);
-  const networkAddr = network.includes('/') ? (network.split('/')[0] ?? network) : network;
-  const config: RoutingConfigInput = {
-    deviceName,
-    staticRoutes: [
-      {
-        network: networkAddr,
-        mask,
-        nextHop: nextHop === 'null0' ? 'null0' : nextHop,
-      },
-    ],
-  };
-  return generateRoutingCommands(config);
-}
-
-export function buildOspfEnableCommands(deviceName: string, processId: number): string[] {
-  return [`router ospf ${processId}`, ' exit'];
-}
-
-export function buildOspfAddNetworkCommands(deviceName: string, processId: number, network: string, area: number | string): string[] {
-  const [net, wildcard] = network.includes('/') ? parseCidrToNetworkWildcard(network) : [network, '0.0.0.255'];
-  const config: RoutingConfigInput = {
-    deviceName,
-    ospf: {
-      processId,
-      areas: [{ areaId: area, networks: [{ network: net, wildcard }] }],
-    },
-  };
-  return generateRoutingCommands(config);
-}
-
-function parseCidrToNetworkWildcard(cidr: string): [string, string] {
-  const parts = cidr.split('/');
-  const cidrBits = Number(parts[1]) || 24;
-  const wildcardBits = 32 - cidrBits;
-  const wildcardNum = (1 << wildcardBits) - 1;
-  const octets = [0, 0, 0, 0];
-  for (let i = 0; i < 4; i++) {
-    const shift = 8 * (3 - i);
-    octets[i] = (wildcardNum >>> shift) & 255;
-  }
-  return [parts[0] ?? cidr, octets.join('.')];
-}
-
-export function buildEigrpEnableCommands(deviceName: string, asn: number): string[] {
-  return [`router eigrp ${asn}`, ' no auto-summary', ' exit'];
-}
-
-export function buildBgpEnableCommands(deviceName: string, asn: number): string[] {
-  return [`router bgp ${asn}`, ' bgp log-neighbor-changes', ' exit'];
-}
-
 export function createRoutingCommand(): Command {
   const command = new Command('routing')
     .description('Comandos para configurar routing en dispositivos Cisco')
@@ -128,14 +52,8 @@ export function createRoutingCommand(): Command {
     .option('--explain', 'Explicar qué hace el comando', false)
     .option('--plan', 'Mostrar plan de ejecución sin ejecutar', false);
 
-  const staticCommand = new Command('static')
-    .description('Configurar rutas estáticas')
-    .option('--examples', 'Mostrar ejemplos', false)
-    .option('--explain', 'Explicar', false)
-    .option('--plan', 'Mostrar plan', false);
-
-  staticCommand
-    .command('add')
+  // routing static add
+  const staticAddCmd = new Command('add')
     .description('Agregar una ruta estática')
     .requiredOption('--device <name>', 'Nombre del dispositivo')
     .requiredOption('--network <cidr>', 'Red destino en formato CIDR')
@@ -144,84 +62,33 @@ export function createRoutingCommand(): Command {
     .option('--explain', 'Explicar', false)
     .option('--plan', 'Mostrar plan', false)
     .action(async (options) => {
-      const globalExamples = process.argv.includes('--examples');
-      const globalExplain = process.argv.includes('--explain');
-      const globalPlan = process.argv.includes('--plan');
+      const { examples, explain, plan } = parseGlobalOptions();
+      if (examples) { console.log(printExamples(ROUTING_META)); return; }
+      if (explain) { console.log(ROUTING_META.longDescription ?? ROUTING_META.summary); return; }
+      if (plan) { console.log('Plan: 1. Validar CIDR y next-hop, 2. Generar comandos IOS, 3. Aplicar'); return; }
 
-      if (globalExamples) {
-        console.log(printExamples(ROUTING_META));
-        return;
-      }
-
-      if (globalExplain) {
-        console.log(ROUTING_META.longDescription ?? ROUTING_META.summary);
-        return;
-      }
-
-      if (globalPlan) {
-        console.log('Plan de ejecución:');
-        console.log(`  1. Validar CIDR: ${options.network}`);
-        console.log(`  2. Validar next-hop: ${options.nextHop}`);
-        console.log(`  3. Generar comandos IOS`);
-        console.log(`  4. Aplicar al dispositivo ${options.device}`);
-        return;
-      }
-
-      const flags: GlobalFlags = {
-        json: false, jq: null, output: 'text', verbose: false, quiet: false,
-        trace: false, tracePayload: false, traceResult: false, traceDir: null,
-        traceBundle: false, traceBundlePath: null, sessionId: null,
-        examples: globalExamples, schema: false, explain: globalExplain, plan: globalPlan, verify: true,
-        timeout: null, noTimeout: false,
-      };
-
+      const flags = buildFlags({ examples, explain, plan });
       const result = await runCommand({
-        action: 'routing.static.add',
-        meta: ROUTING_META,
-        flags,
+        action: 'routing.static.add', meta: ROUTING_META, flags,
         payloadPreview: { device: options.device, network: options.network, nextHop: options.nextHop },
-        execute: async (ctx): Promise<CliResult> => {
+        execute: async (ctx) => {
+          const routingResult = executeStaticRoute({ deviceName: options.device, network: options.network, nextHop: options.nextHop });
+          if (!routingResult.ok) return createErrorResult('routing.static.add', { message: routingResult.error.message });
+          await ctx.controller.start();
           try {
-            if (!validarCIDR(options.network)) {
-              return createErrorResult('routing.static.add', { message: `La red debe tener formato CIDR válido: ${options.network}` });
-            }
-            if (options.nextHop !== 'null0' && !validarIPv4(options.nextHop)) {
-              return createErrorResult('routing.static.add', { message: `El next-hop debe ser una IPv4 válida o null0: ${options.nextHop}` });
-            }
-
-            const comandos = buildStaticRouteCommands(options.device, options.network, options.nextHop);
-
-            await ctx.controller.start();
-            try {
-              await ctx.controller.configIos(options.device, comandos);
-              await ctx.logPhase('verify', { device: options.device });
-              return createSuccessResult('routing.static.add', {
-                device: options.device,
-                network: options.network,
-                nextHop: options.nextHop,
-                commands: comandos,
-              }, { advice: [`Usa pt show ip-route ${options.device} para verificar`] });
-            } finally {
-              await ctx.controller.stop();
-            }
-          } catch (error) {
-            return createErrorResult('routing.static.add', { message: error instanceof Error ? error.message : String(error) });
-          }
+            await ctx.controller.configIos(options.device, routingResult.data.commands);
+            await ctx.logPhase('verify', { device: options.device });
+            return createSuccessResult('routing.static.add', routingResult.data, { advice: [`Usa pt show ip-route ${options.device} para verificar`] });
+          } finally { await ctx.controller.stop(); }
         },
       });
-
-      const output = renderCliResult(result, flags.output);
-      if (!flags.quiet || !result.ok) console.log(output);
-      if (!result.ok) process.exit(1);
+      renderResult(result, flags);
     });
 
-  const ospfCommand = new Command('ospf')
-    .description('Configurar OSPF')
-    .option('--examples', 'Mostrar ejemplos', false)
-    .option('--explain', 'Explicar', false);
+  const staticCommand = new Command('static').description('Configurar rutas estáticas').addCommand(staticAddCmd);
 
-  ospfCommand
-    .command('enable')
+  // routing ospf enable
+  const ospfEnableCmd = new Command('enable')
     .description('Habilitar OSPF en un dispositivo')
     .requiredOption('--device <name>', 'Nombre del dispositivo')
     .requiredOption('--process-id <id>', 'ID del proceso OSPF')
@@ -229,136 +96,72 @@ export function createRoutingCommand(): Command {
     .option('--explain', 'Explicar', false)
     .option('--plan', 'Mostrar plan', false)
     .action(async (options) => {
-      const globalExamples = process.argv.includes('--examples');
-      const globalExplain = process.argv.includes('--explain');
-      const globalPlan = process.argv.includes('--plan');
+      const { examples, explain, plan } = parseGlobalOptions();
+      if (examples) { console.log(printExamples(ROUTING_META)); return; }
+      if (explain) { console.log(ROUTING_META.longDescription ?? ROUTING_META.summary); return; }
+      if (plan) { console.log('Plan: 1. Habilitar OSPF proceso, 2. Aplicar al dispositivo'); return; }
 
-      if (globalExamples) {
-        console.log(printExamples(ROUTING_META));
-        return;
-      }
-
-      if (globalExplain) {
-        console.log(ROUTING_META.longDescription ?? ROUTING_META.summary);
-        return;
-      }
-
-      if (globalPlan) {
-        console.log('Plan de ejecución:');
-        console.log(`  1. Habilitar OSPF proceso ${options.processId}`);
-        console.log(`  2. Aplicar al dispositivo ${options.device}`);
-        return;
-      }
-
-      const flags: GlobalFlags = {
-        json: false, jq: null, output: 'text', verbose: false, quiet: false,
-        trace: false, tracePayload: false, traceResult: false, traceDir: null,
-        traceBundle: false, traceBundlePath: null, sessionId: null,
-        examples: globalExamples, schema: false, explain: globalExplain, plan: globalPlan, verify: true,
-        timeout: null, noTimeout: false,
-      };
-
+      const flags = buildFlags({ examples, explain, plan });
       const result = await runCommand({
-        action: 'routing.ospf.enable',
-        meta: ROUTING_META,
-        flags,
+        action: 'routing.ospf.enable', meta: ROUTING_META, flags,
         payloadPreview: { device: options.device, processId: options.processId },
-        execute: async (ctx): Promise<CliResult> => {
+        execute: async (ctx) => {
           try {
             const processId = parseEnteroObligatorio(options.processId, 'El process-id');
-            const comandos = buildOspfEnableCommands(options.device, processId);
-
+            const routingResult = executeOspfEnable({ deviceName: options.device, processId });
+            if (!routingResult.ok) return createErrorResult('routing.ospf.enable', { message: routingResult.error.message });
             await ctx.controller.start();
             try {
-              await ctx.controller.configIos(options.device, comandos);
+              await ctx.controller.configIos(options.device, routingResult.data.commands);
               await ctx.logPhase('verify', { device: options.device });
-              return createSuccessResult('routing.ospf.enable', {
-                device: options.device,
-                processId,
-                commands: comandos,
-              });
-            } finally {
-              await ctx.controller.stop();
-            }
+              return createSuccessResult('routing.ospf.enable', routingResult.data);
+            } finally { await ctx.controller.stop(); }
           } catch (error) {
             return createErrorResult('routing.ospf.enable', { message: error instanceof Error ? error.message : String(error) });
           }
         },
       });
-
-      const output = renderCliResult(result, flags.output);
-      if (!flags.quiet || !result.ok) console.log(output);
-      if (!result.ok) process.exit(1);
+      renderResult(result, flags);
     });
 
-  ospfCommand
-    .command('add-network')
+  // routing ospf add-network
+  const ospfAddNetCmd = new Command('add-network')
     .description('Agregar una red a OSPF')
     .requiredOption('--device <name>', 'Nombre del dispositivo')
     .requiredOption('--network <cidr>', 'Red en formato CIDR')
     .requiredOption('--area <id>', 'Área OSPF')
     .action(async (options) => {
-      const globalExamples = process.argv.includes('--examples');
-      const globalPlan = process.argv.includes('--plan');
+      const { examples, plan } = parseGlobalOptions();
+      if (examples) { console.log(printExamples(ROUTING_META)); return; }
+      if (plan) { console.log('Plan: 1. Agregar red al área OSPF, 2. Aplicar al dispositivo'); return; }
 
-      if (globalExamples) {
-        console.log(printExamples(ROUTING_META));
-        return;
-      }
-
-      if (globalPlan) {
-        console.log('Plan de ejecución:');
-        console.log(`  1. Agregar red ${options.network} al área ${options.area}`);
-        console.log(`  2. Aplicar al dispositivo ${options.device}`);
-        return;
-      }
-
-      const flags: GlobalFlags = {
-        json: false, jq: null, output: 'text', verbose: false, quiet: false,
-        trace: false, tracePayload: false, traceResult: false, traceDir: null,
-        traceBundle: false, traceBundlePath: null, sessionId: null,
-        examples: globalExamples, schema: false, explain: false, plan: globalPlan, verify: true,
-        timeout: null, noTimeout: false,
-      };
-
+      const flags = buildFlags({ examples, plan });
       const result = await runCommand({
-        action: 'routing.ospf.add-network',
-        meta: ROUTING_META,
-        flags,
+        action: 'routing.ospf.add-network', meta: ROUTING_META, flags,
         payloadPreview: { device: options.device, network: options.network, area: options.area },
-        execute: async (ctx): Promise<CliResult> => {
+        execute: async (ctx) => {
           try {
-            if (!validarCIDR(options.network)) {
-              return createErrorResult('routing.ospf.add-network', { message: `La red debe tener formato CIDR válido: ${options.network}` });
-            }
+            if (!validarCIDR(options.network)) return createErrorResult('routing.ospf.add-network', { message: `La red debe tener formato CIDR válido: ${options.network}` });
             const area = /^\d+$/.test(options.area) ? parseEnteroObligatorio(options.area, 'El área') : options.area;
-            const processId = 1;
-            const comandos = buildOspfAddNetworkCommands(options.device, processId, options.network, area);
-
+            const routingResult = executeOspfAddNetwork({ deviceName: options.device, network: options.network, area, processId: 1 });
+            if (!routingResult.ok) return createErrorResult('routing.ospf.add-network', { message: routingResult.error.message });
             await ctx.controller.start();
             try {
-              await ctx.controller.configIos(options.device, comandos);
+              await ctx.controller.configIos(options.device, routingResult.data.commands);
               return createSuccessResult('routing.ospf.add-network', { device: options.device, network: options.network, area: String(area) });
-            } finally {
-              await ctx.controller.stop();
-            }
+            } finally { await ctx.controller.stop(); }
           } catch (error) {
             return createErrorResult('routing.ospf.add-network', { message: error instanceof Error ? error.message : String(error) });
           }
         },
       });
-
-      const output = renderCliResult(result, flags.output);
-      if (!flags.quiet || !result.ok) console.log(output);
-      if (!result.ok) process.exit(1);
+      renderResult(result, flags);
     });
 
-  const eigrpCommand = new Command('eigrp')
-    .description('Configurar EIGRP')
-    .option('--examples', 'Mostrar ejemplos', false);
+  const ospfCommand = new Command('ospf').description('Configurar OSPF').addCommand(ospfEnableCmd).addCommand(ospfAddNetCmd);
 
-  eigrpCommand
-    .command('enable')
+  // routing eigrp enable
+  const eigrpEnableCmd = new Command('enable')
     .description('Habilitar EIGRP en un dispositivo')
     .requiredOption('--device <name>', 'Nombre del dispositivo')
     .requiredOption('--as <number>', 'Número de sistema autónomo')
@@ -366,57 +169,35 @@ export function createRoutingCommand(): Command {
     .option('--explain', 'Explicar', false)
     .option('--plan', 'Mostrar plan', false)
     .action(async (options) => {
-      const globalExamples = process.argv.includes('--examples');
-      const globalExplain = process.argv.includes('--explain');
-      const globalPlan = process.argv.includes('--plan');
+      const { examples, explain, plan } = parseGlobalOptions();
+      if (examples) { console.log(printExamples(ROUTING_META)); return; }
 
-      if (globalExamples) {
-        console.log(printExamples(ROUTING_META));
-        return;
-      }
-
-      const flags: GlobalFlags = {
-        json: false, jq: null, output: 'text', verbose: false, quiet: false,
-        trace: false, tracePayload: false, traceResult: false, traceDir: null,
-        traceBundle: false, traceBundlePath: null, sessionId: null,
-        examples: globalExamples, schema: false, explain: globalExplain, plan: globalPlan, verify: true,
-        timeout: null, noTimeout: false,
-      };
-
+      const flags = buildFlags({ examples, explain, plan });
       const result = await runCommand({
-        action: 'routing.eigrp.enable',
-        meta: ROUTING_META,
-        flags,
+        action: 'routing.eigrp.enable', meta: ROUTING_META, flags,
         payloadPreview: { device: options.device, as: options.as },
-        execute: async (ctx): Promise<CliResult> => {
+        execute: async (ctx) => {
           try {
             const autonomousSystem = parseEnteroObligatorio(options.as, 'El AS');
-            const comandos = buildEigrpEnableCommands(options.device, autonomousSystem);
-
+            const routingResult = executeEigrpEnable({ deviceName: options.device, asn: autonomousSystem });
+            if (!routingResult.ok) return createErrorResult('routing.eigrp.enable', { message: routingResult.error.message });
             await ctx.controller.start();
             try {
-              await ctx.controller.configIos(options.device, comandos);
-              return createSuccessResult('routing.eigrp.enable', { device: options.device, as: autonomousSystem, commands: comandos });
-            } finally {
-              await ctx.controller.stop();
-            }
+              await ctx.controller.configIos(options.device, routingResult.data.commands);
+              return createSuccessResult('routing.eigrp.enable', routingResult.data);
+            } finally { await ctx.controller.stop(); }
           } catch (error) {
             return createErrorResult('routing.eigrp.enable', { message: error instanceof Error ? error.message : String(error) });
           }
         },
       });
-
-      const output = renderCliResult(result, flags.output);
-      if (!flags.quiet || !result.ok) console.log(output);
-      if (!result.ok) process.exit(1);
+      renderResult(result, flags);
     });
 
-  const bgpCommand = new Command('bgp')
-    .description('Configurar BGP')
-    .option('--examples', 'Mostrar ejemplos', false);
+  const eigrpCommand = new Command('eigrp').description('Configurar EIGRP').addCommand(eigrpEnableCmd);
 
-  bgpCommand
-    .command('enable')
+  // routing bgp enable
+  const bgpEnableCmd = new Command('enable')
     .description('Habilitar BGP en un dispositivo')
     .requiredOption('--device <name>', 'Nombre del dispositivo')
     .requiredOption('--as <number>', 'Número de sistema autónomo')
@@ -424,50 +205,32 @@ export function createRoutingCommand(): Command {
     .option('--explain', 'Explicar', false)
     .option('--plan', 'Mostrar plan', false)
     .action(async (options) => {
-      const globalExamples = process.argv.includes('--examples');
-      const globalExplain = process.argv.includes('--explain');
-      const globalPlan = process.argv.includes('--plan');
+      const { examples, explain, plan } = parseGlobalOptions();
+      if (examples) { console.log(printExamples(ROUTING_META)); return; }
 
-      if (globalExamples) {
-        console.log(printExamples(ROUTING_META));
-        return;
-      }
-
-      const flags: GlobalFlags = {
-        json: false, jq: null, output: 'text', verbose: false, quiet: false,
-        trace: false, tracePayload: false, traceResult: false, traceDir: null,
-        traceBundle: false, traceBundlePath: null, sessionId: null,
-        examples: globalExamples, schema: false, explain: globalExplain, plan: globalPlan, verify: true,
-        timeout: null, noTimeout: false,
-      };
-
+      const flags = buildFlags({ examples, explain, plan });
       const result = await runCommand({
-        action: 'routing.bgp.enable',
-        meta: ROUTING_META,
-        flags,
+        action: 'routing.bgp.enable', meta: ROUTING_META, flags,
         payloadPreview: { device: options.device, as: options.as },
-        execute: async (ctx): Promise<CliResult> => {
+        execute: async (ctx) => {
           try {
             const autonomousSystem = parseEnteroObligatorio(options.as, 'El AS');
-            const comandos = buildBgpEnableCommands(options.device, autonomousSystem);
-
+            const routingResult = executeBgpEnable({ deviceName: options.device, asn: autonomousSystem });
+            if (!routingResult.ok) return createErrorResult('routing.bgp.enable', { message: routingResult.error.message });
             await ctx.controller.start();
             try {
-              await ctx.controller.configIos(options.device, comandos);
-              return createSuccessResult('routing.bgp.enable', { device: options.device, as: autonomousSystem, commands: comandos });
-            } finally {
-              await ctx.controller.stop();
-            }
+              await ctx.controller.configIos(options.device, routingResult.data.commands);
+              return createSuccessResult('routing.bgp.enable', routingResult.data);
+            } finally { await ctx.controller.stop(); }
           } catch (error) {
             return createErrorResult('routing.bgp.enable', { message: error instanceof Error ? error.message : String(error) });
           }
         },
       });
-
-      const output = renderCliResult(result, flags.output);
-      if (!flags.quiet || !result.ok) console.log(output);
-      if (!result.ok) process.exit(1);
+      renderResult(result, flags);
     });
+
+  const bgpCommand = new Command('bgp').description('Configurar BGP').addCommand(bgpEnableCmd);
 
   command.addCommand(staticCommand);
   command.addCommand(ospfCommand);
@@ -475,4 +238,10 @@ export function createRoutingCommand(): Command {
   command.addCommand(bgpCommand);
 
   return command;
+}
+
+function renderResult(result: CliResult, flags: { output: string; quiet: boolean }): void {
+  const output = renderCliResult(result, flags.output);
+  if (!flags.quiet || !result.ok) console.log(output);
+  if (!result.ok) process.exit(1);
 }

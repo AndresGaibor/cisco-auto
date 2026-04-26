@@ -73,12 +73,13 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
     command: string,
     options?: RunTerminalCommandOptions
   ): Promise<TerminalCommandResult> {
-    const timeoutMs = options?.timeoutMs ?? 45000;
+    const executionTimeout = options?.timeoutMs ?? 45000;
+    const bridgeTimeout = executionTimeout + 5000; // Margen para que el runtime falle primero
 
     let execResult: any;
 
     try {
-      execResult = await deps.controller.execIos(device, command, false, timeoutMs);
+      execResult = await deps.controller.execIos(device, command, false, executionTimeout);
     } catch (error) {
       const err = error as any;
 

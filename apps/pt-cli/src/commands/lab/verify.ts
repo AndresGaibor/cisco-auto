@@ -4,7 +4,7 @@ import { readFileSync } from "fs";
 import chalk from "chalk";
 import { loadLabYaml, validateLabSafe, toLabSpec, type LabSpec } from "../../contracts/lab-spec";
 import { compileLabIntent, type NetworkLabIntent } from "@cisco-auto/network-intent";
-import { createDefaultPTController } from "@cisco-auto/pt-control";
+import { createDefaultPTController } from "@cisco-auto/pt-control/controller";
 
 function labSpecToNetworkIntent(spec: LabSpec): NetworkLabIntent {
   return {

@@ -6,7 +6,7 @@ import { getContextualSuggestions } from "./contextual-suggestions.js";
  */
 
 import { randomUUID } from "node:crypto";
-import type { PTController } from "@cisco-auto/pt-control";
+import type { PTController } from "@cisco-auto/pt-control/controller";
 
 import type { CliResult } from "../contracts/cli-result.js";
 import { createErrorResult, createSuccessResult } from "../contracts/cli-result.js";

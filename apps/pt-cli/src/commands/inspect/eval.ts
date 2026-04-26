@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { createDefaultPTController } from '@cisco-auto/pt-control';
+import { createDefaultPTController } from '@cisco-auto/pt-control/controller';
 
 export function createEvaluateCommand(): Command {
   return new Command('eval')

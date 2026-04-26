@@ -12,7 +12,7 @@ import type { CommandMeta } from '../contracts/command-meta.js';
 import type { GlobalFlags } from '../flags.js';
 
 import { runCommand } from '../application/run-command.js';
-import { createTopologyLintService } from '@cisco-auto/pt-control';
+import { createTopologyLintService } from '@cisco-auto/pt-control/pt/topology';
 
 export const LINT_META: CommandMeta = {
   id: 'lint',

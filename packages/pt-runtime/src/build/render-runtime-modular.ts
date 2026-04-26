@@ -1,9 +1,10 @@
+// packages/pt-runtime/src/build/render-runtime-modular.ts
 /**
  * Runtime Modular Generator
- * 
+ *
  * Genera runtime.js como un solo archivo (backwards compatible) PLUS
  * módulos separados opcionales para hot reload selectivo.
- * 
+ *
  * Estructura de salida:
  *   dist/
  *   ├── main.js           (kernel + loader)
@@ -27,6 +28,8 @@ import * as path from "path";
 import { RUNTIME_MANIFEST, getCatalogFiles, getAllRuntimeFiles, type RuntimeManifestSection } from "./runtime-manifest";
 import { transformToPtSafeAst, type AstTransformOptions } from "./ast-transform";
 import { validatePtSafe, formatValidationResult, type ValidationResult } from "./validate-pt-safe";
+import { RUNTIME_MODULE_GROUPS, type ModuleGroupName, getAllModuleGroups } from "./runtime-module-manifest";
+import { moduleWrapperTemplate, runtimeLoaderTemplate } from "./templates/index";
 
 // ============================================================================
 // Config
@@ -42,69 +45,12 @@ export interface ModularGeneratorConfig {
 }
 
 // ============================================================================
-// Module grouping
-// ============================================================================
-
-const MODULE_GROUPS = {
-  core: {
-    files: [
-      ...RUNTIME_MANIFEST.utils,
-      ...RUNTIME_MANIFEST.runtime,
-    ],
-    description: "Core utilities and runtime helpers",
-  },
-  device: {
-    files: ["handlers/device.ts"],
-    description: "Device add/remove/move operations",
-  },
-  dhcp: {
-    files: ["handlers/dhcp.ts"],
-    description: "DHCP server configuration",
-  },
-  vlan: {
-    files: ["handlers/vlan.ts"],
-    description: "VLAN management",
-  },
-  link: {
-    files: ["handlers/link.ts"],
-    description: "Network link operations",
-  },
-  host: {
-    files: ["handlers/host.ts"],
-    description: "Host/endpoints operations",
-  },
-  ios: {
-    files: [
-      "handlers/ios-output-classifier.ts",
-      "handlers/parsers/ios-parsers.ts",
-    ],
-    description: "IOS CLI execution and terminal",
-  },
-  canvas: {
-    files: ["handlers/canvas.ts"],
-    description: "Canvas and UI operations",
-  },
-  inspect: {
-    files: ["handlers/inspect.ts"],
-    description: "Topology inspection",
-  },
-  module: {
-    files: ["handlers/module.ts"],
-    description: "Module management",
-  },
-  // NOTE: kernel is NOT a runtime module — it lives exclusively in main.js (MAIN_MANIFEST).
-} as const;
-
-type ModuleGroup = keyof typeof MODULE_GROUPS;
-
-// ============================================================================
-// Single file compilation
+// Single file compilation (uses compileFilesToModule from ast/)
 // ============================================================================
 
 function compileFilesToModule(
   srcDir: string,
   files: string[],
-  moduleName: string,
   options?: { minify?: boolean }
 ): { code: string; validation: ValidationResult } {
   const sourceFiles = new Map<string, string>();
@@ -129,39 +75,6 @@ function compileFilesToModule(
 }
 
 // ============================================================================
-// Module generators
-// ============================================================================
-
-function wrapModuleCode(code: string, moduleName: string, devDir: string): string {
-  return `
-// ============================================================
-// Module: ${moduleName}
-// Auto-generated - DO NOT EDIT
-// ============================================================
-
-(function() {
-  var ipc = (typeof ipc !== "undefined") ? ipc : null;
-  var dprint = (typeof dprint !== "undefined") ? dprint : function() {};
-  var DEV_DIR = (typeof DEV_DIR !== "undefined") ? DEV_DIR : ${JSON.stringify(devDir)};
-  var fm = ipc ? ipc.systemFileManager() : null;
-
-  // Module namespace
-  var MODULE_NS = {};
-  
-  ${code}
-
-  // Register module globally for hot reload
-  var _g = (typeof self !== "undefined") ? self : this;
-  if (!_g._RUNTIME_MODULES) _g._RUNTIME_MODULES = {};
-  _g._RUNTIME_MODULES["${moduleName}"] = MODULE_NS;
-
-  if (typeof dprint === "function") dprint("[runtime] Loaded module: ${moduleName}");
-
-})();
-`;
-}
-
-// ============================================================================
 // Main Generator Class
 // ============================================================================
 
@@ -179,7 +92,7 @@ export class ModularRuntimeGenerator {
   async generate(): Promise<{
     catalog: string;
     runtimeLoader: string;
-    modules: Map<ModuleGroup, string>;
+    modules: Map<ModuleGroupName, string>;
     manifest: ModularManifest;
   }> {
     const { outputDir, devDir, splitModules } = this.config;
@@ -196,23 +109,22 @@ export class ModularRuntimeGenerator {
       "utf-8"
     );
 
-    const modules = new Map<ModuleGroup, string>();
+    const modules = new Map<ModuleGroupName, string>();
     const modulePaths: string[] = [];
 
     // 2. Generate split modules
     if (splitModules) {
       console.log("[modular-gen] Generating split modules...");
-      
+
       const modulesDir = path.join(outputDir, "runtime");
       await fs.promises.mkdir(modulesDir, { recursive: true });
 
-      for (const [moduleName, group] of Object.entries(MODULE_GROUPS) as [ModuleGroup, typeof MODULE_GROUPS[ModuleGroup]][]) {
+      for (const [moduleName, group] of getAllModuleGroups()) {
         console.log(`  [modular-gen] Compiling ${moduleName}...`);
-        
+
         const { code, validation } = compileFilesToModule(
           path.resolve(__dirname, ".."),
           [...group.files],
-          moduleName
         );
 
         if (!validation.valid) {
@@ -223,21 +135,21 @@ export class ModularRuntimeGenerator {
           throw new Error(`Module ${moduleName} failed PT-safe validation`);
         }
 
-        const wrappedCode = wrapModuleCode(code, moduleName, devDir);
+        const wrappedCode = moduleWrapperTemplate({ moduleName, devDir, code });
         const moduleFileName = `${moduleName}.js`;
         const modulePath = path.join(modulesDir, moduleFileName);
-        
+
         await fs.promises.writeFile(modulePath, wrappedCode, "utf-8");
         modules.set(moduleName, wrappedCode);
         modulePaths.push(`runtime/${moduleFileName}`);
-        
+
         console.log(`  [modular-gen] ✓ ${moduleFileName}`);
       }
     }
 
     // 3. Generate runtime-loader.js (hot reload engine)
     console.log("[modular-gen] Generating runtime-loader.js...");
-    const loaderCode = this.generateRuntimeLoader(modulePaths);
+    const loaderCode = runtimeLoaderTemplate({ devDir, modules: modulePaths });
     await fs.promises.writeFile(
       path.join(outputDir, "runtime-loader.js"),
       loaderCode,
@@ -308,161 +220,10 @@ export class ModularRuntimeGenerator {
 `;
   }
 
-  private generateRuntimeLoader(modules: string[]): string {
-    return `
-// ============================================================
-// Runtime Loader - Hot Reload Engine
-// Auto-generated - DO NOT EDIT
-// ============================================================
-
-(function() {
-  var ipc = (typeof ipc !== "undefined") ? ipc : null;
-  var DEV_DIR = (typeof DEV_DIR !== "undefined") ? DEV_DIR : "${this.config.devDir}";
-  var fm = ipc ? ipc.systemFileManager() : null;
-
-  var _g = (typeof self !== "undefined") ? self : this;
-
-  var __ptDebugEvents = [];
-  var __ptDebugSeq = 0;
-  function __writeDebugLog(scope, message, level) {
-    try {
-      if (!fm || !fm.writePlainTextToFile) return;
-      __ptDebugSeq += 1;
-      __ptDebugEvents.push(JSON.stringify({
-        seq: __ptDebugSeq,
-        timestamp: new Date().toISOString(),
-        scope: scope,
-        message: String(message),
-        level: level || "debug",
-      }));
-      if (__ptDebugEvents.length > 500) {
-        __ptDebugEvents = __ptDebugEvents.slice(-500);
-      }
-      fm.writePlainTextToFile(DEV_DIR + "/logs/pt-debug.current.ndjson", __ptDebugEvents.join("\\n") + "\\n");
-    } catch (e) {}
-  }
-
-  var dprint = function(msg) {
-    __writeDebugLog("loader", msg, "debug");
-  };
-
-  // Module registry
-  if (!_g._RUNTIME_MODULES) _g._RUNTIME_MODULES = {};
-  var modules = _g._RUNTIME_MODULES;
-
-  // Last modification times for hot reload
-  var _modTimes = {};
-
-  // ============================================================
-  // Module Loading
-  // ============================================================
-
-  function loadModule(modulePath, moduleName) {
-    try {
-      var fullPath = DEV_DIR + "/runtime/" + modulePath;
-      if (!fm.fileExists(fullPath)) {
-        dprint("[loader] Module not found: " + modulePath);
-        return false;
-      }
-      
-      var code = fm.getFileContents(fullPath);
-      if (!code || code.length < 10) {
-        dprint("[loader] Module empty: " + modulePath);
-        return false;
-      }
-
-      new Function(code)();
-      dprint("[loader] Loaded: " + moduleName);
-      return true;
-    } catch (e) {
-      dprint("[loader] Error loading " + moduleName + ": " + String(e));
-      return false;
-    }
-  }
-
-  function loadAllModules() {
-    var moduleList = ${JSON.stringify(modules)};
-    for (var i = 0; i < moduleList.length; i++) {
-      var modulePath = moduleList[i];
-      var moduleName = modulePath.replace(/^runtime\\//, "").replace(/\\.js$/, "");
-      loadModule(modulePath, moduleName);
-    }
-  }
-
-  // ============================================================
-  // Hot Reload
-  // ============================================================
-
-  function checkModuleChanged(modulePath) {
-    if (!fm) return false;
-    
-    var fullPath = DEV_DIR + "/runtime/" + modulePath;
-    if (!fm.fileExists(fullPath)) return false;
-
-    try {
-      var mtime = fm.getFileModificationTime(fullPath);
-      if (_modTimes[modulePath] === undefined) {
-        _modTimes[modulePath] = mtime;
-        return false;
-      }
-      if (mtime !== _modTimes[modulePath]) {
-        _modTimes[modulePath] = mtime;
-        return true;
-      }
-    } catch (e) {
-      // Ignore
-    }
-    return false;
-  }
-
-  function reloadChangedModules() {
-    var moduleList = ${JSON.stringify(modules)};
-    var changed = [];
-    
-    for (var i = 0; i < moduleList.length; i++) {
-      if (checkModuleChanged(moduleList[i])) {
-        changed.push(moduleList[i]);
-      }
-    }
-
-    if (changed.length > 0) {
-      dprint("[loader] Hot reload: " + changed.join(", "));
-      for (var i = 0; i < changed.length; i++) {
-        var modulePath = changed[i];
-        var moduleName = modulePath.replace(/^runtime\\//, "").replace(/\\.js$/, "");
-        loadModule(modulePath, moduleName);
-      }
-      return true;
-    }
-    return false;
-  }
-
-  // ============================================================
-  // Expose API
-  // ============================================================
-
-  _g._runtimeLoader = {
-    loadAll: loadAllModules,
-    reloadChanged: reloadChangedModules,
-    modules: modules,
-    DEV_DIR: DEV_DIR,
-  };
-
-  // Auto-load all modules on startup
-  loadAllModules();
-
-  if (typeof dprint === "function") {
-    dprint("[runtime-loader] Ready - " + moduleList.length + " modules loaded");
-  }
-
-})();
-`;
-  }
-
   private generateManifest(
     catalog: string,
     loader: string,
-    modules: Map<ModuleGroup, string>
+    modules: Map<ModuleGroupName, string>
   ): ModularManifest {
     function computeChecksum(content: string): string {
       let hash = 0;
@@ -484,7 +245,7 @@ export class ModularRuntimeGenerator {
           name,
           { checksum: computeChecksum(code), name }
         ])
-      ) as Record<ModuleGroup, { checksum: string; name: ModuleGroup }>,
+      ) as Record<ModuleGroupName, { checksum: string; name: ModuleGroupName }>,
       modulePaths: Array.from(modules.keys()).map(k => `runtime/${k}.js`),
     };
   }
@@ -499,7 +260,7 @@ export interface ModularManifest {
   generatedAt: number;
   catalogChecksum: string;
   loaderChecksum: string;
-  modules: Record<ModuleGroup, { checksum: string; name: ModuleGroup }>;
+  modules: Record<ModuleGroupName, { checksum: string; name: ModuleGroupName }>;
   modulePaths: string[];
 }
 

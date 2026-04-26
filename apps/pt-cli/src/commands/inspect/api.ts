@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { createDefaultPTController } from '@cisco-auto/pt-control';
+import { createDefaultPTController } from '@cisco-auto/pt-control/controller';
 
 /**
  * CLI command to perform deep inspection of any PT object via IPC path.

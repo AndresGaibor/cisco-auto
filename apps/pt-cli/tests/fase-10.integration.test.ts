@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdirSync, rmSync } from 'node:fs';
-import { PTController } from '@cisco-auto/pt-control';
+import { PTController } from '@cisco-auto/pt-control/controller';
 
 describe('Fase 10 - CLI integration', () => {
   let testDir: string;

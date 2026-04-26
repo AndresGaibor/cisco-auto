@@ -277,7 +277,10 @@ export function detectAuthPrompt(output: string): boolean {
   return (
     /username:/i.test(line) ||
     /password:/i.test(line) ||
-    /login:/i.test(line)
+    /login:/i.test(line) ||
+    /usuario:/i.test(line) ||
+    /contraseña:/i.test(line) ||
+    /acceso:/i.test(line)
   );
 }
 

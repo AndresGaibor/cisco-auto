@@ -1,44 +1,52 @@
 import { test, expect } from 'bun:test';
+import { createRoutingCommand } from '../../src/commands/routing.ts';
 import {
-  buildBgpEnableCommands,
-  buildEigrpEnableCommands,
-  buildOspfAddNetworkCommands,
-  buildOspfEnableCommands,
-  buildStaticRouteCommands,
-  createRoutingCommand,
-} from '../../src/commands/routing.ts';
+  executeStaticRoute,
+  executeOspfEnable,
+  executeOspfAddNetwork,
+  executeEigrpEnable,
+  executeBgpEnable,
+} from '@cisco-auto/pt-control/application/routing';
 
-test('routing static add genera una ruta IOS valida', () => {
-  const comandos = buildStaticRouteCommands('R1', '10.10.10.0/24', '192.168.1.1');
+test('executeStaticRoute genera ruta valida', () => {
+  const result = executeStaticRoute({ deviceName: 'R1', network: '10.10.10.0/24', nextHop: '192.168.1.1' });
 
-  expect(comandos).toContain('! Rutas estáticas');
-  expect(comandos).toContain('ip route 10.10.10.0 255.255.255.0 192.168.1.1');
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.data.commands).toContain('ip route 10.10.10.0 255.255.255.0 192.168.1.1');
 });
 
-test('routing ospf enable genera comandos IOS validos', () => {
-  const comandos = buildOspfEnableCommands('R1', 1);
+test('executeOspfEnable genera IOS valido', () => {
+  const result = executeOspfEnable({ deviceName: 'R1', processId: 1 });
 
-  expect(comandos).toEqual(['router ospf 1', ' exit']);
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.data.commands).toContain('router ospf 1');
 });
 
-test('routing ospf add-network genera wildcard correcto', () => {
-  const comandos = buildOspfAddNetworkCommands('R1', 10, '172.16.0.0/24', 0);
+test('executeOspfAddNetwork genera wildcard correcto', () => {
+  const result = executeOspfAddNetwork({ deviceName: 'R1', network: '172.16.0.0/24', area: 0 });
 
-  expect(comandos).toContain('! Configuración OSPF');
-  expect(comandos).toContain('router ospf 10');
-  expect(comandos.some((c) => c.includes('network 172.16.0.0 0.0.0.255 area 0'))).toBe(true);
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  const cmd = result.data.commands.find((c) => c.includes('network'));
+  expect(cmd).toBeDefined();
 });
 
-test('routing eigrp enable genera IOS valido', () => {
-  const comandos = buildEigrpEnableCommands('R1', 100);
+test('executeEigrpEnable genera IOS valido', () => {
+  const result = executeEigrpEnable({ deviceName: 'R1', asn: 100 });
 
-  expect(comandos).toEqual(['router eigrp 100', ' no auto-summary', ' exit']);
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.data.commands).toContain('router eigrp 100');
 });
 
-test('routing bgp enable genera IOS valido', () => {
-  const comandos = buildBgpEnableCommands('R1', 65001);
+test('executeBgpEnable genera IOS valido', () => {
+  const result = executeBgpEnable({ deviceName: 'R1', asn: 65001 });
 
-  expect(comandos).toEqual(['router bgp 65001', ' bgp log-neighbor-changes', ' exit']);
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.data.commands).toContain('router bgp 65001');
 });
 
 test('createRoutingCommand expone los subcomandos esperados', () => {

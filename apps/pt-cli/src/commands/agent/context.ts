@@ -2,13 +2,13 @@
 import { Command } from 'commander';
 import {
   AgentContextService,
-  createDefaultPTController,
   createSessionState,
   renderBaseContext,
   renderCompactContext,
   renderDetailedContext,
-} from '@cisco-auto/pt-control';
-import type { NetworkTwin } from '@cisco-auto/pt-control';
+} from '@cisco-auto/pt-control/agent';
+import { createDefaultPTController } from '@cisco-auto/pt-control/controller';
+import type { NetworkTwin } from '@cisco-auto/pt-control/contracts';
 
 export type AgentWorkflowMode = 'context' | 'plan' | 'apply' | 'verify';
 

@@ -8,7 +8,7 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { input, select } from '@inquirer/prompts';
 
-import type { PTController } from '@cisco-auto/pt-control';
+import type { PTController } from '@cisco-auto/pt-control/controller';
 import type { CliResult } from '../../contracts/cli-result.js';
 import { createSuccessResult, createVerifiedResult } from '../../contracts/cli-result.js';
 import type { CommandMeta } from '../../contracts/command-meta.js';

@@ -4,8 +4,8 @@
  */
 
 import { Command } from 'commander';
-import { createDefaultPTController } from '@cisco-auto/pt-control';
-import type { PTController } from '@cisco-auto/pt-control';
+import { createDefaultPTController } from '@cisco-auto/pt-control/controller';
+import type { PTController } from '@cisco-auto/pt-control/controller';
 import type { CliResult } from '../../contracts/cli-result.js';
 import { createSuccessResult, createErrorResult } from '../../contracts/cli-result.js';
 import type { CommandMeta } from '../../contracts/command-meta.js';

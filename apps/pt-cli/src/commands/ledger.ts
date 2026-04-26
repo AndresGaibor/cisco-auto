@@ -12,7 +12,7 @@ import type { CommandMeta } from '../contracts/command-meta.js';
 import type { GlobalFlags } from '../flags.js';
 
 import { runCommand } from '../application/run-command.js';
-import { createEvidenceLedgerService } from '@cisco-auto/pt-control';
+import { createEvidenceLedgerService } from '@cisco-auto/pt-control/pt/ledger';
 
 export const LEDGER_META: CommandMeta = {
   id: 'ledger',

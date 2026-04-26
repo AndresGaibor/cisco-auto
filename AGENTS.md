@@ -163,8 +163,9 @@ runtime.js (lógica, iterativo)
 | `packages/pt-runtime`  | Generador de scripts PT (`main.js`, `runtime.js`, `catalog.js`) y API de tipos PT       |
 | `packages/pt-control`  | CLI `bun run pt` — comandos para controlar PT en tiempo real                            |
 | `packages/types`       | Tipos compartidos (`@cisco-auto/types`)                                                 |
-| `packages/core`        | Utilidades compartidas                                                                  |
-| `packages/ios-domain`  | Dominio IOS (value objects, entidades)                                                  |
+| `packages/ios-domain`  | Dominio IOS puro: parsers, builders, operations                                         |
+| `packages/pt-control`  | Orquestación Packet Tracer, controller, casos de uso                                    |
+| `packages/types`       | Tipos y schemas compartidos                                                             |
 | `packages/file-bridge` | Puente de archivos                                                                      |
 
 ## Convenciones Generales

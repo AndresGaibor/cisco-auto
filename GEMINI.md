@@ -20,7 +20,9 @@ The project is structured as a monorepo using Bun workspaces:
 - **`apps/pt-cli`**: The main Command Line Interface (`bun run pt`). This is the primary tool for building and validating labs (e.g., `pt device add`, `pt link add`, `pt lab validate`).
 - **`packages/pt-runtime`**: The ES5 Kernel injected into Packet Tracer. Contains the Omniscience handlers (Bypasses, Memory Injection, XML Genomes).
 - **`packages/pt-control`**: The rich, type-safe TypeScript abstraction layer (e.g., `OmniscienceService`, `ScenarioService`).
-- **`packages/core`**: Business logic, orchestrators, and topology building.
+- **`packages/pt-control`**: Packet Tracer orchestration, controller, application use cases.
+- **`packages/ios-domain`**: IOS parsers, builders, capabilities and operations.
+- **`packages/network-intent`**: Declarative network intent and scenarios.
 - **`packages/file-bridge`**: Communication bridge between the CLI and Packet Tracer.
 - **`packages/types`**: Shared TypeScript definitions.
 

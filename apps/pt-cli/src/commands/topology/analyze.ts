@@ -3,7 +3,7 @@ import { loadLabYaml, toLabSpec, analyzeTopology } from '../../contracts/lab-spe
 import { formatExamples, formatRelatedCommands } from '../../help/formatter';
 import { getExamples } from '../../help/examples';
 import { getRelatedCommands } from '../../help/related';
-import { createDefaultPTController } from '@cisco-auto/pt-control';
+import { createDefaultPTController } from '@cisco-auto/pt-control/controller';
 
 export function createTopologyAnalyzeCommand(): Command {
   const cmd = new Command('analyze')

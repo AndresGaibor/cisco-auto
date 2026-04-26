@@ -3,7 +3,7 @@
  * Validaciones básicas post-ejecución para cambios topológicos (Fase 3)
  */
 
-import type { PTController } from '@cisco-auto/pt-control';
+import { type PTController } from "@cisco-auto/pt-control/controller";
 
 export async function validateDeviceExists(controller: PTController, name: string): Promise<boolean> {
   try {

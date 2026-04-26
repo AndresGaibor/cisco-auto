@@ -270,7 +270,7 @@ export { SessionLogEventSchema, type SessionLogEvent } from "./session-log-event
 // Lock info
 export { LockInfoSchema, type LockInfo } from "./lock-info";
 
-// Command Catalog - Single Source of Truth
+// Command Catalog - Single Source of Truth (runtime catalog only)
 export {
   PUBLIC_COMMAND_CATALOG,
   INTERNAL_COMMAND_CATALOG,
@@ -285,7 +285,28 @@ export {
   getServiceForCommand,
   getExecutionModel,
   getCommandsByService,
-  type CommandCatalogEntry,
+  type CommandCatalogEntry as RuntimeCommandCatalogEntry,
   type CommandVisibility,
   type ExecutionModel,
 } from "../command-catalog";
+
+// Telemetry - Observabilidad unificada
+export {
+  ExecutionEventSchema,
+  type ExecutionEvent,
+} from "../telemetry/execution-event";
+
+export {
+  TelemetryCommandResultSchema,
+  type TelemetryCommandResult,
+} from "../telemetry/command-result";
+
+export {
+  VerificationResultSchema,
+  type VerificationResult,
+} from "../telemetry/verification-result";
+
+export {
+  ReportSchema,
+  type Report,
+} from "../telemetry/report";

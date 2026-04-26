@@ -7,7 +7,7 @@
 ## Architecture Diagram
 
 ```
-Lab YAML → @cisco-auto/core → Command Files → @cisco-auto/file-bridge
+pt-cli / pt-control → Command Files → @cisco-auto/file-bridge
     ↓
 @cisco-auto/pt-runtime:
   TypeScript Handlers + Kernel + Terminal Engine
@@ -19,7 +19,7 @@ Lab YAML → @cisco-auto/core → Command Files → @cisco-auto/file-bridge
 
 ## Command Flow
 
-1. **Lab YAML** → `@cisco-auto/core` parses configuration
+1. **CLI / use case** → `apps/pt-cli` llama a `@cisco-auto/pt-control`
 2. **Command Files** → Written to filesystem via `@cisco-auto/file-bridge`
 3. **PT Script Module** → Heartbeat detects new command files
 4. **main.js** → Reads command file, calls runtime

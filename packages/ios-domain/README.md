@@ -2,20 +2,43 @@
 
 Paquete especializado en el dominio de Cisco IOS. Se encarga de la generación de comandos, el parsing de outputs de consola y la validación de configuraciones específicas de IOS.
 
-## 📋 Responsabilidades
+## Responsabilidades
 
-- **IOS Generation**: Transformar modelos de alto nivel en bloques de comandos CLI de IOS (`conf t`, etc.).
-- **IOS Parsing**: Analizar el output de comandos `show` para extraer el estado real de los dispositivos.
-- **Capability Matrix**: Definir qué comandos y funciones están disponibles según el modelo y versión de IOS.
+- Generar bloques de comandos IOS.
+- Parsear outputs de comandos `show`.
+- Validar operaciones IOS.
+- Resolver capabilities por modelo/plataforma.
+- Mantener lógica IOS pura sin dependencias de infraestructura.
 
-## 🚀 Uso
+## Consumidores principales
 
-Utilizado principalmente por `@cisco-auto/pt-control` y `@cisco-auto/core` para interactuar con la línea de comandos de los dispositivos.
+- `@cisco-auto/pt-control`
+- `@cisco-auto/kernel`
+- `apps/pt-cli`, solo indirectamente mediante `pt-control`
 
-```typescript
-import { IosGenerator } from '@cisco-auto/ios-domain';
-// ... generar configuración
+## No debe depender de
+
+```
+@cisco-auto/kernel
+@cisco-auto/pt-control
+@cisco-auto/pt-runtime
+@cisco-auto/pt-memory
+bun:sqlite
+node:fs
 ```
 
----
-Para más información, consulta la [documentación global del proyecto](../../docs/README.md).
+## Ejemplo
+
+```ts
+import { planConfigureVlan } from "@cisco-auto/ios-domain/operations";
+import { resolveCapabilitySet } from "@cisco-auto/ios-domain/capabilities";
+import { VlanId } from "@cisco-auto/ios-primitives/value-objects";
+
+const caps = resolveCapabilitySet("2960");
+const plan = planConfigureVlan(caps, {
+  vlan: VlanId.from(10),
+  name: "USERS",
+});
+```
+
+Para más información, consulta la documentación global del proyecto en `docs/README.md`.

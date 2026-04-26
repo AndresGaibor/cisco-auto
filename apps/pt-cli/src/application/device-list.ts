@@ -6,12 +6,8 @@
  * NO llama al bridge directamente.
  */
 
-import type { 
-  PTController, 
-  DeviceListResult as ControllerDeviceListResult,
-  ConnectionInfo,
-  UnresolvedLink
-} from "@cisco-auto/pt-control";
+import { type PTController } from "@cisco-auto/pt-control/controller";
+import { type DeviceListResult as ControllerDeviceListResult, type ConnectionInfo, type UnresolvedLink } from "@cisco-auto/pt-control/contracts";
 import { createDefaultPTController } from "./controller-provider.js";
 
 const DEBUG = process.env.PT_DEBUG === "1";

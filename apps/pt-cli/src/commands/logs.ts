@@ -1,13 +1,11 @@
 #!/usr/bin/env bun
 /**
  * Comando logs - Visor de trazas para debugging
- * Proporciona inspección de logs de CLI, bridge y PT-side
- * Migrado al patrón runCommand con CliResult
+ * Delega lectura/parsing/clasificación a pt-control/application/logs
  */
 
 import { Command } from "commander";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
 
 import type { CliResult } from "../contracts/cli-result.js";
 import { createSuccessResult, createErrorResult } from "../contracts/cli-result.js";
@@ -26,14 +24,32 @@ import {
   getBundlesDir,
   getPtDebugLogPath,
 } from "../system/paths.js";
-import { sessionLogStore } from "../telemetry/session-log-store.js";
-import { bundleWriter } from "../telemetry/bundle-writer.js";
-import type { SessionLogEvent } from "../telemetry/session-log-store.js";
 import { createDebugLogStream } from "../telemetry/debug-log-stream.js";
 import { formatDebugLogMessage, shouldRenderDebugLogEntry } from "../telemetry/debug-log-view.js";
 import { runLiveTui } from "../telemetry/log-live-tui.js";
 import { renderSessionBlock, formatSessionTime } from "../telemetry/log-summary.js";
 import { formatEcuadorTime } from "../telemetry/time-format.js";
+
+import {
+  findRecentLogErrors,
+  generateLogBundle,
+  inspectCommandLogs,
+  isSessionLogLike,
+  listIosLogEntries,
+  readLogSession,
+  tailLogs,
+  type LogsBundleResult,
+  type LogsCommandResult,
+  type LogsErrorsResult,
+  type LogsIosResult,
+  type LogsSessionResult,
+  type LogsTailResult,
+} from "@cisco-auto/pt-control/application/logs";
+
+import {
+  createCliLogBundleWriter,
+  createCliLogSessionRepository,
+} from "../adapters/logs-repository.js";
 
 const SCOPE_COLORS: Record<string, string> = {
   kernel: "\x1b[36m",
@@ -79,16 +95,6 @@ function bold(text: string): string {
   return color("1", text);
 }
 
-function isSessionLogLike(entry: unknown): entry is SessionLogEvent {
-  if (!entry || typeof entry !== "object") return false;
-  const value = entry as Record<string, unknown>;
-  return (
-    typeof value.session_id === "string" &&
-    typeof value.action === "string" &&
-    typeof value.timestamp === "string"
-  );
-}
-
 function renderGenericTailLine(entry: Record<string, unknown>): string {
   const timestamp = typeof entry.timestamp === "string" ? formatSessionTime(entry.timestamp) : "";
   const phase = typeof entry.phase === "string" ? entry.phase.toLowerCase() : "unknown";
@@ -118,24 +124,6 @@ function renderGenericTailLine(entry: Record<string, unknown>): string {
             : yellow(` ${phase.toUpperCase().slice(0, 4)} `);
 
   return `${gray(`[${timestamp}]`)} ${badge} ${bold(action)} ${gray(`session:${sessionId}`)}`.trim();
-}
-
-function renderErrorLine(error: {
-  timestamp: string;
-  sessionId: string;
-  action: string;
-  error: string;
-}): string[] {
-  const time = formatSessionTime(error.timestamp);
-  return [
-    `${gray(`[${time}]`)} ${red(" ERR ")} ${bold(error.action)} ${gray(`session:${error.sessionId}`)}`,
-    `${gray("      ↳")} ${red(" error ")} ${error.error ? dimTruncate(error.error, 120) : ""}`.trim(),
-  ];
-}
-
-function dimTruncate(text: string, max: number): string {
-  const value = text.length > max ? `${text.slice(0, max - 1)}…` : text;
-  return color("2", value);
 }
 
 async function renderLiveDebugLog(lines: number): Promise<void> {
@@ -209,27 +197,6 @@ const LOGS_META: CommandMeta = {
   supportsExplain: false,
 };
 
-interface LogTailResult {
-  entries: unknown[];
-  count: number;
-}
-
-interface LogSessionResult {
-  sessionId: string;
-  events: SessionLogEvent[];
-  count: number;
-}
-
-interface LogErrorsResult {
-  errors: { timestamp: string; sessionId: string; action: string; error: string }[];
-  count: number;
-}
-
-interface LogBundleResult {
-  bundlePath: string;
-  sessionId: string;
-}
-
 export function createLogsCommand(): Command {
   const cmd = new Command("logs");
 
@@ -294,78 +261,76 @@ export function createLogsCommand(): Command {
         return;
       }
 
-      const logsDir = getLogsDir();
-
-      const entries: unknown[] = [];
-
-      try {
-        const files = readdirSync(logsDir)
-          .filter((f) => f.endsWith(".ndjson"))
-          .sort()
-          .slice(-3);
-
-        for (const file of files) {
-          const filePath = join(logsDir, file);
-          const content = readFileSync(filePath, "utf-8");
-          const allLines = content.split("\n").filter(Boolean);
-          const tailLines = allLines.slice(-lines);
-
-          for (const line of tailLines) {
-            try {
-              const entry = JSON.parse(line);
-
-              if (options.errorsOnly) {
-                const outcome = entry.outcome ?? entry.phase;
-                if (outcome !== "error" && outcome !== "failure" && outcome !== "error") {
-                  continue;
-                }
-              }
-
-              entries.push(entry);
-            } catch {
-              // Skip invalid lines
-            }
-          }
-        }
-      } catch {
-        // No logs found
-      }
-
-      console.log(`\n=== Últimos ${lines} eventos ===${options.follow ? " (seguimiento)" : ""}\n`);
-
-      for (const rawEntry of entries.slice(-lines)) {
-        const entry = rawEntry as Record<string, unknown>;
-        if (isSessionLogLike(entry)) {
-          for (const line of renderSessionBlock(entry)) {
-            console.log(line);
-          }
-        } else {
-          console.log(renderGenericTailLine(entry));
-        }
-      }
-
       if (options.follow) {
-        console.log("\n⏳ Esperando nuevos eventos... (Ctrl+C para salir)");
-
-        let lastSize = 0;
-        const eventsPath = getEventsPath();
-
-        const checkInterval = setInterval(() => {
-          try {
-            if (existsSync(eventsPath)) {
-              const stats = require("node:fs").statSync(eventsPath);
-              if (stats.size > lastSize) {
-                lastSize = stats.size;
-                console.log("\n📝 Nuevo evento detectado");
-              }
-            }
-          } catch {
-            clearInterval(checkInterval);
-          }
-        }, 2000);
-
-        setTimeout(() => clearInterval(checkInterval), 60000);
+        console.log("\n⏳ Follow simple todavía vive en CLI. Usa 'pt logs --live' para TUI completo.");
+        return;
       }
+
+      const flags: GlobalFlags = {
+        json: false,
+        jq: null,
+        output: "text",
+        verbose: false,
+        quiet: false,
+        trace: false,
+        tracePayload: false,
+        traceResult: false,
+        traceDir: null,
+        traceBundle: false,
+        traceBundlePath: null,
+        sessionId: null,
+        examples: globalExamples,
+        schema: false,
+        explain: globalExplain,
+        plan: globalPlan,
+        verify: false,
+      };
+
+      const result = await runCommand<LogsTailResult>({
+        action: "logs.tail",
+        meta: LOGS_META,
+        flags,
+        payloadPreview: {
+          lines,
+          errorsOnly: options.errorsOnly,
+          bridge: options.bridge,
+        },
+        execute: async (): Promise<CliResult<LogsTailResult>> => {
+          const execution = await tailLogs({
+            logsDir: getLogsDir(),
+            lines,
+            errorsOnly: options.errorsOnly,
+          });
+
+          if (!execution.ok) {
+            return createErrorResult("logs.tail", execution.error);
+          }
+
+          return createSuccessResult("logs.tail", execution.data, {
+            advice: execution.advice,
+          });
+        },
+      });
+
+      const output = renderCliResult(result, flags.output);
+      if (!flags.quiet || !result.ok) console.log(output);
+
+      if (result.ok && result.data) {
+        console.log(`\n=== Últimos ${lines} eventos ===\n`);
+
+        for (const rawEntry of result.data.entries) {
+          const entry = rawEntry as Record<string, unknown>;
+          if (isSessionLogLike(entry)) {
+            for (const line of renderSessionBlock(entry)) {
+              console.log(line);
+            }
+          } else {
+            console.log(renderGenericTailLine(entry));
+          }
+        }
+      }
+
+      if (!result.ok) process.exit(1);
     });
 
   cmd
@@ -413,25 +378,23 @@ export function createLogsCommand(): Command {
         verify: false,
       };
 
-      const result = await runCommand<LogSessionResult>({
+      const result = await runCommand<LogsSessionResult>({
         action: "logs.session",
         meta: LOGS_META,
         flags,
         payloadPreview: { sessionId },
-        execute: async (): Promise<CliResult<LogSessionResult>> => {
-          try {
-            const events = await sessionLogStore.read(sessionId);
+        execute: async (): Promise<CliResult<LogsSessionResult>> => {
+          const execution = await readLogSession(createCliLogSessionRepository(), {
+            sessionId,
+          });
 
-            return createSuccessResult("logs.session", {
-              sessionId,
-              events,
-              count: events.length,
-            });
-          } catch (error) {
-            return createErrorResult("logs.session", {
-              message: error instanceof Error ? error.message : String(error),
-            }) as CliResult<LogSessionResult>;
+          if (!execution.ok) {
+            return createErrorResult("logs.session", execution.error);
           }
+
+          return createSuccessResult("logs.session", execution.data, {
+            advice: execution.advice,
+          });
         },
       });
 
@@ -479,77 +442,116 @@ export function createLogsCommand(): Command {
         return;
       }
 
-      console.log(`\n=== Comando: ${commandId} ===\n`);
+      const flags: GlobalFlags = {
+        json: false,
+        jq: null,
+        output: "text",
+        verbose: false,
+        quiet: false,
+        trace: false,
+        tracePayload: false,
+        traceResult: false,
+        traceDir: null,
+        traceBundle: false,
+        traceBundlePath: null,
+        sessionId: null,
+        examples: globalExamples,
+        schema: false,
+        explain: globalExplain,
+        plan: globalPlan,
+        verify: false,
+      };
 
-      const commandsTraceDir = getCommandLogsDir();
-      const resultsDir = getResultsDir();
+      const result = await runCommand<LogsCommandResult>({
+        action: "logs.command",
+        meta: LOGS_META,
+        flags,
+        payloadPreview: { commandId },
+        execute: async (): Promise<CliResult<LogsCommandResult>> => {
+          const execution = await inspectCommandLogs({
+            commandId,
+            commandLogsDir: getCommandLogsDir(),
+            resultsDir: getResultsDir(),
+            eventsPath: getEventsPath(),
+          });
 
-      let foundAny = false;
-
-      const tracePath = join(commandsTraceDir, `${commandId}.json`);
-      if (existsSync(tracePath)) {
-        foundAny = true;
-        console.log("--- PT-Side Trace ---");
-        const trace = JSON.parse(readFileSync(tracePath, "utf-8"));
-        console.log(JSON.stringify(trace, null, 2));
-        console.log();
-      }
-
-      const resultPath = join(resultsDir, `${commandId}.json`);
-      if (existsSync(resultPath)) {
-        foundAny = true;
-        console.log("--- Resultado ---");
-        const result = JSON.parse(readFileSync(resultPath, "utf-8"));
-        // Show verification summary if present
-        if (result && result.verification) {
-          const v = result.verification;
-          console.log("Verification:");
-          if (typeof v.executed !== "undefined") console.log(`  executed: ${v.executed}`);
-          if (typeof v.verified !== "undefined") console.log(`  verified: ${v.verified}`);
-          if (v.partiallyVerified) console.log("  partiallyVerified: true");
-          if (v.verificationSource && v.verificationSource.length)
-            console.log(`  source: ${v.verificationSource.join(", ")}`);
-          if (v.warnings && v.warnings.length) console.log(`  warnings: ${v.warnings.join("; ")}`);
-          if (v.checks && v.checks.length) {
-            console.log("  checks:");
-            for (const c of v.checks) {
-              console.log(`    - ${c.name}: ${c.ok} ${c.details ? JSON.stringify(c.details) : ""}`);
-            }
+          if (!execution.ok) {
+            return createErrorResult("logs.command", execution.error);
           }
+
+          return createSuccessResult("logs.command", execution.data, {
+            advice: execution.advice,
+          });
+        },
+      });
+
+      const output = renderCliResult(result, flags.output);
+      if (!flags.quiet || !result.ok) console.log(output);
+
+      if (result.ok && result.data) {
+        console.log(`\n=== Comando: ${commandId} ===\n`);
+
+        if (result.data.trace) {
+          console.log("--- PT-Side Trace ---");
+          console.log(JSON.stringify(result.data.trace, null, 2));
           console.log();
         }
-        console.log(JSON.stringify(result, null, 2));
-        console.log();
-      }
 
-      const eventsPath = getEventsPath();
-      if (existsSync(eventsPath)) {
-        console.log("--- Bridge Events (recientes) ---");
-        const content = readFileSync(eventsPath, "utf-8");
-        const lines = content.split("\n").filter(Boolean);
+        if (result.data.result) {
+          console.log("--- Resultado ---");
 
-        const cmdEvents = lines
-          .map((line) => {
-            try {
-              return JSON.parse(line);
-            } catch {
-              return null;
+          const value = result.data.result as Record<string, unknown>;
+          const verification =
+            value.verification && typeof value.verification === "object"
+              ? (value.verification as Record<string, unknown>)
+              : undefined;
+
+          if (verification) {
+            console.log("Verification:");
+            if (typeof verification.executed !== "undefined") {
+              console.log(`  executed: ${verification.executed}`);
             }
-          })
-          .filter((e): e is Record<string, unknown> => e !== null && e.command_id === commandId);
+            if (typeof verification.verified !== "undefined") {
+              console.log(`  verified: ${verification.verified}`);
+            }
+            if (verification.partiallyVerified) {
+              console.log("  partiallyVerified: true");
+            }
+            if (Array.isArray(verification.verificationSource)) {
+              console.log(`  source: ${verification.verificationSource.join(", ")}`);
+            }
+            if (Array.isArray(verification.warnings)) {
+              console.log(`  warnings: ${verification.warnings.join("; ")}`);
+            }
+            if (Array.isArray(verification.checks)) {
+              console.log("  checks:");
+              for (const check of verification.checks) {
+                const c = check as { name?: string; ok?: boolean; details?: unknown };
+                console.log(
+                  `    - ${c.name}: ${c.ok} ${c.details ? JSON.stringify(c.details) : ""}`,
+                );
+              }
+            }
+            console.log();
+          }
 
-        if (cmdEvents.length > 0) {
-          console.log(JSON.stringify(cmdEvents, null, 2));
-        } else {
-          console.log("No se encontraron eventos del bridge para este comando.");
+          console.log(JSON.stringify(result.data.result, null, 2));
+          console.log();
         }
-        console.log();
+
+        if (result.data.bridgeEvents.length > 0) {
+          console.log("--- Bridge Events (recientes) ---");
+          console.log(JSON.stringify(result.data.bridgeEvents, null, 2));
+          console.log();
+        }
+
+        if (!result.data.foundAny) {
+          console.log("No se encontró información para este comando.");
+          console.log("Los archivos de trace se crean cuando --trace está habilitado.");
+        }
       }
 
-      if (!foundAny) {
-        console.log("No se encontró información para este comando.");
-        console.log("Los archivos de trace se crean cuando --trace está habilitado.");
-      }
+      if (!result.ok) process.exit(1);
     });
 
   cmd
@@ -596,63 +598,24 @@ export function createLogsCommand(): Command {
       };
 
       const limit = parseInt(options.limit) || 10;
-      const result = await runCommand<LogErrorsResult>({
+      const result = await runCommand<LogsErrorsResult>({
         action: "logs.errors",
         meta: LOGS_META,
         flags,
         payloadPreview: { limit },
-        execute: async (): Promise<CliResult<LogErrorsResult>> => {
-          try {
-            const logsDir = getLogsDir();
-            const errors: {
-              timestamp: string;
-              sessionId: string;
-              action: string;
-              error: string;
-            }[] = [];
+        execute: async (): Promise<CliResult<LogsErrorsResult>> => {
+          const execution = await findRecentLogErrors({
+            logsDir: getLogsDir(),
+            limit,
+          });
 
-            const files = readdirSync(logsDir)
-              .filter((f) => f.endsWith(".ndjson"))
-              .sort()
-              .slice(-5);
-
-            for (const file of files) {
-              if (errors.length >= limit) break;
-
-              const filePath = join(logsDir, file);
-              const content = readFileSync(filePath, "utf-8");
-              const lines = content.split("\n").filter(Boolean);
-
-              for (const line of lines) {
-                if (errors.length >= limit) break;
-
-                try {
-                  const entry = JSON.parse(line);
-                  const outcome = entry.outcome ?? entry.phase;
-
-                  if (outcome === "error" || outcome === "failure") {
-                    errors.push({
-                      timestamp: (entry.timestamp as string)?.split("T")[0] ?? "",
-                      sessionId: (entry.session_id ?? entry.sessionId ?? "") as string,
-                      action: (entry.action ?? "") as string,
-                      error: (entry.error ?? entry.error_message ?? "") as string,
-                    });
-                  }
-                } catch {
-                  // Skip invalid lines
-                }
-              }
-            }
-
-            return createSuccessResult("logs.errors", {
-              errors,
-              count: errors.length,
-            });
-          } catch (error) {
-            return createErrorResult("logs.errors", {
-              message: error instanceof Error ? error.message : String(error),
-            }) as CliResult<LogErrorsResult>;
+          if (!execution.ok) {
+            return createErrorResult("logs.errors", execution.error);
           }
+
+          return createSuccessResult("logs.errors", execution.data, {
+            advice: execution.advice,
+          });
         },
       });
 
@@ -675,16 +638,7 @@ export function createLogsCommand(): Command {
             other: [],
           };
           for (const err of result.data.errors) {
-            const action = err.action.toLowerCase();
-            const msg = err.error.toLowerCase();
-            if (action.includes("bridge") || msg.includes("lease") || msg.includes("queue"))
-              byLayer.bridge!.push(err);
-            else if (action.includes("pt") || msg.includes("runtime") || msg.includes("terminal"))
-              byLayer.pt!.push(err);
-            else if (action.includes("ios") || action.includes("config") || msg.includes("command"))
-              byLayer.ios!.push(err);
-            else if (msg.includes("verif")) byLayer.verification!.push(err);
-            else byLayer.other!.push(err);
+            byLayer[err.layer]!.push(err);
           }
 
           for (const [layer, errs] of Object.entries(byLayer)) {
@@ -747,30 +701,24 @@ export function createLogsCommand(): Command {
         verify: false,
       };
 
-      const result = await runCommand<LogBundleResult>({
+      const result = await runCommand<LogsBundleResult>({
         action: "logs.bundle",
         meta: LOGS_META,
         flags,
         payloadPreview: { sessionId, outputPath: options.output },
-        execute: async (): Promise<CliResult<LogBundleResult>> => {
-          try {
-            const bundlePath = await bundleWriter.writeBundle(sessionId);
+        execute: async (): Promise<CliResult<LogsBundleResult>> => {
+          const execution = await generateLogBundle(createCliLogBundleWriter(), {
+            sessionId,
+            outputPath: options.output,
+          });
 
-            if (existsSync(bundlePath)) {
-              return createSuccessResult("logs.bundle", {
-                bundlePath,
-                sessionId,
-              });
-            } else {
-              return createErrorResult("logs.bundle", {
-                message: "Error al generar el bundle",
-              }) as CliResult<LogBundleResult>;
-            }
-          } catch (error) {
-            return createErrorResult("logs.bundle", {
-              message: error instanceof Error ? error.message : String(error),
-            }) as CliResult<LogBundleResult>;
+          if (!execution.ok) {
+            return createErrorResult("logs.bundle", execution.error);
           }
+
+          return createSuccessResult("logs.bundle", execution.data, {
+            advice: execution.advice,
+          });
         },
       });
 
@@ -798,55 +746,18 @@ export function createLogsCommand(): Command {
       const device = options.device ?? deviceArg;
       const limit = parseInt(options.limit) || 20;
 
-      const logsDir = getLogsDir();
-      const entries: { sessionId: string; action: string; timestamp: string; device?: string }[] =
-        [];
+      const result = await listIosLogEntries({
+        logsDir: getLogsDir(),
+        device,
+        limit,
+      });
 
-      try {
-        const files = readdirSync(logsDir)
-          .filter((f) => f.endsWith(".ndjson"))
-          .sort()
-          .slice(-10);
-
-        for (const file of files) {
-          if (entries.length >= limit) break;
-          const filePath = join(logsDir, file);
-          const content = readFileSync(filePath, "utf-8");
-          const lines = content.split("\n").filter(Boolean);
-
-          for (const line of lines) {
-            if (entries.length >= limit) break;
-            try {
-              const evt = JSON.parse(line) as Record<string, unknown>;
-              const action = (evt.action ?? "") as string;
-              if (
-                !action.includes("ios") &&
-                !action.includes("config") &&
-                !action.includes("show") &&
-                !action.includes("exec")
-              )
-                continue;
-
-              const meta = evt.metadata as { payloadPreview?: { device?: string } } | undefined;
-              const evtDevice = meta?.payloadPreview?.device;
-
-              if (device && evtDevice && !evtDevice.toLowerCase().includes(device.toLowerCase()))
-                continue;
-
-              entries.push({
-                sessionId: (evt.session_id ?? evt.sessionId ?? "") as string,
-                action,
-                timestamp: (evt.timestamp ?? "") as string,
-                device: evtDevice,
-              });
-            } catch {
-              // Entrada de log corrupta, saltar
-            }
-          }
-        }
-      } catch {
-        // No hay logs disponibles, continuar sin entradas
+      if (!result.ok) {
+        console.error(`Error: ${result.error.message}`);
+        process.exit(1);
       }
+
+      const entries = result.data.entries;
 
       console.log("");
       console.log(`═══ Operaciones IOS${device ? ` (dispositivo: ${device})` : ""} ═══`);

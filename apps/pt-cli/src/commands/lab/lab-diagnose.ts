@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { readFileSync } from "fs";
 import chalk from "chalk";
 import { loadLabYaml, validateLabSafe, toLabSpec } from "../../contracts/lab-spec";
-import { createDiagnosisService } from "@cisco-auto/pt-control";
+import { createDiagnosisService } from "@cisco-auto/pt-control/pt/diagnosis";
 
 export function createLabDiagnoseCommand(): Command {
   return new Command("diagnose")

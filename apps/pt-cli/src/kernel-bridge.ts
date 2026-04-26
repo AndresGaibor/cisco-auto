@@ -19,7 +19,7 @@ import {
   type PacketTracerBackendPlugin,
   type PacketTracerAdapterDependencies,
 } from "@cisco-auto/kernel/backends/packet-tracer";
-import { createPTController } from "@cisco-auto/pt-control";
+import { createPTController } from "@cisco-auto/pt-control/controller";
 import { generateVlanCommands, validateVlanConfig } from "@cisco-auto/kernel/plugins/vlan";
 import type { VlanConfigInput } from "@cisco-auto/kernel/plugins/vlan";
 import {

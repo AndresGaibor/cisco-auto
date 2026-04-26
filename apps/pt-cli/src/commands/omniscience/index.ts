@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { Command } from "commander";
 import chalk from "chalk";
-import { createDefaultPTController } from "@cisco-auto/pt-control";
+import { createDefaultPTController } from "@cisco-auto/pt-control/controller";
 
 export function createOmniscienceCommand(): Command {
   const cmd = new Command("omniscience")
@@ -57,7 +57,7 @@ function addCapabilityCommands(cmd: Command): void {
 
   async function ensureOmni() {
     if (!omniModule) {
-      omniModule = await import("@cisco-auto/pt-control");
+      omniModule = await import("@cisco-auto/pt-control/omni");
     }
     return omniModule;
   }
@@ -163,7 +163,7 @@ function addCapabilityCommands(cmd: Command): void {
 
 function addMatrixCommands(cmd: Command): void {
   async function ensureOmni() {
-    return await import("@cisco-auto/pt-control");
+    return await import("@cisco-auto/pt-control/omni");
   }
 
   const matrixCmd = new Command("matrix");
@@ -190,11 +190,11 @@ function addMatrixCommands(cmd: Command): void {
 
 function addRegressionCommands(cmd: Command): void {
   async function ensureOmni() {
-    return await import("@cisco-auto/pt-control");
+    return await import("@cisco-auto/pt-control/omni");
   }
 
   async function getRegressionRunner() {
-    const pt: any = await import("@cisco-auto/pt-control");
+    const pt: any = await import("@cisco-auto/pt-control/omni");
     return pt.runRegressionSmoke;
   }
 
@@ -223,7 +223,7 @@ function addRegressionCommands(cmd: Command): void {
     .option("-f, --format <format>", "Formato de salida", "table")
     .action(async (suiteId: string, opts) => {
       const m = await ensureOmni();
-      const { runRegressionWithComparison, printComparisonReport } = await import("@cisco-auto/pt-control");
+      const { runRegressionWithComparison, printComparisonReport } = await import("@cisco-auto/pt-control/omni");
       const result = await runRegressionWithComparison({
         suite: suiteId,
         label: opts.label,

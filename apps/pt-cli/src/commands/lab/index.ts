@@ -2,7 +2,8 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import * as fs from "fs";
-import { ScenarioService, createDefaultPTController } from "@cisco-auto/pt-control";
+import { ScenarioService } from "@cisco-auto/pt-control/services";
+import { createDefaultPTController } from "@cisco-auto/pt-control/controller";
 import { createLabListCommand } from "./list";
 import { createLabCreateCommand } from "./create";
 import { createLabLiftCommand } from "./lift";

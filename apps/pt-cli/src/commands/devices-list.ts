@@ -24,7 +24,7 @@ function initializeSchema(db: Database): void {
   `);
 
   db.exec(`
-    CREATE TRIGGER IF NOT EXISTS update_devices_timestamp 
+    CREATE TRIGGER IF NOT EXISTS update_devices_timestamp
     AFTER UPDATE ON devices
     BEGIN
       UPDATE devices SET updated_at = strftime('%s', 'now') WHERE id = NEW.id;
@@ -43,15 +43,18 @@ function getMemoryDb(): Database {
 }
 
 export function createDevicesListCommand(): Command {
-  return new Command('list')
-    .description('Listar dispositivos guardados')
+  return new Command('devices-list')
+    .description('⚠️  DEPRECADO - Usa `pt device list` para ver dispositivos en PT')
+    .addHelpText('before', chalk.yellow('⚠️  Este comando está deprecado.\n  devices-list consultaba la base SQLite local.\n  Usa `pt device list` para ver dispositivos en Packet Tracer.\n\n'))
     .option('--limit <n>', 'Numero maximo de dispositivos', '50')
     .action((options) => {
+      console.log(chalk.yellow('⚠️  devices-list está deprecado. Usa `pt device list`.'));
+      console.log(chalk.gray('  (La base SQLite local ~/.cisco-auto/memory.db ya no se usa para listar dispositivos en PT)\n'));
       const db = getMemoryDb();
       const limit = parseInt(options.limit, 10);
       const devices = db.query(`
-        SELECT * FROM devices 
-        ORDER BY last_connected DESC 
+        SELECT * FROM devices
+        ORDER BY last_connected DESC
         LIMIT ?
       `).all(limit) as Array<{
         id: string;
@@ -65,13 +68,12 @@ export function createDevicesListCommand(): Command {
       }>;
 
       if (devices.length === 0) {
-        console.log(chalk.yellow('No hay dispositivos guardados.'));
-        console.log(chalk.gray('Use pt devices add <hostname> --ip <ip> para agregar uno.'));
+        console.log(chalk.yellow('No hay dispositivos guardados en la base local.'));
         db.close();
         return;
       }
 
-      console.log(chalk.bold('\n📋 Dispositivos guardados\n'));
+      console.log(chalk.bold('\n📋 Dispositivos guardados (base local ~/.cisco-auto/memory.db)\n'));
       console.log(chalk.cyan('─'.repeat(80)));
       console.log(
         chalk.yellow('Hostname'.padEnd(20)) +
@@ -93,7 +95,8 @@ export function createDevicesListCommand(): Command {
         );
       }
       console.log(chalk.cyan('─'.repeat(80)));
-      console.log(chalk.gray(`\nTotal: ${devices.length} dispositivos\n`));
+      console.log(chalk.gray(`\nTotal: ${devices.length} dispositivos (base local)\n`));
+      console.log(chalk.gray('  Para ver dispositivos en PT usa: pt device list'));
       db.close();
     });
 }

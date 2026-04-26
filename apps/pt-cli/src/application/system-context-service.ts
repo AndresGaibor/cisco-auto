@@ -6,7 +6,7 @@
  * - getPreferredSystemContext: prefer persisted context, fallback to live inspection
  */
 
-import { createDefaultPTController } from "@cisco-auto/pt-control";
+import { createDefaultPTController } from "@cisco-auto/pt-control/controller";
 import { loadContextStatus } from "./context-supervisor.js";
 import type { ContextStatus } from "../contracts/context-status.js";
 

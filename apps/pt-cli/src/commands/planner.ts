@@ -12,7 +12,7 @@ import type { CommandMeta } from '../contracts/command-meta.js';
 import type { GlobalFlags } from '../flags.js';
 
 import { runCommand } from '../application/run-command.js';
-import { createChangePlannerService } from '@cisco-auto/pt-control';
+import { createChangePlannerService } from '@cisco-auto/pt-control/pt/planner';
 
 export const PLANNER_META: CommandMeta = {
   id: 'planner',

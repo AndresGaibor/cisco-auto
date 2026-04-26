@@ -12,7 +12,8 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { LogManager, redactSensitive, createPTController, type CommandTraceEntry } from '@cisco-auto/pt-control';
+import { LogManager, redactSensitive } from '@cisco-auto/pt-control/logging';
+import { createPTController, type CommandTraceEntry } from '@cisco-auto/pt-control/controller';
 import type { GlobalFlags } from '../flags';
 
 function getDefaultLogDir(): string {

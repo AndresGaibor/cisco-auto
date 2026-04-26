@@ -4,6 +4,21 @@
 // Exports públicos de los componentes extraídos de command-executor.ts.
 // Estos componentes pueden ser usados individualmente o en conjunto.
 
+// Command State Machine
+export {
+  CommandStateMachine,
+  type CommandStateMachineConfig,
+  type SendPagerAdvanceFn,
+} from "./command-state-machine";
+
+// Command Executor (orchestration)
+export {
+  executeTerminalCommand,
+  type PTCommandLine,
+  type ExecutionOptions,
+  type CommandExecutionResult,
+} from "./command-executor";
+
 // Event Collection
 export {
   createTerminalEventCollector,

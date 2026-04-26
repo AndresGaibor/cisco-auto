@@ -10,10 +10,9 @@ describe("vlan CLI boundary", () => {
     );
 
     expect(source).toContain("@cisco-auto/pt-control/application/vlan");
-    expect(source).toContain("executeVlanApply");
-    expect(source).toContain("executeVlanTrunk");
-    expect(source).toContain("executeVlanEnsure");
-    expect(source).toContain("executeVlanConfigInterfaces");
+    expect(source).toContain("buildVlanCreateCommands");
+    expect(source).toContain("buildVlanApplyCommands");
+    expect(source).toContain("buildVlanTrunkCommands");
 
     expect(source).not.toContain("resolveCapabilitySet");
     expect(source).not.toContain("planConfigureVlan");

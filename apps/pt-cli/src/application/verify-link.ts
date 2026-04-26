@@ -4,7 +4,7 @@
  * Inspecciona dispositivos y verifica que el enlace se creó correctamente.
  */
 
-import type { PTController } from '@cisco-auto/pt-control';
+import { type PTController } from "@cisco-auto/pt-control/controller";
 
 export interface LinkVerificationData {
   endpointA: {

@@ -8,7 +8,7 @@ Esta documentación lista todos los modelos de dispositivos **VERIFICADOS** en P
 
 ## ⚠️ IMPORTANTE: Catálogo vs Realidad
 
-El catálogo oficial del proyecto (`packages/core/src/catalog/`) contiene dispositivos Cisco **reales**, pero **NO todos existen en Packet Tracer**.
+La fuente activa de modelos Packet Tracer verificados está en `packages/pt-runtime/src/verified-models.ts` y/o en los catálogos públicos exportados por los paquetes activos. No existe `packages/core/src/catalog/` en el workspace actual.
 
 **Ejemplo crítico:**
 - Catálogo: `2960-24TT-L` ❌ NO funciona en PT
@@ -62,7 +62,7 @@ bridge.sendCommand("addDevice", {
   y: 250
 });
 
-// ❌ INCORRECTO - NO usa modelo del catálogo oficial
+// ❌ INCORRECTO - NO usa modelo verificado de Packet Tracer
 bridge.sendCommand("addDevice", {
   model: "2960-24TT-L"  // NO funciona en PT
 });
@@ -182,12 +182,12 @@ var PT_MODEL_MAP = {
 
 ### 1. "Invalid arguments for IPC call addDevice"
 
-**Causa:** Usar modelo del catálogo oficial que no existe en PT.
+**Causa:** Usar modelo no verificado en PT.
 
 **Solución:** Usar modelos verificados:
 ```typescript
-// ❌ INCORRECTO - Modelo del catálogo que NO funciona
-model: "2960-24TT-L"  // Catálogo oficial
+// ❌ INCORRECTO - Modelo que NO funciona en PT
+model: "2960-24TT-L"  // No existe en PT
 
 // ✅ CORRECTO - Modelo verificado en PT 9.0.0
 model: "2960-24TT"    // Sin la "L" final

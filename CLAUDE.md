@@ -52,9 +52,9 @@ Estos se generan en tiempo de desarrollo pero no deben commitearse. El código f
 ```json
 "dependencies": {
   "@cisco-auto/types": "workspace:*",
-  "@cisco-auto/core": "workspace:*",
+  "@cisco-auto/ios-domain": "workspace:*",
   "@cisco-auto/pt-control": "workspace:*",
-  "@cisco-auto/pt-runtime": "workspace:*"
+  "@cisco-auto/types": "workspace:*"
 }
 ```
 

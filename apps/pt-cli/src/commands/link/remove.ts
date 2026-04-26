@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { createDefaultPTController } from '@cisco-auto/pt-control';
+import { createDefaultPTController } from '@cisco-auto/pt-control/controller';
 import { input, confirm } from '@inquirer/prompts';
 import chalk from 'chalk';
 

@@ -8,6 +8,12 @@
     ".": "./src/index.ts",
     "./schema": "./src/schema.ts",
     "./compiler": "./src/compiler.ts",
+    "./model": "./src/model/index.ts",
+    "./model/*": "./src/model/*.ts",
+    "./validators": "./src/validators/index.ts",
+    "./validators/*": "./src/validators/*.ts",
+    "./scenarios": "./src/scenarios/index.ts",
+    "./scenarios/*": "./src/scenarios/*.ts",
     "./examples/*": "./src/examples/*"
   },
   "dependencies": {

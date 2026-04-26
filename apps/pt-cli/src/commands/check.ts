@@ -25,7 +25,12 @@ import type { CommandMeta } from "../contracts/command-meta.js";
 import type { GlobalFlags } from "../flags.js";
 
 import { runCommand } from "../application/run-command.js";
-import { fetchDeviceList } from "../utils/device-utils.js";
+import {
+  validateLanBasic,
+  validateGateway,
+  type CheckResult,
+  type CheckResultItem,
+} from "@cisco-auto/pt-control/application/check";
 
 export const CHECK_META: CommandMeta = {
   id: "check",
@@ -49,28 +54,15 @@ export const CHECK_META: CommandMeta = {
   supportsExplain: true,
 };
 
-interface CheckResultItem {
-  name: string;
-  status: "pass" | "fail" | "warning" | "skip";
-  message: string;
-  details?: Record<string, unknown>;
-  fix?: string;
-}
-
-interface CheckResult {
-  scenario: string;
-  passed: number;
-  failed: number;
-  warnings: number;
-  checks: CheckResultItem[];
-  summary: string;
-}
-
 const SCENARIOS: Record<
   string,
   {
     description: string;
-    validate: (ctx: any, fix: boolean) => Promise<CheckResultItem[]>;
+    validate: (
+      controller: CheckControllerPort,
+      scenario: string,
+      fix: boolean,
+    ) => Promise<CheckResultItem[]>;
   }
 > = {
   "lan-basic": {
@@ -82,6 +74,13 @@ const SCENARIOS: Record<
     validate: validateGateway,
   },
 };
+
+// Re-export CheckControllerPort for SCENARIOS typing
+interface CheckControllerPort {
+  listDevices(): Promise<{ devices: unknown[] } | unknown[]>;
+  inspectDevice(name: string): Promise<unknown>;
+  sendPing(source: string, target: string, timeoutMs?: number): Promise<{ success: boolean; raw?: string }>;
+}
 
 function getScenarioNames(): string[] {
   return Object.keys(SCENARIOS);
@@ -204,7 +203,7 @@ export function createCheckCommand(): Command {
 
           try {
             const scenarioDef = SCENARIOS[scenario]!;
-            const checks = await scenarioDef.validate(ctx, fix);
+            const checks = await scenarioDef.validate(ctx.controller, scenario, fix);
 
             const passed = checks.filter((c) => c.status === "pass").length;
             const failed = checks.filter((c) => c.status === "fail").length;
@@ -254,229 +253,6 @@ export function createCheckCommand(): Command {
     });
 
   return cmd;
-}
-
-async function validateLanBasic(ctx: any, _fix: boolean): Promise<CheckResultItem[]> {
-  const checks: CheckResultItem[] = [];
-
-  // Force fresh device list by calling listDevices directly
-  let devices: any[] = [];
-  try {
-    const { devices: deviceList } = await ctx.controller.listDevices();
-    devices = deviceList;
-    if (!Array.isArray(devices)) {
-      devices = [];
-    }
-  } catch (e) {
-    devices = [];
-  }
-
-  const pcs = devices.filter((d) => d.type === "pc" || d.type === 8 || d.type === "PC");
-  const switches = devices.filter(
-    (d) =>
-      d.type === "switch" || d.type === "switch-l2" || d.type === "switch_layer3" || d.type === 1,
-  );
-
-  if (pcs.length < 2) {
-    checks.push({
-      name: "min-pcs",
-      status: "fail",
-      message: `Se requieren al menos 2 PCs, encontrado(s): ${pcs.length}`,
-    });
-    return checks;
-  }
-  checks.push({ name: "min-pcs", status: "pass", message: `${pcs.length} PC(s) encontrado(s)` });
-
-  if (switches.length < 1) {
-    checks.push({ name: "min-switches", status: "fail", message: "Se requiere al menos 1 switch" });
-    return checks;
-  }
-  checks.push({
-    name: "min-switches",
-    status: "pass",
-    message: `${switches.length} switch(es) encontrado(s)`,
-  });
-
-  const pc1 = pcs[0];
-  const pc2 = pcs[1];
-  const switch1 = switches[0];
-
-  // listDevices doesn't populate ip/mask, need to inspect each device
-  const pc1Info = await ctx.controller.inspectDevice(pc1.name);
-  const pc2Info = await ctx.controller.inspectDevice(pc2.name);
-
-  const pc1Ip =
-    (pc1Info as any).ip ||
-    pc1Info.ports?.find((p: any) => p.ipAddress && p.ipAddress !== "0.0.0.0")?.ipAddress;
-  const pc1Mask =
-    (pc1Info as any).mask ||
-    pc1Info.ports?.find((p: any) => p.ipAddress && p.ipAddress !== "0.0.0.0")?.subnetMask;
-  const pc2Ip =
-    (pc2Info as any).ip ||
-    pc2Info.ports?.find((p: any) => p.ipAddress && p.ipAddress !== "0.0.0.0")?.ipAddress;
-  const pc2Mask =
-    (pc2Info as any).mask ||
-    pc2Info.ports?.find((p: any) => p.ipAddress && p.ipAddress !== "0.0.0.0")?.subnetMask;
-
-  if (!pc1Ip) {
-    checks.push({
-      name: "pc1-ip",
-      status: "fail",
-      message: `${pc1.name} no tiene IP configurada`,
-      fix: `pt config-host ${pc1.name} 192.168.10.10 255.255.255.0`,
-    });
-  } else {
-    checks.push({ name: "pc1-ip", status: "pass", message: `${pc1.name}: ${pc1Ip}/${pc1Mask}` });
-  }
-
-  if (!pc2Ip) {
-    checks.push({
-      name: "pc2-ip",
-      status: "fail",
-      message: `${pc2.name} no tiene IP configurada`,
-      fix: `pt config-host ${pc2.name} 192.168.10.20 255.255.255.0`,
-    });
-  } else {
-    checks.push({ name: "pc2-ip", status: "pass", message: `${pc2.name}: ${pc2Ip}/${pc2Mask}` });
-  }
-
-  if (pc1Ip && pc2Ip) {
-    const pc1Net = getNetworkAddress(pc1Ip, pc1Mask);
-    const pc2Net = getNetworkAddress(pc2Ip, pc2Mask);
-
-    if (pc1Net === pc2Net) {
-      checks.push({
-        name: "same-subnet",
-        status: "pass",
-        message: "PC1 y PC2 están en la misma subred",
-      });
-    } else {
-      checks.push({
-        name: "same-subnet",
-        status: "fail",
-        message: `PC1 (${pc1Net}) y PC2 (${pc2Net}) en subredes diferentes`,
-        fix: "Ajustar máscara o IP",
-      });
-    }
-
-    const maskBits1 = subnetMaskToBits(pc1Mask);
-    const maskBits2 = subnetMaskToBits(pc2Mask);
-    if (maskBits1 !== maskBits2) {
-      checks.push({
-        name: "mask-mismatch",
-        status: "warning",
-        message: `Máscaras diferentes: PC1 /${maskBits1}, PC2 /${maskBits2}`,
-        details: { pc1Mask, pc2Mask },
-        fix: `Usar /${Math.min(maskBits1, maskBits2)} para ambos`,
-      });
-    }
-  }
-
-  try {
-    const pingResult = await ctx.controller.sendPing(pc1.name, pc2Ip, 30000);
-    const success = pingResult.success;
-
-    if (success) {
-      checks.push({
-        name: "ping-pc1-to-pc2",
-        status: "pass",
-        message: `Ping ${pc1.name} → ${pc2.name} exitoso`,
-      });
-    } else {
-      checks.push({
-        name: "ping-pc1-to-pc2",
-        status: "fail",
-        message: `Ping ${pc1.name} → ${pc2.name} falló`,
-        details: { raw: (pingResult.raw || "").slice(0, 200) },
-        fix: "Verificar enlaces físicos y configuración IP",
-      });
-    }
-  } catch (pingError: any) {
-    checks.push({
-      name: "ping-pc1-to-pc2",
-      status: "fail",
-      message: `No se pudo ejecutar ping: ${pingError.message}`,
-      fix: "Verificar que PT esté corriendo",
-    });
-  }
-
-  try {
-    const switchInfo = await ctx.controller.inspectDevice(switch1.name);
-    const ports = switchInfo.ports || [];
-    const macsWithAddress = ports.filter(
-      (p: any) => p.macAddress && p.macAddress !== "0.0.0.0" && p.macAddress !== "0000.0000.0000",
-    );
-    const uniqueMacs = new Set(macsWithAddress.map((p: any) => p.macAddress));
-
-    if (uniqueMacs.size >= 2) {
-      checks.push({
-        name: "mac-table",
-        status: "pass",
-        message: `${switch1.name} tiene ${uniqueMacs.size} MAC(s) en puertos`,
-        details: { macCount: uniqueMacs.size },
-      });
-    } else {
-      checks.push({
-        name: "mac-table",
-        status: "warning",
-        message: `${switch1.name} solo tiene ${uniqueMacs.size} MAC(s) en puertos - verificar enlaces`,
-        details: {
-          macCount: uniqueMacs.size,
-          ports: ports.map((p: any) => ({ name: p.name, mac: p.macAddress })),
-        },
-      });
-    }
-  } catch (_macError: any) {
-    checks.push({ name: "mac-table", status: "skip", message: "No se pudo obtener tabla MAC" });
-  }
-
-  return checks;
-}
-
-async function validateGateway(ctx: any, _fix: boolean): Promise<CheckResultItem[]> {
-  const checks: CheckResultItem[] = [];
-  const devices = await fetchDeviceList(ctx.controller);
-  const hosts = devices.filter((d) => d.type === "pc" || d.type === "server");
-
-  for (const host of hosts) {
-    const port = host.ports?.find((p) => p.ipAddress && p.ipAddress !== "0.0.0.0");
-    if (!port?.ipAddress) {
-      checks.push({
-        name: `gateway-${host.name}`,
-        status: "skip",
-        message: `${host.name} no tiene IP`,
-      });
-      continue;
-    }
-    checks.push({
-      name: `gateway-${host.name}`,
-      status: "pass",
-      message: `${host.name}: ${port.ipAddress}`,
-    });
-  }
-
-  return checks;
-}
-
-function getNetworkAddress(ip: string, mask: string): string {
-  const ipParts = ip.split(".").map(Number);
-  const maskParts = mask.split(".").map(Number);
-  const netParts = ipParts.map((p, i) => p & (maskParts[i] ?? 0));
-  return netParts.join(".");
-}
-
-function subnetMaskToBits(mask: string): number {
-  if (!mask) return 0;
-  const parts = mask.split(".").map(Number);
-  let bits = 0;
-  for (const part of parts) {
-    let n = part;
-    while (n > 0) {
-      bits += n & 1;
-      n >>= 1;
-    }
-  }
-  return bits;
 }
 
 function renderCheckResult(result: CheckResult, _fix: boolean): void {

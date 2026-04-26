@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { createDefaultPTController, LinkFeasibilityService } from '@cisco-auto/pt-control';
+import { createDefaultPTController } from '@cisco-auto/pt-control/controller';
+import { LinkFeasibilityService } from '@cisco-auto/pt-control/services';
 
 export async function runLinkVerify(options: { sourceDevice: string; sourcePort: string; targetDevice: string; targetPort: string; json?: boolean }): Promise<void> {
   const controller = createDefaultPTController();

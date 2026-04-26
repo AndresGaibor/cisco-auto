@@ -3,7 +3,8 @@
  * Handles device enumeration, validation, and interactive selection
  */
 
-import type { PTController, DeviceState } from "@cisco-auto/pt-control";
+import { type PTController } from "@cisco-auto/pt-control/controller";
+import { type DeviceState } from "@cisco-auto/pt-control/contracts";
 import chalk from "chalk";
 
 /**

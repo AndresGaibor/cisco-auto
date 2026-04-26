@@ -5,8 +5,12 @@
   "type": "module",
   "main": "./src/index.ts",
   "scripts": {
-    "test": "bun test tests",
-    "typecheck": "tsc --noEmit"
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ tests/ --max-warnings 0",
+    "format": "prettier --write 'src/**/*.ts' 'tests/**/*.ts'",
+    "format:check": "prettier --check 'src/**/*.ts' 'tests/**/*.ts'",
+    "build": "echo no build needed"
   },
   "dependencies": {
     "@cisco-auto/file-bridge": "workspace:*",
@@ -28,16 +32,61 @@
   },
   "exports": {
     ".": "./src/index.ts",
+
+    "./legacy": "./src/legacy/index.ts",
+
     "./controller": "./src/controller/index.ts",
+
+    "./ports": "./src/ports/index.ts",
+
+    "./adapters": "./src/adapters/index.ts",
+
+    "./contracts": "./src/contracts/index.ts",
+    "./contracts/ios-execution-evidence": "./src/contracts/ios-execution-evidence.ts",
+
+    "./services": "./src/application/services/index.ts",
+
     "./application/lab": "./src/application/lab/index.ts",
     "./application/vlan": "./src/application/vlan/index.ts",
     "./application/host": "./src/application/host/index.ts",
     "./application/results": "./src/application/results/index.ts",
     "./application/history": "./src/application/history/index.ts",
+    "./application/logs": "./src/application/logs/index.ts",
+    "./application/command-catalog": "./src/application/command-catalog/index.ts",
+    "./application/check": "./src/application/check/index.ts",
+    "./application/routing": "./src/application/routing/index.ts",
+    "./application/dhcp-server": "./src/application/dhcp-server/index.ts",
+    "./application/etherchannel": "./src/application/etherchannel/index.ts",
+    "./application/stp": "./src/application/stp/index.ts",
+    "./application/wlc": "./src/application/wlc/index.ts",
+    "./application/config-ios": "./src/application/config-ios/index.ts",
+    "./application/doctor": "./src/application/doctor/index.ts",
+    "./application/validate": "./src/application/validate/index.ts",
+    "./application/acl": "./src/application/acl/index.ts",
+    "./application/network-services": "./src/application/network-services/index.ts",
+
+    "./agent": "./src/agent/index.ts",
+    "./omni": "./src/omni/index.ts",
+    "./quality": "./src/quality/index.ts",
+
+    "./pt/terminal": "./src/pt/terminal/index.ts",
+    "./pt/topology": "./src/pt/topology/index.ts",
+    "./pt/server": "./src/pt/server/index.ts",
+    "./pt/planner": "./src/pt/planner/index.ts",
+    "./pt/ledger": "./src/pt/ledger/index.ts",
+    "./pt/diagnosis": "./src/pt/diagnosis/index.ts",
+
+    "./intent": "./src/intent/index.ts",
+    "./checks": "./src/checks/index.ts",
+    "./commands": "./src/commands/index.ts",
+    "./commands/bridge-doctor": "./src/commands/bridge-doctor-command.ts",
+
     "./vdom": "./src/vdom/index.ts",
     "./parsers": "./src/parsers/index.ts",
     "./types": "./src/types/index.ts",
-    "./logging": "./src/logging/index.ts"
+    "./logging": "./src/logging/index.ts",
+
+    "./package.json": "./package.json"
   },
   "files": [
     "/src"

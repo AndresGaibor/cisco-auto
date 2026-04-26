@@ -6,7 +6,7 @@ import { createShowRouteCommand } from "./show-route";
 import { createShowVlanCommand } from "./show-vlan";
 import { createShowCdpCommand } from "./show-cdp";
 import { createConfigHostCommand } from "./config-host";
-import { createLabVlanCommand } from "./vlan";
+import { createVlanCommand } from "./vlan";
 import { createEtherchannelCommand } from "./etherchannel";
 import { createConfigIOSCommand } from "./config-ios";
 import { createConfigOspfCommand } from "./config-ospf";
@@ -109,7 +109,7 @@ export const COMMAND_FACTORIES: CommandFactory[] = [
   createConfigVlanCommand,
   createConfigInterfaceCommand,
   createConfigApplyCommand,
-  createLabVlanCommand,
+  createVlanCommand,
   createEtherchannelCommand,
   createConfigIOSCommand,
   createRoutingCommand,

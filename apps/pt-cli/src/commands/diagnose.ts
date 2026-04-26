@@ -12,7 +12,7 @@ import type { CommandMeta } from '../contracts/command-meta.js';
 import type { GlobalFlags } from '../flags.js';
 
 import { runCommand } from '../application/run-command.js';
-import { createDiagnosisService } from '@cisco-auto/pt-control';
+import { createDiagnosisService } from '@cisco-auto/pt-control/pt/diagnosis';
 
 export const DIAGNOSE_META: CommandMeta = {
   id: 'diagnose',

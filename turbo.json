@@ -31,6 +31,16 @@
     "format": {
       "cache": false
     },
+    "architecture:check": {
+      "inputs": [
+        "apps/**/*.ts",
+        "packages/**/*.ts",
+        "scripts/check-architecture-boundaries.ts",
+        "package.json",
+        "turbo.json"
+      ],
+      "outputs": []
+    },
     "pre-release-check": {
       "cache": false,
       "dependsOn": ["build", "lint", "typecheck"]

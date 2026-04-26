@@ -5,7 +5,7 @@
 
 import { Command } from "commander";
 import { loadContextStatus } from "../application/context-supervisor.js";
-import { runBridgeDoctor, printBridgeDoctorReport, type BridgeDoctorReport } from "@cisco-auto/pt-control";
+import { runBridgeDoctor, printBridgeDoctorReport, type BridgeDoctorReport } from "@cisco-auto/pt-control/commands/bridge-doctor";
 
 export function createBridgeCommand(): Command {
   return new Command("bridge")

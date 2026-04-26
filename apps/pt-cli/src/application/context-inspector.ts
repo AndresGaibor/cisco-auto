@@ -5,7 +5,7 @@
  * y lo expone como CommandRuntimeContext.
  */
 
-import type { PTController } from "@cisco-auto/pt-control";
+import { type PTController } from "@cisco-auto/pt-control/controller";
 
 export interface CommandRuntimeContext {
   bridgeReady: boolean;

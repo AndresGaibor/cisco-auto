@@ -1,184 +1,15 @@
 #!/usr/bin/env bun
 /**
  * Comando validate - Validar archivo YAML de laboratorio
- * 
- * Implementación local sin dependencias de @cisco-auto/core.
+ * Thin CLI que delega validación a pt-control/application/validate
  */
 
 import { Command } from 'commander';
 import { loadLabYaml, toLabSpec, type ParsedLabYaml, type LabSpec } from '../contracts/lab-spec';
+import { validateLabUseCase, type ValidationResult } from '@cisco-auto/pt-control/application/validate';
 
-interface ValidationIssue {
-  severity: 'error' | 'warning' | 'info';
-  category: 'structure' | 'physical' | 'logical' | 'topology' | 'best-practice';
-  message: string;
-  device?: string;
-  connection?: string;
-  suggestion?: string;
-}
-
-interface ValidationResult {
-  valid: boolean;
-  issues: ValidationIssue[];
-  summary: {
-    errors: number;
-    warnings: number;
-    info: number;
-  };
-}
-
-/**
- * Valida un laboratorio y retorna issues detallados
- */
-function validateLab(spec: LabSpec): ValidationResult {
-  const issues: ValidationIssue[] = [];
-
-  // Validación de estructura
-  if (!spec.metadata?.name) {
-    issues.push({
-      severity: 'warning',
-      category: 'structure',
-      message: 'El laboratorio no tiene nombre definido',
-      suggestion: 'Agrega metadata.name en el archivo YAML'
-    });
-  }
-
-  if (!spec.devices || spec.devices.length === 0) {
-    issues.push({
-      severity: 'error',
-      category: 'structure',
-      message: 'No hay dispositivos definidos'
-    });
-    return { valid: false, issues, summary: { errors: issues.filter(i => i.severity === 'error').length, warnings: issues.filter(i => i.severity === 'warning').length, info: issues.filter(i => i.severity === 'info').length } };
-  }
-
-  // Validar dispositivos duplicados
-  const deviceNames = new Map<string, string[]>();
-  for (const device of spec.devices) {
-    const name = device.name;
-    if (!deviceNames.has(name)) {
-      deviceNames.set(name, []);
-    }
-    deviceNames.get(name)!.push(device.id);
-
-    if (!device.hostname) {
-      issues.push({
-        severity: 'warning',
-        category: 'structure',
-        message: `Dispositivo '${name}' no tiene hostname`,
-        device: name,
-        suggestion: 'Define un hostname para identificación en IOS'
-      });
-    }
-  }
-
-  for (const [name, ids] of deviceNames) {
-    if (ids.length > 1) {
-      issues.push({
-        severity: 'error',
-        category: 'structure',
-        message: `Dispositivo duplicado: '${name}' aparece ${ids.length} veces`,
-        suggestion: 'Cada dispositivo debe tener un nombre único'
-      });
-    }
-  }
-
-  // Validar conexiones
-  const deviceNameSet = new Set(spec.devices.map(d => d.name));
-  for (const conn of spec.connections) {
-    if (!deviceNameSet.has(conn.from.deviceName)) {
-      issues.push({
-        severity: 'error',
-        category: 'topology',
-        message: `Conexión refiere dispositivo inexistente: '${conn.from.deviceName}'`,
-        connection: `${conn.from.deviceName} -> ${conn.to.deviceName}`
-      });
-    }
-    if (!deviceNameSet.has(conn.to.deviceName)) {
-      issues.push({
-        severity: 'error',
-        category: 'topology',
-        message: `Conexión refiere dispositivo inexistente: '${conn.to.deviceName}'`,
-        connection: `${conn.from.deviceName} -> ${conn.to.deviceName}`
-      });
-    }
-  }
-
-  // Validar routers sin interfaces
-  for (const device of spec.devices) {
-    if (device.type === 'router' && (!device.interfaces || device.interfaces.length === 0)) {
-      issues.push({
-        severity: 'warning',
-        category: 'physical',
-        message: `Router '${device.name}' no tiene interfaces definidas`,
-        device: device.name,
-        suggestion: 'Los routers necesitan al menos una interfaz configurada'
-      });
-    }
-  }
-
-  // Validar switches con VLANs sin trunk
-  for (const device of spec.devices) {
-    if (device.type === 'switch' && device.vlans && (device.vlans as any[]).length > 0) {
-      const hasTrunk = spec.connections.some(conn =>
-        (conn.from.deviceName === device.name || conn.to.deviceName === device.name) &&
-        String(conn.cableType).includes('trunk')
-      );
-      if (!hasTrunk && spec.devices.filter(d => d.type === 'switch').length > 1) {
-        issues.push({
-          severity: 'info',
-          category: 'best-practice',
-          message: `Switch '${device.name}' tiene VLANs pero no hay enlace trunk detectado`,
-          device: device.name,
-          suggestion: 'Configura un puerto trunk para comunicación inter-switch'
-        });
-      }
-    }
-  }
-
-  // Validar PCs sin IP
-  for (const device of spec.devices) {
-    if (device.type === 'pc' && device.interfaces && device.interfaces.length > 0) {
-      const hasIP = device.interfaces.some(i => i.ip);
-      if (!hasIP) {
-        issues.push({
-          severity: 'info',
-          category: 'logical',
-          message: `PC '${device.name}' no tiene IP configurada`,
-          device: device.name,
-          suggestion: 'Configura IP estática o habilita DHCP'
-        });
-      }
-    }
-  }
-
-  // Dispositivos aislados
-  const connectedDevices = new Set<string>();
-  for (const conn of spec.connections) {
-    connectedDevices.add(conn.from.deviceName);
-    connectedDevices.add(conn.to.deviceName);
-  }
-  for (const device of spec.devices) {
-    if (!connectedDevices.has(device.name)) {
-      issues.push({
-        severity: 'warning',
-        category: 'topology',
-        message: `Dispositivo '${device.name}' no tiene conexiones`,
-        device: device.name,
-        suggestion: 'Conecta el dispositivo a la topología'
-      });
-    }
-  }
-
-  const errors = issues.filter(i => i.severity === 'error').length;
-  const warnings = issues.filter(i => i.severity === 'warning').length;
-  const info = issues.filter(i => i.severity === 'info').length;
-
-  return {
-    valid: errors === 0,
-    issues,
-    summary: { errors, warnings, info }
-  };
+interface ValidationResultExt extends ValidationResult {
+  file?: string;
 }
 
 const SEVERITY_ICONS = {
@@ -198,7 +29,7 @@ const CATEGORY_LABELS = {
 /**
  * Formatea y muestra los resultados de validación
  */
-function displayResults(result: ValidationResult, verbose: boolean): void {
+function displayResults(result: ValidationResultExt, verbose: boolean): void {
   console.log('\n' + '═'.repeat(60));
   console.log('                    VALIDATION RESULTS');
   console.log('═'.repeat(60));
@@ -212,7 +43,7 @@ function displayResults(result: ValidationResult, verbose: boolean): void {
   if (result.issues.length > 0) {
     console.log('\n' + '─'.repeat(60));
 
-    const byCategory = new Map<string, ValidationIssue[]>();
+    const byCategory = new Map<string, typeof result.issues[0][]>();
     for (const issue of result.issues) {
       const cat = issue.category;
       if (!byCategory.has(cat)) {
@@ -264,22 +95,41 @@ export function createValidateCommand(): Command {
 
         const parsed = loadLabYaml(file);
         const labSpec = toLabSpec(parsed);
-        const result = validateLab(labSpec);
+        const useCaseResult = validateLabUseCase({
+          metadata: labSpec.metadata,
+          devices: labSpec.devices,
+          connections: labSpec.connections,
+        } as any);
 
-        if (options.warningsAsErrors) {
-          result.issues = result.issues.map(i => ({
-            ...i,
-            severity: i.severity === 'warning' ? 'error' as const : i.severity
-          }));
-          result.valid = !result.issues.some(i => i.severity === 'error');
-          result.summary.errors = result.issues.filter(i => i.severity === 'error').length;
-          result.summary.warnings = 0;
+        if (!useCaseResult.ok) {
+          console.error('❌ Error:', useCaseResult.error?.message);
+          process.exit(1);
         }
 
+        let result = useCaseResult.data!;
+
+        if (options.warningsAsErrors) {
+          result = {
+            ...result,
+            issues: result.issues.map((i) => ({
+              ...i,
+              severity: i.severity === 'warning' ? 'error' as const : i.severity,
+            })),
+            valid: !result.issues.some((i) => i.severity === 'error'),
+            summary: {
+              ...result.summary,
+              errors: result.issues.filter((i) => i.severity === 'error').length,
+              warnings: 0,
+            },
+          };
+        }
+
+        const resultExt: ValidationResultExt = { ...result, file };
+
         if (options.json) {
-          console.log(JSON.stringify(result, null, 2));
+          console.log(JSON.stringify(resultExt, null, 2));
         } else {
-          displayResults(result, options.verbose);
+          displayResults(resultExt, options.verbose);
         }
 
         if (!result.valid) {

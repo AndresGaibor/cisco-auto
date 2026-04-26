@@ -1,249 +1,160 @@
 #!/usr/bin/env bun
 /**
  * Comando acl - Gestión de Access Control Lists
- * Migrado al patrón runCommand con CliResult
+ * Thin CLI wrapper que delega a pt-control/application/acl
  */
 
-import { Command } from 'commander';
-import chalk from 'chalk';
+import { Command } from "commander";
+import chalk from "chalk";
 
-import type { CliResult } from '../contracts/cli-result.js';
-import { createSuccessResult, createErrorResult } from '../contracts/cli-result.js';
-import type { CommandMeta } from '../contracts/command-meta.js';
-import type { GlobalFlags } from '../flags.js';
+import type { CliResult } from "../contracts/cli-result.js";
+import { createSuccessResult, createErrorResult } from "../contracts/cli-result.js";
+import type { CommandMeta } from "../contracts/command-meta.js";
 
-import { runCommand } from '../application/run-command.js';
-import { renderCliResult } from '../ux/renderers.js';
-import { printExamples } from '../ux/examples.js';
-import { generateSecurityCommands } from '@cisco-auto/kernel/plugins/security';
+import { runCommand } from "../application/run-command.js";
+import { renderCliResult } from "../ux/renderers.js";
+import { printExamples } from "../ux/examples.js";
+import { buildFlags, parseGlobalOptions } from "../flags-utils.js";
+
+import {
+  executeAclCreate,
+  executeAclAddRule,
+  executeAclApply,
+} from "@cisco-auto/pt-control/application/acl";
+
+interface AclCreateResult {
+  name: string;
+  type: string;
+  commands: string[];
+  commandsGenerated: number;
+}
+
+interface AclApplyResult {
+  acl: string;
+  device: string;
+  interface: string;
+  direction: string;
+  commands: string[];
+  commandsGenerated: number;
+}
 
 const ACL_EXAMPLES = [
-  { command: 'pt acl create --name MiACL --type standard', description: 'Crear ACL estándar vacía' },
-  { command: 'pt acl add-rule --acl MiACL --rule "permit ip any any"', description: 'Agregar regla permit' },
-  { command: 'pt acl apply --acl MiACL --device R1 --interface Gi0/0 --direction in', description: 'Aplicar ACL a interfaz' },
+  { command: "pt acl create --name MiACL --type standard", description: "Crear ACL estándar vacía" },
+  { command: 'pt acl add-rule --acl MiACL --rule "permit ip any any"', description: "Agregar regla permit" },
+  { command: "pt acl apply --acl MiACL --device R1 --interface Gi0/0 --direction in", description: "Aplicar ACL a interfaz" },
 ];
 
 const ACL_META: CommandMeta = {
-  id: 'acl',
-  summary: 'Gestionar Access Control Lists (ACLs)',
-  longDescription: 'Comandos para crear, agregar reglas y aplicar ACLs a interfaces de dispositivos Cisco.',
+  id: "acl",
+  summary: "Gestionar Access Control Lists (ACLs)",
+  longDescription: "Comandos para crear, agregar reglas y aplicar ACLs a interfaces de dispositivos Cisco.",
   examples: ACL_EXAMPLES,
-  related: ['config-ios', 'show', 'routing'],
+  related: ["config-ios", "show", "vlan"],
   supportsVerify: true,
   supportsJson: true,
   supportsPlan: true,
   supportsExplain: true,
 };
 
-export function createACLCommand(): Command {
-  const cmd = new Command('acl')
-    .description('Comandos para gestionar ACLs')
-    .option('--examples', 'Mostrar ejemplos de uso', false)
-    .option('--explain', 'Explicar qué hace el comando', false)
-    .option('--plan', 'Mostrar plan de ejecución sin ejecutar', false);
-
-  cmd.command('create')
-    .description('Crear una ACL')
-    .requiredOption('--name <name>', 'Nombre de la ACL')
-    .requiredOption('--type <type>', 'Tipo de ACL (standard|extended)')
-    .option('--examples', 'Mostrar ejemplos', false)
-    .option('--explain', 'Explicar', false)
-    .option('--plan', 'Mostrar plan', false)
-    .action(async (options) => {
-      const globalExamples = process.argv.includes('--examples');
-      const globalExplain = process.argv.includes('--explain');
-      const globalPlan = process.argv.includes('--plan');
-
-      if (globalExamples) {
-        console.log(printExamples(ACL_META));
-        return;
-      }
-
-      if (globalExplain) {
-        console.log(ACL_META.longDescription ?? ACL_META.summary);
-        return;
-      }
-
-      if (globalPlan) {
-        console.log('Plan de ejecución:');
-        console.log(`  1. Crear ACL ${options.name} de tipo ${options.type}`);
-        console.log('  2. Generar estructura IOS');
-        return;
-      }
-
-      const flags: GlobalFlags = {
-        json: false, jq: null, output: 'text', verbose: false, quiet: false,
-        trace: false, tracePayload: false, traceResult: false, traceDir: null,
-        traceBundle: false, traceBundlePath: null, sessionId: null,
-        examples: globalExamples, schema: false, explain: globalExplain, plan: globalPlan, verify: false,
-        timeout: null, noTimeout: false,
-      };
-
-      const result = await runCommand({
-        action: 'acl.create',
-        meta: ACL_META,
-        flags,
-        payloadPreview: { name: options.name, type: options.type },
-        execute: async (): Promise<CliResult<{ name: string; type: string; commands: string[] }>> => {
-          try {
-            const name = options.name;
-            const type = options.type === 'extended' ? 'extended' : 'standard';
-            const securityInput = {
-              deviceName: 'temp',
-              acls: [{ name, type: type as 'standard' | 'extended', rules: [] }],
-            };
-            const commands = generateSecurityCommands(securityInput);
-
-            return createSuccessResult('acl.create', {
-              name,
-              type,
-              commands,
-            }, { advice: ['Usa pt acl add-rule para agregar reglas'] });
-          } catch (error) {
-            return createErrorResult<{ name: string; type: string; commands: string[] }>('acl.create', { message: error instanceof Error ? error.message : String(error) });
-          }
-        },
-      });
-
-      const output = renderCliResult(result, flags.output);
-      if (!flags.quiet || !result.ok) console.log(output);
-      if (result.ok) {
-        console.log(chalk.blue('\n➡️  Comandos IOS:'));
-        const cmds = result.data?.commands as string[] | undefined;
-        cmds?.forEach(c => console.log(c));
-      }
-      if (!result.ok) process.exit(1);
-    });
-
-  cmd.command('add-rule')
-    .description('Agregar una regla a una ACL')
-    .requiredOption('--acl <name>', 'Nombre de la ACL')
-    .requiredOption('--rule <rule>', 'Regla en formato: "<action> <protocol> <source> <dest>"')
-    .option('--examples', 'Mostrar ejemplos', false)
-    .option('--explain', 'Explicar', false)
-    .option('--plan', 'Mostrar plan', false)
-    .action(async (options) => {
-      const globalExamples = process.argv.includes('--examples');
-      const globalExplain = process.argv.includes('--explain');
-      const globalPlan = process.argv.includes('--plan');
-
-      if (globalExamples) {
-        console.log(printExamples(ACL_META));
-        return;
-      }
-
-      if (globalExplain) {
-        console.log(ACL_META.longDescription ?? ACL_META.summary);
-        return;
-      }
-
-      if (globalPlan) {
-        console.log('Plan de ejecución:');
-        console.log(`  1. Agregar regla a ACL ${options.acl}`);
-        console.log(`  2. Regla: ${options.rule}`);
-        return;
-      }
-
-      const flags: GlobalFlags = {
-        json: false, jq: null, output: 'text', verbose: false, quiet: false,
-        trace: false, tracePayload: false, traceResult: false, traceDir: null,
-        traceBundle: false, traceBundlePath: null, sessionId: null,
-        examples: globalExamples, schema: false, explain: globalExplain, plan: globalPlan, verify: false,
-        timeout: null, noTimeout: false,
-      };
-
-      const result = await runCommand({
-        action: 'acl.add-rule',
-        meta: ACL_META,
-        flags,
-        payloadPreview: { acl: options.acl, rule: options.rule },
-        execute: async (): Promise<CliResult> => {
-          try {
-            const cmdLine = `access-list ${options.acl} ${options.rule}`;
-            return createSuccessResult('acl.add-rule', { acl: options.acl, command: cmdLine });
-          } catch (error) {
-            return createErrorResult('acl.add-rule', { message: error instanceof Error ? error.message : String(error) });
-          }
-        },
-      });
-
-      const output = renderCliResult(result, flags.output);
-      if (!flags.quiet || !result.ok) console.log(output);
-      if (!result.ok) process.exit(1);
-    });
-
-  cmd.command('apply')
-    .description('Aplicar una ACL a una interfaz')
-    .requiredOption('--acl <name>', 'Nombre o número de la ACL')
-    .requiredOption('--device <device>', 'Nombre del dispositivo destino')
-    .requiredOption('--interface <iface>', 'Interfaz donde aplicar la ACL')
-    .requiredOption('--direction <dir>', 'Dirección de la ACL (in|out)')
-    .option('--examples', 'Mostrar ejemplos', false)
-    .option('--explain', 'Explicar', false)
-    .option('--plan', 'Mostrar plan', false)
-    .action(async (options) => {
-      const globalExamples = process.argv.includes('--examples');
-      const globalExplain = process.argv.includes('--explain');
-      const globalPlan = process.argv.includes('--plan');
-
-      if (globalExamples) {
-        console.log(printExamples(ACL_META));
-        return;
-      }
-
-      if (globalExplain) {
-        console.log(ACL_META.longDescription ?? ACL_META.summary);
-        return;
-      }
-
-      if (globalPlan) {
-        console.log('Plan de ejecución:');
-        console.log(`  1. Generar comandos para aplicar ACL ${options.acl}`);
-        console.log(`  2. Aplicar a ${options.device} interfaz ${options.interface} dirección ${options.direction}`);
-        return;
-      }
-
-      const flags: GlobalFlags = {
-        json: false, jq: null, output: 'text', verbose: false, quiet: false,
-        trace: false, tracePayload: false, traceResult: false, traceDir: null,
-        traceBundle: false, traceBundlePath: null, sessionId: null,
-        examples: globalExamples, schema: false, explain: globalExplain, plan: globalPlan, verify: true,
-        timeout: null, noTimeout: false,
-      };
-
-      const result = await runCommand({
-        action: 'acl.apply',
-        meta: ACL_META,
-        flags,
-        payloadPreview: { acl: options.acl, device: options.device, interface: options.interface, direction: options.direction },
-        execute: async (ctx): Promise<CliResult> => {
-          try {
-            const commands = [`interface ${options.interface}`, `ip access-group ${options.acl} ${options.direction}`];
-
-            await ctx.controller.start();
-            try {
-              await ctx.controller.configIos(options.device, commands);
-              await ctx.logPhase('verify', { device: options.device, interface: options.interface });
-              return createSuccessResult('acl.apply', {
-                acl: options.acl,
-                device: options.device,
-                interface: options.interface,
-                direction: options.direction,
-                commands,
-              }, { advice: [`Usa pt show run-config ${options.device} para verificar`] });
-            } finally {
-              await ctx.controller.stop();
-            }
-          } catch (error) {
-            return createErrorResult('acl.apply', { message: error instanceof Error ? error.message : String(error) });
-          }
-        },
-      });
-
-      const output = renderCliResult(result, flags.output);
-      if (!flags.quiet || !result.ok) console.log(output);
-      if (!result.ok) process.exit(1);
-    });
-
-  return cmd;
+function renderResult(result: CliResult, flags: { quiet: boolean; output: string }): void {
+  const output = renderCliResult(result, flags.output);
+  if (!flags.quiet || !result.ok) console.log(output);
+  if (!result.ok) process.exit(1);
 }
+
+export function createAclCommand(): Command {
+  const command = new Command("acl").description("Gestionar ACLs");
+  const { examples, explain, plan, buildFlags: bf, parseGlobalOptions: pgo } = { examples: false, explain: false, plan: false, buildFlags, parseGlobalOptions };
+
+  const createCmd = new Command("create")
+    .description("Crear una ACL")
+    .requiredOption("--name <name>", "Nombre de la ACL")
+    .requiredOption("--type <type>", "Tipo (standard|extended)")
+    .option("--examples", "Mostrar ejemplos", false)
+    .option("--explain", "Explicar", false)
+    .option("--plan", "Mostrar plan", false)
+    .action(async (options) => {
+      const { examples, explain, plan } = parseGlobalOptions();
+      if (examples) { console.log(printExamples(ACL_META)); return; }
+      if (explain) { console.log(ACL_META.longDescription ?? ACL_META.summary); return; }
+      if (plan) { console.log(`Plan: 1. Crear ACL ${options.name}, 2. Generar estructura IOS`); return; }
+
+      const flags = buildFlags({ examples, explain, plan });
+      const result = await runCommand({
+        action: "acl.create", meta: ACL_META, flags,
+        payloadPreview: { name: options.name, type: options.type },
+        execute: async (ctx): Promise<CliResult<AclCreateResult>> => {
+          const execution = await executeAclCreate(ctx.controller, { name: options.name, type: options.type as "standard" | "extended" });
+          if (!execution.ok) return createErrorResult("acl.create", execution.error);
+          return createSuccessResult("acl.create", execution.data, { advice: execution.advice });
+        },
+      });
+      renderResult(result, flags);
+      if (result.ok) { console.log(chalk.blue("\n➡️  Comandos IOS:")); result.data?.commands?.forEach((c: string) => console.log(c)); }
+    });
+
+  const addRuleCmd = new Command("add-rule")
+    .description("Agregar regla a una ACL")
+    .requiredOption("--acl <name>", "Nombre de la ACL")
+    .requiredOption("--rule <rule>", "Regla (e.g., permit ip any any)")
+    .option("--examples", "Mostrar ejemplos", false)
+    .option("--explain", "Explicar", false)
+    .option("--plan", "Mostrar plan", false)
+    .action(async (options) => {
+      const { examples, explain, plan } = parseGlobalOptions();
+      if (examples) { console.log(printExamples(ACL_META)); return; }
+      if (plan) { console.log(`Plan: 1. Agregar regla a ACL ${options.acl}`); return; }
+
+      const flags = buildFlags({ examples, explain, plan });
+      const result = await runCommand({
+        action: "acl.add-rule", meta: ACL_META, flags,
+        payloadPreview: { acl: options.acl, rule: options.rule },
+        execute: async (ctx) => {
+          const execution = await executeAclAddRule(ctx.controller, { aclName: options.acl, rule: options.rule });
+          if (!execution.ok) return createErrorResult("acl.add-rule", execution.error);
+          return createSuccessResult("acl.add-rule", execution.data);
+        },
+      });
+      renderResult(result, flags);
+    });
+
+  const applyCmd = new Command("apply")
+    .description("Aplicar ACL a una interfaz")
+    .requiredOption("--acl <name>", "Nombre de la ACL")
+    .requiredOption("--device <name>", "Dispositivo")
+    .requiredOption("--interface <name>", "Interfaz")
+    .requiredOption("--direction <dir>", "Dirección (in|out)")
+    .option("--examples", "Mostrar ejemplos", false)
+    .option("--explain", "Explicar", false)
+    .option("--plan", "Mostrar plan", false)
+    .action(async (options) => {
+      const { examples, explain, plan } = parseGlobalOptions();
+      if (examples) { console.log(printExamples(ACL_META)); return; }
+      if (explain) { console.log(ACL_META.longDescription ?? ACL_META.summary); return; }
+      if (plan) { console.log(`Plan: 1. Aplicar ACL ${options.acl} a ${options.device} ${options.interface} ${options.direction}`); return; }
+
+      const flags = buildFlags({ examples, explain, plan });
+      const result = await runCommand({
+        action: "acl.apply", meta: ACL_META, flags,
+        payloadPreview: { acl: options.acl, device: options.device, interface: options.interface, direction: options.direction },
+        execute: async (ctx): Promise<CliResult<AclApplyResult>> => {
+const execution = await executeAclApply(ctx.controller, {
+            aclName: options.acl,
+            deviceName: options.device,
+            interface: options.interface,
+            direction: options.direction as "in" | "out"
+          });
+          if (!execution.ok) return createErrorResult("acl.apply", execution.error);
+          return createSuccessResult("acl.apply", execution.data, { advice: execution.advice });
+        },
+      });
+      renderResult(result, flags);
+    });
+
+  command.addCommand(createCmd);
+  command.addCommand(addRuleCmd);
+  command.addCommand(applyCmd);
+  return command;
+}
+
+export const createACLCommand = createAclCommand;

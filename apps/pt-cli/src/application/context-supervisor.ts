@@ -4,7 +4,7 @@
  * Recolecta resumen desde PTController y persiste un archivo simple de estado
  */
 
-import type { PTController } from "@cisco-auto/pt-control";
+import { type PTController } from "@cisco-auto/pt-control/controller";
 import { getContextStatusPath, getContextDir } from "../system/paths.js";
 import type { ContextStatus } from "../contracts/context-status.js";
 import { computeTopologyHealth } from "./topology-health.js";

@@ -22,6 +22,9 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint src/ tests/ --max-warnings 0",
+    "format": "prettier --write 'src/**/*.ts' 'tests/**/*.ts'",
+    "format:check": "prettier --check 'src/**/*.ts' 'tests/**/*.ts'",
     "build": "echo no build needed"
   },
   "dependencies": {

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { Command } from "commander";
 import chalk from "chalk";
-import { createDefaultPTController, type PTController } from "@cisco-auto/pt-control";
+import { createDefaultPTController, type PTController } from "@cisco-auto/pt-control/controller";
 
 export interface TopologyInspectionResult {
   deviceCount: number;

@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { createDefaultPTController } from '@cisco-auto/pt-control';
-import { LayoutPlannerService } from '@cisco-auto/pt-control';
+import { createDefaultPTController } from '@cisco-auto/pt-control/controller';
+import { LayoutPlannerService } from '@cisco-auto/pt-control/services';
 
 export async function runLayoutPlace(options: { device: string; anchor?: string; relation?: 'left-of' | 'right-of' | 'above' | 'below'; gap?: number; json?: boolean }): Promise<void> {
   const controller = createDefaultPTController();

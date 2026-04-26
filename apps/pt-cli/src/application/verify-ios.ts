@@ -1,4 +1,4 @@
-import { deriveIosConfidence, type IosExecutionEvidence, type IosExecutionSuccess } from '@cisco-auto/pt-control';
+import { deriveIosConfidence, type IosExecutionEvidence, type IosExecutionSuccess } from "@cisco-auto/pt-control/contracts/ios-execution-evidence";
 
 export interface IosVerificationCheck {
   name: string;

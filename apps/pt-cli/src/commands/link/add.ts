@@ -5,7 +5,7 @@
  */
 
 import { Command } from 'commander';
-import type { PTController } from '@cisco-auto/pt-control';
+import type { PTController } from '@cisco-auto/pt-control/controller';
 import { select, input } from '@inquirer/prompts';
 import chalk from 'chalk';
 

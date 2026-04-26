@@ -1,22 +1,12 @@
-// ============================================================================
-// Handlers Index - Active handlers (NOT legacy)
-// ============================================================================
-
 /**
- * @deprecated Los handlers legacy (device, link, inspect, canvas, vlan, dhcp, host)
- * fueron removidos del export público.
+ * Handler module barrel.
  *
- * Sistema NUEVO ( Phase 3+ ):
- *   - runtime-handlers.ts → dispatcher central (Map-based)
- *   - primitives/ → primitivas de dispositivo
- *   - terminal/ → subsistema de terminal
- *   - omni/ → adapters omni
- *
- * Handlers de negocio (VLAN, DHCP, etc.) viven en pt-control.
- * Ver docs/architecture/runtime-control-boundary.md
- *
- * Para backward compat de consumers internos: import desde "../legacy"
+ * La ruta principal sigue siendo runtime-handlers.ts porque el build actual
+ * depende de ese entrypoint. Los grupos de registro viven en handlers/registration.
  */
 
-export * from "./module";
-export * from "./runtime-handlers";
+export * from "./runtime-handlers.js";
+export * from "./registration/runtime-registration.js";
+export * from "./registration/stable-handlers.js";
+export * from "./registration/experimental-handlers.js";
+export * from "./registration/omni-handlers.js";

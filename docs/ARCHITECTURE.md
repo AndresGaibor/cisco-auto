@@ -2,157 +2,172 @@
 
 ## ¿Qué es este proyecto?
 
-**cisco-auto** es un toolkit de automatización para Cisco Packet Tracer y equipos de red reales. Permite definir topologías de red de forma declarativa (YAML/JSON), generar configuraciones IOS automáticamente y desplegarlas tanto en Packet Tracer (control en tiempo real) como en dispositivos físicos vía SSH/Telnet.
+`cisco-auto` es un toolkit Bun-first para controlar Cisco Packet Tracer, automatizar laboratorios, ejecutar comandos IOS/Command Prompt y validar resultados reales mediante un puente de archivos.
 
-**Objetivo principal**: Reducir el tiempo de configuración de laboratorios de 30-45 minutos a menos de 2 minutos.
+El objetivo principal es permitir que la CLI controle Packet Tracer de forma reproducible, observable y verificable.
 
-## Estilo de Arquitectura
-
-El proyecto sigue una **arquitectura Plugin-First** basada en tres patrones:
-
-| Patrón | Aplicación |
-|--------|-----------|
-| **Clean Architecture** | Capas concéntricas: dominio → aplicación → infraestructura. Las dependencias apuntan hacia adentro. |
-| **Hexagonal Architecture (Ports & Adapters)** | El dominio define puertos (interfaces), los adaptadores externos los implementan. |
-| **Domain-Driven Design (DDD)** | Bounded contexts, aggregates, entities, value objects, domain events, repositories. |
-| **Plugin-First** | Toda funcionalidad de protocolo (VLAN, Routing, Security, etc.) es un plugin registrable. El backend (Packet Tracer) también es un plugin. |
-
-## Estructura del Proyecto (Monorepo)
+## Estado actual del monorepo
 
 ```
 cisco-auto/
 ├── apps/
-│   └── pt-cli/                 # CLI principal (entry point)
+│   └── pt-cli/                 # CLI principal
 │
 ├── packages/
-│   ├── kernel/                 # ★ Núcleo: dominio, aplicación, plugins, backends
-│   │   ├── src/domain/         #   Dominio (aggregates, entities, value objects)
-│   │   ├── src/application/    #   Capa de aplicación (use cases, ports)
-│   │   ├── src/plugin-api/     #   Interfaces de plugin (contratos)
-│   │   ├── src/plugins/        #   Plugins de protocolo (vlan, routing, security...)
-│   │   └── src/backends/       #   Backends (packet-tracer)
-│   │
-│   ├── types/                  # Tipos compartidos y schemas Zod
-│   ├── core/                   # Lógica de negocio legacy (orquestadores, parsers)
-│   ├── pt-control/             # Motor de control en tiempo real de Packet Tracer
-│   ├── pt-runtime/             # Generador de runtime JS para Packet Tracer
-│   ├── file-bridge/            # Puente de comunicación CLI ↔ Packet Tracer
-│   └── ios-domain/             # Dominio IOS (generadores, parsers, schemas)
+│   ├── file-bridge/            # IPC por filesystem CLI ↔ Packet Tracer
+│   ├── ios-domain/             # Dominio IOS puro: parsers, builders, operations
+│   ├── ios-primitives/         # Value objects IOS compartidos (si Fase 2 fue aplicada)
+│   ├── kernel/                 # Casos de uso/core abstractions/plugins/backend interfaces
+│   ├── network-intent/         # Intenciones declarativas de red
+│   ├── pt-control/             # Orquestación Packet Tracer desde Bun/CLI
+│   ├── pt-memory/              # Persistencia SQLite (si Fase 3 fue aplicada)
+│   ├── pt-runtime/             # Runtime JavaScript PT-safe para Packet Tracer
+│   ├── terminal-contracts/     # Contratos puros de terminal
+│   └── types/                  # Tipos y schemas compartidos
 │
-├── labs/                       # Definiciones de laboratorios YAML
-├── configs/                    # Configuraciones generadas
-└── docs/                       # Documentación
+├── docs/                       # Documentación activa
+├── docs/archive/               # Documentación histórica/legacy
+├── labs/                       # Laboratorios de ejemplo
+├── configs/                    # Configuración auxiliar
+└── scripts/                   # Scripts operativos
 ```
 
-## Paquetes Principales
+> Nota: `@cisco-auto/core` / `packages/core` no existe como workspace activo. Cualquier referencia histórica debe vivir en `docs/archive/legacy-core/`.
 
-### @cisco-auto/kernel
+## Capas principales
 
-El corazón del sistema. Contiene:
+### `@cisco-auto/types`
 
-- **Dominio**: Modelos puros de red sin dependencias externas
-- **Aplicación**: Casos de uso que orquestan operaciones
-- **Plugin API**: Contratos para plugins de protocolo y backend
-- **Plugins**: Implementaciones concretas (VLAN, Routing, Security, Services, Switching, IPv6)
-- **Backends**: Adaptadores para Packet Tracer
+Contratos compartidos y schemas. No debe contener lógica de runtime ni IO.
 
-### @cisco-auto/types
+### `@cisco-auto/ios-primitives`
 
-Single Source of Truth para tipos TypeScript y schemas Zod. Define:
-- Esquemas de dispositivos, protocolos, laboratorios
-- Tipos para PT Control (DeviceState, TopologySnapshot)
-- Tipos del protocolo FileBridge
+Value objects IOS reutilizables, por ejemplo VLAN, IP, máscara e interfaces.
 
-### @cisco-auto/pt-control
+Regla:
 
-Motor de control en tiempo real de Packet Tracer:
-- FileBridge V2 para comunicación basada en filesystem
-- Controlador de alto nivel (PTController)
-- VDOM para estado de topología
-- Logging estructurado NDJSON
-- CLI con OCLIF
-
-### @cisco-auto/file-bridge
-
-Sistema de IPC basado en filesystem:
-- Lease manager (instancia única)
-- Backpressure (control de flujo)
-- Crash recovery
-- Garbage collection automática
-
-### @cisco-auto/core
-
-Lógica de negocio y orquestadores:
-- Parser YAML con validación Zod
-- Generadores de configuración IOS
-- Deploy orchestrator (SSH/Telnet)
-- Parsers de output IOS (`show ip interface brief`, `show vlan`, etc.)
-- Modelos canónicos de dispositivos
-
-## Stack Tecnológico
-
-| Componente | Tecnología | Notas |
-|------------|-----------|-------|
-| Runtime | **Bun** 1.1+ | TypeScript nativo, obligatorio. No usar Node/npm |
-| Lenguaje | TypeScript 5.x | Modo estricto, módulos ES |
-| Validación | Zod 4.x | Schema validation en runtime |
-| Logging | Pino 10.x | JSON estructurado, NDJSON |
-| Testing | Bun Test | Runner integrado, sin dependencias externas |
-| YAML | js-yaml | Parsing de lab definitions |
-| SSH | node-ssh | Conexión a dispositivos reales |
-
-## Decisiones de Diseño Clave
-
-### 1. Plugin-First
-
-Toda funcionalidad de protocolo es un plugin independiente que implementa `ProtocolPlugin`:
-
-```typescript
-// packages/kernel/src/plugin-api/protocol.plugin.ts
-export interface ProtocolPlugin {
-  id: string;
-  category: 'switching' | 'routing' | 'security' | 'services';
-  name: string;
-  version: string;
-  description: string;
-  commands: PluginCommandDefinition[];
-  validate(config: unknown): PluginValidationResult;
-}
+```
+ios-domain -> ios-primitives
+kernel     -> ios-primitives
+pt-control -> ios-primitives
 ```
 
-Esto permite:
-- Agregar nuevos protocolos sin modificar el núcleo
-- Validación consistente de configuraciones
-- Generación de comandos IOS encapsulada
-- Testing aislado por protocolo
+### `@cisco-auto/ios-domain`
 
-### 2. Backend como Plugin
+Dominio IOS puro:
 
-Packet Tracer no es una dependencia hardcodeada. Es un `BackendPlugin` que implementa `BackendPort`:
+* parsers de comandos `show`
+* builders de configuración IOS
+* operations IOS
+* capabilities por modelo
 
-```typescript
-// packages/kernel/src/application/ports/driven/backend.port.ts
-export interface BackendPort {
-  connect(config: unknown): Promise<void>;
-  disconnect(): Promise<void>;
-  isConnected(): boolean;
-}
+No debe depender de:
+
+```
+@cisco-auto/kernel
+@cisco-auto/pt-control
+@cisco-auto/pt-runtime
+@cisco-auto/pt-memory
+bun:sqlite
+node:fs
 ```
 
-Esto permite agregar backends alternativos en el futuro (GNS3, EVE-NG, dispositivos reales directos).
+### `@cisco-auto/pt-memory`
 
-### 3. Dominio Puro
+Persistencia SQLite para auditoría, historial, preferencias y topología.
 
-El dominio (`packages/kernel/src/domain/`) no tiene dependencias externas. Usa solo:
-- Value Objects con validación incorporada
-- Entities con identidad
-- Aggregates que garantizan invariantes
-- Domain Events para comunicación entre bounded contexts
+No pertenece a `ios-domain`.
 
-### 4. Filesystem como IPC
+### `@cisco-auto/file-bridge`
 
-FileBridge usa el filesystem (`~/pt-dev/`) como medio de comunicación con Packet Tracer:
-- No requiere configuración de red
-- Sobrevive a reinicios
-- Auditoría completa vía NDJSON
-- Single-instance con lease manager
+IPC por filesystem:
+
+* comandos
+* resultados
+* lease
+* heartbeat
+* crash recovery
+* queue/dead-letter
+
+No debe contener lógica IOS ni lógica de escenarios.
+
+### `@cisco-auto/pt-runtime`
+
+Código TypeScript que se transforma a JavaScript compatible con Packet Tracer/QtScript.
+
+Responsabilidades:
+
+* handlers PT-safe
+* dispatcher runtime
+* terminal engine
+* acceso bajo a API Packet Tracer
+
+Regla:
+
+```
+runtime estable != omni/experimental
+```
+
+Los handlers `omni`, `evaluate`, `siphon`, `exfiltrate`, etc. deben estar detrás de opt-in explícito.
+
+### `@cisco-auto/pt-control`
+
+Orquestación desde Bun:
+
+* `PTController`
+* servicios de aplicación
+* adapters hacia runtime/file-bridge
+* casos de uso de CLI
+* verificación y diagnóstico
+
+La API pública debe entrar por subpaths:
+
+```ts
+import { createDefaultPTController } from "@cisco-auto/pt-control/controller";
+import { executeVlanApply } from "@cisco-auto/pt-control/application/vlan";
+```
+
+Evitar usar el root como god barrel.
+
+### `apps/pt-cli`
+
+CLI delgada:
+
+* parsea argumentos
+* pide confirmación o datos interactivos
+* llama casos de uso
+* renderiza resultados
+
+No debe contener lógica profunda de dominio, parsing de logs, builders IOS ni lectura directa de internals de otros paquetes.
+
+## Flujo de ejecución Packet Tracer
+
+```
+pt-cli
+  -> pt-control
+  -> file-bridge
+  -> main.js dentro de Packet Tracer
+  -> runtime.js dentro de Packet Tracer
+  -> API Packet Tracer
+  -> result.json
+  -> pt-cli renderiza/verifica
+```
+
+## Reglas de arquitectura
+
+| Capa             | Puede depender de         | No puede depender de                                      |
+| ---------------- | ------------------------- | --------------------------------------------------------- |
+| `ios-primitives` | nada de negocio           | `kernel`, `pt-control`, `pt-runtime`, `apps`              |
+| `ios-domain`     | `ios-primitives`, `types` | `kernel`, `pt-control`, `pt-runtime`, `pt-memory`, SQLite |
+| `pt-memory`      | `ios-domain`             | `pt-control`, `pt-runtime`, `apps`                        |
+| `pt-runtime`     | contratos PT-safe         | Node APIs en runtime estable                              |
+| `pt-control`     | paquetes inferiores       | `apps/pt-cli`                                             |
+| `apps/pt-cli`    | APIs públicas de paquetes | `src/` internos de paquetes                               |
+
+## Validaciones
+
+```bash
+bun run architecture:check
+bun run typecheck
+bun test
+```

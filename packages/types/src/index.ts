@@ -12,7 +12,7 @@ export * from './schemas/index.js';
 export * from './types/index.js';
 
 // Export command catalog
-export * from './command-catalog.js';
+export * from './command-catalog/index.js';
 
 // Export PT API types
 export * from './pt-api/index.js';

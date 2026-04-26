@@ -5,7 +5,7 @@ import yaml from 'js-yaml';
 import { loadLabYaml, toLabSpec } from '../contracts/lab-spec.js';
 import type { DeviceConfigSpecInput } from '@cisco-auto/kernel/plugins/orchestrator';
 import { orchestrateConfig } from '@cisco-auto/kernel/plugins/orchestrator';
-import { createDefaultPTController } from '@cisco-auto/pt-control';
+import { createDefaultPTController } from '@cisco-auto/pt-control/controller';
 
 interface DeployDeviceResult {
   deviceName: string;

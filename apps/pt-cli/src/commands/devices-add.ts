@@ -25,7 +25,7 @@ function initializeSchema(db: Database): void {
   `);
 
   db.exec(`
-    CREATE TRIGGER IF NOT EXISTS update_devices_timestamp 
+    CREATE TRIGGER IF NOT EXISTS update_devices_timestamp
     AFTER UPDATE ON devices
     BEGIN
       UPDATE devices SET updated_at = strftime('%s', 'now') WHERE id = NEW.id;
@@ -40,7 +40,6 @@ function getMemoryDb(): Database {
   try {
     require("node:fs").mkdirSync(dir, { recursive: true });
   } catch {
-    // Directorio ya existe o no se puede crear, continuar
   }
   const db = new Database(dbPath);
   initializeSchema(db);
@@ -48,13 +47,16 @@ function getMemoryDb(): Database {
 }
 
 export function createDevicesAddCommand(): Command {
-  return new Command("add")
-    .description("Agregar dispositivo a la memoria")
+  return new Command("devices-add")
+    .description("⚠️  DEPRECADO - Usa `pt device add` para agregar dispositivos a PT")
+    .addHelpText("before", chalk.yellow('⚠️  Este comando está deprecado.\n  devices-add agregaba a la base SQLite local.\n  Usa `pt device add` para crear dispositivos en Packet Tracer.\n\n'))
     .argument("<hostname>", "Nombre del dispositivo")
     .option("--ip <ip>", "Direccion IP")
     .option("--model <model>", "Modelo del dispositivo")
     .option("--type <type>", "Tipo: router, switch, pc", "router")
     .action((hostname, options) => {
+      console.log(chalk.yellow("⚠️  devices-add está deprecado. Usa `pt device add`."));
+      console.log(chalk.gray("  (El dispositivo ya no se guarda en la base SQLite local)\n"));
       const db = getMemoryDb();
       const id = randomUUID().slice(0, 8);
       const now = Math.floor(Date.now() / 1000);
@@ -74,7 +76,8 @@ export function createDevicesAddCommand(): Command {
         [id, hostname, options.ip || null, options.type || null, options.model || null, now, now],
       );
 
-      console.log(chalk.green(`\n✓ Dispositivo "${chalk.cyan(hostname)}" registrado\n`));
+      console.log(chalk.green(`\n✓ Dispositivo "${chalk.cyan(hostname)}" registrado (base local deprecated)\n`));
+      console.log(chalk.gray("  Para agregar dispositivos en PT usa: pt device add <name> <model>"));
       db.close();
     });
 }

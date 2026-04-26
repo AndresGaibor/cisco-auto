@@ -5,7 +5,7 @@
  */
 
 import { Command } from 'commander';
-import type { PTController } from '@cisco-auto/pt-control';
+import type { PTController } from '@cisco-auto/pt-control/controller';
 import { select, input } from '@inquirer/prompts';
 import chalk from 'chalk';
 
@@ -20,6 +20,7 @@ import { printExamples } from '../ux/examples.js';
 import { formatNextSteps } from '../ux/next-steps.js';
 import { fetchDeviceList, formatDevice } from '../utils/device-utils.js';
 import { CONFIG_HOST_META } from './config-host/meta.js';
+import { buildFlags, parseGlobalOptions } from '../flags-utils.js';
 
 interface ConfigHostResult {
   device: string;
@@ -49,31 +50,26 @@ export function createConfigHostCommand(): Command {
     .option('--trace', 'Activar traza estructurada de la ejecución', false)
     .option('--trace-bundle', 'Generar archivo bundle único para debugging', false)
     .action(async (device, ip, mask, gateway, dns, options) => {
-      const globalExamples = process.argv.includes('--examples');
-      const globalSchema = process.argv.includes('--schema');
-      const globalExplain = process.argv.includes('--explain');
-      const globalPlan = process.argv.includes('--plan');
-      const globalTrace = process.argv.includes('--trace');
-      const globalTraceBundle = process.argv.includes('--trace-bundle');
+      const { examples, schema, explain, plan, trace, traceBundle } = parseGlobalOptions();
 
       const verifyEnabled = options.verify ?? true;
 
-      if (globalExamples) {
+      if (examples) {
         console.log(printExamples(CONFIG_HOST_META));
         return;
       }
 
-      if (globalSchema) {
+      if (schema) {
         console.log(JSON.stringify(CONFIG_HOST_META, null, 2));
         return;
       }
 
-      if (globalExplain) {
+      if (explain) {
         console.log(CONFIG_HOST_META.longDescription ?? CONFIG_HOST_META.summary);
         return;
       }
 
-      if (globalPlan) {
+      if (plan) {
         console.log('Plan de ejecución:');
         console.log(`  1. Seleccionar dispositivo: ${device ?? '<device>'}`);
         console.log(`  2. Configurar IP: ${ip ?? '<ip>'}`);
@@ -98,17 +94,17 @@ export function createConfigHostCommand(): Command {
         output: 'text',
         verbose: false,
         quiet: false,
-        trace: globalTrace,
+        trace: trace,
         tracePayload: false,
         traceResult: false,
         traceDir: null,
-        traceBundle: globalTraceBundle,
+        traceBundle: traceBundle,
         traceBundlePath: null,
         sessionId: null,
-        examples: globalExamples,
-        schema: globalSchema,
-        explain: globalExplain,
-        plan: globalPlan,
+        examples: examples,
+        schema: schema,
+        explain: explain,
+        plan: plan,
         verify: verifyEnabled,
       };
 

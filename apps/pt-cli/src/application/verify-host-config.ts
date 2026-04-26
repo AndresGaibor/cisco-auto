@@ -4,7 +4,7 @@
  * Inspecciona el dispositivo y verifica que la configuración IP se aplicó correctamente.
  */
 
-import type { PTController } from '@cisco-auto/pt-control';
+import { type PTController } from "@cisco-auto/pt-control/controller";
 
 export interface HostConfigVerificationData {
   deviceName: string;

@@ -2,7 +2,7 @@
 // scripts/pre-release-check.ts
 // Pre-release validation script - runs all checks before a release
 
-const { execSync } = require("child_process");
+import { execSync } from "child_process";
 
 interface Check {
   name: string;
@@ -12,8 +12,11 @@ interface Check {
 
 const checks: Check[] = [
   { name: "Typecheck", command: "bun run typecheck", required: true },
+  { name: "Lint", command: "bun run lint", required: true },
+  { name: "Unit Tests", command: "bun test", required: true },
+  { name: "Architecture Checks", command: "bun run architecture:check", required: true },
   { name: "Build pt-runtime", command: "cd packages/pt-runtime && bun run build", required: true },
-  { name: "PT-Safe Validation", command: "cd packages/pt-runtime && bun --eval \"const { renderRuntimeV2Sync } = require('./src/build/render-runtime-v2.ts'); const { validatePtSafe } = require('./src/build/validate-pt-safe.ts'); const r = renderRuntimeV2Sync({ srcDir: './src', outputPath: '', injectDevDir: '~/pt-dev' }); const v = validatePtSafe(r); if (!v.valid) { console.error('PT-safe validation FAILED'); process.exit(1); }\"", required: true },
+  { name: "PT-Safe Validation", command: "cd packages/pt-runtime && bun run validate-pt-safe", required: true },
 ];
 
 console.log("=".repeat(60));

@@ -1,15 +1,15 @@
 import { describe, expect, test, vi } from "bun:test";
-import { createDefaultPTController } from "@cisco-auto/pt-control";
+import { createDefaultPTController } from "@cisco-auto/pt-control/controller";
 import {
   buildDeviceListFromSnapshot,
   loadLiveDeviceList,
   isEmptyTopologySnapshot,
   loadLiveDeviceListFromController,
 } from "../src/application/device-list.js";
-import type { TopologySnapshot } from "@cisco-auto/pt-control";
+import type { TopologySnapshot } from "@cisco-auto/pt-control/contracts";
 import { selectPortsForDisplay } from "../src/commands/device/list.js";
 
-vi.mock("@cisco-auto/pt-control", () => ({
+vi.mock("@cisco-auto/pt-control/controller", () => ({
   createDefaultPTController: vi.fn(),
 }));
 
