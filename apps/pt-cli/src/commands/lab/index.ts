@@ -60,7 +60,7 @@ Regla:
     .command("clear")
     .description("Limpia el canvas/lab actual")
     .option("--yes", "Confirmar limpieza")
-    .action(async (options) => {
+    .action(async (options: any) => {
       if (!options.yes) {
         process.stderr.write("Operación destructiva. Ejecuta: pt lab clear --yes\n");
         process.exitCode = 2;

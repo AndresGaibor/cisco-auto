@@ -9,7 +9,6 @@ describe("registry público", () => {
       "completion",
       "device",
       "doctor",
-      "lab",
       "link",
       "omni",
       "runtime",

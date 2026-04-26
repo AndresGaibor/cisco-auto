@@ -87,7 +87,7 @@ export function evaluateOmniRawPolicy(code: string, guard: OmniGuardMode): OmniP
       ? "dangerous"
       : warnings.length > 0
         ? "elevated"
-        : "dangerous";
+        : "safe";
 
   if (guard === "off") {
     return {
@@ -118,6 +118,8 @@ export function evaluateOmniRawPolicy(code: string, guard: OmniGuardMode): OmniP
   };
 }
 
-export function hasRawApproval(options: { approve?: boolean }): boolean {
-  return Boolean(options.approve) || process.env.PT_OMNI_AUTO_APPROVE === "1";
+export function hasRawApproval(options: { yes?: boolean; approve?: boolean }): boolean {
+  return Boolean(options.yes) ||
+    Boolean(options.approve) ||
+    process.env.PT_OMNI_AUTO_APPROVE === "1";
 }

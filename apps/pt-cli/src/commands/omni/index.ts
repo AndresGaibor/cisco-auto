@@ -278,7 +278,7 @@ Variables disponibles en runtime:
           value: {
             code,
             policy,
-            wouldExecute: policy.ok && (hasRawApproval(options) || Boolean(options.approve)),
+            wouldExecute: policy.ok && (hasRawApproval(options) || flags.yes),
           },
           warnings: policy.warnings,
           confidence: 1,
@@ -747,7 +747,7 @@ function createOmniCapabilityCommand(): Command {
         payload,
         timeout: options.timeout,
         requireApproval: true,
-        approved: Boolean(options.approve),
+        approved: Boolean(options.yes),
       });
     });
 

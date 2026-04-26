@@ -53,6 +53,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PtCommandDefinition[] = [
   {
     id: "lab",
     name: "lab",
+    hidden: true,
     group: "lab",
     summary: "Gestiona el laboratorio/canvas actual sin YAML",
     description: "Permite limpiar, inspeccionar, ejecutar scripts .ptcmd y generar reportes del lab actual.",

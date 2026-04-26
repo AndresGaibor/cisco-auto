@@ -57,7 +57,11 @@ export function createProgram(): Command {
     registered.add(command.name());
   }
 
-  program.arguments("<command> [args...]").action((commandName: string, _args: string[]) => {
+  program.action(() => {
+    process.stdout.write(renderRootHelp(PUBLIC_COMMAND_DEFINITIONS));
+  });
+
+  program.on("command:*", ([commandName]) => {
     const suggestions = suggestClosest(commandName, ROOT_COMMAND_NAMES);
     const lines: string[] = [];
     lines.push("");
@@ -73,6 +77,7 @@ export function createProgram(): Command {
     lines.push(chalk.bold("Ayuda útil:"));
     lines.push("  pt --help");
     lines.push("  pt cmd --help");
+    lines.push("  pt omni --help");
     lines.push("  pt verify --help");
     lines.push("  pt doctor");
     lines.push("");

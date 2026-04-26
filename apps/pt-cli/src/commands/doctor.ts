@@ -10,11 +10,6 @@ import {
   type DoctorCheckResult,
 } from "@cisco-auto/pt-control/application/doctor";
 import { getDefaultDevDir, getLogsDir, getHistoryDir, getResultsDir } from "../system/paths.ts";
-import type { CliResult } from "../contracts/cli-result.ts";
-import type { CommandMeta } from "../contracts/command-meta.ts";
-import { createSuccessResult } from "../contracts/cli-result.ts";
-import { runCommand } from "../application/run-command.ts";
-import { COMMAND_CATALOG } from "./command-catalog.ts";
 
 export { type DoctorCheckResult };
 
@@ -24,68 +19,12 @@ export function createDoctorCommand(): Command {
     .option("-v, --verbose", "Salida detallada", false)
     .option("-j, --json", "Salida JSON", false)
     .action(async (options: any) => {
-      await runCommand({
-        action: "doctor",
-        meta: COMMAND_CATALOG["doctor"] as unknown as CommandMeta,
-        flags: options,
-        execute: async (ctx) => {
-          const paths = {
-            ptDevDir: process.env.PT_DEV_DIR ?? getDefaultDevDir(),
-            logsDir: getLogsDir(),
-            historyDir: getHistoryDir(),
-            resultsDir: getResultsDir(),
-          };
-
-          const checks = await runAllDoctorChecks(ctx.controller, paths, options.verbose);
-          const ok = checks.every((c) => c.ok);
-
-          const result = createSuccessResult("doctor", {
-            checks: checks.map((c) => ({
-              name: c.name,
-              ok: c.ok,
-              severity: c.severity,
-              message: c.message,
-              details: c.details,
-            })),
-          });
-
-          result.verification = {
-            executed: true,
-            verified: ok,
-            verificationSource: checks.map((c) => c.name),
-            checks: checks.map((c) => ({
-              name: c.name,
-              ok: c.ok,
-              severity: c.severity,
-              details: { message: c.message, details: c.details },
-            })),
-          };
-
-          if (!ok) {
-            result.warnings = ["Algunas verificaciones de diagnóstico fallaron."];
-            result.advice = [
-              'Ejecuta "pt build" para desplegar archivos a ~/pt-dev/',
-              "Asegúrate de que Packet Tracer esté ejecutándose",
-              "Verifica que el script generado esté cargado en Packet Tracer",
-              'Revisa "pt logs errors" para errores recientes',
-            ];
-          }
-
-          return result;
-        },
-      });
-
-      // Fallback human-readable output for direct invocation
       const paths = {
         ptDevDir: process.env.PT_DEV_DIR ?? getDefaultDevDir(),
         logsDir: getLogsDir(),
         historyDir: getHistoryDir(),
         resultsDir: getResultsDir(),
       };
-
-      console.log("");
-      console.log("═══ Diagnóstico del sistema ═══");
-      console.log("");
 
       const mockController = {
         getHeartbeat: () => null,
@@ -101,6 +40,29 @@ export function createDoctorCommand(): Command {
       };
 
       const checks = await runAllDoctorChecks(mockController, paths, options.verbose);
+      const ok = checks.every((c) => c.ok);
+
+      if (options.json) {
+        const output = {
+          ok,
+          action: "doctor",
+          checks: checks.map((c) => ({
+            name: c.name,
+            ok: c.ok,
+            severity: c.severity,
+            message: c.message,
+            details: c.details,
+          })),
+        };
+
+        process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+        process.exit(ok ? 0 : 1);
+        return;
+      }
+
+      console.log("");
+      console.log("═══ Diagnóstico del sistema ═══");
+      console.log("");
 
       const sevIcons: Record<string, string> = { info: "ℹ", warning: "⚠", critical: "🔴" };
       for (const c of checks) {
