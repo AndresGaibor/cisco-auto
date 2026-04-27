@@ -124,4 +124,25 @@ describe("createTerminalCommandService plan run", () => {
       evidence: { verdict: { ok: true }, parsed: { source: "legacy-host" } },
     });
   });
+
+  test("rechaza dispositivos inexistentes con error claro", async () => {
+    const controller = {
+      inspectDevice: vi.fn().mockResolvedValue(null),
+      execIos: vi.fn(),
+      execHost: vi.fn(),
+    };
+
+    const service = createTerminalCommandService({
+      controller: controller as any,
+      runtimeTerminal: null,
+      generateId: () => "missing-device-id",
+    });
+
+    const result = await service.executeCommand("R1", "show version");
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("DEVICE_NOT_FOUND_OR_UNSUPPORTED");
+    expect((controller.execIos as any)).not.toHaveBeenCalled();
+    expect((controller.execHost as any)).not.toHaveBeenCalled();
+  });
 });

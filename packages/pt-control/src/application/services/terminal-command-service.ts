@@ -53,17 +53,29 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
   async function resolveDeviceKind(device: string): Promise<TerminalDeviceKind> {
     try {
       const deviceState = await deps.controller.inspectDevice(device).catch(() => null);
+
+      if (!deviceState) {
+        return "unknown";
+      }
+
       const deviceType =
-        typeof deviceState?.type === "string"
+        typeof deviceState.type === "string"
           ? deviceState.type
           : normalizeDeviceType(deviceState?.type);
 
       const isIOS =
         deviceType === "router" ||
         deviceType === "switch" ||
-        deviceType === "switch_layer3";
+        deviceType === "switch_layer3" ||
+        deviceType === "generic";
 
-      return isIOS ? "ios" : "host";
+      if (isIOS) return "ios";
+
+      if (deviceType === "host" || deviceType === "pc" || deviceType === "server") {
+        return "host";
+      }
+
+      return "unknown";
     } catch {
       return "unknown";
     }
@@ -369,11 +381,13 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
       output: "",
       status: 1,
       error: {
-        code: "UNKNOWN_DEVICE_TYPE",
-        message: `No se pudo determinar el tipo de dispositivo para "${device}"`,
+        code: "DEVICE_NOT_FOUND_OR_UNSUPPORTED",
+        message: `No se encontró el dispositivo "${device}" o no se pudo determinar si usa IOS/terminal host.`,
         phase: "detection",
       },
-      warnings: [],
+      warnings: [
+        "Ejecuta `bun run pt device list --json` para ver los nombres exactos de dispositivos.",
+      ],
       evidence: null,
     };
   }

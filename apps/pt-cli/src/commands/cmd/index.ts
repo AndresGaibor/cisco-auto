@@ -4,10 +4,19 @@ import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import { input, select } from "../../utils/inquirer.js";
 import { createTerminalCommandService } from "@cisco-auto/pt-control/services";
+import type { PTController } from "@cisco-auto/pt-control/controller";
 import { runCommand } from "../../application/run-command.js";
 import { createSuccessResult, createErrorResult } from "../../contracts/cli-result.js";
 import { getGlobalFlags } from "../../flags.js";
 import { printCmdResult, toCmdCliResult, type CmdCliResult } from "./render.js";
+
+function createRuntimeTerminalForCli(controller: PTController) {
+  return {
+    runTerminalPlan: controller.runTerminalPlan.bind(controller),
+    ensureSession: controller.ensureTerminalSession.bind(controller),
+    pollTerminalJob: async () => null,
+  };
+}
 
 function joinCommandParts(parts: string[]): string {
   return parts.join(" ").trim();
@@ -48,7 +57,7 @@ function buildConfigCommand(commands: string[], save: boolean): string {
 async function promptForCommand(): Promise<string> {
   return input({
     message: "Comando a ejecutar:",
-    validate: (value) => value.trim().length > 0 || "El comando no puede estar vacío",
+        validate: (value: string) => value.trim().length > 0 || "El comando no puede estar vacío",
   });
 }
 
@@ -109,7 +118,7 @@ Reglas:
       if (!device && !flags.noInput) {
         device = await input({
           message: "Dispositivo destino:",
-          validate: (value) => value.trim().length > 0 || "Debes especificar un dispositivo",
+          validate: (value: string) => value.trim().length > 0 || "Debes especificar un dispositivo",
         });
       }
 
@@ -199,7 +208,7 @@ Reglas:
         execute: async (ctx) => {
           const service = createTerminalCommandService({
             controller: ctx.controller,
-            runtimeTerminal: null,
+            runtimeTerminal: createRuntimeTerminalForCli(ctx.controller),
             generateId: () => `cmd-${randomUUID().slice(0, 8)}`,
           });
 
@@ -314,7 +323,7 @@ Reglas:
           execute: async (ctx) => {
             const service = createTerminalCommandService({
               controller: ctx.controller,
-              runtimeTerminal: null,
+              runtimeTerminal: createRuntimeTerminalForCli(ctx.controller),
               generateId: () => `cmd-${randomUUID().slice(0, 8)}`,
             });
 

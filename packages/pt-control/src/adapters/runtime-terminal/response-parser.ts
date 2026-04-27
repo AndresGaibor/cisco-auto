@@ -46,6 +46,35 @@ interface LegacyContractValue {
   };
 }
 
+interface SimpleRuntimeResultValue {
+  ok?: boolean;
+  code?: string;
+  error?: string | { message?: string; code?: string };
+  message?: string;
+  raw?: string;
+  output?: string;
+  value?: unknown;
+  parsed?: unknown;
+  warnings?: string[];
+  session?: {
+    mode?: string;
+    prompt?: string;
+    modeBefore?: string;
+    modeAfter?: string;
+    promptBefore?: string;
+    promptAfter?: string;
+    paging?: boolean;
+    awaitingConfirm?: boolean;
+    autoDismissedInitialDialog?: boolean;
+    kind?: string;
+  };
+  diagnostics?: {
+    commandStatus?: number;
+    statusCode?: number;
+    completionReason?: string;
+  };
+}
+
 export interface ParsedCommandResponse {
   raw: string;
   status: number;
@@ -116,6 +145,11 @@ export function createResponseParser() {
 
     if (hasUnifiedContract) {
       return parseUnifiedContract(value, options, warnings);
+    }
+
+    const simpleValue = res as SimpleRuntimeResultValue | undefined;
+    if (typeof simpleValue?.ok === "boolean") {
+      return parseSimpleRuntimeResult(simpleValue, options, warnings);
     }
 
     return parseLegacyContract(res as LegacyContractValue | undefined, options, warnings, stepIndex);
@@ -234,6 +268,89 @@ export function createResponseParser() {
       autoDismissedInitialDialog: Boolean(sessionInfo.autoDismissedInitialDialog),
       sessionKind: isHost ? "host" : "ios",
       warnings,
+    };
+  }
+
+  function parseSimpleRuntimeResult(
+    res: SimpleRuntimeResultValue,
+    options: ParseResponseOptions,
+    warnings: string[],
+  ): ParsedCommandResponse {
+    const { stepIndex, isHost, command } = options;
+
+    const raw = String(
+      res.output ??
+        res.raw ??
+        (typeof res.value === "string" ? res.value : "") ??
+        "",
+    );
+
+    const status = Number(
+      res.diagnostics?.statusCode ??
+        res.diagnostics?.commandStatus ??
+        (res.ok ? 0 : 1),
+    );
+
+    const sessionInfo = res.session ?? {};
+
+    const promptBefore =
+      stepIndex === 0
+        ? String(sessionInfo.promptBefore ?? sessionInfo.prompt ?? "")
+        : "";
+
+    const promptAfter = String(sessionInfo.promptAfter ?? sessionInfo.prompt ?? "");
+
+    const modeBefore =
+      stepIndex === 0
+        ? String(sessionInfo.modeBefore ?? sessionInfo.mode ?? "")
+        : "";
+
+    const modeAfter = String(sessionInfo.modeAfter ?? sessionInfo.mode ?? "");
+
+    if (Array.isArray(res.warnings)) {
+      warnings.push(...res.warnings.map(String));
+    }
+
+    const errorText =
+      typeof res.error === "string"
+        ? res.error
+        : String(res.error?.message ?? res.message ?? res.code ?? "");
+
+    if (!res.ok && errorText) {
+      warnings.push(errorText);
+    }
+
+    if (sessionInfo.paging) {
+      warnings.push(`El comando "${command}" activó paginación`);
+    }
+
+    if (sessionInfo.awaitingConfirm) {
+      warnings.push(`El comando "${command}" requirió confirmación`);
+    }
+
+    if (isHost && (raw.includes("request timed out") || raw.includes("reply from"))) {
+      warnings.push(`Comando host "${command}" produjo output de red (ping/tracert)`);
+    }
+
+    return {
+      raw,
+      status,
+      ok: Boolean(res.ok),
+      promptBefore,
+      promptAfter,
+      modeBefore,
+      modeAfter,
+      parsed: res.parsed ?? res,
+      paging: Boolean(sessionInfo.paging),
+      awaitingConfirm: Boolean(sessionInfo.awaitingConfirm),
+      autoDismissedInitialDialog: Boolean(sessionInfo.autoDismissedInitialDialog),
+      sessionKind: isHost ? "host" : "ios",
+      warnings,
+      error: errorText || undefined,
+      diagnostics: {
+        completionReason: res.diagnostics?.completionReason,
+        statusCode: status,
+      },
     };
   }
 

@@ -241,6 +241,39 @@ export function createRuntimeTerminalAdapter(
     }
 
     const submitValue = normalizeBridgeValue(submitResult);
+
+    if (
+      submitValue &&
+      typeof submitValue === "object" &&
+      (submitValue as { ok?: unknown }).ok === false
+    ) {
+      const parsed = responseParser.parseCommandResponse(submitValue, {
+        stepIndex: 0,
+        isHost: false,
+        command: "terminal.plan.run",
+      });
+
+      return {
+        ok: false,
+        output: parsed.raw.trim(),
+        status: parsed.status || 1,
+        promptBefore: parsed.promptBefore,
+        promptAfter: parsed.promptAfter,
+        modeBefore: parsed.modeBefore,
+        modeAfter: parsed.modeAfter,
+        events: [
+          responseParser.buildEventFromResponse(
+            parsed,
+            { kind: "command", command: "terminal.plan.run" },
+            0,
+          ),
+        ],
+        warnings: parsed.warnings,
+        parsed: parsed.parsed,
+        confidence: 0,
+      };
+    }
+
     if (isDeferredValue(submitValue)) {
       const startedAt = Date.now();
       let pollValue: unknown = submitValue;
