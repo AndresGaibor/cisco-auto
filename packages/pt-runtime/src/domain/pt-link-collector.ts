@@ -35,7 +35,7 @@ export function collectPtLinks(net: PTNetwork, deps: HandlerDeps): PtLinkRaw[] {
 
 export function collectPtLinksViaPortScan(net: PTNetwork, deps: HandlerDeps): PtLinkRaw[] {
   const links: PtLinkRaw[] = [];
-  const seen = new Set<string>();
+  const seen: string[] = [];
   const count = net.getDeviceCount();
 
   for (let di = 0; di < count; di++) {
@@ -73,8 +73,8 @@ export function collectPtLinksViaPortScan(net: PTNetwork, deps: HandlerDeps): Pt
 
       const dedupeKey = p1Mac && p2Mac ? [p1Mac, p2Mac].sort().join("-") : null;
       if (dedupeKey) {
-        if (seen.has(dedupeKey)) continue;
-        seen.add(dedupeKey);
+        if (seen.indexOf(dedupeKey) !== -1) continue;
+        seen.push(dedupeKey);
       }
 
       links.push({
@@ -97,7 +97,7 @@ export function mergePtLinkSources(
   fromLinkAt: PtLinkRaw[],
   fromPortScan: PtLinkRaw[],
 ): PtLinkRaw[] {
-  const seen = new Set<string>();
+  const seen: string[] = [];
   const merged: PtLinkRaw[] = [];
 
   function addIfNew(link: PtLinkRaw) {
@@ -112,8 +112,8 @@ export function mergePtLinkSources(
         ? [link.p1Uuid, link.p2Uuid].sort().join("|")
         : [link.p1Name, link.p2Name].sort().join("|");
 
-    if (seen.has(key)) return;
-    seen.add(key);
+    if (seen.indexOf(key) !== -1) return;
+    seen.push(key);
     merged.push(link);
   }
 

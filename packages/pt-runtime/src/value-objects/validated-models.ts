@@ -243,7 +243,15 @@ export function getPTDeviceType(model: string): number {
  * Obtiene todos los modelos válidos.
  */
 export function getAllValidModels(): string[] {
-  return [...new Set(Object.values(PT_MODEL_MAP))];
+  const values = Object.values(PT_MODEL_MAP);
+  const unique: string[] = [];
+
+  for (let i = 0; i < values.length; i++) {
+    const value = values[i];
+    if (unique.indexOf(value) === -1) unique.push(value);
+  }
+
+  return unique;
 }
 
 /**

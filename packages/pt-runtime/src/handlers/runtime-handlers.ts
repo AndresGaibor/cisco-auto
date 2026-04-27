@@ -92,11 +92,28 @@ export type {
 // Runtime result compatibility alias used by some old tests/consumers.
 export type RuntimeHandlerResult = PtResult;
 
+function publishHandlerMap(): void {
+  try {
+    const scope = Function("return this")() as Record<string, unknown>;
+    const registeredTypes = getRegisteredTypes();
+    const handlerMap: Record<string, true> = {};
+
+    for (let i = 0; i < registeredTypes.length; i++) {
+      handlerMap[registeredTypes[i]] = true;
+    }
+
+    scope.HANDLER_MAP = handlerMap;
+  } catch {
+    // El runtime debe seguir cargando aunque el scope global no sea accesible.
+  }
+}
+
 // ============================================================================
 // Handler registration side effect
 // ============================================================================
 
 registerRuntimeHandlersFromGlobals();
+publishHandlerMap();
 
 // ============================================================================
 // Public exports

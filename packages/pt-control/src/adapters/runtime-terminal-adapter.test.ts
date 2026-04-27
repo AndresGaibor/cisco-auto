@@ -12,6 +12,8 @@ function createBridge(options?: {
   deviceType?: "pc" | "router";
   responseDelay?: number;
   customResponse?: unknown;
+  planRunResponse?: unknown;
+  pollDeferredResponse?: unknown;
 }) {
   const calls: BridgeCall[] = [];
   const deviceType = options?.deviceType ?? "router";
@@ -26,6 +28,44 @@ function createBridge(options?: {
 
       if (responseDelay > 0) {
         await new Promise((r) => setTimeout(r, responseDelay));
+      }
+
+      if (type === "terminal.plan.run") {
+        return options?.planRunResponse ?? {
+          ok: true,
+          status: 0,
+          completedAt: Date.now(),
+          value: {
+            ok: true,
+            output: "show output\n",
+            session: {
+              modeBefore: "user-exec",
+              modeAfter: "priv-exec",
+              promptBefore: "R1>",
+              promptAfter: "R1#",
+            },
+            diagnostics: { completionReason: "completed", statusCode: 0 },
+          },
+        };
+      }
+
+      if (type === "__pollDeferred") {
+        return options?.pollDeferredResponse ?? {
+          ok: true,
+          status: 0,
+          completedAt: Date.now(),
+          value: {
+            ok: true,
+            output: "show output\n",
+            session: {
+              modeBefore: "user-exec",
+              modeAfter: "priv-exec",
+              promptBefore: "R1>",
+              promptAfter: "R1#",
+            },
+            diagnostics: { completionReason: "completed", statusCode: 0 },
+          },
+        };
       }
 
       if (type === "listDevices") {
@@ -75,7 +115,7 @@ function createBridge(options?: {
     loadRuntime: async () => undefined,
     loadRuntimeFromFile: async () => undefined,
     isReady: () => true,
-  } as FileBridgePort & { calls: typeof calls };
+  } as unknown as FileBridgePort & { calls: typeof calls };
 
   return bridge;
 }
@@ -92,10 +132,9 @@ describe("createRuntimeTerminalAdapter", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(bridge.calls).toHaveLength(2);
-    expect(bridge.calls[0]!.type).toBe("listDevices");
-    expect(bridge.calls[1]!.type).toBe("execIos");
-    expect(bridge.calls[1]!.timeoutMs).toBe(12345);
+    expect(bridge.calls).toHaveLength(1);
+    expect(bridge.calls[0]!.type).toBe("terminal.plan.run");
+    expect((bridge.calls[0]!.payload as any).options.timeoutMs).toBe(30000);
   });
 
   test("usa timeout por defecto cuando el paso no lo define", async () => {
@@ -108,10 +147,9 @@ describe("createRuntimeTerminalAdapter", () => {
       steps: [{ command: "show ip interface brief" }],
     });
 
-    expect(bridge.calls).toHaveLength(2);
-    expect(bridge.calls[0]!.type).toBe("listDevices");
-    expect(bridge.calls[1]!.type).toBe("execIos");
-    expect(bridge.calls[1]!.timeoutMs).toBe(8000);
+    expect(bridge.calls).toHaveLength(1);
+    expect(bridge.calls[0]!.type).toBe("terminal.plan.run");
+    expect((bridge.calls[0]!.payload as any).options.timeoutMs).toBe(30000);
   });
 
   test("detecta host con listDevices y usa execPc", async () => {
@@ -124,9 +162,8 @@ describe("createRuntimeTerminalAdapter", () => {
       steps: [{ command: "ping 192.168.10.1" }],
     });
 
-    expect(bridge.calls).toHaveLength(2);
-    expect(bridge.calls[0]!.type).toBe("listDevices");
-    expect(bridge.calls[1]!.type).toBe("execPc");
+    expect(bridge.calls).toHaveLength(1);
+    expect(bridge.calls[0]!.type).toBe("terminal.plan.run");
   });
 
   test("retorna success cuando el comando es exitoso", async () => {
@@ -145,9 +182,87 @@ describe("createRuntimeTerminalAdapter", () => {
     expect(result.confidence).toBe(1);
   });
 
+  test("usa terminal.plan.run primero y conserva el resultado", async () => {
+    const bridge = createBridge();
+    const adapter = createRuntimeTerminalAdapter({ bridge, generateId: () => "id-4a", defaultTimeout: 30000 });
+
+    const result = await adapter.runTerminalPlan({
+      id: "plan-4a",
+      device: "R1",
+      steps: [{ command: "show version" }],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.output).toContain("show output");
+    expect(bridge.calls).toHaveLength(1);
+    expect(bridge.calls[0]!.type).toBe("terminal.plan.run");
+  });
+
+  test("hace polling cuando terminal.plan.run vuelve deferred", async () => {
+    const bridge = createBridge({
+      planRunResponse: {
+        ok: true,
+        status: 0,
+        completedAt: Date.now(),
+        value: { deferred: true, ticket: "ticket-123" },
+      },
+      pollDeferredResponse: {
+        ok: true,
+        status: 0,
+        completedAt: Date.now(),
+        value: {
+          ok: true,
+          output: "show output\n",
+          session: {
+            modeBefore: "user-exec",
+            modeAfter: "priv-exec",
+            promptBefore: "R1>",
+            promptAfter: "R1#",
+          },
+          diagnostics: { completionReason: "completed", statusCode: 0 },
+        },
+      },
+    });
+    const adapter = createRuntimeTerminalAdapter({ bridge, generateId: () => "id-4b", defaultTimeout: 30000 });
+
+    const result = await adapter.runTerminalPlan({
+      id: "plan-4b",
+      device: "R1",
+      steps: [{ command: "show version" }],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(bridge.calls.map((call) => call.type)).toEqual(["terminal.plan.run", "__pollDeferred"]);
+    expect((bridge.calls[1]!.payload as any).ticket).toBe("ticket-123");
+    expect(result.promptBefore).toBe("R1>");
+    expect(result.promptAfter).toBe("R1#");
+  });
+
+  test("cae al flujo legacy cuando terminal.plan.run no existe", async () => {
+    const bridge = createBridge({
+      planRunResponse: {
+        ok: false,
+        status: 1,
+        completedAt: Date.now(),
+        error: "unknown command",
+      },
+    });
+    const adapter = createRuntimeTerminalAdapter({ bridge, generateId: () => "id-4c", defaultTimeout: 30000 });
+
+    const result = await adapter.runTerminalPlan({
+      id: "plan-4c",
+      device: "R1",
+      steps: [{ command: "show version" }],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(bridge.calls.map((call) => call.type)).toEqual(["terminal.plan.run", "listDevices", "execIos"]);
+    expect(result.output).toContain("show output");
+  });
+
   test("retorna failure cuando el comando falla", async () => {
     const bridge = createBridge({
-      customResponse: {
+      planRunResponse: {
         ok: false,
         status: 1,
         completedAt: Date.now(),
@@ -174,7 +289,7 @@ describe("createRuntimeTerminalAdapter", () => {
 
   test("detecta partial output con paging", async () => {
     const bridge = createBridge({
-      customResponse: {
+      planRunResponse: {
         ok: true,
         status: 0,
         completedAt: Date.now(),
@@ -201,7 +316,7 @@ describe("createRuntimeTerminalAdapter", () => {
 
   test("detecta prompt mismatch cuando no se alcanza el prompt esperado", async () => {
     const bridge = createBridge({
-      customResponse: {
+      planRunResponse: {
         ok: true,
         status: 0,
         completedAt: Date.now(),
@@ -268,14 +383,13 @@ describe("createRuntimeTerminalAdapter", () => {
       ],
     });
 
-    expect(result.events).toHaveLength(2);
-    expect((result.events[0] as any).command).toBe("show version");
-    expect((result.events[1] as any).command).toBe("show ip interface brief");
+    expect(result.events).toHaveLength(1);
+    expect((result.events[0] as any).command).toBe("terminal.plan.run");
   });
 
   test("confidence es menor cuando hay advertencias", async () => {
     const bridge = createBridge({
-      customResponse: {
+      planRunResponse: {
         ok: true,
         status: 0,
         completedAt: Date.now(),

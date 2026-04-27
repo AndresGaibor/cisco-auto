@@ -67,6 +67,30 @@ interface PatternRule {
 
 const PT_FORBIDDEN_PATTERNS: PatternRule[] = [
   {
+    pattern: /\bnew\s+Set\s*\(/g,
+    message: "Set is not supported in PT runtime",
+    category: "forbidden-global",
+    suggestion: "Use arrays with indexOf() or a plain object for deduplication",
+  },
+  {
+    pattern: /\bnew\s+Map\s*\(/g,
+    message: "Map is not supported in PT runtime",
+    category: "forbidden-global",
+    suggestion: "Use plain objects for keyed lookups",
+  },
+  {
+    pattern: /\bnew\s+WeakMap\s*\(/g,
+    message: "WeakMap is not supported in PT runtime",
+    category: "forbidden-global",
+    suggestion: "Use arrays or plain objects for object-to-owner indexing",
+  },
+  {
+    pattern: /\bnew\s+WeakSet\s*\(/g,
+    message: "WeakSet is not supported in PT runtime",
+    category: "forbidden-global",
+    suggestion: "Use arrays or plain objects for membership tracking",
+  },
+  {
     pattern: /\bimport\s+(?:type\s+)?.*?\s+from\s+["'][^"']+["']/g,
     message: "import statements are not supported in PT runtime",
     category: "module-syntax",

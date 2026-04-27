@@ -14,7 +14,7 @@ describe("handleExecIos", () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(result.code).toBe("DEVICE_NOT_FOUND");
+    expect((result as any).code).toBe("DEVICE_NOT_FOUND");
   });
 
   it("should return error when terminal is not accessible", async () => {
@@ -32,7 +32,7 @@ describe("handleExecIos", () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(result.code).toBe("NO_TERMINAL");
+    expect((result as any).code).toBe("NO_TERMINAL");
   });
 
   it("should detect host devices (PC/Server) correctly", async () => {
@@ -44,5 +44,52 @@ describe("handleExecIos", () => {
     expect(isHostDevice("PC")).toBe(true);
     expect(isHostDevice("2911")).toBe(false);
     expect(isHostDevice("Switch-PT")).toBe(false);
+  });
+
+  it("should delegate command execution through terminal.plan.run", async () => {
+    const terminal = {
+      getPrompt: () => "Router#",
+      getOutput: () => "Router#",
+    };
+
+    const api = {
+      getDeviceByName: (_name: string) => ({
+        getModel: () => "2911",
+        getCommandLine: () => terminal,
+      }),
+      dprint: () => {},
+    } as any;
+
+    const result = await handleExecIos(
+      {
+        type: "execIos",
+        device: "R1",
+        command: "show ip int brief",
+        commandTimeoutMs: 1234,
+        stallTimeoutMs: 5678,
+      },
+      api,
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      deferred: true,
+      ticket: "execIos:R1",
+    });
+    expect((result as any).job).toMatchObject({
+      id: "",
+      device: "R1",
+      kind: "ios-session",
+      version: 1,
+      payload: { command: "show ip int brief" },
+      options: { stopOnError: false, commandTimeoutMs: 1234, stallTimeoutMs: 5678 },
+    });
+    expect((result as any).job.plan).toEqual([
+      {
+        type: "command",
+        value: "show ip int brief",
+        options: { stopOnError: false, timeoutMs: 1234 },
+      },
+    ]);
   });
 });

@@ -1,4 +1,4 @@
-import type { DomainEvent } from '../../../shared/events/domain-event.interface.js';
+import type { DomainEvent } from '../../shared/events/domain-event.interface.js';
 
 // ===== Device Events =====
 

@@ -11,6 +11,13 @@ describe("runtime handler wiring", () => {
     expect(getHandler("configHost")).toBe(handleConfigHost as never);
   });
 
+  test("runtime-handlers expone HANDLER_MAP en global", () => {
+    const scope = globalThis as Record<string, unknown>;
+
+    expect(scope.HANDLER_MAP).toBeDefined();
+    expect(Object.keys(scope.HANDLER_MAP as Record<string, unknown>)).toContain("addModule");
+  });
+
   test("setDeviceIp points to handleSetDeviceIp, not handleConfigHost", () => {
     expect(getHandler("setDeviceIp")).toBe(handleSetDeviceIp as never);
     expect(getHandler("setDeviceIp")).not.toBe(handleConfigHost as never);

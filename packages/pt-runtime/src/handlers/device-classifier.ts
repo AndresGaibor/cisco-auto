@@ -1,7 +1,7 @@
 import type { PTDevice } from "../utils/helpers";
 import { DEVICE_TYPES } from "../utils/constants";
 
-const END_DEVICE_TYPES = new Set<number>([
+const END_DEVICE_TYPES: number[] = [
   DEVICE_TYPES.pc as number,
   DEVICE_TYPES.server as number,
   DEVICE_TYPES.printer as number,
@@ -18,11 +18,11 @@ const END_DEVICE_TYPES = new Set<number>([
   DEVICE_TYPES.sniffer as number,
   DEVICE_TYPES.mcu as number,
   DEVICE_TYPES.sbc as number,
-]);
+];
 
 export function isEndDevice(device: PTDevice): boolean {
   try {
-    return END_DEVICE_TYPES.has(device.getType());
+    return END_DEVICE_TYPES.indexOf(device.getType()) !== -1;
   } catch {
     return false;
   }

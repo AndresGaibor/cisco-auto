@@ -5,16 +5,12 @@
 import type { PtRuntimeApi } from "../../pt-api/pt-deps.js";
 import type { PtResult } from "../../pt-api/pt-results.js";
 import type { ConfigIosPayload } from "../ios-payloads.js";
-import { createErrorResult, createSuccessResult } from "../result-factories";
-import { sanitizeTerminalOutput } from "../terminal-sanitizer";
-import { createCommandExecutor, type ExecutionOptions } from "../../terminal/index";
+import { createDeferredResult, createErrorResult } from "../result-factories";
 import { ensureSession } from "../../terminal/session-registry";
 import {
   getTerminalDevice,
-  inferExpectedModeAfterCommand,
-  DEFAULT_COMMAND_TIMEOUT,
-  DEFAULT_STALL_TIMEOUT,
 } from "./ios-session-utils";
+import { buildConfigIosPlan } from "../ios-plan-builder";
 
 /**
  * Ejecuta una secuencia de comandos IOS de configuración.
@@ -43,71 +39,14 @@ export async function handleConfigIos(payload: ConfigIosPayload, api: PtRuntimeA
 
   ensureSession(deviceName);
 
-  const executor = createCommandExecutor({
-    commandTimeoutMs: payload.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT,
-    stallTimeoutMs: payload.stallTimeoutMs ?? DEFAULT_STALL_TIMEOUT,
+  const plan = buildConfigIosPlan(deviceName, payload.commands, {
+    save: Boolean(payload.save),
+    stopOnError: Boolean(payload.stopOnError),
+    ensurePrivileged: Boolean(payload.ensurePrivileged),
+    dismissInitialDialog: payload.dismissInitialDialog ?? true,
+    commandTimeoutMs: payload.commandTimeoutMs ?? 30000,
+    stallTimeoutMs: payload.stallTimeoutMs ?? 15000,
   });
 
-  let allOutput = "";
-  let lastOk = false;
-
-  const execOptions: ExecutionOptions = {
-    commandTimeoutMs: payload.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT,
-    stallTimeoutMs: payload.stallTimeoutMs ?? DEFAULT_STALL_TIMEOUT,
-    autoAdvancePager: true,
-    autoDismissWizard: payload.dismissInitialDialog ?? true,
-    maxPagerAdvances: 50,
-  };
-
-  for (const command of payload.commands) {
-    const result = await executor.executeCommand(deviceName, command, terminal, {
-      ...execOptions,
-      expectedMode: inferExpectedModeAfterCommand(command),
-    });
-    allOutput += result.output;
-
-    if (!result.ok) {
-      if (payload.stopOnError) {
-        return createErrorResult(
-          result.error || `Command failed: ${command}`,
-          result.code,
-          { raw: allOutput }
-        );
-      }
-    } else {
-      lastOk = true;
-    }
-  }
-
-  if (payload.save) {
-    const saveResult = await executor.executeCommand(
-      deviceName,
-      "end",
-      terminal,
-      {
-        ...execOptions,
-        expectedMode: "privileged-exec" as any,
-      }
-    );
-    allOutput += saveResult.output;
-
-    const copyResult = await executor.executeCommand(
-      deviceName,
-      "copy run start",
-      terminal,
-      execOptions
-    );
-    allOutput += copyResult.output;
-    lastOk = copyResult.ok;
-  }
-
-  if (lastOk) {
-    return createSuccessResult(undefined, {
-      raw: sanitizeTerminalOutput(undefined, allOutput) || allOutput,
-    });
-  }
-
-  return createErrorResult("Configuration sequence failed", "CONFIG_FAILED", {
-    raw: allOutput,
-  });
+  return createDeferredResult(`configIos:${deviceName}`, plan);
 }

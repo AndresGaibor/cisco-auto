@@ -83,7 +83,7 @@ function sameEndpoint(deviceA: string, portA: string, deviceB: string, portB: st
 
 function pushLink(
   links: LiveLink[],
-  seen: Set<string>,
+  seen: string[],
   ep1: LiveEndpoint,
   ep2: LiveEndpoint,
   rawId: string,
@@ -93,8 +93,8 @@ function pushLink(
   if (!ep1.device || !ep1.port || !ep2.device || !ep2.port) return;
 
   const id = rawId || stableLinkId(ep1.device, ep1.port, ep2.device, ep2.port);
-  if (seen.has(id)) return;
-  seen.add(id);
+  if (seen.indexOf(id) !== -1) return;
+  seen.push(id);
 
   links.push({
     id,
@@ -115,9 +115,17 @@ function readEndpoint(
   port: any,
   fallbackDevice: string,
   fallbackIndex: number,
-  ownerByPort?: WeakMap<object, string>,
+  ownerByPort?: Array<{ port: object; device: string }>,
 ): LiveEndpoint {
-  const indexedOwner = ownerByPort && port && typeof port === "object" ? ownerByPort.get(port as object) ?? null : null;
+  let indexedOwner: string | null = null;
+  if (ownerByPort && port && typeof port === "object") {
+    for (let i = 0; i < ownerByPort.length; i++) {
+      if (ownerByPort[i].port === (port as object)) {
+        indexedOwner = ownerByPort[i].device;
+        break;
+      }
+    }
+  }
   const owner = safe(() => port.getOwnerDevice(), null as any);
   const device = indexedOwner ?? safe(() => owner?.getName?.(), fallbackDevice);
   const portName = safe(() => port.getName(), "");
@@ -138,8 +146,8 @@ function readEndpoint(
 
 export function collectLiveLinks(net: any): LiveLink[] {
   const links: LiveLink[] = [];
-  const seen = new Set<string>();
-  const ownerByPort = new WeakMap<object, string>();
+  const seen: string[] = [];
+  const ownerByPort: Array<{ port: object; device: string }> = [];
   const deviceCount = safe(() => Number(net.getDeviceCount()), 0);
 
   for (let di = 0; di < deviceCount; di++) {
@@ -154,7 +162,7 @@ export function collectLiveLinks(net: any): LiveLink[] {
       if (!localPort) continue;
 
       if (localPort && typeof localPort === "object") {
-        ownerByPort.set(localPort as object, deviceName);
+        ownerByPort.push({ port: localPort as object, device: deviceName });
       }
 
       const link = safe(() => (typeof localPort.getLink === "function" ? localPort.getLink() : null), null as any);

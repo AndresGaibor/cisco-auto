@@ -1,0 +1,127 @@
+import { describe, expect, test, vi } from "bun:test";
+import { createTerminalCommandService } from "./terminal-command-service.js";
+
+function createController(options: {
+  deviceType: string | number;
+  runtimeTerminal?: { runTerminalPlan?: ReturnType<typeof vi.fn> } | null;
+  execIos?: ReturnType<typeof vi.fn>;
+  execHost?: ReturnType<typeof vi.fn>;
+}) {
+  return {
+    inspectDevice: vi.fn().mockResolvedValue({ type: options.deviceType }),
+    execIos:
+      options.execIos ??
+      vi.fn().mockResolvedValue({ ok: true, raw: "legacy-ios", evidence: { source: "legacy-ios" }, warnings: [] }),
+    execHost:
+      options.execHost ??
+      vi.fn().mockResolvedValue({ success: true, raw: "legacy-host", verdict: { ok: true }, parsed: { source: "legacy-host" } }),
+  };
+}
+
+describe("createTerminalCommandService plan run", () => {
+  test("usa runTerminalPlan para IOS cuando está disponible", async () => {
+    const runTerminalPlan = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 0,
+      output: "runtime-ios",
+      warnings: ["runtime-warning"],
+      evidence: { source: "runtime-ios" },
+    });
+    const controller = createController({ deviceType: "router", runtimeTerminal: { runTerminalPlan } });
+    const service = createTerminalCommandService({
+      controller: controller as any,
+      runtimeTerminal: { runTerminalPlan } as any,
+      generateId: () => "ios-plan-id",
+    });
+
+    const result = await service.executeCommand("R1", "show version");
+
+    expect(runTerminalPlan).toHaveBeenCalledTimes(1);
+    expect((controller.execIos as any)).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      ok: true,
+      action: "ios.exec",
+      device: "R1",
+      deviceKind: "ios",
+      command: "show version",
+      output: "runtime-ios",
+      status: 0,
+      warnings: ["runtime-warning"],
+      evidence: { source: "runtime-ios" },
+    });
+  });
+
+  test("usa runTerminalPlan para host cuando está disponible", async () => {
+    const runTerminalPlan = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 1,
+      output: "runtime-host",
+      warnings: [],
+      evidence: { source: "runtime-host" },
+    });
+    const controller = createController({ deviceType: "pc", runtimeTerminal: { runTerminalPlan } });
+    const service = createTerminalCommandService({
+      controller: controller as any,
+      runtimeTerminal: { runTerminalPlan } as any,
+      generateId: () => "host-plan-id",
+    });
+
+    const result = await service.executeCommand("PC1", "ipconfig");
+
+    expect(runTerminalPlan).toHaveBeenCalledTimes(1);
+    expect((controller.execHost as any)).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      ok: false,
+      action: "host.exec",
+      device: "PC1",
+      deviceKind: "host",
+      command: "ipconfig",
+      output: "runtime-host",
+      status: 1,
+      evidence: { source: "runtime-host" },
+    });
+    expect(result.error?.code).toBe("HOST_EXEC_FAILED");
+  });
+
+  test("cae a execIos si no hay runTerminalPlan", async () => {
+    const execIos = vi.fn().mockResolvedValue({ ok: true, raw: "legacy-ios", evidence: { source: "legacy-ios" }, warnings: [] });
+    const controller = createController({ deviceType: "router", execIos });
+    const service = createTerminalCommandService({
+      controller: controller as any,
+      runtimeTerminal: null,
+      generateId: () => "legacy-ios-id",
+    });
+
+    const result = await service.executeCommand("R1", "show version");
+
+    expect(execIos).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      ok: true,
+      action: "ios.exec",
+      deviceKind: "ios",
+      output: "legacy-ios",
+      evidence: { source: "legacy-ios" },
+    });
+  });
+
+  test("cae a execHost si no hay runTerminalPlan", async () => {
+    const execHost = vi.fn().mockResolvedValue({ success: true, raw: "legacy-host", verdict: { ok: true }, parsed: { source: "legacy-host" } });
+    const controller = createController({ deviceType: "pc", execHost });
+    const service = createTerminalCommandService({
+      controller: controller as any,
+      runtimeTerminal: undefined,
+      generateId: () => "legacy-host-id",
+    });
+
+    const result = await service.executeCommand("PC1", "ipconfig");
+
+    expect(execHost).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      ok: true,
+      action: "host.exec",
+      deviceKind: "host",
+      output: "legacy-host",
+      evidence: { verdict: { ok: true }, parsed: { source: "legacy-host" } },
+    });
+  });
+});

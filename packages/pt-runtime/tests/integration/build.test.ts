@@ -1,6 +1,7 @@
 // packages/pt-runtime/tests/integration/build.test.ts
 import { describe, test, expect } from "bun:test";
 import { validatePtSafe } from "../../src/build/validate-pt-safe";
+import { RuntimeGenerator } from "../../src/build/runtime-generator";
 
 describe("Build Integration", () => {
   describe("validatePtSafe", () => {
@@ -84,5 +85,15 @@ function main() {
       expect(result.valid).toBe(false);
       expect(result.errors.some(e => e.message.includes("process"))).toBe(true);
     });
+  });
+
+  describe("runtime generation", () => {
+    test("no emite new Map ni new Set en runtime.js", () => {
+      const generator = new RuntimeGenerator({ devDir: "/tmp/pt-dev" });
+      const runtime = generator.generateRuntime();
+
+      expect(runtime.includes("new Map")).toBe(false);
+      expect(runtime.includes("new Set")).toBe(false);
+    }, 30000);
   });
 });

@@ -1,5 +1,5 @@
 import type { DeviceAggregate } from '../aggregates/device.aggregate.js';
-import type { DeviceType } from '../../value-objects/device-id.vo.js';
+import type { DeviceType } from '../value-objects/device-id.vo.js';
 
 /**
  * Interfaz de repositorio para dispositivos IOS.
@@ -16,17 +16,4 @@ export interface DeviceRepository {
   findAll(): Promise<DeviceAggregate[]>;
   /** Busca dispositivos por tipo */
   findByType(type: DeviceType): Promise<DeviceAggregate[]>;
-}
-
-/**
- * Interfaz de repositorio para topología de red.
- * Define las operaciones de persistencia para TopologyGraphAggregate.
- */
-export interface TopologyRepository {
-  /** Guarda una topología */
-  save(topology: import('../topology/aggregates/topology-graph.aggregate.js').TopologyGraphAggregate): Promise<void>;
-  /** Busca una topología por ID */
-  findById(id: string): Promise<import('../topology/aggregates/topology-graph.aggregate.js').TopologyGraphAggregate | null>;
-  /** Busca todas las topologías */
-  findAll(): Promise<import('../topology/aggregates/topology-graph.aggregate.js').TopologyGraphAggregate[]>;
 }

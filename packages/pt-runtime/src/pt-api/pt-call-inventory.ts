@@ -13,11 +13,13 @@ export function getCallsForFile(sourceFile: string): PTCallEntry[] {
 }
 
 export function getMethodsForObjectType(objectType: string): string[] {
-  const methods = new Set<string>();
+  const methods: string[] = [];
   for (const entry of PT_CALL_INVENTORY) {
     if (entry.objectType === objectType) {
-      methods.add(entry.method);
+      if (methods.indexOf(entry.method) === -1) {
+        methods.push(entry.method);
+      }
     }
   }
-  return Array.from(methods).sort();
+  return methods.sort();
 }

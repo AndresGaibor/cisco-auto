@@ -4,6 +4,7 @@ import type {
   TerminalCommandResult,
 } from "@cisco-auto/terminal-contracts";
 import type { RuntimeTerminalPort } from "../../ports/runtime-terminal-port.js";
+import { buildUniversalTerminalPlan } from "./terminal-plan-builder.js";
 
 export interface TerminalControllerPort {
   inspectDevice(device: string): Promise<{ type?: string | number } | null | undefined>;
@@ -73,8 +74,55 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
     command: string,
     options?: RunTerminalCommandOptions
   ): Promise<TerminalCommandResult> {
+    const runtimeTerminal = deps.runtimeTerminal;
     const executionTimeout = options?.timeoutMs ?? 45000;
     const bridgeTimeout = executionTimeout + 5000; // Margen para que el runtime falle primero
+
+    if (runtimeTerminal?.runTerminalPlan) {
+      const plan = buildUniversalTerminalPlan({
+        id: deps.generateId(),
+        device,
+        command,
+        deviceKind: "ios",
+        mode: options?.mode,
+        allowConfirm: options?.allowConfirm,
+        allowDestructive: options?.allowDestructive,
+        timeoutMs: executionTimeout,
+      });
+
+      const runtimeResult = (await runtimeTerminal.runTerminalPlan(plan, { timeoutMs: bridgeTimeout })) as any;
+
+      if (!runtimeResult.ok) {
+        return {
+          ok: false,
+          action: "ios.exec",
+          device,
+          deviceKind: "ios",
+          command,
+          output: String(runtimeResult.output ?? ""),
+          status: Number(runtimeResult.status ?? 1),
+          error: {
+            code: String(runtimeResult.error?.code ?? "IOS_EXEC_FAILED"),
+            message: String(runtimeResult.error?.message ?? "Error en ejecución de comando IOS"),
+            phase: "execution",
+          },
+          warnings: Array.isArray(runtimeResult.warnings) ? runtimeResult.warnings : [],
+          evidence: runtimeResult.evidence,
+        };
+      }
+
+      return {
+        ok: true,
+        action: "ios.exec",
+        device,
+        deviceKind: "ios",
+        command,
+        output: String(runtimeResult.output ?? ""),
+        status: Number(runtimeResult.status ?? 0),
+        warnings: Array.isArray(runtimeResult.warnings) ? runtimeResult.warnings : [],
+        evidence: runtimeResult.evidence,
+      };
+    }
 
     let execResult: any;
 
@@ -176,6 +224,7 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
     command: string,
     options?: RunTerminalCommandOptions
   ): Promise<TerminalCommandResult> {
+    const runtimeTerminal = deps.runtimeTerminal;
     const cmdName = command.split(" ")[0]!.toLowerCase();
     let capabilityId = "host.exec";
 
@@ -187,6 +236,59 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
     else if (cmdName === "netstat") capabilityId = "host.netstat";
 
     const timeoutMs = options?.timeoutMs ?? 45000;
+    if (runtimeTerminal?.runTerminalPlan) {
+      const plan = buildUniversalTerminalPlan({
+        id: deps.generateId(),
+        device,
+        command,
+        deviceKind: "host",
+        mode: options?.mode,
+        allowConfirm: options?.allowConfirm,
+        allowDestructive: options?.allowDestructive,
+        timeoutMs,
+      });
+
+      const runtimeResult = (await runtimeTerminal.runTerminalPlan(plan, { timeoutMs })) as any;
+
+      if (!runtimeResult.ok) {
+        const hostOutput = String(runtimeResult.output ?? "");
+        const hostCode =
+          hostOutput.toLowerCase().includes("invalid command") ||
+          hostOutput.toLowerCase().includes("not recognized")
+            ? "HOST_INVALID_COMMAND"
+            : "HOST_EXEC_FAILED";
+
+        return {
+          ok: false,
+          action: "host.exec",
+          device,
+          deviceKind: "host",
+          command,
+          output: hostOutput,
+          status: Number(runtimeResult.status ?? 1),
+          error: {
+            code: String(runtimeResult.error?.code ?? hostCode),
+            message: String(runtimeResult.error?.message ?? "Error en ejecución de comando Host"),
+            phase: "execution",
+          },
+          warnings: Array.isArray(runtimeResult.warnings) ? runtimeResult.warnings : [],
+          evidence: runtimeResult.evidence,
+        };
+      }
+
+      return {
+        ok: true,
+        action: "host.exec",
+        device,
+        deviceKind: "host",
+        command,
+        output: String(runtimeResult.output ?? ""),
+        status: Number(runtimeResult.status ?? 0),
+        warnings: Array.isArray(runtimeResult.warnings) ? runtimeResult.warnings : [],
+        evidence: runtimeResult.evidence,
+      };
+    }
+
     const execResult = await deps.controller.execHost(device, command, capabilityId, {
       timeoutMs,
     });

@@ -34,34 +34,46 @@ export function createRuntimeTerminalAdapter(
   const responseParser = createResponseParser();
   const planAdapter = createTerminalPlanAdapter();
 
-  async function runTerminalPlan(
-    plan: TerminalPlan,
-    options?: TerminalPortOptions,
-  ): Promise<TerminalPortResult> {
-    const timeoutMs = options?.timeoutMs ?? defaultTimeout;
+  function normalizeBridgeValue(result: unknown): unknown {
+    return (result as { value?: unknown })?.value ?? result ?? {};
+  }
 
-    const validation = planAdapter.validatePlan(plan);
-    if (!validation.valid) {
-      return {
-        ok: false,
-        output: "",
-        status: 1,
-        promptBefore: "",
-        promptAfter: "",
-        modeBefore: "",
-        modeAfter: "",
-        events: [],
-        warnings: validation.errors,
-        confidence: 0,
-      };
+  function isDeferredValue(value: unknown): value is { deferred: true; ticket: string } {
+    return (
+      typeof value === "object" &&
+      value !== null &&
+      (value as { deferred?: unknown }).deferred === true &&
+      typeof (value as { ticket?: unknown }).ticket === "string"
+    );
+  }
+
+  function isStillPending(value: unknown): boolean {
+    if (!value || typeof value !== "object") {
+      return false;
     }
 
-    if (validation.warnings.length > 0) {
-      console.warn("[runtime-terminal] Plan warnings:", validation.warnings);
-    }
+    const record = value as Record<string, unknown>;
+    if (record.deferred === true) return true;
+    if (record.done === false) return true;
+    if (record.status === "pending") return true;
+    if (record.status === "in-flight") return true;
+    if (record.status === "running") return true;
+    return false;
+  }
 
-    const normalizedPlan = planAdapter.normalizePlan(plan);
+  function isUnsupportedTerminalPlanRun(result: unknown): boolean {
+    const value = result as { error?: unknown; value?: { error?: unknown } } | null | undefined;
+    const text = String(value?.error ?? value?.value?.error ?? "").toLowerCase();
+    return (
+      text.includes("unknown command") ||
+      text.includes("not found") ||
+      text.includes("unsupported") ||
+      text.includes("unrecognized") ||
+      text.includes("no existe")
+    );
+  }
 
+  async function executeLegacyPlan(normalizedPlan: ReturnType<typeof planAdapter.normalizePlan>): Promise<TerminalPortResult> {
     let promptBefore = "";
     let modeBefore = "";
     let promptAfter = "";
@@ -77,10 +89,8 @@ export function createRuntimeTerminalAdapter(
     const isHost = deviceType === "host";
     const handlerName = isHost ? "execPc" : "execIos";
 
-    const defaultTimeouts: TerminalPlanTimeouts = normalizedPlan.timeouts ??
-      payloadBuilder.getDefaultTimeouts();
-    const defaultPolicies: TerminalPlanPolicies = normalizedPlan.policies ??
-      payloadBuilder.getDefaultPolicies();
+    const defaultTimeouts = normalizedPlan.timeouts ?? payloadBuilder.getDefaultTimeouts();
+    const defaultPolicies = normalizedPlan.policies ?? payloadBuilder.getDefaultPolicies();
 
     for (let i = 0; i < normalizedPlan.steps.length; i += 1) {
       const step = normalizedPlan.steps[i]!;
@@ -99,27 +109,15 @@ export function createRuntimeTerminalAdapter(
           i,
         );
 
-        if (result.promptBefore && !promptBefore) {
-          promptBefore = result.promptBefore;
-        }
-        if (result.modeBefore && !modeBefore) {
-          modeBefore = result.modeBefore;
-        }
-        if (result.promptAfter) {
-          promptAfter = result.promptAfter;
-        }
-        if (result.modeAfter) {
-          modeAfter = result.modeAfter;
-        }
-        if (result.finalParsed) {
-          finalParsed = result.finalParsed;
-        }
+        if (result.promptBefore && !promptBefore) promptBefore = result.promptBefore;
+        if (result.modeBefore && !modeBefore) modeBefore = result.modeBefore;
+        if (result.promptAfter) promptAfter = result.promptAfter;
+        if (result.modeAfter) modeAfter = result.modeAfter;
+        if (result.finalParsed) finalParsed = result.finalParsed;
 
         events.push(event);
 
-        if (returnEarly && returnValue) {
-          return returnValue;
-        }
+        if (returnEarly && returnValue) return returnValue;
         continue;
       }
 
@@ -151,18 +149,6 @@ export function createRuntimeTerminalAdapter(
       const stepTimeout = step.timeout ?? defaultTimeouts.commandTimeoutMs;
       const stepStallTimeout = defaultTimeouts.stallTimeoutMs;
 
-      const stepPolicies = {
-        allowPager: step.allowPager ?? defaultPolicies.autoAdvancePager,
-        allowConfirm: step.allowConfirm ?? false,
-      };
-
-      const ensurePrivileged = payloadBuilder.shouldEnsurePrivilegedForStep({
-        isHost,
-        planTargetMode: normalizedPlan.targetMode,
-        command,
-        stepIndex: i,
-      });
-
       const payload = payloadBuilder.buildCommandPayload({
         handlerName,
         device: normalizedPlan.device,
@@ -170,22 +156,20 @@ export function createRuntimeTerminalAdapter(
         targetMode: normalizedPlan.targetMode,
         expectMode: step.expectMode,
         expectPromptPattern: step.expectPromptPattern,
-        allowPager: stepPolicies.allowPager,
-        allowConfirm: stepPolicies.allowConfirm,
-        ensurePrivileged,
+        allowPager: step.allowPager ?? defaultPolicies.autoAdvancePager,
+        allowConfirm: step.allowConfirm ?? false,
+        ensurePrivileged: payloadBuilder.shouldEnsurePrivilegedForStep({
+          isHost,
+          planTargetMode: normalizedPlan.targetMode,
+          command,
+          stepIndex: i,
+        }),
         commandTimeoutMs: stepTimeout,
         stallTimeoutMs: stepStallTimeout,
       });
 
-      const bridgeResult = await bridge.sendCommandAndWait<unknown>(
-        handlerName,
-        payload,
-        stepTimeout,
-      );
-
-      const res = (bridgeResult as any)?.value ?? bridgeResult ?? {};
-
-      const parsed = responseParser.parseCommandResponse(res, {
+      const bridgeResult = await bridge.sendCommandAndWait<unknown>(handlerName, payload, stepTimeout);
+      const parsed = responseParser.parseCommandResponse(normalizeBridgeValue(bridgeResult), {
         stepIndex: i,
         isHost,
         command,
@@ -203,14 +187,11 @@ export function createRuntimeTerminalAdapter(
       finalParsed = parsed.parsed;
 
       warnings.push(...parsed.warnings);
-
       const event = responseParser.buildEventFromResponse(parsed, step, i);
       events.push(event);
 
       const mismatchWarning = responseParser.checkPromptMismatch(parsed, step);
-      if (mismatchWarning) {
-        warnings.push(mismatchWarning);
-      }
+      if (mismatchWarning) warnings.push(mismatchWarning);
 
       if (!parsed.ok || parsed.status !== 0) {
         return {
@@ -242,6 +223,123 @@ export function createRuntimeTerminalAdapter(
       parsed: finalParsed,
       confidence: warnings.length > 0 ? 0.8 : 1,
     };
+  }
+
+  async function executeTerminalPlanRun(
+    plan: TerminalPlan,
+    timeoutMs: number,
+  ): Promise<TerminalPortResult | null> {
+    const submitTimeoutMs = plan.steps[0]?.timeout ?? timeoutMs;
+    const submitResult = await bridge.sendCommandAndWait<unknown>(
+      "terminal.plan.run",
+      { plan, options: { timeoutMs } },
+      submitTimeoutMs,
+    );
+
+    if (isUnsupportedTerminalPlanRun(submitResult)) {
+      return null;
+    }
+
+    const submitValue = normalizeBridgeValue(submitResult);
+    if (isDeferredValue(submitValue)) {
+      const startedAt = Date.now();
+      let pollValue: unknown = submitValue;
+
+      while (Date.now() - startedAt < timeoutMs) {
+        const pollResult = await bridge.sendCommandAndWait<unknown>(
+          "__pollDeferred",
+          { ticket: submitValue.ticket },
+          timeoutMs,
+        );
+
+        pollValue = normalizeBridgeValue(pollResult);
+        if (!isStillPending(pollValue)) {
+          break;
+        }
+      }
+
+      const parsed = responseParser.parseCommandResponse(pollValue, {
+        stepIndex: 0,
+        isHost: false,
+        command: "terminal.plan.run",
+      });
+
+      const warnings = [...parsed.warnings];
+      const mismatchWarning = responseParser.checkPromptMismatch(parsed, plan.steps[0] ?? {});
+      if (mismatchWarning) warnings.push(mismatchWarning);
+
+      return {
+        ok: parsed.ok,
+        output: parsed.raw.trim(),
+        status: parsed.status,
+        promptBefore: parsed.promptBefore,
+        promptAfter: parsed.promptAfter,
+        modeBefore: parsed.modeBefore,
+        modeAfter: parsed.modeAfter,
+        events: [responseParser.buildEventFromResponse(parsed, { kind: "command", command: "terminal.plan.run" }, 0)],
+        warnings,
+        parsed: parsed.parsed,
+        confidence: !parsed.ok || parsed.status !== 0 ? 0 : warnings.length > 0 ? 0.8 : 1,
+      };
+    }
+
+    const parsed = responseParser.parseCommandResponse(submitValue, {
+      stepIndex: 0,
+      isHost: false,
+      command: "terminal.plan.run",
+    });
+
+    const warnings = [...parsed.warnings];
+    const mismatchWarning = responseParser.checkPromptMismatch(parsed, plan.steps[0] ?? {});
+    if (mismatchWarning) warnings.push(mismatchWarning);
+
+    return {
+      ok: parsed.ok,
+      output: parsed.raw.trim(),
+      status: parsed.status,
+      promptBefore: parsed.promptBefore,
+      promptAfter: parsed.promptAfter,
+      modeBefore: parsed.modeBefore,
+      modeAfter: parsed.modeAfter,
+      events: [responseParser.buildEventFromResponse(parsed, { kind: "command", command: "terminal.plan.run" }, 0)],
+      warnings,
+      parsed: parsed.parsed,
+      confidence: !parsed.ok || parsed.status !== 0 ? 0 : warnings.length > 0 ? 0.8 : 1,
+    };
+  }
+
+  async function runTerminalPlan(
+    plan: TerminalPlan,
+    options?: TerminalPortOptions,
+  ): Promise<TerminalPortResult> {
+    const timeoutMs = options?.timeoutMs ?? defaultTimeout;
+
+    const validation = planAdapter.validatePlan(plan);
+    if (!validation.valid) {
+      return {
+        ok: false,
+        output: "",
+        status: 1,
+        promptBefore: "",
+        promptAfter: "",
+        modeBefore: "",
+        modeAfter: "",
+        events: [],
+        warnings: validation.errors,
+        confidence: 0,
+      };
+    }
+
+    if (validation.warnings.length > 0) {
+      console.warn("[runtime-terminal] Plan warnings:", validation.warnings);
+    }
+
+    const normalizedPlan = planAdapter.normalizePlan(plan);
+
+    const deferredResult = await executeTerminalPlanRun(normalizedPlan, timeoutMs);
+    if (deferredResult) return deferredResult;
+
+    return executeLegacyPlan(normalizedPlan);
   }
 
   return {

@@ -26,35 +26,36 @@ export interface PrimitiveContext {
   lw: any;
 }
 
-const primitiveRegistry = new Map<string, PrimitiveEntry>();
+const primitiveRegistry: Record<string, PrimitiveEntry> = {};
 
 export function registerPrimitive<T>(entry: PrimitiveEntry<T>): void {
-  if (primitiveRegistry.has(entry.id)) {
+  if (primitiveRegistry[entry.id]) {
     throw new Error(`Duplicate primitive id: ${entry.id}`);
   }
-  primitiveRegistry.set(entry.id, entry as PrimitiveEntry);
+  primitiveRegistry[entry.id] = entry as PrimitiveEntry;
 }
 
 export function getPrimitive(id: string): PrimitiveEntry | undefined {
-  return primitiveRegistry.get(id);
+  return primitiveRegistry[id];
 }
 
 export function listPrimitives(): string[] {
-  return Array.from(primitiveRegistry.keys());
+  return Object.keys(primitiveRegistry);
 }
 
 export function getPrimitivesByDomain(domain: PrimitiveDomain): string[] {
   const result: string[] = [];
-  for (const [id, entry] of primitiveRegistry) {
-    if (entry.domain === domain) {
-      result.push(id);
-    }
+  const ids = Object.keys(primitiveRegistry);
+  for (let i = 0; i < ids.length; i++) {
+    const id = ids[i];
+    const entry = primitiveRegistry[id];
+    if (entry.domain === domain) result.push(id);
   }
   return result;
 }
 
 export function executePrimitive<T>(id: string, payload: T, context: PrimitiveContext): PrimitiveResult {
-  const primitive = primitiveRegistry.get(id);
+  const primitive = primitiveRegistry[id];
   if (!primitive) {
     return { ok: false, error: `Unknown primitive: ${id}`, code: "PRIMITIVE_NOT_FOUND", confidence: 0 };
   }

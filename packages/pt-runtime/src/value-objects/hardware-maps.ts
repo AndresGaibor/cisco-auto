@@ -49,20 +49,25 @@ export function validatePortExists(deviceModel: string, portName: string): { val
       return rawModel;
     }
   })();
-  const modelKeys = Array.from(new Set([
+  const modelKeys: string[] = [];
+  const candidateKeys = [
     requestedModel,
     requestedModel.toLowerCase(),
     requestedModel.toUpperCase(),
     rawModel,
     rawModel.toLowerCase(),
     rawModel.toUpperCase(),
-  ].filter(Boolean)));
+  ].filter(Boolean) as string[];
+  for (let i = 0; i < candidateKeys.length; i++) {
+    const key = candidateKeys[i];
+    if (modelKeys.indexOf(key) === -1) modelKeys.push(key);
+  }
   const ports = modelKeys.map((key) => PT_PORT_MAP[key]).find((value) => value);
 
   if (!ports) {
     const normalized = requestedModel.toLowerCase();
-    const hostFallbackModels = new Set(["pc-pt", "server-pt", "laptop-pt"]);
-    if (hostFallbackModels.has(normalized)) {
+    const hostFallbackModels = ["pc-pt", "server-pt", "laptop-pt"];
+    if (hostFallbackModels.indexOf(normalized) !== -1) {
       const requested = (portName || '').replace(/\s+/g, '').toLowerCase();
       if (requested === "fastethernet0" || requested === "ethernet0" || requested === "gigabitethernet0") {
         return { valid: true, connector: "rj45" };

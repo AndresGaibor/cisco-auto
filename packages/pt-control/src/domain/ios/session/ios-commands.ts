@@ -11,14 +11,14 @@ export interface IosCommandStrategy {
 class RouterStrategy implements IosCommandStrategy {
   readonly deviceType: IosDeviceType = "router";
   readonly supportedCommands: string[] = [
-    "show", 
-    "config", 
-    "interface", 
-    "router", 
-    "acl", 
-    "vlan", 
-    "spanning-tree", 
-    "etherchannel"
+    "show",
+    "config",
+    "interface",
+    "router",
+    "acl",
+    "vlan",
+    "spanning-tree",
+    "etherchannel",
   ];
 
   dismissSetupCommand(): string {
@@ -26,7 +26,7 @@ class RouterStrategy implements IosCommandStrategy {
   }
 
   pressReturnCommand(): string {
-    return "";
+    return "\r\n";
   }
 
   confirmationCommand(): string {
@@ -37,13 +37,13 @@ class RouterStrategy implements IosCommandStrategy {
 class SwitchStrategy implements IosCommandStrategy {
   readonly deviceType: IosDeviceType = "switch";
   readonly supportedCommands: string[] = [
-    "show", 
-    "config", 
-    "interface", 
-    "vlan", 
-    "spanning-tree", 
-    "etherchannel", 
-    "port-security"
+    "show",
+    "config",
+    "interface",
+    "vlan",
+    "spanning-tree",
+    "etherchannel",
+    "port-security",
   ];
 
   dismissSetupCommand(): string {
@@ -51,7 +51,7 @@ class SwitchStrategy implements IosCommandStrategy {
   }
 
   pressReturnCommand(): string {
-    return "";
+    return "\r\n";
   }
 
   confirmationCommand(): string {
@@ -62,11 +62,11 @@ class SwitchStrategy implements IosCommandStrategy {
 class PcStrategy implements IosCommandStrategy {
   readonly deviceType: IosDeviceType = "pc";
   readonly supportedCommands: string[] = [
-    "ipconfig", 
-    "ping", 
-    "tracert", 
-    "arp", 
-    "netstat"
+    "ipconfig",
+    "ping",
+    "tracert",
+    "arp",
+    "netstat",
   ];
 
   dismissSetupCommand(): string | null {
@@ -74,7 +74,7 @@ class PcStrategy implements IosCommandStrategy {
   }
 
   pressReturnCommand(): string {
-    return "";
+    return "\r\n";
   }
 
   confirmationCommand(): string {
