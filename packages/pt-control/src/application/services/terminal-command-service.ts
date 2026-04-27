@@ -64,6 +64,33 @@ function normalizeText(value: unknown): string {
   return String(value ?? "").trim().toLowerCase();
 }
 
+function extractIosFailureDetails(input: {
+  output?: unknown;
+  error?: { code?: unknown; message?: unknown };
+}): { code: string; message: string } {
+  const output = String(input.output ?? "").trim();
+  const loweredOutput = output.toLowerCase();
+
+  if (loweredOutput.includes("invalid input detected") || loweredOutput.includes("invalid command")) {
+    return {
+      code: "IOS_INVALID_INPUT",
+      message: output || "Entrada inválida en IOS",
+    };
+  }
+
+  if (loweredOutput.includes("not recognized")) {
+    return {
+      code: "IOS_UNKNOWN_COMMAND",
+      message: output || "Comando IOS no reconocido",
+    };
+  }
+
+  return {
+    code: String(input.error?.code ?? "IOS_EXEC_FAILED"),
+    message: output || String(input.error?.message ?? "Error en ejecución de comando IOS"),
+  };
+}
+
 function getDeviceModel(deviceState: { model?: unknown; customDeviceModel?: unknown }): string {
   return normalizeText(deviceState.model ?? deviceState.customDeviceModel);
 }
@@ -167,6 +194,11 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
       const runtimeResult = (await runtimeTerminal.runTerminalPlan(plan, { timeoutMs: bridgeTimeout })) as any;
 
       if (!runtimeResult.ok) {
+        const iosFailure = extractIosFailureDetails({
+          output: runtimeResult.output,
+          error: runtimeResult.error,
+        });
+
         return {
           ok: false,
           action: "ios.exec",
@@ -176,8 +208,8 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
           output: String(runtimeResult.output ?? ""),
           status: Number(runtimeResult.status ?? 1),
           error: {
-            code: String(runtimeResult.error?.code ?? "IOS_EXEC_FAILED"),
-            message: String(runtimeResult.error?.message ?? "Error en ejecución de comando IOS"),
+            code: iosFailure.code,
+            message: iosFailure.message,
             phase: "execution",
           },
           warnings: Array.isArray(runtimeResult.warnings) ? runtimeResult.warnings : [],
@@ -257,6 +289,10 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
       const events = Array.isArray(evidence?.events) ? evidence.events : [];
       const parsedError = (execResult.parsed as any)?.error;
       const failureEvent = events.find((e: any) => e?.error || e?.code);
+      const iosFailure = extractIosFailureDetails({
+        output,
+        error: parsedError,
+      });
 
       return {
         ok: false,
@@ -267,12 +303,8 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
         output,
         status: 1,
         error: {
-          code: String(
-            parsedError?.code ?? failureEvent?.code ?? "IOS_EXEC_FAILED"
-          ),
-          message: String(
-            parsedError?.message ?? failureEvent?.error ?? "Error en ejecución de comando IOS"
-          ),
+          code: String(parsedError?.code ?? failureEvent?.code ?? iosFailure.code),
+          message: String(parsedError?.message ?? failureEvent?.error ?? iosFailure.message),
           phase: "execution",
         },
         warnings: Array.isArray(execResult.warnings) ? execResult.warnings : [],

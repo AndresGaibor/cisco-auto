@@ -77,6 +77,27 @@ export interface ExecutionEngine {
 export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine {
   const jobs: Record<string, ActiveJob> = {};
 
+  function isConfigMode(mode: string | null | undefined): boolean {
+    return String(mode ?? "").startsWith("config");
+  }
+
+  function cleanupConfigSession(device: string, mode: string | null | undefined, prompt: string | null | undefined): void {
+    if (!isConfigMode(mode) && !/\(config[^)]*\)#\s*$/.test(String(prompt ?? ""))) {
+      return;
+    }
+
+    execLog("CLEANUP config session device=" + device);
+    void terminal
+      .executeCommand(device, "end", {
+        commandTimeoutMs: 5000,
+        allowPager: false,
+        autoConfirm: false,
+      })
+      .catch(function (error) {
+        execLog("CLEANUP failed device=" + device + " error=" + String(error));
+      });
+  }
+
   function execLog(msg: string): void {
     try {
       dprint("[exec] " + msg);
@@ -233,7 +254,12 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
         let command = step.value || "";
         if (stepType === "ensure-mode") {
           const targetMode = step.value || "privileged-exec";
-          if (targetMode === "privileged-exec") command = "enable";
+          const currentSession = terminal.getSession(job.device);
+          const currentMode = currentSession ? String(currentSession.mode ?? "") : "";
+
+          if (targetMode === "privileged-exec") {
+            command = isConfigMode(currentMode) ? "end" : "enable";
+          }
           else if (targetMode === "config") command = "configure terminal";
           else if (targetMode === "config-if")
             command = "interface " + (step.options?.expectedPrompt || "");
@@ -300,7 +326,7 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
 
             if (stepType === "ensure-mode") {
               const target = step.value || "privileged-exec";
-              if (result.session.mode !== target && result.status !== 0) {
+              if (result.session.mode !== target || result.status !== 0) {
                 execLog(
                   "MODE TRANSITION FAILED id=" +
                     job.id +
@@ -314,6 +340,7 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
                   "Mode transition failed: expected " + target + " but got " + result.session.mode;
                 ctx.errorCode = "MODE_TRANSITION_FAILED";
                 ctx.finished = true;
+                cleanupConfigSession(job.device, result.session.mode, result.session.prompt);
                 return;
               }
             }
@@ -324,6 +351,7 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
               ctx.error = "Command failed with status " + result.status + ": " + command;
               ctx.errorCode = "CMD_FAILED";
               ctx.finished = true;
+              cleanupConfigSession(job.device, result.session.mode, result.session.prompt);
               return;
             }
 
@@ -351,6 +379,7 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
             ctx.error = String(err);
             ctx.errorCode = "EXEC_ERROR";
             ctx.finished = true;
+            cleanupConfigSession(job.device, ctx.lastMode, ctx.lastPrompt);
           });
         break;
       }

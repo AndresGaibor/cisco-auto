@@ -65,12 +65,41 @@ describe("terminal-plan-builder", () => {
       mode: "safe",
     });
 
-    expect(plan.steps.map((step: TerminalPlanStep) => step.command)).toEqual([
+    expect(plan.steps.map((step: TerminalPlanStep) => step.kind)).toEqual([
+      "ensureMode",
+      "command",
+      "command",
+      "command",
+      "command",
+    ]);
+    expect(plan.steps[0]).toMatchObject({ kind: "ensureMode", expectMode: "privileged-exec" });
+    expect(plan.steps.slice(1).map((step: TerminalPlanStep) => step.command)).toEqual([
       "configure terminal",
       "interface g0/0",
       "no shutdown",
       "end",
     ]);
     expect(plan.targetMode).toBe("global-config");
+  });
+
+  test("buildUniversalTerminalPlan inserta enable para comandos IOS privilegiados", () => {
+    const plan = buildUniversalTerminalPlan({
+      id: "ios-privileged",
+      device: "R1",
+      deviceKind: "ios",
+      command: "show running-config",
+      mode: "safe",
+    });
+
+    expect(plan.targetMode).toBe("privileged-exec");
+    expect(plan.steps.map((step: TerminalPlanStep) => step.kind)).toEqual(["ensureMode", "command"]);
+    expect(plan.steps[0]).toMatchObject({
+      kind: "ensureMode",
+      expectMode: "privileged-exec",
+    });
+    expect(plan.steps[1]).toMatchObject({
+      kind: "command",
+      command: "show running-config",
+    });
   });
 });

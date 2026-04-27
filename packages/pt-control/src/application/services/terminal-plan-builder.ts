@@ -50,14 +50,50 @@ function isConfigureTerminal(command: string): boolean {
   return /^(conf|config|configure)(\s+t|\s+terminal)?$/i.test(command.trim());
 }
 
+function normalizeIosCommand(line: string): string {
+  return line.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function isEnableCommand(line: string): boolean {
+  return /^enable\b/i.test(line.trim());
+}
+
+function requiresPrivilegedIosCommand(line: string): boolean {
+  const cmd = normalizeIosCommand(line);
+
+  return (
+    /^show running-config\b/.test(cmd) ||
+    /^show startup-config\b/.test(cmd) ||
+    /^show archive\b/.test(cmd) ||
+    /^show tech-support\b/.test(cmd) ||
+    /^write\b/.test(cmd) ||
+    /^copy\b/.test(cmd) ||
+    /^erase\b/.test(cmd) ||
+    /^reload\b/.test(cmd) ||
+    /^clear\b/.test(cmd) ||
+    /^debug\b/.test(cmd) ||
+    /^undebug\b/.test(cmd) ||
+    isConfigureTerminal(cmd)
+  );
+}
+
+function shouldPrependEnable(options: BuildUniversalTerminalPlanOptions, lines: string[]): boolean {
+  if (options.deviceKind !== "ios") return false;
+  if (options.mode === "raw") return false;
+  if (lines.length === 0) return false;
+  if (isEnableCommand(lines[0] ?? "")) return false;
+
+  return lines.some(requiresPrivilegedIosCommand);
+}
+
 function inferIosTargetMode(lines: string[]): TerminalMode | undefined {
-  const normalized = lines.map((line) => line.trim().toLowerCase());
+  const normalized = lines.map(normalizeIosCommand);
 
   if (normalized.some((line) => isConfigureTerminal(line))) {
     return "global-config";
   }
 
-  if (normalized.some((line) => line.startsWith("show ") || line.startsWith("do show "))) {
+  if (normalized.some(requiresPrivilegedIosCommand)) {
     return "privileged-exec";
   }
 
@@ -65,7 +101,7 @@ function inferIosTargetMode(lines: string[]): TerminalMode | undefined {
     return "privileged-exec";
   }
 
-  return "privileged-exec";
+  return undefined;
 }
 
 export function buildUniversalTerminalPlan(
@@ -111,13 +147,28 @@ export function buildUniversalTerminalPlan(
     };
   }
 
-  const steps: TerminalPlanStep[] = lines.map((line) => ({
-    kind: "command",
-    command: line,
-    timeout: options.timeoutMs,
-    allowPager: /^show\s+/i.test(line),
-    allowConfirm: Boolean(options.allowConfirm),
-  }));
+  const steps: TerminalPlanStep[] = [];
+
+  if (shouldPrependEnable(options, lines)) {
+    steps.push({
+      kind: "ensureMode",
+      expectMode: "privileged-exec",
+      timeout: options.timeoutMs,
+      metadata: {
+        reason: "auto-enable-for-privileged-ios-command",
+      },
+    });
+  }
+
+  steps.push(
+    ...lines.map((line) => ({
+      kind: "command" as const,
+      command: line,
+      timeout: options.timeoutMs,
+      allowPager: /^show\s+/i.test(line),
+      allowConfirm: Boolean(options.allowConfirm),
+    })),
+  );
 
   return {
     id: options.id,

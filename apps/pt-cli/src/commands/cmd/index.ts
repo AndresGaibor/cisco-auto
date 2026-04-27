@@ -22,34 +22,50 @@ function joinCommandParts(parts: string[]): string {
   return parts.join(" ").trim();
 }
 
-function readCommandsFromOptions(options: { file?: string; stdin?: boolean }, commandParts: string[]): string[] {
+function normalizeCommandLines(content: string): string[] {
+  return content
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0)
+    .filter((line) => !line.trimStart().startsWith("#"));
+}
+
+function readCommandsFromOptions(
+  options: { file?: string; stdin?: boolean; config?: boolean },
+  commandParts: string[],
+): string[] {
   if (options.file) {
-    const content = readFileSync(options.file, "utf-8");
-    return content
-      .split(/\r?\n/)
-      .map((line) => line.trimEnd())
-      .filter((line) => line.trim().length > 0)
-      .filter((line) => !line.trimStart().startsWith("#"));
+    return normalizeCommandLines(readFileSync(options.file, "utf-8"));
   }
 
   if (options.stdin) {
-    const content = readFileSync(0, "utf-8");
-    return content
-      .split(/\r?\n/)
-      .map((line) => line.trimEnd())
-      .filter((line) => line.trim().length > 0)
-      .filter((line) => !line.trimStart().startsWith("#"));
+    return normalizeCommandLines(readFileSync(0, "utf-8"));
+  }
+
+  if (options.config) {
+    return commandParts.flatMap((part) => normalizeCommandLines(part)).filter(Boolean);
   }
 
   const joined = joinCommandParts(commandParts);
   return joined ? [joined] : [];
 }
 
+function isEndCommand(command: string): boolean {
+  return /^(end|exit)$/i.test(command.trim());
+}
+
 function buildConfigCommand(commands: string[], save: boolean): string {
   const lines: string[] = [];
+  const normalizedCommands = commands.filter((line) => line.trim().length > 0);
+
   lines.push("configure terminal");
-  lines.push(...commands);
-  lines.push("end");
+  lines.push(...normalizedCommands);
+
+  const lastCommand = normalizedCommands.at(-1);
+  if (!lastCommand || !isEndCommand(lastCommand)) {
+    lines.push("end");
+  }
+
   if (save) lines.push("write memory");
   return lines.join("\n");
 }
@@ -132,7 +148,14 @@ Reglas:
         return;
       }
 
-      let commands = readCommandsFromOptions(options, commandParts);
+      let commands = readCommandsFromOptions(
+        {
+          file: options.file,
+          stdin: Boolean(options.stdin),
+          config: Boolean(options.config),
+        },
+        commandParts,
+      );
 
       if (commands.length === 0 && !flags.noInput) {
         commands = [await promptForCommand()];
@@ -360,3 +383,10 @@ Reglas:
 
   return cmd;
 }
+
+export const __test__ = {
+  normalizeCommandLines,
+  readCommandsFromOptions,
+  buildConfigCommand,
+  isEndCommand,
+};
