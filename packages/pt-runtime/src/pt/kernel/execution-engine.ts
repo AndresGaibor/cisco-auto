@@ -105,6 +105,48 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
     };
   }
 
+  function tryAttachTerminal(deviceName: string): boolean {
+    try {
+      const scope = (typeof self !== "undefined" ? self : Function("return this")()) as any;
+      const ipc = scope && scope.ipc ? scope.ipc : null;
+
+      if (!ipc || typeof ipc.network !== "function") {
+        execLog("ATTACH SKIP no ipc.network/getDevice device=" + deviceName);
+        return false;
+      }
+
+      const net = ipc.network();
+      if (!net || typeof net.getDevice !== "function") {
+        execLog("ATTACH FAIL no network/getDevice device=" + deviceName);
+        return false;
+      }
+
+      const dev = net.getDevice(deviceName);
+      if (!dev) {
+        execLog("ATTACH FAIL device not found=" + deviceName);
+        return false;
+      }
+
+      if (typeof (dev as any).getCommandLine !== "function") {
+        execLog("ATTACH FAIL getCommandLine missing device=" + deviceName);
+        return false;
+      }
+
+      const term = (dev as any).getCommandLine();
+      if (!term) {
+        execLog("ATTACH FAIL getCommandLine returned null device=" + deviceName);
+        return false;
+      }
+
+      terminal.attach(deviceName, term);
+      execLog("ATTACH OK device=" + deviceName);
+      return true;
+    } catch (error) {
+      execLog("ATTACH ERROR device=" + deviceName + " error=" + String(error));
+      return false;
+    }
+  }
+
   function isJobFinished(jobId: string): boolean {
     const job = jobs[jobId];
     if (!job) return true;
@@ -355,6 +397,17 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
         pendingCommand: null,
       };
       jobs[plan.id] = job;
+
+      const attached = tryAttachTerminal(plan.device);
+      if (!attached) {
+        context.phase = "error";
+        context.finished = true;
+        context.error = "No terminal attached to " + plan.device;
+        context.errorCode = "NO_TERMINAL_ATTACHED";
+        context.updatedAt = Date.now();
+        return job;
+      }
+
       advanceJob(plan.id);
       return job;
     },
