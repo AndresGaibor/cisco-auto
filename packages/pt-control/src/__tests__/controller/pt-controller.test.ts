@@ -149,6 +149,15 @@ describe("PTController split", () => {
       expect(result).toHaveProperty("stats");
     });
 
+    test("listDevices expone errores del topology controller", async () => {
+      const controller: any = Object.create(PTController.prototype);
+      controller._topologyController = {
+        listDevices: vi.fn().mockResolvedValue({ ok: false, error: "DISPATCH_ERROR" }),
+      };
+
+      await expect(controller.listDevices()).rejects.toThrow(/DISPATCH_ERROR/i);
+    });
+
     test("execHost delegates to terminalPort.runTerminalPlan", async () => {
       const runTerminalPlanMock = vi.fn().mockResolvedValue({
         ok: true,

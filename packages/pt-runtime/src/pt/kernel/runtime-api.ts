@@ -5,19 +5,52 @@ import type { RuntimeApi, DeviceRef, DeferredJobPlan } from "../../runtime/contr
 import type { KernelSubsystems } from "./kernel-lifecycle";
 import type { KernelState } from "./kernel-state";
 import { toKernelJobState, type ActiveJob } from "./execution-engine";
-import type { PTNetwork } from "../../pt-api/pt-api-registry.js";
+import type { PTFileManager, PTLogicalWorkspace, PTNetwork, PTCommandLine } from "../../pt-api/pt-api-registry.js";
 
 export function createRuntimeApi(subsystems: KernelSubsystems): RuntimeApi {
   const scope = (typeof self !== "undefined" ? self : Function("return this")()) as any;
   const ipc = scope.ipc;
-  const net = ipc?.network?.() as PTNetwork | null;
   const { executionEngine, terminal, subsystems: subs } = getDependencies(subsystems);
+
+  function getNet(): PTNetwork {
+    return ipc.network() as PTNetwork;
+  }
+
+  function getLW(): any {
+    return ipc.appWindow().getActiveWorkspace().getLogicalWorkspace() as unknown as PTLogicalWorkspace;
+  }
+
+  function getFM(): any {
+    return ipc.systemFileManager() as unknown as PTFileManager;
+  }
+
+  function safeDprint(msg: string): void {
+    try {
+      const appWindow = ipc && ipc.appWindow ? ipc.appWindow() : null;
+      if (appWindow && typeof appWindow.writeToPT === "function") {
+        appWindow.writeToPT("[runtime] " + msg + "\n");
+      }
+    } catch {
+      // Ignorar fallos de escritura en PT Debug.
+    }
+
+    try {
+      dprint("[runtime] " + msg);
+    } catch {
+      // Ignorar fallos del logger nativo.
+    }
+  }
 
   return {
     ipc: ipc as any,
     privileged: scope._ScriptModule || null,
+    DEV_DIR: scope.DEV_DIR,
+    getLW,
+    getNet,
+    getFM,
     getDeviceByName: function (name: string): DeviceRef | null {
-      const dev = net && net.getDevice ? net.getDevice(name) : null;
+      const net = getNet();
+      const dev = net && typeof net.getDevice === "function" ? (net.getDevice(name) as any) : null;
       if (!dev) return null;
       const term = (dev as any).getCommandLine ? (dev as any).getCommandLine() : null;
       const res: any = dev;
@@ -31,27 +64,28 @@ export function createRuntimeApi(subsystems: KernelSubsystems): RuntimeApi {
       return res as unknown as DeviceRef;
     },
     listDevices: function (): string[] {
-      if (!net) return [];
+      const net = getNet();
       const names: string[] = [];
-      const count = net.getDeviceCount ? net.getDeviceCount() : 0;
+      const count = net && typeof net.getDeviceCount === "function" ? net.getDeviceCount() : 0;
       for (let i = 0; i < count; i++) {
-        const dev = net.getDeviceAt ? net.getDeviceAt(i) : null;
-        if (dev) names.push((dev as any).getName());
+        const dev = typeof net.getDeviceAt === "function" ? net.getDeviceAt(i) : null;
+        if (dev && typeof (dev as any).getName === "function") names.push(String((dev as any).getName()));
       }
       return names;
+    },
+    getCommandLine: function (deviceName: string): PTCommandLine | null {
+      const device = this.getDeviceByName(deviceName) as any;
+      if (!device || typeof device.getCommandLine !== "function") return null;
+      return device.getCommandLine() ?? null;
+    },
+    listDeviceNames: function (): string[] {
+      return this.listDevices();
     },
     querySessionState: function (deviceName: string) {
       return terminal.getSession(deviceName);
     },
     getWorkspace: function () {
-      return (
-        ipc &&
-        ipc.appWindow &&
-        ipc.appWindow() &&
-        ipc.appWindow().getActiveWorkspace &&
-        ipc.appWindow().getActiveWorkspace().getLogicalWorkspace &&
-        ipc.appWindow().getActiveWorkspace().getLogicalWorkspace()
-      );
+      return getLW();
     },
     now: function () {
       return Date.now();
@@ -68,18 +102,7 @@ export function createRuntimeApi(subsystems: KernelSubsystems): RuntimeApi {
         .replace(/\s+/g, "")
         .toLowerCase();
     },
-    dprint: function (msg: string) {
-      try {
-        const scope = (typeof self !== "undefined" ? self : Function("return this")()) as any;
-        const appWindow = scope.ipc && scope.ipc.appWindow ? scope.ipc.appWindow() : null;
-        if (appWindow && typeof appWindow.writeToPT === "function") {
-          appWindow.writeToPT("[runtime] " + msg + "\n");
-        }
-      } catch {}
-      try {
-        dprint("[runtime] " + msg);
-      } catch {}
-    },
+    dprint: safeDprint,
     createJob: function (plan: DeferredJobPlan): string {
       return executionEngine.startJob(plan).id;
     },

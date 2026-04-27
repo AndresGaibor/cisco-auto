@@ -346,6 +346,15 @@ export class PTController {
       return result as DeviceState[];
     }
 
+    if (result && typeof result === "object" && "ok" in result && (result as { ok?: unknown }).ok === false) {
+      const errorText =
+        (result as { error?: unknown; value?: { error?: unknown } }).error ??
+        (result as { value?: { error?: unknown } }).value?.error ??
+        "listDevices returned an error";
+
+      throw new Error(String(errorText));
+    }
+
     if (
       result &&
       typeof result === "object" &&
@@ -355,7 +364,7 @@ export class PTController {
       return (result as { devices: DeviceState[] }).devices;
     }
 
-    return [];
+    throw new Error(`listDevices returned invalid shape: ${JSON.stringify(result).slice(0, 500)}`);
   }
 
   async inspectDevice(name: string, includeXml = false): Promise<DeviceState> {

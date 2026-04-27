@@ -10,7 +10,7 @@
 // Tipos PT compartidos
 // ============================================================================
 
-import type { PTNetwork, PTDevice, PTCommandLine, PTPort } from "../pt-api/pt-api-registry.js";
+import type { PTNetwork, PTDevice, PTCommandLine, PTPort, PTLogicalWorkspace, PTFileManager } from "../pt-api/pt-api-registry.js";
 
 export type {
   PTNetwork,
@@ -95,6 +95,14 @@ export interface DeviceRef extends PTDevice {
 
 /** The API object that main injects into runtime */
 export interface RuntimeApi {
+  /** Compatibilidad legacy para handlers estables */
+  getLW(): PTLogicalWorkspace;
+  getNet(): PTNetwork;
+  getFM(): PTFileManager;
+  DEV_DIR: string;
+  getCommandLine(deviceName: string): PTCommandLine | null;
+  listDeviceNames(): string[];
+
   /** Get device by name */
   getDeviceByName(name: string): DeviceRef | null;
 
