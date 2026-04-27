@@ -1,4 +1,4 @@
-import type { RuntimeState } from "./runtime-state";
+import { createRuntimeBucket, type RuntimeState } from "./runtime-state";
 
 export interface BootstrapConfig {
   version: string;
@@ -42,8 +42,8 @@ function createInitialState(config: BootstrapConfig): RuntimeState {
     runtimeLoaded: false,
     lastRuntimeLoadAt: 0,
     tickTimer: null,
-    watchers: {},
-    listeners: {},
+    watchers: createRuntimeBucket<Record<string, any>>(),
+    listeners: createRuntimeBucket<Record<string, any[]>>(),
     activeQueueItem: null,
     heartbeatState: {
       active: false,

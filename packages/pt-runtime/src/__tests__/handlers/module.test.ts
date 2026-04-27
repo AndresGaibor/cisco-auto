@@ -37,6 +37,27 @@ describe("Module handlers", () => {
     expect((result.evidence as any)?.slotCount).toBe(0);
   });
 
+  test("inspectModuleSlots incluye ocupacion y modulo instalado", () => {
+    const root = {
+      getSlotCount: () => 2,
+      getSlotTypeAt: (index: number) => (index === 0 ? 1 : 2),
+      getModuleAt: (index: number) => (index === 1 ? { getModuleNameAsString: () => "WIC-2T" } : null),
+    };
+    const net = {
+      getDevice: () => ({
+        getModel: () => "2911",
+        getRootModule: () => root,
+      }),
+    };
+
+    const result = inspectModuleSlots("R1", net as any);
+
+    expect(result.ok).toBe(true);
+    expect((result.value as any)?.slots?.[1]?.occupied).toBe(true);
+    expect((result.value as any)?.slots?.[1]?.installedModule).toBe("WIC-2T");
+    expect((result.value as any)?.slots?.[1]?.compatibleModules).toContain("WIC-2T");
+  });
+
   test("handleAddModule returns error for non-existent device", () => {
     const deps = createDeps(null);
     const result = handleAddModule(
@@ -65,6 +86,34 @@ describe("Module handlers", () => {
     expect(result.ok).toBe(true);
     expect((result as any).device).toBe("R1");
     expect((result as any).module).toBe("HWIC-4T");
+  });
+
+  test("handleAddModule respeta el slot explícito cuando hay getRootModule", () => {
+    const addModuleAt = (mod: string, slot: number) => slot === 1 && mod === "WIC-2T";
+    const root = {
+      getSlotCount: () => 2,
+      getSlotTypeAt: (index: number) => (index === 0 ? 2 : 2),
+      getModuleCount: () => 0,
+      getModuleAt: () => null,
+      addModuleAt,
+    };
+    const device = {
+      getName: () => "R1",
+      getModel: () => "2911",
+      getPower: () => true,
+      setPower: () => {},
+      skipBoot: () => {},
+      getRootModule: () => root,
+      addModule: () => false,
+    };
+
+    const result = handleAddModule(
+      { type: "addModule", device: "R1", slot: "1", module: "WIC-2T" },
+      createDeps(device),
+    );
+
+    expect(result.ok).toBe(true);
+    expect((result as any).slot).toBe("root:1");
   });
 
   test("handleRemoveModule returns error for non-existent device", () => {

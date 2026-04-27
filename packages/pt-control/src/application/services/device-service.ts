@@ -5,7 +5,7 @@
 import type { RuntimePrimitivePort } from "../../ports/runtime-primitive-port.js";
 import type { TopologyCachePort } from "../ports/topology-cache.port.js";
 import { DeviceQueryService } from "./device-query-service.js";
-import { DeviceMutationService, type AddModuleResult, type AddModuleError } from "./device-mutation-service.js";
+import { DeviceMutationService, type AddModuleResult, type AddModuleError, type RemoveModuleResult } from "./device-mutation-service.js";
 
 /**
  * Servicio para inspección y gestión de dispositivos de red.
@@ -43,7 +43,7 @@ export class DeviceService {
     return this.mutation.inspectModuleSlots(device);
   }
 
-  removeModule(device: string, slot: number) {
+  removeModule(device: string, slot: number): Promise<{ ok: true; value: RemoveModuleResult } | { ok: false; value?: unknown }> {
     return this.mutation.removeModule(device, slot);
   }
 

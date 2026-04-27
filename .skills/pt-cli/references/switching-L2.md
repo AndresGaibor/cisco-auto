@@ -1,24 +1,109 @@
-# Expert Knowledge: Switching & Layer 2 (Cisco CCNA/CCNP)
+# Switching L2: VLANs, trunks, STP y EtherChannel
 
-## 1. MAC Address Learning
-- **Process:** When a frame enters a port, the switch records the Source MAC and the port ID.
-- **Aging:** Entries typically last 300 seconds.
-- **Troubleshooting:** If `show mac address-table` is empty, check if the device has sent any traffic. Use a dummy ping to force ARP and populate the table.
+## VLANs
 
-## 2. VLANs & Trunks (802.1Q)
-- **Access Ports:** Carry traffic for a single VLAN. Untagged.
-- **Trunk Ports:** Carry multiple VLANs using tags. 
-- **Native VLAN:** Untagged traffic on a trunk. MUST match on both ends to avoid "Native VLAN Mismatch" errors and potential security leaks (VLAN hopping).
-- **VTP:** Use only if necessary. Prefer "Transparent" mode or manual configuration for automation stability.
+Una VLAN separa dominios de broadcast. En switches Cisco, crea la VLAN y luego asigna puertos access o trunks.
 
-## 3. Spanning Tree Protocol (STP)
-- **Root Bridge Selection:** Lowest Priority + Lowest MAC.
-- **Port States:** Blocking -> Listening -> Learning -> Forwarding.
-- **Convergence:** Standard STP takes 50s. Rapid-PVST+ takes < 2s.
-- **Packet Tracer Quirk:** Ports start in Amber (2). They won't pass traffic until they turn Green (1). Force simulation time if they are stuck.
+Configurar VLAN y access port:
 
-## 4. EtherChannel (Aggregation)
-- **LACP (802.3ad):** Standard protocol. Modes: Active/Passive.
-- **PAgP:** Cisco proprietary. Modes: Desirable/Auto.
-- **Rule:** Both sides must have matching speed, duplex, and allowed VLANs.
-- **STP Interaction:** STP sees a Port-Channel as a single logical interface.
+```bash
+bun run pt cmd SW1 --config \
+  "vlan 10" "name USERS" \
+  "interface fa0/1" \
+  "switchport mode access" \
+  "switchport access vlan 10" \
+  "spanning-tree portfast" \
+  --json
+```
+
+Verificar:
+
+```bash
+bun run pt verify vlan SW1 10 --json
+bun run pt cmd SW1 "show vlan brief" --json
+bun run pt cmd SW1 "show interfaces fa0/1 switchport" --json
+```
+
+## Trunks
+
+Un trunk transporta varias VLANs por 802.1Q. La VLAN nativa debe coincidir en ambos extremos.
+
+```bash
+bun run pt cmd SW1 --config \
+  "interface g0/1" \
+  "switchport mode trunk" \
+  "switchport trunk native vlan 99" \
+  "switchport trunk allowed vlan 10,20,99" \
+  --json
+```
+
+Verificar en ambos switches:
+
+```bash
+bun run pt cmd SW1 "show interfaces trunk" --json
+bun run pt cmd SW2 "show interfaces trunk" --json
+```
+
+## MAC learning
+
+La tabla MAC aprende direcciones cuando recibe tráfico. Si está vacía:
+
+```bash
+bun run pt verify ping PC1 192.168.10.2 --json
+bun run pt cmd SW1 "show mac address-table" --json
+```
+
+## STP / Rapid PVST+
+
+STP evita loops L2. En Packet Tracer, enlaces pueden verse ámbar mientras convergen.
+
+```bash
+bun run pt cmd SW1 --config \
+  "spanning-tree mode rapid-pvst" \
+  "spanning-tree vlan 10 root primary" \
+  --json
+```
+
+Verificar:
+
+```bash
+bun run pt cmd SW1 "show spanning-tree" --json
+bun run pt cmd SW1 "show spanning-tree vlan 10" --json
+```
+
+## EtherChannel
+
+Ambos lados deben coincidir en modo, velocidad, dúplex, trunk/access y VLANs permitidas.
+
+```bash
+bun run pt cmd SW1 --config \
+  "interface range fa0/1 - 2" \
+  "switchport mode trunk" \
+  "channel-group 1 mode active" \
+  "interface port-channel 1" \
+  "switchport mode trunk" \
+  --json
+```
+
+Verificar:
+
+```bash
+bun run pt cmd SW1 "show etherchannel summary" --json
+bun run pt cmd SW1 "show interfaces port-channel 1 switchport" --json
+```
+
+## Troubleshooting L2 rápido
+
+1. `link verify --json`.
+2. `device ports SW1 --json --refresh`.
+3. `show vlan brief`.
+4. `show interfaces trunk`.
+5. `show spanning-tree vlan X`.
+6. Genera ping y revisa `show mac address-table`.
+
+## Historial
+
+| Versión | Fecha | cambios |
+|--------|-------|--------|
+| 2.0 | 2026-04 | Rewrite: CLI commands, format unified |
+| 1.0 | 2024-... | Original CCNA/CCNP content |

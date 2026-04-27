@@ -19,10 +19,19 @@ import {
   executeDhcpService,
   executeNtpService,
   executeSyslogService,
+  buildDhcpServiceCommands,
+  buildNtpServiceCommands,
+  buildSyslogServiceCommands,
   type DhcpServiceResult,
   type NtpServiceResult,
   type SyslogServiceResult,
 } from "@cisco-auto/pt-control/application/network-services";
+
+export {
+  buildDhcpServiceCommands as buildDhcpCommands,
+  buildNtpServiceCommands as buildNtpCommands,
+  buildSyslogServiceCommands as buildSyslogCommands,
+};
 
 interface DhcpServiceResultCli {
   device: string;

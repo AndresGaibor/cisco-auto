@@ -26,6 +26,23 @@ export interface RuntimeState {
   buildFingerprint: string;
 }
 
+const RUNTIME_BUCKET_MARK = "__runtime_bucket__";
+
+export function createRuntimeBucket<T extends Record<string, unknown>>(): T {
+  const bucket = Object.create(null) as T;
+  Object.defineProperty(bucket, RUNTIME_BUCKET_MARK, {
+    value: true,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  return bucket;
+}
+
+function isRuntimeBucket(value: unknown): boolean {
+  return Boolean(value && typeof value === "object" && (value as Record<string, unknown>)[RUNTIME_BUCKET_MARK] === true);
+}
+
 export function createRuntimeState(version: string, fingerprint: string): RuntimeState {
   return {
     bootstrapped: false,
@@ -33,8 +50,8 @@ export function createRuntimeState(version: string, fingerprint: string): Runtim
     runtimeLoaded: false,
     lastRuntimeLoadAt: 0,
     tickTimer: null,
-    watchers: {},
-    listeners: {},
+    watchers: createRuntimeBucket<Record<string, any>>(),
+    listeners: createRuntimeBucket<Record<string, any[]>>(),
     activeQueueItem: null,
     heartbeatState: {
       active: false,
@@ -58,8 +75,8 @@ export function resetRuntimeState(state: RuntimeState): void {
   state.runtimeLoaded = false;
   state.lastRuntimeLoadAt = 0;
   state.tickTimer = null;
-  state.watchers = {};
-  state.listeners = {};
+  state.watchers = createRuntimeBucket<Record<string, any>>();
+  state.listeners = createRuntimeBucket<Record<string, any[]>>();
   state.activeQueueItem = null;
   state.heartbeatState.active = false;
   state.heartbeatState.lastBeatAt = 0;
@@ -75,7 +92,7 @@ export function isValidRuntimeState(state: RuntimeState): boolean {
   if (typeof state.bootstrapped !== "boolean") return false;
   if (typeof state.cleaningUp !== "boolean") return false;
   if (typeof state.runtimeLoaded !== "boolean") return false;
-  if (!state.watchers || typeof state.watchers !== "object") return false;
-  if (!state.listeners || typeof state.listeners !== "object") return false;
+  if (!isRuntimeBucket(state.watchers)) return false;
+  if (!isRuntimeBucket(state.listeners)) return false;
   return true;
 }

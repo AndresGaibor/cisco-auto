@@ -106,3 +106,21 @@ test('createDeviceCommand registra el subcomando module', () => {
 
   expect(subcommandNames).toContain('module');
 });
+
+test('createDeviceCommand registra el subcomando module remove', () => {
+  const deviceCommand = createDeviceCommand();
+  const moduleCommand = (deviceCommand.commands as any[]).find((command) => command.name() === 'module');
+  const subcommandNames = (moduleCommand?.commands as any[]).map((command) => command.name()) ?? [];
+
+  expect(subcommandNames).toContain('remove');
+});
+
+test('createDeviceCommand registra catalog suggest y probe en module', () => {
+  const deviceCommand = createDeviceCommand();
+  const moduleCommand = (deviceCommand.commands as any[]).find((command) => command.name() === 'module');
+  const subcommandNames = (moduleCommand?.commands as any[]).map((command) => command.name()) ?? [];
+
+  expect(subcommandNames).toContain('catalog');
+  expect(subcommandNames).toContain('suggest');
+  expect(subcommandNames).toContain('probe');
+});

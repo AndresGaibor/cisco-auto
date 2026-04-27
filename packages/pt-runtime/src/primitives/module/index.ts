@@ -4,6 +4,7 @@
 
 import { registerPrimitive } from "../primitive-registry";
 import type { PrimitiveDomain } from "../primitive-registry";
+import { PT_DEVICE_MODULE_SLOTS } from "../../value-objects/hardware-maps.js";
 
 export interface AddModulePayload {
   type: "addModule";
@@ -85,12 +86,22 @@ export function inspectModuleSlots(deviceName: string, net: any): ModulePrimitiv
       return { ok: true, value: { slots: [] }, evidence: { slots: [], slotCount: 0 } };
     }
 
+    const modelKey = String(device.getModel?.() ?? "").toLowerCase();
+    const deviceSlots = PT_DEVICE_MODULE_SLOTS[modelKey] ?? [];
     const slotCount = rootModule.getSlotCount?.() || 0;
-    const slots: Array<{ index: number; type: number }> = [];
+    const slots: Array<{ index: number; type: number; occupied: boolean; installedModule?: string | null; compatibleModules: string[] }> = [];
 
     for (let i = 0; i < slotCount; i++) {
       const type = rootModule.getSlotTypeAt?.(i);
-      slots.push({ index: i, type: type ?? -1 });
+      const child = rootModule.getModuleAt?.(i) ?? null;
+      const slotMeta = deviceSlots[i];
+      slots.push({
+        index: i,
+        type: type ?? -1,
+        occupied: Boolean(child),
+        installedModule: child?.getModuleNameAsString?.() ?? null,
+        compatibleModules: slotMeta?.supportedModules ?? [],
+      });
     }
 
     return {

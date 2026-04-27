@@ -1,4 +1,5 @@
 import type { RuntimeState } from "./runtime-state";
+import { createRuntimeBucket } from "./runtime-state";
 
 export interface CleanupStage {
   name: string;
@@ -79,10 +80,10 @@ export function createCleanupManager(state: RuntimeState): CleanupManager {
       }
 
       this.advance("disconnect-listeners");
-      state.listeners = {};
+      state.listeners = createRuntimeBucket<Record<string, any[]>>();
 
       this.advance("close-watchers");
-      state.watchers = {};
+      state.watchers = createRuntimeBucket<Record<string, any>>();
 
       this.advance("release-terminals");
       state.terminalSubsystemReady = false;

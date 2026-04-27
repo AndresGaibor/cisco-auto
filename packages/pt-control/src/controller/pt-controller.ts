@@ -355,8 +355,8 @@ export class PTController {
     return this._composition.deviceService.inspectModuleSlots(device);
   }
 
-  async removeModule(device: string, slot: number): Promise<void> {
-    await this._topologyController.removeModule(device, slot);
+  async removeModule(device: string, slot: number): Promise<{ ok: true; value: { device: string; slot: number; beforePorts: Array<{ name: string; [key: string]: unknown }>; afterPorts: Array<{ name: string; [key: string]: unknown }>; removedPorts: Array<{ name: string; [key: string]: unknown }> } } | { ok: false; error?: string; code?: string }> {
+    return this._topologyController.removeModule(device, slot) as any;
   }
 
   async addLink(

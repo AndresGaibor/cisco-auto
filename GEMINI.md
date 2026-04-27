@@ -1,85 +1,63 @@
-# cisco-auto — Instructional Context
+# GEMINI.md — cisco-auto
 
-This file serves as the primary instructional context for Gemini CLI interactions within the `cisco-auto` project. It outlines the project's purpose, architecture, development standards, and key operational commands.
+Contexto mínimo para Gemini CLI. Mantén este archivo corto; usa `AGENTS.md` como guía compartida.
 
-## Project Overview
-**cisco-auto** is a professional-grade Network Intelligence and Automation platform for Cisco Packet Tracer (v9.0). It is designed to act as a **Virtual CCIE**, allowing users to build, iterate, debug, and validate complex network topologies (like the 76 CCNA Scenarios) directly from the command line.
+## Lectura obligatoria según tarea
 
-It transcends basic configuration by utilizing an "Omniscience Layer" that hooks directly into the C++ engine of the simulator via QtScript, bypassing standard API limitations.
+- Siempre: `AGENTS.md`.
+- Si trabajas dentro de un paquete: `packages/<paquete>/AGENTS.md`.
+- CLI/talleres Cisco/PT: `.skills/pt-cli/SKILL.md` y `docs/CLI_AGENT_SKILL.md`.
+- Arquitectura: `docs/ARCHITECTURE_BOUNDARIES.md`.
+- Runtime vs control: `docs/architecture/runtime-control-boundary.md`.
+- Packet Tracer internals/Omni: `docs/PT_ENGINE_INTERNALS.md` y `docs/PT_EVALUATE_HACKING_GUIDE.md`.
 
-### Core Technologies
-- **Runtime:** [Bun](https://bun.sh/) (v1.1+ mandatory). **Do NOT use Node.js or npm.**
-- **Language:** TypeScript (Strict mode).
-- **Validation:** Zod.
-- **CLI Framework:** Commander.js.
-- **Communication:** FileBridge (file-based IPC to Packet Tracer).
+## Identidad del proyecto
 
-## Architecture (Monorepo)
-The project is structured as a monorepo using Bun workspaces:
+`cisco-auto` automatiza Cisco Packet Tracer con una CLI Bun-first (`bun run pt`) y un runtime JavaScript cargado dentro de PT.
 
-- **`apps/pt-cli`**: The main Command Line Interface (`bun run pt`). This is the primary tool for building and validating labs (e.g., `pt device add`, `pt link add`, `pt lab validate`).
-- **`packages/pt-runtime`**: The ES5 Kernel injected into Packet Tracer. Contains the Omniscience handlers (Bypasses, Memory Injection, XML Genomes).
-- **`packages/pt-control`**: The rich, type-safe TypeScript abstraction layer (e.g., `OmniscienceService`, `ScenarioService`).
-- **`packages/pt-control`**: Packet Tracer orchestration, controller, application use cases.
-- **`packages/ios-domain`**: IOS parsers, builders, capabilities and operations.
-- **`packages/network-intent`**: Declarative network intent and scenarios.
-- **`packages/file-bridge`**: Communication bridge between the CLI and Packet Tracer.
-- **`packages/types`**: Shared TypeScript definitions.
+Paquetes clave:
 
-## Building and Running
-Always use `bun` for development tasks.
+- `apps/pt-cli`: comandos públicos.
+- `packages/pt-control`: orquestación, diagnóstico, verification, policies.
+- `packages/pt-runtime`: kernel PT-safe y primitives de bajo nivel.
+- `packages/file-bridge`: IPC con Packet Tracer.
+- `packages/ios-domain` / `packages/ios-primitives`: IOS puro.
+- `.skills/pt-cli`: guía para operar labs de redes.
 
-### Key Commands
-- **Install Dependencies:** `bun install`
-- **Start CLI:** `bun run pt`
-- **Run Tests:** `bun test`
-- **Build Project:** `bun run build`
-- **Type Check:** `bun run typecheck`
+## Reglas de trabajo
 
-## PT CLI Skill
-**IMPORTANTE**: Para cualquier tarea relacionada con Packet Tracer, VLANs, routing, switching, o automatización Cisco, USAR LA SKILL `pt-cli` automáticamente.
+- No supongas: confirma con archivos reales o pregunta por evidencia.
+- Antes de modificar CLI, verifica `apps/pt-cli/src/program.ts` y `apps/pt-cli/src/commands/command-registry.ts`.
+- No uses comandos legacy si no están registrados públicamente.
+- No edites artefactos generados en `~/pt-dev/` como si fueran source.
+- No pongas semántica de red/lab en `pt-runtime`; debe vivir en `pt-control`.
+- Usa `--json` cuando necesites que otro agente parsee resultados.
+- Todo éxito de Packet Tracer debe tener evidencia posterior: `verify`, `cmd show...`, `ping`, `device list`, `link verify`.
 
-La skill pt-cli está ubicada en `.skills/pt-cli/SKILL.md` y provee:
-- Todos los comandos disponibles de `bun run pt`
-- Ejemplos de uso para cada categoría
-- Flags globales y opciones de salida
+## Comandos frecuentes
 
-## Protocolo de Terminal Determinista
-Toda la ejecución de terminal en PT (IOS o Host) está gobernada por el `CommandExecutor`, que usa estabilización de output (250ms) y es inmune a bloqueos DNS o Power OFF.
-- **Acceso rápido a comandos:** Usa siempre `bun run pt cmd <device> "<command>"` para ejecutar comandos individuales de forma robusta.
-- **Historial:** Usa `bun run pt history <device>` para ver la bitácora de la consola con los comandos y outputs separados.
-
-## Real-Time Packet Tracer Control
-
-### Setup
 ```bash
-# 1. Build y deploy de archivos a ~/pt-dev/
-bun run pt:build
-
-# 2. Dentro de PT: cargar el script desde File > Open > selecciona ~/pt-dev/main.js
+bun run pt --help
+bun run pt doctor
+bun run pt runtime status --json
+bun run pt device list --json
+bun run pt device ports <device> --json
+bun run pt link suggest <a> <b> --json
+bun run pt cmd <device> "<command>"
+bun run pt set host <device> ip <ip/cidr> --gateway <gw>
+bun run pt verify ping <source> <target>
 ```
 
-### Platform-Aware Directory
-- **macOS/Linux:** `~/pt-dev/`
-- **Windows:** `%USERPROFILE%\pt-dev\`
-- Override: Set `PT_DEV_DIR` environment variable
+Calidad:
 
-## Development Conventions
-Adhere to these standards to maintain consistency and quality:
+```bash
+bun run lint
+bun run typecheck
+bun test
+bun run architecture:check
+bun run quality:check
+```
 
-- **Runtime:** Strictly use Bun. Prefer `Bun.file` and `Bun.serve` over Node equivalents.
-- **TypeScript:** Use strict typing. Avoid `any`. Leverage Zod for runtime schema validation.
-- **Naming:** Follow camelCase for variables/functions and PascalCase for classes/types.
-- **Messages:** User-facing CLI messages should be in **Spanish**, while code, comments, and internal documentation are in **English**.
-- **Testing:** New features or bug fixes must include tests using `bun:test`.
-- **Environment:** Bun automatically loads `.env` files; do not use `dotenv`.
+## Entrega
 
-## AI Skills Integration
-The project includes specialized skills in `.gemini/skills/`:
-- **`pt-cli`**: Automation skill for Packet Tracer CLI (USE THIS for any Cisco/PT task)
-- **`cisco-networking-assistant`**: Modular orchestration driver
-- **`skill-creator`**: For creating new skills
-
----
-
-*Refer to `CLAUDE.md` for detailed tool usage and `PRD.md` for full functional requirements.*
+Indica archivos cambiados, validaciones ejecutadas, validaciones pendientes y si algo requiere Packet Tracer real.

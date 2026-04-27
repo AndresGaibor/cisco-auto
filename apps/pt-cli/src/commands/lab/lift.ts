@@ -9,7 +9,9 @@ import {
   executeCore3650LiftLab,
   type LabLiftControllerPort,
   type LabLiftResult,
-} from "@cisco-auto/pt-control/application/lab";
+  } from "@cisco-auto/pt-control/application/lab";
+
+export { buildCore3650LiftScenarioPlan as buildScenarioPlan };
 
 import { createVerifiedResult, createErrorResult } from "../../contracts/cli-result.js";
 import type { CliResult } from "../../contracts/cli-result.js";

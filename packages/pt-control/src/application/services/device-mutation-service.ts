@@ -1,5 +1,5 @@
 import type { RuntimePrimitivePort } from "../../ports/runtime-primitive-port.js";
-import { validateModuleExists, validateModuleSlotCompatible, findFirstCompatibleSlot } from "@cisco-auto/pt-runtime";
+import { validateModuleExists } from "@cisco-auto/pt-runtime";
 import { DeviceQueryService } from "./device-query-service.js";
 
 export interface AddModuleResult {
@@ -8,6 +8,9 @@ export interface AddModuleResult {
   slot: number;
   wasPoweredOff: boolean;
   powerRestored: boolean;
+  beforePorts: Array<{ name: string; [key: string]: unknown }>;
+  afterPorts: Array<{ name: string; [key: string]: unknown }>;
+  addedPorts: Array<{ name: string; [key: string]: unknown }>;
 }
 
 export interface AddModuleError {
@@ -15,6 +18,14 @@ export interface AddModuleError {
   error: string;
   code: string;
   advice?: string[];
+}
+
+export interface RemoveModuleResult {
+  device: string;
+  slot: number;
+  beforePorts: Array<{ name: string; [key: string]: unknown }>;
+  afterPorts: Array<{ name: string; [key: string]: unknown }>;
+  removedPorts: Array<{ name: string; [key: string]: unknown }>;
 }
 
 /**
@@ -35,20 +46,33 @@ export class DeviceMutationService {
    */
   async addModule(device: string, slot: number | "auto", module: string): Promise<{ ok: true; value: AddModuleResult } | AddModuleError> {
     const currentDevice = await this.query.inspect(device, false);
+    const beforePorts = extractPorts(currentDevice);
+    const slotsResult = await this.inspectModuleSlots(device);
     const moduleValidation = validateModuleExists(module);
     if (!moduleValidation.valid)
       return { ok: false, error: moduleValidation.error ?? `Módulo '${module}' no encontrado en catálogo`, code: "MODULE_NOT_FOUND" };
 
     let resolvedSlot: number;
     if (slot === "auto") {
-      const autoSlot = findFirstCompatibleSlot(currentDevice.model, module);
-      if (!autoSlot.valid)
-        return { ok: false, error: autoSlot.error ?? `No se encontró slot compatible para '${module}' en '${currentDevice.model}'`, code: "NO_COMPATIBLE_SLOT" };
-      resolvedSlot = autoSlot.slot;
+      const slots = (slotsResult.value as { slots?: Array<{ index: number; occupied?: boolean; compatibleModules?: string[] }> } | undefined)?.slots ?? [];
+      const autoSlot = slots.find((candidate) => !candidate.occupied && (candidate.compatibleModules ?? []).includes(module));
+      if (!autoSlot) {
+        return { ok: false, error: `No se encontró slot compatible para '${module}' en '${currentDevice.model}'`, code: "NO_COMPATIBLE_SLOT" };
+      }
+      resolvedSlot = autoSlot.index;
     } else {
-      const slotValidation = validateModuleSlotCompatible(currentDevice.model, slot, module);
-      if (!slotValidation.valid)
-        return { ok: false, error: slotValidation.error ?? `Slot inválido para '${module}'`, code: "SLOT_INCOMPATIBLE" };
+      const slots = (slotsResult.value as { slots?: Array<{ index: number; occupied?: boolean; compatibleModules?: string[] }> } | undefined)?.slots ?? [];
+      const targetSlot = slots.find((candidate) => candidate.index === slot);
+      if (!targetSlot) {
+        return { ok: false, error: `Slot '${slot}' no existe en '${currentDevice.model}'`, code: "SLOT_NOT_FOUND" };
+      }
+
+      if (targetSlot.occupied) {
+        return { ok: false, error: `Slot '${slot}' ya está ocupado`, code: "SLOT_OCCUPIED" };
+      }
+
+      if (!(targetSlot.compatibleModules ?? []).includes(module))
+        return { ok: false, error: `Slot '${slot}' no es compatible con '${module}'`, code: "SLOT_INCOMPATIBLE" };
       resolvedSlot = slot;
     }
 
@@ -58,6 +82,10 @@ export class DeviceMutationService {
     }
 
     const value = result.value as { wasPoweredOff?: boolean };
+    const afterDevice = await this.query.inspect(device, false);
+    const afterPorts = extractPorts(afterDevice);
+    const addedPorts = afterPorts.filter((afterPort) => !beforePorts.some((beforePort) => beforePort.name === afterPort.name));
+
     return {
       ok: true,
       value: {
@@ -66,6 +94,9 @@ export class DeviceMutationService {
         slot: resolvedSlot,
         wasPoweredOff: value?.wasPoweredOff ?? false,
         powerRestored: value?.wasPoweredOff ?? false,
+        beforePorts,
+        afterPorts,
+        addedPorts,
       },
     };
   }
@@ -84,13 +115,28 @@ export class DeviceMutationService {
    * @param device - Nombre del dispositivo
    * @param slot - Slot del módulo a remover
    */
-  async removeModule(device: string, slot: number): Promise<{ ok: boolean; value?: unknown }> {
+  async removeModule(device: string, slot: number): Promise<{ ok: true; value: RemoveModuleResult } | { ok: false; error?: string; code?: string }> {
+    const currentDevice = await this.query.inspect(device, false);
+    const beforePorts = extractPorts(currentDevice);
     const result = await this.primitivePort.runPrimitive("module.remove", { device, slot });
     if (!result.ok) {
-      return { ok: false };
+      return { ok: false, error: result.error ?? "Error removiendo módulo", code: result.code ?? "MODULE_REMOVE_FAILED" };
     }
 
-    return { ok: true, value: result.value };
+    const afterDevice = await this.query.inspect(device, false);
+    const afterPorts = extractPorts(afterDevice);
+    const removedPorts = beforePorts.filter((beforePort) => !afterPorts.some((afterPort) => afterPort.name === beforePort.name));
+
+    return {
+      ok: true,
+      value: {
+        device,
+        slot,
+        beforePorts,
+        afterPorts,
+        removedPorts,
+      } satisfies RemoveModuleResult,
+    };
   }
 
   /**
@@ -300,4 +346,14 @@ export class DeviceMutationService {
       interfaces: Array<{ vlanId: number; ip: string; mask: string; error?: string }>;
     };
   }
+}
+
+function extractPorts(device: { ports?: Array<{ name?: string; [key: string]: unknown }> }): Array<{ name: string; [key: string]: unknown }> {
+  const ports = Array.isArray(device.ports) ? device.ports : [];
+  return ports
+    .map((port) => ({
+      ...(port ?? {}),
+      name: String(port?.name ?? ""),
+    }))
+    .filter((port) => port.name.length > 0);
 }

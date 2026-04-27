@@ -2,13 +2,19 @@ import { describe, expect, test } from 'bun:test';
 import { getRegisteredCommandIds } from '../src/commands/command-registry';
 
 describe('Fase 7 - Completion registry', () => {
-  test('usa comandos reales registrados', () => {
+  test('usa comandos públicos registrados', () => {
     const commands = getRegisteredCommandIds();
 
-    expect(commands).toContain('build');
-    expect(commands).toContain('history');
-    expect(commands).toContain('setup');
-    expect(commands).toContain('runtime');
-    expect(commands).toContain('status');
+    expect(commands).toEqual([
+      'cmd',
+      'completion',
+      'device',
+      'doctor',
+      'link',
+      'omni',
+      'runtime',
+      'set',
+      'verify',
+    ]);
   });
 });

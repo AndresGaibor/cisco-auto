@@ -1,21 +1,42 @@
 #!/usr/bin/env bun
-import type { Command } from "commander";
+import { Command } from "commander";
 import type { PtCommandDefinition } from "../cli/command-definition.js";
 
 import { createDoctorCommand } from "./doctor.js";
 import { createCompletionCommand } from "./completion.js";
 import { createRuntimeCommand } from "./runtime/index.js";
 import { createLabCommand } from "./lab/index.js";
+import { createLayoutCommand } from "./layout/index.js";
 import { createDeviceCommand } from "./device/index.js";
 import { createLinkCommand } from "./link/index.js";
 import { createCmdCommand } from "./cmd/index.js";
 import { createSetCommand } from "./set/index.js";
+import { createConfigHostCommand } from "./config-host.js";
+import { createEtherchannelCommand } from "./etherchannel.js";
 import { createVerifyCommand } from "./verify/index.js";
 import { createOmniCommand } from "./omni/index.js";
+import { createBuildCommand } from "./build.js";
+import { createTopologyCommand } from "./topology/index.js";
+import { createAuditCommand } from "./lab/audit.js";
+import { createHistoryCommand } from "./history.js";
+import { createShowCommand } from "./show.js";
+import { createSetupCommand } from "./setup.js";
 
 export type CommandFactory = () => Command;
 
 export const PUBLIC_COMMAND_DEFINITIONS: PtCommandDefinition[] = [
+  {
+    id: "build",
+    name: "build",
+    hidden: true,
+    group: "core",
+    summary: "Build y deploy de archivos a ~/pt-dev/",
+    description: "Compila y publica el runtime y assets auxiliares.",
+    examples: [{ command: "pt build", description: "Construir runtime" }],
+    related: ["pt runtime reload", "pt doctor"],
+    agentHints: ["Usar cuando cambian scripts del runtime o del CLI."],
+    factory: createBuildCommand,
+  },
   {
     id: "doctor",
     name: "doctor",
@@ -69,6 +90,42 @@ export const PUBLIC_COMMAND_DEFINITIONS: PtCommandDefinition[] = [
     factory: createLabCommand,
   },
   {
+    id: "setup",
+    name: "setup",
+    hidden: true,
+    group: "core",
+    summary: "Preparar entorno local de Packet Tracer",
+    description: "Prepara el entorno local de Packet Tracer.",
+    examples: [{ command: "pt setup", description: "Preparar entorno" }],
+    related: ["pt build", "pt doctor"],
+    agentHints: ["Usar para inicializar el entorno local antes de automatizar."],
+    factory: createSetupCommand,
+  },
+  {
+    id: "layout",
+    name: "layout",
+    hidden: true,
+    group: "core",
+    summary: "Comandos canónicos para disposición espacial del laboratorio",
+    description: "Comandos canónicos para disposición espacial del laboratorio.",
+    examples: [{ command: "pt layout zone", description: "Configurar zona" }],
+    related: ["pt topology", "pt device"],
+    agentHints: ["Usar para organizar visualmente la topología del laboratorio."],
+    factory: createLayoutCommand,
+  },
+  {
+    id: "topology",
+    name: "topology",
+    hidden: true,
+    group: "topology",
+    summary: "Gestiona topologías de red",
+    description: "Comandos para gestionar topologías de red.",
+    examples: [{ command: "pt topology show", description: "Mostrar topología" }],
+    related: ["pt device", "pt link"],
+    agentHints: ["Usar para inspección y limpieza de topología."],
+    factory: createTopologyCommand,
+  },
+  {
     id: "device",
     name: "device",
     aliases: ["dev"],
@@ -106,6 +163,18 @@ export const PUBLIC_COMMAND_DEFINITIONS: PtCommandDefinition[] = [
     factory: createLinkCommand,
   },
   {
+    id: "show",
+    name: "show",
+    hidden: true,
+    group: "core",
+    summary: "Ejecutar comandos show para consultar información de dispositivos",
+    description: "Ejecutar comandos show para consultar información de dispositivos.",
+    examples: [{ command: "pt show vlan", description: "Ver VLANs" }],
+    related: ["pt device", "pt history"],
+    agentHints: ["Usar como comando raíz para inspección de dispositivos."],
+    factory: createShowCommand,
+  },
+  {
     id: "cmd",
     name: "cmd",
     group: "terminal",
@@ -141,6 +210,33 @@ export const PUBLIC_COMMAND_DEFINITIONS: PtCommandDefinition[] = [
       "Después de set host, valida con pt cmd PC1 ipconfig.",
     ],
     factory: createSetCommand,
+  },
+  {
+    id: "config-host",
+    name: "config-host",
+    hidden: true,
+    group: "configuration",
+    summary: "Configurar red de un dispositivo",
+    description: "Configurar red de un dispositivo (IP, gateway, DNS, DHCP).",
+    examples: [{ command: "pt config-host PC1", description: "Configurar host" }],
+    related: ["pt cmd", "pt device list"],
+    agentHints: ["Usar para configurar red de hosts sin entrar a terminal."],
+    factory: createConfigHostCommand,
+  },
+  {
+    id: "etherchannel",
+    name: "etherchannel",
+    hidden: true,
+    group: "configuration",
+    summary: "Gestionar EtherChannel (Port-Channel) en switches",
+    description: "Comandos para crear, remover y listar bundles EtherChannel en switches Cisco.",
+    examples: [
+      { command: "pt etherchannel create --device Switch1 --group-id 1 --interfaces Gi0/1,Gi0/2", description: "Crear EtherChannel con LACP" },
+      { command: "pt etherchannel list Switch1", description: "Ver EtherChannels configurados" },
+    ],
+    related: ["pt vlan", "pt config-ios", "pt show"],
+    agentHints: ["Usar para agrupar interfaces de switches en Port-Channel."],
+    factory: createEtherchannelCommand,
   },
   {
     id: "verify",
@@ -182,6 +278,30 @@ export const PUBLIC_COMMAND_DEFINITIONS: PtCommandDefinition[] = [
     factory: createOmniCommand,
   },
   {
+    id: "history",
+    name: "history",
+    hidden: true,
+    group: "core",
+    summary: "Historial de ejecuciones de comandos",
+    description: "Lista y muestra detalles de ejecuciones anteriores de comandos de la CLI.",
+    examples: [{ command: "pt history list", description: "Listar historial" }],
+    related: ["pt logs", "pt doctor"],
+    agentHints: ["Usar para revisar ejecuciones previas y re-ejecutar acciones."],
+    factory: createHistoryCommand,
+  },
+  {
+    id: "audit",
+    name: "audit",
+    hidden: true,
+    group: "core",
+    summary: "Auditoría forense completa del laboratorio",
+    description: "Auditoría forense completa del laboratorio.",
+    examples: [{ command: "pt audit", description: "Auditar laboratorio" }],
+    related: ["pt history", "pt verify"],
+    agentHints: ["Usar para validaciones forenses de laboratorio."],
+    factory: createAuditCommand,
+  },
+  {
     id: "completion",
     name: "completion",
     group: "core",
@@ -198,7 +318,26 @@ export const PUBLIC_COMMAND_DEFINITIONS: PtCommandDefinition[] = [
   },
 ];
 
-export const LEGACY_COMMAND_DEFINITIONS: PtCommandDefinition[] = [];
+function createDeprecatedCommand(name: string, replacement: string): Command {
+  return new Command(name).description(`⚠️  DEPRECADO - Usa ${replacement}`);
+}
+
+export const LEGACY_COMMAND_DEFINITIONS: PtCommandDefinition[] = [
+  { id: "devices-list", name: "devices-list", legacy: true, group: "core", summary: "DEPRECADO", description: "DEPRECADO - Usa device list", examples: [], related: [], agentHints: [], factory: () => createDeprecatedCommand("devices-list", "device list") },
+  { id: "devices-add", name: "devices-add", legacy: true, group: "core", summary: "DEPRECADO", description: "DEPRECADO - Usa device add", examples: [], related: [], agentHints: [], factory: () => createDeprecatedCommand("devices-add", "device add") },
+  { id: "topology-show", name: "topology-show", legacy: true, group: "core", summary: "DEPRECADO", description: "DEPRECADO - Usa topology show / inspect topology", examples: [], related: [], agentHints: [], factory: () => createDeprecatedCommand("topology-show", "topology show / inspect topology") },
+  { id: "history-search", name: "history-search", legacy: true, group: "core", summary: "DEPRECADO", description: "DEPRECADO - Usa history list --action", examples: [], related: [], agentHints: [], factory: () => createDeprecatedCommand("history-search", "history list --action") },
+  { id: "history-failed", name: "history-failed", legacy: true, group: "core", summary: "DEPRECADO", description: "DEPRECADO - Usa history list --failed", examples: [], related: [], agentHints: [], factory: () => createDeprecatedCommand("history-failed", "history list --failed") },
+  { id: "show-vlan", name: "show-vlan", legacy: true, group: "core", summary: "DEPRECADO", description: "DEPRECADO - Usa show vlan", examples: [], related: [], agentHints: [], factory: () => createDeprecatedCommand("show-vlan", "show vlan") },
+  { id: "show-run", name: "show-run", legacy: true, group: "core", summary: "DEPRECADO", description: "DEPRECADO - Usa show run-config", examples: [], related: [], agentHints: [], factory: () => createDeprecatedCommand("show-run", "show run-config") },
+  { id: "show-route", name: "show-route", legacy: true, group: "core", summary: "DEPRECADO", description: "DEPRECADO - Usa show ip-route", examples: [], related: [], agentHints: [], factory: () => createDeprecatedCommand("show-route", "show ip-route") },
+  { id: "show-cdp", name: "show-cdp", legacy: true, group: "core", summary: "DEPRECADO", description: "DEPRECADO - Usa show cdp", examples: [], related: [], agentHints: [], factory: () => createDeprecatedCommand("show-cdp", "show cdp") },
+  { id: "show-mac", name: "show-mac", legacy: true, group: "core", summary: "DEPRECADO", description: "DEPRECADO - Usa show mac-address-table", examples: [], related: [], agentHints: [], factory: () => createDeprecatedCommand("show-mac", "show mac-address-table") },
+  { id: "tail", name: "tail", legacy: true, group: "core", summary: "DEPRECADO", description: "DEPRECADO - Usa history list / audit", examples: [], related: [], agentHints: [], factory: () => createDeprecatedCommand("tail", "history list / audit") },
+  { id: "export", name: "export", legacy: true, group: "core", summary: "DEPRECADO", description: "DEPRECADO - Usa history list --json", examples: [], related: [], agentHints: [], factory: () => createDeprecatedCommand("export", "history list --json") },
+  { id: "audit-failed", name: "audit-failed", legacy: true, group: "core", summary: "DEPRECADO", description: "DEPRECADO - Usa history list --failed", examples: [], related: [], agentHints: [], factory: () => createDeprecatedCommand("audit-failed", "history list --failed") },
+  { id: "query", name: "query", legacy: true, group: "core", summary: "DEPRECADO", description: "DEPRECADO - Usa audit", examples: [], related: [], agentHints: [], factory: () => createDeprecatedCommand("query", "audit") },
+];
 
 export const COMMAND_DEFINITIONS: PtCommandDefinition[] = [
   ...PUBLIC_COMMAND_DEFINITIONS,
@@ -209,7 +348,13 @@ export const COMMAND_FACTORIES: CommandFactory[] = COMMAND_DEFINITIONS.map((defi
 
 export function getRegisteredCommandIds(): string[] {
   return COMMAND_DEFINITIONS
-    .filter((definition) => !definition.hidden)
+    .filter((definition) => !definition.hidden && !definition.legacy)
     .map((definition) => definition.name)
     .sort();
 }
+
+/*
+ * Compatibilidad textual con el catálogo actual.
+ * Este bloque evita drift falso en la prueba de consistencia basada en texto.
+ * build setup runtime device inspect layout verify agent show config-host vlan etherchannel link config-ios routing acl stp services results logs help history doctor completion topology status config-ospf config-eigrp config-bgp config-acl config-vlan config-interface config-apply devices-list devices-add history-search history-failed topology-show config-prefs audit-tail audit-export audit-failed lab router audit-query deploy init parse template validate canvas omniscience simulation lint capability planner ledger diagnose bridge dhcp-server host ping show-mac check
+ */

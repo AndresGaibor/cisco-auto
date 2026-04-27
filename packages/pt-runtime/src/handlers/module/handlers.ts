@@ -32,6 +32,9 @@ export function handleAddModule(payload: AddModulePayload, deps: HandlerDeps): H
   const { getNet, dprint } = deps;
   const net = getNet();
   const { device: deviceName, slot: slotArg, module: moduleId } = payload;
+  const requestedSlot = typeof slotArg === "string" && slotArg.toLowerCase() !== "auto"
+    ? Number.parseInt(slotArg.replace(/[^0-9]/g, ""), 10)
+    : Number.NaN;
 
   const device = net.getDevice(deviceName);
   if (!device) {
@@ -108,7 +111,10 @@ export function handleAddModule(payload: AddModulePayload, deps: HandlerDeps): H
     const candidates = collectSlotCandidates(root);
     dprint(`[addModule] ${deviceName} model=${model} candidates=${candidates.length}`);
 
-    const best = findBestSlot(candidates, moduleId);
+    const explicitCandidate = Number.isFinite(requestedSlot)
+      ? candidates.find((candidate) => candidate.slotIndex === requestedSlot)
+      : null;
+    const best = explicitCandidate ?? findBestSlot(candidates, moduleId);
 
     if (!best) {
       dprint(`[addModule] ${deviceName} no suitable slot for ${moduleId}`);
@@ -117,6 +123,10 @@ export function handleAddModule(payload: AddModulePayload, deps: HandlerDeps): H
         if (device.skipBoot) device.skipBoot();
       }
       return { ok: false, error: `No suitable slot for module "${moduleId}" on ${deviceName}` };
+    }
+
+    if (explicitCandidate && isHWICOrWIC(moduleId) && best.slotType !== MODULE_TYPE.eInterfaceCard) {
+      return { ok: false, error: `Slot ${slotArg} no es compatible con ${moduleId}`, code: "SLOT_INCOMPATIBLE" };
     }
 
     dprint(

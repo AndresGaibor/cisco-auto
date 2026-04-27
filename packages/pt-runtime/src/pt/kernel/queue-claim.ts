@@ -14,7 +14,7 @@ import { QueueDiscovery } from "./queue-discovery";
 import { DeadLetter } from "./dead-letter";
 import { writeDebugLog } from "./debug-log";
 
-const USE_LEGACY_QUEUE_INDEX = false;
+const USE_LEGACY_QUEUE_INDEX = true;
 
 export interface QueueClaim {
   poll(): CommandEnvelope | null;
@@ -169,11 +169,7 @@ export function createQueueClaim(
       }
     }
 
-    const parsed = parseEnvelopeAtPath(filename, dstPath);
-    if (!parsed) {
-      logQueue("[queue-claim] claimFromCommands parse falló: " + filename);
-    }
-    return parsed;
+    return { ...cmd, filename } as CommandEnvelope;
   }
 
   function handleInvalidEnvelope(filename: string, dstPath: string, reasonDetail: string): void {
