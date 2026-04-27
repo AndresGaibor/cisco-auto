@@ -7,7 +7,13 @@ import type { RuntimeTerminalPort } from "../../ports/runtime-terminal-port.js";
 import { buildUniversalTerminalPlan } from "./terminal-plan-builder.js";
 
 export interface TerminalControllerPort {
-  inspectDevice(device: string): Promise<{ type?: string | number } | null | undefined>;
+  inspectDevice(device: string): Promise<{
+    type?: string | number;
+    model?: string;
+    name?: string;
+    hostname?: string;
+    customDeviceModel?: string;
+  } | null | undefined>;
   execIos(
     device: string,
     command: string,
@@ -40,13 +46,78 @@ export interface TerminalCommandServiceDeps {
 const DEVICE_TYPE_MAP: Record<number, string> = {
   0: "router",
   1: "switch",
+  3: "pc",
+  4: "server",
+  5: "printer",
+  8: "host",
+  9: "host",
   16: "switch_layer3",
 };
 
 function normalizeDeviceType(type: string | number | undefined): string {
-  if (typeof type === "string") return type;
+  if (typeof type === "string") return type.trim().toLowerCase();
   if (typeof type === "number") return DEVICE_TYPE_MAP[type] || "unknown";
   return "unknown";
+}
+
+function normalizeText(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function getDeviceModel(deviceState: { model?: unknown; customDeviceModel?: unknown }): string {
+  return normalizeText(deviceState.model ?? deviceState.customDeviceModel);
+}
+
+function isIosLikeDevice(deviceState: {
+  type?: string | number;
+  model?: unknown;
+  customDeviceModel?: unknown;
+}): boolean {
+  const deviceType = normalizeDeviceType(deviceState.type);
+  const model = getDeviceModel(deviceState);
+
+  return (
+    deviceType === "router" ||
+    deviceType === "switch" ||
+    deviceType === "switch_layer3" ||
+    deviceType === "generic" ||
+    model === "2811" ||
+    model === "2911" ||
+    model === "1941" ||
+    model === "2960" ||
+    model === "2960-24tt" ||
+    model === "3650-24ps" ||
+    model.includes("router") ||
+    model.includes("switch")
+  );
+}
+
+function isHostLikeDevice(deviceState: {
+  type?: string | number;
+  model?: unknown;
+  customDeviceModel?: unknown;
+}): boolean {
+  const deviceType = normalizeDeviceType(deviceState.type);
+  const model = getDeviceModel(deviceState);
+
+  return (
+    deviceType === "host" ||
+    deviceType === "pc" ||
+    deviceType === "server" ||
+    deviceType === "printer" ||
+    model === "pc" ||
+    model === "pc-pt" ||
+    model === "laptop" ||
+    model === "laptop-pt" ||
+    model === "server" ||
+    model === "server-pt" ||
+    model === "printer" ||
+    model === "printer-pt" ||
+    model.includes("server") ||
+    model.includes("pc-pt") ||
+    model.includes("laptop") ||
+    model.includes("printer")
+  );
 }
 
 export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
@@ -58,20 +129,11 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
         return "unknown";
       }
 
-      const deviceType =
-        typeof deviceState.type === "string"
-          ? deviceState.type
-          : normalizeDeviceType(deviceState?.type);
+      if (isIosLikeDevice(deviceState)) {
+        return "ios";
+      }
 
-      const isIOS =
-        deviceType === "router" ||
-        deviceType === "switch" ||
-        deviceType === "switch_layer3" ||
-        deviceType === "generic";
-
-      if (isIOS) return "ios";
-
-      if (deviceType === "host" || deviceType === "pc" || deviceType === "server") {
+      if (isHostLikeDevice(deviceState)) {
         return "host";
       }
 

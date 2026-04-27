@@ -3,12 +3,13 @@ import { createTerminalCommandService } from "./terminal-command-service.js";
 
 function createController(options: {
   deviceType: string | number;
+  model?: string;
   runtimeTerminal?: { runTerminalPlan?: ReturnType<typeof vi.fn> } | null;
   execIos?: ReturnType<typeof vi.fn>;
   execHost?: ReturnType<typeof vi.fn>;
 }) {
   return {
-    inspectDevice: vi.fn().mockResolvedValue({ type: options.deviceType }),
+    inspectDevice: vi.fn().mockResolvedValue({ type: options.deviceType, model: options.model }),
     execIos:
       options.execIos ??
       vi.fn().mockResolvedValue({ ok: true, raw: "legacy-ios", evidence: { source: "legacy-ios" }, warnings: [] }),
@@ -144,5 +145,53 @@ describe("createTerminalCommandService plan run", () => {
     expect(result.error?.code).toBe("DEVICE_NOT_FOUND_OR_UNSUPPORTED");
     expect((controller.execIos as any)).not.toHaveBeenCalled();
     expect((controller.execHost as any)).not.toHaveBeenCalled();
+  });
+
+  test("clasifica Server-PT type 9 como host y usa runTerminalPlan", async () => {
+    const runTerminalPlan = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 0,
+      output: "IP Configuration",
+      warnings: [],
+      evidence: { source: "runtime-host" },
+    });
+
+    const controller = createController({
+      deviceType: 9,
+      model: "Server-PT",
+      runtimeTerminal: { runTerminalPlan },
+    });
+
+    const service = createTerminalCommandService({
+      controller: controller as any,
+      runtimeTerminal: { runTerminalPlan } as any,
+      generateId: () => "server-plan-id",
+    });
+
+    const result = await service.executeCommand("SRV1-CORE", "ipconfig");
+
+    expect(runTerminalPlan).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      ok: true,
+      action: "host.exec",
+      device: "SRV1-CORE",
+      deviceKind: "host",
+      command: "ipconfig",
+      output: "IP Configuration",
+      status: 0,
+    });
+  });
+
+  test("resolveDeviceKind reconoce Server-PT aunque type sea numérico desconocido", async () => {
+    const service = createTerminalCommandService({
+      controller: createController({
+        deviceType: 9,
+        model: "Server-PT",
+      }) as any,
+      runtimeTerminal: null,
+      generateId: () => "server-kind-id",
+    });
+
+    await expect(service.resolveDeviceKind("SRV1-CORE")).resolves.toBe("host");
   });
 });
