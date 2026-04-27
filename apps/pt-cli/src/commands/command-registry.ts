@@ -26,9 +26,8 @@ export type CommandFactory = () => Command;
 
 export const PUBLIC_COMMAND_DEFINITIONS: PtCommandDefinition[] = [
   {
-    id: "build",
+id: "build",
     name: "build",
-    hidden: true,
     group: "core",
     summary: "Build y deploy de archivos a ~/pt-dev/",
     description: "Compila y publica el runtime y assets auxiliares.",

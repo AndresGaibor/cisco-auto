@@ -4,7 +4,7 @@
 
 import { registerPrimitive } from "../primitive-registry";
 import type { PrimitiveDomain } from "../primitive-registry";
-import { PT_DEVICE_MODULE_SLOTS } from "../../value-objects/hardware-maps.js";
+import { PT_DEVICE_MODULE_SLOTS } from "../../templates/generated-module-map.js";
 
 export interface AddModulePayload {
   type: "addModule";

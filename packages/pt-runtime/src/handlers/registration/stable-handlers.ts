@@ -53,15 +53,6 @@ import {
 
 import { handleConfigHost } from "../host-handler.js";
 
-import {
-  handleConfigIos,
-  handleExecIos,
-  handleDeferredPoll,
-  handlePing,
-  handleExecPc,
-  handleReadTerminal,
-} from "../ios/index.js";
-
 let stableHandlersRegistered = false;
 
 /**
@@ -83,13 +74,6 @@ export function registerStableRuntimeHandlers(): void {
   stableHandlersRegistered = true;
 
   registerHandler("configHost", handleConfigHost as unknown as HandlerFn);
-  registerHandler("configIos", handleConfigIos as unknown as HandlerFn);
-  registerHandler("execIos", handleExecIos as unknown as HandlerFn);
-  registerHandler("__pollDeferred", handleDeferredPoll as unknown as HandlerFn);
-  registerHandler("__ping", handlePing as unknown as HandlerFn);
-  registerHandler("execPc", handleExecPc as unknown as HandlerFn);
-  registerHandler("readTerminal", handleReadTerminal as unknown as HandlerFn);
-
   registerHandler("ensureVlans", handleEnsureVlans as unknown as HandlerFn);
   registerHandler("configVlanInterfaces", handleConfigVlanInterfaces as unknown as HandlerFn);
   registerHandler("configDhcpServer", handleConfigDhcpServer as unknown as HandlerFn);

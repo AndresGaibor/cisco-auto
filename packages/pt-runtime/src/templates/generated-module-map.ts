@@ -7,7 +7,7 @@
 // Slot types: 0=eLineCard, 1=eNetworkModule, 2=eInterfaceCard
 // ============================================================================
 
-var PT_MODULE_CATALOG = {
+export const PT_MODULE_CATALOG = {
   "NM-2W":    { code: "NM-2W",    slotType: "eNetworkModule",   name: "NM-2W HWIC-2T" },
   "HWIC-2T":  { code: "HWIC-2T",  slotType: "eInterfaceCard",   name: "HWIC-2T" },
   "HWIC-4ESW":{ code: "HWIC-4ESW",slotType: "eInterfaceCard",   name: "HWIC-4ESW" },
@@ -15,7 +15,7 @@ var PT_MODULE_CATALOG = {
   "WIC-1T":   { code: "WIC-1T",   slotType: "eInterfaceCard",   name: "WIC-1T" },
 };
 
-var PT_DEVICE_MODULE_SLOTS = {
+export const PT_DEVICE_MODULE_SLOTS = {
   "2811": [
     { type: "eNetworkModule",  count: 2, supportedModules: ["NM-2W","NM-1E","NM-1FE-TX","NM-4A/S"] },
     { type: "eInterfaceCard",   count: 2, supportedModules: ["HWIC-2T","HWIC-4ESW","WIC-2T","WIC-1T","HWIC-1GE-SFP"] },

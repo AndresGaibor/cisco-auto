@@ -47,7 +47,6 @@ import type { PTCommandLine, ExecutionOptions, CommandExecutionResult } from "..
 import type { TerminalSessionState } from "../session-state";
 import type { CommandSessionKind } from "../command-output-extractor";
 
-// Re-export constants needed externally
 export { COMMAND_END_GRACE_MS, COMMAND_END_MAX_WAIT_MS, HOST_COMMAND_END_GRACE_MS } from "./terminal-completion-controller";
 
 const DEFAULT_COMMAND_TIMEOUT = 15000;
@@ -189,9 +188,9 @@ export class CommandStateMachine {
 
   constructor(config: CommandStateMachineConfig) {
     this.config = {
-      now: () => Date.now(),
-      setTimeout: globalThis.setTimeout,
-      clearTimeout: globalThis.clearTimeout,
+      now: function() { return Date.now(); },
+      setTimeout: setTimeout,
+      clearTimeout: clearTimeout,
       readTerminalSnapshotFn: readTerminalSnapshot,
       getPromptSafeFn: getPromptSafe,
       getModeSafeFn: getModeSafe,

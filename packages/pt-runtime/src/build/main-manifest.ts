@@ -60,6 +60,9 @@ export const MAIN_MANIFEST = {
     "terminal/engine/terminal-error-resolver.ts",
     "terminal/engine/terminal-recovery-controller.ts",
     "terminal/engine/terminal-observability.ts",
+    "terminal/engine/command-executor.ts",
+    "terminal/engine/command-state-machine.ts",
+    "terminal/terminal-utils.ts",
   ],
 
   // main.ts MUST be last — it depends on createTerminalEngine (terminal) and all kernel modules
