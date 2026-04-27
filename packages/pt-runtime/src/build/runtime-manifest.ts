@@ -135,9 +135,9 @@ export const RUNTIME_MANIFEST = {
   ],
 
   primitives: [
+    "primitives/primitive-registry.ts",
     "templates/generated-module-map.ts",
     "primitives/module/index.ts",
-    "primitives/primitive-registry.ts",
   ],
 
   terminal: [
