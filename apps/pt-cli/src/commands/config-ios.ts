@@ -27,6 +27,8 @@ import {
   type ConfigIOSVerification,
 } from "@cisco-auto/pt-control/application/config-ios";
 
+export { buildVerificationPlan };
+
 export const CONFIG_IOS_META: CommandMeta = {
   id: "config-ios",
   summary: "Ejecutar comandos IOS en un dispositivo de red Cisco",

@@ -1,6 +1,21 @@
 import type { RuntimePrimitivePort } from "../../ports/runtime-primitive-port.js";
-import { validateModuleExists, validateModuleSlotCompatible } from "@cisco-auto/pt-runtime";
+import { validateModuleExists, validateModuleSlotCompatible, findFirstCompatibleSlot } from "@cisco-auto/pt-runtime";
 import { DeviceQueryService } from "./device-query-service.js";
+
+export interface AddModuleResult {
+  device: string;
+  module: string;
+  slot: number;
+  wasPoweredOff: boolean;
+  powerRestored: boolean;
+}
+
+export interface AddModuleError {
+  ok: false;
+  error: string;
+  code: string;
+  advice?: string[];
+}
 
 /**
  * Servicio de mutación de dispositivos.
@@ -15,25 +30,53 @@ export class DeviceMutationService {
   /**
    * Añade un módulo a un dispositivo.
    * @param device - Nombre del dispositivo
-   * @param slot - Slot donde instalar el módulo
+   * @param slot - Slot donde instalar el módulo ("auto" para descubrimiento automático)
    * @param module - Tipo de módulo
    */
-  async addModule(device: string, slot: number, module: string): Promise<void> {
+  async addModule(device: string, slot: number | "auto", module: string): Promise<{ ok: true; value: AddModuleResult } | AddModuleError> {
     const currentDevice = await this.query.inspect(device, false);
     const moduleValidation = validateModuleExists(module);
     if (!moduleValidation.valid)
-      throw new Error(moduleValidation.error ?? `Módulo inválido: ${module}`);
+      return { ok: false, error: moduleValidation.error ?? `Módulo '${module}' no encontrado en catálogo`, code: "MODULE_NOT_FOUND" };
 
-    const slotValidation = validateModuleSlotCompatible(currentDevice.model, slot, module);
-    if (!slotValidation.valid)
-      throw new Error(
-        slotValidation.error ?? `El módulo ${module} no es válido para ${currentDevice.model}`,
-      );
-
-    const result = await this.primitivePort.runPrimitive("module.add", { device, slot, module });
-    if (!result.ok) {
-      throw new Error(result.error ?? `Error añadiendo módulo ${module} a ${device}`);
+    let resolvedSlot: number;
+    if (slot === "auto") {
+      const autoSlot = findFirstCompatibleSlot(currentDevice.model, module);
+      if (!autoSlot.valid)
+        return { ok: false, error: autoSlot.error ?? `No se encontró slot compatible para '${module}' en '${currentDevice.model}'`, code: "NO_COMPATIBLE_SLOT" };
+      resolvedSlot = autoSlot.slot;
+    } else {
+      const slotValidation = validateModuleSlotCompatible(currentDevice.model, slot, module);
+      if (!slotValidation.valid)
+        return { ok: false, error: slotValidation.error ?? `Slot inválido para '${module}'`, code: "SLOT_INCOMPATIBLE" };
+      resolvedSlot = slot;
     }
+
+    const result = await this.primitivePort.runPrimitive("module.add", { device, slot: resolvedSlot, module });
+    if (!result.ok) {
+      return { ok: false, error: result.error ?? "Error añadiendo módulo", code: "MODULE_ADD_FAILED" };
+    }
+
+    const value = result.value as { wasPoweredOff?: boolean };
+    return {
+      ok: true,
+      value: {
+        device,
+        module,
+        slot: resolvedSlot,
+        wasPoweredOff: value?.wasPoweredOff ?? false,
+        powerRestored: value?.wasPoweredOff ?? false,
+      },
+    };
+  }
+
+  async inspectModuleSlots(device: string): Promise<{ ok: boolean; value?: unknown }> {
+    const result = await this.primitivePort.runPrimitive("module.slots", { device });
+    if (!result.ok) {
+      return { ok: false };
+    }
+
+    return { ok: true, value: result.value };
   }
 
   /**
@@ -41,11 +84,13 @@ export class DeviceMutationService {
    * @param device - Nombre del dispositivo
    * @param slot - Slot del módulo a remover
    */
-  async removeModule(device: string, slot: number): Promise<void> {
+  async removeModule(device: string, slot: number): Promise<{ ok: boolean; value?: unknown }> {
     const result = await this.primitivePort.runPrimitive("module.remove", { device, slot });
     if (!result.ok) {
-      throw new Error(result.error ?? `Error removiendo módulo de ${device}`);
+      return { ok: false };
     }
+
+    return { ok: true, value: result.value };
   }
 
   /**

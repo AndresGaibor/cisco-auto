@@ -48,7 +48,93 @@ function createMockLW(): HandlerDeps["getLW"] {
   }) as any;
 }
 
-const commonDeps = {
+function createLiveLinkDeps(opts?: { connected?: boolean }) {
+  let link: any = null;
+
+  const device1: any = {};
+  const device2: any = {};
+
+  const port1: any = {
+    getName: () => "GigabitEthernet0/0",
+    getLightStatus: () => 2,
+    isPortUp: () => true,
+    isProtocolUp: () => true,
+    getRemotePortName: () => "FastEthernet0/1",
+    getOwnerDevice: () => device1,
+    getLink: () => link,
+  };
+
+  const port2: any = {
+    getName: () => "FastEthernet0/1",
+    getLightStatus: () => 2,
+    isPortUp: () => true,
+    isProtocolUp: () => true,
+    getRemotePortName: () => "GigabitEthernet0/0",
+    getOwnerDevice: () => device2,
+    getLink: () => link,
+  };
+
+  device1.getName = () => "R1";
+  device1.getModel = () => "2911";
+  device1.getType = () => DEVICE_TYPES.router;
+  device1.getPower = () => true;
+  device1.skipBoot = () => {};
+  device1.getPortCount = () => 1;
+  device1.getPortAt = (i: number) => (i === 0 ? port1 : null);
+  device1.getPort = (name: string) => (String(name).toLowerCase() === "gigabitethernet0/0" ? port1 : null);
+
+  device2.getName = () => "S1";
+  device2.getModel = () => "2960";
+  device2.getType = () => DEVICE_TYPES.switch;
+  device2.getPower = () => true;
+  device2.skipBoot = () => {};
+  device2.getPortCount = () => 1;
+  device2.getPortAt = (i: number) => (i === 0 ? port2 : null);
+  device2.getPort = (name: string) => (String(name).toLowerCase() === "fastethernet0/1" ? port2 : null);
+
+  const liveLink = {
+    getObjectUuid: () => "uuid-1",
+    getConnectionType: () => 8100,
+    getPort1: () => port1,
+    getPort2: () => port2,
+  };
+
+  if (opts?.connected !== false) {
+    link = liveLink;
+  }
+
+  const net = {
+    getDeviceCount: () => 2,
+    getDeviceAt: (i: number) => (i === 0 ? device1 : i === 1 ? device2 : null),
+    getDevice: (name: string) => {
+      if (name === "R1") return device1;
+      if (name === "S1") return device2;
+      return null;
+    },
+  };
+
+  const lw = {
+    createLink: () => {
+      link = liveLink;
+      return liveLink;
+    },
+    deleteLink: () => {
+      link = null;
+      return true;
+    },
+  };
+
+  return {
+    deps: {
+      getLW: () => lw as any,
+      getNet: () => net as any,
+      ...commonDeps,
+    },
+    liveLink,
+  };
+}
+
+const commonDeps: any = {
   getFM: () => ({ 
     fileExists: () => false, 
     writePlainTextToFile: () => {}, 
@@ -88,14 +174,7 @@ describe("handleAddDevice contract", () => {
 
 describe("handleAddLink contract", () => {
   test("retorna LinkState-compatible payload con id, device1, port1, device2, port2, cableType", () => {
-    const deps: any = {
-      getLW: createMockLW(),
-      getNet: createMockNet({
-        "R1": createMockDevice("R1", "2911", DEVICE_TYPES.router, ["GigabitEthernet0/0"]),
-        "S1": createMockDevice("S1", "2960", DEVICE_TYPES.switch, ["FastEthernet0/1"]),
-      }),
-      ...commonDeps,
-    };
+    const { deps } = createLiveLinkDeps({ connected: false });
 
     const result = handleAddLink({
       type: "addLink",
@@ -109,8 +188,7 @@ describe("handleAddLink contract", () => {
     expect((result as any).ok).toBe(true);
     expect((result as any)).toHaveProperty("id");
     expect(typeof (result as any).id).toBe("string");
-    expect((result as any).id).toContain("R1");
-    expect((result as any).id).toContain("S1");
+    expect((result as any).id).toBe("uuid-1");
     expect((result as any)).toHaveProperty("device1");
     expect((result as any).device1).toBe("R1");
     expect((result as any)).toHaveProperty("port1");
@@ -124,21 +202,14 @@ describe("handleAddLink contract", () => {
   });
 
   test("usa 'auto' cuando linkType no se especifica", () => {
-    const deps: any = {
-      getLW: createMockLW(),
-      getNet: createMockNet({
-        "R1": createMockDevice("R1", "2911", DEVICE_TYPES.router, ["Serial0/0/0"]),
-        "R2": createMockDevice("R2", "2911", DEVICE_TYPES.router, ["Serial0/0/0"]),
-      }),
-      ...commonDeps,
-    };
+    const { deps } = createLiveLinkDeps({ connected: false });
 
     const result = handleAddLink({
       type: "addLink",
       device1: "R1",
-      port1: "Serial0/0/0",
-      device2: "R2",
-      port2: "Serial0/0/0",
+      port1: "GigabitEthernet0/0",
+      device2: "S1",
+      port2: "FastEthernet0/1",
     }, deps);
 
     expect((result as any).ok).toBe(true);
@@ -223,9 +294,19 @@ describe("handleListDevices contract", () => {
 
 describe("handleRemoveDevice contract", () => {
   test("retorna ok y name en éxito", () => {
+    const device = createMockDevice("R1", "2911", DEVICE_TYPES.router);
+    let devices: Record<string, unknown> = { R1: device };
     const deps: any = {
-      getLW: createMockLW(),
-      getNet: createMockNet({}),
+      getLW: () => ({
+        removeDevice: (name: string) => {
+          delete devices[name];
+        },
+      } as any),
+      getNet: () => ({
+        getDeviceCount: () => Object.keys(devices).length,
+        getDeviceAt: (i: number) => Object.values(devices)[i] ?? null,
+        getDevice: (name: string) => (devices[name] as any) ?? null,
+      } as any),
       ...commonDeps,
     };
 
@@ -238,13 +319,9 @@ describe("handleRemoveDevice contract", () => {
 
 describe("handleRemoveLink contract", () => {
   test("retorna ok en éxito", () => {
-    const deps: any = {
-      getLW: createMockLW(),
-      getNet: createMockNet({}),
-      ...commonDeps,
-    };
+    const { deps } = createLiveLinkDeps({ connected: true });
 
-    const result = handleRemoveLink({ device: "R1", port: "GigabitEthernet0/0" }, deps);
+    const result = handleRemoveLink({ type: "removeLink", device: "R1", port: "GigabitEthernet0/0" }, deps);
 
     expect((result as any).ok).toBe(true);
   });

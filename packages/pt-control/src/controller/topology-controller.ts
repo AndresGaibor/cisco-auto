@@ -47,8 +47,8 @@ export class TopologyController {
     },
     private readonly deviceService: {
       inspect(name: string, includeXml?: boolean): Promise<DeviceState>;
-      addModule(device: string, slot: number, module: string): Promise<void>;
-      removeModule(device: string, slot: number): Promise<void>;
+      addModule(device: string, slot: number | "auto", module: string): Promise<{ ok: true; value: { device: string; module: string; slot: number; wasPoweredOff: boolean } } | { ok: false; error: string; code: string; advice?: string[] }>;
+      removeModule(device: string, slot: number): Promise<{ ok: boolean; value?: unknown }>;
     },
   ) {}
 
@@ -86,8 +86,8 @@ export class TopologyController {
     return this.deviceService.inspect(name, includeXml);
   }
 
-  async addModule(device: string, slot: number, module: string): Promise<void> {
-    await this.deviceService.addModule(device, slot, module);
+  async addModule(device: string, slot: number | "auto", module: string): Promise<{ ok: true; value: { device: string; module: string; slot: number; wasPoweredOff: boolean } } | { ok: false; error: string; code: string; advice?: string[] }> {
+    return this.deviceService.addModule(device, slot, module) as any;
   }
 
   async removeModule(device: string, slot: number): Promise<void> {

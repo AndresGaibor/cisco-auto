@@ -4,6 +4,7 @@ import { createDeviceAddCommand } from "./add";
 import { createDeviceGetCommand } from "./get";
 import { createDeviceInteractiveCommand } from "./interactive";
 import { createDeviceListCommand } from "./list";
+import { createDeviceModuleCommand } from "./module";
 import { createDevicePortsCommand } from "./ports";
 import { createDeviceMoveCommand } from "./move";
 import { createDeviceRemoveCommand } from "./remove";
@@ -18,6 +19,7 @@ export function createDeviceCommand(): Command {
   cmd.addCommand(createDeviceGetCommand());
   cmd.addCommand(createDeviceInteractiveCommand());
   cmd.addCommand(createDeviceListCommand());
+  cmd.addCommand(createDeviceModuleCommand());
   cmd.addCommand(createDevicePortsCommand());
   cmd.addCommand(createDeviceMoveCommand());
   cmd.addCommand(createDeviceRemoveCommand());

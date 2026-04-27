@@ -13,19 +13,32 @@ export function attachCommandTiming(
   program: Command,
   write: (message: string) => void = (message) => process.stdout.write(message),
 ): Command {
-  const startedAt = new Map<string, number>();
+  let startedAt = 0;
+  let commandPath = program.name();
+
+  const buildCommandPath = (command: Command): string => {
+    const names: string[] = [];
+    let current: Command | null = command;
+
+    while (current) {
+      names.unshift(current.name());
+      current = current.parent;
+    }
+
+    return names.join(" ");
+  };
 
   program.hook("preAction", (_thisCommand, actionCommand) => {
-    startedAt.set(actionCommand.commandName(), Date.now());
+    startedAt = Date.now();
+    commandPath = buildCommandPath(actionCommand);
   });
 
-  program.hook("postAction", (_thisCommand, actionCommand) => {
-    const started = startedAt.get(actionCommand.commandName());
-    if (!started) return;
+  program.hook("postAction", () => {
+    if (!startedAt) return;
 
-    const elapsedSeconds = (Date.now() - started) / 1000;
-    write(`⏱ ${actionCommand.commandPath()} · ${elapsedSeconds.toFixed(1)}s\n`);
-    startedAt.delete(actionCommand.commandName());
+    const elapsedSeconds = (Date.now() - startedAt) / 1000;
+    write(`⏱ ${commandPath} · ${elapsedSeconds.toFixed(1)}s\n`);
+    startedAt = 0;
   });
 
   return program;

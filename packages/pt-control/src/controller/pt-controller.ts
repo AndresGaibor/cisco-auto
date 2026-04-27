@@ -165,7 +165,7 @@ export class PTController {
       } as any;
 
       this._snapshotController = {
-        snapshot: async () => bridge.sendCommandAndWait('snapshot', {}).then(r => r?.value || { devices: {}, links: {} }),
+        snapshot: async () => bridge.sendCommandAndWait('snapshot', {}).then((r: any) => r?.value || { devices: {}, links: {} }),
         getCachedSnapshot: () => null,
         loadRuntime: async (code: string) => {},
         loadRuntimeFromFile: async (file: string) => {},
@@ -195,34 +195,36 @@ export class PTController {
       return;
     }
 
-    this._composition = composition as ControlComposition;
+    const controlComposition = composition as ControlComposition;
+
+    this._composition = controlComposition;
     this._legacyBridge = null;
     this._legacyIosService = null;
 
     this._topologyController = new TopologyController(
-      composition.topologyFacade,
-      composition.deviceService,
+      controlComposition.topologyFacade,
+      controlComposition.deviceService,
     );
 
     this._iosController = new IosController(
-      composition.controllerIosService,
-      composition.deviceService,
+      controlComposition.controllerIosService,
+      controlComposition.deviceService,
     );
 
     this._snapshotController = new SnapshotController(
-      composition.snapshotService,
-      composition.bridgeService,
+      controlComposition.snapshotService,
+      controlComposition.bridgeService,
     );
 
     this._runtimeController = new RuntimeController(
-      composition.bridgeService,
-      composition.primitivePort,
-      composition.contextService,
+      controlComposition.bridgeService,
+      controlComposition.primitivePort,
+      controlComposition.contextService,
     );
 
     this._hostCommandService = new HostCommandService(
-      composition.terminalPort,
-      composition.deviceService,
+      controlComposition.terminalPort,
+      controlComposition.deviceService,
     );
   }
 
@@ -275,14 +277,18 @@ export class PTController {
     model: string,
     options?: { x?: number; y?: number },
   ): Promise<DeviceState> {
+    await this.ensureDeviceNameAvailable(name);
     return this._topologyController.addDevice(name, model, options);
   }
 
   async removeDevice(name: string): Promise<void> {
+    await this.requireDevice(name);
     await this._topologyController.removeDevice(name);
   }
 
   async renameDevice(oldName: string, newName: string): Promise<void> {
+    await this.requireDevice(oldName);
+    await this.ensureDeviceNameAvailable(newName);
     await this._topologyController.renameDevice(oldName, newName);
   }
 
@@ -293,19 +299,60 @@ export class PTController {
   ): Promise<
     { ok: true; name: string; x: number; y: number } | { ok: false; error: string; code: string }
   > {
+    await this.requireDevice(name);
     return this._topologyController.moveDevice(name, x, y);
   }
 
+  async requireDevice(name: string): Promise<DeviceState> {
+    const devices = await this.listDevices();
+    const found = Array.isArray(devices) ? devices.find((device) => device.name === name) : undefined;
+
+    if (!found) {
+      const error = new Error(`Device not found: ${name}`);
+      (error as Error & { code?: string; details?: Record<string, unknown> }).code = "DEVICE_NOT_FOUND";
+      (error as Error & { code?: string; details?: Record<string, unknown> }).details = {
+        requested: name,
+        availableDevices: Array.isArray(devices)
+          ? devices.map((device) => ({ name: device.name, type: device.type, model: device.model }))
+          : [],
+        count: Array.isArray(devices) ? devices.length : 0,
+      };
+      throw error;
+    }
+
+    return found;
+  }
+
+  async ensureDeviceNameAvailable(name: string): Promise<void> {
+    const devices = await this.listDevices();
+    const listed = Array.isArray(devices) ? devices : [];
+
+    if (listed.some((device) => device.name === name)) {
+      const error = new Error(`Device already exists: ${name}`);
+      (error as Error & { code?: string; details?: Record<string, unknown> }).code = "DEVICE_ALREADY_EXISTS";
+      (error as Error & { code?: string; details?: Record<string, unknown> }).details = {
+        requested: name,
+        availableDevices: listed.map((device) => ({ name: device.name, type: device.type, model: device.model })),
+        count: listed.length,
+      };
+      throw error;
+    }
+  }
+
   async listDevices(filter?: string | number | string[]): Promise<DeviceState[]> {
-    return this._topologyController.listDevices(filter);
+    return (await this._topologyController.listDevices(filter)) as unknown as DeviceState[];
   }
 
   async inspectDevice(name: string, includeXml = false): Promise<DeviceState> {
     return this._topologyController.inspectDevice(name, includeXml);
   }
 
-  async addModule(device: string, slot: number, module: string): Promise<void> {
-    await this._topologyController.addModule(device, slot, module);
+  async addModule(device: string, slot: number | "auto", module: string): Promise<{ ok: true; value: { device: string; module: string; slot: number; wasPoweredOff: boolean } } | { ok: false; error: string; code: string; advice?: string[] }> {
+    return this._topologyController.addModule(device, slot, module) as any;
+  }
+
+  async inspectModuleSlots(device: string): Promise<{ ok: boolean; value?: unknown }> {
+    return this._composition.deviceService.inspectModuleSlots(device);
   }
 
   async removeModule(device: string, slot: number): Promise<void> {

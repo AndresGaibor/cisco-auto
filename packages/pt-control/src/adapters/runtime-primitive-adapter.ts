@@ -74,6 +74,11 @@ const PRIMITIVE_REGISTRY: Record<string, PrimitiveMetadata> = {
     description: "Eliminar un módulo de un dispositivo",
     supportedPayloadFields: ["device", "slot"],
   },
+  "module.slots": {
+    domain: "module",
+    description: "Inspeccionar slots modulares de un dispositivo",
+    supportedPayloadFields: ["device"],
+  },
 
   // Topology primitives
   "topology.snapshot": {
@@ -132,6 +137,7 @@ const HANDLER_TYPE_OVERRIDES: Record<string, string> = {
   "link.remove": "removeLink",
   "module.add": "addModule",
   "module.remove": "removeModule",
+  "module.slots": "inspectModuleSlots",
   "topology.snapshot": "snapshot",
   "topology.list": "listDevices",
   "hardware.info": "inspect",

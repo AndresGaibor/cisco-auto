@@ -82,7 +82,7 @@ export function inspectModuleSlots(deviceName: string, net: any): ModulePrimitiv
 
     const rootModule = device.getRootModule?.();
     if (!rootModule) {
-      return { ok: true, value: { slots: [] }, evidence: { slots: [] } };
+      return { ok: true, value: { slots: [] }, evidence: { slots: [], slotCount: 0 } };
     }
 
     const slotCount = rootModule.getSlotCount?.() || 0;
@@ -104,6 +104,10 @@ export function inspectModuleSlots(deviceName: string, net: any): ModulePrimitiv
   }
 }
 
+export function inspectModuleSlotsPrimitive(payload: { device: string }, net: any): ModulePrimitiveResult {
+  return inspectModuleSlots(payload.device, net);
+}
+
 registerPrimitive({
   id: "module.add",
   domain: "module" as PrimitiveDomain,
@@ -114,4 +118,10 @@ registerPrimitive({
   id: "module.remove",
   domain: "module" as PrimitiveDomain,
   implementation: ((payload: any, ctx: { net: any; lw: any }) => removeModule(payload, ctx.net)) as any,
+});
+
+registerPrimitive({
+  id: "module.slots",
+  domain: "module" as PrimitiveDomain,
+  implementation: ((payload: any, ctx: { net: any; lw: any }) => inspectModuleSlotsPrimitive(payload, ctx.net)) as any,
 });

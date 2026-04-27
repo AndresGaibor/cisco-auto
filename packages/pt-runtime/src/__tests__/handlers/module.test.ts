@@ -1,5 +1,6 @@
 import { expect, test, describe } from "bun:test";
 import { handleAddModule, handleRemoveModule } from "../../handlers/module";
+import { inspectModuleSlots } from "../../primitives/module";
 import type { HandlerDeps } from "../../utils/helpers";
 
 function createDeps(device: any): HandlerDeps {
@@ -20,6 +21,22 @@ function createDeps(device: any): HandlerDeps {
 }
 
 describe("Module handlers", () => {
+  test("inspectModuleSlots devuelve slots vacios cuando el dispositivo no expone root module", () => {
+    const net = {
+      getDevice: () => ({
+        getModel: () => "2911",
+        getRootModule: null,
+      }),
+    };
+
+    const result = inspectModuleSlots("R1", net as any);
+
+    expect(result.ok).toBe(true);
+    expect((result.value as any)?.slots).toEqual([]);
+    expect((result.evidence as any)?.slots).toEqual([]);
+    expect((result.evidence as any)?.slotCount).toBe(0);
+  });
+
   test("handleAddModule returns error for non-existent device", () => {
     const deps = createDeps(null);
     const result = handleAddModule(

@@ -120,3 +120,32 @@ export function validateModuleSlotCompatible(deviceModel: string, slot: number |
 
   return { valid: true };
 }
+
+export function findFirstCompatibleSlot(deviceModel: string, moduleCode: string): { valid: true; slot: number } | { valid: false; error: string } {
+  const modelKey = (deviceModel || '').toLowerCase();
+  const deviceSlots = PT_DEVICE_MODULE_SLOTS[modelKey];
+  const moduleInfo = validateModuleExists(moduleCode);
+
+  if (!deviceSlots) {
+    return { valid: false, error: `Modelo '${deviceModel}' no tiene información de slots de módulos` };
+  }
+
+  if (!moduleInfo.valid || !moduleInfo.module) {
+    return { valid: false, error: moduleInfo.error ?? `Módulo '${moduleCode}' no encontrado` };
+  }
+
+  for (let i = 0; i < deviceSlots.length; i++) {
+    const slotInfo = deviceSlots[i];
+    if (slotInfo.type === moduleInfo.module.slotType) {
+      return { valid: true, slot: i };
+    }
+  }
+
+  const compatible = deviceSlots
+    .map((s, i) => `${i}: ${s.type} (${s.supportedModules?.join(", ") || "ninguno"})`)
+    .join("; ");
+  return {
+    valid: false,
+    error: `No hay slot con tipo '${moduleInfo.module.slotType}' disponible en ${deviceModel}. Slots: ${compatible}`,
+  };
+}

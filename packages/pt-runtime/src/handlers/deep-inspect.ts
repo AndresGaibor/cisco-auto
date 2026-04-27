@@ -24,7 +24,9 @@ export interface DeepInspectPayload {
  * 3. Privileged Scope (_ScriptModule) - For file system and low-level IPC.
  */
 export function handleDeepInspect(payload: DeepInspectPayload, deps: HandlerDeps): HandlerResult {
-  const { ipc, global, privileged } = deps;
+  const ipc = deps.ipc ?? (typeof (deps as any).getIpc === "function" ? (deps as any).getIpc() : null);
+  const global = deps.global ?? (typeof (deps as any).getGlobal === "function" ? (deps as any).getGlobal() : null);
+  const privileged = deps.privileged ?? (typeof (deps as any).getPrivileged === "function" ? (deps as any).getPrivileged() : null);
   
   if (!ipc && !global) {
     return { ok: false, error: "Runtime environment unavailable", code: "IPC_UNAVAILABLE" };

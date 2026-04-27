@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { Command } from "commander";
-import { input, select } from "@inquirer/prompts";
+import { input, select } from "../../utils/inquirer.js";
 import { createTerminalCommandService } from "@cisco-auto/pt-control/services";
 import { runCommand } from "../../application/run-command.js";
 import { createSuccessResult, createErrorResult } from "../../contracts/cli-result.js";

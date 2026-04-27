@@ -3,9 +3,9 @@
 // ============================================================================
 
 import type { HandlerDeps, HandlerResult } from "../utils/helpers";
-import { getCableTypeName } from "../utils/constants";
 import { parseDeviceXml } from "../utils/device-xml-parser";
 import type { ParsedDeviceXml } from "../utils/device-xml-parser";
+import { collectLiveLinks } from "../domain/live-link";
 
 // ============================================================================
 // Payload Types
@@ -180,11 +180,28 @@ export function handleInspect(payload: InspectPayload, deps: HandlerDeps): Handl
  * Includes devices and links
  */
 export function handleSnapshot(_payload: SnapshotPayload, deps: HandlerDeps): HandlerResult {
-  var net = deps.ipc.network();
+  var net = typeof deps.getNet === "function" ? deps.getNet() : deps.ipc.network();
   var count = net.getDeviceCount();
   var devices: Record<string, any> = {};
   var links: Record<string, any> = {};
-  var processedLinks: Record<string, boolean> = {};
+
+  const liveLinks = collectLiveLinks(net);
+
+  for (const link of liveLinks) {
+    links[link.id] = {
+      id: link.id,
+      device1: link.device1,
+      port1: link.port1,
+      device2: link.device2,
+      port2: link.port2,
+      cableType: link.cableType ?? "auto",
+      cableTypeId: link.cableTypeId,
+      state: link.state,
+      endpoint1: link.endpoint1,
+      endpoint2: link.endpoint2,
+      evidence: link.evidence,
+    };
+  }
 
   for (var i = 0; i < count; i++) {
     var device = net.getDeviceAt(i);
@@ -202,7 +219,7 @@ export function handleSnapshot(_payload: SnapshotPayload, deps: HandlerDeps): Ha
         var portName = port.getName();
         var portInfo: Record<string, any> = { name: portName };
 
-        // LED State (0 = Red/Down, 1 = Green/Up, 2 = Amber/Blocked)
+        // LED State oficial PT: 0=off/down, 1=amber, 2=green, 3=blink
         try {
           var isUp = false;
           if (typeof port.isPortUp === 'function' && port.isPortUp()) isUp = true;
@@ -211,43 +228,22 @@ export function handleSnapshot(_payload: SnapshotPayload, deps: HandlerDeps): Ha
           var light = -1;
           if (typeof port.getLightStatus === 'function') {
             light = port.getLightStatus();
-            if (light === 1 || light === 2) isUp = true; // 1=Green, 2=Amber
+            if (light === 2 || light === 3) isUp = true;
           }
           
           portInfo.status = isUp ? 'up' : 'down';
           portInfo.protocol = isUp ? 'up' : 'down';
           portInfo.light = light;
+          portInfo.lightName =
+            light === 0 ? "off" :
+            light === 1 ? "amber" :
+            light === 2 ? "green" :
+            light === 3 ? "blink" :
+            "unknown";
         } catch (e) { /* ignore */ }
 
         try {
           portInfo.ipAddress = port.getIpAddress();
-        } catch (e) { /* ignore */ }
-
-        // Recolectar Link si no ha sido procesado
-        try {
-            var l = port.getLink ? port.getLink() : null;
-            if (l) {
-                var lId = l.getObjectUuid ? String(l.getObjectUuid()) : "L" + i + "_" + p;
-                if (!processedLinks[lId]) {
-                    var ep1 = typeof (l as any).getPort1 === "function" ? (l as any).getPort1() : null;
-                    var ep2 = typeof (l as any).getPort2 === "function" ? (l as any).getPort2() : null;
-                    if (ep1 && ep2) {
-                        const owner1 = typeof ep1.getOwnerDevice === "function" ? ep1.getOwnerDevice() : null;
-                        const owner2 = typeof ep2.getOwnerDevice === "function" ? ep2.getOwnerDevice() : null;
-                        if (owner1 && owner2) {
-                            links[lId] = {
-                                id: lId,
-                                device1: typeof owner1.getName === "function" ? owner1.getName() : "Unknown",
-                                port1: typeof ep1.getName === "function" ? ep1.getName() : "Unknown",
-                                device2: typeof owner2.getName === "function" ? owner2.getName() : "Unknown",
-                                port2: typeof ep2.getName === "function" ? ep2.getName() : "Unknown",
-                                type: "auto"
-                            };
-                            processedLinks[lId] = true;
-                        }
-                    }
-                }
-            }
         } catch (e) { /* ignore */ }
 
         ports.push(portInfo);

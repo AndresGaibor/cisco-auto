@@ -6,16 +6,15 @@
 
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { select } from '@inquirer/prompts';
+import { select } from '../../utils/inquirer.js';
 
 import type { CliResult } from '../../contracts/cli-result.js';
 import { createSuccessResult, createVerifiedResult } from '../../contracts/cli-result.js';
 import type { CommandMeta } from '../../contracts/command-meta.js';
 
 import { runCommand } from '../../application/run-command.js';
-import { renderCliResult } from '../../ux/renderers.js';
 import { printExamples } from '../../ux/examples.js';
-import { formatNextSteps } from '../../ux/next-steps.js';
+import { renderCommandResult } from '../../application/render-command-result.js';
 import { buildFlags } from '../../flags-utils.js';
 import { DeviceNotFoundError, fetchDeviceList, formatDevice, requireDeviceExists } from '../../utils/device-utils.js';
 
@@ -268,24 +267,11 @@ export function createDeviceMoveCommand(): Command {
         },
       });
 
-      const output = renderCliResult(result, flags.output);
-
-      if (!flags.quiet || !result.ok) {
-        console.log(output);
-      }
-
-      if (!flags.json && result.ok && result.data) {
-        const nextSteps = [
-          `bun run pt device get ${name ?? '<device>'}`,
-        ];
-        if (!flags.quiet) {
-          console.log(formatNextSteps(nextSteps));
-        }
-      }
-
-      if (!result.ok) {
-        process.exit(1);
-      }
+      renderCommandResult({
+        result,
+        flags,
+        nextSteps: [`bun run pt device get ${name ?? '<device>'}`],
+      });
     });
 
   return cmd;

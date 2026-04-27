@@ -6,16 +6,15 @@
 
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { input, select } from '@inquirer/prompts';
+import { input, select } from '../../utils/inquirer.js';
 
 import type { CliResult } from '../../contracts/cli-result.js';
 import { createSuccessResult, createVerifiedResult, createErrorResult } from '../../contracts/cli-result.js';
 import type { CommandMeta } from '../../contracts/command-meta.js';
 
 import { runCommand } from '../../application/run-command.js';
-import { renderCliResult } from '../../ux/renderers.js';
 import { printExamples } from '../../ux/examples.js';
-import { formatNextSteps } from '../../ux/next-steps.js';
+import { renderCommandResult } from '../../application/render-command-result.js';
 import { buildFlags } from '../../flags-utils.js';
 import {
   DEVICE_MODELS,
@@ -279,25 +278,14 @@ export function createDeviceAddCommand(): Command {
         },
       });
 
-      const output = renderCliResult(result, flags.output);
-
-      if (!flags.quiet || !result.ok) {
-        console.log(output);
-      }
-
-      if (!flags.json && result.ok && result.data) {
-        const nextSteps = [
+      renderCommandResult({
+        result,
+        flags,
+        nextSteps: [
           'bun run pt device list',
           `bun run pt device get ${name ?? '<device>'}`,
-        ];
-        if (!flags.quiet) {
-          console.log(formatNextSteps(nextSteps));
-        }
-      }
-
-      if (!result.ok) {
-        process.exit(1);
-      }
+        ],
+      });
     });
 
   return cmd;

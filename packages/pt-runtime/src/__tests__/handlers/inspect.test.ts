@@ -73,6 +73,9 @@ describe("Inspect handlers", () => {
       getName: () => "GigabitEthernet0/0",
       getIpAddress: () => "192.168.1.1",
       getSubnetMask: () => "255.255.255.0",
+      getLightStatus: () => 2,
+      isPortUp: () => true,
+      isProtocolUp: () => true,
     };
     const device = {
       getName: () => "SW1",
@@ -92,6 +95,7 @@ describe("Inspect handlers", () => {
     expect((result as any).metadata.deviceCount).toBe(1);
     expect((result as any).devices.SW1.name).toBe("SW1");
     expect((result as any).devices.SW1.ports[0].name).toBe("GigabitEthernet0/0");
+    expect((result as any).devices.SW1.ports[0].lightName).toBe("green");
   });
 
   test("handleHardwareCatalog returns requiresIpc stub", () => {

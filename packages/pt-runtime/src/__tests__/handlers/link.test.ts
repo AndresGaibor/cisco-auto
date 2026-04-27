@@ -54,7 +54,7 @@ class MockNetwork {
 }
 
 describe("handleAddLink", () => {
-  test("reintenta con cable auto cuando el cable explícito falla", () => {
+  test("falla cuando createLink no crea el enlace exacto", () => {
     const workspace = new MockWorkspace();
     const deps: any = {
       getLW: () => workspace as never,
@@ -76,7 +76,9 @@ describe("handleAddLink", () => {
       deps,
     );
 
-    expect(result.ok).toBe(true);
-    expect(workspace.calls.some((call) => call.cableType === 8107)).toBe(true);
+    expect(result.ok).toBe(false);
+    if (!result.ok && "code" in result) {
+      expect(result.code).toBe("LINK_CREATED_BUT_NOT_EXACT");
+    }
   });
 });

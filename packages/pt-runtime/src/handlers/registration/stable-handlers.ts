@@ -21,7 +21,7 @@ import {
   handleMoveDevice,
 } from "../device.js";
 
-import { handleAddLink, handleRemoveLink } from "../link.js";
+import { handleAddLink, handleRemoveLink, handleVerifyLink } from "../link.js";
 
 import {
   handleSetDeviceIp,
@@ -38,6 +38,7 @@ import {
 import {
   handleAddModule,
   handleRemoveModule,
+  handleInspectModuleSlots,
 } from "../module/index.js";
 
 import { handleDeepInspect } from "../deep-inspect.js";
@@ -106,6 +107,7 @@ export function registerStableRuntimeHandlers(): void {
 
   registerHandler("addLink", handleAddLink as unknown as HandlerFn);
   registerHandler("removeLink", handleRemoveLink as unknown as HandlerFn);
+  registerHandler("verifyLink", handleVerifyLink as unknown as HandlerFn);
 
   registerHandler("listCanvasRects", handleListCanvasRects as unknown as HandlerFn);
   registerHandler("getRect", handleGetRect as unknown as HandlerFn);
@@ -114,6 +116,7 @@ export function registerStableRuntimeHandlers(): void {
 
   registerHandler("addModule", handleAddModule as unknown as HandlerFn);
   registerHandler("removeModule", handleRemoveModule as unknown as HandlerFn);
+  registerHandler("inspectModuleSlots", handleInspectModuleSlots as unknown as HandlerFn);
 
   registerHandler("inspect", handleInspect as unknown as HandlerFn);
   registerHandler("snapshot", handleSnapshot as unknown as HandlerFn);

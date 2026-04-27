@@ -4,6 +4,7 @@
 
 import type { HandlerDeps, HandlerResult } from "../../utils/helpers";
 import { safeString, isHWICOrWIC } from "./helpers";
+import { inspectModuleSlots } from "../../primitives/module/index.js";
 import {
   MODULE_TYPE,
   getSlotCountOrZero,
@@ -216,4 +217,18 @@ export function handleRemoveModule(payload: RemoveModulePayload, deps: HandlerDe
 
     return { ok: false, error: errorMsg, code: "MODULE_REMOVE_ERROR" };
   }
+}
+
+export function handleInspectModuleSlots(payload: { device: string }, deps: HandlerDeps): HandlerResult {
+  const { getNet } = deps;
+  const result = inspectModuleSlots(payload.device, getNet());
+  return {
+    ok: result.ok,
+    value: result.value,
+    error: result.error,
+    code: result.code,
+    warnings: result.warnings,
+    evidence: result.evidence,
+    confidence: result.confidence,
+  } as HandlerResult;
 }

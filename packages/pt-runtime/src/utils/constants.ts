@@ -90,6 +90,23 @@ export const CABLE_TYPE_NAMES: Record<number, string> = Object.fromEntries(
   Object.entries(CABLE_TYPES).map(([name, id]) => [id, name])
 );
 
+const LEGACY_CABLE_TYPE_NAMES: Record<number, string> = {
+  0: "straight",
+  1: "cross",
+  2: "fiber",
+  3: "serial",
+  4: "console",
+  5: "phone",
+  6: "cable",
+  7: "roll",
+  8: "wireless",
+  9: "coaxial",
+  10: "custom_io",
+  11: "octal",
+  12: "cellular",
+  13: "usb",
+};
+
 /** Reverse map: device type ID to canonical name */
 export const DEVICE_TYPE_NAMES: Record<number, string> = {
   [DEVICE_TYPES.router]: 'router',
@@ -118,7 +135,7 @@ export const DEVICE_TYPE_NAMES: Record<number, string> = {
 
 /** Get cable name from ID */
 export function getCableTypeName(id: number): string {
-  return CABLE_TYPE_NAMES[id] || "auto";
+  return CABLE_TYPE_NAMES[id] || LEGACY_CABLE_TYPE_NAMES[id] || "auto";
 }
 
 /** Get cable ID from name */

@@ -5,7 +5,7 @@
 
 import { Command } from "commander";
 import chalk from "chalk";
-import { input, select } from "@inquirer/prompts";
+import { input, select } from "../utils/inquirer.js";
 
 import {
   buildHostConfigPlanText,

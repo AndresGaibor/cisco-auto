@@ -4,8 +4,8 @@ import { createLinkAddCommand } from './add';
 import { createLinkListCommand } from './list';
 import { createLinkRemoveCommand } from './remove';
 import { createLinkSuggestCommand } from './suggest';
-import { createLinkSyncCommand } from './sync';
 import { createLinkVerifyCommand } from './verify';
+import { createLinkDoctorCommand } from './doctor';
 
 export function createLinkCommand(): Command {
   const cmd = new Command('link')
@@ -17,8 +17,8 @@ export function createLinkCommand(): Command {
   cmd.addCommand(createLinkListCommand());
   cmd.addCommand(createLinkRemoveCommand().alias('rm'));
   cmd.addCommand(createLinkSuggestCommand());
-  cmd.addCommand(createLinkSyncCommand());
   cmd.addCommand(createLinkVerifyCommand());
+  cmd.addCommand(createLinkDoctorCommand());
 
   return cmd;
 }

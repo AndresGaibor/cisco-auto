@@ -1,18 +1,11 @@
 import type { HandlerDeps, HandlerResult } from "../utils/helpers";
-import { getDeviceTypeString, collectPorts } from "../utils/helpers";
+import { getDeviceTypeString } from "../utils/helpers";
 import {
   buildPortOwnerIndex,
-  collectPtLinks,
-  collectPtLinksViaPortScan,
-  mergePtLinkSources,
-  collectRegistryLinks,
-  mergeCanonicalLinks,
   buildConnectionsByDevice,
-  mergeRegistries,
-  getLinkRegistry,
-  loadLinksJson,
 } from "../domain";
 import type { ConnectionInfo } from "../domain";
+import { collectLiveLinks } from "../domain/live-link";
 import { composeDeviceListing } from "./device-listing";
 
 /**
@@ -72,37 +65,40 @@ export type ListDevicesResult = HandlerResult & {
  * List all devices in the network
  */
 export function handleListDevices(
-  payload: ListDevicesPayload,
+  _payload: ListDevicesPayload,
   deps: HandlerDeps,
 ): ListDevicesResult {
-  const { getNet, DEV_DIR, getFM, dprint } = deps;
+  const { getNet, dprint } = deps;
   const net = getNet();
   const count = net.getDeviceCount();
 
   dprint(`[handler:listDevices] starting deviceCount=${count}`);
 
-  const fm = getFM();
-  const mergedRegistry = mergeRegistries(getLinkRegistry(DEV_DIR, fm), loadLinksJson(DEV_DIR, fm));
-
   const portIndex = buildPortOwnerIndex(net, deps);
-  const ptLinksFromLinkAt = collectPtLinks(net, deps);
-  const ptLinksFromPortScan = collectPtLinksViaPortScan(net, deps);
-  const ptLinks = mergePtLinkSources(ptLinksFromLinkAt, ptLinksFromPortScan);
-  const registryLinks = collectRegistryLinks(mergedRegistry);
-  const { links, unresolved } = mergeCanonicalLinks(ptLinks, registryLinks, portIndex, deps);
+  const liveLinks = collectLiveLinks(net);
+  const links = liveLinks.map((link) => ({
+    id: link.id,
+    device1: link.device1,
+    port1: link.port1,
+    device2: link.device2,
+    port2: link.port2,
+    source: "pt" as const,
+    confidence: (link.state === "green" ? "exact" : link.state === "amber" ? "merged" : "unknown") as any,
+    evidence: link.evidence,
+  }));
   const connectionsByDevice = buildConnectionsByDevice(links);
 
   dprint(
-    `[handler:listDevices] ptLinksFromLinkAt=${ptLinksFromLinkAt.length} ptLinksFromPortScan=${ptLinksFromPortScan.length} ptLinksTotal=${ptLinks.length} registryLinks=${registryLinks.length} resolvedLinks=${links.length}`,
+    `[handler:listDevices] liveLinks=${links.length}`,
   );
 
   const ptLinkDebug = {
     getLinkCountResult: typeof net.getLinkCount === "function" ? net.getLinkCount() : 0,
     getLinkAtExists: typeof net.getLinkAt === "function",
-    ptLinksFromLinkAt: ptLinksFromLinkAt.length,
-    ptLinksFromPortScan: ptLinksFromPortScan.length,
-    ptLinksFound: ptLinks.length,
-    registryEntries: Object.keys(mergedRegistry).length,
+    ptLinksFromLinkAt: liveLinks.length,
+    ptLinksFromPortScan: liveLinks.length,
+    ptLinksFound: liveLinks.length,
+    registryEntries: 0,
   };
 
   const unresolvedLinks: ListDevicesResult["unresolvedLinks"] = [];

@@ -6,7 +6,7 @@
 
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { input } from '@inquirer/prompts';
+import { input } from '../../utils/inquirer.js';
 
 import type { PTController } from '@cisco-auto/pt-control/controller';
 import type { CliResult } from '../../contracts/cli-result.js';

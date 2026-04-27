@@ -6,16 +6,18 @@ import {
   formatDevice,
   formatDeviceType,
 } from '../../src/utils/device-utils.ts';
+import { createDeviceCommand } from '../../src/commands/device/index.ts';
 
 test('DEVICE_MODELS contiene modelos para router, switch, pc y server', () => {
-  expect(DEVICE_MODELS.router.length).toBeGreaterThan(0);
-  expect(DEVICE_MODELS.switch.length).toBeGreaterThan(0);
-  expect(DEVICE_MODELS.pc.length).toBeGreaterThan(0);
-  expect(DEVICE_MODELS.server.length).toBeGreaterThan(0);
+  const modelos = DEVICE_MODELS as any;
+  expect(modelos.router.length).toBeGreaterThan(0);
+  expect(modelos.switch.length).toBeGreaterThan(0);
+  expect(modelos.pc.length).toBeGreaterThan(0);
+  expect(modelos.server.length).toBeGreaterThan(0);
 });
 
 test('DEVICE_MODELS router incluye modelos comunes', () => {
-  const routerModels = DEVICE_MODELS.router.map((m) => m.name);
+  const routerModels = (DEVICE_MODELS as any).router.map((m: any) => m.name);
   expect(routerModels).toContain('2911');
   expect(routerModels).toContain('1941');
 });
@@ -26,7 +28,7 @@ test('filterDevicesByType filtra dispositivos por tipo', () => {
     { name: 'S1', type: 'switch' },
     { name: 'PC1', type: 'pc' },
     { name: 'R2', type: 'router' },
-  ];
+  ] as any;
 
   const routers = filterDevicesByType(devices, 'router');
   expect(routers).toHaveLength(2);
@@ -34,7 +36,7 @@ test('filterDevicesByType filtra dispositivos por tipo', () => {
 
   const switches = filterDevicesByType(devices, 'switch');
   expect(switches).toHaveLength(1);
-  expect(switches[0].name).toBe('S1');
+  expect(switches[0]?.name).toBe('S1');
 });
 
 test('getIOSCapableDevices filtra solo routers y switches', () => {
@@ -43,7 +45,7 @@ test('getIOSCapableDevices filtra solo routers y switches', () => {
     { name: 'S1', type: 'switch' },
     { name: 'PC1', type: 'pc' },
     { name: 'SRV1', type: 'server' },
-  ];
+  ] as any;
 
   const iosDevices = getIOSCapableDevices(devices);
   expect(iosDevices).toHaveLength(2);
@@ -56,7 +58,7 @@ test('getIOSCapableDevices maneja tipos numericos de PT', () => {
     { name: 'S1', type: 1 }, // switch
     { name: 'MLS1', type: 16 }, // multilayer-switch
     { name: 'PC1', type: 'pc' },
-  ];
+  ] as any;
 
   const iosDevices = getIOSCapableDevices(devices);
   expect(iosDevices).toHaveLength(3);
@@ -96,4 +98,11 @@ test('formatDevice maneja dispositivo sin informacion opcional', () => {
   const formatted = formatDevice(device as any);
   expect(formatted).toContain('R1');
   expect(formatted).toContain('router');
+});
+
+test('createDeviceCommand registra el subcomando module', () => {
+  const deviceCommand = createDeviceCommand();
+  const subcommandNames = (deviceCommand.commands as any[]).map((command) => command.name());
+
+  expect(subcommandNames).toContain('module');
 });

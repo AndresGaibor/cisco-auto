@@ -20,6 +20,7 @@ export type { SlotCandidate } from "./slot-finder";
 export {
   handleAddModule,
   handleRemoveModule,
+  handleInspectModuleSlots,
   type AddModulePayload,
   type RemoveModulePayload,
 } from "./handlers";

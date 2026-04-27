@@ -1,7 +1,6 @@
 import type { RuntimePrimitivePort } from "../../ports/runtime-primitive-port.js";
 import type { CableType, DeviceState, LinkState, TopologySnapshot } from "@cisco-auto/types";
 import { validatePTModel } from "../../shared/utils/helpers.js";
-import { validatePortExists } from "@cisco-auto/pt-runtime";
 
 export class TopologyMutationService {
   constructor(
@@ -91,11 +90,16 @@ export class TopologyMutationService {
     // Dejamos que el motor de Packet Tracer (runtime) maneje la validación real.
 
     const result = await this.primitivePort.runPrimitive("link.add", {
+      type: "addLink",
       device1,
       port1,
       device2,
       port2,
+      linkType,
       cableType: linkType,
+      strictPorts: true,
+      allowAutoFallback: false,
+      replaceExisting: false,
     });
 
     if (!result.ok) {

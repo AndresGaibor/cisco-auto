@@ -44,42 +44,34 @@ describe("Link handlers (addLink/removeLink)", () => {
     expect((result as any).code).toBe("DEVICE_NOT_FOUND");
   });
 
-  test("handleAddLink calls createLink with swapped order when first is end device", () => {
-    const pcPort = {
-      getName: () => "Ethernet0",
-      getPortCount: () => 1,
-      getPortAt: () => null,
-      getPort: () => pcPort,
-    };
-    const routerPort = {
-      getName: () => "GigabitEthernet0/0",
-      getPortCount: () => 1,
-      getPortAt: () => null,
-      getPort: () => routerPort,
-    };
-    const device = {
-      getName: () => "PC1",
-      skipBoot: () => {},
-      getType: () => 8,
-      getPortCount: () => 1,
-      getPortAt: () => pcPort,
-      getPort: () => pcPort,
-    };
-    const router = {
-      getName: () => "R1",
-      skipBoot: () => {},
-      getType: () => 0,
-      getPortCount: () => 1,
-      getPortAt: () => routerPort,
-      getPort: () => routerPort,
-    };
+  test("handleAddLink calls createLink en orden directo", () => {
+    const router: any = { getName: () => "R1", skipBoot: () => {}, getType: () => 0 };
+    const pc: any = { getName: () => "PC1", skipBoot: () => {}, getType: () => 8 };
     let callOrder: string[] = [];
 
+    let link: any = null;
+    const routerPort: any = {
+      getName: () => "GigabitEthernet0/0",
+      getOwnerDevice: () => router,
+      getLink: () => link,
+    };
+    const pcPort: any = {
+      getName: () => "Ethernet0",
+      getOwnerDevice: () => pc,
+      getLink: () => link,
+    };
     const lw = {
       createLink: (d1: string, p1: string, d2: string, p2: string, type: number) => {
         callOrder.push(`${d1}:${p1}-${d2}:${p2}`);
-        return d1 === "R1";
+        link = {
+          getObjectUuid: () => "uuid-1",
+          getConnectionType: () => type,
+          getPort1: () => routerPort,
+          getPort2: () => pcPort,
+        };
+        return link;
       },
+      deleteLink: () => true,
     };
 
     const fm = {
@@ -87,57 +79,86 @@ describe("Link handlers (addLink/removeLink)", () => {
       writePlainTextToFile: () => {},
     };
 
-    const net = { getDevice: (n: string) => (n === "PC1" ? device : router) };
+    const net = {
+      getDeviceCount: () => 2,
+      getDeviceAt: (index: number) => (index === 0 ? router : index === 1 ? pc : null),
+      getDevice: (n: string) => (n === "PC1" ? pc : router),
+    };
+    router.getPortCount = () => 1;
+    router.getPortAt = () => routerPort;
+    router.getPort = () => routerPort;
+    pc.getPortCount = () => 1;
+    pc.getPortAt = () => pcPort;
+    pc.getPort = () => pcPort;
 
     const result = handleAddLink(
       {
         type: "addLink",
-        device1: "PC1",
-        port1: "Ethernet0",
-        device2: "R1",
-        port2: "Gi0/0",
+        device1: "R1",
+        port1: "GigabitEthernet0/0",
+        device2: "PC1",
+        port2: "Ethernet0",
         linkType: "auto",
       },
       createDeps(lw, net, fm),
     );
     expect(result.ok).toBe(true);
-    expect(callOrder[0]).toContain("R1:GigabitEthernet0/0");
+    expect(callOrder[0]).toContain("R1:GigabitEthernet0/0-PC1:Ethernet0");
   });
 
   test("handleRemoveLink calls deleteLink", () => {
     let called = false;
+    let linkRef: any = null;
+    const link = {
+      getObjectUuid: () => "uuid-1",
+      getConnectionType: () => 8100,
+      getPort1: () => ({ getOwnerDevice: () => ({ getName: () => "R1" }), getName: () => "Gi0/0" }),
+      getPort2: () => ({ getOwnerDevice: () => ({ getName: () => "S1" }), getName: () => "Fa0/1" }),
+    };
     const lw = {
       deleteLink: () => {
         called = true;
+        linkRef = null;
       },
     };
+    const net = {
+      getDeviceCount: () => 1,
+      getDeviceAt: () => ({
+        getName: () => "R1",
+        getPortCount: () => 1,
+        getPortAt: () => ({ getName: () => "Gi0/0", getLink: () => linkRef }),
+      }),
+      getDevice: () => ({ getPort: () => ({ getName: () => "Gi0/0", getLink: () => linkRef }) }),
+    };
+    linkRef = link;
     const fm = {
       fileExists: () => false,
     };
 
-    const result = handleRemoveLink({ device: "R1", port: "Gi0/0" }, createDeps(lw, {}, fm));
+    const result = handleRemoveLink({ type: "removeLink", device: "R1", port: "Gi0/0" }, createDeps(lw, net, fm));
     expect(result.ok).toBe(true);
     expect(called).toBe(true);
   });
 
-  test("handleRemoveLink cleans up registry entry", () => {
+  test("handleRemoveLink funciona contra link live", () => {
+    const port = {
+      getName: () => "Gi0/0",
+      getLink: () => null,
+    };
     const lw = { deleteLink: () => true };
-    const registryContent = {
-      "R1:Gi0/0--SW1:Fa0/1": { device1: "R1", port1: "Gi0/0", device2: "SW1", port2: "Fa0/1" },
+    const net = {
+      getDeviceCount: () => 1,
+      getDeviceAt: () => ({
+        getName: () => "R1",
+        getPortCount: () => 1,
+        getPortAt: () => port,
+      }),
+      getDevice: () => ({ getPort: () => port }),
     };
-    let savedRegistry: any = null;
+    const fm = { fileExists: () => false };
 
-    const fm = {
-      fileExists: (path: string) => path.includes("link-registry.json"),
-      getFileContents: () => JSON.stringify(registryContent),
-      writePlainTextToFile: (_: string, content: string) => {
-        savedRegistry = JSON.parse(content);
-      },
-    };
-
-    const result = handleRemoveLink({ device: "R1", port: "Gi0/0" }, createDeps(lw, {}, fm));
-    expect(result.ok).toBe(true);
-    expect(savedRegistry).not.toBeNull();
-    expect(savedRegistry["R1:Gi0/0--SW1:Fa0/1"]).toBeUndefined();
+    const result = handleRemoveLink({ type: "removeLink", device: "R1", port: "Gi0/0" }, createDeps(lw, net, fm));
+    expect(result.ok).toBe(false);
+    expect((result as any).code).toBe("LINK_NOT_FOUND");
   });
 });

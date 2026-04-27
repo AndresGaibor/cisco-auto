@@ -27,6 +27,7 @@ import {
   validatePortExists,
   validateModuleExists,
   validateModuleSlotCompatible,
+  findFirstCompatibleSlot,
 } from "../value-objects/hardware-maps.js";
 
 // ---------------------------------------------------------------------------
@@ -84,6 +85,7 @@ export {
   validatePortExists,
   validateModuleExists,
   validateModuleSlotCompatible,
+  findFirstCompatibleSlot,
 };
 
 // ---------------------------------------------------------------------------

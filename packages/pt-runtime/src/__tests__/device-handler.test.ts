@@ -264,7 +264,7 @@ describe("handleListDevices", () => {
       expect(result.unresolvedLinks.length).toBe(0);
     });
 
-    test("merges PT + registry when they agree", () => {
+    test("usa solo links live de PT", () => {
       const pc1 = new MockDevice("PC1", "PC-PT", 8, true, [new MockPort("FastEthernet0")]);
       const sw = new MockDevice("SW1", "2960-24TT", 1, true, [new MockPort("FastEthernet0/1")]);
 
@@ -272,29 +272,7 @@ describe("handleListDevices", () => {
 
       const net = new MockNetwork([pc1, sw], [link]);
 
-      const fm = {
-        fileExists: (path: string) => {
-          if (path.includes("link-registry.json")) return true;
-          return false;
-        },
-        getFileContents: (path: string) => {
-          if (path.includes("link-registry.json")) {
-            return JSON.stringify({
-              "pc1-sw1-link": {
-                device1: "PC1",
-                port1: "FastEthernet0",
-                device2: "SW1",
-                port2: "FastEthernet0/1",
-                source: "manual",
-                createdAt: Date.now(),
-              },
-            });
-          }
-          return "{}";
-        },
-      };
-
-      const deps = createDeps(net, fm);
+      const deps = createDeps(net);
 
       const result = handleListDevices({ type: "listDevices" }, deps) as any;
 
@@ -303,42 +281,18 @@ describe("handleListDevices", () => {
       expect(allConns.length).toBeGreaterThan(0);
     });
 
-    test("creates registry-only entry when no PT link", () => {
+    test("omite enlaces cuando no existe link live", () => {
       const pc1 = new MockDevice("PC1", "PC-PT", 8, true, [new MockPort("FastEthernet0")]);
       const sw = new MockDevice("SW1", "2960-24TT", 1, true, [new MockPort("FastEthernet0/1")]);
 
       const net = new MockNetwork([pc1, sw], []);
 
-      const fm = {
-        fileExists: (path: string) => {
-          if (path.includes("link-registry.json")) return true;
-          return false;
-        },
-        getFileContents: (path: string) => {
-          if (path.includes("link-registry.json")) {
-            return JSON.stringify({
-              "pc1-sw1-reg": {
-                device1: "PC1",
-                port1: "FastEthernet0",
-                device2: "SW1",
-                port2: "FastEthernet0/1",
-                source: "manual",
-                createdAt: Date.now(),
-              },
-            });
-          }
-          return "{}";
-        },
-      };
-
-      const deps = createDeps(net, fm);
+      const deps = createDeps(net);
 
       const result = handleListDevices({ type: "listDevices" }, deps) as any;
 
       const allConns = Object.values(result.connectionsByDevice).flat();
-      const registryConn = allConns.find((c: any) => c.evidence?.source === "registry") as any;
-      expect(registryConn).toBeDefined();
-      expect(registryConn.confidence).toBe("registry");
+      expect(allConns).toHaveLength(0);
     });
 
     test("omits unresolved links from the visible list", () => {

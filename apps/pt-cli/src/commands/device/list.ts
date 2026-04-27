@@ -151,13 +151,12 @@ export function extractDeviceMac(ports: ListedPort[]): string | undefined {
 }
 
 export function getPortLinkLabel(port: ListedPort): string {
+  if (port.connection?.remoteDevice && port.connection?.remotePort) {
+    return `${port.connection.remoteDevice}:${port.connection.remotePort}`;
+  }
+
   const isUp = port.status === "up" || port.protocol === "up";
   const statusLabel = isUp ? "UP" : (port.status === "administratively down" ? "ADM-DOWN" : "DOWN");
-  
-  if (port.connection?.remoteDevice && port.connection?.remotePort) {
-    const peer = `${port.connection.remoteDevice}:${port.connection.remotePort}`;
-    return `${statusLabel} (${peer})`;
-  }
 
   if (isUp) return "UP";
   if (port.status === "administratively down") return "ADMIN-DOWN";
