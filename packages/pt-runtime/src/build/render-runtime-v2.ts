@@ -169,7 +169,7 @@ function validateAndTransform(srcDir: string, minify: boolean): { code: string; 
 
   const missingDependencies = validateRuntimeManifestDependencies(sourceFiles);
   if (missingDependencies.length > 0) {
-    console.warn(
+    throw new Error(
       "[render-runtime-v2] runtime.js manifest missing transitive dependencies:\n" +
         missingDependencies.map((file) => `  - ${file}`).join("\n"),
     );

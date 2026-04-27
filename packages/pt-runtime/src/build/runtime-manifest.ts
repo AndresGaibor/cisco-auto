@@ -104,6 +104,7 @@ export const RUNTIME_MANIFEST = {
     "handlers/host.ts",
     "handlers/result-factories.ts",
     "handlers/host-handler.ts",
+    "handlers/terminal-plan-run.ts",
     "handlers/ios/index.ts",
     "handlers/ios-execution.ts",
     "handlers/ios-plan-builder.ts",

@@ -165,6 +165,25 @@ function enrichMacAddresses(
   });
 }
 
+function getControllerDevices(
+  result: Awaited<ReturnType<PTController["listDevices"]>>,
+): TopologyDeviceLike[] {
+  if (Array.isArray(result)) {
+    return result as TopologyDeviceLike[];
+  }
+
+  if (
+    result &&
+    typeof result === "object" &&
+    "devices" in result &&
+    Array.isArray((result as { devices?: unknown }).devices)
+  ) {
+    return (result as { devices: TopologyDeviceLike[] }).devices;
+  }
+
+  return [];
+}
+
 export function isEmptyTopologySnapshot(
   snapshot:
     | {
@@ -268,28 +287,54 @@ const UNCERTAIN_CONFIDENCES: ConnectionInfo["confidence"][] = ["ambiguous", "unk
 type ControllerDevice = Awaited<ReturnType<PTController["listDevices"]>>[number];
 
 function mapControllerResult(result: Awaited<ReturnType<PTController["listDevices"]>>): DeviceListResult {
-  const devices: ListedDevice[] = result.map((device: ControllerDevice) => {
-    const ports: ListedPort[] = (device.ports ?? []).map((port) => ({
-      ...port,
-      status: (port as any).status,
-      protocol: (port as any).protocol,
-      macAddress: (port as ListedPort).macAddress ?? (port as ListedPort).mac,
-      mac: (port as ListedPort).mac ?? (port as ListedPort).macAddress,
-      connection: undefined as PortConnection | undefined,
-    }));
+  const rawDevices = getControllerDevices(result);
 
-    const xmlp = (device as Record<string, unknown>).xmlParsed as unknown as XmlParsedSummary | undefined;
+  const devices: ListedDevice[] = rawDevices.map((device: ControllerDevice | TopologyDeviceLike) => {
+    const deviceRecord = device as Record<string, unknown>;
+    const ports: ListedPort[] = ((deviceRecord.ports as Array<unknown>) ?? []).map((port) => {
+      const portRecord = port as Record<string, unknown>;
+      return {
+        name: String(portRecord.name ?? ""),
+        type: portRecord.type as string | undefined,
+        status: portRecord.status as "up" | "down" | "administratively down" | undefined,
+        protocol: portRecord.protocol as "up" | "down" | undefined,
+        ipAddress: portRecord.ipAddress as string | undefined,
+        subnetMask: portRecord.subnetMask as string | undefined,
+        macAddress: (portRecord.macAddress as string | undefined) ?? (portRecord.mac as string | undefined),
+        mac: (portRecord.mac as string | undefined) ?? (portRecord.macAddress as string | undefined),
+        speed: portRecord.speed as string | undefined,
+        duplex: portRecord.duplex as "auto" | "full" | "half" | undefined,
+        vlan: portRecord.vlan as number | undefined,
+        mode: portRecord.mode as "unknown" | "trunk" | "access" | "dynamic" | undefined,
+        link: portRecord.link as string | undefined,
+        connection: undefined as PortConnection | undefined,
+        portVlan: portRecord.portVlan as number | undefined,
+        trunkVlan: portRecord.trunkVlan as string | undefined,
+        nativeVlan: portRecord.nativeVlan as number | undefined,
+      };
+    });
+
+    const xmlp = deviceRecord.xmlParsed as unknown as XmlParsedSummary | undefined;
     return {
-      ...device,
-      mac: (device as TopologyDeviceLike).mac,
+      name: String(deviceRecord.name ?? "unknown"),
+      model: String(deviceRecord.model ?? "unknown"),
+      type: String(deviceRecord.type ?? "generic"),
+      power: Boolean(deviceRecord.power),
       ports,
+      displayName: deviceRecord.displayName as string | undefined,
+      x: deviceRecord.x as number | undefined,
+      y: deviceRecord.y as number | undefined,
+      hostname: deviceRecord.hostname as string | undefined,
+      ip: deviceRecord.ip as string | undefined,
+      mask: deviceRecord.mask as string | undefined,
+      mac: deviceRecord.mac as string | undefined,
       xmlParsed: xmlp,
     };
   });
 
   return {
     devices,
-    count: result.length,
+    count: rawDevices.length,
     connectionsByDevice: {},
     unresolvedLinks: [],
   };
@@ -307,7 +352,7 @@ export async function loadLiveDeviceListFromController(
   try {
     // La ruta viva manda: el estado del bridge solo influye en el fallback.
     result = await controller.listDevices(type);
-    log(`controller.listDevices() ok, devices=${result.length}`);
+  log(`controller.listDevices() ok, devices=${getControllerDevices(result).length}`);
   } catch (err) {
     const bridgeStatus = controller.getBridgeStatus?.();
     const cachedSnapshot = controller.getCachedSnapshot?.();
