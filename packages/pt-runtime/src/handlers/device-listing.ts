@@ -50,23 +50,28 @@ export function composeDeviceListing(input: DeviceListingInput): ListedDevice[] 
   const deviceCount = net.getDeviceCount();
 
   for (let deviceIndex = 0; deviceIndex < deviceCount; deviceIndex++) {
-    const device = net.getDeviceAt(deviceIndex);
-    if (!device) continue;
+    try {
+      const device = net.getDeviceAt(deviceIndex);
+      if (!device) continue;
 
-    const name = device.getName();
-    const devicePorts = collectPorts(device);
-    const connectionsRaw = connectionsByDevice[name] || [];
-    const connections = filterValidConnections(connectionsRaw);
+      const name = typeof device.getName === "function" ? String(device.getName()) : `device-${deviceIndex}`;
+      const devicePorts = collectPorts(device);
+      const connectionsRaw = connectionsByDevice[name] || [];
+      const connections = filterValidConnections(connectionsRaw);
 
-    attachConnectionsToPorts(devicePorts, connections, portIndex, name);
+      attachConnectionsToPorts(devicePorts, connections, portIndex, name);
 
-    devices.push({
-      name,
-      model: device.getModel(),
-      type: getDeviceTypeString(device.getType()),
-      power: device.getPower(),
-      ports: devicePorts,
-    });
+      devices.push({
+        name,
+        model: typeof device.getModel === "function" ? String(device.getModel()) : "unknown",
+        type:
+          typeof device.getType === "function" ? getDeviceTypeString(device.getType()) : "unknown",
+        power: typeof device.getPower === "function" ? Boolean(device.getPower()) : false,
+        ports: devicePorts,
+      });
+    } catch {
+      continue;
+    }
   }
 
   return devices;

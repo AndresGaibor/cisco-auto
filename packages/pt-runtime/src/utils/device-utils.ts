@@ -52,14 +52,17 @@ export function collectPorts(device: PTDevice): Array<Record<string, any>> {
   const count = typeof device.getPortCount === "function" ? device.getPortCount() : 0;
 
   for (let i = 0; i < count; i++) {
-    const port = device.getPortAt(i) as PTPort | null;
+    const port = typeof device.getPortAt === "function" ? (device.getPortAt(i) as PTPort | null) : null;
     if (!port || typeof port.getName !== "function") continue;
 
     let ip = typeof port.getIpAddress === "function" ? String(port.getIpAddress()) : "";
     let mask = typeof port.getSubnetMask === "function" ? String(port.getSubnetMask()) : "";
 
     // OMNISCIENCE BYPASS: If no IP on port, check device IPv4 Manager (for PCs/Servers)
-    if ((!ip || ip === "0.0.0.0" || ip === "") && (device as any).getIPv4Config) {
+    if (
+      (!ip || ip === "0.0.0.0" || ip === "") &&
+      typeof (device as any).getIPv4Config === "function"
+    ) {
       const ipv4 = (device as any).getIPv4Config();
       if (ipv4 && ipv4.getIpAddress) {
           try { ip = String(ipv4.getIpAddress().toString()); } catch(e) { ip = String(ipv4.getIpAddress()); }

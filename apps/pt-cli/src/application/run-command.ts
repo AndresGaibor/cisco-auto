@@ -49,17 +49,81 @@ function generateCorrelationId(): string {
   return `c-${randomUUID().slice(0, 8)}`;
 }
 
-async function waitForBridgeReady(controller: PTController, timeoutMs = 5000): Promise<void> {
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function summarizeBridgeStatus(status: unknown): string {
+  try {
+    return JSON.stringify(status, null, 2);
+  } catch {
+    return String(status);
+  }
+}
+
+async function waitForBridgeReady(controller: PTController, timeoutMs = 35_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
+  let lastStatus: unknown = null;
+  let lastStartError: unknown = null;
 
   while (Date.now() < deadline) {
-    const status = controller.getBridgeStatus?.();
-    if (status?.ready) return;
+    lastStatus = controller.getBridgeStatus?.();
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    if (
+      lastStatus &&
+      typeof lastStatus === "object" &&
+      "ready" in lastStatus &&
+      (lastStatus as { ready?: boolean }).ready
+    ) {
+      return;
+    }
+
+    try {
+      await controller.start();
+    } catch (error) {
+      lastStartError = error;
+    }
+
+    lastStatus = controller.getBridgeStatus?.();
+    if (
+      lastStatus &&
+      typeof lastStatus === "object" &&
+      "ready" in lastStatus &&
+      (lastStatus as { ready?: boolean }).ready
+    ) {
+      return;
+    }
+
+    await sleep(250);
   }
 
-  throw new Error("El bridge no quedó listo a tiempo después de iniciar el controller");
+  const error = new Error(
+    [
+      `El bridge no quedó listo después de ${timeoutMs}ms.`,
+      "",
+      "Último estado del bridge:",
+      summarizeBridgeStatus(lastStatus),
+      "",
+      lastStartError
+        ? `Último error de start(): ${
+            lastStartError instanceof Error ? lastStartError.message : String(lastStartError)
+          }`
+        : "start() no lanzó error explícito.",
+      "",
+      "Sugerencias:",
+      "- Ejecuta `pt doctor`.",
+      "- Revisa si otro comando `bun run pt ...` sigue corriendo.",
+      "- Si no hay otro comando corriendo, elimina bridge-lease.json y reintenta.",
+    ].join("\n"),
+  );
+
+  (error as Error & { code?: string; details?: Record<string, unknown> }).code = "BRIDGE_NOT_READY";
+  (error as Error & { code?: string; details?: Record<string, unknown> }).details = {
+    lastStatus,
+    lastStartError: lastStartError instanceof Error ? lastStartError.message : String(lastStartError ?? ""),
+  };
+
+  throw error;
 }
 
 export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliResult<T>> {
@@ -98,8 +162,41 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
   let contextStatusToPersist: Awaited<ReturnType<typeof collectContextStatus>> | null = null;
 
   try {
-    await controller.start();
-    await waitForBridgeReady(controller);
+    try {
+      await controller.start();
+      await waitForBridgeReady(controller, Number(options.flags.timeout ?? 35_000));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      runtimeContext = {
+        bridgeReady: false,
+        topologyMaterialized: false,
+        deviceCount: 0,
+        linkCount: 0,
+        heartbeat: controller.getHeartbeatHealth?.() ?? { state: "unknown" },
+        bridge: controller.getBridgeStatus?.() ?? {
+          ready: false,
+          warnings: [],
+        },
+        warnings: ["No se pudo inicializar el bridge para ejecutar el comando."],
+        notes: [message],
+      };
+
+      result = createErrorResult<T>(options.action, {
+        code:
+          error instanceof Error && (error as Error & { code?: string }).code
+            ? (error as Error & { code?: string }).code
+            : "BRIDGE_NOT_READY",
+        message,
+        details:
+          error instanceof Error && (error as Error & { details?: Record<string, unknown> }).details
+            ? (error as Error & { details?: Record<string, unknown> }).details
+            : undefined,
+      });
+
+      return result;
+    }
+
     runtimeContext = await inspectCommandContext(controller);
 
     await logPhase("start", {

@@ -36,7 +36,7 @@ export async function handleSetDeviceIp(
     }
 
     // CAMINO A: IPv4Config manager (solo ciertos routers y servers)
-    if (dev.getIPv4Config) {
+    if (typeof dev.getIPv4Config === "function") {
       var ipv4 = dev.getIPv4Config();
       if (ipv4 && ipv4.setStaticIpAddress) {
         ipv4.setStaticIpAddress(payload.ip, payload.mask);
@@ -88,7 +88,7 @@ export function handleSetDefaultGateway(
   if (!dev) return { ok: false, error: "Device not found" };
 
   try {
-    if (dev.getIPv4Config) {
+    if (typeof dev.getIPv4Config === "function") {
       var ipv4 = dev.getIPv4Config();
       if (ipv4 && ipv4.setGateway) {
         ipv4.setGateway(payload.gw);

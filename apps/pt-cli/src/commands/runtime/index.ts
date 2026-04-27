@@ -1,11 +1,12 @@
 #!/usr/bin/env bun
 import { Command } from "commander";
 import { existsSync, readdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { listRuntimeSnapshots, restoreRuntimeSnapshot } from "@cisco-auto/pt-runtime";
+import { getDefaultDevDir } from "../../system/paths.js";
 
 function getDevDir(): string {
-  return process.env.PT_DEV_DIR ?? resolve(import.meta.dirname, "../../../../../../pt-dev");
+  return process.env.PT_DEV_DIR ?? getDefaultDevDir();
 }
 
 function printJson(data: unknown): void {

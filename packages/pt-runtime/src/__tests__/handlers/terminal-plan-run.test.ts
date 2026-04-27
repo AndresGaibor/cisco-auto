@@ -2,11 +2,9 @@ import { describe, expect, test, vi } from "bun:test";
 import { handleTerminalPlanRun } from "../../handlers/terminal-plan-run.js";
 
 describe("handleTerminalPlanRun", () => {
-  test("crea un job diferido para un plan válido", () => {
-    const createJob = vi.fn().mockReturnValue("ticket-123");
+  test("crea un job diferido para un plan válido sin exigir createJob", () => {
     const api = {
       now: () => 1700000000000,
-      createJob,
     } as any;
 
     const result = handleTerminalPlanRun(
@@ -37,11 +35,10 @@ describe("handleTerminalPlanRun", () => {
       api,
     );
 
-    expect(createJob).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({
       ok: true,
       deferred: true,
-      ticket: "ticket-123",
+      ticket: "plan-1",
     });
     expect((result as any).job.device).toBe("R1");
     expect((result as any).job.plan).toHaveLength(1);
@@ -72,10 +69,8 @@ describe("handleTerminalPlanRun", () => {
   });
 
   test("acepta un plan vacío como job válido", () => {
-    const createJob = vi.fn().mockReturnValue("ticket-empty");
     const api = {
       now: () => 1700000000000,
-      createJob,
     } as any;
 
     const result = handleTerminalPlanRun(
@@ -90,11 +85,10 @@ describe("handleTerminalPlanRun", () => {
       api,
     );
 
-    expect(createJob).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({
       ok: true,
       deferred: true,
-      ticket: "ticket-empty",
+      ticket: "plan-empty",
     });
   });
 });

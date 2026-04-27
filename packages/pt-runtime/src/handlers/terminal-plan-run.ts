@@ -103,7 +103,7 @@ export function handleTerminalPlanRun(
     return createErrorResult("terminal.plan.run requiere plan.device y plan.steps", "INVALID_TERMINAL_PLAN");
   }
 
-  var ticket = api.createJob(deferredPlan);
+  var ticket = String(deferredPlan.id || payload.plan?.id || "terminal_plan");
 
   return createDeferredResult(ticket, deferredPlan);
 }

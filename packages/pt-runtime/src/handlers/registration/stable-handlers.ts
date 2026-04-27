@@ -53,6 +53,7 @@ import {
 
 import { handleConfigHost } from "../host-handler.js";
 import { handleTerminalPlanRun } from "../terminal-plan-run.js";
+import { handlePollDeferred } from "../poll-deferred.js";
 
 let stableHandlersRegistered = false;
 
@@ -76,6 +77,7 @@ export function registerStableRuntimeHandlers(): void {
 
   registerHandler("configHost", handleConfigHost as unknown as HandlerFn);
   registerHandler("terminal.plan.run", handleTerminalPlanRun as unknown as HandlerFn);
+  registerHandler("__pollDeferred", handlePollDeferred as unknown as HandlerFn);
   registerHandler("ensureVlans", handleEnsureVlans as unknown as HandlerFn);
   registerHandler("configVlanInterfaces", handleConfigVlanInterfaces as unknown as HandlerFn);
   registerHandler("configDhcpServer", handleConfigDhcpServer as unknown as HandlerFn);

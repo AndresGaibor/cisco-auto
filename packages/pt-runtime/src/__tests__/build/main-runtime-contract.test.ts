@@ -22,7 +22,7 @@ describe("main/runtime contract", () => {
   test("runtime.js publica _ptDispatch y runtimeDispatcher", () => {
     const runtime = renderRuntimeV2Sync({ srcDir: "src", outputPath: "/tmp/runtime.js", injectDevDir: "/tmp/pt-dev" });
 
-    expect(runtime).toContain("runtimeDispatcher");
     expect(runtime).toContain("_ptDispatch");
+    expect(runtime).toContain("runtimeDispatcher(payload, api || deps)");
   });
 });

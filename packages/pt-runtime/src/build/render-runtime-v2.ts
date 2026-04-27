@@ -140,8 +140,8 @@ try {
   // Re-verify imports from runtime-handlers.ts are present in 'code'
   var deps = createPtDepsFromGlobals({ ipc: ipc, fm: fm, dprint: dprint, DEV_DIR: DEV_DIR });
   
-  _g._ptDispatch = function(payload) {
-    return runtimeDispatcher(payload, deps);
+  _g._ptDispatch = function(payload, api) {
+    return runtimeDispatcher(payload, api || deps);
   };
   
   if (typeof dprint === "function") {

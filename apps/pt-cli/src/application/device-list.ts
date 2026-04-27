@@ -376,6 +376,14 @@ export async function loadLiveDeviceListFromController(
       );
     }
 
+    if (typeof controller.snapshot === "function") {
+      const liveSnapshot = await controller.snapshot().catch(() => null);
+      if (liveSnapshot) {
+        log("controller.listDevices() failed, returning fresh snapshot");
+        return buildDeviceListFromSnapshot(liveSnapshot as Parameters<typeof buildDeviceListFromSnapshot>[0]);
+      }
+    }
+
     if (bridgeStatus && bridgeStatus.ready === false) {
       log("controller.listDevices() failed and bridge not ready, returning empty list");
       return {
@@ -394,10 +402,19 @@ export async function loadLiveDeviceListFromController(
   const mapped = mapControllerResult(result);
   const cachedSnapshot = controller.getCachedSnapshot?.();
   let devices = enrichMacAddresses(mapped.devices, cachedSnapshot?.devices);
+  let liveSnapshot: Awaited<ReturnType<PTController["snapshot"]>> | null = null;
 
-  if (!hasMacAddresses(devices) && typeof controller.snapshot === "function") {
-    const liveSnapshot = await controller.snapshot().catch(() => null);
-    devices = enrichMacAddresses(devices, liveSnapshot?.devices);
+  if ((devices.length === 0 || !hasMacAddresses(devices)) && typeof controller.snapshot === "function") {
+    liveSnapshot = await controller.snapshot().catch(() => null);
+  }
+
+  if (devices.length === 0 && liveSnapshot && !isEmptyTopologySnapshot(liveSnapshot)) {
+    log("controller.listDevices() returned empty, using live snapshot");
+    return buildDeviceListFromSnapshot(liveSnapshot);
+  }
+
+  if (!hasMacAddresses(devices) && liveSnapshot) {
+    devices = enrichMacAddresses(devices, liveSnapshot.devices);
   }
 
   return {

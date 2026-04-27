@@ -38,32 +38,36 @@ export function buildPortOwnerIndex(net: PTNetwork, deps: HandlerDeps): PortOwne
 
   const count = net.getDeviceCount();
   for (let di = 0; di < count; di++) {
-    const dev = net.getDeviceAt(di);
-    if (!dev) continue;
+    try {
+      const dev = net.getDeviceAt(di);
+      if (!dev) continue;
 
-    const devName = dev.getName();
-    const portCount = typeof dev.getPortCount === "function" ? dev.getPortCount() : 0;
+      const devName = typeof dev.getName === "function" ? String(dev.getName()) : `device-${di}`;
+      const portCount = typeof dev.getPortCount === "function" ? dev.getPortCount() : 0;
 
-    for (let pi = 0; pi < portCount; pi++) {
-      const port = dev.getPortAt ? (dev.getPortAt(pi) as PTPort | null) : null;
-      if (!port || !port.getName) continue;
+      for (let pi = 0; pi < portCount; pi++) {
+        const port = typeof dev.getPortAt === "function" ? (dev.getPortAt(pi) as PTPort | null) : null;
+        if (!port || !port.getName) continue;
 
-      const portName = port.getName();
-      const portUuid = safeGetObjectUuid(deps, port);
-      const rawMac = typeof port.getMacAddress === "function" ? port.getMacAddress() : "";
-      const mac = normalizeMac(rawMac);
+        const portName = port.getName();
+        const portUuid = safeGetObjectUuid(deps, port);
+        const rawMac = typeof port.getMacAddress === "function" ? port.getMacAddress() : "";
+        const mac = normalizeMac(rawMac);
 
-      const owner: PortOwner = { deviceName: devName, portName, portUuid, mac };
+        const owner: PortOwner = { deviceName: devName, portName, portUuid, mac };
 
-      try {
-        if (port) (port as any).__ciscoAutoOwner__ = devName;
-      } catch {}
+        try {
+          if (port) (port as any).__ciscoAutoOwner__ = devName;
+        } catch {}
 
-      if (portUuid) index.byUuid[portUuid] = owner;
-      if (mac && mac !== "000000000000") index.byMac[mac] = owner;
+        if (portUuid) index.byUuid[portUuid] = owner;
+        if (mac && mac !== "000000000000") index.byMac[mac] = owner;
 
-      pushIndexedOwner(index.byName, portName, owner);
-      pushIndexedOwner(index.byNormalizedName, normalizePortLookupKey(portName), owner);
+        pushIndexedOwner(index.byName, portName, owner);
+        pushIndexedOwner(index.byNormalizedName, normalizePortLookupKey(portName), owner);
+      }
+    } catch {
+      continue;
     }
   }
 

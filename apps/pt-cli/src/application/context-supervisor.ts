@@ -34,10 +34,6 @@ export async function collectContextStatus(controller: PTController): Promise<Co
     warnings: [],
   };
 
-  if (!liveSnapshot && bridge.ready && typeof controller.snapshot === "function") {
-    liveSnapshot = await controller.snapshot().catch(() => null);
-  }
-
   const deviceCount = liveSnapshot?.devices
     ? Object.keys(liveSnapshot.devices).length
     : sys.deviceCount;
