@@ -15,7 +15,7 @@ import type { CommandMeta } from '../../contracts/command-meta.js';
 import { runCommand } from '../../application/run-command.js';
 import { printExamples } from '../../ux/examples.js';
 import { renderCommandResult } from '../../application/render-command-result.js';
-import { buildFlags } from '../../flags-utils.js';
+import { flagsFromCommand, flagEnabled } from '../../flags-utils.js';
 import { DeviceNotFoundError, fetchDeviceList, formatDevice, requireDeviceExists } from '../../utils/device-utils.js';
 
 interface DeviceRemoveResult {
@@ -62,15 +62,20 @@ export function createDeviceRemoveCommand(): Command {
     .option('--schema', 'Mostrar schema JSON del resultado y salir', false)
     .option('--explain', 'Explicar qué hace el comando y salir', false)
     .option('--plan', 'Mostrar plan de ejecución sin ejecutar', false)
+    .option('--verify', 'Verificar cambios post-ejecución')
+    .option('--no-verify', 'Omitir verificación post-ejecución')
     .option('--trace', 'Activar traza estructurada de la ejecución', false)
     .option('--trace-bundle', 'Generar archivo bundle único para debugging', false)
-    .action(async (name, options) => {
+    .action(async (name, options, command) => {
       const globalExamples = process.argv.includes('--examples');
       const globalSchema = process.argv.includes('--schema');
       const globalExplain = process.argv.includes('--explain');
       const globalPlan = process.argv.includes('--plan');
-      const globalTrace = process.argv.includes('--trace');
-      const globalTraceBundle = process.argv.includes('--trace-bundle');
+      const verifyEnabled = flagEnabled(options.verify, {
+        defaultValue: true,
+        positive: '--verify',
+        negative: '--no-verify',
+      });
 
       if (globalExamples) {
         console.log(printExamples(DEVICE_REMOVE_META));
@@ -89,16 +94,8 @@ export function createDeviceRemoveCommand(): Command {
 
       let deviceName = name;
 
-      const flags = buildFlags({
-        json: process.argv.includes('--json'),
-        output: process.argv.includes('--json') ? 'json' : 'text',
-        trace: globalTrace,
-        traceBundle: globalTraceBundle,
-        examples: globalExamples,
-        schema: globalSchema,
-        explain: globalExplain,
-        plan: globalPlan,
-        verify: true,
+      const flags = flagsFromCommand(command, {
+        verify: verifyEnabled,
       });
 
       const result = await runCommand<DeviceRemoveResult>({
@@ -110,8 +107,6 @@ export function createDeviceRemoveCommand(): Command {
         },
         execute: async (ctx): Promise<CliResult<DeviceRemoveResult>> => {
           const { controller, logPhase } = ctx;
-
-          await controller.start();
 
           try {
             if (!deviceName && !options.interactive) {
@@ -144,9 +139,9 @@ export function createDeviceRemoveCommand(): Command {
               throw new Error('El nombre del dispositivo es requerido');
             }
 
-            await requireDeviceExists(controller, deviceName);
-
             if (globalPlan) {
+              await requireDeviceExists(controller, deviceName);
+
               return createSuccessResult('device.remove', {
                 name: deviceName,
                 removed: false,
@@ -176,20 +171,26 @@ export function createDeviceRemoveCommand(): Command {
 
             await logPhase('apply', { name: deviceName });
 
-            await controller.removeDevice(deviceName);
+            await (
+              !verifyEnabled && !globalPlan && typeof (controller as any).removeDeviceUnchecked === 'function'
+                ? (controller as any).removeDeviceUnchecked(deviceName)
+                : controller.removeDevice(deviceName)
+            );
 
-            await logPhase('verify', { name: deviceName });
+            if (verifyEnabled) {
+              await logPhase('verify', { name: deviceName });
 
-            const devicesAfter = await fetchDeviceList(controller);
-            const stillExists = devicesAfter.some((d) => d.name === deviceName);
+              const devicesAfter = await fetchDeviceList(controller);
+              const stillExists = devicesAfter.some((d) => d.name === deviceName);
 
-            if (stillExists) {
-              return createSuccessResult('device.remove', {
-                name: deviceName,
-                removed: false,
-              }, {
-                warnings: ['El dispositivo aún existe después de eliminarlo'],
-              });
+              if (stillExists) {
+                return createSuccessResult('device.remove', {
+                  name: deviceName,
+                  removed: false,
+                }, {
+                  warnings: ['El dispositivo aún existe después de eliminarlo'],
+                });
+              }
             }
 
             return createSuccessResult('device.remove', {
@@ -216,8 +217,6 @@ export function createDeviceRemoveCommand(): Command {
             }
 
             throw error;
-          } finally {
-            await controller.stop();
           }
         },
       });

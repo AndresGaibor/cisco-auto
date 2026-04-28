@@ -161,109 +161,39 @@ export function createRouterAddCommand(): Command {
         execute: async (ctx): Promise<CliResult<RouterAddResult>> => {
           const { controller, logPhase } = ctx;
 
-          await controller.start();
+          if ((!routerName || !routerModel) && !options.interactive) {
+            throw new Error('Debes pasar nombre y modelo, o usar --interactive');
+          }
 
-          try {
-            if ((!routerName || !routerModel) && !options.interactive) {
-              throw new Error('Debes pasar nombre y modelo, o usar --interactive');
-            }
+          if (!routerName || !routerModel) {
+            const interactive = await promptForRouter(routerName, routerModel);
+            routerName = interactive.name;
+            routerModel = interactive.model;
+          }
 
-            if (!routerName || !routerModel) {
-              const interactive = await promptForRouter(routerName, routerModel);
-              routerName = interactive.name;
-              routerModel = interactive.model;
-            }
+          if (!routerName?.trim()) {
+            return createErrorResult('router.add', { message: 'El nombre del router es requerido' }) as unknown as CliResult<RouterAddResult>;
+          }
+          if (!routerModel?.trim()) {
+            return createErrorResult('router.add', { 
+              message: 'El modelo del router es requerido' 
+            }) as unknown as CliResult<RouterAddResult>;
+          }
 
-            if (!routerName?.trim()) {
-              return createErrorResult('router.add', { message: 'El nombre del router es requerido' }) as unknown as CliResult<RouterAddResult>;
-            }
-            if (!routerModel?.trim()) {
-              return createErrorResult('router.add', { 
-                message: 'El modelo del router es requerido' 
-              }) as unknown as CliResult<RouterAddResult>;
-            }
+          // Validar que el modelo sea válido para routers
+          const validModels = ROUTER_MODELS.map(m => m.name);
+          if (!validModels.includes(routerModel)) {
+            return createErrorResult('router.add', { 
+              message: `Modelo '${routerModel}' no válido para routers. Modelos disponibles: ${validModels.join(', ')}` 
+            }) as unknown as CliResult<RouterAddResult>;
+          }
 
-            // Validar que el modelo sea válido para routers
-            const validModels = ROUTER_MODELS.map(m => m.name);
-            if (!validModels.includes(routerModel)) {
-              return createErrorResult('router.add', { 
-                message: `Modelo '${routerModel}' no válido para routers. Modelos disponibles: ${validModels.join(', ')}` 
-              }) as unknown as CliResult<RouterAddResult>;
-            }
-
-            // Validar que el nombre no exista
+          // Validar que el nombre no exista (solo en plan o verify)
+          if (verifyEnabled || globalPlan) {
             await validateDeviceNameNotExists(controller, routerName);
+          }
 
-            await logPhase('apply', {
-              name: routerName,
-              model: routerModel,
-              type: 'router',
-              x,
-              y,
-            });
-
-            // Agregar el dispositivo como router
-            await controller.addDevice(routerName, routerModel, { x, y });
-
-            if (verifyEnabled) {
-              await logPhase('verify', { name: routerName });
-
-              const device = await controller.inspectDevice(routerName);
-
-              if (!device) {
-                return createVerifiedResult('router.add', {
-                  name: routerName,
-                  model: routerModel,
-                  type: 'router',
-                  x,
-                  y,
-                }, {
-                  verified: false,
-                  checks: [{
-                    name: 'device.exists',
-                    ok: false,
-                    details: { message: 'El router no fue encontrado después de crearlo' },
-                  }],
-                });
-              }
-
-              const checks = [
-                {
-                  name: 'device.exists',
-                  ok: true,
-                  details: { name: device.name, type: device.type },
-                },
-                {
-                  name: 'device.model',
-                  ok: device.model === routerModel,
-                  details: { expected: routerModel, actual: device.model },
-                },
-                {
-                  name: 'device.position',
-                  ok: device.x === x && device.y === y,
-                  details: { expectedX: x, expectedY: y, actualX: device.x, actualY: device.y },
-                },
-                {
-                  name: 'device.type',
-                  ok: device.type === 'router' || device.type === 'multilayer_device',
-                  details: { type: device.type },
-                },
-              ];
-
-              const allPassed = checks.every((c) => c.ok);
-
-              return createVerifiedResult('router.add', {
-                name: device.name,
-                model: device.model,
-                type: device.type,
-                x: device.x ?? x,
-                y: device.y ?? y,
-              }, {
-                verified: allPassed,
-                checks,
-              });
-            }
-
+          if (globalPlan) {
             return createSuccessResult('router.add', {
               name: routerName,
               model: routerModel,
@@ -272,13 +202,98 @@ export function createRouterAddCommand(): Command {
               y,
             }, {
               advice: [
-                'Ejecuta bun run pt device list para verificar',
-                'Usa bun run pt config-ios para configurar interfaces',
+                `Plan: agregaría router ${routerName} (${routerModel}) en (${x}, ${y})`,
+                'Verificaría que el router se creó correctamente',
               ],
             });
-          } finally {
-            await controller.stop();
           }
+
+          await logPhase('apply', {
+            name: routerName,
+            model: routerModel,
+            type: 'router',
+            x,
+            y,
+          });
+
+          // Fast-path: skip validation if --no-verify and not in plan mode
+          if (!verifyEnabled && !globalPlan && typeof (controller as any).addDeviceUnchecked === 'function') {
+            await (controller as any).addDeviceUnchecked(routerName, routerModel, { x, y });
+          } else {
+            await controller.addDevice(routerName, routerModel, { x, y });
+          }
+
+          if (verifyEnabled) {
+            await logPhase('verify', { name: routerName });
+
+            const device = await controller.inspectDevice(routerName);
+
+            if (!device) {
+              return createVerifiedResult('router.add', {
+                name: routerName,
+                model: routerModel,
+                type: 'router',
+                x,
+                y,
+              }, {
+                verified: false,
+                checks: [{
+                  name: 'device.exists',
+                  ok: false,
+                  details: { message: 'El router no fue encontrado después de crearlo' },
+                }],
+              });
+            }
+
+            const checks = [
+              {
+                name: 'device.exists',
+                ok: true,
+                details: { name: device.name, type: device.type },
+              },
+              {
+                name: 'device.model',
+                ok: device.model === routerModel,
+                details: { expected: routerModel, actual: device.model },
+              },
+              {
+                name: 'device.position',
+                ok: device.x === x && device.y === y,
+                details: { expectedX: x, expectedY: y, actualX: device.x, actualY: device.y },
+              },
+              {
+                name: 'device.type',
+                ok: device.type === 'router' || device.type === 'multilayer_device',
+                details: { type: device.type },
+              },
+            ];
+
+            const allPassed = checks.every((c) => c.ok);
+
+            return createVerifiedResult('router.add', {
+              name: device.name,
+              model: device.model,
+              type: device.type,
+              x: device.x ?? x,
+              y: device.y ?? y,
+            }, {
+              verified: allPassed,
+              checks,
+            });
+          }
+
+          return createSuccessResult('router.add', {
+            name: routerName,
+            model: routerModel,
+            type: 'router',
+            x,
+            y,
+          }, {
+            advice: [
+              'Ejecuta bun run pt device list para verificar',
+              'Usa bun run pt config-ios para configurar interfaces',
+            ],
+          });
         },
       });
 

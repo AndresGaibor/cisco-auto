@@ -118,111 +118,105 @@ export function createTopologyCleanCommand(): Command {
         execute: async (ctx): Promise<CliResult<TopologyCleanResult>> => {
           const { controller, logPhase } = ctx;
 
-          await controller.start();
+          await logPhase("discover", {});
 
-          try {
-            await logPhase("discover", {});
+          const allDevices = await controller.listDevices();
+          const devicesToRemove: string[] = [];
 
-            const allDevices = await controller.listDevices();
-            const devicesToRemove: string[] = [];
-
-            if (options.type) {
-              const typeFilter = options.type.toLowerCase();
-              for (const device of allDevices) {
-                if (device.type === typeFilter) {
-                  devicesToRemove.push(device.name);
-                }
-              }
-            } else if (devices.length > 0) {
-              for (const deviceName of devices) {
-                const exists = allDevices.find((d: { name: string }) => d.name === deviceName);
-                if (exists) {
-                  devicesToRemove.push(deviceName);
-                }
-              }
-            } else {
-              for (const device of allDevices) {
+          if (options.type) {
+            const typeFilter = options.type.toLowerCase();
+            for (const device of allDevices) {
+              if (device.type === typeFilter) {
                 devicesToRemove.push(device.name);
               }
             }
-
-            if (devicesToRemove.length === 0) {
-              return createSuccessResult(
-                "topology.clean",
-                {
-                  devicesRemoved: [],
-                  count: 0,
-                },
-                {
-                  advice: ["No hay dispositivos para eliminar"],
-                },
-              );
-            }
-
-            console.log(chalk.cyan(`Dispositivos encontrados: ${devicesToRemove.length}`));
-            for (const name of devicesToRemove) {
-              const device = allDevices.find((d: { name: string; type?: string }) => d.name === name);
-              console.log(`  - ${name} (${device?.type ?? "unknown"})`);
-            }
-
-            if (isDryRun) {
-              console.log(chalk.yellow("\n[DRY RUN] No se eliminó ningún dispositivo"));
-              return createSuccessResult(
-                "topology.clean",
-                {
-                  devicesRemoved: [],
-                  count: 0,
-                },
-                {
-                  advice: ["Ejecuta sin --list para eliminar los dispositivos"],
-                },
-              );
-            }
-
-            if (globalPlan) {
-              console.log("\nPlan de ejecución:");
-              console.log(`  1. Eliminar ${devicesToRemove.length} dispositivo(s)`);
-              for (const name of devicesToRemove) {
-                console.log(`     - ${name}`);
+          } else if (devices.length > 0) {
+            for (const deviceName of devices) {
+              const exists = allDevices.find((d: { name: string }) => d.name === deviceName);
+              if (exists) {
+                devicesToRemove.push(deviceName);
               }
-              return createSuccessResult("topology.clean", {
-                devicesRemoved: [],
-                count: 0,
-              });
             }
-
-            if (!options.force) {
-              console.log(
-                chalk.yellow(`\n¿Confirmas eliminar ${devicesToRemove.length} dispositivo(s)?`),
-              );
-              console.log(chalk.gray("Usa --force para omitir esta confirmación"));
+          } else {
+            for (const device of allDevices) {
+              devicesToRemove.push(device.name);
             }
+          }
 
-            await logPhase("apply", {
-              devices: devicesToRemove,
-              count: devicesToRemove.length,
-            });
-
-            const removed: string[] = [];
-            for (const deviceName of devicesToRemove) {
-              await controller.removeDevice(deviceName);
-              removed.push(deviceName);
-              console.log(`${chalk.green("✓")} Eliminado: ${deviceName}`);
-            }
-
+          if (devicesToRemove.length === 0) {
             return createSuccessResult(
               "topology.clean",
               {
-                devicesRemoved: removed,
-                count: removed.length,
+                devicesRemoved: [],
+                count: 0,
               },
               {
-                advice: ["Ejecuta bun run pt device list para verificar los cambios"],
+                advice: ["No hay dispositivos para eliminar"],
               },
             );
-          } finally {
-            await controller.stop();
           }
+
+          console.log(chalk.cyan(`Dispositivos encontrados: ${devicesToRemove.length}`));
+          for (const name of devicesToRemove) {
+            const device = allDevices.find((d: { name: string; type?: string }) => d.name === name);
+            console.log(`  - ${name} (${device?.type ?? "unknown"})`);
+          }
+
+          if (isDryRun) {
+            console.log(chalk.yellow("\n[DRY RUN] No se eliminó ningún dispositivo"));
+            return createSuccessResult(
+              "topology.clean",
+              {
+                devicesRemoved: [],
+                count: 0,
+              },
+              {
+                advice: ["Ejecuta sin --list para eliminar los dispositivos"],
+              },
+            );
+          }
+
+          if (globalPlan) {
+            console.log("\nPlan de ejecución:");
+            console.log(`  1. Eliminar ${devicesToRemove.length} dispositivo(s)`);
+            for (const name of devicesToRemove) {
+              console.log(`     - ${name}`);
+            }
+            return createSuccessResult("topology.clean", {
+              devicesRemoved: [],
+              count: 0,
+            });
+          }
+
+          if (!options.force) {
+            console.log(
+              chalk.yellow(`\n¿Confirmas eliminar ${devicesToRemove.length} dispositivo(s)?`),
+            );
+            console.log(chalk.gray("Usa --force para omitir esta confirmación"));
+          }
+
+          await logPhase("apply", {
+            devices: devicesToRemove,
+            count: devicesToRemove.length,
+          });
+
+          const removed: string[] = [];
+          for (const deviceName of devicesToRemove) {
+            await controller.removeDevice(deviceName);
+            removed.push(deviceName);
+            console.log(`${chalk.green("✓")} Eliminado: ${deviceName}`);
+          }
+
+          return createSuccessResult(
+            "topology.clean",
+            {
+              devicesRemoved: removed,
+              count: removed.length,
+            },
+            {
+              advice: ["Ejecuta bun run pt device list para verificar los cambios"],
+            },
+          );
         },
       });
 

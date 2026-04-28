@@ -281,8 +281,20 @@ export class PTController {
     return this._topologyController.addDevice(name, model, options);
   }
 
+  async addDeviceUnchecked(
+    name: string,
+    model: string,
+    options?: { x?: number; y?: number },
+  ): Promise<DeviceState> {
+    return this._topologyController.addDevice(name, model, options);
+  }
+
   async removeDevice(name: string): Promise<void> {
     await this.requireDevice(name);
+    await this._topologyController.removeDevice(name);
+  }
+
+  async removeDeviceUnchecked(name: string): Promise<void> {
     await this._topologyController.removeDevice(name);
   }
 
@@ -300,6 +312,16 @@ export class PTController {
     { ok: true; name: string; x: number; y: number } | { ok: false; error: string; code: string }
   > {
     await this.requireDevice(name);
+    return this._topologyController.moveDevice(name, x, y);
+  }
+
+  async moveDeviceUnchecked(
+    name: string,
+    x: number,
+    y: number,
+  ): Promise<
+    { ok: true; name: string; x: number; y: number } | { ok: false; error: string; code: string }
+  > {
     return this._topologyController.moveDevice(name, x, y);
   }
 

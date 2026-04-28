@@ -15,7 +15,7 @@ import type { CommandMeta } from '../../contracts/command-meta.js';
 import { runCommand } from '../../application/run-command.js';
 import { printExamples } from '../../ux/examples.js';
 import { renderCommandResult } from '../../application/render-command-result.js';
-import { buildFlags } from '../../flags-utils.js';
+import { flagsFromCommand, flagEnabled } from '../../flags-utils.js';
 import {
   DEVICE_MODELS,
   DeviceAlreadyExistsError,
@@ -86,11 +86,11 @@ export function createDeviceAddCommand(): Command {
     .option('--explain', 'Explicar qué hace el comando y salir', false)
     .option('--plan', 'Mostrar plan de ejecución sin ejecutar', false)
     .option('-i, --interactive', 'Completar datos faltantes de forma interactiva', false)
-    .option('--verify', 'Verificar cambios post-ejecución', true)
-    .option('--no-verify', 'Omitir verificación post-ejecución', false)
+    .option('--verify', 'Verificar cambios post-ejecución')
+    .option('--no-verify', 'Omitir verificación post-ejecución')
     .option('--trace', 'Activar traza estructurada de la ejecución', false)
     .option('--trace-bundle', 'Generar archivo bundle único para debugging', false)
-    .action(async (name, model, options) => {
+    .action(async (name, model, options, command) => {
       const globalExamples = process.argv.includes('--examples');
       const globalSchema = process.argv.includes('--schema');
       const globalExplain = process.argv.includes('--explain');
@@ -99,7 +99,11 @@ export function createDeviceAddCommand(): Command {
       const globalTrace = process.argv.includes('--trace');
       const globalTraceBundle = process.argv.includes('--trace-bundle');
 
-      const verifyEnabled = options.verify ?? true;
+      const verifyEnabled = flagEnabled(options.verify, {
+        defaultValue: true,
+        positive: '--verify',
+        negative: '--no-verify',
+      });
 
       if (globalExamples) {
         console.log(printExamples(DEVICE_ADD_META));
@@ -121,15 +125,7 @@ export function createDeviceAddCommand(): Command {
       const x = parseInt(options.xpos ?? '100', 10);
       const y = parseInt(options.ypos ?? '100', 10);
 
-      const flags = buildFlags({
-        json: globalJson,
-        output: globalJson ? 'json' : 'text',
-        trace: globalTrace,
-        traceBundle: globalTraceBundle,
-        examples: globalExamples,
-        schema: globalSchema,
-        explain: globalExplain,
-        plan: globalPlan,
+      const flags = flagsFromCommand(command, {
         verify: verifyEnabled,
       });
 
@@ -145,8 +141,6 @@ export function createDeviceAddCommand(): Command {
         },
         execute: async (ctx): Promise<CliResult<DeviceAddResult>> => {
           const { controller, logPhase } = ctx;
-
-          await controller.start();
 
           try {
             if ((!deviceName || !deviceModel) && !options.interactive) {
@@ -166,24 +160,24 @@ export function createDeviceAddCommand(): Command {
               throw new Error('El modelo del dispositivo es requerido');
             }
 
-            try {
-              await validateDeviceNameNotExists(controller, deviceName);
-            } catch (error) {
-              if (error instanceof DeviceAlreadyExistsError) {
-                const result = createErrorResult<DeviceAddResult>('device.add', {
-                  code: error.code,
-                  message: error.message,
-                  details: error.toDetails(),
-                });
+            if (globalPlan) {
+              try {
+                await validateDeviceNameNotExists(controller, deviceName);
+              } catch (error) {
+                if (error instanceof DeviceAlreadyExistsError) {
+                  const result = createErrorResult<DeviceAddResult>('device.add', {
+                    code: error.code,
+                    message: error.message,
+                    details: error.toDetails(),
+                  });
 
-                result.advice = error.toAdvice();
-                return result;
+                  result.advice = error.toAdvice();
+                  return result;
+                }
+
+                throw error;
               }
 
-              throw error;
-            }
-
-            if (globalPlan) {
               return createSuccessResult('device.add', {
                 name: deviceName,
                 model: deviceModel,
@@ -205,7 +199,11 @@ export function createDeviceAddCommand(): Command {
               y,
             });
 
-            await controller.addDevice(deviceName, deviceModel, { x, y });
+            await (
+              !verifyEnabled && !globalPlan && typeof (controller as any).addDeviceUnchecked === 'function'
+                ? (controller as any).addDeviceUnchecked(deviceName, deviceModel, { x, y })
+                : controller.addDevice(deviceName, deviceModel, { x, y })
+            );
 
             if (verifyEnabled) {
               await logPhase('verify', { name: deviceName });
@@ -272,8 +270,19 @@ export function createDeviceAddCommand(): Command {
                 'Ejecuta bun run pt device list para verificar',
               ],
             });
-          } finally {
-            await controller.stop();
+          } catch (error) {
+            if (error instanceof DeviceAlreadyExistsError) {
+              const result = createErrorResult<DeviceAddResult>('device.add', {
+                code: error.code,
+                message: error.message,
+                details: error.toDetails(),
+              });
+
+              result.advice = error.toAdvice();
+              return result;
+            }
+
+            throw error;
           }
         },
       });
@@ -299,7 +308,7 @@ async function promptForDevice(
     providedName ||
     (await input({
       message: 'Nombre del dispositivo',
-      validate: (value) => value.trim() !== '' || 'El nombre es requerido',
+        validate: (value: string) => value.trim() !== '' || 'El nombre es requerido',
     }));
 
   const deviceType = await select({

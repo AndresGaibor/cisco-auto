@@ -190,7 +190,12 @@ function mapBridgeResultToPrimitiveResult(
       error: `Timeout esperando resultado del bridge`,
       code: "BRIDGE_TIMEOUT",
       warnings: [],
-      evidence: buildEvidence({ status: bridgeResult.status }),
+      evidence: buildEvidence({
+        status: bridgeResult.status,
+        ...(bridgeResult.bridgeTimeoutDetails
+          ? { bridgeTimeoutDetails: bridgeResult.bridgeTimeoutDetails }
+          : {}),
+      }),
     };
   }
 

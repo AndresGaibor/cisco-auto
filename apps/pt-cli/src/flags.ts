@@ -48,8 +48,8 @@ export function addGlobalFlags(program: Command): Command {
     .option("--schema", "Mostrar schema JSON del resultado y salir", false)
     .option("--explain", "Explicar qué hace el comando y salir", false)
     .option("--plan", "Mostrar plan de ejecución sin ejecutar", false)
-    .option("--verify", "Verificar cambios post-ejecución", true)
-    .option("--no-verify", "Omitir verificación post-ejecución", false)
+    .option("--verify", "Verificar cambios post-ejecución")
+    .option("--no-verify", "Omitir verificación post-ejecución")
     .option("--timeout <ms>", "Timeout global para operaciones en milisegundos", (value) => Number(value), undefined)
     .option("--no-timeout", "Desactivar timeout global", false)
     .option("-y, --yes", "Aceptar confirmaciones no destructivas", false)
@@ -77,7 +77,7 @@ export function getGlobalFlags(command: Command): GlobalFlags {
     schema: Boolean(opts.schema),
     explain: Boolean(opts.explain),
     plan: Boolean(opts.plan),
-    verify: Boolean(opts.verify),
+    verify: opts.verify === false ? false : Boolean(opts.verify),
     timeout:
       typeof opts.timeout === "number" && Number.isFinite(opts.timeout) && opts.timeout > 0
         ? opts.timeout

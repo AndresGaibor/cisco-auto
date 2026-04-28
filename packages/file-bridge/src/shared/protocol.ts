@@ -14,6 +14,7 @@ export {
   type BridgeEventInput,
   type BridgeResultEnvelope,
   type BridgeErrorDetail,
+  type BridgeTimeoutDetails,
   type BridgeEvent,
   type BridgeCheckpoint,
   type BridgeQueueStatus,

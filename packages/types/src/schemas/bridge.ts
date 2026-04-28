@@ -51,6 +51,15 @@ export interface BridgeCommandEnvelope<T = unknown> {
  * Envelope para resultados PT -> CLI
  * Usar para recibir resultados del runtime
  */
+export interface BridgeTimeoutDetails {
+  commandId: string;
+  seq: number;
+  timeoutMs: number;
+  timedOutAt: number;
+  location: "commands" | "in-flight" | "results" | "dead-letter" | "unknown";
+  exists: boolean;
+}
+
 export interface BridgeResultEnvelope<T = unknown> {
   protocolVersion: BridgeProtocolVersion;
   id: string;
@@ -62,6 +71,7 @@ export interface BridgeResultEnvelope<T = unknown> {
   ok: boolean;
   value?: T;
   error?: BridgeErrorDetail;
+  bridgeTimeoutDetails?: BridgeTimeoutDetails;
 }
 
 /**

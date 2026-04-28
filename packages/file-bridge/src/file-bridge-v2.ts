@@ -23,7 +23,7 @@
  * enumerar directorios). La fuente de verdad es la existencia física de
  * los archivos en commands/.
  */
-import { existsSync, watch, readFileSync, statSync } from "node:fs";
+import { existsSync, watch, readFileSync, statSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
@@ -31,6 +31,7 @@ import { ensureDir, ensureFile, atomicWriteFile } from "./shared/fs-atomic.js";
 import type {
   BridgeCommandEnvelope,
   BridgeResultEnvelope,
+  BridgeTimeoutDetails,
   BridgeEvent,
 } from "./shared/protocol.js";
 import type { Snapshot, DeviceSnapshot, LinkSnapshot } from "@cisco-auto/types";
@@ -452,7 +453,14 @@ export class FileBridgeV2 extends EventEmitter {
       const checkResult = async () => {
         if (Date.now() - started > timeout) {
           debugLog(`result timeout id=${envelope.id}`);
-          rejectOnce(new Error(`Timeout waiting for result for ${envelope.id} after ${timeout}ms`));
+          resolveOnce(
+            this.buildResultTimeoutEnvelope(
+              envelope.id,
+              envelope.type,
+              timeout,
+              envelope.seq,
+            ) as unknown as BridgeResultEnvelope<TResult>,
+          );
           return;
         }
 
@@ -544,6 +552,86 @@ export class FileBridgeV2 extends EventEmitter {
       (value as { deferred?: unknown }).deferred === true &&
       typeof (value as { ticket?: unknown }).ticket === "string"
     );
+  }
+
+  private findCommandArtifact(commandId: string): {
+    commandId: string;
+    commandFile: string | null;
+    inFlightFile: string | null;
+    resultFile: string | null;
+    deadLetterFile: string | null;
+    queueIndexHasCommand: boolean;
+  } {
+    const findInDir = (dir: string): string | null => {
+      try {
+        const files = readdirSync(dir);
+        return files.find((file) => file.includes(commandId)) ?? null;
+      } catch {
+        return null;
+      }
+    };
+
+    const commandFile = findInDir(this.paths.commandsDir());
+    const inFlightFile = findInDir(this.paths.inFlightDir());
+    const resultFile = findInDir(this.paths.resultsDir());
+    const deadLetterFile = findInDir(this.paths.deadLetterDir());
+
+    let queueIndexHasCommand = false;
+    try {
+      const queuePath = join(this.paths.commandsDir(), "_queue.json");
+      if (existsSync(queuePath)) {
+        const parsed = JSON.parse(readFileSync(queuePath, "utf8"));
+        if (Array.isArray(parsed)) {
+          queueIndexHasCommand = parsed.some((entry) => String(entry).includes(commandId));
+        }
+      }
+    } catch {
+      queueIndexHasCommand = false;
+    }
+
+    return {
+      commandId,
+      commandFile,
+      inFlightFile,
+      resultFile,
+      deadLetterFile,
+      queueIndexHasCommand,
+    };
+  }
+
+  private buildResultTimeoutEnvelope(
+    commandId: string,
+    type: string,
+    timeoutMs: number,
+    seq: number,
+  ): BridgeResultEnvelope {
+    const artifact = this.findCommandArtifact(commandId);
+
+    // Determinar dónde quedó el comando
+    let location: BridgeTimeoutDetails["location"] = "unknown";
+    if (artifact.commandFile) location = "commands";
+    else if (artifact.inFlightFile) location = "in-flight";
+    else if (artifact.resultFile) location = "results";
+    else if (artifact.deadLetterFile) location = "dead-letter";
+
+    const bridgeTimeoutDetails: BridgeTimeoutDetails = {
+      commandId,
+      seq,
+      timeoutMs,
+      timedOutAt: Date.now(),
+      location,
+      exists: location !== "unknown",
+    };
+
+    return {
+      protocolVersion: 2,
+      id: commandId,
+      seq,
+      completedAt: Date.now(),
+      status: "timeout",
+      ok: false,
+      bridgeTimeoutDetails,
+    };
   }
 
   /**

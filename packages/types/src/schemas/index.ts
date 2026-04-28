@@ -206,6 +206,7 @@ export {
   type BridgeResultEnvelope,
   type BridgeResultTimings,
   type BridgeErrorDetail,
+  type BridgeTimeoutDetails,
   type BridgeEvent,
   type BridgeCheckpoint,
   type BridgeQueueStatus,
