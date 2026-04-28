@@ -4,7 +4,7 @@
 
 import type { RuntimePrimitivePort } from "../../ports/runtime-primitive-port.js";
 import type { TopologyCachePort } from "../ports/topology-cache.port.js";
-import { DeviceQueryService } from "./device-query-service.js";
+import { DeviceQueryService, type DeviceInspectFastState } from "./device-query-service.js";
 import { DeviceMutationService, type AddModuleResult, type AddModuleError, type RemoveModuleResult } from "./device-mutation-service.js";
 
 /**
@@ -33,6 +33,10 @@ export class DeviceService {
 
   inspect(device: string, includeXml = false) {
     return this.query.inspect(device, includeXml);
+  }
+
+  inspectFast(device: string): Promise<DeviceInspectFastState> {
+    return this.query.inspectFast(device) as Promise<DeviceInspectFastState>;
   }
 
   addModule(device: string, slot: number | "auto", module: string): Promise<{ ok: true; value: AddModuleResult } | AddModuleError> {

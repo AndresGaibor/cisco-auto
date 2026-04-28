@@ -17,6 +17,11 @@ export interface InspectPayload {
   includeXml?: boolean;
 }
 
+export interface InspectDeviceFastPayload {
+  type: "inspectDeviceFast";
+  device: string;
+}
+
 export interface SnapshotPayload {
   type: "snapshot";
 }
@@ -173,6 +178,35 @@ export function handleInspect(payload: InspectPayload, deps: HandlerDeps): Handl
   }
 
   return result as HandlerResult;
+}
+
+/**
+ * Get a minimal device inspection without scanning ports or topology.
+ */
+export function handleInspectDeviceFast(
+  payload: InspectDeviceFastPayload,
+  deps: HandlerDeps,
+): HandlerResult {
+  const { getNet } = deps;
+  const net = getNet();
+  const device = net.getDevice(payload.device);
+
+  if (!device) {
+    return { ok: false, error: `Device not found: ${payload.device}`, code: "DEVICE_NOT_FOUND" };
+  }
+
+  const commandLine = device as unknown as { getCommandLine?: () => unknown };
+
+  return {
+    ok: true,
+    device: {
+      name: device.getName(),
+      model: device.getModel(),
+      type: device.getType(),
+      power: device.getPower(),
+      hasCommandLine: typeof commandLine.getCommandLine === "function" && !!commandLine.getCommandLine(),
+    },
+  } as HandlerResult;
 }
 
 /**

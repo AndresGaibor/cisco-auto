@@ -10,7 +10,7 @@ import type { CommandEnvelope } from "./types";
 export interface KernelState {
   isRunning: boolean;
   isShuttingDown: boolean;
-  activeCommand: CommandEnvelope | null;
+  activeCommand: (CommandEnvelope & { startedAt: number }) | null;
   activeCommandFilename: string | null;
 }
 

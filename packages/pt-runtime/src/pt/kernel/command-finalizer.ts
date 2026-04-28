@@ -5,6 +5,7 @@ import type { CommandEnvelope, ResultEnvelope } from "./types";
 import { safeFM } from "./safe-fm";
 import type { KernelSubsystems } from "./kernel-lifecycle";
 import type { KernelState } from "./kernel-state";
+import { buildCommandResultEnvelope } from "./command-result-envelope";
 
 export function finishActiveCommand(
   subsystems: KernelSubsystems,
@@ -20,24 +21,7 @@ export function finishActiveCommand(
   subsystems.kernelLog("<<< COMPLETING: " + cmdId + " ok=" + (result?.ok !== false), "info");
 
   try {
-    const envelope: ResultEnvelope = {
-      protocolVersion: 2,
-      id: state.activeCommand.id,
-      seq: state.activeCommand.seq || 0,
-      startedAt: Date.now(),
-      completedAt: Date.now(),
-      status: result?.ok === false ? "failed" : "completed",
-      ok: result?.ok !== false,
-      value: result, // Siempre incluimos el resultado para no perder raw/parsed
-      error:
-        result?.ok === false
-          ? {
-              code: result?.code ?? "EXECUTION_ERROR",
-              message: String(result?.error ?? "Command failed"),
-              phase: "execution",
-            }
-          : undefined,
-    };
+    const envelope = buildCommandResultEnvelope(state.activeCommand, result);
 
     const resPath = subsystems.config.resultsDir + "/" + state.activeCommand.id + ".json";
     const fm = safeFM().fm;

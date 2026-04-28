@@ -78,6 +78,8 @@ describe("pollCommandQueue", () => {
 
     pollCommandQueue(subsystems, state);
 
+    expect(state.activeCommand?.startedAt).toBeTypeOf("number");
+    expect(state.activeCommand?.startedAt).toBeGreaterThan(0);
     expect(finishActiveCommand).not.toHaveBeenCalled();
 
     await new Promise((resolve) => setTimeout(resolve, 30));

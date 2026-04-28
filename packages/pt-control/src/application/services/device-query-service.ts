@@ -2,6 +2,16 @@ import type { RuntimePrimitivePort } from "../../ports/runtime-primitive-port.js
 import type { TopologyCachePort } from "../ports/topology-cache.port.js";
 import type { DeviceState } from "@cisco-auto/types";
 
+export interface DeviceInspectFastState {
+  name?: string;
+  model?: string;
+  type?: string | number;
+  power?: boolean;
+  hostname?: string;
+  customDeviceModel?: string;
+  hasCommandLine?: boolean;
+}
+
 /**
  * Servicio de consulta de dispositivos.
  * Proporciona operaciones de lectura sobre dispositivos PT.
@@ -56,6 +66,54 @@ export class DeviceQueryService {
     });
     if (!result.ok) throw new Error(`Failed to inspect device '${device}': ${result.error}`);
     return result.value as DeviceState;
+  }
+
+  /**
+   * Inspección rápida de un dispositivo sin snapshot completo.
+   * Se usa para resolver tipo/modelo en rutas calientes.
+   */
+  async inspectFast(device: string): Promise<DeviceInspectFastState | DeviceState> {
+    const cachedDevice = this.cache.getDevice(device);
+    if (cachedDevice) return cachedDevice;
+
+    const result = await this.primitivePort.runPrimitive("device.inspect.fast", {
+      id: this.generateId(),
+      device,
+    });
+
+    if (result.ok) {
+      const deviceState = this.extractFastDeviceState(result.value);
+      if (deviceState) {
+        return deviceState;
+      }
+    }
+
+    return this.inspect(device, false);
+  }
+
+  private extractFastDeviceState(value: unknown): DeviceInspectFastState | null {
+    if (!value || typeof value !== "object") return null;
+
+    const record = value as Record<string, unknown>;
+    const candidate = record.device && typeof record.device === "object" ? record.device : record;
+
+    if (!candidate || typeof candidate !== "object") return null;
+
+    const fastState = candidate as Record<string, unknown>;
+    if (!fastState.name && !fastState.model && fastState.type === undefined) {
+      return null;
+    }
+
+    return {
+      name: typeof fastState.name === "string" ? fastState.name : undefined,
+      model: typeof fastState.model === "string" ? fastState.model : undefined,
+      type: typeof fastState.type === "string" || typeof fastState.type === "number" ? fastState.type : undefined,
+      power: typeof fastState.power === "boolean" ? fastState.power : undefined,
+      hostname: typeof fastState.hostname === "string" ? fastState.hostname : undefined,
+      customDeviceModel:
+        typeof fastState.customDeviceModel === "string" ? fastState.customDeviceModel : undefined,
+      hasCommandLine: typeof fastState.hasCommandLine === "boolean" ? fastState.hasCommandLine : undefined,
+    };
   }
 
   /**

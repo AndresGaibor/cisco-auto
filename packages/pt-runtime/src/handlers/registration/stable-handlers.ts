@@ -45,6 +45,7 @@ import { handleDeepInspect } from "../deep-inspect.js";
 
 import {
   handleInspect,
+  handleInspectDeviceFast,
   handleSnapshot,
   handleHardwareInfo,
   handleHardwareCatalog,
@@ -107,6 +108,7 @@ export function registerStableRuntimeHandlers(): void {
   registerHandler("inspectModuleSlots", handleInspectModuleSlots as unknown as HandlerFn);
 
   registerHandler("inspect", handleInspect as unknown as HandlerFn);
+  registerHandler("inspectDeviceFast", handleInspectDeviceFast as unknown as HandlerFn);
   registerHandler("snapshot", handleSnapshot as unknown as HandlerFn);
   registerHandler("hardwareInfo", handleHardwareInfo as unknown as HandlerFn);
   registerHandler("hardwareCatalog", handleHardwareCatalog as unknown as HandlerFn);

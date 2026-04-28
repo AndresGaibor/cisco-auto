@@ -54,7 +54,7 @@ export function pollCommandQueue(subsystems: KernelSubsystems, state: KernelStat
     return;
   }
 
-  state.activeCommand = claimed;
+  state.activeCommand = { ...claimed, startedAt: Date.now() };
   state.activeCommandFilename = (claimed as any).filename ?? null;
   heartbeat.setActiveCommand(claimed.id);
   kernelLog(

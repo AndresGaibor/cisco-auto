@@ -371,6 +371,10 @@ export class PTController {
     return this._topologyController.inspectDevice(name, includeXml);
   }
 
+  async inspectDeviceFast(name: string): Promise<unknown> {
+    return this._topologyController.inspectDeviceFast(name);
+  }
+
   async addModule(device: string, slot: number | "auto", module: string): Promise<{ ok: true; value: { device: string; module: string; slot: number; wasPoweredOff: boolean } } | { ok: false; error: string; code: string; advice?: string[] }> {
     return this._topologyController.addModule(device, slot, module) as any;
   }

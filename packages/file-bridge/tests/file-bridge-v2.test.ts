@@ -157,6 +157,8 @@ describe("FileBridgeV2", () => {
         raw: "Success rate is 100 percent",
         status: 0,
       });
+      expect((result as any).timings).toBeDefined();
+      expect((result as any).timings.waitMs).toBeGreaterThanOrEqual(0);
     });
 
     it("should timeout without noisy ENOENT logs", async () => {

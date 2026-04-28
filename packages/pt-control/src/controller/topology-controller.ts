@@ -47,6 +47,7 @@ export class TopologyController {
     },
     private readonly deviceService: {
       inspect(name: string, includeXml?: boolean): Promise<DeviceState>;
+      inspectFast?(name: string): Promise<unknown>;
       addModule(device: string, slot: number | "auto", module: string): Promise<{ ok: true; value: { device: string; module: string; slot: number; wasPoweredOff: boolean } } | { ok: false; error: string; code: string; advice?: string[] }>;
       removeModule(device: string, slot: number): Promise<{ ok: true; value: { device: string; slot: number; beforePorts: Array<{ name: string; [key: string]: unknown }>; afterPorts: Array<{ name: string; [key: string]: unknown }>; removedPorts: Array<{ name: string; [key: string]: unknown }> } } | { ok: false; error?: string; code?: string }>;
     },
@@ -84,6 +85,14 @@ export class TopologyController {
 
   async inspectDevice(name: string, includeXml = false): Promise<DeviceState> {
     return this.deviceService.inspect(name, includeXml);
+  }
+
+  async inspectDeviceFast(name: string): Promise<unknown> {
+    if (typeof this.deviceService.inspectFast === "function") {
+      return this.deviceService.inspectFast(name);
+    }
+
+    return this.deviceService.inspect(name, false);
   }
 
   async addModule(device: string, slot: number | "auto", module: string): Promise<{ ok: true; value: { device: string; module: string; slot: number; wasPoweredOff: boolean } } | { ok: false; error: string; code: string; advice?: string[] }> {

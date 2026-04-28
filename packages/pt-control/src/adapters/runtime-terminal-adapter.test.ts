@@ -32,9 +32,16 @@ function createBridge(options?: {
 
       if (type === "terminal.plan.run") {
         return options?.planRunResponse ?? {
+          id: "cmd-1",
           ok: true,
           status: 0,
           completedAt: Date.now(),
+          timings: {
+            sentAt: Date.now() - 5,
+            resultSeenAt: Date.now() - 1,
+            receivedAt: Date.now(),
+            waitMs: 5,
+          },
           value: {
             ok: true,
             output: "show output\n",
@@ -51,9 +58,16 @@ function createBridge(options?: {
 
       if (type === "__pollDeferred") {
         return options?.pollDeferredResponse ?? {
+          id: "cmd-2",
           ok: true,
           status: 0,
           completedAt: Date.now(),
+          timings: {
+            sentAt: Date.now() - 5,
+            resultSeenAt: Date.now() - 1,
+            receivedAt: Date.now(),
+            waitMs: 5,
+          },
           value: {
             ok: true,
             output: "show output\n",
@@ -92,13 +106,20 @@ function createBridge(options?: {
         return options.customResponse;
       }
 
-      return {
-        ok: true,
-        status: 0,
-        completedAt: Date.now(),
-        value: {
-          raw: "show output",
-          output: "show output",
+        return {
+          id: "cmd-3",
+          ok: true,
+          status: 0,
+          completedAt: Date.now(),
+          timings: {
+            sentAt: Date.now() - 5,
+            resultSeenAt: Date.now() - 1,
+            receivedAt: Date.now(),
+            waitMs: 5,
+          },
+          value: {
+            raw: "show output",
+            output: "show output",
           session: { mode: "priv-exec", prompt: "R1#", paging: false, modeBefore: "user-exec", modeAfter: "priv-exec", promptBefore: "R1>", promptAfter: "R1#" },
           diagnostics: { completionReason: "command-ended", statusCode: 0 },
         },
@@ -180,6 +201,9 @@ describe("createRuntimeTerminalAdapter", () => {
     expect(result.status).toBe(0);
     expect(result.output).toContain("show output");
     expect(result.confidence).toBe(1);
+    expect((result as any).evidence).toMatchObject({
+      timings: expect.any(Object),
+    });
   });
 
   test("usa terminal.plan.run primero y conserva el resultado", async () => {

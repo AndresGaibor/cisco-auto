@@ -4,12 +4,14 @@ import { createTerminalCommandService } from "./terminal-command-service.js";
 function createController(options: {
   deviceType: string | number;
   model?: string;
+  fastDeviceState?: { type?: string | number; model?: string };
   runtimeTerminal?: { runTerminalPlan?: ReturnType<typeof vi.fn> } | null;
   execIos?: ReturnType<typeof vi.fn>;
   execHost?: ReturnType<typeof vi.fn>;
 }) {
   return {
     inspectDevice: vi.fn().mockResolvedValue({ type: options.deviceType, model: options.model }),
+    inspectDeviceFast: vi.fn().mockResolvedValue(options.fastDeviceState ?? { type: options.deviceType, model: options.model }),
     execIos:
       options.execIos ??
       vi.fn().mockResolvedValue({ ok: true, raw: "legacy-ios", evidence: { source: "legacy-ios" }, warnings: [] }),
@@ -193,5 +195,22 @@ describe("createTerminalCommandService plan run", () => {
     });
 
     await expect(service.resolveDeviceKind("SRV1-CORE")).resolves.toBe("host");
+  });
+
+  test("resolveDeviceKind usa inspectDeviceFast cuando está disponible", async () => {
+    const controller = createController({
+      deviceType: "unknown",
+      fastDeviceState: { type: "pc", model: "PC-PT" },
+    });
+
+    const service = createTerminalCommandService({
+      controller: controller as any,
+      runtimeTerminal: null,
+      generateId: () => "fast-kind-id",
+    });
+
+    await expect(service.resolveDeviceKind("PC1")).resolves.toBe("host");
+    expect((controller.inspectDeviceFast as any)).toHaveBeenCalledTimes(1);
+    expect((controller.inspectDevice as any)).not.toHaveBeenCalled();
   });
 });

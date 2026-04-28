@@ -18,6 +18,7 @@ export interface TerminalPortResult {
   warnings: string[];
   confidence: number;
   parsed?: unknown;
+  evidence?: unknown;
 }
 
 export interface RuntimeTerminalPort {

@@ -38,6 +38,10 @@ export function createRuntimeTerminalAdapter(
     return (result as { value?: unknown })?.value ?? result ?? {};
   }
 
+  function buildTimingsEvidence(timings: unknown): Record<string, unknown> {
+    return timings ? { timings } : {};
+  }
+
   function isDeferredValue(value: unknown): value is { deferred: true; ticket: string } {
     return (
       typeof value === "object" &&
@@ -81,6 +85,7 @@ export function createRuntimeTerminalAdapter(
     let aggregatedOutput = "";
     let finalStatus = 0;
     let finalParsed: unknown = undefined;
+    let finalTimings: unknown = undefined;
 
     const warnings: string[] = [];
     const events: Array<Record<string, unknown>> = [];
@@ -169,6 +174,7 @@ export function createRuntimeTerminalAdapter(
       });
 
       const bridgeResult = await bridge.sendCommandAndWait<unknown>(handlerName, payload, stepTimeout);
+      finalTimings = bridgeResult.timings;
       const parsed = responseParser.parseCommandResponse(normalizeBridgeValue(bridgeResult), {
         stepIndex: i,
         isHost,
@@ -205,6 +211,7 @@ export function createRuntimeTerminalAdapter(
           events,
           warnings,
           parsed: finalParsed,
+          evidence: buildTimingsEvidence(bridgeResult.timings),
           confidence: 0,
         };
       }
@@ -221,6 +228,7 @@ export function createRuntimeTerminalAdapter(
       events,
       warnings,
       parsed: finalParsed,
+      evidence: buildTimingsEvidence(finalTimings),
       confidence: warnings.length > 0 ? 0.8 : 1,
     };
   }
@@ -235,6 +243,7 @@ export function createRuntimeTerminalAdapter(
       { plan, options: { timeoutMs } },
       submitTimeoutMs,
     );
+    let finalTimings: unknown = submitResult.timings;
 
     if (isUnsupportedTerminalPlanRun(submitResult)) {
       return null;
@@ -270,6 +279,7 @@ export function createRuntimeTerminalAdapter(
         ],
         warnings: parsed.warnings,
         parsed: parsed.parsed,
+        evidence: buildTimingsEvidence(submitResult.timings),
         confidence: 0,
       };
     }
@@ -285,6 +295,7 @@ export function createRuntimeTerminalAdapter(
           timeoutMs,
         );
 
+        finalTimings = pollResult.timings;
         pollValue = normalizeBridgeValue(pollResult);
         if (!isStillPending(pollValue)) {
           break;
@@ -312,6 +323,7 @@ export function createRuntimeTerminalAdapter(
         events: [responseParser.buildEventFromResponse(parsed, { kind: "command", command: "terminal.plan.run" }, 0)],
         warnings,
         parsed: parsed.parsed,
+        evidence: buildTimingsEvidence(finalTimings),
         confidence: !parsed.ok || parsed.status !== 0 ? 0 : warnings.length > 0 ? 0.8 : 1,
       };
     }
@@ -337,6 +349,7 @@ export function createRuntimeTerminalAdapter(
       events: [responseParser.buildEventFromResponse(parsed, { kind: "command", command: "terminal.plan.run" }, 0)],
       warnings,
       parsed: parsed.parsed,
+      evidence: buildTimingsEvidence(submitResult.timings),
       confidence: !parsed.ok || parsed.status !== 0 ? 0 : warnings.length > 0 ? 0.8 : 1,
     };
   }

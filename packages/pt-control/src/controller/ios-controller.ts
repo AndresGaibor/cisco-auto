@@ -36,6 +36,7 @@ export class IosController {
     },
     private readonly deviceService: {
       inspect(name: string, includeXml?: boolean): Promise<DeviceState>;
+      inspectFast?(name: string): Promise<unknown>;
     },
   ) {}
 
@@ -127,5 +128,13 @@ export class IosController {
 
   async inspectDevice(name: string, includeXml = false): Promise<DeviceState> {
     return this.deviceService.inspect(name, includeXml);
+  }
+
+  async inspectDeviceFast(name: string): Promise<unknown> {
+    if (typeof this.deviceService.inspectFast === "function") {
+      return this.deviceService.inspectFast(name);
+    }
+
+    return this.deviceService.inspect(name, false);
   }
 }

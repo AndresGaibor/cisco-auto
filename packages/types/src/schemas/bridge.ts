@@ -57,10 +57,24 @@ export interface BridgeResultEnvelope<T = unknown> {
   seq: number;
   startedAt?: number;
   completedAt: number;
+  timings?: BridgeResultTimings;
   status: "completed" | "failed" | "timeout";
   ok: boolean;
   value?: T;
   error?: BridgeErrorDetail;
+}
+
+/**
+ * Métricas de timing para un resultado del bridge.
+ */
+export interface BridgeResultTimings {
+  sentAt: number;
+  resultSeenAt: number;
+  receivedAt: number;
+  waitMs: number;
+  queueLatencyMs?: number;
+  execLatencyMs?: number;
+  completedAtMs?: number;
 }
 
 /**

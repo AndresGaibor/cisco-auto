@@ -479,6 +479,24 @@ export class FileBridgeV2 extends EventEmitter {
       this.resultWatcher.watch(envelope.id, checkResult);
     });
 
+    const resultSeenAt = Date.now();
+    const resultMeta = (result as {
+      meta?: {
+        queueLatencyMs?: number;
+        execLatencyMs?: number;
+        completedAtMs?: number;
+      };
+    }).meta;
+    const timings = {
+      sentAt: started,
+      resultSeenAt,
+      receivedAt: resultSeenAt,
+      waitMs: resultSeenAt - started,
+      queueLatencyMs: resultMeta?.queueLatencyMs,
+      execLatencyMs: resultMeta?.execLatencyMs,
+      completedAtMs: resultMeta?.completedAtMs ?? result.completedAt,
+    };
+
     if (this.isDeferredBridgeValue(result.value)) {
       const remainingTimeout = timeout - (Date.now() - started);
       if (remainingTimeout <= 0) {
@@ -492,6 +510,8 @@ export class FileBridgeV2 extends EventEmitter {
         { ticket: result.value.ticket },
         remainingTimeout,
       );
+      const followUpTimings = (followUp as { timings?: typeof timings }).timings;
+      const receivedAt = Date.now();
       return {
         ...result,
         ok: followUp.ok,
@@ -499,10 +519,22 @@ export class FileBridgeV2 extends EventEmitter {
         completedAt: followUp.completedAt,
         value: followUp.value as TResult,
         error: followUp.error,
+        timings: {
+          sentAt: started,
+          resultSeenAt: followUpTimings?.resultSeenAt ?? resultSeenAt,
+          receivedAt,
+          waitMs: receivedAt - started,
+          queueLatencyMs: followUpTimings?.queueLatencyMs ?? timings.queueLatencyMs,
+          execLatencyMs: followUpTimings?.execLatencyMs ?? timings.execLatencyMs,
+          completedAtMs: followUpTimings?.completedAtMs ?? followUp.completedAt,
+        },
       };
     }
 
-    return result;
+    return {
+      ...result,
+      timings,
+    };
   }
 
   private isDeferredBridgeValue(value: unknown): value is { deferred: true; ticket: string } {

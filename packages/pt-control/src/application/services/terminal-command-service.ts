@@ -7,6 +7,13 @@ import type { RuntimeTerminalPort } from "../../ports/runtime-terminal-port.js";
 import { buildUniversalTerminalPlan } from "./terminal-plan-builder.js";
 
 export interface TerminalControllerPort {
+  inspectDeviceFast?(device: string): Promise<{
+    type?: string | number;
+    model?: string;
+    name?: string;
+    hostname?: string;
+    customDeviceModel?: string;
+  } | null | undefined>;
   inspectDevice(device: string): Promise<{
     type?: string | number;
     model?: string;
@@ -150,7 +157,9 @@ function isHostLikeDevice(deviceState: {
 export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
   async function resolveDeviceKind(device: string): Promise<TerminalDeviceKind> {
     try {
-      const deviceState = await deps.controller.inspectDevice(device).catch(() => null);
+      const fastInspector = deps.controller.inspectDeviceFast;
+      const fastDeviceState = fastInspector ? await fastInspector.call(deps.controller, device).catch(() => null) : null;
+      const deviceState = fastDeviceState ?? await deps.controller.inspectDevice(device).catch(() => null);
 
       if (!deviceState) {
         return "unknown";

@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import chalk from "chalk";
+import type { BridgeResultTimings } from "@cisco-auto/types";
 import type { TerminalCommandResult } from "@cisco-auto/terminal-contracts";
 
 export interface CmdCliResult {
@@ -19,10 +20,34 @@ export interface CmdCliResult {
   };
   nextSteps: string[];
   evidence?: unknown;
+  timings?: BridgeResultTimings;
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}s`;
+}
+
+function formatTimingsSummary(timings: BridgeResultTimings): string {
+  const parts = [`total ${formatDuration(timings.waitMs)}`];
+
+  if (typeof timings.queueLatencyMs === "number") {
+    parts.push(`queue ${formatDuration(timings.queueLatencyMs)}`);
+  }
+
+  if (typeof timings.execLatencyMs === "number") {
+    parts.push(`exec ${formatDuration(timings.execLatencyMs)}`);
+  }
+
+  return `Timings: ${parts.join(" | ")}`;
 }
 
 export function toCmdCliResult(result: TerminalCommandResult): CmdCliResult {
   const nextSteps: string[] = [];
+  const timings =
+    typeof result.evidence === "object" && result.evidence !== null
+      ? ((result.evidence as { timings?: BridgeResultTimings }).timings ?? undefined)
+      : undefined;
 
   if (result.deviceKind === "ios") {
     nextSteps.push(`pt cmd ${result.device} "show running-config"`);
@@ -51,6 +76,7 @@ export function toCmdCliResult(result: TerminalCommandResult): CmdCliResult {
     error: result.error,
     nextSteps,
     evidence: result.evidence,
+    timings,
   };
 }
 
@@ -63,6 +89,10 @@ export function printCmdResult(result: CmdCliResult, options: { json?: boolean; 
   if (options.raw) {
     process.stdout.write(result.output ? `${result.output}\n` : "");
     return;
+  }
+
+  if (result.timings && !options.quiet) {
+    process.stdout.write(`${formatTimingsSummary(result.timings)}\n`);
   }
 
   if (!result.ok) {

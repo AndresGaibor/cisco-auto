@@ -45,6 +45,11 @@ const PRIMITIVE_REGISTRY: Record<string, PrimitiveMetadata> = {
     description: "Inspeccionar estado de un dispositivo",
     supportedPayloadFields: ["device", "includeXml"],
   },
+  "device.inspect.fast": {
+    domain: "device",
+    description: "Inspeccionar rápidamente un dispositivo sin snapshot completo",
+    supportedPayloadFields: ["device"],
+  },
   "device.ports.list": {
     domain: "device",
     description: "Listar puertos de un dispositivo",
@@ -133,6 +138,7 @@ const HANDLER_TYPE_OVERRIDES: Record<string, string> = {
   "device.rename": "renameDevice",
   "device.move": "moveDevice",
   "device.inspect": "inspect",
+  "device.inspect.fast": "inspectDeviceFast",
   "link.add": "addLink",
   "link.remove": "removeLink",
   "module.add": "addModule",
@@ -171,13 +177,20 @@ function primitiveIdToHandlerType(primitiveId: string): string {
 function mapBridgeResultToPrimitiveResult(
   bridgeResult: BridgeResultEnvelope<unknown>,
 ): PrimitivePortResult {
+  const timings = bridgeResult.timings;
+  const buildEvidence = (base: Record<string, unknown> | undefined): Record<string, unknown> => ({
+    ...(base ?? {}),
+    id: bridgeResult.id,
+    ...(timings ? { timings } : {}),
+  });
+
   if (bridgeResult.status === "timeout") {
     return {
       ok: false,
       error: `Timeout esperando resultado del bridge`,
       code: "BRIDGE_TIMEOUT",
       warnings: [],
-      evidence: { status: bridgeResult.status, id: bridgeResult.id },
+      evidence: buildEvidence({ status: bridgeResult.status }),
     };
   }
 
@@ -188,7 +201,7 @@ function mapBridgeResultToPrimitiveResult(
       error: errorDetail?.message ?? "Comando falló en el bridge",
       code: errorDetail?.code ?? "BRIDGE_FAILURE",
       warnings: [],
-      evidence: { status: bridgeResult.status, id: bridgeResult.id },
+      evidence: buildEvidence({ status: bridgeResult.status }),
     };
   }
 
@@ -198,7 +211,7 @@ function mapBridgeResultToPrimitiveResult(
       error: bridgeResult.error?.message ?? "Comando devolvió ok=false sin error",
       code: bridgeResult.error?.code ?? "COMMAND_FAILED",
       warnings: [],
-      evidence: { status: bridgeResult.status, id: bridgeResult.id },
+      evidence: buildEvidence({ status: bridgeResult.status }),
     };
   }
 
@@ -211,7 +224,7 @@ function mapBridgeResultToPrimitiveResult(
     ok: true,
     value: value?.value ?? bridgeResult.value,
     warnings: warnings ?? [],
-    evidence: evidence ?? { id: bridgeResult.id },
+    evidence: buildEvidence(evidence),
     confidence: confidence ?? 1,
   };
 }
