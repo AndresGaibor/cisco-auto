@@ -191,7 +191,7 @@ export class RuntimeOmniAdapter {
       return createInvalidPayloadError("Payload debe contener 'code' (string)");
     }
 
-    return executeAndParse(this.bridge, "__evaluate", buildEvaluatePayload(payload), timeoutMs);
+    return executeAndParse(this.bridge, "omni.evaluate.raw", buildEvaluatePayload(payload), timeoutMs);
   }
 
   private async executeDeviceGenoma(
@@ -272,7 +272,7 @@ export class RuntimeOmniAdapter {
     }
 
     const res = await this.bridge.sendCommandAndWait<{ result?: unknown }>(
-      "__evaluate",
+      "omni.evaluate.raw",
       { code },
       timeoutMs
     );
@@ -286,7 +286,7 @@ export class RuntimeOmniAdapter {
   ): Promise<OmniPortResult> {
     const code = buildProcessInspectCode(payload as ProcessInspectPayload);
     const res = await this.bridge.sendCommandAndWait<{ result?: unknown }>(
-      "__evaluate",
+      "omni.evaluate.raw",
       { code },
       timeoutMs
     );
@@ -309,7 +309,7 @@ export class RuntimeOmniAdapter {
   ): Promise<OmniPortResult> {
     const code = buildEnvironmentInspectCode(payload as EnvironmentInspectPayload);
     const res = await this.bridge.sendCommandAndWait<{ result?: unknown }>(
-      "__evaluate",
+      "omni.evaluate.raw",
       { code },
       timeoutMs
     );
@@ -332,7 +332,7 @@ export class RuntimeOmniAdapter {
   ): Promise<OmniPortResult> {
     const code = buildGlobalScopeInspectCode(payload as GlobalScopeInspectPayload);
     const res = await this.bridge.sendCommandAndWait<{ result?: unknown }>(
-      "__evaluate",
+      "omni.evaluate.raw",
       { code },
       timeoutMs
     );

@@ -156,7 +156,7 @@ export async function executeAndParse<T>(
 }
 
 /**
- * Ejecuta código arbitrario via __evaluate y parsea respuesta.
+ * Ejecuta código arbitrario via omni.evaluate.raw y parsea respuesta.
  * @param bridge - Puerto del bridge
  * @param code - Código JavaScript a ejecutar
  * @param timeoutMs - Timeout en milisegundos
@@ -168,7 +168,7 @@ export async function executeCodeAndParse(
   timeoutMs: number
 ): Promise<OmniPortResult> {
   const res = await bridge.sendCommandAndWait<{ result?: unknown }>(
-    "__evaluate",
+    "omni.evaluate.raw",
     { code },
     timeoutMs
   );
@@ -190,7 +190,7 @@ export async function executeCodeWithEvidence(
   timeoutMs: number
 ): Promise<OmniPortResult> {
   const res = await bridge.sendCommandAndWait<{ result?: unknown }>(
-    "__evaluate",
+    "omni.evaluate.raw",
     { code },
     timeoutMs
   );
@@ -212,7 +212,7 @@ export async function executeAndParseJson(
   timeoutMs: number
 ): Promise<OmniPortResult> {
   const res = await bridge.sendCommandAndWait<{ result?: unknown }>(
-    "__evaluate",
+    "omni.evaluate.raw",
     { code },
     timeoutMs
   );

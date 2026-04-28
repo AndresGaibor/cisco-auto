@@ -131,6 +131,102 @@ describe("CommandStateMachine", () => {
 
       expect(setIntervalMock).toHaveBeenCalledTimes(1);
     });
+
+    test("mantiene pagerActive mientras el pager siga visible en el snapshot", () => {
+      const terminal = createMockTerminal({
+        getPrompt: () => "Router#",
+        enterChar: vi.fn(),
+      });
+      const session = createMockSession();
+      const events: TerminalEventRecord[] = [];
+      const snapshot = { raw: "show version\n--More--", source: "poll" };
+
+      const sm = new CommandStateMachine({
+        deviceName: "Router1",
+        command: "show version",
+        terminal,
+        options: { autoAdvancePager: true },
+        session,
+        events,
+        warnings: [],
+        sessionKind: "ios",
+        promptBefore: "Router#",
+        modeBefore: "privileged-exec",
+        baselineSnapshot: snapshot,
+        baselineOutput: snapshot.raw,
+        readTerminalSnapshotFn: vi.fn(() => snapshot) as any,
+        getPromptSafeFn: vi.fn(() => "Router#") as any,
+        getModeSafeFn: vi.fn(() => "privileged-exec") as any,
+        setInterval: vi.fn(() => 1 as any) as any,
+        clearInterval: vi.fn() as any,
+      } as any);
+
+      (sm as any).startOutputPolling();
+
+      expect(terminal.enterChar).toHaveBeenCalledWith(32, 0);
+      expect(session.pagerActive).toBe(true);
+    });
+  });
+
+  describe("wakeTerminalIfNeeded", () => {
+    test("despierta el terminal cuando el modo guardado es logout", () => {
+      const terminal = createMockTerminal({
+        getPrompt: () => "Router#",
+        getMode: () => "logout",
+        enterChar: vi.fn(),
+      } as any);
+      const session = createMockSession();
+      session.lastMode = "logout" as any;
+
+      const sm = new CommandStateMachine({
+        deviceName: "Router1",
+        command: "show version",
+        terminal,
+        options: {},
+        session,
+        events: [],
+        warnings: [],
+        sessionKind: "ios",
+        promptBefore: "Router#",
+        modeBefore: "privileged-exec",
+        baselineSnapshot: { raw: "", source: "test" },
+        baselineOutput: "",
+      } as any);
+
+      (sm as any).wakeTerminalIfNeeded();
+
+      expect(terminal.enterChar).toHaveBeenCalledWith(13, 0);
+    });
+  });
+
+  describe("clearing input", () => {
+    test("limpia input compuesto solo por espacios antes de enviar el comando", () => {
+      const terminal = createMockTerminal({
+        getCommandInput: () => "   ",
+        enterChar: vi.fn(),
+      });
+      const session = createMockSession();
+
+      const sm = new CommandStateMachine({
+        deviceName: "Router1",
+        command: "show version",
+        terminal,
+        options: {},
+        session,
+        events: [],
+        warnings: [],
+        sessionKind: "ios",
+        promptBefore: "Router#",
+        modeBefore: "privileged-exec",
+        baselineSnapshot: { raw: "", source: "test" },
+        baselineOutput: "",
+      } as any);
+
+      const result = (sm as any).clearWhitespaceOnlyInput();
+
+      expect(result).toBe(true);
+      expect(terminal.enterChar).toHaveBeenCalledWith(21, 0);
+    });
   });
 
   describe("sendPagerAdvance", () => {

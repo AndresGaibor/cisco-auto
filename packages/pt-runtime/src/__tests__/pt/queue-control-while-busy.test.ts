@@ -53,7 +53,14 @@ describe("pollCommandQueue control commands while busy", () => {
     pollCommandQueue(subsystems as any, state as any);
 
     expect(queue.poll).not.toHaveBeenCalled();
-    expect(queue.pollAllowedTypes).toHaveBeenCalledWith(["__pollDeferred", "__ping"]);
+    expect(queue.pollAllowedTypes).toHaveBeenCalledWith([
+      "__pollDeferred",
+      "__ping",
+      "inspectDeviceFast",
+      "readTerminal",
+      "omni.evaluate.raw",
+      "__evaluate",
+    ]);
     expect((state.activeCommand as any)?.type).toBe("__pollDeferred");
   });
 });

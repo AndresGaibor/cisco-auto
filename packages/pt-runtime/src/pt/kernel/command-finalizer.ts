@@ -7,6 +7,35 @@ import type { KernelSubsystems } from "./kernel-lifecycle";
 import type { KernelState } from "./kernel-state";
 import { buildCommandResultEnvelope } from "./command-result-envelope";
 
+function verifyResultFile(resPath: string, expectedEnvelope: ResultEnvelope & { type: string }): boolean {
+  const fm = safeFM().fm;
+
+  if (!fm) return false;
+
+  try {
+    if (typeof fm.fileExists === "function" && !fm.fileExists(resPath)) {
+      return false;
+    }
+
+    if (typeof fm.getFileSize === "function" && fm.getFileSize(resPath) <= 0) {
+      return false;
+    }
+
+    const contents = String(fm.getFileContents(resPath) ?? "").trim();
+    if (!contents) return false;
+
+    const parsed = JSON.parse(contents) as Record<string, unknown>;
+
+    return (
+      parsed.protocolVersion === expectedEnvelope.protocolVersion &&
+      String(parsed.id ?? "") === expectedEnvelope.id &&
+      String(parsed.type ?? "") === expectedEnvelope.type
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function finishActiveCommand(
   subsystems: KernelSubsystems,
   state: KernelState,
@@ -28,6 +57,11 @@ export function finishActiveCommand(
     if (fm) {
       subsystems.kernelLogSubsystem("fm", "Writing result to " + resPath);
       fm.writePlainTextToFile(resPath, JSON.stringify(envelope));
+      if (!verifyResultFile(resPath, envelope)) {
+        subsystems.kernelLog("Result file verification failed for " + resPath, "error");
+        return;
+      }
+
       subsystems.kernelLogSubsystem("fm", "Result written OK");
       if (state.activeCommandFilename) {
         subsystems.kernelLogSubsystem("queue", "Cleaning up " + state.activeCommandFilename);

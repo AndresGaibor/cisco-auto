@@ -9,6 +9,11 @@ import type { TerminalEventRecord } from "../../pt/terminal/terminal-events";
 import type { TerminalErrorCode } from "../terminal-errors";
 import type { CommandEndedPayload } from "../../pt/terminal/terminal-events";
 
+function isEnableOrEndCommand(command: string): boolean {
+  const cmd = command.trim().toLowerCase();
+  return cmd === "enable" || cmd === "end" || cmd === "exit";
+}
+
 import {
   detectConfirmPrompt,
   detectPager,
@@ -41,7 +46,7 @@ import {
   computeConfidenceString,
   shouldFinalizeCommand,
 } from "./index.js";
-import { detectWizardFromOutput, sleep, terminalOutputHasPager } from "../terminal-utils";
+import { detectWizardFromOutput, sleep } from "../terminal-utils";
 import { TerminalErrors } from "../terminal-errors";
 import type { PTCommandLine, ExecutionOptions, CommandExecutionResult } from "../command-executor";
 import type { TerminalSessionState } from "../session-state";
@@ -108,9 +113,9 @@ function defaultSendPagerAdvance(
 
   setTimeout(() => {
     try {
-      if (!terminalOutputHasPager(terminal)) return;
+      if (!terminalSnapshotTailHasActivePager(terminal)) return;
 
-      terminal.enterCommand?.(" ");
+      terminal.enterChar?.(32, 0);
 
       pushEvent(
         events,
@@ -118,7 +123,7 @@ function defaultSendPagerAdvance(
         deviceName,
         "pagerAdvanceFallback",
         "SPACE",
-        `Fallback SPACE command sent to pager from ${source}`,
+        `Fallback SPACE char sent to active pager from ${source}`,
       );
     } catch {
       pushEvent(
@@ -127,12 +132,35 @@ function defaultSendPagerAdvance(
         deviceName,
         "pagerAdvanceFallbackFailed",
         "SPACE",
-        `Fallback SPACE command failed from ${source}`,
+        `Fallback SPACE char failed from ${source}`,
       );
     }
   }, 150);
 
   return sent;
+}
+
+function terminalSnapshotTailHasActivePager(terminal: PTCommandLine): boolean {
+  try {
+    const snapshot = readTerminalSnapshot(terminal);
+    const tail = String(snapshot.raw || "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .slice(-800);
+
+    if (!tail.trim()) {
+      return false;
+    }
+
+    return (
+      /--More--\s*$/i.test(tail) ||
+      /\s--More--\s*$/i.test(tail) ||
+      /More:\s*$/i.test(tail) ||
+      /Press any key to continue\s*$/i.test(tail)
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -230,6 +258,65 @@ export class CommandStateMachine {
     this.onMoreDisplayedHandler = this.onMoreDisplayed.bind(this);
   }
 
+  private debug(message: string): void {
+    try {
+      dprint(
+        "[cmd-sm] device=" +
+          this.config.deviceName +
+          " command=" +
+          JSON.stringify(this.config.command) +
+          " " +
+          message,
+      );
+    } catch {}
+  }
+
+  private wakeTerminalIfNeeded(): void {
+    const terminal = this.config.terminal;
+
+    try {
+      const prompt = this.config.getPromptSafeFn(terminal);
+      let mode = "";
+
+      try {
+        if (typeof (terminal as any).getMode === "function") {
+          mode = String((terminal as any).getMode() || "");
+        }
+      } catch {}
+
+      const needsWake =
+        !prompt ||
+        mode.toLowerCase() === "logout" ||
+        String(this.config.session.lastMode || "") === "logout" ||
+        this.config.session.lastMode === "unknown";
+
+      if (!needsWake) return;
+
+      this.debug(
+        "wake begin prompt=" +
+          JSON.stringify(prompt) +
+          " mode=" +
+          JSON.stringify(mode) +
+          " sessionMode=" +
+          JSON.stringify(this.config.session.lastMode),
+      );
+
+      try {
+        terminal.enterChar(13, 0);
+      } catch {
+        try {
+          terminal.enterCommand("");
+        } catch {}
+      }
+
+      this.lastOutputAt = this.config.now();
+      this.config.session.lastActivityAt = this.config.now();
+      this.debug("wake sent enter");
+    } catch (error) {
+      this.debug("wake failed error=" + String(error));
+    }
+  }
+
   /**
    * Ejecuta el comando y retorna el resultado.
    */
@@ -249,7 +336,19 @@ export class CommandStateMachine {
       this.config.warnings.push("Terminal not ready after retries: " + readyResult.prompt);
     }
 
+    this.debug(
+      "run start promptBefore=" +
+        JSON.stringify(this.config.promptBefore) +
+        " modeBefore=" +
+        JSON.stringify(this.config.modeBefore) +
+        " timeoutMs=" +
+        commandTimeoutMs +
+        " stallMs=" +
+        stallTimeoutMs,
+    );
+
     this.setupHandlers();
+    this.debug("handlers setup complete");
 
     // Start output polling fallback
     this.startOutputPolling();
@@ -274,21 +373,28 @@ export class CommandStateMachine {
     }, 2000);
 
     // Send the command
-    try {
-      if (sessionKind === "ios") {
-        try { terminal.enterChar(13, 0); } catch (e) {}
+    this.wakeTerminalIfNeeded();
+
+    sleep(250).then(() => {
+      if (this.settled) return;
+
+      try {
+        this.clearWhitespaceOnlyInput();
+        this.debug("enterCommand begin");
+        terminal.enterCommand(this.config.command);
+        this.startedSeen = true;
+        this.resetStallTimer();
+        this.debug("enterCommand sent");
+
+        sleep(100).then(() => {
+          if (!this.settled) {
+            this.scheduleFinalizeAfterCommandEnd();
+          }
+        });
+      } catch (e) {
+        this.finalizeFailure(TerminalErrors.UNKNOWN_STATE, "Failed to send command: " + String(e));
       }
-
-      terminal.enterCommand(this.config.command);
-
-      sleep(100).then(() => {
-        if (!this.settled && this.startedSeen) {
-          this.scheduleFinalizeAfterCommandEnd();
-        }
-      });
-    } catch (e) {
-      this.finalizeFailure(TerminalErrors.UNKNOWN_STATE, "Failed to send command: " + String(e));
-    }
+    });
 
     // Return promise that resolves when settled
     return new Promise((resolve) => {
@@ -450,15 +556,58 @@ export class CommandStateMachine {
     const poll = (): void => {
       if (this.settled) return;
       const currentRaw = this.config.readTerminalSnapshotFn!(this.config.terminal);
+      const rawTail = String(currentRaw.raw || "")
+        .replace(/\r\n/g, "\n")
+        .replace(/\r/g, "\n")
+        .slice(-800);
+      const pagerVisible =
+        /--More--\s*$/i.test(rawTail) ||
+        /\s--More--\s*$/i.test(rawTail) ||
+        /More:\s*$/i.test(rawTail) ||
+        /Press RETURN to get started\s*$/i.test(rawTail) ||
+        /Press any key to continue\s*$/i.test(rawTail);
+
+      if (pagerVisible) {
+        this.config.session.pagerActive = true;
+        this.debug("poll pager visible tail=" + JSON.stringify(rawTail.slice(-120)));
+
+        if (this.config.options.autoAdvancePager !== false) {
+          try {
+            this.config.terminal.enterChar(32, 0);
+            this.debug("poll pager advanced with space");
+            this.config.session.pagerActive = true;
+            this.lastOutputAt = this.config.now();
+            this.config.session.lastActivityAt = this.config.now();
+          } catch (error) {
+            this.debug("poll pager advance failed error=" + String(error));
+          }
+        }
+      }
 
       // Handle buffer reset/rotation
       if (currentRaw.raw.length < this.lastTerminalSnapshot.raw.length) {
         this.lastTerminalSnapshot = { raw: "", source: "reset" };
       }
 
+      try {
+        const prompt = this.config.getPromptSafeFn(this.config.terminal);
+        if (prompt && prompt !== this.previousPrompt) {
+          this.previousPrompt = prompt;
+          this.promptStableSince = this.config.now();
+
+          const mode = detectModeFromPrompt(normalizePrompt(prompt));
+          this.config.session.lastPrompt = normalizePrompt(prompt);
+          this.config.session.lastMode = mode;
+
+          this.debug("poll prompt=" + JSON.stringify(prompt) + " mode=" + mode);
+          this.scheduleFinalizeAfterCommandEnd();
+        }
+      } catch {}
+
       if (currentRaw.raw.length > this.lastTerminalSnapshot.raw.length) {
         const delta = currentRaw.raw.substring(this.lastTerminalSnapshot.raw.length);
         this.lastTerminalSnapshot = currentRaw;
+        this.debug("poll output deltaLen=" + delta.length);
         this.onOutput(null, { chunk: delta, newOutput: delta });
       }
     };
@@ -489,6 +638,44 @@ export class CommandStateMachine {
     }
     this.lastPagerAdvanceAt = now;
     return true;
+  }
+
+  private getCommandInputSafe(): string {
+    try {
+      if (typeof this.config.terminal.getCommandInput === "function") {
+        return String(this.config.terminal.getCommandInput() ?? "");
+      }
+    } catch {}
+
+    return "";
+  }
+
+  private clearWhitespaceOnlyInput(): boolean {
+    const input = this.getCommandInputSafe();
+
+    if (input.length === 0) return false;
+    if (input.replace(/\s+/g, "") !== "") return false;
+
+    try {
+      this.config.terminal.enterChar?.(21, 0);
+    } catch {}
+
+    for (let i = 0; i < Math.min(input.length + 8, 32); i += 1) {
+      try {
+        this.config.terminal.enterChar?.(8, 0);
+      } catch {}
+    }
+
+    this.debug("cleared whitespace-only input before command len=" + input.length);
+    return true;
+  }
+
+  private snapshotTailHasActivePager(): boolean {
+    try {
+      return terminalSnapshotTailHasActivePager(this.config.terminal);
+    } catch {
+      return false;
+    }
   }
 
   private resetStallTimer(): void {
@@ -640,7 +827,7 @@ export class CommandStateMachine {
             return;
           }
 
-          this.config.session.pagerActive = false;
+          this.config.session.pagerActive = true;
           this.resetStallTimer();
         }, 50);
       }
@@ -726,7 +913,7 @@ export class CommandStateMachine {
           return;
         }
 
-        this.config.session.pagerActive = false;
+        this.config.session.pagerActive = true;
         this.resetStallTimer();
       }, 50);
     }
@@ -744,7 +931,58 @@ export class CommandStateMachine {
       }
     }
 
+    if (this.snapshotTailHasActivePager()) {
+      this.config.session.pagerActive = true;
+
+      if (this.config.options.autoAdvancePager !== false && this.canAdvancePagerNow()) {
+        const sent = this.sendPagerAdvance(
+          this.config.terminal,
+          this.config.events,
+          this.config.session.sessionId,
+          this.config.deviceName,
+          "finalizeGuard",
+        );
+
+        this.debug("finalize blocked by active pager sent=" + String(sent));
+        this.lastOutputAt = this.config.now();
+        this.resetStallTimer();
+      }
+
+      return;
+    }
+
+    if (this.config.session.pagerActive) {
+      this.config.session.pagerActive = false;
+      this.debug("pager cleared by snapshot tail");
+    }
+
     const currentPrompt = this.config.getPromptSafeFn(this.config.terminal);
+
+    const snapshot = this.config.readTerminalSnapshotFn!(this.config.terminal);
+    const diff = diffSnapshotStrict(this.config.baselineOutput, snapshot.raw);
+    const snapshotDelta = String(diff.delta || "");
+    const hasAnyOutput = this.outputBuffer.trim().length > 0 || snapshotDelta.trim().length > 0;
+    const promptLooksReady = /^[A-Za-z0-9._-]+(?:\(config[^)]*\))?[>#]\s*$/.test(String(currentPrompt || "").trim());
+    const quietLongEnough = this.config.now() - this.lastOutputAt >= 700;
+
+    if (
+      this.startedSeen &&
+      promptLooksReady &&
+      quietLongEnough &&
+      !this.config.session.pagerActive &&
+      !this.config.session.confirmPromptActive
+    ) {
+      if (hasAnyOutput || this.config.options.allowEmptyOutput === true || isEnableOrEndCommand(this.config.command)) {
+        this.debug(
+          "finalize by prompt-ready fallback prompt=" +
+            JSON.stringify(currentPrompt) +
+            " hasAnyOutput=" +
+            hasAnyOutput,
+        );
+        this.finalize(true, this.endedStatus, "prompt-ready-fallback");
+        return;
+      }
+    }
 
     const verdict = shouldFinalizeCommand({
       state: {
@@ -778,6 +1016,23 @@ export class CommandStateMachine {
   private finalize(cmdOk: boolean, status: number | null, error?: string, code?: TerminalErrorCode): void {
     if (this.settled) return;
 
+    this.debug(
+      "finalize ok=" +
+        cmdOk +
+        " status=" +
+        status +
+        " error=" +
+        JSON.stringify(error || "") +
+        " code=" +
+        JSON.stringify(code || "") +
+        " outputLen=" +
+        this.outputBuffer.length +
+        " startedSeen=" +
+        this.startedSeen +
+        " endedSeen=" +
+        this.commandEndedSeen,
+    );
+
     this.finalizedOk = cmdOk;
     if (status !== null) this.endedStatus = status;
     this.finalizedError = error;
@@ -789,6 +1044,17 @@ export class CommandStateMachine {
   }
 
   private finalizeFailure(code: TerminalErrorCode, message: string): void {
+    this.debug(
+      "finalizeFailure code=" +
+        String(code) +
+        " message=" +
+        JSON.stringify(message) +
+        " outputLen=" +
+        this.outputBuffer.length,
+    );
+
+    this.finalize(false, 1, message, code);
+
     const recoverable =
       code === TerminalErrors.COMMAND_START_TIMEOUT ||
       code === TerminalErrors.COMMAND_END_TIMEOUT ||
@@ -797,17 +1063,17 @@ export class CommandStateMachine {
       message.includes("No output received");
 
     if (recoverable && this.config.terminal) {
-      try {
-        const recovery = this.config.recoverTerminalSyncFn!(
-          this.config.terminal,
-          this.config.sessionKind === "host" ? "host" : "ios"
-        );
-        this.config.warnings.push(
-          `Recovery attempted: ${recovery.actions.join(", ")}; prompt=${recovery.prompt}; mode=${recovery.mode}`,
-        );
-      } catch {}
+      this.config.setTimeout!(() => {
+        try {
+          const recovery = this.config.recoverTerminalSyncFn!(
+            this.config.terminal,
+            this.config.sessionKind === "host" ? "host" : "ios"
+          );
+          this.config.warnings.push(
+            `Recovery attempted: ${recovery.actions.join(", ")}; prompt=${recovery.prompt}; mode=${recovery.mode}`,
+          );
+        } catch {}
+      }, 0);
     }
-
-    this.finalize(false, 1, message, code);
   }
 }

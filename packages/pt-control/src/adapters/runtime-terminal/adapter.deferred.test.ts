@@ -56,9 +56,9 @@ describe("createRuntimeTerminalAdapter deferred flow", () => {
 
     expect(result.ok).toBe(true);
     expect(calls.map((call) => call.type)).toEqual(["terminal.plan.run", "__pollDeferred"]);
-    expect(calls[0]?.timeoutMs).toBeLessThanOrEqual(5000);
+    expect(calls[0]?.timeoutMs).toBe(30000);
     expect(calls[0]?.options).toMatchObject({ resolveDeferred: false });
-    expect(calls[1]?.timeoutMs).toBe(45000);
+    expect(calls[1]?.timeoutMs).toBe(63000);
   });
 
   test("sigue consultando hasta que el job diferido termine", async () => {

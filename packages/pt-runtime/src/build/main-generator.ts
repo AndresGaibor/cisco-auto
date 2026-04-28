@@ -447,7 +447,7 @@ function cleanUp() {
 //   catalog.js = static PT constants (loaded once at boot)
 //   runtime.js = all handlers + dispatcher (hot-reloaded by kernel)
 //
-// NOTE: globalThis is NOT available in PT QTScript — uses self/this instead.
+// NOTE: this is NOT available in PT QTScript — uses self/this instead.
 `;
 
   const fullCode = header + kernelIife + fileLoader + entryPoints;

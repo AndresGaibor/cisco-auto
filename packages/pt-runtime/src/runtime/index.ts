@@ -57,16 +57,16 @@ function initializeRuntime(api: RuntimeApi): void {
       try {
         if (api.dprint) {
           api.dprint(JSON.stringify(entry));
-        } else {
-          var fallbackMsg = "[LOG FALLBACK] " + JSON.stringify(entry);
-          if (
-            typeof globalThis !== "undefined" &&
-            (globalThis as any).ipc &&
-            (globalThis as any).ipc.appWindow &&
-            (globalThis as any).ipc.appWindow().writeToPT
-          ) {
-            (globalThis as any).ipc.appWindow().writeToPT(fallbackMsg + "\n");
-          } else if (typeof print === "function") {
+            } else {
+              var fallbackMsg = "[LOG FALLBACK] " + JSON.stringify(entry);
+              if (
+                typeof self !== "undefined" &&
+                (self as any).ipc &&
+                (self as any).ipc.appWindow &&
+                (self as any).ipc.appWindow().writeToPT
+              ) {
+                (self as any).ipc.appWindow().writeToPT(fallbackMsg + "\n");
+            } else if (typeof print === "function") {
             print(fallbackMsg);
           } else {
             console.error(fallbackMsg);
@@ -249,7 +249,7 @@ declare var self: any;
 var _global =
   typeof self !== "undefined"
     ? self
-    : typeof this !== "undefined"
+          : typeof self !== "undefined"
       ? this
       : Function("return this")();
 (_global as any).runtime = runtime;

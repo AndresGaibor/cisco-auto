@@ -46,6 +46,9 @@ export function createKernelLifecycle(
 
   function safePollTick(): void {
     try {
+      if (executionEngine && typeof executionEngine.reapStaleJobs === "function") {
+        executionEngine.reapStaleJobs();
+      }
       pollCommandQueue(subsystems, state);
     } catch (e) {
       kernelLog("FATAL POLL ERROR: " + String(e), "error");

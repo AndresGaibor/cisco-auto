@@ -49,7 +49,7 @@ const PATTERNS_NODE_GLOBAL: Array<{
   { regex: /__dirname/, mensaje: '__dirname no esta disponible en Packet Tracer', pattern: '__dirname' },
   { regex: /__filename/, mensaje: '__filename no esta disponible en Packet Tracer', pattern: '__filename' },
   { regex: /\bglobal\s*\./, mensaje: 'global no esta disponible en Packet Tracer', pattern: 'global' },
-  { regex: /\bglobalThis\b/, mensaje: 'globalThis no disponible en Packet Tracer', pattern: 'globalThis' },
+  { regex: /\bthis\b/, mensaje: 'this no disponible en Packet Tracer', pattern: 'this' },
 ];
 
 const PATTERNS_FORBIDDEN_API: Array<{

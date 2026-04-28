@@ -10,12 +10,13 @@ import {
   updatePrompt,
   setPaging,
 } from "./terminal-session";
-import { parsePrompt, type IosMode } from "./prompt-parser";
+import type { IosMode } from "./prompt-parser";
 import {
   createCommandExecutor,
   type ExecutionOptions as ExecuteOptions,
   type CommandExecutionResult,
 } from "../../terminal/command-executor";
+import { getPromptSafe } from "../../terminal/terminal-ready";
 
 export interface TerminalEngineConfig {
   commandTimeoutMs: number;
@@ -32,6 +33,22 @@ export interface TerminalResult {
 }
 
 export type { ExecuteOptions };
+
+function normalizePacketTracerMode(mode: unknown, prompt: string): string {
+  const raw = String(mode ?? "").trim().toLowerCase();
+  const p = String(prompt ?? "").trim();
+
+  if (/\(config[^)]*\)#\s*$/.test(p)) return "global-config";
+  if (/#\s*$/.test(p)) return "privileged-exec";
+  if (/>$/.test(p)) return "user-exec";
+
+  if (raw === "user") return "user-exec";
+  if (raw === "enable" || raw === "privileged" || raw === "privileged-exec") return "privileged-exec";
+  if (raw === "config" || raw === "global-config") return "global-config";
+  if (raw === "logout") return "logout";
+
+  return raw || "unknown";
+}
 
 interface PTCommandLine {
   getPrompt(): string;
@@ -64,13 +81,21 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
     terminals[device] = term;
     sessions[device] = createTerminalSession(device);
 
+    try {
+      const prompt = getPromptSafe(term);
+      const rawMode = typeof (term as any).getMode === "function" ? (term as any).getMode() : "";
+      let updated = updatePrompt(sessions[device], prompt);
+      updated = updateMode(updated, normalizePacketTracerMode(rawMode, prompt));
+      sessions[device] = updated;
+    } catch {}
+
     term.registerEvent("promptChanged", null, (_src, args) => {
       const current = sessions[device];
       if (!current) return;
       const prompt = (args as { prompt?: string })?.prompt || "";
-      const parsed = parsePrompt(prompt);
-      let updated = updatePrompt(current, parsed.hostname);
-      updated = updateMode(updated, parsed.mode);
+      const rawMode = typeof (term as any).getMode === "function" ? (term as any).getMode() : "";
+      let updated = updatePrompt(current, prompt);
+      updated = updateMode(updated, normalizePacketTracerMode(rawMode, prompt));
       sessions[device] = updated;
     });
 
@@ -86,7 +111,7 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
       if (!current) return;
       const newMode = (args as { newMode?: string })?.newMode || "";
       if (newMode) {
-        sessions[device] = updateMode(current, newMode);
+        sessions[device] = updateMode(current, normalizePacketTracerMode(newMode, current.prompt));
       }
     });
 
@@ -95,9 +120,7 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
       if (!current) return;
       const inputMode = (args as { inputMode?: string })?.inputMode || "";
       if (inputMode && typeof inputMode === "string") {
-        const validModes = ["user-exec", "privileged-exec", "config", "config-if", "config-line", "config-router", "config-subif", "config-vlan", "unknown"] as const;
-        const normalizedMode = validModes.includes(inputMode as typeof validModes[number]) ? inputMode : "unknown";
-        sessions[device] = updateMode(current, normalizedMode);
+        sessions[device] = updateMode(current, normalizePacketTracerMode(inputMode, current.prompt));
       }
     });
     try {

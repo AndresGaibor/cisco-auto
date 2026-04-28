@@ -33,7 +33,7 @@ export const RUNTIME_MANIFEST = {
     "runtime/constants.ts",
     "runtime/types.ts",
     "runtime/helpers.ts",
-    // NOTE: runtime/index.ts excluded — only TS re-exports + has globalThis reference
+    // NOTE: runtime/index.ts excluded — only TS re-exports + has this reference
   ],
 
   domain: [
@@ -107,6 +107,7 @@ export const RUNTIME_MANIFEST = {
     "handlers/host-handler.ts",
     "handlers/terminal-plan-run.ts",
     "handlers/poll-deferred.ts",
+    "handlers/terminal-native-exec.ts",
     "handlers/ios/index.ts",
     "handlers/ios-execution.ts",
     "handlers/ios-plan-builder.ts",

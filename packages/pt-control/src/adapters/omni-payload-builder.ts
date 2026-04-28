@@ -2,7 +2,7 @@
 // Omni Payload Builder - Construcción de payloads para cada capability
 // ============================================================================
 // Extrae la lógica de construir payloads (código JavaScript) para ejecutar en el runtime PT.
-// Cada función recibe un payload tipado y retorna el código a inyectar via __evaluate.
+// Cada función recibe un payload tipado y retorna el código a inyectar via omni.evaluate.raw.
 
 // Tipos del dominio
 import type { OmniDomain, OmniRisk } from "../ports/runtime-omni-port.js";

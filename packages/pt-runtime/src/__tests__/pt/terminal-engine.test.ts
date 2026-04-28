@@ -35,7 +35,24 @@ describe("createTerminalEngine", () => {
 
   test("getMode returns current mode", () => {
     engine.attach("R1", mockTerm);
-    expect(engine.getMode("R1")).toBe("unknown");
+    expect(engine.getMode("R1") as any).toBe("privileged-exec");
+  });
+
+  test("normaliza el modo desde el prompt de PT", () => {
+    mockTerm = {
+      getPrompt: vi.fn(() => "Router(config)#"),
+      getMode: vi.fn(() => "enable"),
+      enterCommand: vi.fn(),
+      registerEvent: vi.fn(),
+      unregisterEvent: vi.fn(),
+      enterChar: vi.fn(),
+    } as any;
+
+    engine.attach("R1", mockTerm);
+
+    const session = engine.getSession("R1");
+    expect(session?.mode).toBe("global-config");
+    expect(engine.getMode("R1") as any).toBe("global-config");
   });
 
   test("isBusy returns false when idle", () => {

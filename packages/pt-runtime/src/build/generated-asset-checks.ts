@@ -71,9 +71,9 @@ const FORBIDDEN_PATTERNS_RUNTIME = [
     severity: "error" as const,
   },
   {
-    pattern: /\bglobalThis\b/,
+    pattern: /\bthis\b/,
     check: "no-global-this",
-    message: "globalThis is not available in PT QTScript engine",
+    message: "this is not available in PT QTScript engine",
     severity: "error" as const,
   },
 ];

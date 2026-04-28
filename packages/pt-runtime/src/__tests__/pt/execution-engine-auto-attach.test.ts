@@ -69,7 +69,7 @@ describe("ExecutionEngine auto attach", () => {
       getMode: vi.fn(),
       isBusy: vi.fn(() => false),
       isAnyBusy: vi.fn(() => false),
-      executeCommand: vi.fn(),
+      executeCommand: vi.fn().mockReturnValue(new Promise(() => {})),
       continuePager: vi.fn(),
       confirmPrompt: vi.fn(),
     } as any;
@@ -209,6 +209,189 @@ describe("ExecutionEngine auto attach", () => {
         expect.objectContaining({ commandTimeoutMs: 8000 }),
       );
       expect(job.context.phase).not.toBe("error");
+    } finally {
+      (globalThis as any).ipc = previousIpc;
+      (globalThis as any).dprint = previousDprint;
+    }
+  });
+
+  test("startJob habilita pager en comandos normales", async () => {
+    const terminal = {
+      attach: vi.fn(),
+      detach: vi.fn(),
+      getSession: vi.fn(),
+      getMode: vi.fn(),
+      isBusy: vi.fn(() => false),
+      isAnyBusy: vi.fn(() => false),
+      executeCommand: vi.fn().mockResolvedValue({
+        ok: true,
+        output: "show version\n",
+        status: 0,
+        session: { mode: "privileged-exec", prompt: "R1#", paging: false, awaitingConfirm: false },
+        mode: "privileged-exec",
+      }),
+      continuePager: vi.fn(),
+      confirmPrompt: vi.fn(),
+    } as any;
+
+    const previousIpc = (globalThis as any).ipc;
+    const previousDprint = (globalThis as any).dprint;
+
+    (globalThis as any).ipc = {
+      network: () => ({
+        getDevice: () => ({
+          getCommandLine: () => ({
+            registerEvent: vi.fn(),
+            unregisterEvent: vi.fn(),
+            enterCommand: vi.fn(),
+            enterChar: vi.fn(),
+          }),
+        }),
+      }),
+    };
+    (globalThis as any).dprint = vi.fn();
+
+    try {
+      const engine = createExecutionEngine(terminal);
+      const plan = createDeferredJobPlan("R1", [commandStep("show version")]);
+
+      engine.startJob(plan);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(terminal.executeCommand).toHaveBeenCalledWith(
+        "R1",
+        "show version",
+        expect.objectContaining({
+          allowPager: true,
+          autoAdvancePager: true,
+          maxPagerAdvances: 25,
+        }),
+      );
+    } finally {
+      (globalThis as any).ipc = previousIpc;
+      (globalThis as any).dprint = previousDprint;
+    }
+  });
+
+  test("reapStaleJobs rescata un comando atascado desde el terminal nativo", async () => {
+    const nativeTerminal = {
+      registerEvent: vi.fn(),
+      unregisterEvent: vi.fn(),
+      enterCommand: vi.fn(),
+      enterChar: vi.fn(),
+      getCommandInput: vi.fn(() => " "),
+      getAllOutput: vi.fn(() => "show version\nCisco IOS Software\nRouter#"),
+      getPrompt: vi.fn(() => "Router#"),
+      getMode: vi.fn(() => "enable"),
+    } as any;
+
+    const terminal = {
+      attach: vi.fn(),
+      detach: vi.fn(),
+      getSession: vi.fn(),
+      getMode: vi.fn(),
+      isBusy: vi.fn(() => false),
+      isAnyBusy: vi.fn(() => false),
+      executeCommand: vi.fn().mockReturnValue(new Promise(() => {})),
+      continuePager: vi.fn(),
+      confirmPrompt: vi.fn(),
+    } as any;
+
+    const previousIpc = (globalThis as any).ipc;
+    const previousDprint = (globalThis as any).dprint;
+
+    (globalThis as any).ipc = {
+      network: () => ({
+        getDevice: () => ({
+          getCommandLine: () => nativeTerminal,
+        }),
+      }),
+    };
+    (globalThis as any).dprint = vi.fn();
+
+    try {
+      const engine = createExecutionEngine(terminal);
+      const plan = createDeferredJobPlan("R1", [commandStep("show version")]);
+      const job = engine.startJob(plan);
+
+      job.context.updatedAt = Date.now() - 1000;
+
+      const refreshed = engine.getJob(job.id);
+
+      expect(refreshed?.context.finished).toBe(true);
+      expect(refreshed?.context.phase).toBe("completed");
+      expect(refreshed?.context.stepResults).toHaveLength(1);
+      expect(refreshed?.context.outputBuffer).toContain("Cisco IOS Software");
+      expect(nativeTerminal.enterChar).toHaveBeenCalledWith(13, 0);
+      expect((refreshed?.context as any).debug).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining("native-tick reason=getJob"),
+          expect.stringContaining("native-output-len="),
+          expect.stringContaining("native-check command=\"show version\""),
+          expect.stringContaining("complete=true"),
+        ]),
+      );
+    } finally {
+      (globalThis as any).ipc = previousIpc;
+      (globalThis as any).dprint = previousDprint;
+    }
+  });
+
+  test("getJobState rescata un job aunque pendingCommand sea null", () => {
+    const nativeTerminal = {
+      registerEvent: vi.fn(),
+      unregisterEvent: vi.fn(),
+      enterCommand: vi.fn(),
+      enterChar: vi.fn(),
+      getAllOutput: vi.fn(() => "show version\nCisco IOS Software\nRouter#"),
+      getPrompt: vi.fn(() => "Router#"),
+      getMode: vi.fn(() => "enable"),
+    } as any;
+
+    const terminal = {
+      attach: vi.fn(),
+      detach: vi.fn(),
+      getSession: vi.fn(),
+      getMode: vi.fn(),
+      isBusy: vi.fn(() => false),
+      isAnyBusy: vi.fn(() => false),
+      executeCommand: vi.fn().mockReturnValue(new Promise(() => {})),
+      continuePager: vi.fn(),
+      confirmPrompt: vi.fn(),
+    } as any;
+
+    const previousIpc = (globalThis as any).ipc;
+    const previousDprint = (globalThis as any).dprint;
+
+    (globalThis as any).ipc = {
+      network: () => ({
+        getDevice: () => ({
+          getCommandLine: () => nativeTerminal,
+        }),
+      }),
+    };
+    (globalThis as any).dprint = vi.fn();
+
+    try {
+      const engine = createExecutionEngine(terminal);
+      const plan = createDeferredJobPlan("R1", [commandStep("show version")]);
+      const job = engine.startJob(plan);
+
+      job.pendingCommand = null;
+      job.context.waitingForCommandEnd = true;
+      job.context.phase = "waiting-command";
+      job.context.updatedAt = Date.now() - 1000;
+
+      const context = engine.getJobState(job.id);
+
+      expect(context?.finished).toBe(true);
+      expect(context?.phase).toBe("completed");
+      expect(context?.debug).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining("native-tick reason=getJobState"),
+        ]),
+      );
     } finally {
       (globalThis as any).ipc = previousIpc;
       (globalThis as any).dprint = previousDprint;

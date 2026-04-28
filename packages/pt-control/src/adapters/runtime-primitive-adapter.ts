@@ -159,7 +159,7 @@ const HANDLER_TYPE_OVERRIDES: Record<string, string> = {
   "vlan.ensure": "ensureVlans",
   "vlan.configInterfaces": "configVlanInterfaces",
   "host.configure": "configHost",
-  "omni.evaluate.raw": "__evaluate",
+  "omni.evaluate.raw": "omni.evaluate.raw",
   "omni.physical.siphon": "omni.physical.siphon",
   "omni.logical.siphonConfigs": "omni.logical.siphonConfigs",
 };

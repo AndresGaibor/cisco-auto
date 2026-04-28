@@ -77,6 +77,60 @@ export function createRuntimeTerminalAdapter(
     );
   }
 
+  function normalizeCommand(command: string): string {
+    return String(command ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+  }
+
+  function isProbablyConfigChangingCommand(command: string): boolean {
+    const cmd = normalizeCommand(command);
+
+    if (!cmd) return false;
+
+    return (
+      cmd === "configure terminal" ||
+      cmd === "conf t" ||
+      cmd === "end" ||
+      cmd === "exit" ||
+      cmd.startsWith("interface ") ||
+      cmd.startsWith("router ") ||
+      cmd.startsWith("line ") ||
+      cmd.startsWith("vlan ") ||
+      cmd.startsWith("ip route ") ||
+      cmd.startsWith("no ") ||
+      cmd.startsWith("hostname ") ||
+      cmd.startsWith("enable secret ") ||
+      cmd.startsWith("username ")
+    );
+  }
+
+  function getVisibleCommandSteps(plan: TerminalPlan): Array<{ command: string; kind?: string }> {
+    return plan.steps.filter((step) => {
+      const metadata = step.metadata as { internal?: boolean } | undefined;
+
+      return metadata?.internal !== true && String(step.command ?? "").trim().length > 0;
+    }) as Array<{ command: string; kind?: string }>;
+  }
+
+  function getSingleVisibleCommand(plan: TerminalPlan): string | null {
+    const commands = getVisibleCommandSteps(plan);
+
+    if (commands.length !== 1) return null;
+
+    const command = String(commands[0]?.command ?? "").trim();
+    return command || null;
+  }
+
+  function shouldUseNativeExec(plan: TerminalPlan): boolean {
+    const metadata = plan.metadata as { deviceKind?: string } | undefined;
+
+    if (metadata?.deviceKind !== "ios") return false;
+
+    const command = getSingleVisibleCommand(plan);
+    if (!command) return false;
+
+    return !command.includes("\n") && !isProbablyConfigChangingCommand(command);
+  }
+
   function buildTerminalTransportFailure(
     message: string,
     evidence?: Record<string, unknown>,
@@ -282,11 +336,35 @@ export function createRuntimeTerminalAdapter(
     };
   }
 
+  function computeDeferredPollTimeoutMs(plan: TerminalPlan, requestedTimeoutMs: number): number {
+    const planTimeouts = plan.timeouts as TerminalPlanTimeouts | undefined;
+    const commandTimeoutMs = Number(planTimeouts?.commandTimeoutMs ?? requestedTimeoutMs ?? 30000);
+    const stallTimeoutMs = Number(planTimeouts?.stallTimeoutMs ?? 15000);
+    const stepCount = Math.max(plan.steps.length, 1);
+
+    const perStepBudgetMs = commandTimeoutMs + stallTimeoutMs + 3000;
+    const totalBudgetMs = perStepBudgetMs * stepCount;
+
+    return Math.max(requestedTimeoutMs, totalBudgetMs, 25000);
+  }
+
+  function computeTerminalPlanSubmitTimeoutMs(plan: TerminalPlan, requestedTimeoutMs: number): number {
+    const firstStepTimeoutMs = Number(plan.steps[0]?.timeout ?? requestedTimeoutMs ?? 30000);
+
+    // terminal.plan.run solo debe crear el ticket; no ejecuta todo el comando.
+    // Pero Packet Tracer puede tardar en reclamar archivos si el kernel está ocupado,
+    // hay polling activo, o el filesystem compartido va lento.
+    return Math.max(
+      15000,
+      Math.min(firstStepTimeoutMs, 30000),
+    );
+  }
+
   async function executeTerminalPlanRun(
     plan: TerminalPlan,
     timeoutMs: number,
   ): Promise<TerminalPortResult | null> {
-    const submitTimeoutMs = Math.min(Number(plan.steps[0]?.timeout ?? timeoutMs), 5000);
+    const submitTimeoutMs = computeTerminalPlanSubmitTimeoutMs(plan, timeoutMs);
     const submitResult = await bridge.sendCommandAndWait(
       "terminal.plan.run",
       { plan, options: { timeoutMs } },
@@ -336,7 +414,7 @@ export function createRuntimeTerminalAdapter(
 
     if (isDeferredValue(submitValue)) {
       const startedAt = Date.now();
-      const pollTimeoutMs = Math.max(timeoutMs, 2000);
+      const pollTimeoutMs = computeDeferredPollTimeoutMs(plan, timeoutMs);
       const pollIntervalMs = 300;
 
       let pollValue: unknown = null;
@@ -446,6 +524,54 @@ export function createRuntimeTerminalAdapter(
     };
   }
 
+  async function executeTerminalNativeExec(
+    plan: TerminalPlan,
+    timeoutMs: number,
+  ): Promise<TerminalPortResult> {
+    const command = String(getSingleVisibleCommand(plan) ?? "").trim();
+    const stepTimeoutMs = Number(plan.steps[0]?.timeout ?? timeoutMs ?? defaultTimeout);
+    const nativeTimeoutMs = Math.max(stepTimeoutMs, 10000);
+
+    const nativeResult = await bridge.sendCommandAndWait(
+      "terminal.native.exec",
+      {
+        device: plan.device,
+        command,
+        timeoutMs: nativeTimeoutMs,
+        maxPagerAdvances: plan.policies?.maxPagerAdvances ?? 80,
+        stableSamples: 2,
+        sampleDelayMs: 90,
+      },
+      nativeTimeoutMs,
+      { resolveDeferred: false },
+    );
+
+    const parsed = responseParser.parseCommandResponse(normalizeBridgeValue(nativeResult), {
+      stepIndex: 0,
+      isHost: false,
+      command,
+    });
+
+    const warnings = [...parsed.warnings];
+    const mismatchWarning = responseParser.checkPromptMismatch(parsed, plan.steps[0] ?? {});
+    if (mismatchWarning) warnings.push(mismatchWarning);
+
+    return {
+      ok: parsed.ok,
+      output: parsed.raw.trim(),
+      status: parsed.status,
+      promptBefore: parsed.promptBefore,
+      promptAfter: parsed.promptAfter,
+      modeBefore: parsed.modeBefore,
+      modeAfter: parsed.modeAfter,
+      events: [responseParser.buildEventFromResponse(parsed, { kind: "command", command }, 0)],
+      warnings,
+      parsed: parsed.parsed,
+      evidence: buildTimingsEvidence(nativeResult.timings),
+      confidence: !parsed.ok || parsed.status !== 0 ? 0 : warnings.length > 0 ? 0.8 : 1,
+    };
+  }
+
   async function runTerminalPlan(
     plan: TerminalPlan,
     options?: TerminalPortOptions,
@@ -473,6 +599,10 @@ export function createRuntimeTerminalAdapter(
     }
 
     const normalizedPlan = planAdapter.normalizePlan(plan);
+
+    if (shouldUseNativeExec(normalizedPlan)) {
+      return executeTerminalNativeExec(normalizedPlan, timeoutMs);
+    }
 
     const deferredResult = await executeTerminalPlanRun(normalizedPlan, timeoutMs);
     if (deferredResult) return deferredResult;

@@ -54,7 +54,15 @@ import {
 
 import { handleConfigHost } from "../host-handler.js";
 import { handleTerminalPlanRun } from "../terminal-plan-run.js";
+import { handleTerminalNativeExec } from "../terminal-native-exec.js";
 import { handlePollDeferred } from "../poll-deferred.js";
+import {
+  handleExecIos,
+  handleConfigIos,
+  handlePing,
+  handleExecPc,
+  handleReadTerminal,
+} from "../ios/index.js";
 
 let stableHandlersRegistered = false;
 
@@ -78,7 +86,17 @@ export function registerStableRuntimeHandlers(): void {
 
   registerHandler("configHost", handleConfigHost as unknown as HandlerFn);
   registerHandler("terminal.plan.run", handleTerminalPlanRun as unknown as HandlerFn);
+  registerHandler("terminal.native.exec", handleTerminalNativeExec as unknown as HandlerFn);
   registerHandler("__pollDeferred", handlePollDeferred as unknown as HandlerFn);
+
+  // Legacy IOS/terminal handlers.
+  // Se mantienen registrados para compatibilidad con adapters/comandos antiguos.
+  registerHandler("configIos", handleConfigIos as unknown as HandlerFn);
+  registerHandler("execIos", handleExecIos as unknown as HandlerFn);
+  registerHandler("__ping", handlePing as unknown as HandlerFn);
+  registerHandler("execPc", handleExecPc as unknown as HandlerFn);
+  registerHandler("readTerminal", handleReadTerminal as unknown as HandlerFn);
+
   registerHandler("ensureVlans", handleEnsureVlans as unknown as HandlerFn);
   registerHandler("configVlanInterfaces", handleConfigVlanInterfaces as unknown as HandlerFn);
   registerHandler("configDhcpServer", handleConfigDhcpServer as unknown as HandlerFn);

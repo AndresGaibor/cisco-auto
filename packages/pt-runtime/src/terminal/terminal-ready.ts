@@ -23,18 +23,49 @@ const DEFAULT_QUIET_THRESHOLD_MS = 2000;
 /**
  * Lee el prompt del terminal de forma segura, sin lanzar excepciones.
  */
+function inferPromptFromText(output: string): string {
+  const lines = String(output || "")
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const line = lines[i] || "";
+
+    if (/^[A-Za-z0-9._-]+(?:\(config[^)]*\))?[>#]$/.test(line)) {
+      return line;
+    }
+
+    if (/[A-Z]:\\>$/.test(line)) {
+      return line;
+    }
+
+    if (/\b(?:PC|Server|Laptop|Host)[A-Za-z0-9._-]*>$/.test(line)) {
+      return line;
+    }
+  }
+
+  return "";
+}
+
 export function getPromptSafe(terminal: any): string {
   try {
     if (typeof terminal.getPrompt === "function") {
       const p = terminal.getPrompt();
-      if (p && typeof p === "string") {
-        return p;
+      if (p && typeof p === "string" && p.trim()) {
+        return p.trim();
       }
     }
-    return "";
-  } catch {
-    return "";
-  }
+  } catch {}
+
+  try {
+    const snapshot = readTerminalSnapshot(terminal);
+    const inferred = inferPromptFromText(snapshot.raw);
+    if (inferred) return inferred;
+  } catch {}
+
+  return "";
 }
 
 /**

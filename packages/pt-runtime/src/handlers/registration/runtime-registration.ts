@@ -8,54 +8,24 @@ export interface RuntimeHandlerRegistrationOptions {
 }
 
 /**
- * Lee flags globales de forma compatible con Packet Tracer/QtScript.
- *
- * No usar process.env aquí porque este código puede terminar dentro de runtime.js.
- */
-function getGlobalFlag(name: string): boolean {
-  try {
-    var scope = Function("return this")() as Record<string, unknown>;
-    var value = scope[name];
-
-    return value === true || value === 1 || value === "1" || value === "true";
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Registra handlers del runtime.
  *
- * Por defecto registra solo handlers estables.
- * Los handlers experimentales/omni requieren opt-in explícito.
+ * Siempre registra handlers estables, omni y experimentales.
+ * Los tres grupos se registran sin necesidad de opt-in.
  */
-export function registerRuntimeHandlers(
-  options: RuntimeHandlerRegistrationOptions = {},
-): void {
+export function registerRuntimeHandlers(): void {
   registerStableRuntimeHandlers();
-
-  if (options.experimental) {
-    registerExperimentalRuntimeHandlers();
-  }
-
-  if (options.omni) {
-    registerExperimentalRuntimeHandlers();
-    registerOmniRuntimeHandlers();
-  }
+  registerOmniRuntimeHandlers();
+  registerExperimentalRuntimeHandlers();
 }
 
 /**
  * Entrada usada por runtime-handlers.ts.
  *
- * Permite opt-in por variables globales si main.js decide habilitarlas antes
- * de cargar runtime.js:
- *
- *   PT_ENABLE_EXPERIMENTAL_HANDLERS = true
- *   PT_ENABLE_OMNI_HANDLERS = true
+ * Registra todos los handlers (estables, omni y experimentales) sin
+ * necesidad de flags globales. El runtime debe tener disponibles
+ * todos los comandos desde el inicio.
  */
 export function registerRuntimeHandlersFromGlobals(): void {
-  registerRuntimeHandlers({
-    experimental: getGlobalFlag("PT_ENABLE_EXPERIMENTAL_HANDLERS"),
-    omni: getGlobalFlag("PT_ENABLE_OMNI_HANDLERS"),
-  });
+  registerRuntimeHandlers();
 }

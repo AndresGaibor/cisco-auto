@@ -9,6 +9,11 @@ let experimentalHandlersRegistered = false;
  *
  * Estos handlers permiten evaluación arbitraria o capacidades no operativas.
  * No deben registrarse en el runtime estable por defecto.
+ *
+ * Se registran tres aliases para el mismo handler:
+ * - __evaluate (legacy)
+ * - omni.evaluate.raw (nuevo)
+ * - omni.raw (corto)
  */
 export function registerExperimentalRuntimeHandlers(): void {
   if (experimentalHandlersRegistered) {
@@ -19,4 +24,5 @@ export function registerExperimentalRuntimeHandlers(): void {
 
   registerHandler("__evaluate", handleEvaluate as unknown as HandlerFn);
   registerHandler("omni.evaluate.raw", handleEvaluate as unknown as HandlerFn);
+  registerHandler("omni.raw", handleEvaluate as unknown as HandlerFn);
 }

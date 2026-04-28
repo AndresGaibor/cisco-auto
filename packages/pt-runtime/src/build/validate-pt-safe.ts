@@ -180,8 +180,8 @@ const PT_FORBIDDEN_PATTERNS: PatternRule[] = [
   },
   // PT QTScript engine missing globals
   {
-    pattern: /\bglobalThis\b/g,
-    message: "globalThis is not available in PT QTScript engine",
+    pattern: /\bthis\b/g,
+    message: "this is not available in PT QTScript engine",
     category: "forbidden-global",
     suggestion: "Use 'typeof self !== undefined ? self : this' as a safe global accessor",
   },

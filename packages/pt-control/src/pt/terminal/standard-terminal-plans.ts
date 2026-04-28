@@ -18,16 +18,18 @@ export function createIosShowPlan(
     expectedPrompt?: string;
   },
 ): TerminalPlan {
-  const step: TerminalPlanStep = {
+  const steps: TerminalPlanStep[] = [{
+    kind: "command",
     command,
     timeout: options?.timeout ?? 15000,
     expectedPrompt: options?.expectedPrompt,
-  };
+    allowPager: /^show\s+/i.test(command.trim()),
+  }];
 
   return {
     id: options?.id ?? `ios-show-${Date.now()}`,
     device,
-    steps: [step],
+    steps,
   };
 }
 

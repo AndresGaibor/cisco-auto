@@ -85,11 +85,18 @@ function shouldPrependEnable(options: BuildUniversalTerminalPlanOptions, lines: 
   return lines.some(requiresPrivilegedIosCommand);
 }
 
-function inferIosTargetMode(lines: string[]): TerminalMode | undefined {
+function inferIosTargetMode(
+  lines: string[],
+  options: BuildUniversalTerminalPlanOptions,
+): TerminalMode | undefined {
   const normalized = lines.map(normalizeIosCommand);
 
   if (normalized.some((line) => isConfigureTerminal(line))) {
     return "global-config";
+  }
+
+  if (shouldPrependEnable(options, lines)) {
+    return "privileged-exec";
   }
 
   return undefined;
@@ -189,7 +196,7 @@ export function buildUniversalTerminalPlan(
   return {
     id: options.id,
     device: options.device,
-    targetMode: inferIosTargetMode(lines),
+    targetMode: inferIosTargetMode(lines, options),
     steps,
     timeouts: buildDefaultTerminalTimeouts(options.timeoutMs),
     policies: buildDefaultTerminalPolicies(options),

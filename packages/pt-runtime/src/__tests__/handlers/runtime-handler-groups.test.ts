@@ -8,6 +8,7 @@ import {
 
 const stableHandlers = [
   "configHost",
+  "terminal.native.exec",
   "configIos",
   "execIos",
   "__pollDeferred",
@@ -42,14 +43,20 @@ const stableHandlers = [
   "deepInspect",
 ];
 
-const unsafeHandlers = [
+// Handlers experimentales/omni que ahora se registran juntos
+const evaluateHandlers = [
   "__evaluate",
   "omni.evaluate.raw",
+  "omni.raw",
+];
+
+const omniHandlers = [
   "omni.physical.siphon",
   "omni.logical.siphonConfigs",
   "siphonAllConfigs",
   "evaluateInternalVariable",
   "getActivityTreeXml",
+  "execIosOmni",
   "setEnvironmentRules",
   "controlSimulation",
   "getNetworkGenoma",
@@ -58,48 +65,42 @@ const unsafeHandlers = [
   "workspaceVisuals",
   "siphonDesktopApps",
   "siphonActiveProcesses",
+  "isDesktopReady",
   "kvStore",
   "base64",
   "cryptoUtils",
 ];
 
 describe("runtime handler groups", () => {
-  test("stable handlers are registered by default", () => {
+  test("stable handlers are registered", () => {
+    registerRuntimeHandlers();
+
     for (const type of stableHandlers) {
       expect(getHandler(type), `${type} should be registered`).toBeDefined();
     }
   });
 
-  test("unsafe handlers are not registered by default", () => {
-    for (const type of unsafeHandlers) {
-      expect(getHandler(type), `${type} should not be registered by default`).toBeUndefined();
+  test("evaluate handlers are registered with aliases", () => {
+    registerRuntimeHandlers();
+
+    for (const type of evaluateHandlers) {
+      expect(getHandler(type), `${type} should be registered`).toBeDefined();
     }
   });
 
-  test("experimental registration enables evaluate handlers", () => {
-    registerRuntimeHandlers({ experimental: true });
+  test("omni handlers are registered", () => {
+    registerRuntimeHandlers();
 
-    expect(getHandler("__evaluate")).toBeDefined();
-    expect(getHandler("omni.evaluate.raw")).toBeDefined();
-
-    // Omni still disabled.
-    expect(getHandler("siphonAllConfigs")).toBeUndefined();
-    expect(getHandler("exfiltrateHostFile")).toBeUndefined();
+    for (const type of omniHandlers) {
+      expect(getHandler(type), `${type} should be registered`).toBeDefined();
+    }
   });
 
-  test("omni registration enables omni handlers", () => {
-    registerRuntimeHandlers({ omni: true });
-
-    expect(getHandler("siphonAllConfigs")).toBeDefined();
-    expect(getHandler("exfiltrateHostFile")).toBeDefined();
-    expect(getHandler("skipBoot")).toBeDefined();
-    expect(getHandler("siphonDesktopApps")).toBeDefined();
-  });
-
-  test("registered type list includes stable handlers", () => {
+  test("registered type list includes all handlers", () => {
+    registerRuntimeHandlers();
     const registered = getRegisteredTypes();
 
-    for (const type of stableHandlers) {
+    for (const type of [...stableHandlers, ...evaluateHandlers, ...omniHandlers]) {
       expect(registered).toContain(type);
     }
   });

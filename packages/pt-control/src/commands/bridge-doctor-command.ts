@@ -50,7 +50,7 @@ function checkDirectoryExists(path: string): { ok: boolean; message: string } {
 
 function countJsonFiles(dir: string): number {
   if (!existsSync(dir)) return 0;
-  return readdirSync(dir).filter((f) => f.endsWith(".json")).length;
+  return readdirSync(dir).filter((f) => /^cmd_\d+\.json$/.test(f)).length;
 }
 
 function getStaleInFlight(dir: string, maxAgeMs: number = 60000): string[] {

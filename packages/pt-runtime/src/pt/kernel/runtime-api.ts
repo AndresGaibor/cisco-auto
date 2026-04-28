@@ -107,6 +107,15 @@ export function createRuntimeApi(subsystems: KernelSubsystems): RuntimeApi {
       return executionEngine.startJob(plan).id;
     },
     getJobState: function (id: string) {
+      const ctx =
+        typeof (executionEngine as any).getJobState === "function"
+          ? (executionEngine as any).getJobState(id)
+          : null;
+
+      if (ctx) {
+        return toKernelJobState(ctx);
+      }
+
       const job = executionEngine.getJob(id);
       return job ? toKernelJobState(job.context) : null;
     },

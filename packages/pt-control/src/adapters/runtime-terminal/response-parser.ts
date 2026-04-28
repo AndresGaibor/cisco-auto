@@ -48,6 +48,26 @@ interface LegacyContractValue {
 
 interface SimpleRuntimeResultValue {
   ok?: boolean;
+  done?: boolean;
+  status?: number;
+  result?: {
+    ok?: boolean;
+    raw?: string;
+    output?: string;
+    status?: number;
+    session?: {
+      mode?: string;
+      prompt?: string;
+      modeBefore?: string;
+      modeAfter?: string;
+      promptBefore?: string;
+      promptAfter?: string;
+      paging?: boolean;
+      awaitingConfirm?: boolean;
+      autoDismissedInitialDialog?: boolean;
+      kind?: string;
+    };
+  };
   code?: string;
   errorCode?: string;
   error?: string | { message?: string; code?: string; errorCode?: string };
@@ -279,20 +299,26 @@ export function createResponseParser() {
   ): ParsedCommandResponse {
     const { stepIndex, isHost, command } = options;
 
+    const nestedResult = res.result;
+
     const raw = String(
-      res.output ??
+      nestedResult?.output ??
+        nestedResult?.raw ??
+        res.output ??
         res.raw ??
         (typeof res.value === "string" ? res.value : "") ??
         "",
     );
 
     const status = Number(
-      res.diagnostics?.statusCode ??
+      nestedResult?.status ??
+        res.status ??
+        res.diagnostics?.statusCode ??
         res.diagnostics?.commandStatus ??
-        (res.ok ? 0 : 1),
+        (nestedResult?.ok ?? res.ok ? 0 : 1),
     );
 
-    const sessionInfo = res.session ?? {};
+    const sessionInfo = nestedResult?.session ?? res.session ?? {};
 
     const promptBefore =
       stepIndex === 0
@@ -317,7 +343,7 @@ export function createResponseParser() {
         ? res.error
         : String(res.error?.message ?? res.message ?? res.code ?? res.errorCode ?? "");
 
-    if (!res.ok && errorText) {
+    if (!(nestedResult?.ok ?? res.ok) && errorText) {
       warnings.push(errorText);
     }
 
@@ -336,7 +362,7 @@ export function createResponseParser() {
     return {
       raw,
       status,
-      ok: Boolean(res.ok),
+      ok: Boolean(nestedResult?.ok ?? res.ok),
       promptBefore,
       promptAfter,
       modeBefore,

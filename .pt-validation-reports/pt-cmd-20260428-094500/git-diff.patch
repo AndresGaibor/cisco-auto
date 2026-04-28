@@ -1,0 +1,378 @@
+diff --git a/packages/pt-control/src/application/services/terminal-plan-builder.ts b/packages/pt-control/src/application/services/terminal-plan-builder.ts
+index 7965b3c6..1d02dc82 100644
+--- a/packages/pt-control/src/application/services/terminal-plan-builder.ts
++++ b/packages/pt-control/src/application/services/terminal-plan-builder.ts
+@@ -85,13 +85,20 @@ function shouldPrependEnable(options: BuildUniversalTerminalPlanOptions, lines:
+   return lines.some(requiresPrivilegedIosCommand);
+ }
+ 
+-function inferIosTargetMode(lines: string[]): TerminalMode | undefined {
++function inferIosTargetMode(
++  lines: string[],
++  options: BuildUniversalTerminalPlanOptions,
++): TerminalMode | undefined {
+   const normalized = lines.map(normalizeIosCommand);
+ 
+   if (normalized.some((line) => isConfigureTerminal(line))) {
+     return "global-config";
+   }
+ 
++  if (shouldPrependEnable(options, lines)) {
++    return "privileged-exec";
++  }
++
+   return undefined;
+ }
+ 
+@@ -189,7 +196,7 @@ export function buildUniversalTerminalPlan(
+   return {
+     id: options.id,
+     device: options.device,
+-    targetMode: inferIosTargetMode(lines),
++    targetMode: inferIosTargetMode(lines, options),
+     steps,
+     timeouts: buildDefaultTerminalTimeouts(options.timeoutMs),
+     policies: buildDefaultTerminalPolicies(options),
+diff --git a/packages/pt-runtime/src/handlers/poll-deferred.ts b/packages/pt-runtime/src/handlers/poll-deferred.ts
+index 9a59bb2c..1f02349e 100644
+--- a/packages/pt-runtime/src/handlers/poll-deferred.ts
++++ b/packages/pt-runtime/src/handlers/poll-deferred.ts
+@@ -23,19 +23,25 @@ export function handlePollDeferred(payload: PollDeferredPayload, api: RuntimeApi
+     jobState.state === "error";
+ 
+   if (!finished) {
++    const currentStep = jobState.currentStep ?? 0;
++    const currentStepData = jobState.plan.plan[currentStep];
+     return {
+       ok: true,
+       deferred: true,
+       ticket,
+       done: false,
+       state: jobState.state,
+-      currentStep: jobState.currentStep,
++      currentStep,
+       totalSteps: jobState.plan.plan.length,
++      stepType: currentStepData?.type,
++      stepValue: currentStepData?.value,
+       outputTail: jobState.outputBuffer ? jobState.outputBuffer.slice(-500) : "",
+       lastPrompt: jobState.lastPrompt,
+       lastMode: jobState.lastMode,
+       waitingForCommandEnd: jobState.waitingForCommandEnd,
+       updatedAt: jobState.updatedAt,
++      ageMs: Date.now() - jobState.startedAt,
++      idleMs: Date.now() - jobState.updatedAt,
+     } as unknown as RuntimeResult;
+   }
+ 
+diff --git a/packages/pt-runtime/src/pt/kernel/execution-engine.ts b/packages/pt-runtime/src/pt/kernel/execution-engine.ts
+index 0d68d678..097e659c 100644
+--- a/packages/pt-runtime/src/pt/kernel/execution-engine.ts
++++ b/packages/pt-runtime/src/pt/kernel/execution-engine.ts
+@@ -125,12 +125,17 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
+       var dev = net && typeof net.getDevice === "function" ? net.getDevice(device) : null;
+       var term = dev && typeof dev.getCommandLine === "function" ? dev.getCommandLine() : null;
+ 
+-      if (!term) {
+-        execLog("ATTACH failed device=" + device + " reason=no-command-line");
++      if (
++        !term ||
++        typeof term.enterCommand !== "function" ||
++        typeof term.getPrompt !== "function" ||
++        typeof term.registerEvent !== "function"
++      ) {
++        execLog("ATTACH failed device=" + device + " reason=invalid-terminal-capabilities");
+         return false;
+       }
+ 
+-      terminal.attach(device, term);
++      terminal.attach(device, term as any);
+       return true;
+     } catch (error) {
+       execLog("ATTACH failed device=" + device + " error=" + String(error));
+@@ -286,6 +291,92 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
+     }, 0);
+   }
+ 
++  function modeMatches(actual: unknown, expected: unknown): boolean {
++    const current = String(actual ?? "").trim();
++    const target = String(expected ?? "").trim();
++
++    if (!target) return true;
++    if (current === target) return true;
++
++    if (target === "global-config") {
++      return current === "config" || current === "global-config";
++    }
++
++    if (target === "privileged-exec") {
++      return current === "privileged-exec";
++    }
++
++    return false;
++  }
++
++  function inferModeFromPrompt(prompt: string): string {
++    const value = String(prompt ?? "").trim();
++
++    if (/\(config[^)]*\)#$/.test(value)) return "config";
++    if (/#$/.test(value)) return "privileged-exec";
++    if (/>$/.test(value)) return "user-exec";
++
++    return "unknown";
++  }
++
++  function readSession(device: string): { mode: string; prompt: string } {
++    try {
++      const session = terminal.getSession(device) as any;
++      const prompt = String(session?.prompt ?? "");
++      const mode = String(session?.mode ?? "unknown");
++
++      return {
++        mode: mode === "unknown" ? inferModeFromPrompt(prompt) : mode,
++        prompt,
++      };
++    } catch {
++      return { mode: "unknown", prompt: "" };
++    }
++  }
++
++  function commandForEnsureMode(currentMode: string, targetMode: string): string | null {
++    if (modeMatches(currentMode, targetMode)) return null;
++
++    if (targetMode === "privileged-exec") {
++      if (isConfigMode(currentMode)) return "end";
++      return "enable";
++    }
++
++    if (targetMode === "global-config" || targetMode === "config") {
++      if (currentMode === "user-exec" || currentMode === "unknown") return "enable";
++      if (currentMode === "privileged-exec") return "configure terminal";
++    }
++
++    return null;
++  }
++
++  function completeJobIfLastStep(job: ActiveJob, result: TerminalResult | null): boolean {
++    const ctx = job.context;
++
++    if (ctx.currentStep < ctx.plan.plan.length) {
++      return false;
++    }
++
++    execLog("JOB COMPLETED id=" + job.id + " steps=" + ctx.stepResults.length);
++    ctx.phase = "completed";
++    ctx.result = result;
++    ctx.finished = true;
++    ctx.updatedAt = Date.now();
++    wakePendingJobsForDevice(job.device);
++    return true;
++  }
++
++  function promptMatches(prompt: string, expectedPrompt: string): boolean {
++    if (!expectedPrompt) return true;
++    if (prompt.indexOf(expectedPrompt) >= 0) return true;
++
++    try {
++      return new RegExp(expectedPrompt).test(prompt);
++    } catch {
++      return false;
++    }
++  }
++
+   function getCurrentStep(ctx: JobContext): DeferredStep | null {
+     if (ctx.currentStep >= ctx.plan.plan.length) return null;
+     return ctx.plan.plan[ctx.currentStep];
+@@ -319,6 +410,178 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
+         break;
+       }
+ 
++      case "ensure-mode": {
++        const targetMode = String(
++          (step as any).expectMode ||
++            (step.options as any)?.expectedMode ||
++            step.value ||
++            "privileged-exec",
++        );
++
++        const session = readSession(job.device);
++        const command = commandForEnsureMode(session.mode, targetMode);
++
++        ctx.phase = "waiting-ensure-mode";
++        ctx.lastMode = session.mode;
++        ctx.lastPrompt = session.prompt;
++
++        if (!targetMode || command === null) {
++          if (targetMode && !modeMatches(session.mode, targetMode)) {
++            execLog("ENSURE MODE unsupported target=" + targetMode + " current=" + session.mode + " id=" + job.id);
++            if (stopOnError) {
++              ctx.phase = "error";
++              ctx.error = "Cannot ensure terminal mode " + targetMode + " from " + session.mode;
++              ctx.errorCode = "ENSURE_MODE_UNSUPPORTED";
++              ctx.finished = true;
++              ctx.updatedAt = Date.now();
++              wakePendingJobsForDevice(job.device);
++              return;
++            }
++          }
++
++          ctx.stepResults.push({
++            stepIndex: ctx.currentStep,
++            stepType: stepType,
++            command: "",
++            raw: "",
++            status: 0,
++            completedAt: Date.now(),
++          });
++          ctx.currentStep++;
++          ctx.phase = "pending";
++          ctx.updatedAt = Date.now();
++          if (!completeJobIfLastStep(job, null)) advanceJob(job.id);
++          return;
++        }
++
++        execLog(
++          "ENSURE MODE id=" +
++            job.id +
++            " device=" +
++            job.device +
++            " current=" +
++            session.mode +
++            " target=" +
++            targetMode +
++            " cmd='" +
++            command +
++            "'",
++        );
++
++        ctx.waitingForCommandEnd = true;
++        job.pendingCommand = terminal.executeCommand(job.device, command, {
++          commandTimeoutMs: timeout,
++          stallTimeoutMs: ctx.plan.options.stallTimeoutMs,
++          expectedMode: targetMode as any,
++          allowPager: false,
++          autoAdvancePager: false,
++          maxPagerAdvances: 0,
++          autoConfirm: false,
++          autoDismissWizard: true,
++        });
++
++        job.pendingCommand
++          .then(function (result) {
++            if (ctx.finished) return;
++
++            job.pendingCommand = null;
++            ctx.waitingForCommandEnd = false;
++            ctx.outputBuffer += result.output;
++            ctx.lastPrompt = result.session.prompt;
++            ctx.lastMode = result.session.mode;
++            ctx.paged = result.session.paging;
++
++            ctx.stepResults.push({
++              stepIndex: ctx.currentStep,
++              stepType: stepType,
++              command: command,
++              raw: result.output,
++              status: result.status,
++              completedAt: Date.now(),
++            });
++
++            if (!modeMatches(result.session.mode, targetMode)) {
++              execLog(
++                "ENSURE MODE FAILED id=" +
++                  job.id +
++                  " expected=" +
++                  targetMode +
++                  " actual=" +
++                  result.session.mode,
++              );
++              ctx.phase = "error";
++              ctx.error = "Expected mode " + targetMode + ", got " + result.session.mode;
++              ctx.errorCode = "ENSURE_MODE_FAILED";
++              ctx.finished = true;
++              ctx.updatedAt = Date.now();
++              cleanupConfigSession(job.device, result.session.mode, result.session.prompt);
++              wakePendingJobsForDevice(job.device);
++              return;
++            }
++
++            ctx.currentStep++;
++            ctx.phase = "pending";
++            ctx.error = null;
++            ctx.errorCode = null;
++            ctx.updatedAt = Date.now();
++
++            if (!completeJobIfLastStep(job, result)) advanceJob(job.id);
++          })
++          .catch(function (err) {
++            if (ctx.finished) return;
++            execLog("ENSURE MODE ERROR id=" + job.id + " error=" + String(err));
++            job.pendingCommand = null;
++            ctx.waitingForCommandEnd = false;
++            ctx.phase = "error";
++            ctx.error = String(err);
++            ctx.errorCode = "ENSURE_MODE_EXEC_ERROR";
++            ctx.finished = true;
++            ctx.updatedAt = Date.now();
++            cleanupConfigSession(job.device, ctx.lastMode, ctx.lastPrompt);
++            wakePendingJobsForDevice(job.device);
++          });
++        break;
++      }
++
++      case "expect-prompt": {
++        const expectedPrompt = String(
++          (step.options as any)?.expectedPrompt ||
++            (step as any).expectPromptPattern ||
++            step.value ||
++            "",
++        );
++
++        const session = readSession(job.device);
++        const prompt = session.prompt || ctx.lastPrompt;
++        const matched = promptMatches(prompt, expectedPrompt);
++
++        if (!matched && stopOnError) {
++          ctx.phase = "error";
++          ctx.error = "Expected prompt " + expectedPrompt + ", got " + prompt;
++          ctx.errorCode = "EXPECT_PROMPT_FAILED";
++          ctx.finished = true;
++          ctx.updatedAt = Date.now();
++          wakePendingJobsForDevice(job.device);
++          return;
++        }
++
++        ctx.stepResults.push({
++          stepIndex: ctx.currentStep,
++          stepType: stepType,
++          command: "",
++          raw: prompt,
++          status: 0,
++          completedAt: Date.now(),
++        });
++        ctx.lastMode = session.mode;
++        ctx.lastPrompt = prompt;
++        ctx.currentStep++;
++        ctx.phase = "pending";
++        ctx.updatedAt = Date.now();
++        if (!completeJobIfLastStep(job, null)) advanceJob(job.id);
++        break;
++      }
++
+       case "release-session":
+       case "close-session": {
+         execLog("RELEASE SESSION id=" + job.id + " device=" + job.device);
+@@ -452,13 +715,7 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
+             ctx.phase = "pending";
+             ctx.updatedAt = Date.now();
+ 
+-            if (ctx.currentStep >= ctx.plan.plan.length) {
+-              execLog("JOB COMPLETED id=" + job.id + " steps=" + ctx.stepResults.length);
+-              ctx.phase = "completed";
+-              ctx.result = result;
+-              ctx.finished = true;
+-              wakePendingJobsForDevice(job.device);
+-            } else {
++            if (!completeJobIfLastStep(job, result)) {
+               advanceJob(job.id);
+             }
+           })

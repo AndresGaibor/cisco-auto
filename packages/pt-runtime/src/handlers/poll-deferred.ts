@@ -23,19 +23,27 @@ export function handlePollDeferred(payload: PollDeferredPayload, api: RuntimeApi
     jobState.state === "error";
 
   if (!finished) {
+    const currentStep = jobState.currentStep ?? 0;
+    const currentStepData = jobState.plan.plan[currentStep];
     return {
       ok: true,
       deferred: true,
       ticket,
       done: false,
       state: jobState.state,
-      currentStep: jobState.currentStep,
+      currentStep,
       totalSteps: jobState.plan.plan.length,
+      stepType: currentStepData?.type,
+      stepValue: currentStepData?.value,
       outputTail: jobState.outputBuffer ? jobState.outputBuffer.slice(-500) : "",
       lastPrompt: jobState.lastPrompt,
       lastMode: jobState.lastMode,
       waitingForCommandEnd: jobState.waitingForCommandEnd,
       updatedAt: jobState.updatedAt,
+      ageMs: Date.now() - jobState.startedAt,
+      idleMs: Date.now() - jobState.updatedAt,
+      debug: (jobState as any).debug || [],
+      stepResults: (jobState as any).stepResults || [],
     } as unknown as RuntimeResult;
   }
 

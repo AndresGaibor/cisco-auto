@@ -34,6 +34,17 @@ export function pollCommandQueue(subsystems: KernelSubsystems, state: KernelStat
     return;
   }
 
+  function isControlCommand(type: string): boolean {
+    return (
+      type === "__pollDeferred" ||
+      type === "__ping" ||
+      type === "inspectDeviceFast" ||
+      type === "readTerminal" ||
+      type === "omni.evaluate.raw" ||
+      type === "__evaluate"
+    );
+  }
+
   const activeJobs = executionEngine.getActiveJobs();
   const terminalIsBusy =
     typeof (terminal as any).isAnyBusy === "function" ? (terminal as any).isAnyBusy() : false;
@@ -46,7 +57,14 @@ export function pollCommandQueue(subsystems: KernelSubsystems, state: KernelStat
   if (isBusy) {
     claimed =
       typeof (queue as any).pollAllowedTypes === "function"
-        ? (queue as any).pollAllowedTypes(["__pollDeferred", "__ping"])
+        ? (queue as any).pollAllowedTypes([
+            "__pollDeferred",
+            "__ping",
+            "inspectDeviceFast",
+            "readTerminal",
+            "omni.evaluate.raw",
+            "__evaluate",
+          ].filter(isControlCommand))
         : null;
 
     if (!claimed) {

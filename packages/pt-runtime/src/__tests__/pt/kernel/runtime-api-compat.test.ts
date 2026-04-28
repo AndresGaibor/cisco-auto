@@ -49,4 +49,66 @@ describe("createRuntimeApi", () => {
       (globalThis as any).dprint = previousDprint;
     }
   });
+
+  test("getJobState usa el contexto reapeado y preserva debug", () => {
+    const jobState = {
+      id: "job-1",
+      device: "R1",
+      plan: { plan: [] },
+      currentStep: 0,
+      state: "running",
+      outputBuffer: "show version\nRouter#",
+      startedAt: Date.now() - 1000,
+      updatedAt: Date.now() - 500,
+      stepResults: [],
+      lastMode: "privileged-exec",
+      lastPrompt: "Router#",
+      paged: false,
+      waitingForCommandEnd: false,
+      finished: false,
+      result: null,
+      error: null,
+      errorCode: null,
+      debug: ["trace-1"],
+    };
+
+    const executionEngine = {
+      getJob: vi.fn(() => ({ context: { debug: ["wrong-path"] } })),
+      getJobState: vi.fn(() => jobState),
+      getActiveJobs: vi.fn(() => []),
+      isJobFinished: vi.fn(() => false),
+      startJob: vi.fn(),
+      advanceJob: vi.fn(),
+    } as any;
+
+    const previousSelf = (globalThis as any).self;
+    const previousDprint = (globalThis as any).dprint;
+
+    (globalThis as any).self = {
+      ipc: {
+        network: vi.fn(() => ({ getDevice: vi.fn() })),
+        appWindow: vi.fn(() => ({
+          getActiveWorkspace: () => ({ getLogicalWorkspace: () => ({}) }),
+          writeToPT: vi.fn(),
+        })),
+        systemFileManager: vi.fn(() => ({})),
+      },
+      _ScriptModule: {},
+      DEV_DIR: "/tmp/pt-dev",
+    };
+    (globalThis as any).dprint = vi.fn();
+
+    try {
+      const api: any = createRuntimeApi({ executionEngine } as any);
+
+      const result = api.getJobState("job-1");
+
+      expect(executionEngine.getJobState).toHaveBeenCalledWith("job-1");
+      expect(executionEngine.getJob).not.toHaveBeenCalled();
+      expect(result?.debug).toEqual(["trace-1"]);
+    } finally {
+      (globalThis as any).self = previousSelf;
+      (globalThis as any).dprint = previousDprint;
+    }
+  });
 });

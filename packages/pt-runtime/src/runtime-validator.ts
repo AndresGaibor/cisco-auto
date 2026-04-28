@@ -39,7 +39,7 @@ const FORBIDDEN_GLOBAL_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
   { pattern: /\brequire\s*\(/, message: "require() is not PT-safe" },
   { pattern: /\bmodule\b/, message: "module is not PT-safe" },
   { pattern: /\bexports\b/, message: "exports is not PT-safe" },
-  { pattern: /\bglobalThis\b/, message: "globalThis is not PT-safe" },
+  { pattern: /\bthis\b/, message: "this is not PT-safe" },
 ];
 
 const FORBIDDEN_WARNING_PATTERNS: Array<{ pattern: RegExp; message: string }> = [

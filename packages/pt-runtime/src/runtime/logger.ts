@@ -40,12 +40,12 @@ function createFallbackTransport(): (entry: LogEntry) => void {
       if (typeof dprint === "function") {
         dprint(msg);
       } else if (
-        typeof globalThis !== "undefined" &&
-        (globalThis as any).ipc &&
-        (globalThis as any).ipc.appWindow &&
-        (globalThis as any).ipc.appWindow().writeToPT
+        typeof self !== "undefined" &&
+        (self as any).ipc &&
+        (self as any).ipc.appWindow &&
+        (self as any).ipc.appWindow().writeToPT
       ) {
-        (globalThis as any).ipc.appWindow().writeToPT(msg + "\n");
+        (self as any).ipc.appWindow().writeToPT(msg + "\n");
       } else if (typeof print === "function") {
         print(msg);
       } else {
