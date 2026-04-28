@@ -65,6 +65,7 @@ async function waitForBridgeReady(controller: PTController, timeoutMs = 35_000):
   const deadline = Date.now() + timeoutMs;
   let lastStatus: unknown = null;
   let lastStartError: unknown = null;
+  let pollMs = 25;
 
   while (Date.now() < deadline) {
     lastStatus = controller.getBridgeStatus?.();
@@ -94,7 +95,8 @@ async function waitForBridgeReady(controller: PTController, timeoutMs = 35_000):
       return;
     }
 
-    await sleep(250);
+    await sleep(pollMs);
+    pollMs = Math.min(pollMs * 2, 250);
   }
 
   const error = new Error(

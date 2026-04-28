@@ -423,7 +423,7 @@ export class FileBridgeV2 extends EventEmitter {
     const resultPath = this.paths.resultFilePath(envelope.id);
     const timeout = timeoutMs ?? this.options.resultTimeoutMs ?? 120_000;
     const started = Date.now();
-    let pollMs = 25;
+    let pollMs = 5;
     debugLog(`waiting result id=${envelope.id} path=${resultPath}`);
 
     const result = await new Promise<BridgeResultEnvelope<TResult>>((resolve, reject) => {
@@ -463,7 +463,7 @@ export class FileBridgeV2 extends EventEmitter {
         } catch (err) {
           const error = err as NodeJS.ErrnoException;
           if (error.code === "ENOENT") {
-            pollMs = Math.min(pollMs * 1.5, 500);
+            pollMs = Math.min(pollMs * 1.5, 200);
             timer = setTimeout(checkResult, pollMs);
           } else {
             debugLog(

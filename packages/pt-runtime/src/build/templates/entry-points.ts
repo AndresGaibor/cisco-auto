@@ -50,8 +50,8 @@ function main() {
         deadLetterDir:          devDir + "/dead-letter",
         logsDir:                devDir + "/logs",
         commandsTraceDir:       devDir + "/logs/commands",
-        pollIntervalMs:         1000,
-        deferredPollIntervalMs: 500,
+        pollIntervalMs:         100,
+        deferredPollIntervalMs: 200,
         heartbeatIntervalMs:    5000,
         demoRuntime:            false,
       });
