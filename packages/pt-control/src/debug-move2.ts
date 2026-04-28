@@ -1,7 +1,7 @@
 import { createPTController } from "./controller/index.js";
 
 async function main() {
-  const controller = createPTController({ devDir: undefined });
+  const controller = createPTController();
   await controller.start();
   
   try {
@@ -11,7 +11,8 @@ async function main() {
     console.log("Bridge status:", JSON.stringify(status, null, 2));
     
     // Intentar con el primitivePort directamente
-    const primitivePort = (controller as any)._composition.primitivePort;
+    const controllerInterno = controller as unknown as { _composition?: { primitivePort?: unknown } };
+    const primitivePort = controllerInterno._composition?.primitivePort;
     console.log("PrimitivePort exists:", !!primitivePort);
     
     // Intentar mover el dispositivo

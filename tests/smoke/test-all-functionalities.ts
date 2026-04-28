@@ -5,11 +5,12 @@
  * Nueva arquitectura simplificada con file-bridge
  */
 
-import { FileBridgeV2 } from "./packages/file-bridge/src/file-bridge-v2.js";
+import { FileBridgeV2 } from "../../packages/file-bridge/src/file-bridge-v2.js";
 import { join } from "node:path";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { getSmokePtDevDir } from "./smoke-paths.js";
 
-const PT_DEV_DIR = "/Users/andresgaibor/pt-dev";
+const PT_DEV_DIR = getSmokePtDevDir();
 
 async function testAllFunctionalities() {
   console.log("🚀 TESTING ALL PT CONTROL V2 FUNCTIONALITIES");

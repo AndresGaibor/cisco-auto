@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 
-import { FileBridgeV2 } from "./packages/file-bridge/src/file-bridge-v2.js";
+import { FileBridgeV2 } from "../../packages/file-bridge/src/file-bridge-v2.js";
+import { getSmokePtDevDir } from "./smoke-paths.js";
 
-const PT_DEV_DIR = "/Users/andresgaibor/pt-dev";
+const PT_DEV_DIR = getSmokePtDevDir();
 
 const tests = [
   { model: '3560-24PS', type: 16 },

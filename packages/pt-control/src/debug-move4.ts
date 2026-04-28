@@ -1,9 +1,12 @@
-import { createPTController } from "./controller/index.js";
+import { createDefaultPTController } from "./controller/index.js";
 import * as fs from "fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+const devDir = process.env.PT_DEV_DIR ?? join(homedir(), "pt-dev");
 
 async function main() {
-  const devDir = "/Users/andresgaibor/pt-dev";
-  const controller = createPTController({ devDir });
+  const controller = createDefaultPTController();
   await controller.start();
   
   try {

@@ -6,6 +6,7 @@
 
 import { Command } from 'commander';
 import chalk from 'chalk';
+import { resolve } from 'node:path';
 
 interface DeviceStatus {
   name: string;
@@ -26,9 +27,10 @@ interface NetworkReport {
 
 async function getNetworkStatus(): Promise<NetworkReport> {
   const { execSync } = await import('child_process');
+  const repoRoot = resolve(import.meta.dir, '../../../../');
 
   const result = execSync(
-    `cd /Users/andresgaibor/code/javascript/cisco-auto && bun run pt omni raw "(function() {
+    `bun run pt omni raw "(function() {
       var net = ipc.network();
       var devs = ['PC0', 'WLC1', 'SW1', 'AAA_Server', 'AP1', 'AP2', 'AP3'];
       var report = [];
@@ -61,7 +63,7 @@ async function getNetworkStatus(): Promise<NetworkReport> {
       });
       return JSON.stringify(report);
     })();"`,
-    { encoding: 'utf-8', timeout: 30000 }
+    { encoding: 'utf-8', timeout: 30000, cwd: repoRoot }
   );
 
   const jsonMatch = result.match(/🚀 RESULTADO: ([\s\S]*?)$/m);
@@ -83,10 +85,11 @@ async function getNetworkStatus(): Promise<NetworkReport> {
 
 async function ensurePowerOnDevice(deviceName: string): Promise<boolean> {
   const { execSync } = await import('child_process');
+  const repoRoot = resolve(import.meta.dir, '../../../../');
 
   try {
     execSync(
-      `cd /Users/andresgaibor/code/javascript/cisco-auto && bun run pt omni raw "(function() {
+      `bun run pt omni raw "(function() {
         var net = ipc.network();
         var d = net.getDevice('${deviceName}');
         if (d && !d.getPower()) {
@@ -95,7 +98,7 @@ async function ensurePowerOnDevice(deviceName: string): Promise<boolean> {
         }
         return '${deviceName} already powered';
       })();"`,
-      { encoding: 'utf-8', timeout: 30000 }
+      { encoding: 'utf-8', timeout: 30000, cwd: repoRoot }
     );
     return true;
   } catch (e) {
@@ -105,17 +108,18 @@ async function ensurePowerOnDevice(deviceName: string): Promise<boolean> {
 
 async function addPowerAdapter(deviceName: string): Promise<boolean> {
   const { execSync } = await import('child_process');
+  const repoRoot = resolve(import.meta.dir, '../../../../');
 
   try {
     const result = execSync(
-      `cd /Users/andresgaibor/code/javascript/cisco-auto && bun run pt omni raw "(function() {
+      `bun run pt omni raw "(function() {
         var net = ipc.network();
         var d = net.getDevice('${deviceName}');
         var rm = d.getRootModule();
         var result = rm.addModuleAt('ACCESS_POINT_POWER_ADAPTER', 1);
         return result ? 'success' : 'failed';
       })();"`,
-      { encoding: 'utf-8', timeout: 30000 }
+      { encoding: 'utf-8', timeout: 30000, cwd: repoRoot }
     );
     return result.toString().includes('success');
   } catch (e) {
@@ -125,17 +129,18 @@ async function addPowerAdapter(deviceName: string): Promise<boolean> {
 
 async function enablePoE(switchName: string, portName: string): Promise<boolean> {
   const { execSync } = await import('child_process');
+  const repoRoot = resolve(import.meta.dir, '../../../../');
 
   try {
     execSync(
-      `cd /Users/andresgaibor/code/javascript/cisco-auto && bun run pt omni raw "(function() {
+      `bun run pt omni raw "(function() {
         var net = ipc.network();
         var sw = net.getDevice('${switchName}');
         var p = sw.getPort('${portName}');
         p.setPower(true);
         return 'PoE enabled on ${switchName}:${portName}';
       })();"`,
-      { encoding: 'utf-8', timeout: 30000 }
+      { encoding: 'utf-8', timeout: 30000, cwd: repoRoot }
     );
     return true;
   } catch (e) {
@@ -145,10 +150,11 @@ async function enablePoE(switchName: string, portName: string): Promise<boolean>
 
 async function setWLCManagementIP(ip: string, mask: string, gateway: string): Promise<boolean> {
   const { execSync } = await import('child_process');
+  const repoRoot = resolve(import.meta.dir, '../../../../');
 
   try {
     execSync(
-      `cd /Users/andresgaibor/code/javascript/cisco-auto && bun run pt omni raw "(function() {
+      `bun run pt omni raw "(function() {
         var net = ipc.network();
         var wlc = net.getDevice('WLC1');
         var mgmt = wlc.getPort('management');
@@ -156,7 +162,7 @@ async function setWLCManagementIP(ip: string, mask: string, gateway: string): Pr
         mgmt.setDefaultGateway('${gateway}');
         return 'WLC management set to ${ip}';
       })();"`,
-      { encoding: 'utf-8', timeout: 30000 }
+      { encoding: 'utf-8', timeout: 30000, cwd: repoRoot }
     );
     return true;
   } catch (e) {

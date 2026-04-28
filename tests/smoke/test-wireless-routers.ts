@@ -1,8 +1,10 @@
 #!/usr/bin/env bun
 
-import { FileBridgeV2 } from "./packages/file-bridge/src/file-bridge-v2.js";
+import { FileBridgeV2 } from "../../packages/file-bridge/src/file-bridge-v2.js";
+import { getSmokePtDevDir } from "./smoke-paths.js";
+import { join } from "node:path";
 
-const PT_DEV_DIR = "/Users/andresgaibor/pt-dev";
+const PT_DEV_DIR = getSmokePtDevDir();
 
 const wirelessModels = [
   // Wireless Routers
@@ -72,7 +74,7 @@ async function testWireless() {
   
   // Guardar resultados
   const { writeFileSync } = await import('node:fs');
-  writeFileSync("/Users/andresgaibor/pt-dev/wireless-test-report.json", JSON.stringify({
+  writeFileSync(join(PT_DEV_DIR, "wireless-test-report.json"), JSON.stringify({
     date: new Date().toISOString(),
     models: { working: working.map(([m]) => m) }
   }, null, 2));

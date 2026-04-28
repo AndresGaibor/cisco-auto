@@ -4,9 +4,11 @@
  * Test exhaustivo de TODOS los modelos de switches posibles en PT 9.0.0
  */
 
-import { FileBridgeV2 } from "./packages/file-bridge/src/file-bridge-v2.js";
+import { FileBridgeV2 } from "../../packages/file-bridge/src/file-bridge-v2.js";
+import { getSmokePtDevDir } from "./smoke-paths.js";
+import { join } from "node:path";
 
-const PT_DEV_DIR = "/Users/andresgaibor/pt-dev";
+const PT_DEV_DIR = getSmokePtDevDir();
 
 // Lista exhaustiva de modelos de switches posibles en PT
 const allSwitchModels = [
@@ -108,13 +110,14 @@ async function testAllSwitches() {
   console.log(`\n❌ NO FUNCIONAN (${notWorking.length}):\n`);
   notWorking.forEach(([model, _]) => console.log(`   - ${model}`));
   
-  console.log(`\n📈 Tasa de éxito: ${Math.round(working.length / results.length * 100)}% (${working.length}/${results.length})`);
+  const totalModels = working.length + notWorking.length;
+  console.log(`\n📈 Tasa de éxito: ${Math.round(working.length / totalModels * 100)}% (${working.length}/${totalModels})`);
   
   // Guardar resultados
-  const reportPath = "/Users/andresgaibor/pt-dev/switch-test-report.json";
+  const reportPath = join(PT_DEV_DIR, "switch-test-report.json");
   const report = {
     date: new Date().toISOString(),
-    total: results.length,
+    total: totalModels,
     working: working.length,
     notWorking: notWorking.length,
     models: {

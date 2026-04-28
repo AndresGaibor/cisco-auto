@@ -1,6 +1,8 @@
 #!/usr/bin/env bun
-import { FileBridgeV2 } from "./packages/file-bridge/src/file-bridge-v2.js";
-const bridge = new FileBridgeV2({ root: "/Users/andresgaibor/pt-dev", consumerId: "smoke-official" });
+import { FileBridgeV2 } from "../../packages/file-bridge/src/file-bridge-v2.js";
+import { getSmokePtDevDir } from "./smoke-paths.js";
+
+const bridge = new FileBridgeV2({ root: getSmokePtDevDir(), consumerId: "smoke-official" });
 bridge.start();
 await new Promise(r => setTimeout(r, 1000));
 for (const [model, type] of [["3560-24PS",16],["3650-24PS",16],["AccessPoint-PT",7],["Linksys-WRT300N",11],["Cloud-PT",2],["Printer-PT",10]]) {

@@ -1,7 +1,7 @@
-import { createPTController } from "./controller/index.js";
+import { createDefaultPTController } from "./controller/index.js";
 
 async function main() {
-  const controller = createPTController({ devDir: "/Users/andresgaibor/pt-dev" });
+  const controller = createDefaultPTController();
   await controller.start();
   
   try {

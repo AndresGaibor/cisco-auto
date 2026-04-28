@@ -4,9 +4,10 @@
  * Test simple para verificar que los comandos tengan el payload.type correcto
  */
 
-import { FileBridgeV2 } from "./packages/file-bridge/src/file-bridge-v2.js";
+import { FileBridgeV2 } from "../../packages/file-bridge/src/file-bridge-v2.js";
+import { getSmokePtDevDir } from "./smoke-paths.js";
 
-const PT_DEV_DIR = "/Users/andresgaibor/pt-dev";
+const PT_DEV_DIR = getSmokePtDevDir();
 
 async function testCommandPayload() {
   console.log("🧪 Testing command payload structure...\n");

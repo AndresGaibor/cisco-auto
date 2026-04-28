@@ -4,9 +4,10 @@
  * Test para verificar qué modelos de switches existen realmente en PT 9.0.0
  */
 
-import { FileBridgeV2 } from "./packages/file-bridge/src/file-bridge-v2.js";
+import { FileBridgeV2 } from "../../packages/file-bridge/src/file-bridge-v2.js";
+import { getSmokePtDevDir } from "./smoke-paths.js";
 
-const PT_DEV_DIR = "/Users/andresgaibor/pt-dev";
+const PT_DEV_DIR = getSmokePtDevDir();
 
 const switchModelsToTest = [
   // Modelos del catálogo
@@ -90,7 +91,8 @@ async function testSwitchModels() {
   console.log(`\n❌ NO FUNCIONAN (${notWorking.length}):`);
   notWorking.forEach(([model, _]) => console.log(`   - ${model}`));
   
-  console.log(`\n📈 Tasa de éxito: ${Math.round(working.length / results.length * 100)}%`);
+  const totalModels = working.length + notWorking.length;
+  console.log(`\n📈 Tasa de éxito: ${Math.round(working.length / totalModels * 100)}%`);
 }
 
 testSwitchModels().catch(console.error);

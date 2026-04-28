@@ -5,11 +5,12 @@
  * con auto-snapshot y heartbeat monitoring
  */
 
-import { FileBridgeV2 } from "./packages/file-bridge/src/file-bridge-v2.js";
+import { FileBridgeV2 } from "../../packages/file-bridge/src/file-bridge-v2.js";
 import { join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
+import { getSmokePtDevDir } from "./smoke-paths.js";
 
-const PT_DEV_DIR = "/Users/andresgaibor/pt-dev";
+const PT_DEV_DIR = getSmokePtDevDir();
 
 async function testNewArchitecture() {
   console.log("🚀 Testing new simplified PT architecture...\n");

@@ -1,16 +1,18 @@
-import { createPTController } from "./controller/index.js";
+import { createDefaultPTController } from "./controller/index.js";
 import * as fs from "fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+const devDir = process.env.PT_DEV_DIR ?? join(homedir(), "pt-dev");
 
 async function main() {
-  const controller = createPTController({ devDir: undefined });
+  const controller = createDefaultPTController();
   await controller.start();
   
   try {
-    const devDir = "/Users/andresgaibor/pt-dev";
-    
     // Listar comandos y resultados antes
-    const beforeCmds = fs.readdirSync(`${devDir}/commands`).filter(f => f.startsWith("cmd_"));
-    const beforeResults = fs.readdirSync(`${devDir}/results`).filter(f => f.startsWith("cmd_"));
+    const beforeCmds = fs.readdirSync(`${devDir}/commands`).filter((f) => f.startsWith("cmd_"));
+    const beforeResults = fs.readdirSync(`${devDir}/results`).filter((f) => f.startsWith("cmd_"));
     console.log("Before - Commands:", beforeCmds.length, "Results:", beforeResults.length);
     
     // Intentar mover el dispositivo
@@ -20,8 +22,8 @@ async function main() {
     
     // Listar comandos y resultados después
     await new Promise(r => setTimeout(r, 500));
-    const afterCmds = fs.readdirSync(`${devDir}/commands`).filter(f => f.startsWith("cmd_"));
-    const afterResults = fs.readdirSync(`${devDir}/results`).filter(f => f.startsWith("cmd_"));
+    const afterCmds = fs.readdirSync(`${devDir}/commands`).filter((f) => f.startsWith("cmd_"));
+    const afterResults = fs.readdirSync(`${devDir}/results`).filter((f) => f.startsWith("cmd_"));
     console.log("After - Commands:", afterCmds.length, "Results:", afterResults.length);
     
     // Mostrar archivos nuevos

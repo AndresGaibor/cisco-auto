@@ -7,6 +7,7 @@
 import * as path from "path";
 import { RuntimeGenerator } from "./build/runtime-generator.js";
 import { ModularRuntimeGenerator } from "./build/render-runtime-modular.js";
+import { getDefaultDevDir } from "./system/paths.js";
 
 const args = Bun.argv.slice(2);
 const command = args[0] ?? "help";
@@ -16,7 +17,7 @@ async function main() {
     case "generate": {
       const generator = new RuntimeGenerator({
         outputDir: path.join(path.resolve(__dirname), "../dist-qtscript"),
-        devDir: process.env.PT_DEV_DIR || "/Users/andresgaibor/pt-dev",
+        devDir: getDefaultDevDir(),
       });
       await generator.generate();
       console.log("Generated: dist-qtscript/");
@@ -26,7 +27,7 @@ async function main() {
     case "deploy": {
       const generator = new RuntimeGenerator({
         outputDir: path.join(path.resolve(__dirname), "../dist-qtscript"),
-        devDir: process.env.PT_DEV_DIR || "/Users/andresgaibor/pt-dev",
+        devDir: getDefaultDevDir(),
       });
       await generator.deploy();
       console.log("Deployed to: " + generator.config.devDir);
@@ -36,7 +37,7 @@ async function main() {
     case "modular": {
       const generator = new ModularRuntimeGenerator({
         outputDir: path.join(path.resolve(__dirname), "../dist-modular"),
-        devDir: process.env.PT_DEV_DIR || "/Users/andresgaibor/pt-dev",
+        devDir: getDefaultDevDir(),
         splitModules: true,
       });
       const { modules, manifest } = await generator.generate();

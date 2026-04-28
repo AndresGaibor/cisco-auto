@@ -25,6 +25,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { getDefaultDevDir } from "../system/paths.js";
 import { RUNTIME_MANIFEST, getCatalogFiles, getAllRuntimeFiles, type RuntimeManifestSection } from "./runtime-manifest";
 import { transformToPtSafeAst, type AstTransformOptions } from "./ast-transform";
 import { validatePtSafe, formatValidationResult, type ValidationResult } from "./validate-pt-safe";
@@ -271,7 +272,7 @@ export interface ModularManifest {
 if (typeof Bun !== "undefined" && Bun.argv.includes("modular-generate")) {
   const generator = new ModularRuntimeGenerator({
     outputDir: path.join(path.resolve(__dirname), "../dist-modular"),
-    devDir: process.env.PT_DEV_DIR || "/Users/andresgaibor/pt-dev",
+    devDir: getDefaultDevDir(),
     splitModules: true,
   });
 
