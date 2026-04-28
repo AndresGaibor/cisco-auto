@@ -3,6 +3,10 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { randomUUID } from "node:crypto";
 import { Database } from "bun:sqlite";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+
+import { getMemoryDbPath } from "../system/paths.js";
 
 function initializeSchema(db: Database): void {
   db.exec(`
@@ -34,14 +38,11 @@ function initializeSchema(db: Database): void {
 }
 
 function getMemoryDb(): Database {
-  const home = process.env.HOME || process.env.USERPROFILE || ".";
-  const dbPath = `${home}/.cisco-auto/memory.db`;
-  const dir = dbPath.substring(0, dbPath.lastIndexOf("/"));
   try {
-    require("node:fs").mkdirSync(dir, { recursive: true });
+    mkdirSync(dirname(getMemoryDbPath()), { recursive: true });
   } catch {
   }
-  const db = new Database(dbPath);
+  const db = new Database(getMemoryDbPath());
   initializeSchema(db);
   return db;
 }
