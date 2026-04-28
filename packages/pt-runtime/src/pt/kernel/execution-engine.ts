@@ -175,6 +175,19 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
     return ctx.finished || ctx.phase === "completed" || ctx.phase === "error";
   }
 
+  function wakePendingJobsForDevice(device: string): void {
+    setTimeout(function () {
+      for (const key in jobs) {
+        const other = jobs[key];
+        if (!other) continue;
+        if (other.device !== device) continue;
+        if (isJobFinished(key)) continue;
+        if (other.pendingCommand !== null) continue;
+        advanceJob(key);
+      }
+    }, 0);
+  }
+
   function getCurrentStep(ctx: JobContext): DeferredStep | null {
     if (ctx.currentStep >= ctx.plan.plan.length) return null;
     return ctx.plan.plan[ctx.currentStep];
@@ -214,6 +227,7 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
         terminal.detach(job.device);
         ctx.phase = "completed";
         ctx.finished = true;
+        wakePendingJobsForDevice(job.device);
         break;
       }
 
@@ -235,6 +249,7 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
         terminal.detach(job.device);
         ctx.phase = "completed";
         ctx.finished = true;
+        wakePendingJobsForDevice(job.device);
         break;
       }
 
@@ -367,6 +382,7 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
               execLog("JOB COMPLETED id=" + job.id + " steps=" + ctx.stepResults.length);
               ctx.phase = "completed";
               ctx.finished = true;
+              wakePendingJobsForDevice(job.device);
             } else {
               advanceJob(job.id);
             }
@@ -380,6 +396,7 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
             ctx.errorCode = "EXEC_ERROR";
             ctx.finished = true;
             cleanupConfigSession(job.device, ctx.lastMode, ctx.lastPrompt);
+            wakePendingJobsForDevice(job.device);
           });
         break;
       }

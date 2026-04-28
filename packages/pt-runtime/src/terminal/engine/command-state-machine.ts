@@ -70,6 +70,8 @@ export interface CommandStateMachineConfig {
   now?: () => number;
   setTimeout?: typeof setTimeout;
   clearTimeout?: typeof clearTimeout;
+  setInterval?: typeof setInterval;
+  clearInterval?: typeof clearInterval;
   readTerminalSnapshotFn?: typeof readTerminalSnapshot;
   getPromptSafeFn?: typeof getPromptSafe;
   getModeSafeFn?: typeof getModeSafe;
@@ -170,6 +172,7 @@ export class CommandStateMachine {
   private outputPollTimer: ReturnType<typeof setInterval> | null = null;
 
   // Time tracking
+  private readonly startedAt: number;
   private lastOutputAt: number;
   private previousPrompt: string;
   private promptStableSince: number | null = null;
@@ -191,6 +194,8 @@ export class CommandStateMachine {
       now: function() { return Date.now(); },
       setTimeout: setTimeout,
       clearTimeout: clearTimeout,
+      setInterval: setInterval,
+      clearInterval: clearInterval,
       readTerminalSnapshotFn: readTerminalSnapshot,
       getPromptSafeFn: getPromptSafe,
       getModeSafeFn: getModeSafe,
@@ -201,6 +206,7 @@ export class CommandStateMachine {
 
     this.sendPagerAdvance = this.config.sendPagerAdvanceFn;
 
+    this.startedAt = this.config.now();
     this.lastOutputAt = this.config.now();
     this.previousPrompt = this.config.promptBefore;
     this.lastTerminalSnapshot = this.config.baselineSnapshot;
@@ -395,9 +401,9 @@ export class CommandStateMachine {
       output: finalOutput,
       rawOutput: finalRaw,
       status: this.endedStatus,
-      startedAt: this.config.now() - (endedAt - this.config.now()),
+      startedAt: this.startedAt,
       endedAt,
-      durationMs: endedAt - this.config.now(),
+      durationMs: Math.max(0, endedAt - this.startedAt),
       promptBefore: this.config.promptBefore,
       promptAfter,
       modeBefore: this.config.modeBefore,
@@ -438,7 +444,7 @@ export class CommandStateMachine {
   }
 
   private startOutputPolling(): void {
-    this.outputPollTimer = this.config.setTimeout!(() => {
+    const poll = (): void => {
       if (this.settled) return;
       const currentRaw = this.config.readTerminalSnapshotFn!(this.config.terminal);
 
@@ -452,7 +458,10 @@ export class CommandStateMachine {
         this.lastTerminalSnapshot = currentRaw;
         this.onOutput(null, { chunk: delta, newOutput: delta });
       }
-    }, 250) as unknown as ReturnType<typeof setInterval>;
+    };
+
+    poll();
+    this.outputPollTimer = this.config.setInterval!(poll, 250) as unknown as ReturnType<typeof setInterval>;
   }
 
   private clearTimers(): void {
@@ -460,7 +469,14 @@ export class CommandStateMachine {
     if (this.stallTimer) this.config.clearTimeout!(this.stallTimer);
     if (this.globalTimeoutTimer) this.config.clearTimeout!(this.globalTimeoutTimer);
     if (this.startTimer) this.config.clearTimeout!(this.startTimer);
-    if (this.outputPollTimer) this.config.clearTimeout!(this.outputPollTimer as unknown as ReturnType<typeof setTimeout>);
+    if (this.outputPollTimer) {
+      if (this.config.clearInterval) {
+        this.config.clearInterval(this.outputPollTimer);
+      } else {
+        this.config.clearTimeout!(this.outputPollTimer as unknown as ReturnType<typeof setTimeout>);
+      }
+      this.outputPollTimer = null;
+    }
   }
 
   private canAdvancePagerNow(): boolean {

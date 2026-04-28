@@ -145,7 +145,7 @@ describe("ExecutionEngine auto attach", () => {
 
       const job = engine.startJob(plan);
 
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 10));
 
       expect(job.context.phase).toBe("error");
       expect(job.context.errorCode).toBe("MODE_TRANSITION_FAILED");
@@ -199,7 +199,7 @@ describe("ExecutionEngine auto attach", () => {
 
       const job = engine.startJob(plan);
 
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 10));
 
       expect(terminal.executeCommand).toHaveBeenCalledTimes(1);
       expect(terminal.executeCommand).toHaveBeenCalledWith(
@@ -208,6 +208,61 @@ describe("ExecutionEngine auto attach", () => {
         expect.objectContaining({ commandTimeoutMs: 8000 }),
       );
       expect(job.context.phase).not.toBe("error");
+    } finally {
+      (globalThis as any).ipc = previousIpc;
+      (globalThis as any).dprint = previousDprint;
+    }
+  });
+
+  test("despierta jobs pendientes del mismo device cuando termina el anterior", async () => {
+    const terminal = {
+      attach: vi.fn(),
+      detach: vi.fn(),
+      getSession: vi.fn(),
+      getMode: vi.fn(),
+      isBusy: vi.fn(() => false),
+      isAnyBusy: vi.fn(() => false),
+      executeCommand: vi.fn().mockResolvedValue({
+        ok: true,
+        output: "output\n",
+        status: 0,
+        session: { mode: "privileged-exec", prompt: "R1#", paging: false, awaitingConfirm: false },
+        mode: "privileged-exec",
+      }),
+      continuePager: vi.fn(),
+      confirmPrompt: vi.fn(),
+    } as any;
+
+    const previousIpc = (globalThis as any).ipc;
+    const previousDprint = (globalThis as any).dprint;
+
+    (globalThis as any).ipc = {
+      network: () => ({
+        getDevice: () => ({
+          getCommandLine: () => ({
+            registerEvent: vi.fn(),
+            unregisterEvent: vi.fn(),
+            enterCommand: vi.fn(),
+            enterChar: vi.fn(),
+          }),
+        }),
+      }),
+    };
+    (globalThis as any).dprint = vi.fn();
+
+    try {
+      const engine = createExecutionEngine(terminal);
+      const planA = createDeferredJobPlan("R1", [commandStep("show version")]);
+      const planB = createDeferredJobPlan("R1", [commandStep("show ip interface brief")]);
+
+      engine.startJob(planA);
+      engine.startJob(planB);
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(terminal.executeCommand).toHaveBeenCalledTimes(2);
+      expect(terminal.executeCommand).toHaveBeenNthCalledWith(1, "R1", "show version", expect.any(Object));
+      expect(terminal.executeCommand).toHaveBeenNthCalledWith(2, "R1", "show ip interface brief", expect.any(Object));
     } finally {
       (globalThis as any).ipc = previousIpc;
       (globalThis as any).dprint = previousDprint;

@@ -101,6 +101,38 @@ describe("CommandStateMachine", () => {
     });
   });
 
+  describe("output polling", () => {
+    test("usa polling periódico para seguir leyendo el terminal", async () => {
+      const terminal = createMockTerminal();
+      const session = createMockSession();
+      const events: TerminalEventRecord[] = [];
+      const setIntervalMock = vi.fn(() => 1 as any);
+
+      const sm = new CommandStateMachine({
+        deviceName: "Router1",
+        command: "show version",
+        terminal,
+        options: {},
+        session,
+        events,
+        warnings: [],
+        sessionKind: "ios",
+        promptBefore: "Router#",
+        modeBefore: "privileged-exec",
+        baselineSnapshot: { raw: "", source: "test" },
+        baselineOutput: "",
+        setInterval: setIntervalMock as any,
+        clearInterval: vi.fn() as any,
+      } as any);
+
+      expect(sm).toBeDefined();
+
+      (sm as any).startOutputPolling();
+
+      expect(setIntervalMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe("sendPagerAdvance", () => {
     test("sends SPACE character via enterChar", () => {
       const terminal = createMockTerminal();
