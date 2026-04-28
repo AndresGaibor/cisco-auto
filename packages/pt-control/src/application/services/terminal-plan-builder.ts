@@ -78,7 +78,11 @@ function requiresPrivilegedIosCommand(line: string): boolean {
 }
 
 function shouldPrependEnable(options: BuildUniversalTerminalPlanOptions, lines: string[]): boolean {
-  return false;
+  if (options.deviceKind !== "ios") return false;
+  if (options.mode === "raw") return false;
+  if (lines.some(isEnableCommand)) return false;
+
+  return lines.some(requiresPrivilegedIosCommand);
 }
 
 function inferIosTargetMode(lines: string[]): TerminalMode | undefined {

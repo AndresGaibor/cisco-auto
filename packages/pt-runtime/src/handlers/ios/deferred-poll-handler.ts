@@ -24,7 +24,13 @@ export function handleDeferredPoll(pollPayload: PollDeferredPayload, api: PtRunt
     jobState.output ?? jobState.outputBuffer ?? jobState.result?.raw ?? jobState.result?.output ?? ""
   );
 
-  if (!jobState.done) {
+  const done =
+    jobState.done === true ||
+    jobState.finished === true ||
+    jobState.state === "completed" ||
+    jobState.state === "error";
+
+  if (!done) {
     return {
       ok: true,
       deferred: true,

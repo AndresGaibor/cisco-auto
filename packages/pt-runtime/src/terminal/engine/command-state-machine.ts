@@ -163,6 +163,9 @@ export class CommandStateMachine {
   private outputEventsCount = 0;
   private lastTerminalSnapshot: { raw: string; source: string };
   private promptFirstSeenAt: number | null = null;
+  private finalizedOk = true;
+  private finalizedError: string | undefined;
+  private finalizedCode: TerminalErrorCode | undefined;
 
   // Timers
   private commandEndGraceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -335,14 +338,14 @@ export class CommandStateMachine {
     const promptMatched = !options.expectedPromptPattern || promptAfter.includes(options.expectedPromptPattern);
     const modeMatched = !options.expectedMode || modeAfter === options.expectedMode;
 
-    let finalError: string | undefined;
-    let finalCode: TerminalErrorCode | undefined;
+    let finalError: string | undefined = this.finalizedError;
+    let finalCode: TerminalErrorCode | undefined = this.finalizedCode;
 
     const semantic = sessionKind === "host"
       ? verifyHostOutput(finalOutput)
       : verifyIosOutput(finalOutput);
 
-    let cmdOk = this.endedStatus === null ? true : this.endedStatus === 0;
+    let cmdOk = this.finalizedOk && (this.endedStatus === null ? true : this.endedStatus === 0);
 
     if (!semantic.ok) {
       cmdOk = false;
@@ -774,6 +777,12 @@ export class CommandStateMachine {
 
   private finalize(cmdOk: boolean, status: number | null, error?: string, code?: TerminalErrorCode): void {
     if (this.settled) return;
+
+    this.finalizedOk = cmdOk;
+    if (status !== null) this.endedStatus = status;
+    this.finalizedError = error;
+    this.finalizedCode = code;
+
     this.settled = true;
     this.clearTimers();
     this.cleanup();

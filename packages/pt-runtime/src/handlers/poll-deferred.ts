@@ -16,22 +16,48 @@ export function handlePollDeferred(payload: PollDeferredPayload, api: RuntimeApi
     return { ok: false, error: `Job not found: ${ticket}`, code: "UNKNOWN_COMMAND" } as RuntimeResult;
   }
 
-  if (!jobState.finished) {
+  const finished =
+    jobState.finished === true ||
+    (jobState as any).done === true ||
+    jobState.state === "completed" ||
+    jobState.state === "error";
+
+  if (!finished) {
     return {
+      ok: true,
+      deferred: true,
+      ticket,
       done: false,
       state: jobState.state,
       currentStep: jobState.currentStep,
       totalSteps: jobState.plan.plan.length,
       outputTail: jobState.outputBuffer ? jobState.outputBuffer.slice(-500) : "",
+      lastPrompt: jobState.lastPrompt,
+      lastMode: jobState.lastMode,
+      waitingForCommandEnd: jobState.waitingForCommandEnd,
+      updatedAt: jobState.updatedAt,
     } as unknown as RuntimeResult;
   }
 
+  const output = String(jobState.outputBuffer ?? (jobState.result as any)?.raw ?? (jobState.result as any)?.output ?? "");
+  const status = jobState.error || jobState.state === "error" ? 1 : Number((jobState.result as any)?.status ?? 0);
+
   return {
     done: true,
-    ok: !jobState.error,
+    ok: !jobState.error && jobState.state !== "error",
+    status,
     result: jobState.result,
-    error: jobState.error,
-    errorCode: jobState.errorCode,
-    output: jobState.outputBuffer,
+    error: jobState.error || undefined,
+    code: jobState.errorCode || undefined,
+    errorCode: jobState.errorCode || undefined,
+    raw: output,
+    output,
+    source: "terminal",
+    session: {
+      mode: String(jobState.lastMode ?? ""),
+      prompt: String(jobState.lastPrompt ?? ""),
+      paging: jobState.paged === true,
+      awaitingConfirm: false,
+    },
   } as unknown as RuntimeResult;
 }

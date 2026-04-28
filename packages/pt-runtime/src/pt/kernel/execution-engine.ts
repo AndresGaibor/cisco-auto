@@ -77,6 +77,67 @@ export interface ExecutionEngine {
 export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine {
   const jobs: Record<string, ActiveJob> = {};
 
+  function execLog(message: string): void {
+    try {
+      dprint("[exec] " + message);
+    } catch {}
+  }
+
+  function getJobTimeoutMs(job: ActiveJob): number {
+    const commandTimeout = Number(job.context.plan.options.commandTimeoutMs || 30000);
+    const stallTimeout = Number(job.context.plan.options.stallTimeoutMs || 15000);
+    return Math.max(commandTimeout + stallTimeout + 2000, 5000);
+  }
+
+  function isJobFinished(jobId: string): boolean {
+    const job = jobs[jobId];
+    if (!job) return true;
+    return job.context.finished === true || job.context.phase === "completed" || job.context.phase === "error";
+  }
+
+  function createJobContext(plan: DeferredJobPlan): JobContext {
+    const now = Date.now();
+
+    return {
+      plan,
+      currentStep: 0,
+      phase: "pending",
+      outputBuffer: "",
+      startedAt: now,
+      updatedAt: now,
+      stepResults: [],
+      lastMode: "unknown",
+      lastPrompt: "",
+      paged: false,
+      waitingForCommandEnd: false,
+      finished: false,
+      result: null,
+      error: null,
+      errorCode: null,
+      pendingDelay: null,
+      waitingForConfirm: false,
+    };
+  }
+
+  function tryAttachTerminal(device: string): boolean {
+    try {
+      var net = typeof ipc !== "undefined" && ipc && typeof ipc.network === "function" ? ipc.network() : null;
+      var dev = net && typeof net.getDevice === "function" ? net.getDevice(device) : null;
+      var term = dev && typeof dev.getCommandLine === "function" ? dev.getCommandLine() : null;
+
+      if (!term) {
+        execLog("ATTACH failed device=" + device + " reason=no-command-line");
+        return false;
+      }
+
+      terminal.attach(device, term);
+      return true;
+    } catch (error) {
+      execLog("ATTACH failed device=" + device + " error=" + String(error));
+      return false;
+    }
+  }
+
   function isConfigMode(mode: string | null | undefined): boolean {
     return String(mode ?? "").startsWith("config");
   }
@@ -329,8 +390,19 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
             job.id,
         );
 
+        const policies = ((ctx.plan.payload || {}) as any).policies || {};
+        const stepOptions = (step.options || {}) as any;
+        const allowPager = (step as any).allowPager !== false;
+
         job.pendingCommand = terminal.executeCommand(job.device, command, {
           commandTimeoutMs: timeout,
+          stallTimeoutMs: ctx.plan.options.stallTimeoutMs,
+          expectedMode: (step as any).expectMode,
+          expectedPromptPattern: stepOptions.expectedPrompt,
+          allowPager,
+          autoAdvancePager: allowPager && policies.autoAdvancePager !== false,
+          maxPagerAdvances: Number(policies.maxPagerAdvances ?? 80),
+          autoConfirm: (step as any).allowConfirm === true,
         });
 
         job.pendingCommand
@@ -383,6 +455,7 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
             if (ctx.currentStep >= ctx.plan.plan.length) {
               execLog("JOB COMPLETED id=" + job.id + " steps=" + ctx.stepResults.length);
               ctx.phase = "completed";
+              ctx.result = result;
               ctx.finished = true;
               wakePendingJobsForDevice(job.device);
             } else {
@@ -499,6 +572,7 @@ export function toKernelJobState(ctx: JobContext): KernelJobState {
     paged: ctx.paged,
     waitingForCommandEnd: ctx.waitingForCommandEnd,
     finished: ctx.finished,
+    done: ctx.finished,
     error: ctx.error,
     errorCode: ctx.errorCode,
   };

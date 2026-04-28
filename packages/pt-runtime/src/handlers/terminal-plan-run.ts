@@ -38,9 +38,12 @@ function isObject(value: unknown): value is Record<string, unknown> {
 function normalizeStep(step: any): any {
   var kind = String(step.kind || "command");
 
+  if (kind === "ensureMode") kind = "ensure-mode";
   if (kind === "expectPrompt") kind = "expect-prompt";
   if (kind === "saveConfig") kind = "save-config";
   if (kind === "closeSession") kind = "close-session";
+
+  const timeoutMs = Number(step.timeout || 0) || undefined;
 
   return {
     type: kind,
@@ -52,7 +55,11 @@ function normalizeStep(step: any): any {
     allowPager: step.allowPager !== false,
     allowConfirm: step.allowConfirm === true,
     optional: step.optional === true,
-    timeoutMs: Number(step.timeout || 0) || undefined,
+    timeoutMs,
+    options: {
+      timeoutMs,
+      expectedPrompt: step.expectPromptPattern ? String(step.expectPromptPattern) : undefined,
+    },
     metadata: isObject(step.metadata) ? step.metadata : {},
   };
 }
@@ -88,6 +95,7 @@ function buildDeferredPlan(payload: TerminalPlanRunPayload, api: RuntimeApi): De
     payload: {
       source: "terminal.plan.run",
       metadata: isObject(plan.metadata) ? plan.metadata : {},
+      policies: isObject(plan.policies) ? plan.policies : {},
     },
   } as unknown as DeferredJobPlan;
 }
