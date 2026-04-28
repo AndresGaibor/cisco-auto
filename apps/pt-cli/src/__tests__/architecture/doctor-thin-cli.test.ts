@@ -12,6 +12,11 @@ describe("doctor CLI boundary", () => {
     expect(source).toContain("@cisco-auto/pt-control/application/doctor");
   });
 
+  test("doctor.ts crea el controller real", () => {
+    expect(source).toContain("createDefaultPTController");
+    expect(source).not.toContain("mockController");
+  });
+
   test("doctor.ts re-exports DoctorCheckResult type", () => {
     expect(source).toContain("export { type DoctorCheckResult }");
   });

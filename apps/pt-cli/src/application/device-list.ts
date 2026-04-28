@@ -13,8 +13,20 @@ import { createDefaultPTController } from "./controller-provider.js";
 const DEBUG = process.env.PT_DEBUG === "1";
 
 const log = (...args: unknown[]) => {
-  if (DEBUG) console.log("[device-list]", ...args);
+  if (DEBUG) console.error("[device-list]", ...args);
 };
+
+function isBridgeResultTimeout(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+
+  return (
+    message.includes("Timeout") ||
+    message.includes("timeout") ||
+    message.includes("result timeout") ||
+    message.includes("waiting result") ||
+    message.includes("Packet Tracer no respondió")
+  );
+}
 
 export type { ConnectionInfo };
 
@@ -288,6 +300,14 @@ type ControllerDevice = Awaited<ReturnType<PTController["listDevices"]>>[number]
 
 function mapControllerResult(result: Awaited<ReturnType<PTController["listDevices"]>>): DeviceListResult {
   const rawDevices = getControllerDevices(result);
+  const rawConnectionsByDevice =
+    (result && typeof result === "object" && "connectionsByDevice" in result
+      ? (result as { connectionsByDevice?: Record<string, ConnectionInfo[]> }).connectionsByDevice
+      : undefined) ?? {};
+  const rawUnresolvedLinks =
+    (result && typeof result === "object" && "unresolvedLinks" in result
+      ? (result as { unresolvedLinks?: UnresolvedLink[] }).unresolvedLinks
+      : undefined) ?? [];
 
   const devices: ListedDevice[] = rawDevices.map((device: ControllerDevice | TopologyDeviceLike) => {
     const deviceRecord = device as Record<string, unknown>;
@@ -332,11 +352,47 @@ function mapControllerResult(result: Awaited<ReturnType<PTController["listDevice
     };
   });
 
+  const normalizedConnectionsByDevice: Record<string, ConnectionInfo[]> = {};
+  for (const device of devices) {
+    const connections = rawConnectionsByDevice[device.name] ?? [];
+    const certainConnections: ConnectionInfo[] = [];
+    for (const conn of connections) {
+      if (!CERTAIN_CONFIDENCES.includes(conn.confidence)) continue;
+      certainConnections.push(conn);
+      const port = device.ports?.find((candidate) => candidate.name === conn.localPort);
+      if (!port) continue;
+
+      port.connection = {
+        remoteDevice: conn.remoteDevice ?? "",
+        remotePort: conn.remotePort ?? "",
+        confidence: conn.confidence,
+      };
+    }
+    if (certainConnections.length > 0) {
+      normalizedConnectionsByDevice[device.name] = certainConnections;
+    }
+  }
+
+  const derivedUnresolvedLinks: UnresolvedLink[] = [];
+  for (const [deviceName, connections] of Object.entries(rawConnectionsByDevice)) {
+    for (const conn of connections ?? []) {
+      if (CERTAIN_CONFIDENCES.includes(conn.confidence)) continue;
+      derivedUnresolvedLinks.push({
+        port1Name: conn.localPort ?? "",
+        port2Name: conn.remotePort ?? "",
+        candidates1: conn.evidence?.localCandidates ?? [deviceName],
+        candidates2: conn.evidence?.remoteCandidates ?? [conn.remoteDevice ?? ""],
+        confidence: conn.confidence,
+        evidence: conn.evidence?.source ? [conn.evidence.source] : [],
+      });
+    }
+  }
+
   return {
     devices,
     count: rawDevices.length,
-    connectionsByDevice: {},
-    unresolvedLinks: [],
+    connectionsByDevice: normalizedConnectionsByDevice,
+    unresolvedLinks: rawUnresolvedLinks.length > 0 ? rawUnresolvedLinks : derivedUnresolvedLinks,
   };
 }
 
@@ -352,8 +408,15 @@ export async function loadLiveDeviceListFromController(
   try {
     // La ruta viva manda: el estado del bridge solo influye en el fallback.
     result = await controller.listDevices(type);
-  log(`controller.listDevices() ok, devices=${getControllerDevices(result).length}`);
+    log(`controller.listDevices() ok, devices=${getControllerDevices(result).length}`);
   } catch (err) {
+    if (isBridgeResultTimeout(err)) {
+      throw new Error(
+        "BRIDGE_RESULT_TIMEOUT: Packet Tracer runtime no escribió el result file. " +
+          "Revisa main.js, commands/, in-flight/ y logs/pt-debug.current.ndjson.",
+      );
+    }
+
     const bridgeStatus = controller.getBridgeStatus?.();
     const cachedSnapshot = controller.getCachedSnapshot?.();
     if (cachedSnapshot) {
@@ -385,13 +448,10 @@ export async function loadLiveDeviceListFromController(
     }
 
     if (bridgeStatus && bridgeStatus.ready === false) {
-      log("controller.listDevices() failed and bridge not ready, returning empty list");
-      return {
-        devices: [],
-        count: 0,
-        connectionsByDevice: {},
-        unresolvedLinks: [],
-      };
+      throw new Error(
+        "BRIDGE_NOT_READY: Packet Tracer runtime no está listo. " +
+          "Revisa heartbeat.json, commands/, in-flight/ y pt-debug.current.ndjson.",
+      );
     }
 
     throw new Error(

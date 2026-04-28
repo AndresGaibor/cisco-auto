@@ -13,6 +13,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import * as ts from "typescript";
 import { transformToPtSafeAst } from "./ast-transform.js";
 import { formatValidationResult } from "./validate-pt-safe.js";
 import { getAllMainFiles, validateMainManifestDependencies } from "./main-manifest.js";
@@ -38,9 +39,17 @@ export function renderMainV2(options: RenderMainV2Options): string {
 
   const missingDependencies = validateMainManifestDependencies(sourceFiles);
   if (missingDependencies.length > 0) {
-    console.warn(
-      "[render-main-v2] main.js manifest missing transitive dependencies:\n" +
-        missingDependencies.map((file) => `  - ${file}`).join("\n"),
+    const details = missingDependencies
+      .map((file) => {
+        const importedBy = findImportersOf(sourceFiles, file);
+        return `  - ${file} (imported by: ${importedBy.join(", ")})`;
+      })
+      .join("\n");
+    throw new Error(
+      `[render-main-v2] BUILD FAILED: main.js manifest is missing ${missingDependencies.length} transitive dependenc${missingDependencies.length === 1 ? "y" : "ies"}.\n` +
+        `These files are imported by manifest entries but not listed in MAIN_MANIFEST.\n` +
+        `Add them to the appropriate section in packages/pt-runtime/src/build/main-manifest.ts:\n` +
+        details,
     );
   }
 
@@ -119,4 +128,63 @@ export function renderMainV2(options: RenderMainV2Options): string {
   }
 
   return output;
+}
+
+/**
+ * Given a set of source files and a missing dependency path, find which manifest
+ * files import it so the error message tells you exactly who needs it.
+ */
+function findImportersOf(sourceFiles: Map<string, string>, missingFile: string): string[] {
+  const importers: string[] = [];
+  const manifestFiles = new Set(getAllMainFiles());
+
+  for (const [filePath, content] of sourceFiles) {
+    const sf = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    sf.forEachChild((node) => {
+      if (ts.isImportDeclaration(node)) {
+        const specifier = node.moduleSpecifier;
+        if (!specifier || !ts.isStringLiteral(specifier)) return;
+        if (node.importClause?.isTypeOnly) return;
+        const resolved = resolveManifestImport(filePath, specifier.text, manifestFiles);
+        if (resolved === missingFile) {
+          importers.push(filePath);
+        }
+      }
+    });
+  }
+
+  return importers;
+}
+
+function resolveManifestImport(
+  fromFile: string,
+  specifier: string,
+  knownFiles: Set<string>,
+): string | null {
+  if (!specifier.startsWith(".")) return null;
+
+  const fromDir = path.posix.dirname(fromFile);
+  const normalized = path.posix.normalize(path.posix.join(fromDir, specifier));
+  const candidates = new Set<string>([
+    normalized,
+    normalized.replace(/\.js$/, ".ts"),
+    normalized.replace(/\.js$/, ".tsx"),
+    normalized + ".ts",
+    normalized + ".tsx",
+    path.posix.join(normalized, "index.ts"),
+    path.posix.join(normalized, "index.tsx"),
+  ]);
+
+  let fallback: string | null = null;
+
+  for (const candidate of candidates) {
+    if (!fallback && (candidate.endsWith(".ts") || candidate.endsWith(".tsx"))) {
+      fallback = candidate;
+    }
+    if (knownFiles.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  return fallback;
 }

@@ -26,6 +26,7 @@ export const MAIN_MANIFEST = {
     "pt/kernel/kernel-state.ts",
     "pt/kernel/file-access.ts",
     "pt/kernel/runtime-api.ts",
+    "pt/kernel/command-result-envelope.ts",
     "pt/kernel/command-finalizer.ts",
     "pt/kernel/queue-poller.ts",
     "pt/kernel/kernel-lifecycle.ts",
@@ -35,7 +36,6 @@ export const MAIN_MANIFEST = {
 
   terminal: [
     "pt/terminal/prompt-parser.ts",
-    "pt/terminal/command-executor.ts",
     "pt/terminal/terminal-engine.ts",
     "pt/terminal/terminal-session.ts",
     "pt/terminal/terminal-events.ts",

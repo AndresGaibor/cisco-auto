@@ -74,7 +74,7 @@ export interface MonitoringState {
 
 const DEBUG = process.env.PT_DEBUG === "1";
 const debugLog = (...args: unknown[]) => {
-  if (DEBUG) console.log("[bridge:monitoring]", ...args);
+  if (DEBUG) console.error("[bridge:monitoring]", ...args);
 };
 
 export class MonitoringService {

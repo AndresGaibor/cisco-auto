@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import * as ts from "typescript";
 import { transformToPtSafeAst, type AstTransformOptions } from "./ast-transform.js";
 import { validatePtSafe, formatValidationResult, type ValidationResult } from "./validate-pt-safe.js";
 import { getAllRuntimeFiles, validateRuntimeManifestDependencies } from "./runtime-manifest.js";
@@ -169,9 +170,17 @@ function validateAndTransform(srcDir: string, minify: boolean): { code: string; 
 
   const missingDependencies = validateRuntimeManifestDependencies(sourceFiles);
   if (missingDependencies.length > 0) {
+    const details = missingDependencies
+      .map((file) => {
+        const importedBy = findRuntimeImportersOf(sourceFiles, file);
+        return `  - ${file} (imported by: ${importedBy.join(", ")})`;
+      })
+      .join("\n");
     throw new Error(
-      "[render-runtime-v2] runtime.js manifest missing transitive dependencies:\n" +
-        missingDependencies.map((file) => `  - ${file}`).join("\n"),
+      `[render-runtime-v2] BUILD FAILED: runtime.js manifest is missing ${missingDependencies.length} transitive dependenc${missingDependencies.length === 1 ? "y" : "ies"}.\n` +
+        `These files are imported by manifest entries but not listed in RUNTIME_MANIFEST.\n` +
+        `Add them to the appropriate section in packages/pt-runtime/src/build/runtime-manifest.ts:\n` +
+        details,
     );
   }
 
@@ -239,4 +248,63 @@ ${assembleRuntimeOutput(code, devDirLiteral)}`;
   }
 
   return output;
+}
+
+/**
+ * Given a set of source files and a missing dependency path, find which manifest
+ * files import it so the error message tells you exactly who needs it.
+ */
+function findRuntimeImportersOf(sourceFiles: Map<string, string>, missingFile: string): string[] {
+  const importers: string[] = [];
+  const manifestFiles = new Set(getAllRuntimeFiles());
+
+  for (const [filePath, content] of sourceFiles) {
+    const sf = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    sf.forEachChild((node) => {
+      if (ts.isImportDeclaration(node)) {
+        const specifier = node.moduleSpecifier;
+        if (!specifier || !ts.isStringLiteral(specifier)) return;
+        if (node.importClause?.isTypeOnly) return;
+        const resolved = resolveRuntimeImport(filePath, specifier.text, manifestFiles);
+        if (resolved === missingFile) {
+          importers.push(filePath);
+        }
+      }
+    });
+  }
+
+  return importers;
+}
+
+function resolveRuntimeImport(
+  fromFile: string,
+  specifier: string,
+  knownFiles: Set<string>,
+): string | null {
+  if (!specifier.startsWith(".")) return null;
+
+  const fromDir = path.posix.dirname(fromFile);
+  const normalized = path.posix.normalize(path.posix.join(fromDir, specifier));
+  const candidates = new Set<string>([
+    normalized,
+    normalized.replace(/\.js$/, ".ts"),
+    normalized.replace(/\.js$/, ".tsx"),
+    normalized + ".ts",
+    normalized + ".tsx",
+    path.posix.join(normalized, "index.ts"),
+    path.posix.join(normalized, "index.tsx"),
+  ]);
+
+  let fallback: string | null = null;
+
+  for (const candidate of candidates) {
+    if (!fallback && (candidate.endsWith(".ts") || candidate.endsWith(".tsx"))) {
+      fallback = candidate;
+    }
+    if (knownFiles.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  return fallback;
 }

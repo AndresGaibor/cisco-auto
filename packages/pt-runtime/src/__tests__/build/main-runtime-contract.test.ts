@@ -16,7 +16,7 @@ describe("main/runtime contract", () => {
     expect(getAllMainFiles()).toContain("pt/kernel/dead-letter.ts");
     expect(getAllMainFiles()).toContain("pt/kernel/queue-cleanup.ts");
     expect(getAllMainFiles()).toContain("pt/kernel/queue-claim.ts");
-    expect(getAllMainFiles()).toContain("pt/terminal/command-executor.ts");
+    expect(getAllMainFiles()).toContain("terminal/command-executor.ts");
   });
 
   test("runtime.js publica _ptDispatch y runtimeDispatcher", () => {

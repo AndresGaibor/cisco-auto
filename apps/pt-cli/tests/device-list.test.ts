@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "bun:test";
-import { createDefaultPTController } from "@cisco-auto/pt-control/controller";
+import { createDefaultPTController } from "../src/application/controller-provider.js";
 import {
   buildDeviceListFromSnapshot,
   loadLiveDeviceList,
@@ -9,7 +9,7 @@ import {
 import type { TopologySnapshot } from "@cisco-auto/pt-control/contracts";
 import { selectPortsForDisplay } from "../src/commands/device/list.js";
 
-vi.mock("@cisco-auto/pt-control/controller", () => ({
+vi.mock("../src/application/controller-provider.js", () => ({
   createDefaultPTController: vi.fn(),
 }));
 
@@ -66,18 +66,30 @@ describe("device list helpers", () => {
     expect(result.connectionsByDevice.R1?.[0]?.remoteDevice).toBe("S1");
   });
 
-  test("devuelve vacío si live falla y no hay estado", async () => {
+  test("lanza error si el bridge no está listo y no hay fallback", async () => {
     const controller = {
-      listDevices: vi.fn().mockRejectedValue(new Error("no respondió a tiempo")),
+      listDevices: vi.fn().mockRejectedValue(new Error("bridge not ready")),
       getBridgeStatus: () => ({ ready: false, warnings: [] }),
       getCachedSnapshot: () => null,
       readState: () => null,
     };
 
-    const result = await loadLiveDeviceListFromController(controller as never, undefined, 10);
+    await expect(loadLiveDeviceListFromController(controller as never, undefined, 10)).rejects.toThrow(
+      "BRIDGE_NOT_READY",
+    );
+  });
 
-    expect(result.count).toBe(0);
-    expect(result.devices).toEqual([]);
+  test("lanza error si el bridge no está listo y no hay fallback", async () => {
+    const controller = {
+      listDevices: vi.fn().mockRejectedValue(new Error("bridge not ready")),
+      getBridgeStatus: () => ({ ready: false, warnings: [] }),
+      getCachedSnapshot: () => null,
+      readState: () => null,
+    };
+
+    await expect(loadLiveDeviceListFromController(controller as never, undefined, 10)).rejects.toThrow(
+      "BRIDGE_NOT_READY",
+    );
   });
 
   test("usa el resultado vivo aunque el bridge no esté listo", async () => {
@@ -327,7 +339,7 @@ describe("device list helpers", () => {
     expect(result.devices[0]?.name).toBe("S1");
   });
 
-  test("loadLiveDeviceList devuelve vacío si no hay caché ni state", async () => {
+  test("loadLiveDeviceList lanza error si no hay caché ni state", async () => {
     const start = vi.fn();
     const stop = vi.fn().mockResolvedValue(undefined);
 
@@ -341,10 +353,7 @@ describe("device list helpers", () => {
       readState: () => null,
     } as never);
 
-    const result = await loadLiveDeviceList();
-
-    expect(result.count).toBe(0);
-    expect(result.devices).toEqual([]);
+    await expect(loadLiveDeviceList()).rejects.toThrow("BRIDGE_NOT_READY");
   });
 
   test("mapControllerResult: ambiguous links van a unresolvedLinks, no a connectionsByDevice", async () => {
