@@ -2,6 +2,7 @@
 import chalk from "chalk";
 import type { BridgeResultTimings } from "@cisco-auto/types";
 import type { TerminalCommandResult } from "@cisco-auto/terminal-contracts";
+import { cleanCmdOutput } from "./output-cleaner.js";
 
 export interface CmdCliResult {
   schemaVersion: "1.0";
@@ -11,6 +12,7 @@ export interface CmdCliResult {
   deviceKind: string;
   command: string;
   output: string;
+  rawOutput?: string;
   status: number;
   warnings: string[];
   error?: {
@@ -42,12 +44,22 @@ function formatTimingsSummary(timings: BridgeResultTimings): string {
   return `Timings: ${parts.join(" | ")}`;
 }
 
-export function toCmdCliResult(result: TerminalCommandResult): CmdCliResult {
+export function toCmdCliResult(
+  result: TerminalCommandResult,
+  options: { includeSyslogs?: boolean } = {},
+): CmdCliResult {
   const nextSteps: string[] = [];
   const timings =
     typeof result.evidence === "object" && result.evidence !== null
       ? ((result.evidence as { timings?: BridgeResultTimings }).timings ?? undefined)
       : undefined;
+  const cleaned = cleanCmdOutput({
+    command: result.command,
+    output: result.output,
+    deviceKind: result.deviceKind,
+    includeSyslogs: options.includeSyslogs,
+  });
+  const mergedWarnings = [...(result.warnings ?? []), ...cleaned.warnings];
 
   if (result.deviceKind === "ios") {
     nextSteps.push(`pt cmd ${result.device} "show running-config"`);
@@ -70,9 +82,10 @@ export function toCmdCliResult(result: TerminalCommandResult): CmdCliResult {
     device: result.device,
     deviceKind: result.deviceKind,
     command: result.command,
-    output: result.output,
+    output: cleaned.output,
+    rawOutput: result.rawOutput ?? cleaned.rawOutput,
     status: result.status,
-    warnings: result.warnings,
+    warnings: mergedWarnings,
     error: result.error,
     nextSteps,
     evidence: result.evidence,
@@ -87,7 +100,7 @@ export function printCmdResult(result: CmdCliResult, options: { json?: boolean; 
   }
 
   if (options.raw) {
-    process.stdout.write(result.output ? `${result.output}\n` : "");
+    process.stdout.write(result.rawOutput ? `${result.rawOutput}\n` : result.output ? `${result.output}\n` : "");
     return;
   }
 

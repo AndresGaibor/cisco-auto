@@ -103,7 +103,7 @@ describe("ExecutionEngine auto attach", () => {
     }
   });
 
-  test("startJob falla si ensure-mode no alcanza el modo esperado aunque el prompt sí cambie", async () => {
+  test("startJob completa ensure-mode aunque el status no sea cero si el modo llegó", async () => {
     const terminal = {
       attach: vi.fn(),
       detach: vi.fn(),
@@ -141,15 +141,16 @@ describe("ExecutionEngine auto attach", () => {
 
     try {
       const engine = createExecutionEngine(terminal);
-      const plan = createDeferredJobPlan("R1", [ensureModeStep("privileged-exec"), commandStep("show version")]);
+      const plan = createDeferredJobPlan("R1", [ensureModeStep("privileged-exec")]);
 
       const job = engine.startJob(plan);
 
       await new Promise((resolve) => setTimeout(resolve, 10));
 
-      expect(job.context.phase).toBe("error");
-      expect(job.context.errorCode).toBe("MODE_TRANSITION_FAILED");
-      expect(job.context.error).toContain("expected privileged-exec but got privileged-exec");
+      expect(job.context.phase).toBe("completed");
+      expect(job.context.finished).toBe(true);
+      expect(job.context.errorCode).toBeNull();
+      expect(job.context.error).toBeNull();
       expect(terminal.executeCommand).toHaveBeenCalledTimes(1);
     } finally {
       (globalThis as any).ipc = previousIpc;

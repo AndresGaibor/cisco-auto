@@ -88,6 +88,7 @@ export const RUNTIME_MANIFEST = {
     "handlers/omniscience-telepathy.ts",
     "handlers/omniscience-utils.ts",
     "handlers/link.ts",
+    "handlers/list-links.ts",
     "handlers/add-link.ts",
     "handlers/remove-link.ts",
     "handlers/verify-link.ts",

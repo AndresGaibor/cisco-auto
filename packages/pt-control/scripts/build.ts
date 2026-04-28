@@ -15,6 +15,7 @@
 import { resolve } from "node:path";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, utimesSync } from "node:fs";
 import { homedir } from "node:os";
+import { createHash } from "node:crypto";
 
 // ============================================================================
 // Configuration
@@ -163,10 +164,18 @@ function triggerReload(): void {
   bumpSeq();
   const seq = getNextSeq();
   const cmdFile = resolve(COMMANDS_DIR, `${String(seq).padStart(12, "0")}-__ping.json`);
+  const createdAt = Date.now();
+  const payload = { type: "__ping" };
   const cmd = JSON.stringify({
+    protocolVersion: 2,
+    id: `reload-${createdAt}`,
+    seq,
+    createdAt,
     type: "__ping",
-    id: `reload-${Date.now()}`,
-    payload: { type: "__ping" },
+    payload,
+    attempt: 1,
+    expiresAt: createdAt + 2000,
+    checksum: createHash("sha256").update(JSON.stringify({ type: "__ping", payload })).digest("hex"),
   });
   writeFileSync(cmdFile, cmd);
   console.log(`🔄 Reload triggered: ${cmdFile}`);

@@ -88,7 +88,7 @@ export class DeviceQueryService {
       }
     }
 
-    return this.inspect(device, false);
+    return null as unknown as DeviceInspectFastState | DeviceState;
   }
 
   private extractFastDeviceState(value: unknown): DeviceInspectFastState | null {

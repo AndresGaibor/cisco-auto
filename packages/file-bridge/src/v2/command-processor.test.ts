@@ -80,6 +80,7 @@ describe("CommandProcessor + CrashRecovery contract", () => {
     const firstResultPath = paths.resultFilePath(first!.id);
     expect(existsSync(firstResultPath)).toBe(true);
     expect(JSON.parse(readFileSync(firstResultPath, "utf8")).id).toBe(first!.id);
+    expect(JSON.parse(readFileSync(firstResultPath, "utf8")).type).toBe("configIos");
     expect(() => backpressure.checkCapacity()).not.toThrow();
 
     const second = processor.pickNextCommand();
@@ -117,5 +118,20 @@ describe("CommandProcessor + CrashRecovery contract", () => {
       : 0;
     expect(deadAfter).toBe(deadBefore);
     expect(existsSync(join(paths.commandsDir(), "_queue.json"))).toBe(true);
+  });
+
+  test("publishResult conserva cmd.type aunque el resultado traiga type null", () => {
+    const cmd = commandEnvelope(3, "terminal.plan.run");
+
+    processor.publishResult(cmd as any, {
+      startedAt: Date.now(),
+      status: "completed",
+      ok: true,
+      value: { ok: true },
+      type: null,
+    } as any);
+
+    const parsed = JSON.parse(readFileSync(paths.resultFilePath(cmd.id), "utf8"));
+    expect(parsed.type).toBe("terminal.plan.run");
   });
 });

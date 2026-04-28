@@ -109,7 +109,7 @@ export function createTerminalPlanAdapter() {
     return {
       id: `plan-${Date.now()}`,
       device,
-      targetMode: "privileged-exec",
+      targetMode: undefined,
       steps: [{ kind: "command", command }],
     };
   }

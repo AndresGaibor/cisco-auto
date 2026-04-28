@@ -22,6 +22,8 @@ export function createDeviceListCommand(): Command {
     .description("Listar dispositivos en PT (consulta directa)")
     .option("-t, --type <type>", "Filtrar por tipo (router|switch|pc|server)")
     .option("--refresh", "Forzar actualización del cache de puertos (TTL: 5 min)")
+    .option("--deep", "Enriquecer con snapshot completo de PT; puede ser lento", false)
+    .option("--no-deep", "No usar snapshot completo ni enriquecimiento lento", false)
     .option("--verbose", "Mostrar todos los puertos y enlaces, sin límite")
     .option("--links", "Vista enfocada en conectividad (todos los peers)")
     .option("--xml", "Enriquecer con datos del XML (VLANs, modules, ARP, MAC, versión)")
@@ -33,13 +35,20 @@ export function createDeviceListCommand(): Command {
       const verbose = options.verbose ?? false;
       const linksMode = options.links ?? false;
       const useXml = options.xml ?? false;
+      const deep = Boolean(options.deep);
 
       let result;
       try {
         if (useXml) {
-          result = await loadLiveDeviceListXml(options.type, { refreshCache: options.refresh });
+          result = await loadLiveDeviceListXml(options.type, {
+            refreshCache: options.refresh,
+            deep,
+          });
         } else {
-          result = await loadLiveDeviceList(options.type, { refreshCache: options.refresh });
+          result = await loadLiveDeviceList(options.type, {
+            refreshCache: options.refresh,
+            deep,
+          });
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

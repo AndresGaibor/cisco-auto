@@ -29,50 +29,36 @@ export function renderRootHelp(commands: PtCommandDefinition[]): string {
 
   const lines: string[] = [];
   lines.push("");
-  lines.push(chalk.bold("PT Control — CLI profesional para Cisco Packet Tracer"));
+  lines.push(chalk.bold.cyan("PT Control — CLI profesional para Cisco Packet Tracer"));
   lines.push("");
-  lines.push("Uso:");
+  lines.push(chalk.bold("Uso:"));
   lines.push("  pt <comando> [subcomando] [args] [flags]");
-  lines.push("");
-  lines.push("Reglas mentales:");
-  lines.push("  pt cmd      Ejecuta comandos dentro de routers, switches, PCs y servers");
-  lines.push("  pt set      Cambia propiedades/API/GUI que no son terminal");
-  lines.push("  pt device   Crea, lista y modifica dispositivos");
-  lines.push("  pt link     Crea y valida cableado");
-  lines.push("  pt verify   Comprueba si el laboratorio está bien");
-  lines.push("  pt omni     Inspección profunda, fallback experimental y raw eval controlado");
   lines.push("");
 
   for (const group of GROUP_ORDER) {
     const groupCommands = publicCommands.filter((command) => command.group === group);
     if (groupCommands.length === 0) continue;
 
-    lines.push(chalk.bold(`${GROUP_LABELS[group]}:`));
+    lines.push(chalk.bold.underline(`${GROUP_LABELS[group]}:`));
     for (const command of groupCommands) {
-      lines.push(`  ${command.name.padEnd(12)} ${command.summary}`);
+      const aliases = command.aliases ? ` (${command.aliases.join(", ")})` : "";
+      lines.push(`  ${chalk.green(command.name)}${aliases.padEnd(15 - command.name.length)} ${command.summary}`);
     }
     lines.push("");
   }
 
-  lines.push(chalk.bold("Primeros pasos:"));
-  lines.push("  pt doctor");
-  lines.push("  pt device list");
-  lines.push('  pt cmd R1 "show ip interface brief"');
-  lines.push('  pt cmd PC1 "ipconfig"');
-  lines.push("  pt verify ping PC1 <gateway>");
+  lines.push(chalk.bold.underline("Ejemplos rápidos:"));
+  lines.push(`  ${chalk.cyan("pt doctor")}                           Verificar entorno`);
+  lines.push(`  ${chalk.cyan('pt cmd R1 "show ip int br"')}       Ver interfaces`);
+  lines.push(`  ${chalk.cyan("pt device list --json")}                Lista JSON`);
+  lines.push(`  ${chalk.cyan("pt link suggest PC1 SW1")}              Sugerir puertos`);
+  lines.push(`  ${chalk.cyan("pt verify ping PC1 192.168.1.1")}      Validar conectividad`);
   lines.push("");
-  lines.push(chalk.bold("Ayuda por comando:"));
-  lines.push("  pt cmd --help");
-  lines.push("  pt set --help");
-  lines.push("  pt verify --help");
-  lines.push("  pt omni --help");
-  lines.push("  pt omni status");
-  lines.push("  pt omni raw --help");
-  lines.push("");
-  lines.push(chalk.bold("Salida para agentes/autómatas:"));
-  lines.push("  pt device list --json");
-  lines.push('  pt cmd R1 "show version" --json');
-  lines.push("  pt verify ping PC1 <gateway> --json");
+  
+  lines.push(chalk.bold.underline("Ayuda:"));
+  lines.push(`  ${chalk.yellow("pt <comando> --help")}               Ayuda de un comando`);
+  lines.push(`  ${chalk.yellow("pt <comando> <sub> --help")}         Ayuda de subcomando`);
+  lines.push(`  ${chalk.yellow("pt doctor")}                         Diagnóstico completo`);
   lines.push("");
 
   return lines.join("\n");

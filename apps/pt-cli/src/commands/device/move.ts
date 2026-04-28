@@ -32,11 +32,11 @@ export const DEVICE_MOVE_META: CommandMeta = {
   longDescription: 'Mueve un dispositivo a las coordenadas especificadas en el canvas de Packet Tracer.',
   examples: [
     {
-      command: 'bun run pt device move R1 -x 200 -y 300',
+      command: 'bun run pt device move R1 --x 200 --y 300',
       description: 'Mover router R1 a posición (200, 300)'
     },
     {
-      command: 'bun run pt device move S1 --xpos 400 --ypos 150',
+      command: 'bun run pt device move S1 --x 400 --y 150',
       description: 'Mover switch S1 a posición (400, 150)'
     }
   ],
@@ -61,8 +61,8 @@ export function createDeviceMoveCommand(): Command {
     .argument('[name]', 'Nombre del dispositivo')
     .argument('[x]', 'Nueva posición X')
     .argument('[y]', 'Nueva posición Y')
-    .option('-x, --xpos <x>', 'Nueva posición X', '100')
-    .option('-y, --ypos <y>', 'Nueva posición Y', '100')
+    .option('--x <x>', 'Nueva posición X', '100')
+    .option('--y <y>', 'Nueva posición Y', '100')
     .option('-i, --interactive', 'Seleccionar el dispositivo de forma interactiva', false)
     .option('--examples', 'Mostrar ejemplos de uso y salir', false)
     .option('--schema', 'Mostrar schema JSON del resultado y salir', false)
@@ -100,8 +100,8 @@ export function createDeviceMoveCommand(): Command {
       }
 
       let deviceName = name;
-      const x = parseInt(xArg ?? options.xpos ?? '100', 10);
-      const y = parseInt(yArg ?? options.ypos ?? '100', 10);
+      const x = parseInt(xArg ?? options.x ?? '100', 10);
+      const y = parseInt(yArg ?? options.y ?? '100', 10);
 
       if (!Number.isFinite(x) || !Number.isFinite(y)) {
         throw new Error('Las coordenadas X/Y deben ser números válidos');

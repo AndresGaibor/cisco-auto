@@ -18,6 +18,7 @@ const USE_LEGACY_QUEUE_INDEX = true;
 
 export interface QueueClaim {
   poll(): CommandEnvelope | null;
+  pollAllowedTypes(allowedTypes: string[]): CommandEnvelope | null;
   count(): number;
 }
 
@@ -60,6 +61,41 @@ export function createQueueClaim(
 
   function count(): number {
     return listCandidates().length;
+  }
+
+  function allowedSet(allowedTypes: string[]): Record<string, boolean> {
+    const set: Record<string, boolean> = {};
+
+    for (const type of allowedTypes) {
+      const normalized = String(type || "").trim();
+      if (normalized) set[normalized] = true;
+    }
+
+    return set;
+  }
+
+  function readEnvelopeTypeAtPath(path: string): string | null {
+    const s = safeFM();
+    if (!s.available || !s.fm) return null;
+
+    try {
+      if (!s.fm.fileExists(path)) return null;
+
+      const content = s.fm.getFileContents(path);
+      if (!content || content.length < 10) return null;
+
+      const parsed = JSON.parse(content);
+      const type = String((parsed as { type?: unknown } | null)?.type ?? "").trim();
+
+      return type || null;
+    } catch (e) {
+      logQueue("[queue-claim] no se pudo leer type para filtro: " + path + " - " + String(e));
+      return null;
+    }
+  }
+
+  function isAllowedType(type: string | null, allowed: Record<string, boolean>): boolean {
+    return !!type && allowed[type] === true;
   }
 
   function parseEnvelopeAtPath(filename: string, dstPath: string): CommandEnvelope | null {
@@ -240,5 +276,74 @@ export function createQueueClaim(
     return null;
   }
 
-  return { poll, count };
+  function pollAllowedTypes(allowedTypes: string[]): CommandEnvelope | null {
+    const s = safeFM();
+    if (!s.available || !s.fm) {
+      logQueue("[queue-claim] FM no disponible para pollAllowedTypes");
+      return null;
+    }
+
+    const fm = s.fm;
+    const allowed = allowedSet(allowedTypes);
+
+    const files = listCandidates();
+    if (files.length > 0) {
+      logQueue(
+        "[queue-claim] control candidatos: " +
+          files.length +
+          " " +
+          JSON.stringify(files.slice(0, 5)),
+      );
+    }
+
+    for (const filename of files) {
+      const srcPath = commandsDir + "/" + filename;
+      const dstPath = inFlightDir + "/" + filename;
+
+      if (fm.fileExists(dstPath)) {
+        const inFlightType = readEnvelopeTypeAtPath(dstPath);
+
+        if (!isAllowedType(inFlightType, allowed)) {
+          logQueue(
+            "[queue-claim] control skip in-flight no permitido: " +
+              filename +
+              " tipo=" +
+              String(inFlightType),
+          );
+          continue;
+        }
+
+        logQueue("[queue-claim] control reclaim permitido: " + filename);
+        const cmd = reclaimFromInFlight(filename, dstPath);
+        if (cmd) return cmd;
+
+        continue;
+      }
+
+      if (!fm.fileExists(srcPath)) {
+        continue;
+      }
+
+      const sourceType = readEnvelopeTypeAtPath(srcPath);
+
+      if (!isAllowedType(sourceType, allowed)) {
+        logQueue(
+          "[queue-claim] control skip commands no permitido: " +
+            filename +
+            " tipo=" +
+            String(sourceType),
+        );
+        continue;
+      }
+
+      logQueue("[queue-claim] control claim permitido: " + filename + " tipo=" + sourceType);
+
+      const claimed = claimFromCommands(filename, srcPath, dstPath);
+      if (claimed) return claimed;
+    }
+
+    return null;
+  }
+
+  return { poll, pollAllowedTypes, count };
 }

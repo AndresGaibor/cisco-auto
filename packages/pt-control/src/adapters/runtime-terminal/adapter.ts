@@ -77,6 +77,55 @@ export function createRuntimeTerminalAdapter(
     );
   }
 
+  function buildTerminalTransportFailure(
+    message: string,
+    evidence?: Record<string, unknown>,
+  ): TerminalPortResult {
+    return {
+      ok: false,
+      output: "",
+      status: 1,
+      promptBefore: "",
+      promptAfter: "",
+      modeBefore: "",
+      modeAfter: "",
+      events: [],
+      warnings: [message],
+      parsed: {
+        ok: false,
+        code: "TERMINAL_PLAN_TRANSPORT_FAILED",
+        error: message,
+      },
+      evidence,
+      confidence: 0,
+    };
+  }
+
+  function buildTerminalDeferredFailure(
+    code: string,
+    message: string,
+    evidence?: Record<string, unknown>,
+  ): TerminalPortResult {
+    return {
+      ok: false,
+      output: "",
+      status: 1,
+      promptBefore: "",
+      promptAfter: "",
+      modeBefore: "",
+      modeAfter: "",
+      events: [],
+      warnings: [message],
+      parsed: {
+        ok: false,
+        code,
+        error: message,
+      },
+      evidence,
+      confidence: 0,
+    };
+  }
+
   async function executeLegacyPlan(normalizedPlan: ReturnType<typeof planAdapter.normalizePlan>): Promise<TerminalPortResult> {
     let promptBefore = "";
     let modeBefore = "";
@@ -237,11 +286,12 @@ export function createRuntimeTerminalAdapter(
     plan: TerminalPlan,
     timeoutMs: number,
   ): Promise<TerminalPortResult | null> {
-    const submitTimeoutMs = plan.steps[0]?.timeout ?? timeoutMs;
-    const submitResult = await bridge.sendCommandAndWait<unknown>(
+    const submitTimeoutMs = Math.min(Number(plan.steps[0]?.timeout ?? timeoutMs), 5000);
+    const submitResult = await bridge.sendCommandAndWait(
       "terminal.plan.run",
       { plan, options: { timeoutMs } },
       submitTimeoutMs,
+      { resolveDeferred: false },
     );
     let finalTimings: unknown = submitResult.timings;
 
@@ -286,20 +336,62 @@ export function createRuntimeTerminalAdapter(
 
     if (isDeferredValue(submitValue)) {
       const startedAt = Date.now();
-      let pollValue: unknown = submitValue;
+      const pollTimeoutMs = Math.max(timeoutMs, 2000);
+      const pollIntervalMs = 300;
 
-      while (Date.now() - startedAt < timeoutMs) {
-        const pollResult = await bridge.sendCommandAndWait<unknown>(
-          "__pollDeferred",
-          { ticket: submitValue.ticket },
-          timeoutMs,
-        );
+      let pollValue: unknown = null;
 
-        finalTimings = pollResult.timings;
-        pollValue = normalizeBridgeValue(pollResult);
+      while (Date.now() - startedAt < pollTimeoutMs) {
+        try {
+          const pollResult = await bridge.sendCommandAndWait(
+            "__pollDeferred",
+            { ticket: submitValue.ticket },
+            Math.max(pollTimeoutMs - (Date.now() - startedAt), 1000),
+            { resolveDeferred: false },
+          );
+
+          finalTimings = pollResult.timings;
+          pollValue = normalizeBridgeValue(pollResult);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error ?? "Unknown poll error");
+
+          return buildTerminalDeferredFailure(
+            "TERMINAL_DEFERRED_POLL_TIMEOUT",
+            `__pollDeferred no respondió en ${pollTimeoutMs}ms para ticket ${submitValue.ticket}: ${message}`,
+            {
+              phase: "terminal-plan-poll",
+              ticket: submitValue.ticket,
+              pollTimeoutMs,
+              elapsedMs: Date.now() - startedAt,
+              error: message,
+            },
+          );
+        }
+
         if (!isStillPending(pollValue)) {
           break;
         }
+
+        const remainingMs = pollTimeoutMs - (Date.now() - startedAt);
+        if (remainingMs <= 0) {
+          break;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, Math.min(pollIntervalMs, remainingMs)));
+      }
+
+      if (isStillPending(pollValue)) {
+        return buildTerminalDeferredFailure(
+          "TERMINAL_DEFERRED_STALLED",
+          `terminal.plan.run creó el ticket ${submitValue.ticket}, pero el job siguió pendiente después de ${pollTimeoutMs}ms.`,
+          {
+            phase: "terminal-plan-poll",
+            ticket: submitValue.ticket,
+            pollTimeoutMs,
+            elapsedMs: Date.now() - startedAt,
+            pollValue,
+          },
+        );
       }
 
       const parsed = responseParser.parseCommandResponse(pollValue, {

@@ -98,81 +98,118 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
       });
   }
 
-  function execLog(msg: string): void {
-    try {
-      dprint("[exec] " + msg);
-    } catch {}
+  // ============================================================================
+  // Helpers para detección de prompt y output completo
+  // ============================================================================
+
+  function normalizeEol(value: unknown): string {
+    return String(value ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   }
 
-  function createJobContext(plan: DeferredJobPlan): JobContext {
-    return {
-      plan,
-      currentStep: 0,
-      phase: "pending",
-      outputBuffer: "",
-      startedAt: Date.now(),
-      updatedAt: Date.now(),
-      stepResults: [],
-      lastMode: "",
-      lastPrompt: "",
-      paged: false,
-      waitingForCommandEnd: false,
-      finished: false,
-      result: null,
-      error: null,
-      errorCode: null,
-      pendingDelay: null,
-      waitingForConfirm: false,
-    };
+  function isIosPrompt(value: unknown): boolean {
+    const line = String(value ?? "").trim();
+    return /^[A-Za-z0-9._-]+(?:\(config[^)]*\))?[>#]$/.test(line);
   }
 
-  function tryAttachTerminal(deviceName: string): boolean {
-    try {
-      const scope = (typeof self !== "undefined" ? self : Function("return this")()) as any;
-      const ipc = scope && scope.ipc ? scope.ipc : null;
+  function lastNonEmptyLine(value: unknown): string {
+    const lines = normalizeEol(value)
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
 
-      if (!ipc || typeof ipc.network !== "function") {
-        execLog("ATTACH SKIP no ipc.network/getDevice device=" + deviceName);
-        return false;
-      }
+    return lines.length > 0 ? lines[lines.length - 1] : "";
+  }
 
-      const net = ipc.network();
-      if (!net || typeof net.getDevice !== "function") {
-        execLog("ATTACH FAIL no network/getDevice device=" + deviceName);
-        return false;
-      }
+  function outputLooksComplete(output: string, command: string): boolean {
+    const text = normalizeEol(output);
+    const cmd = String(command ?? "").trim().toLowerCase();
 
-      const dev = net.getDevice(deviceName);
-      if (!dev) {
-        execLog("ATTACH FAIL device not found=" + deviceName);
-        return false;
-      }
+    if (!text.trim()) return false;
 
-      if (typeof (dev as any).getCommandLine !== "function") {
-        execLog("ATTACH FAIL getCommandLine missing device=" + deviceName);
-        return false;
-      }
-
-      const term = (dev as any).getCommandLine();
-      if (!term) {
-        execLog("ATTACH FAIL getCommandLine returned null device=" + deviceName);
-        return false;
-      }
-
-      terminal.attach(deviceName, term);
-      execLog("ATTACH OK device=" + deviceName);
+    const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+    const hasCommandEcho = cmd.length > 0 && lines.some((line) => line.toLowerCase() === cmd);
+    const hasPromptAtEnd = isIosPrompt(lastNonEmptyLine(text));
+    const hasMeaningfulBody = lines.some((line) => {
+      if (!line) return false;
+      if (cmd && line.toLowerCase() === cmd) return false;
+      if (isIosPrompt(line)) return false;
       return true;
-    } catch (error) {
-      execLog("ATTACH ERROR device=" + deviceName + " error=" + String(error));
-      return false;
-    }
+    });
+
+    return hasCommandEcho && hasPromptAtEnd && hasMeaningfulBody;
   }
 
-  function isJobFinished(jobId: string): boolean {
-    const job = jobs[jobId];
-    if (!job) return true;
-    const ctx = job.context;
-    return ctx.finished || ctx.phase === "completed" || ctx.phase === "error";
+  function reapStaleJobs(): void {
+    const now = Date.now();
+
+    for (const key in jobs) {
+      const job = jobs[key];
+      if (!job || job.context.finished || job.context.phase === "completed" || job.context.phase === "error") {
+        continue;
+      }
+
+      if (job.pendingCommand === null) {
+        continue;
+      }
+
+      if (now - job.context.updatedAt <= getJobTimeoutMs(job)) {
+        const output = String(job.context.outputBuffer ?? "");
+        const lastPrompt = String(job.context.lastPrompt ?? "");
+        const waitingForCommandEnd = job.context.waitingForCommandEnd === true;
+
+        const looksBackAtPrompt =
+          /^[A-Za-z0-9._-]+(?:\(config[^)]*\))?[>#]$/.test(lastPrompt.trim());
+
+        const hasOutput = output.trim().length > 0;
+
+        if (
+          waitingForCommandEnd &&
+          job.context.phase === "waiting-command" &&
+          looksBackAtPrompt &&
+          hasOutput &&
+          now - job.context.updatedAt > 750
+        ) {
+          execLog(
+            "JOB FORCE COMPLETE FROM PROMPT id=" +
+              job.id +
+              " device=" +
+              job.device +
+              " prompt=" +
+              lastPrompt,
+          );
+
+          job.pendingCommand = null;
+          job.context.waitingForCommandEnd = false;
+          job.context.phase = "completed";
+          job.context.finished = true;
+          job.context.error = null;
+          job.context.errorCode = null;
+          job.context.updatedAt = now;
+
+          job.context.result = {
+            ok: true,
+            output,
+            status: 0,
+            prompt: lastPrompt,
+            mode: job.context.lastMode,
+          } as any;
+
+          cleanupConfigSession(job.device, job.context.lastMode, job.context.lastPrompt);
+          wakePendingJobsForDevice(job.device);
+        }
+        continue;
+      }
+
+      execLog("JOB TIMEOUT id=" + job.id + " device=" + job.device + " phase=" + job.context.phase);
+      job.pendingCommand = null;
+      job.context.phase = "error";
+      job.context.finished = true;
+      job.context.error = "Job timed out while waiting for terminal command completion";
+      job.context.errorCode = "JOB_TIMEOUT";
+      job.context.updatedAt = now;
+      cleanupConfigSession(job.device, job.context.lastMode, job.context.lastPrompt);
+      wakePendingJobsForDevice(job.device);
+    }
   }
 
   function wakePendingJobsForDevice(device: string): void {
@@ -264,37 +301,20 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
       }
 
       case "command":
-      case "ensure-mode":
       case "save-config": {
         let command = step.value || "";
-        if (stepType === "ensure-mode") {
-          const targetMode = step.value || "privileged-exec";
-          const currentSession = terminal.getSession(job.device);
-          const currentMode = currentSession ? String(currentSession.mode ?? "") : "";
-
-          if (targetMode === "privileged-exec") {
-            command = isConfigMode(currentMode) ? "end" : "enable";
-          }
-          else if (targetMode === "config") command = "configure terminal";
-          else if (targetMode === "config-if")
-            command = "interface " + (step.options?.expectedPrompt || "");
-        } else if (stepType === "save-config") {
+        if (stepType === "save-config") {
           command = "write memory";
         }
 
-        if (!command && stepType === "command") {
+        if (!command) {
           execLog("SKIP empty command step=" + ctx.currentStep + " id=" + job.id);
           ctx.currentStep++;
           advanceJob(job.id);
           return;
         }
 
-        ctx.phase =
-          stepType === "ensure-mode"
-            ? "waiting-ensure-mode"
-            : stepType === "save-config"
-              ? "waiting-save"
-              : "waiting-command";
+        ctx.phase = stepType === "save-config" ? "waiting-save" : "waiting-command";
         ctx.waitingForCommandEnd = true;
         execLog(
           "EXEC CMD step=" +
@@ -309,10 +329,13 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
             job.id,
         );
 
-        job.pendingCommand = terminal.executeCommand(job.device, command, { commandTimeoutMs: timeout });
+        job.pendingCommand = terminal.executeCommand(job.device, command, {
+          commandTimeoutMs: timeout,
+        });
 
         job.pendingCommand
           .then(function (result) {
+            if (ctx.finished) return;
             execLog(
               "CMD OK id=" +
                 job.id +
@@ -338,27 +361,6 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
               status: result.status,
               completedAt: Date.now(),
             });
-
-            if (stepType === "ensure-mode") {
-              const target = step.value || "privileged-exec";
-              if (result.session.mode !== target || result.status !== 0) {
-                execLog(
-                  "MODE TRANSITION FAILED id=" +
-                    job.id +
-                    " expected=" +
-                    target +
-                    " got=" +
-                    result.session.mode,
-                );
-                ctx.phase = "error";
-                ctx.error =
-                  "Mode transition failed: expected " + target + " but got " + result.session.mode;
-                ctx.errorCode = "MODE_TRANSITION_FAILED";
-                ctx.finished = true;
-                cleanupConfigSession(job.device, result.session.mode, result.session.prompt);
-                return;
-              }
-            }
 
             if (result.status !== 0 && stopOnError) {
               execLog("CMD FAILED (stopOnError) id=" + job.id + " status=" + result.status);
@@ -388,6 +390,7 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
             }
           })
           .catch(function (err) {
+            if (ctx.finished) return;
             execLog("CMD ERROR id=" + job.id + " error=" + String(err));
             job.pendingCommand = null;
             ctx.waitingForCommandEnd = false;
@@ -459,9 +462,11 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
     },
     advanceJob: advanceJob,
     getJob: function (id) {
+      reapStaleJobs();
       return jobs[id] || null;
     },
     getActiveJobs: function () {
+      reapStaleJobs();
       const active: ActiveJob[] = [];
       for (const key in jobs) {
         if (!isJobFinished(key)) {

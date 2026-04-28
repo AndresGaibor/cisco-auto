@@ -21,20 +21,42 @@ import { createAuditCommand } from "./lab/audit.js";
 import { createHistoryCommand } from "./history.js";
 import { createShowCommand } from "./show.js";
 import { createSetupCommand } from "./setup.js";
+import { createLogsCommand } from "./logs.js";
 
 export type CommandFactory = () => Command;
 
 export const PUBLIC_COMMAND_DEFINITIONS: PtCommandDefinition[] = [
   {
-id: "build",
+    id: "build",
     name: "build",
     group: "core",
     summary: "Build y deploy de archivos a ~/pt-dev/",
     description: "Compila y publica el runtime y assets auxiliares.",
-    examples: [{ command: "pt build", description: "Construir runtime" }],
+    examples: [
+      { command: "pt build", description: "Construir runtime" },
+    ],
     related: ["pt runtime reload", "pt doctor"],
     agentHints: ["Usar cuando cambian scripts del runtime o del CLI."],
     factory: createBuildCommand,
+  },
+  {
+    id: "logs",
+    name: "logs",
+    group: "debug",
+    summary: "Inspeccionar trazas de ejecución",
+    description: "Proporciona inspección de logs de CLI, bridge y PT-side para debugging.",
+    examples: [
+      { command: "pt logs tail", description: "Mostrar últimos eventos" },
+      { command: "pt logs errors", description: "Buscar errores recientes" },
+      { command: "pt logs session <id>", description: "Ver timeline de sesión" },
+      { command: "pt logs bundle <id>", description: "Generar bundle de debugging" },
+    ],
+    related: ["pt doctor", "pt history", "pt runtime logs"],
+    agentHints: [
+      "Usar para inspeccionar trazas de ejecución y debugging.",
+      "Los subcomandos tail, session, command, errors, bundle, ios proveen diferentes vistas.",
+    ],
+    factory: createLogsCommand,
   },
   {
     id: "doctor",
@@ -133,12 +155,14 @@ id: "build",
     description: "Controla dispositivos físicos/lógicos en el canvas de Packet Tracer.",
     examples: [
       { command: "pt device list", description: "Listar dispositivos" },
+      { command: "pt device list --deep", description: "Listar con snapshot completo" },
       { command: "pt device add R1 2911", description: "Crear router R1" },
       { command: "pt device add SW1 2960-24TT --at 300,120", description: "Crear switch en posición específica" },
     ],
     related: ["pt link add", "pt cmd", "pt set host"],
     agentHints: [
       "Después de crear dispositivos, usa pt device list --json para obtener nombres reales.",
+      "Usa pt device list --deep solo cuando necesites enriquecer con snapshot completo.",
       "No asumas puertos: usa pt device ports <device>.",
     ],
     factory: createDeviceCommand,
@@ -151,7 +175,10 @@ id: "build",
     summary: "Crea, lista y valida enlaces físicos",
     description: "Controla cableado entre dispositivos y ayuda a sugerir puertos compatibles.",
     examples: [
-      { command: "pt link add R1:g0/0 SW1:g0/1", description: "Conectar router y switch" },
+      { command: "pt link add R1:g0/0 SW1:g0/1 --no-verify", description: "Conectar router y switch sin verificación" },
+      { command: "pt link remove R1:g0/0 --if-exists", description: "Eliminar un enlace si existe" },
+      { command: "pt link verify R1:g0/0 SW1:g0/1", description: "Verificar un enlace" },
+      { command: "pt link doctor R1:g0/0 SW1:g0/1", description: "Diagnosticar un enlace" },
       { command: "pt link suggest PC1 SW1", description: "Sugerir puertos libres compatibles" },
     ],
     related: ["pt device ports", "pt verify reachability"],

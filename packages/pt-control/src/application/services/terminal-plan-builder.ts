@@ -78,12 +78,7 @@ function requiresPrivilegedIosCommand(line: string): boolean {
 }
 
 function shouldPrependEnable(options: BuildUniversalTerminalPlanOptions, lines: string[]): boolean {
-  if (options.deviceKind !== "ios") return false;
-  if (options.mode === "raw") return false;
-  if (lines.length === 0) return false;
-  if (isEnableCommand(lines[0] ?? "")) return false;
-
-  return lines.some(requiresPrivilegedIosCommand);
+  return false;
 }
 
 function inferIosTargetMode(lines: string[]): TerminalMode | undefined {
@@ -91,14 +86,6 @@ function inferIosTargetMode(lines: string[]): TerminalMode | undefined {
 
   if (normalized.some((line) => isConfigureTerminal(line))) {
     return "global-config";
-  }
-
-  if (normalized.some(requiresPrivilegedIosCommand)) {
-    return "privileged-exec";
-  }
-
-  if (normalized.length > 1) {
-    return "privileged-exec";
   }
 
   return undefined;
@@ -143,6 +130,31 @@ export function buildUniversalTerminalPlan(
       metadata: {
         deviceKind: "host",
         source: "pt-control.terminal-plan-builder",
+      },
+    };
+  }
+
+  if (options.deviceKind === "ios" && lines.length === 1 && isEnableCommand(lines[0] ?? "")) {
+    return {
+      id: options.id,
+      device: options.device,
+      targetMode: "privileged-exec",
+      steps: [
+        {
+          kind: "ensureMode",
+          expectMode: "privileged-exec",
+          timeout: options.timeoutMs,
+          metadata: {
+            reason: "explicit-enable-command",
+          },
+        },
+      ],
+      timeouts: buildDefaultTerminalTimeouts(options.timeoutMs),
+      policies: buildDefaultTerminalPolicies(options),
+      metadata: {
+        deviceKind: "ios",
+        source: "pt-control.terminal-plan-builder",
+        lineCount: lines.length,
       },
     };
   }

@@ -82,6 +82,10 @@ export interface FileBridgeV2Options {
   autoGcIntervalMs?: number;
 }
 
+export interface SendCommandAndWaitOptions {
+  resolveDeferred?: boolean;
+}
+
 /**
  * Bridge V2 que coordina todos los componentes del sistema de archivos
  * para comunicación CLI <-> PT de forma durable y crash-safe.
@@ -410,6 +414,7 @@ export class FileBridgeV2 extends EventEmitter {
     type: string,
     payload: TPayload,
     timeoutMs?: number,
+    options: SendCommandAndWaitOptions = {},
   ): Promise<BridgeResultEnvelope<TResult>> {
     debugLog(
       `sendCommandAndWait type=${type} timeoutMs=${String(timeoutMs ?? this.options.resultTimeoutMs ?? 120_000)}`,
@@ -505,7 +510,7 @@ export class FileBridgeV2 extends EventEmitter {
       completedAtMs: resultMeta?.completedAtMs ?? result.completedAt,
     };
 
-    if (this.isDeferredBridgeValue(result.value)) {
+    if (options.resolveDeferred !== false && this.isDeferredBridgeValue(result.value)) {
       const remainingTimeout = timeout - (Date.now() - started);
       if (remainingTimeout <= 0) {
         throw new Error(
@@ -517,6 +522,7 @@ export class FileBridgeV2 extends EventEmitter {
         "__pollDeferred",
         { ticket: result.value.ticket },
         remainingTimeout,
+        options,
       );
       const followUpTimings = (followUp as { timings?: typeof timings }).timings;
       const receivedAt = Date.now();

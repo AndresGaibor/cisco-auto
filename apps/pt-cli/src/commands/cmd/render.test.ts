@@ -11,6 +11,7 @@ describe("toCmdCliResult", () => {
       deviceKind: "ios",
       command: "show version",
       output: "output",
+      rawOutput: "raw output",
       status: 0,
       warnings: [],
       evidence: {
@@ -33,6 +34,7 @@ describe("toCmdCliResult", () => {
       queueLatencyMs: 4,
       execLatencyMs: 5,
     });
+    expect(result.rawOutput).toBe("raw output");
   });
 });
 
@@ -101,6 +103,32 @@ describe("printCmdResult", () => {
     const output = stdoutSpy.mock.calls.flat().join(" ");
     expect(output).toContain('"timings"');
     expect(output).toContain('"waitMs": 15');
+
+    stdoutSpy.mockRestore();
+  });
+
+  test("prioriza rawOutput cuando se solicita salida cruda", () => {
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true as never);
+
+    printCmdResult(
+      {
+        schemaVersion: "1.0",
+        ok: true,
+        action: "cmd.exec",
+        device: "R1",
+        deviceKind: "ios",
+        command: "show version",
+        output: "salida limpia",
+        rawOutput: "salida cruda",
+        status: 0,
+        warnings: [],
+        nextSteps: [],
+      },
+      { json: false, raw: true, quiet: false },
+    );
+
+    const output = stdoutSpy.mock.calls.flat().join(" ");
+    expect(output).toContain("salida cruda");
 
     stdoutSpy.mockRestore();
   });

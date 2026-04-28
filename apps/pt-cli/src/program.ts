@@ -57,6 +57,7 @@ const ROOT_COMMAND_NAMES = [
   "verify",
   "omni",
   "omniscience",
+  "logs",
   "completion",
 ];
 
@@ -76,10 +77,43 @@ export function createProgram(): Command {
       outputError: (str, write) => write(str),
     });
 
+  // Configurar ayuda personalizada al estilo gh
+  program.configureHelp({
+    formatHelp: (cmd, helper) => {
+      const cmdName = cmd.name();
+      
+      // Solo mostrar ayuda raíz si es el comando pt
+      if (cmdName === "pt" || !cmd.parent) {
+        return renderRootHelp(PUBLIC_COMMAND_DEFINITIONS);
+      }
+      
+      // Para subcomandos, usar el formato por defecto de Commander
+      // pero sin heredar la ayuda del padre
+      const usage = helper.commandUsage(cmd);
+      const help = helper.visibleOptions(cmd).map((opt) => helper.optionTerm(opt) + "  " + opt.description).join("\n");
+      const subcommands = helper.visibleCommands(cmd);
+      
+      let output = `Usage: ${usage}\n\n`;
+      output += `${cmd.description()}\n\n`;
+      
+      if (subcommands.length > 0) {
+        output += "Commands:\n";
+        for (const sub of subcommands) {
+          output += `  ${helper.subcommandTerm(sub).padEnd(30)} ${sub.description()}\n`;
+        }
+        output += "\n";
+      }
+      
+      if (help.trim()) {
+        output += "Options:\n" + help + "\n\n";
+      }
+      
+      return output;
+    },
+  });
+
   addGlobalFlags(program);
   attachCommandTiming(program);
-
-  program.addHelpText("beforeAll", () => renderRootHelp(PUBLIC_COMMAND_DEFINITIONS));
 
   const registered = new Set<string>();
 
@@ -125,6 +159,33 @@ export function createProgram(): Command {
 }
 
 export async function parseProgram(argv = process.argv): Promise<void> {
+  // Extraer primer argumento que parece comando (no empieza con -)
+  const attemptedCommand = argv.slice(2).find((arg) => !arg.startsWith("-"));
+  const hasHelpFlag = argv.slice(2).some((arg) => arg === "--help" || arg === "-h");
+  const isKnownCommand = attemptedCommand && ROOT_COMMAND_NAMES.includes(attemptedCommand);
+
+  // Interceptar --help con comando desconocido antes de que Commander procese
+  if (attemptedCommand && hasHelpFlag && !isKnownCommand) {
+    const suggestions = suggestClosest(attemptedCommand, ROOT_COMMAND_NAMES);
+    const lines: string[] = [];
+    lines.push("");
+    lines.push(`${chalk.red("✗")} Comando desconocido: ${attemptedCommand}`);
+    if (suggestions.length > 0) {
+      lines.push("");
+      lines.push(chalk.bold("¿Quisiste decir?"));
+      for (const s of suggestions) {
+        lines.push(`  pt ${s}`);
+      }
+    }
+    lines.push("");
+    lines.push(chalk.bold("Ayuda útil:"));
+    lines.push("  pt --help");
+    lines.push("  pt doctor");
+    lines.push("");
+    process.stderr.write(lines.join("\n"));
+    process.exit(ExitCodes.INVALID_USAGE);
+  }
+
   const program = createProgram();
 
   try {
@@ -154,6 +215,31 @@ export async function parseProgram(argv = process.argv): Promise<void> {
           code: commanderError.code,
         }),
       );
+      process.exit(ExitCodes.INVALID_USAGE);
+    }
+
+    // Manejar "too many arguments" (Commander dispara esto para comandos desconocidos)
+    if (commanderError.message?.includes("too many arguments") && attemptedCommand && !isKnownCommand) {
+      const suggestions = suggestClosest(attemptedCommand, ROOT_COMMAND_NAMES);
+      const lines: string[] = [];
+      lines.push("");
+      lines.push(`${chalk.red("✗")} Comando desconocido: ${attemptedCommand}`);
+      if (suggestions.length > 0) {
+        lines.push("");
+        lines.push(chalk.bold("¿Quisiste decir?"));
+        for (const s of suggestions) {
+          lines.push(`  pt ${s}`);
+        }
+      }
+      lines.push("");
+      lines.push(chalk.bold("Ayuda útil:"));
+      lines.push("  pt --help");
+      lines.push("  pt cmd --help");
+      lines.push("  pt omni --help");
+      lines.push("  pt verify --help");
+      lines.push("  pt doctor");
+      lines.push("");
+      process.stderr.write(lines.join("\n"));
       process.exit(ExitCodes.INVALID_USAGE);
     }
 

@@ -276,6 +276,7 @@ export interface ResultEnvelope {
   protocolVersion: number;
   id: string;
   seq: number;
+  type?: string;
   startedAt: number;
   completedAt: number;
   status: "completed" | "failed" | "pending";

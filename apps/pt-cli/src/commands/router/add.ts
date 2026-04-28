@@ -53,7 +53,7 @@ export const ROUTER_ADD_META: CommandMeta = {
       description: 'Agregar router Cisco 2911'
     },
     {
-      command: 'bun run pt router add R1 2911 -x 200 -y 300',
+      command: 'bun run pt router add R1 2911 --x 200 --y 300',
       description: 'Agregar router en posición específica'
     },
     {
@@ -87,8 +87,8 @@ export function createRouterAddCommand(): Command {
     .description('Agregar un router Cisco a la topología')
     .argument('[name]', 'Nombre del router (ej: R1, R2, Router1)')
     .argument('[model]', 'Modelo del router (ej: 2911, 1941, 4321)')
-    .option('-x, --xpos <x>', 'Posición X en el workspace', '100')
-    .option('-y, --ypos <y>', 'Posición Y en el workspace', '100')
+    .option('--x <x>', 'Posición X en el workspace', '100')
+    .option('--y <y>', 'Posición Y en el workspace', '100')
     .option('--examples', 'Mostrar ejemplos de uso y salir', false)
     .option('--schema', 'Mostrar schema JSON del resultado y salir', false)
     .option('--explain', 'Explicar qué hace el comando y salir', false)
@@ -126,7 +126,7 @@ export function createRouterAddCommand(): Command {
       if (globalPlan) {
         console.log('Plan de ejecución:');
         console.log(`  1. Agregar router ${name ?? '<name>'}:${model ?? '<model>'}`);
-        console.log(`  2. Posición: (${options.xpos ?? '100'}, ${options.ypos ?? '100'})`);
+        console.log(`  2. Posición: (${options.x ?? '100'}, ${options.y ?? '100'})`);
         console.log('  3. Verificar que el router se creó correctamente');
         console.log('  4. Listo para configuración');
         return;
@@ -134,8 +134,8 @@ export function createRouterAddCommand(): Command {
 
       let routerName = name;
       let routerModel = model;
-      const x = parseInt(options.xpos ?? '100', 10);
-      const y = parseInt(options.ypos ?? '100', 10);
+      const x = parseInt(options.x ?? '100', 10);
+      const y = parseInt(options.y ?? '100', 10);
 
       const flags = buildFlags({
         trace: globalTrace,
@@ -330,7 +330,7 @@ async function promptForRouter(
     providedName ||
     (await input({
       message: 'Nombre del router',
-      validate: (value) => value.trim() !== '' || 'El nombre es requerido',
+      validate: (value: string) => value.trim() !== '' || 'El nombre es requerido',
     }));
 
   const routerModel =
@@ -338,7 +338,7 @@ async function promptForRouter(
     (await input({
       message: 'Modelo del router (2911, 1941, 4321, etc.)',
       default: '2911',
-      validate: (value) => {
+      validate: (value: string) => {
         const validModels = ROUTER_MODELS.map(m => m.name);
         return validModels.includes(value) || 'Modelo no válido';
       },

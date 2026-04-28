@@ -34,4 +34,10 @@ describe("runtime manifest execution order", () => {
 
     expect(terminalPlanIndex).toBeLessThan(stableRegistrationIndex);
   });
+
+  test("runtime manifest incluye el handler de listLinks", () => {
+    const files = getAllRuntimeFiles();
+
+    expect(files).toContain("handlers/list-links.ts");
+  });
 });

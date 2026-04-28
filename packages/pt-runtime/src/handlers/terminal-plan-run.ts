@@ -38,7 +38,6 @@ function isObject(value: unknown): value is Record<string, unknown> {
 function normalizeStep(step: any): any {
   var kind = String(step.kind || "command");
 
-  if (kind === "ensureMode") kind = "ensure-mode";
   if (kind === "expectPrompt") kind = "expect-prompt";
   if (kind === "saveConfig") kind = "save-config";
   if (kind === "closeSession") kind = "close-session";

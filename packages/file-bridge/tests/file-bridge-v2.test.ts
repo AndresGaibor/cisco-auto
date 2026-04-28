@@ -85,9 +85,10 @@ describe("FileBridgeV2", () => {
   describe("sendCommandAndWait", () => {
     it("should timeout if no result appears", async () => {
       bridge.start();
-      await expect(bridge.sendCommandAndWait("addDevice", { name: "R1" }, 100)).rejects.toThrow(
-        /timeout/i,
-      );
+      const result = await bridge.sendCommandAndWait("addDevice", { name: "R1" }, 100);
+
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe("timeout");
     });
 
     it("should follow deferred results until completion", async () => {
@@ -161,6 +162,82 @@ describe("FileBridgeV2", () => {
       expect((result as any).timings.waitMs).toBeGreaterThanOrEqual(0);
     });
 
+    it("should return deferred results without auto polling when resolveDeferred is false", async () => {
+      bridge.start();
+
+      const sentTypes: string[] = [];
+      const bridgeAny = bridge as any;
+      const originalSendCommand = bridgeAny.sendCommand.bind(bridge);
+
+      bridgeAny.sendCommand = (type: string, payload: any, expiresAtMs?: number) => {
+        const envelope = originalSendCommand(type, payload, expiresAtMs);
+        sentTypes.push(type);
+
+        const resultPath = join(testDir, "results", `${envelope.id}.json`);
+        if (type === "execPc") {
+          writeFileSync(
+            resultPath,
+            JSON.stringify({
+              protocolVersion: 2,
+              id: envelope.id,
+              seq: envelope.seq,
+              startedAt: envelope.createdAt,
+              completedAt: Date.now(),
+              status: "completed",
+              ok: true,
+              value: {
+                ok: true,
+                deferred: true,
+                ticket: "ticket-456",
+                job: { id: "ticket-456" },
+              },
+            }),
+            "utf-8",
+          );
+        }
+
+        if (type === "__pollDeferred") {
+          writeFileSync(
+            resultPath,
+            JSON.stringify({
+              protocolVersion: 2,
+              id: envelope.id,
+              seq: envelope.seq,
+              startedAt: envelope.createdAt,
+              completedAt: Date.now(),
+              status: "completed",
+              ok: true,
+              value: {
+                ok: true,
+                raw: "Success rate is 100 percent",
+                status: 0,
+              },
+            }),
+            "utf-8",
+          );
+        }
+
+        return envelope;
+      };
+
+      const result = await (bridge as any).sendCommandAndWait(
+        "execPc",
+        { device: "PC1", command: "ping" },
+        100,
+        { resolveDeferred: false },
+      );
+
+      expect(sentTypes).toEqual(["execPc"]);
+      expect(result.ok).toBe(true);
+      expect(result.value).toEqual({
+        ok: true,
+        deferred: true,
+        ticket: "ticket-456",
+        job: { id: "ticket-456" },
+      });
+      expect((result as any).timings).toBeDefined();
+    });
+
     it("should timeout without noisy ENOENT logs", async () => {
       bridge.start();
       const logs: string[] = [];
@@ -170,9 +247,9 @@ describe("FileBridgeV2", () => {
       };
 
       try {
-        await expect(bridge.sendCommandAndWait("addDevice", { name: "R1" }, 100)).rejects.toThrow(
-          /timeout/i,
-        );
+        const result = await bridge.sendCommandAndWait("addDevice", { name: "R1" }, 100);
+        expect(result.ok).toBe(false);
+        expect(result.status).toBe("timeout");
         expect(logs.some((line) => line.includes("result not ready"))).toBe(false);
         expect(logs.some((line) => line.includes("result read failed"))).toBe(false);
       } finally {
@@ -378,7 +455,9 @@ describe("sendCommand", () => {
     const resultPromise = bridge.sendCommandAndWait("addDevice", { name: "R1" }, 50);
 
     expect(sendCommandCalled).toBe(true);
-    await expect(resultPromise).rejects.toThrow(/timeout/i);
+    const result = await resultPromise;
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("timeout");
   });
 });
 

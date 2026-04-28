@@ -36,6 +36,7 @@ export interface FileBridgePort {
     type: string,
     payload: unknown,
     timeoutMs?: number,
+    options?: { resolveDeferred?: boolean },
   ): Promise<BridgeResultEnvelope<T>>;
 
   /**

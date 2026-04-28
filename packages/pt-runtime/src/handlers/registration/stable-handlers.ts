@@ -21,7 +21,7 @@ import {
   handleMoveDevice,
 } from "../device.js";
 
-import { handleAddLink, handleRemoveLink, handleVerifyLink } from "../link.js";
+import { handleAddLink, handleRemoveLink, handleVerifyLink, handleListLinks } from "../link.js";
 
 import {
   handleSetDeviceIp,
@@ -97,6 +97,7 @@ export function registerStableRuntimeHandlers(): void {
   registerHandler("addLink", handleAddLink as unknown as HandlerFn);
   registerHandler("removeLink", handleRemoveLink as unknown as HandlerFn);
   registerHandler("verifyLink", handleVerifyLink as unknown as HandlerFn);
+  registerHandler("listLinks", handleListLinks as unknown as HandlerFn);
 
   registerHandler("listCanvasRects", handleListCanvasRects as unknown as HandlerFn);
   registerHandler("getRect", handleGetRect as unknown as HandlerFn);

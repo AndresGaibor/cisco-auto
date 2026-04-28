@@ -58,6 +58,7 @@ export function createDeviceRemoveCommand(): Command {
     .argument('[name]', 'Nombre del dispositivo a eliminar')
     .option('-f, --force', 'Eliminar sin confirmación', false)
     .option('-i, --interactive', 'Seleccionar el dispositivo de forma interactiva', false)
+    .option('--if-exists', 'No fallar si el dispositivo no existe', false)
     .option('--examples', 'Mostrar ejemplos de uso y salir', false)
     .option('--schema', 'Mostrar schema JSON del resultado y salir', false)
     .option('--explain', 'Explicar qué hace el comando y salir', false)
@@ -202,6 +203,19 @@ export function createDeviceRemoveCommand(): Command {
               ],
             });
           } catch (error) {
+            if (
+              options.ifExists &&
+              (error instanceof DeviceNotFoundError ||
+                (error instanceof Error && error.message.includes('Device not found')))
+            ) {
+              return createSuccessResult('device.remove', {
+                name: deviceName,
+                removed: false,
+              }, {
+                advice: [`No se eliminó '${deviceName}' porque no existe.`],
+              });
+            }
+
             if (error instanceof DeviceNotFoundError) {
               return {
                 schemaVersion: '1.0',

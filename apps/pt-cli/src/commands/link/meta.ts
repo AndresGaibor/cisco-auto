@@ -11,16 +11,16 @@ export const LINK_ADD_META: CommandMeta = {
   longDescription: 'Crea una conexión física entre dos dispositivos en la topología de Packet Tracer. Soporta diferentes tipos de cables y detección automática.',
   examples: [
     {
-      command: 'bun run pt link add R1 Gi0/0 S1 Fa0/1',
-      description: 'Conecta un router a un switch con detección automática'
+      command: 'bun run pt link add R1 Gi0/0 S1 Fa0/1 --no-verify',
+      description: 'Conecta un router a un switch sin verificación posterior'
     },
     {
-      command: 'bun run pt link add PC1 Fa0 S1 Fa0/10 --type copper_straight',
-      description: 'Conecta una PC a un switch con cable recto'
+      command: 'bun run pt link add PC1 Fa0 S1 Fa0/10 --type copper_straight --verify',
+      description: 'Conecta una PC a un switch con cable recto y verifica'
     },
     {
-      command: 'bun run pt link add R1 Gi0/1 R2 Gi0/1 --type copper_crossover',
-      description: 'Conecta dos routers directamente con cable crossover'
+      command: 'bun run pt link add R1 Gi0/1 R2 Gi0/1 --type copper_crossover --replace',
+      description: 'Conecta dos routers directamente y reemplaza un enlace ocupado'
     }
   ],
   related: [
@@ -62,8 +62,8 @@ export const LINK_REMOVE_META: CommandMeta = {
   summary: 'Eliminar una conexión entre dispositivos',
   examples: [
     {
-      command: 'bun run pt link remove R1 Gi0/0 S1 Fa0/1',
-      description: 'Eliminar conexión específica'
+      command: 'bun run pt link remove R1 Gi0/0 S1 Fa0/1 --no-verify',
+      description: 'Eliminar conexión específica sin verificación posterior'
     }
   ],
   related: [

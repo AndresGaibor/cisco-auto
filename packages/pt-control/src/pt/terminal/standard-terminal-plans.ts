@@ -61,7 +61,14 @@ export function createIosEnablePlan(
   return {
     id: options?.id ?? `ios-enable-${Date.now()}`,
     device,
-    steps: buildSteps(["enable"], options?.timeout ?? 10000),
+    targetMode: "privileged-exec",
+    steps: [
+      {
+        kind: "ensureMode",
+        expectMode: "privileged-exec",
+        timeout: options?.timeout ?? 10000,
+      },
+    ],
   };
 }
 

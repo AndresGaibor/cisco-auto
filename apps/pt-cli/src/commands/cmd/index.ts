@@ -10,7 +10,9 @@ import { createSuccessResult, createErrorResult } from "../../contracts/cli-resu
 import { getGlobalFlags } from "../../flags.js";
 import { printCmdResult, toCmdCliResult, type CmdCliResult } from "./render.js";
 
-function createRuntimeTerminalForCli(controller: PTController) {
+const DEFAULT_CMD_TIMEOUT_MS = 12_000;
+
+function createRuntimeTerminalForCli(controller: any) {
   return {
     runTerminalPlan: controller.runTerminalPlan.bind(controller),
     ensureSession: controller.ensureTerminalSession.bind(controller),
@@ -103,6 +105,7 @@ export function createCmdCommand(): Command {
     .option("--mode <mode>", "safe|interactive|raw|strict", "safe")
     .option("--allow-confirm", "Permitir confirmaciones interactivas", false)
     .option("--allow-destructive", "Permitir comandos destructivos", false)
+    .option("--logs", "Incluir syslogs IOS asíncronos en la salida limpia", false)
     .option("--history", "Mostrar historial del dispositivo si el runtime lo soporta", false)
     .option("--repl", "Abrir modo interactivo guiado para el dispositivo", false)
     .addHelpText(
@@ -230,20 +233,22 @@ Reglas:
         },
         execute: async (ctx) => {
           const service = createTerminalCommandService({
-            controller: ctx.controller,
+            controller: ctx.controller as any,
             runtimeTerminal: createRuntimeTerminalForCli(ctx.controller),
             generateId: () => `cmd-${randomUUID().slice(0, 8)}`,
           });
 
           const result = await service.executeCommand(device!, finalCommand, {
-            timeoutMs: flags.timeout ?? 45000,
+            timeoutMs: flags.timeout ?? DEFAULT_CMD_TIMEOUT_MS,
             mode,
             allowConfirm: Boolean(options.allowConfirm),
             allowDestructive: Boolean(options.allowDestructive),
             evidenceLevel: flags.verbose ? "full" : "summary",
           });
 
-          const cliResult = toCmdCliResult(result);
+          const cliResult = toCmdCliResult(result, {
+            includeSyslogs: Boolean(options.logs),
+          });
 
           if (!result.ok) {
             return createErrorResult("cmd.exec", {
@@ -260,22 +265,28 @@ Reglas:
         },
       });
 
+      const errorDetails = wrapped.error?.details as Partial<CmdCliResult> | undefined;
+
       const data = wrapped.data ?? {
         schemaVersion: "1.0",
         ok: false,
         action: "cmd.exec",
         device,
-        deviceKind: "unknown",
+        deviceKind: String(errorDetails?.deviceKind ?? "unknown"),
         command: finalCommand,
-        output: String(wrapped.error?.details?.output ?? ""),
-        status: 1,
-        warnings: wrapped.warnings ?? [],
+        output: String(errorDetails?.output ?? ""),
+        rawOutput: String(errorDetails?.rawOutput ?? errorDetails?.output ?? ""),
+        status: Number(errorDetails?.status ?? 1),
+        warnings: [
+          ...(Array.isArray(errorDetails?.warnings) ? errorDetails.warnings : []),
+          ...(Array.isArray(wrapped.warnings) ? wrapped.warnings : []),
+        ],
         error: {
-          code: wrapped.error?.code ?? "CMD_EXEC_FAILED",
-          message: wrapped.error?.message ?? "Error ejecutando comando",
+          code: wrapped.error?.code ?? errorDetails?.error?.code ?? "CMD_EXEC_FAILED",
+          message: wrapped.error?.message ?? errorDetails?.error?.message ?? "Error ejecutando comando",
         },
-        nextSteps: wrapped.advice ?? ["pt doctor"],
-      };
+        nextSteps: errorDetails?.nextSteps ?? wrapped.advice ?? ["pt doctor"],
+      } satisfies CmdCliResult;
 
       printCmdResult(data, {
         json: flags.json,
@@ -303,7 +314,7 @@ Reglas:
       const results: CmdCliResult[] = [];
 
       for (const device of devices) {
-        const serviceResult = await runCommand<CmdCliResult>({
+            const serviceResult = await runCommand<CmdCliResult>({
           action: "cmd.each",
           meta: {
             id: "cmd.each",
@@ -343,19 +354,21 @@ Reglas:
             noColor: false,
           },
           payloadPreview: { device, commandText },
-          execute: async (ctx) => {
-            const service = createTerminalCommandService({
-              controller: ctx.controller,
-              runtimeTerminal: createRuntimeTerminalForCli(ctx.controller),
-              generateId: () => `cmd-${randomUUID().slice(0, 8)}`,
-            });
+            execute: async (ctx) => {
+              const service = createTerminalCommandService({
+                controller: ctx.controller as any,
+                runtimeTerminal: createRuntimeTerminalForCli(ctx.controller),
+                generateId: () => `cmd-${randomUUID().slice(0, 8)}`,
+              });
 
-            const result = await service.executeCommand(device, commandText, {
-              timeoutMs: flags.timeout ?? 45000,
-              mode: options.mode,
-            });
+              const result = await service.executeCommand(device, commandText, {
+                timeoutMs: flags.timeout ?? DEFAULT_CMD_TIMEOUT_MS,
+                mode: options.mode,
+              });
 
-            const cliResult = toCmdCliResult(result);
+            const cliResult = toCmdCliResult(result, {
+              includeSyslogs: Boolean(options.logs),
+            });
             if (!result.ok) {
               return createErrorResult("cmd.each", {
                 code: result.error?.code ?? "CMD_EXEC_FAILED",

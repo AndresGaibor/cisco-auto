@@ -334,4 +334,43 @@ describe("createCommandQueue", () => {
 
     expect(queue.poll()?.id).toBe("cmd_000000000007");
   });
+
+  test("pollAllowedTypes procesa solo tipos permitidos cuando hay mezcla de comandos", () => {
+    mockFm.getFilesInDirectory.mockReturnValue([
+      "000000000001-addDevice.json",
+      "000000000002-__pollDeferred.json",
+    ]);
+    mockIpc.appWindow.mockReturnValue({ listDirectory: vi.fn().mockReturnValue([]) });
+    mockFm.fileExists.mockImplementation((p: string) => p.endsWith(".json"));
+    mockFm.getFileContents.mockImplementation((p: string) => {
+      if (p.includes("__pollDeferred")) {
+        return JSON.stringify({
+          protocolVersion: 2,
+          id: "cmd_000000000002",
+          seq: 2,
+          type: "__pollDeferred",
+          payload: { type: "__pollDeferred", ticket: "job-1" },
+        });
+      }
+
+      return JSON.stringify({
+        protocolVersion: 2,
+        id: "cmd_000000000001",
+        seq: 1,
+        type: "addDevice",
+        payload: { type: "addDevice", name: "R1" },
+      });
+    });
+
+    const queue = createCommandQueue({
+      commandsDir: "/tmp/commands",
+      inFlightDir: "/tmp/in-flight",
+      deadLetterDir: "/tmp/dead-letter",
+    }) as any;
+
+    const claimed = queue.pollAllowedTypes(["__pollDeferred", "__ping"]);
+
+    expect(claimed?.type).toBe("__pollDeferred");
+    expect(claimed?.id).toBe("cmd_000000000002");
+  });
 });

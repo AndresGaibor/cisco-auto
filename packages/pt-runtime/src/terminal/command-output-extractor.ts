@@ -93,8 +93,12 @@ if (hasCommand && hasEventOutput) {
     warnings.push(`Syslog lines detected: ${noise.length}`);
   }
 
+  const cleanedOutput = hasCommand
+    ? stripCommandEchoAndPrompt(commandOutput, input.command, input.promptBefore, input.promptAfter)
+    : commandOutput;
+
   return {
-    output: finalClean(commandOutput, input.snapshotAfter?.raw || ""),
+    output: finalClean(cleanedOutput, input.snapshotAfter?.raw || ""),
     raw,
     source,
     confidence,
@@ -212,6 +216,64 @@ function splitAsyncNoise(output: string): { commandOutput: string; noise: string
     commandOutput: commandLines.join("\n").trim(),
     noise,
   };
+}
+
+function stripCommandEchoAndPrompt(
+  output: string,
+  command: string,
+  promptBefore: string,
+  promptAfter: string,
+): string {
+  const lines = output
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((line) => line.trimEnd());
+
+  const trimmedCommand = command.trim();
+  const trimmedPromptBefore = promptBefore.trim();
+  const trimmedPromptAfter = promptAfter.trim();
+
+  while (lines.length > 0) {
+    const first = lines[0]?.trim() ?? "";
+    if (!first) {
+      lines.shift();
+      continue;
+    }
+
+    if (trimmedCommand && first === trimmedCommand) {
+      lines.shift();
+      continue;
+    }
+
+    if (trimmedPromptBefore && first === trimmedPromptBefore) {
+      lines.shift();
+      continue;
+    }
+
+    break;
+  }
+
+  while (lines.length > 0) {
+    const last = lines[lines.length - 1]?.trim() ?? "";
+    if (!last) {
+      lines.pop();
+      continue;
+    }
+
+    if (trimmedPromptAfter && last === trimmedPromptAfter) {
+      lines.pop();
+      continue;
+    }
+
+    if (trimmedPromptBefore && last === trimmedPromptBefore) {
+      lines.pop();
+      continue;
+    }
+
+    break;
+  }
+
+  return lines.join("\n").trim();
 }
 
 /**

@@ -15,6 +15,7 @@ export interface TerminalCommandResult {
   deviceKind: TerminalDeviceKind;
   command: string;
   output: string;
+  rawOutput?: string;
   status: number;
   promptBefore?: string;
   promptAfter?: string;

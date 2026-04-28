@@ -40,6 +40,7 @@ export interface BridgeResultMeta {
 }
 
 export interface BridgeResultEnvelopeWithMeta<T = unknown> extends BridgeResultEnvelope<T> {
+  type: string;
   meta: BridgeResultMeta;
 }
 
@@ -227,9 +228,11 @@ export class CommandProcessor {
   ): void {
     const completedAtMs = Date.now();
     const finalResult: BridgeResultEnvelopeWithMeta<TResult> = {
+      ...result,
       protocolVersion: 2,
       id: cmd.id,
       seq: cmd.seq,
+      type: cmd.type,
       completedAt: completedAtMs,
       meta: {
         attempt: result.attempt ?? cmd.attempt ?? 1,
@@ -240,7 +243,6 @@ export class CommandProcessor {
         execLatencyMs: result.execLatencyMs ?? completedAtMs - (result.claimedAt ?? completedAtMs),
         claimedFile: result.claimedFile,
       },
-      ...result,
     };
 
     atomicWriteFile(

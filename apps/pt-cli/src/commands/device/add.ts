@@ -54,7 +54,7 @@ export const DEVICE_ADD_META: CommandMeta = {
       description: 'Agregar servidor'
     },
     {
-      command: 'bun run pt device add R1 2911 -x 200 -y 300',
+      command: 'bun run pt device add R1 2911 --x 200 --y 300',
       description: 'Agregar router en posición específica'
     }
   ],
@@ -79,8 +79,8 @@ export function createDeviceAddCommand(): Command {
     .description('Agregar un nuevo dispositivo a la topología')
     .argument('[name]', 'Nombre del dispositivo (ej: R1, S1, PC1)')
     .argument('[model]', 'Modelo del dispositivo (ej: 2911, 2960, PC)')
-    .option('-x, --xpos <x>', 'Posición X en el workspace', '100')
-    .option('-y, --ypos <y>', 'Posición Y en el workspace', '100')
+    .option('--x <x>', 'Posición X en el workspace', '100')
+    .option('--y <y>', 'Posición Y en el workspace', '100')
     .option('--examples', 'Mostrar ejemplos de uso y salir', false)
     .option('--schema', 'Mostrar schema JSON del resultado y salir', false)
     .option('--explain', 'Explicar qué hace el comando y salir', false)
@@ -122,8 +122,8 @@ export function createDeviceAddCommand(): Command {
 
       let deviceName = name;
       let deviceModel = model;
-      const x = parseInt(options.xpos ?? '100', 10);
-      const y = parseInt(options.ypos ?? '100', 10);
+      const x = parseInt(options.x ?? '100', 10);
+      const y = parseInt(options.y ?? '100', 10);
 
       const flags = flagsFromCommand(command, {
         verify: verifyEnabled,

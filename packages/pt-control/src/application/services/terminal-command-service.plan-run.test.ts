@@ -4,14 +4,16 @@ import { createTerminalCommandService } from "./terminal-command-service.js";
 function createController(options: {
   deviceType: string | number;
   model?: string;
-  fastDeviceState?: { type?: string | number; model?: string };
+  fastDeviceState?: { type?: string | number; model?: string } | null;
   runtimeTerminal?: { runTerminalPlan?: ReturnType<typeof vi.fn> } | null;
   execIos?: ReturnType<typeof vi.fn>;
   execHost?: ReturnType<typeof vi.fn>;
 }) {
   return {
     inspectDevice: vi.fn().mockResolvedValue({ type: options.deviceType, model: options.model }),
-    inspectDeviceFast: vi.fn().mockResolvedValue(options.fastDeviceState ?? { type: options.deviceType, model: options.model }),
+    inspectDeviceFast: vi.fn().mockResolvedValue(
+      options.fastDeviceState !== undefined ? options.fastDeviceState : { type: options.deviceType, model: options.model },
+    ),
     execIos:
       options.execIos ??
       vi.fn().mockResolvedValue({ ok: true, raw: "legacy-ios", evidence: { source: "legacy-ios" }, warnings: [] }),
@@ -48,6 +50,7 @@ describe("createTerminalCommandService plan run", () => {
       deviceKind: "ios",
       command: "show version",
       output: "runtime-ios",
+      rawOutput: "runtime-ios",
       status: 0,
       warnings: ["runtime-warning"],
       evidence: { source: "runtime-ios" },
@@ -80,6 +83,7 @@ describe("createTerminalCommandService plan run", () => {
       deviceKind: "host",
       command: "ipconfig",
       output: "runtime-host",
+      rawOutput: "runtime-host",
       status: 1,
       evidence: { source: "runtime-host" },
     });
@@ -103,6 +107,7 @@ describe("createTerminalCommandService plan run", () => {
       action: "ios.exec",
       deviceKind: "ios",
       output: "legacy-ios",
+      rawOutput: "legacy-ios",
       evidence: { source: "legacy-ios" },
     });
   });
@@ -124,6 +129,7 @@ describe("createTerminalCommandService plan run", () => {
       action: "host.exec",
       deviceKind: "host",
       output: "legacy-host",
+      rawOutput: "legacy-host",
       evidence: { verdict: { ok: true }, parsed: { source: "legacy-host" } },
     });
   });
@@ -212,5 +218,42 @@ describe("createTerminalCommandService plan run", () => {
     await expect(service.resolveDeviceKind("PC1")).resolves.toBe("host");
     expect((controller.inspectDeviceFast as any)).toHaveBeenCalledTimes(1);
     expect((controller.inspectDevice as any)).not.toHaveBeenCalled();
+  });
+
+  test("resolveDeviceKind no cae al inspector lento cuando fast retorna null", async () => {
+    const controller = createController({
+      deviceType: "router",
+      fastDeviceState: null,
+    });
+
+    const service = createTerminalCommandService({
+      controller: controller as any,
+      runtimeTerminal: null,
+      generateId: () => "null-fast-kind-id",
+    });
+
+    await expect(service.resolveDeviceKind("MISSING-1")).resolves.toBe("unknown");
+    expect((controller.inspectDeviceFast as any)).toHaveBeenCalledTimes(1);
+    expect((controller.inspectDevice as any)).not.toHaveBeenCalled();
+  });
+
+  test("propaga runtime caído cuando inspectDeviceFast falla por timeout", async () => {
+    const controller = createController({
+      deviceType: "unknown",
+      fastDeviceState: undefined,
+    });
+    (controller.inspectDeviceFast as any).mockRejectedValue(new Error("Timeout waiting for result"));
+
+    const service = createTerminalCommandService({
+      controller: controller as any,
+      runtimeTerminal: null,
+      generateId: () => "runtime-timeout-id",
+    });
+
+    const result = await service.executeCommand("R1", "show version");
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("RUNTIME_NOT_POLLING");
+    expect(result.error?.phase).toBe("detection");
   });
 });

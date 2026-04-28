@@ -49,7 +49,8 @@ interface LegacyContractValue {
 interface SimpleRuntimeResultValue {
   ok?: boolean;
   code?: string;
-  error?: string | { message?: string; code?: string };
+  errorCode?: string;
+  error?: string | { message?: string; code?: string; errorCode?: string };
   message?: string;
   raw?: string;
   output?: string;
@@ -314,7 +315,7 @@ export function createResponseParser() {
     const errorText =
       typeof res.error === "string"
         ? res.error
-        : String(res.error?.message ?? res.message ?? res.code ?? "");
+        : String(res.error?.message ?? res.message ?? res.code ?? res.errorCode ?? "");
 
     if (!res.ok && errorText) {
       warnings.push(errorText);

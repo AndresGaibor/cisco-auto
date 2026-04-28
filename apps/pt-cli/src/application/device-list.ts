@@ -118,6 +118,40 @@ export interface ListedDevice {
   xmlParsed?: XmlParsedSummary;
 }
 
+export interface LiveDeviceListOptions {
+  refreshCache?: boolean;
+  deep?: boolean;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function listDevicesWithRetry(
+  controller: PTController,
+  type?: string,
+): Promise<Awaited<ReturnType<PTController["listDevices"]>>> {
+  try {
+    const firstResult = await controller.listDevices(type);
+    if (getControllerDevices(firstResult).length > 0) {
+      return firstResult;
+    }
+
+    log("controller.listDevices() returned empty on first attempt, retrying once");
+    await sleep(250);
+    return await controller.listDevices(type);
+  } catch (firstError) {
+    log(
+      `controller.listDevices() first attempt failed, retrying once: ${
+        firstError instanceof Error ? firstError.message : String(firstError)
+      }`,
+    );
+
+    await sleep(250);
+    return await controller.listDevices(type);
+  }
+}
+
 export interface TopologyDeviceLike {
   name: string;
   model: string;
@@ -400,14 +434,14 @@ export async function loadLiveDeviceListFromController(
   controller: PTController,
   type?: string,
   timeoutMs = 15000,
-  options?: { refreshCache?: boolean },
+  options?: LiveDeviceListOptions,
 ): Promise<DeviceListResult> {
   log(`listDevices() type=${String(type ?? "none")} timeoutMs=${timeoutMs}`);
 
   let result: Awaited<ReturnType<PTController["listDevices"]>>;
   try {
     // La ruta viva manda: el estado del bridge solo influye en el fallback.
-    result = await controller.listDevices(type);
+    result = await listDevicesWithRetry(controller, type);
     log(`controller.listDevices() ok, devices=${getControllerDevices(result).length}`);
   } catch (err) {
     if (isBridgeResultTimeout(err)) {
@@ -419,11 +453,17 @@ export async function loadLiveDeviceListFromController(
 
     const bridgeStatus = controller.getBridgeStatus?.();
     const cachedSnapshot = controller.getCachedSnapshot?.();
-    if (cachedSnapshot) {
+    if (cachedSnapshot && !isEmptyTopologySnapshot(cachedSnapshot)) {
       log(
-        `controller.listDevices() failed${bridgeStatus?.ready === false ? " (bridge not ready)" : ""}, returning cached snapshot`,
+        `controller.listDevices() failed${bridgeStatus?.ready === false ? " (bridge not ready)" : ""}, returning non-empty cached snapshot`,
       );
       return buildDeviceListFromSnapshot(cachedSnapshot);
+    }
+
+    if (cachedSnapshot && isEmptyTopologySnapshot(cachedSnapshot)) {
+      log(
+        `controller.listDevices() failed${bridgeStatus?.ready === false ? " (bridge not ready)" : ""}, ignoring empty cached snapshot`,
+      );
     }
 
     const stateSnapshot = controller.readState?.();
@@ -433,16 +473,20 @@ export async function loadLiveDeviceListFromController(
       "devices" in stateSnapshot &&
       "links" in stateSnapshot
     ) {
-      log("controller.listDevices() failed, returning state snapshot");
-      return buildDeviceListFromSnapshot(
-        stateSnapshot as Parameters<typeof buildDeviceListFromSnapshot>[0],
-      );
+      const normalizedStateSnapshot = stateSnapshot as Parameters<typeof buildDeviceListFromSnapshot>[0];
+
+      if (!isEmptyTopologySnapshot(normalizedStateSnapshot)) {
+        log("controller.listDevices() failed, returning non-empty state snapshot");
+        return buildDeviceListFromSnapshot(normalizedStateSnapshot);
+      }
+
+      log("controller.listDevices() failed, ignoring empty state snapshot");
     }
 
-    if (typeof controller.snapshot === "function") {
+    if (options?.deep && typeof controller.snapshot === "function") {
       const liveSnapshot = await controller.snapshot().catch(() => null);
       if (liveSnapshot) {
-        log("controller.listDevices() failed, returning fresh snapshot");
+        log("controller.listDevices() failed, returning fresh snapshot because --deep is enabled");
         return buildDeviceListFromSnapshot(liveSnapshot as Parameters<typeof buildDeviceListFromSnapshot>[0]);
       }
     }
@@ -463,17 +507,18 @@ export async function loadLiveDeviceListFromController(
   const cachedSnapshot = controller.getCachedSnapshot?.();
   let devices = enrichMacAddresses(mapped.devices, cachedSnapshot?.devices);
   let liveSnapshot: Awaited<ReturnType<PTController["snapshot"]>> | null = null;
+  const deepEnabled = Boolean(options?.deep);
 
-  if ((devices.length === 0 || !hasMacAddresses(devices)) && typeof controller.snapshot === "function") {
+  if (deepEnabled && (devices.length === 0 || !hasMacAddresses(devices)) && typeof controller.snapshot === "function") {
     liveSnapshot = await controller.snapshot().catch(() => null);
   }
 
-  if (devices.length === 0 && liveSnapshot && !isEmptyTopologySnapshot(liveSnapshot)) {
-    log("controller.listDevices() returned empty, using live snapshot");
+  if (deepEnabled && devices.length === 0 && liveSnapshot && !isEmptyTopologySnapshot(liveSnapshot)) {
+    log("controller.listDevices() returned empty, using live snapshot because --deep is enabled");
     return buildDeviceListFromSnapshot(liveSnapshot);
   }
 
-  if (!hasMacAddresses(devices) && liveSnapshot) {
+  if (deepEnabled && !hasMacAddresses(devices) && liveSnapshot) {
     devices = enrichMacAddresses(devices, liveSnapshot.devices);
   }
 
@@ -485,7 +530,7 @@ export async function loadLiveDeviceListFromController(
 
 export async function loadLiveDeviceList(
   type?: string,
-  options?: { refreshCache?: boolean },
+  options?: LiveDeviceListOptions,
 ): Promise<DeviceListResult> {
   let controller: PTController;
   try {
@@ -559,7 +604,7 @@ function extractXmlSummary(xmlParsed: Record<string, unknown> | null | undefined
 
 export async function loadLiveDeviceListXml(
   type?: string,
-  options?: { refreshCache?: boolean },
+  options?: LiveDeviceListOptions,
 ): Promise<DeviceListResult> {
   let controller: PTController;
   try {

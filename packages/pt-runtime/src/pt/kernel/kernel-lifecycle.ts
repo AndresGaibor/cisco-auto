@@ -44,6 +44,14 @@ export function createKernelLifecycle(
 
   let commandPollInterval: ReturnType<typeof setInterval> | null = null;
 
+  function safePollTick(): void {
+    try {
+      pollCommandQueue(subsystems, state);
+    } catch (e) {
+      kernelLog("FATAL POLL ERROR: " + String(e), "error");
+    }
+  }
+
   function boot(): void {
     kernelLog("=== KERNEL BOOT STARTING ===", "info");
     kernelLog("Initializing subsystems...");
@@ -75,10 +83,7 @@ export function createKernelLifecycle(
         kernelLogSubsystem("loader", "Runtime loaded successfully");
         state.isRunning = true;
         kernelLog("Starting poll interval (" + config.pollIntervalMs + "ms)...");
-        commandPollInterval = setInterval(
-          () => pollCommandQueue(subsystems, state),
-          config.pollIntervalMs,
-        );
+        commandPollInterval = setInterval(() => safePollTick(), config.pollIntervalMs);
         kernelLogSubsystem("queue", "Forcing immediate poll...");
         kernelLogSubsystem(
           "queue",
@@ -87,7 +92,7 @@ export function createKernelLifecycle(
             " active=" +
             (state.activeCommand ? state.activeCommand.id : "null"),
         );
-        pollCommandQueue(subsystems, state);
+        safePollTick();
         heartbeat.setQueuedCount(queue.count());
         kernelLogSubsystem(
           "queue",

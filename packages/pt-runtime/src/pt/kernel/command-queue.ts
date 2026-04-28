@@ -15,6 +15,7 @@ import { createQueueClaim } from "./queue-claim";
 
 export interface CommandQueue {
   poll(): CommandEnvelope | null;
+  pollAllowedTypes(allowedTypes: string[]): CommandEnvelope | null;
   cleanup(filename: string): void;
   count(): number;
 }
@@ -38,6 +39,7 @@ export function createCommandQueue(config: {
 
   return {
     poll: () => claim.poll(),
+    pollAllowedTypes: (allowedTypes: string[]) => claim.pollAllowedTypes(allowedTypes),
     cleanup: (filename: string) => cleanup.cleanup(filename),
     count: () => claim.count(),
   };

@@ -4,14 +4,17 @@
 import type { ResultEnvelope } from "./types";
 
 export function buildCommandResultEnvelope(
-  activeCommand: { id: string; seq: number; startedAt: number },
+  activeCommand: { id: string; seq: number; type?: string; startedAt: number },
   result: any,
   completedAt: number = Date.now(),
-): ResultEnvelope {
+): ResultEnvelope & { type: string } {
+  const type = String(activeCommand.type ?? "").trim() || "unknown";
+
   return {
     protocolVersion: 2,
     id: activeCommand.id,
     seq: activeCommand.seq || 0,
+    type,
     startedAt: activeCommand.startedAt,
     completedAt,
     status: result?.ok === false ? "failed" : "completed",

@@ -67,6 +67,11 @@ const PRIMITIVE_REGISTRY: Record<string, PrimitiveMetadata> = {
     description: "Eliminar un enlace",
     supportedPayloadFields: ["device", "port"],
   },
+  "link.list": {
+    domain: "link",
+    description: "Listar enlaces live sin snapshot",
+    supportedPayloadFields: ["device", "state"],
+  },
 
   // Module primitives
   "module.add": {
@@ -141,6 +146,7 @@ const HANDLER_TYPE_OVERRIDES: Record<string, string> = {
   "device.inspect.fast": "inspectDeviceFast",
   "link.add": "addLink",
   "link.remove": "removeLink",
+  "link.list": "listLinks",
   "module.add": "addModule",
   "module.remove": "removeModule",
   "module.slots": "inspectModuleSlots",

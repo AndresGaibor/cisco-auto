@@ -71,9 +71,20 @@ function normalizeText(value: unknown): string {
   return String(value ?? "").trim().toLowerCase();
 }
 
+function createRuntimePollingError(device: string, cause: string): Error {
+  const error = new Error(
+    `No se pudo inspeccionar "${device}" porque el runtime de Packet Tracer no respondió.`,
+  ) as Error & { code?: string; details?: Record<string, unknown> };
+
+  error.code = "RUNTIME_NOT_POLLING";
+  error.details = { device, cause };
+  return error;
+}
+
 function extractIosFailureDetails(input: {
   output?: unknown;
   error?: { code?: unknown; message?: unknown };
+  parsed?: unknown;
 }): { code: string; message: string } {
   const output = String(input.output ?? "").trim();
   const loweredOutput = output.toLowerCase();
@@ -89,6 +100,32 @@ function extractIosFailureDetails(input: {
     return {
       code: "IOS_UNKNOWN_COMMAND",
       message: output || "Comando IOS no reconocido",
+    };
+  }
+
+  const parsed = input.parsed && typeof input.parsed === "object"
+    ? (input.parsed as Record<string, unknown>)
+    : {};
+
+  const parsedError = parsed.error && typeof parsed.error === "object"
+    ? (parsed.error as Record<string, unknown>)
+    : {};
+
+  const parsedCode = String(
+    parsed.code ??
+    parsed.errorCode ??
+    parsedError.code ??
+    input.error?.code ??
+    "",
+  );
+  const parsedMessage = String(
+    parsed.message ?? parsed.error ?? parsedError.message ?? input.error?.message ?? "",
+  );
+
+  if (parsedCode) {
+    return {
+      code: parsedCode,
+      message: output || parsedMessage || parsedCode,
     };
   }
 
@@ -158,8 +195,43 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
   async function resolveDeviceKind(device: string): Promise<TerminalDeviceKind> {
     try {
       const fastInspector = deps.controller.inspectDeviceFast;
-      const fastDeviceState = fastInspector ? await fastInspector.call(deps.controller, device).catch(() => null) : null;
-      const deviceState = fastDeviceState ?? await deps.controller.inspectDevice(device).catch(() => null);
+      if (fastInspector) {
+        let fastDeviceState: unknown = null;
+
+        try {
+          fastDeviceState = await fastInspector.call(deps.controller, device);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error ?? "");
+          const lowered = message.toLowerCase();
+
+          if (
+            lowered.includes("timeout") ||
+            lowered.includes("timed out") ||
+            lowered.includes("runtime_not_polling") ||
+            lowered.includes("no result")
+          ) {
+            throw createRuntimePollingError(device, message);
+          }
+
+          fastDeviceState = null;
+        }
+
+        if (!fastDeviceState) {
+          return "unknown";
+        }
+
+        if (isIosLikeDevice(fastDeviceState)) {
+          return "ios";
+        }
+
+        if (isHostLikeDevice(fastDeviceState)) {
+          return "host";
+        }
+
+        return "unknown";
+      }
+
+      const deviceState = await deps.controller.inspectDevice(device).catch(() => null);
 
       if (!deviceState) {
         return "unknown";
@@ -174,7 +246,13 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
       }
 
       return "unknown";
-    } catch {
+    } catch (error) {
+      const runtimeError = error as Error & { code?: string };
+
+      if (runtimeError.code === "RUNTIME_NOT_POLLING") {
+        throw runtimeError;
+      }
+
       return "unknown";
     }
   }
@@ -206,6 +284,7 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
         const iosFailure = extractIosFailureDetails({
           output: runtimeResult.output,
           error: runtimeResult.error,
+          parsed: runtimeResult.parsed,
         });
 
         return {
@@ -215,6 +294,7 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
           deviceKind: "ios",
           command,
           output: String(runtimeResult.output ?? ""),
+          rawOutput: String(runtimeResult.rawOutput ?? runtimeResult.output ?? ""),
           status: Number(runtimeResult.status ?? 1),
           error: {
             code: iosFailure.code,
@@ -233,6 +313,7 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
         deviceKind: "ios",
         command,
         output: String(runtimeResult.output ?? ""),
+        rawOutput: String(runtimeResult.rawOutput ?? runtimeResult.output ?? ""),
         status: Number(runtimeResult.status ?? 0),
         warnings: Array.isArray(runtimeResult.warnings) ? runtimeResult.warnings : [],
         evidence: runtimeResult.evidence,
@@ -254,6 +335,15 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
         command,
         output: String(
           err?.details?.output ??
+            err?.details?.evidence?.raw ??
+            err?.details?.parsed?.raw ??
+            err?.output ??
+            err?.raw ??
+            ""
+        ),
+        rawOutput: String(
+          err?.details?.rawOutput ??
+            err?.details?.output ??
             err?.details?.evidence?.raw ??
             err?.details?.parsed?.raw ??
             err?.output ??
@@ -321,17 +411,27 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
       };
     }
 
-    return {
-      ok: true,
-      action: "ios.exec",
-      device,
-      deviceKind: "ios",
-      command,
-      output,
-      status: 0,
-      warnings: Array.isArray(execResult.warnings) ? execResult.warnings : [],
-      evidence: execResult.evidence,
-    };
+      return {
+        ok: true,
+        action: "ios.exec",
+        device,
+        deviceKind: "ios",
+        command,
+        output,
+        rawOutput: String(
+          execResult.rawOutput ??
+            execResult.raw ??
+            execResult.output ??
+            execResult.evidence?.raw ??
+            execResult.parsed?.raw ??
+            execResult.parsed?.output ??
+            execResult.error?.details?.output ??
+            "",
+        ),
+        status: 0,
+        warnings: Array.isArray(execResult.warnings) ? execResult.warnings : [],
+        evidence: execResult.evidence,
+      };
   }
 
   async function executeHostCommand(
@@ -352,16 +452,16 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
 
     const timeoutMs = options?.timeoutMs ?? 45000;
     if (runtimeTerminal?.runTerminalPlan) {
-      const plan = buildUniversalTerminalPlan({
-        id: deps.generateId(),
-        device,
-        command,
-        deviceKind: "host",
-        mode: options?.mode,
-        allowConfirm: options?.allowConfirm,
-        allowDestructive: options?.allowDestructive,
-        timeoutMs,
-      });
+        const plan = buildUniversalTerminalPlan({
+          id: deps.generateId(),
+          device,
+          command,
+          deviceKind: "host",
+          mode: options?.mode,
+          allowConfirm: options?.allowConfirm,
+          allowDestructive: options?.allowDestructive,
+          timeoutMs,
+        });
 
       const runtimeResult = (await runtimeTerminal.runTerminalPlan(plan, { timeoutMs })) as any;
 
@@ -380,6 +480,7 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
           deviceKind: "host",
           command,
           output: hostOutput,
+          rawOutput: String(runtimeResult.rawOutput ?? runtimeResult.output ?? ""),
           status: Number(runtimeResult.status ?? 1),
           error: {
             code: String(runtimeResult.error?.code ?? hostCode),
@@ -398,6 +499,7 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
         deviceKind: "host",
         command,
         output: String(runtimeResult.output ?? ""),
+        rawOutput: String(runtimeResult.rawOutput ?? runtimeResult.output ?? ""),
         status: Number(runtimeResult.status ?? 0),
         warnings: Array.isArray(runtimeResult.warnings) ? runtimeResult.warnings : [],
         evidence: runtimeResult.evidence,
@@ -421,6 +523,7 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
         : "HOST_EXEC_FAILED";
 
     if (!execResult.success || execResult.verdict?.ok === false) {
+      const execResultAny = execResult as any;
       return {
         ok: false,
         action: "host.exec",
@@ -428,6 +531,13 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
         deviceKind: "host",
         command,
         output: hostOutput,
+        rawOutput: String(
+          execResultAny.rawOutput ??
+            execResultAny.raw ??
+            execResultAny.output ??
+            execResult.verdict?.reason ??
+            "",
+        ),
         status: 1,
         error: {
           code: hostCode,
@@ -451,6 +561,13 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
       deviceKind: "host",
       command,
       output: hostOutput,
+      rawOutput: String(
+        (execResult as any).rawOutput ??
+          (execResult as any).raw ??
+          (execResult as any).output ??
+          execResult.verdict?.reason ??
+          "",
+      ),
       status: 0,
       warnings: [],
       evidence: {
@@ -465,7 +582,35 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
     command: string,
     options?: RunTerminalCommandOptions
   ): Promise<TerminalCommandResult> {
-    const deviceKind = await resolveDeviceKind(device);
+    let deviceKind: TerminalDeviceKind;
+
+    try {
+      deviceKind = await resolveDeviceKind(device);
+    } catch (error) {
+      const runtimeError = error as Error & { code?: string; details?: Record<string, unknown> };
+
+      if (runtimeError.code === "RUNTIME_NOT_POLLING") {
+        return {
+          ok: false,
+          action: "ios.exec",
+          device,
+          deviceKind: "unknown",
+          command,
+          output: "",
+          rawOutput: "",
+          status: 1,
+          error: {
+            code: runtimeError.code,
+            message: runtimeError.message,
+            phase: "detection",
+          },
+          warnings: [],
+          evidence: runtimeError.details ?? null,
+        };
+      }
+
+      deviceKind = "unknown";
+    }
 
     if (deviceKind === "ios") {
       return executeIosCommand(device, command, options);

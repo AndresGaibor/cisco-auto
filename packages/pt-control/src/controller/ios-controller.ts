@@ -135,6 +135,16 @@ export class IosController {
       return this.deviceService.inspectFast(name);
     }
 
-    return this.deviceService.inspect(name, false);
+    const error = new Error(
+      `Fast device inspection is not available for '${name}'. Use inspectDevice() for deep inspection.`,
+    ) as Error & { code?: string; details?: Record<string, unknown> };
+
+    error.code = "FAST_DEVICE_INSPECTION_UNAVAILABLE";
+    error.details = {
+      requested: name,
+      advice: "inspectDeviceFast() must not fall back to inspect(), because inspect() may call snapshot().",
+    };
+
+    throw error;
   }
 }

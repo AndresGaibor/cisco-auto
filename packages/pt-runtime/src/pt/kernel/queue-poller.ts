@@ -41,12 +41,36 @@ export function pollCommandQueue(subsystems: KernelSubsystems, state: KernelStat
   kernelLogSubsystem("loader", "Checking runtime reload... busy=" + isBusy);
   runtimeLoader.reloadIfNeeded(() => isBusy);
 
-  if (isBusy) {
-    kernelLogSubsystem("queue", "System busy, skipping poll. Active jobs=" + activeJobs.length);
-    return;
-  }
+  let claimed = null as ReturnType<typeof queue.poll>;
 
-  const claimed = queue.poll();
+  if (isBusy) {
+    claimed =
+      typeof (queue as any).pollAllowedTypes === "function"
+        ? (queue as any).pollAllowedTypes(["__pollDeferred", "__ping"])
+        : null;
+
+    if (!claimed) {
+      kernelLogSubsystem(
+        "queue",
+        "System busy, skipping non-control poll. Active jobs=" +
+          activeJobs.length +
+          " terminalBusy=" +
+          terminalIsBusy,
+      );
+      heartbeat.setQueuedCount(queue.count());
+      return;
+    }
+
+    kernelLogSubsystem(
+      "queue",
+      "System busy, but processing control command=" +
+        claimed.id +
+        " type=" +
+        String((claimed as any).type),
+    );
+  } else {
+    claimed = queue.poll();
+  }
   kernelLogSubsystem("queue", "Poll result: claimed=" + (claimed ? claimed.id : "null"));
   if (!claimed) {
     kernelLogSubsystem("queue", "No command claimed, checking files...");

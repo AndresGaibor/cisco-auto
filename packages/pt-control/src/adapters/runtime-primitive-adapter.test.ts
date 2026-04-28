@@ -63,4 +63,14 @@ describe("RuntimePrimitiveAdapter", () => {
       timings: expect.any(Object),
     });
   });
+
+  test("mapea link.list a listLinks", async () => {
+    const bridge = createBridge();
+    const adapter = new RuntimePrimitiveAdapter(bridge);
+
+    const result = await adapter.runPrimitive("link.list", { type: "listLinks" });
+
+    expect(result.ok).toBe(true);
+    expect(bridge.calls[0]?.type).toBe("listLinks");
+  });
 });
