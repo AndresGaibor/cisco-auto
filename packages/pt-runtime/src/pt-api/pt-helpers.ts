@@ -1,15 +1,5 @@
 import type { PtDeps } from "./pt-deps";
-
-export interface PtHelperMaps {
-  PT_MODEL_MAP: Record<string, string>;
-  PT_DEVICE_TYPE_MAP: Record<string, number>;
-  PT_PORT_MAP: Record<string, Record<string, string>>;
-  PT_MODULE_CATALOG: Record<string, { slotType: string; [k: string]: unknown }>;
-  PT_DEVICE_MODULE_SLOTS: Record<string, Array<{ type: string; supportedModules?: string[] }>>;
-  CABLE_CONNECTOR_COMPATIBILITY: Record<string, string[]>;
-  CABLE_TYPES: Record<string, number>;
-  DEVICE_TYPES: Record<string, number>;
-}
+import type { PtHelperMaps } from "./pt-constants";
 
 export function normalizePortKey(name: string): string {
   const value = String(name || "").replace(/\s+/g, "").toLowerCase();
@@ -167,7 +157,7 @@ export function validateModuleSlotCompatible(
   return { valid: true };
 }
 
-export function resolveModel(maps: PtHelperMaps, model: string): string {
+export function resolveModelFromMaps(maps: PtHelperMaps, model: string): string {
   if (!model) return "1941";
   const key = model.toLowerCase();
   if (maps.PT_MODEL_MAP[key]) {

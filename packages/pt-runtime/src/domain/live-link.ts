@@ -37,7 +37,7 @@ function safe<T>(fn: () => T, fallback: T): T {
   }
 }
 
-export function normalizeIfaceName(value: string): string {
+export function expandIfaceName(value: string): string {
   return String(value)
     .trim()
     .toLowerCase()
@@ -78,7 +78,7 @@ function stableLinkId(device1: string, port1: string, device2: string, port2: st
 }
 
 function sameEndpoint(deviceA: string, portA: string, deviceB: string, portB: string): boolean {
-  return deviceA === deviceB && normalizeIfaceName(portA) === normalizeIfaceName(portB);
+  return deviceA === deviceB && expandIfaceName(portA) === expandIfaceName(portB);
 }
 
 function pushLink(

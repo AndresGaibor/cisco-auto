@@ -4,29 +4,6 @@
  */
 
 /**
- * Format error message with optional context
- */
-function formatError(message: string, context?: Record<string, unknown>): string {
-  if (!context || Object.keys(context).length === 0) {
-    return message;
-  }
-
-  var result = message + " [";
-  var first = true;
-
-  for (var key in context) {
-    if (context.hasOwnProperty(key)) {
-      if (!first) result += ", ";
-      result += key + "=" + JSON.stringify(context[key]);
-      first = false;
-    }
-  }
-
-  result += "]";
-  return result;
-}
-
-/**
  * Safely get a string value with type checking
  */
 function safeGetString(obj: any, key: string): string | null {
@@ -59,26 +36,6 @@ function safeGetBoolean(obj: any, key: string): boolean | null {
 function logWithTime(dprint: (msg: string) => void, message: string): void {
   var now = new Date().toISOString();
   dprint("[" + now + "] " + message);
-}
-
-/**
- * Create error result
- */
-function errorResult(error: string, context?: Record<string, unknown>): any {
-  return {
-    ok: false,
-    error: formatError(error, context),
-  };
-}
-
-/**
- * Create success result
- */
-function successResult(value: unknown): any {
-  return {
-    ok: true,
-    value: value,
-  };
 }
 
 /**

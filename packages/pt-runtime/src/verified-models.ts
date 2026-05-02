@@ -139,10 +139,6 @@ export function getDeviceType(modelOrAlias: string): number {
   return type;
 }
 
-export function resolveModel(alias: string): string {
-  return MODEL_ALIASES[alias as ModelAlias] || alias;
-}
-
 export function listVerifiedModels(): VerifiedModel[] {
   return [
     ...Object.keys(VERIFIED_MODELS.routers),
@@ -184,7 +180,6 @@ export default {
   getVerifiedModel,
   isVerifiedModel,
   getDeviceType,
-  resolveModel,
   listVerifiedModels,
   listModelsByCategory,
   generateES5ModelMap,

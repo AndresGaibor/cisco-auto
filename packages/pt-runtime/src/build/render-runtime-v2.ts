@@ -4,6 +4,10 @@ import * as ts from "typescript";
 import { transformToPtSafeAst, type AstTransformOptions } from "./ast-transform.js";
 import { validatePtSafe, formatValidationResult, type ValidationResult } from "./validate-pt-safe.js";
 import { getAllRuntimeFiles, validateRuntimeManifestDependencies } from "./runtime-manifest.js";
+import { sanitizeTypeScriptHelperGlobalThis } from "./sanitize-typescript-helpers.js";
+import { assertJavaScriptSyntaxOrThrow } from "./syntax-assert.js";
+import { assertNoDuplicateTopLevelSymbols } from "./top-level-symbols.js";
+import { tslibHelpersTemplate } from "./templates/index.js";
 
 export interface RenderRuntimeV2Options {
   srcDir: string;
@@ -14,7 +18,50 @@ export interface RenderRuntimeV2Options {
 
 const RUNTIME_SOURCE_FILES = getAllRuntimeFiles();
 
+function shouldShowValidationDetails(): boolean {
+  return typeof Bun !== "undefined"
+    ? Bun.env.PT_SHOW_VALIDATION_WARNINGS === "1" || Bun.env.PT_DEBUG === "1"
+    : false;
+}
+
+function reportPtSafeValidation(label: string, validation: ValidationResult): void {
+  if (validation.valid) {
+    return;
+  }
+
+  if (!shouldShowValidationDetails()) {
+    console.warn(
+      `[${label}] PT-safe validation produced ` +
+        `${validation.errors.length} error(s) and ${validation.warnings.length} warning(s). ` +
+        `Details hidden by default. Set PT_SHOW_VALIDATION_WARNINGS=1 to inspect them.`,
+    );
+    return;
+  }
+
+  console.error(`[${label}] Validation FAILED:`);
+  console.error(formatValidationResult(validation));
+}
+
+function assertNoEmittedTypeScriptHelpers(label: string, code: string): void {
+  const forbidden = [
+    "var __assign = (this && this.__assign)",
+    "var __awaiter = (this && this.__awaiter)",
+    "var __generator = (this && this.__generator)",
+    "var __values = (this && this.__values)",
+    "var __read = (this && this.__read)",
+    "var __spreadArray = (this && this.__spreadArray)",
+  ];
+
+  for (const marker of forbidden) {
+    if (code.includes(marker)) {
+      throw new Error(`${label} still contains emitted TypeScript helper: ${marker}`);
+    }
+  }
+}
+
 function assembleRuntimeOutput(code: string, devDirLiteral: string): string {
+  const tslibHelpers = tslibHelpersTemplate();
+
   return `
 var __ipc = (typeof _g !== "undefined" && _g && typeof _g.ipc !== "undefined" && _g.ipc !== null) ? _g.ipc : null;
 if (!__ipc && typeof self !== "undefined" && self && typeof self.ipc !== "undefined") {
@@ -73,64 +120,7 @@ var _g = (typeof self !== "undefined") ? self
        : (typeof _global !== "undefined") ? _global
        : (function() { return this; })();
 
-var __assign = function() {
-  __assign = Object.assign || function(t) {
-    for (var s, i = 1, n = arguments.length; i < n; i++) {
-      s = arguments[i];
-      for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p)) t[p] = s[p];
-    }
-    return t;
-  };
-  return __assign.apply(this, arguments);
-};
-var __values = function(o, markArrayFunction) {
-  if (typeof Symbol !== "undefined" && o[Symbol.iterator]) {
-    var it = typeof markArrayFunction === "function" ? markArrayFunction(o) : o[Symbol.iterator]();
-    var next;
-    return {
-      next: function() {
-        next = it.next();
-        return next;
-      }
-    };
-  }
-  var i = -1;
-  return {
-    next: function() {
-      i += 1;
-      next = { value: o[i], done: i >= o.length };
-      return next;
-    }
-  };
-};
-var __read = function(o, n) {
-  if (n === undefined) n = o.length;
-  var m = new Array(n);
-  var i = 0;
-  var r;
-  if (Array.isArray(o) || (typeof o[Symbol.iterator] === "function" && !isNaN(Number(o.length)))) {
-    for (var it = __values(o), s; !(s = it.next()).done; ) {
-      if (i === n) break;
-      m[i++] = s.value;
-    }
-  } else {
-    for (var a = [], j = 0; j < o.length; j++) a.push(o[j]);
-    m = a.slice(0, n);
-  }
-  return m;
-};
-var __spreadArray = function(to, from, pack) {
-  if (pack || from.length === 0) {
-    for (var i = 0, e = from.length; i < e; i++) {
-      to[i + (pack ? 0 : to.length)] = from[i];
-    }
-  } else {
-    for (var i = from.length, j = to.length; i--; ) {
-      to[j--] = from[i];
-    }
-  }
-  return to;
-};
+${tslibHelpers}
 
 ${code}
 
@@ -195,26 +185,34 @@ function validateAndTransform(srcDir: string, minify: boolean): { code: string; 
     treeShake: false,
   });
 
+  assertNoEmittedTypeScriptHelpers("runtime transform output", code);
+
   return { code, validation };
 }
 
 export async function renderRuntimeV2(options: RenderRuntimeV2Options): Promise<string> {
   const { code, validation } = validateAndTransform(options.srcDir, options.minify ?? false);
 
-  if (!validation.valid) {
-    console.error("[render-runtime-v2] Validation FAILED:");
-    for (const issue of validation.errors) {
-      console.error(`  ${issue.line}:${issue.column}: ${issue.message}`);
-    }
-    console.warn("[render-runtime-v2] PT-safe validation warnings ignored for build continuity.");
-  }
+  reportPtSafeValidation("render-runtime-v2", validation);
 
   const devDirLiteral = options.injectDevDir ? JSON.stringify(options.injectDevDir) : 'DEV_DIR + "/pt-dev"';
-  const output = `
+  let output = `
 // PT Runtime - Generated from TypeScript via AST pipeline V2
 // Do not edit directly - regenerate with: bun run build:runtime-v2
 // Generated at: ${new Date().toISOString()}
 ${assembleRuntimeOutput(code, devDirLiteral)}`;
+
+  assertJavaScriptSyntaxOrThrow("runtime.js after assembleRuntimeOutput", output);
+
+  assertNoDuplicateTopLevelSymbols(output, {
+    fileName: "runtime.js",
+    label: "runtime.js",
+    allowDuplicateVarDeclarations: true,
+  });
+
+  output = sanitizeTypeScriptHelperGlobalThis(output);
+
+  assertJavaScriptSyntaxOrThrow("runtime.js after sanitizeTypeScriptHelperGlobalThis", output);
 
   if (options.outputPath) {
     await fs.promises.mkdir(path.dirname(options.outputPath), { recursive: true });
@@ -227,20 +225,26 @@ ${assembleRuntimeOutput(code, devDirLiteral)}`;
 export function renderRuntimeV2Sync(options: RenderRuntimeV2Options): string {
   const { code, validation } = validateAndTransform(options.srcDir, options.minify ?? false);
 
-  if (!validation.valid) {
-    console.error("[render-runtime-v2] Validation FAILED:");
-    for (const issue of validation.errors) {
-      console.error(`  ${issue.line}:${issue.column}: ${issue.message}`);
-    }
-    console.warn("[render-runtime-v2] PT-safe validation warnings ignored for build continuity.");
-  }
+  reportPtSafeValidation("render-runtime-v2 (sync)", validation);
 
   const devDirLiteral = options.injectDevDir ? JSON.stringify(options.injectDevDir) : 'DEV_DIR + "/pt-dev"';
-  const output = `
+  let output = `
 // PT Runtime - Generated from TypeScript via AST pipeline V2
 // Do not edit directly - regenerate with: bun run build:runtime-v2
 // Generated at: ${new Date().toISOString()}
 ${assembleRuntimeOutput(code, devDirLiteral)}`;
+
+  assertJavaScriptSyntaxOrThrow("runtime.js after assembleRuntimeOutput (sync)", output);
+
+  assertNoDuplicateTopLevelSymbols(output, {
+    fileName: "runtime.js",
+    label: "runtime.js (sync)",
+    allowDuplicateVarDeclarations: true,
+  });
+
+  output = sanitizeTypeScriptHelperGlobalThis(output);
+
+  assertJavaScriptSyntaxOrThrow("runtime.js after sanitizeTypeScriptHelperGlobalThis (sync)", output);
 
   if (options.outputPath) {
     fs.mkdirSync(path.dirname(options.outputPath), { recursive: true });

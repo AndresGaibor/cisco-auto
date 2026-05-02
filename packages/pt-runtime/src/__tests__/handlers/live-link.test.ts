@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { classifyLiveLinkState, collectLiveLinks, findLiveLink, findLiveLinkByEndpoint, lightName, normalizeIfaceName } from "../../domain/live-link";
+import { classifyLiveLinkState, collectLiveLinks, findLiveLink, findLiveLinkByEndpoint, lightName, expandIfaceName } from "../../domain/live-link";
 
 describe("live-link domain", () => {
   test("normaliza nombres de interfaz comunes", () => {
-    expect(normalizeIfaceName("Gi0/0")).toBe("gigabitethernet00");
-    expect(normalizeIfaceName("Fa0/1")).toBe("fastethernet01");
+    expect(expandIfaceName("Gi0/0")).toBe("gigabitethernet00");
+    expect(expandIfaceName("Fa0/1")).toBe("fastethernet01");
   });
 
   test("mapea correctamente las luces oficiales de PT", () => {

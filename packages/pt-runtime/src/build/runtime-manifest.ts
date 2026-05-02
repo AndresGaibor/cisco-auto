@@ -15,12 +15,11 @@ export const RUNTIME_MANIFEST = {
     "pt-api/pt-constants.ts",
   ],
 
-  ptApi: [
+ptApi: [
     "pt-api/pt-api-registry.ts",
-    // pt-constants.ts ya está en catalog — no duplicar en runtime
+    "pt-api/pt-constants.ts",
     "pt-api/pt-results.ts",
     "pt-api/pt-deps.ts",
-    "pt-api/pt-helpers.ts",
     "pt-api/pt-call-inventory.ts",
     "pt-api/pt-types.ts",
     "pt-api/pt-processes.ts",
@@ -49,16 +48,16 @@ export const RUNTIME_MANIFEST = {
     "domain/ios-plans.ts",
   ],
 
-  utils: [
-    "utils/helpers.ts",
+utils: [
     "utils/constants.ts",
+    "utils/helpers.ts",
     "utils/parser-generator.ts",
     "utils/device-creation.ts",
     "utils/device-utils.ts",
     "utils/device-xml-parser.ts",
     "utils/handler-types.ts",
     "utils/port-utils.ts",
-    "utils/index.ts",
+    // utils/index.ts removido - solo re-exports, causa duplicados
   ],
 
   valueObjects: [
