@@ -176,6 +176,47 @@ export function createQueueClaim(
     return !!type && allowed[type] === true;
   }
 
+  function extractTypeFromCommandFilename(filename: string): string | null {
+    const normalized = normalizeCandidateName(filename);
+    if (!normalized) return null;
+
+    const withoutExt = normalized.endsWith(".json")
+      ? normalized.slice(0, -".json".length)
+      : normalized;
+
+    const dashIndex = withoutExt.indexOf("-");
+    if (dashIndex < 0 || dashIndex >= withoutExt.length - 1) {
+      return null;
+    }
+
+    return withoutExt.slice(dashIndex + 1);
+  }
+
+  function prioritizeAllowedCandidateFiles(
+    files: string[],
+    allowed: Record<string, boolean>,
+  ): string[] {
+    const prioritized: string[] = [];
+    const rest: string[] = [];
+
+    for (const rawFilename of files) {
+      const filename = normalizeCandidateName(rawFilename);
+      if (!filename) {
+        rest.push(rawFilename);
+        continue;
+      }
+
+      const filenameType = extractTypeFromCommandFilename(filename);
+      if (filenameType && allowed[filenameType] === true) {
+        prioritized.push(filename);
+      } else {
+        rest.push(filename);
+      }
+    }
+
+    return [...prioritized, ...rest];
+  }
+
   function parseEnvelopeAtPath(filename: string, dstPath: string): CommandEnvelope | null {
     const s = safeFM();
     if (!s.available || !s.fm) return null;
@@ -376,7 +417,7 @@ export function createQueueClaim(
     const fm = s.fm;
     const allowed = allowedSet(allowedTypes);
 
-    const files = listCandidates();
+    const files = prioritizeAllowedCandidateFiles(listCandidates(), allowed);
     if (files.length > 0) {
       logQueue(
         "[queue-claim] control candidatos: " +
