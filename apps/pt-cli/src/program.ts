@@ -45,6 +45,7 @@ export function attachCommandTiming(
 }
 
 const ROOT_COMMAND_NAMES = [
+  "build",
   "doctor",
   "runtime",
   "lab",

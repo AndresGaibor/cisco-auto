@@ -5,8 +5,8 @@
  */
 
 import { existsSync, readdirSync, statSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { normalizeHostPath, resolvePtDevDir } from "../system/paths.js";
 
 export interface BridgeDoctorReport {
   ok: boolean;
@@ -31,14 +31,13 @@ export interface BridgeDoctorReport {
 }
 
 export function getBridgeRoot(): string {
-  const home = homedir();
-  const isWindows = process.platform === "win32";
+  const fromBridgeRoot = process.env.PT_BRIDGE_ROOT?.trim();
 
-  if (isWindows) {
-    return process.env.PT_BRIDGE_ROOT ?? process.env.PT_DEV_DIR ?? join(process.env.USERPROFILE ?? home, "pt-dev");
+  if (fromBridgeRoot) {
+    return normalizeHostPath(fromBridgeRoot);
   }
 
-  return process.env.PT_BRIDGE_ROOT ?? process.env.PT_DEV_DIR ?? join(home, "pt-dev");
+  return resolvePtDevDir();
 }
 
 function checkDirectoryExists(path: string): { ok: boolean; message: string } {

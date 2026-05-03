@@ -22,6 +22,7 @@ import { createHistoryCommand } from "./history.js";
 import { createShowCommand } from "./show.js";
 import { createSetupCommand } from "./setup.js";
 import { createLogsCommand } from "./logs.js";
+import { formatDevDirForDisplay } from "../system/paths.js";
 
 export type CommandFactory = () => Command;
 
@@ -30,7 +31,7 @@ export const PUBLIC_COMMAND_DEFINITIONS: PtCommandDefinition[] = [
     id: "build",
     name: "build",
     group: "core",
-    summary: "Build y deploy de archivos a ~/pt-dev/",
+    summary: `Build y deploy de archivos a ${formatDevDirForDisplay()}/`,
     description: "Compila y publica el runtime y assets auxiliares.",
     examples: [
       { command: "pt build", description: "Construir runtime" },

@@ -5,7 +5,7 @@
  */
 
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 /**
  * Obtiene el directorio raíz de pt-dev.
@@ -14,17 +14,53 @@ import { join } from "node:path";
  */
 export function getDefaultDevDir(): string {
   const home = homedir();
-  const isWindows = process.platform === "win32";
+  const fromEnv = process.env.PT_DEV_DIR?.trim();
 
-  if (isWindows) {
-    return process.env.PT_DEV_DIR ?? join(process.env.USERPROFILE ?? home, "pt-dev");
+  if (fromEnv) {
+    return normalizeHostPath(fromEnv);
   }
 
-  return process.env.PT_DEV_DIR ?? join(home, "pt-dev");
+  return join(home, "pt-dev");
 }
 
 export function getDevDir(): string {
   return getDefaultDevDir();
+}
+
+export function formatDevDirForDisplay(devDir: string = getDevDir()): string {
+  const home = homedir();
+  const normalize = (value: string): string => normalizeHostPath(value);
+
+  if (process.platform !== "win32" && normalize(devDir) === normalize(join(home, "pt-dev"))) {
+    return "~/pt-dev";
+  }
+
+  if (process.platform === "win32") {
+    const userProfile = process.env.USERPROFILE;
+    if (userProfile && normalize(devDir) === normalize(join(userProfile, "pt-dev"))) {
+      return "%USERPROFILE%\\pt-dev";
+    }
+  }
+
+  return devDir;
+}
+
+export function looksLikeWindowsAbsolutePath(value: string): boolean {
+  return /^[a-zA-Z]:[\\/]/.test(value) || /^\\\\[^\\]+\\[^\\]+/.test(value);
+}
+
+export function normalizeHostPath(value: string): string {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return trimmed;
+  }
+
+  if (looksLikeWindowsAbsolutePath(trimmed)) {
+    return trimmed.replace(/\\/g, "/").replace(/\/+$/g, "");
+  }
+
+  return resolve(trimmed).replace(/\/+$/g, "");
 }
 
 /**

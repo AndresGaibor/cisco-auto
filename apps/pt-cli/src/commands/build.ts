@@ -4,10 +4,11 @@ import { ExitCodes } from "../errors/index.js";
 import { getGlobalFlags } from "../flags.js";
 import { buildFlags } from "../flags-utils.js";
 import { resolveTimeout } from "../utils/timeout.js";
+import { formatDevDirForDisplay } from "../system/paths.js";
 
 export function createBuildCommand(): Command {
   return new Command("build")
-    .description("Build y deploy de archivos a ~/pt-dev/")
+    .description(`Build y deploy de archivos a ${formatDevDirForDisplay()}/`)
     .action(async function () {
       const { resolve } = await import("path");
 

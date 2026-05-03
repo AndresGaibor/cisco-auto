@@ -39,7 +39,7 @@ import type { GlobalFlags } from "../flags.js";
 import { runCommand } from "../application/run-command.js";
 import { renderCliResult } from "../ux/renderers.ts";
 import { printExamples } from "../ux/examples.js";
-import { getDefaultDevDir } from "../system/paths.js";
+import { formatDevDirForDisplay, getDefaultDevDir } from "../system/paths.js";
 import { buildFlags } from "../flags-utils.js";
 
 const RESULTS_EXAMPLES = [
@@ -53,7 +53,7 @@ const RESULTS_META: CommandMeta = {
   id: "results",
   summary: "Gestionar resultados de comandos",
   longDescription:
-    "Lista, limpia y visualiza archivos de resultado de comandos guardados en ~/pt-dev/results.",
+    `Lista, limpia y visualiza archivos de resultado de comandos guardados en ${formatDevDirForDisplay()}/results.`,
   examples: RESULTS_EXAMPLES,
   related: ["history", "logs", "doctor"],
   supportsVerify: false,
@@ -258,7 +258,7 @@ async function confirmDeletion(count: number, names: string[]): Promise<boolean>
 }
 
 export function createResultsCommand(): Command {
-  const cmd = new Command("results").description("Gestionar resultados de comandos en ~/pt-dev/");
+  const cmd = new Command("results").description(`Gestionar resultados de comandos en ${formatDevDirForDisplay()}/`);
 
   cmd
     .command("list")

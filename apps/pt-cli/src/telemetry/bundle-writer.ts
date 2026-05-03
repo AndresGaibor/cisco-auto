@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { getSessionLogsDir, getCommandLogsDir, getResultsDir, getBundlesDir, getEventsPath, getContextStatusPath, getHistoryDir } from '../system/paths.js';
 import { redactObject } from './trace-redaction.js';
 import type { LogBundle } from '../contracts/log-bundle.js';
@@ -12,7 +13,7 @@ export class BundleWriter {
   }
 
   private async loadSessionLogs(sessionId: string): Promise<Record<string, unknown>[]> {
-    const sessionPath = `${getSessionLogsDir()}/${sessionId}.ndjson`;
+    const sessionPath = join(getSessionLogsDir(), `${sessionId}.ndjson`);
 
     if (!existsSync(sessionPath)) {
       return [];
@@ -35,7 +36,7 @@ export class BundleWriter {
   }
 
   private async loadCommandTrace(cmdId: string): Promise<Record<string, unknown> | null> {
-    const tracePath = `${getCommandLogsDir()}/${cmdId}.json`;
+    const tracePath = join(getCommandLogsDir(), `${cmdId}.json`);
 
     if (!existsSync(tracePath)) {
       return null;
@@ -49,7 +50,7 @@ export class BundleWriter {
   }
 
   private async loadCommandResult(cmdId: string): Promise<Record<string, unknown> | null> {
-    const resultPath = `${getResultsDir()}/${cmdId}.json`;
+    const resultPath = join(getResultsDir(), `${cmdId}.json`);
 
     if (!existsSync(resultPath)) {
       return null;
@@ -86,7 +87,7 @@ export class BundleWriter {
   }
 
   private async loadHistoryEntry(sessionId: string): Promise<Record<string, unknown> | null> {
-    const sessionPath = `${getHistoryDir()}/sessions/${sessionId}.json`;
+    const sessionPath = join(getHistoryDir(), "sessions", `${sessionId}.json`);
     if (!existsSync(sessionPath)) return null;
     try {
       return JSON.parse(readFileSync(sessionPath, 'utf-8'));
@@ -179,7 +180,7 @@ export class BundleWriter {
     };
 
     const bundlesDir = getBundlesDir();
-    const bundlePath = `${bundlesDir}/${sessionId}.bundle.json`;
+    const bundlePath = join(bundlesDir, `${sessionId}.bundle.json`);
 
     writeFileSync(bundlePath, JSON.stringify(bundleWithMeta, null, 2), 'utf-8');
 

@@ -5,6 +5,7 @@ import { ExitCodes } from "../errors/index.js";
 import { getGlobalFlags } from "../flags.js";
 import { buildFlags } from "../flags-utils.js";
 import { resolveTimeout } from "../utils/timeout.js";
+import { formatDevDirForDisplay } from "../system/paths.js";
 
 export function createSetupCommand(): Command {
   return new Command("setup")
@@ -40,6 +41,6 @@ export function createSetupCommand(): Command {
 
       console.log("✓ Entorno preparado");
       console.log("✓ Runtime generado");
-      console.log("✓ Artefactos principales desplegados en ~/pt-dev");
+      console.log(`✓ Artefactos principales desplegados en ${formatDevDirForDisplay()}`);
     });
 }

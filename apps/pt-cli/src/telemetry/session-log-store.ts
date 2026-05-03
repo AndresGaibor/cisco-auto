@@ -1,5 +1,5 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { join } from "node:path";
 import { getSessionLogsDir } from "../system/paths.js";
 import { redactObject } from "./trace-redaction.js";
 
@@ -31,7 +31,7 @@ export class SessionLogStore {
   }
 
   private getSessionPath(sessionId: string): string {
-    return `${this.sessionsDir}/${sessionId}.ndjson`;
+    return join(this.sessionsDir, `${sessionId}.ndjson`);
   }
 
   async append(event: SessionLogEvent): Promise<void> {

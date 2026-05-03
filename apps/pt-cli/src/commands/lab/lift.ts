@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { Command } from "commander";
 import { readdir, unlink } from "node:fs/promises";
+import { join } from "node:path";
 
 import {
   CORE3650_LIFT_SCENARIO_NAME,
@@ -59,11 +60,11 @@ async function clearBridgeQueue(): Promise<void> {
   for (const dir of dirs) {
     try {
       const entries = await readdir(dir);
-      await Promise.all(
-        entries
-          .filter((entry) => entry.endsWith(".json"))
-          .map((entry) => unlink(`${dir}/${entry}`)),
-      );
+        await Promise.all(
+          entries
+            .filter((entry) => entry.endsWith(".json"))
+            .map((entry) => unlink(join(dir, entry))),
+        );
     } catch {
       // Si el directorio no existe o no se puede leer,
       // no bloqueamos el despliegue del laboratorio.

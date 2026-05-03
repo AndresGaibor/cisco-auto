@@ -1,9 +1,10 @@
 import { Command } from 'commander';
 import { readdirSync } from 'fs';
-import { loadLabYaml, validateLabSafe } from '../../contracts/lab-spec';
-import { formatExamples, formatRelatedCommands } from '../../help/formatter';
-import { getExamples } from '../../help/examples';
-import { getRelatedCommands } from '../../help/related';
+import { join } from 'node:path';
+import { loadLabYaml, validateLabSafe } from '../../contracts/lab-spec.js';
+import { formatExamples, formatRelatedCommands } from '../../../help/formatter.js';
+import { getExamples } from '../../../help/examples.js';
+import { getRelatedCommands } from '../../../help/related.js';
 
 export function createLabListCommand(): Command {
   const cmd = new Command('list')
@@ -19,7 +20,7 @@ export function createLabListCommand(): Command {
         
         for (const file of files) {
           try {
-            const lab = loadLabYaml(`${options.directory}/${file}`);
+            const lab = loadLabYaml(join(options.directory, file));
             const validation = validateLabSafe(lab);
             const isValid = validation.success;
             console.log(`\n📋 ${file}`);
