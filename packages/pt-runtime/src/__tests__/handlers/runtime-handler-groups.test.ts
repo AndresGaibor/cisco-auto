@@ -80,27 +80,27 @@ describe("runtime handler groups", () => {
     }
   });
 
-  test("evaluate handlers are registered with aliases", () => {
-    registerRuntimeHandlers();
+  test("evaluate handlers are registered with experimental option", () => {
+    registerRuntimeHandlers({ experimental: true });
 
     for (const type of evaluateHandlers) {
       expect(getHandler(type), `${type} should be registered`).toBeDefined();
     }
   });
 
-  test("omni handlers are registered", () => {
-    registerRuntimeHandlers();
-
-    for (const type of omniHandlers) {
-      expect(getHandler(type), `${type} should be registered`).toBeDefined();
-    }
-  });
-
-  test("registered type list includes all handlers", () => {
+  test("full omni handlers are not registered by runtime default", () => {
     registerRuntimeHandlers();
     const registered = getRegisteredTypes();
 
-    for (const type of [...stableHandlers, ...evaluateHandlers, ...omniHandlers]) {
+    expect(registered).not.toContain("omni.physical.siphon");
+    expect(registered).not.toContain("exfiltrateHostFile");
+  });
+
+  test("registered type list includes stable and experimental raw handlers when enabled", () => {
+    registerRuntimeHandlers({ experimental: true });
+    const registered = getRegisteredTypes();
+
+    for (const type of [...stableHandlers, ...evaluateHandlers]) {
       expect(registered).toContain(type);
     }
   });

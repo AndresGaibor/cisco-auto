@@ -79,6 +79,7 @@ utils: [
     // Handler implementations
     "handlers/handler-registry.ts",
     "handlers/dispatcher.ts",
+    "handlers/evaluate.ts",
     "handlers/device-crud.ts",
     "handlers/device-discovery.ts",
     "handlers/device.ts",
@@ -117,12 +118,15 @@ utils: [
     "handlers/ios/read-terminal-handler.ts",
     // Main dispatcher - runtime default solo registra estables
     "handlers/runtime-handlers.ts",
-    // Registration handlers - solo stable (omni/experimental removidos del default)
+    // Registration handlers - stable + raw/evaluate experimental aliases.
+    // Full omni sigue fuera del runtime default.
     "handlers/registration/stable-handlers.ts",
+    "handlers/registration/experimental-handlers.ts",
     "handlers/registration/runtime-registration.ts",
     // NOTE: ios-engine.ts removed — IosSessionEngine duplicated terminal-engine.ts + job-executor.ts
     // NOTE: ios-session.ts removed — inferModeFromPrompt duplicated prompt-parser.ts
-    // NOTE: deep-inspect.ts, evaluate.ts, omniscience* removidos - van a runtime extended
+    // NOTE: deep-inspect.ts y omniscience* siguen fuera.
+    // evaluate.ts se incluye solo para __evaluate / omni.evaluate.raw / omni.raw.
   ],
 
   primitives: [

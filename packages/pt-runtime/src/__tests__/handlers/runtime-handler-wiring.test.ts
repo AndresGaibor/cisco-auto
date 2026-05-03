@@ -1,17 +1,15 @@
 import { describe, expect, test } from "bun:test";
 
-import { getHandler } from "../../handlers/dispatcher";
+import { getHandler, registerRuntimeHandlers } from "../../handlers/runtime-handlers";
 import { handleSetDeviceIp, handleSetDefaultGateway } from "../../handlers/device-config";
 import { handleConfigHost } from "../../handlers/host-handler";
-
-import "../../handlers/runtime-handlers";
 
 describe("runtime handler wiring", () => {
   test("configHost points to handleConfigHost", () => {
     expect(getHandler("configHost")).toBe(handleConfigHost as never);
   });
 
-  test("runtime-handlers expone HANDLER_MAP en global", () => {
+  test("runtime-handlers expose HANDLER_MAP in global", () => {
     const scope = globalThis as Record<string, unknown>;
 
     expect(scope.HANDLER_MAP).toBeDefined();
@@ -25,5 +23,13 @@ describe("runtime handler wiring", () => {
 
   test("setDefaultGateway points to handleSetDefaultGateway", () => {
     expect(getHandler("setDefaultGateway")).toBe(handleSetDefaultGateway as never);
+  });
+
+  test("omni.evaluate.raw is available when experimental handlers are enabled", () => {
+    registerRuntimeHandlers({ experimental: true });
+
+    expect(getHandler("omni.evaluate.raw")).toBeDefined();
+    expect(getHandler("__evaluate")).toBeDefined();
+    expect(getHandler("omni.raw")).toBeDefined();
   });
 });

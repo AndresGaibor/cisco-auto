@@ -29,6 +29,10 @@ import {
   registerStableRuntimeHandlers,
 } from "./registration/stable-handlers.js";
 
+import {
+  registerExperimentalRuntimeHandlers,
+} from "./registration/experimental-handlers.js";
+
 // ============================================================================
 // Backward-compatible type exports
 // ============================================================================
@@ -101,7 +105,8 @@ function publishHandlerMap(): void {
 // Handler registration side effect
 // ============================================================================
 
-registerRuntimeHandlersFromGlobals();
+// runtime.js generado registra handlers estables + raw/evaluate experimentales
+registerRuntimeHandlers({ experimental: true });
 publishHandlerMap();
 
 // ============================================================================
@@ -117,4 +122,5 @@ export {
   registerRuntimeHandlers,
   registerRuntimeHandlersFromGlobals,
   registerStableRuntimeHandlers,
+  registerExperimentalRuntimeHandlers,
 };
