@@ -22,10 +22,11 @@ async function sendRuntimeControlCommand<T = unknown>(
   const devDir = getDevDir();
   const bridge = new FileBridgeV2({
     root: devDir,
+    role: "client",
     consumerId: "runtime-cli",
     enableBackpressure: false,
     resultTimeoutMs: timeoutMs,
-  } as any);
+  });
 
   bridge.start();
   try {

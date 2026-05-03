@@ -98,7 +98,7 @@ export async function pushCommands(
   timeoutMs = 120_000,
 ): Promise<PushResult> {
   const devDir = getDevDir();
-  const bridge = new FileBridgeV2({ root: devDir });
+  const bridge = new FileBridgeV2({ root: devDir, role: "client" });
 
   bridge.start();
 
@@ -145,7 +145,7 @@ export async function pushCommands(
  */
 export async function pushCode(code: string, timeoutMs = 120_000): Promise<PushResult> {
   const devDir = getDevDir();
-  const bridge = new FileBridgeV2({ root: devDir });
+  const bridge = new FileBridgeV2({ root: devDir, role: "client" });
 
   bridge.start();
 

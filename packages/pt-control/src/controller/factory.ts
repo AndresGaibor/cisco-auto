@@ -36,17 +36,18 @@ export interface PTControllerConfig {
 export function createPTController(config?: PTControllerConfig | ControlComposition): PTController {
   if (config === undefined) {
     const devDir = getDefaultDevDir();
-    const bridge = new FileBridgeV2({ root: devDir, resultTimeoutMs: 10_000 });
-    const composition = createControlComposition({ bridge });
+    const bridge = new FileBridgeV2({ root: devDir, role: "client", resultTimeoutMs: 10_000 });
+    const composition = createControlComposition({ bridge: bridge as any });
     return new PTController(composition);
   }
   if (typeof config === "object" && "devDir" in config) {
     const devDir = config.devDir ?? getDefaultDevDir();
     const bridge = new FileBridgeV2({
       root: devDir,
+      role: "client",
       resultTimeoutMs: config.resultTimeoutMs ?? 10_000,
     });
-    const composition = createControlComposition({ bridge });
+    const composition = createControlComposition({ bridge: bridge as any });
     return new PTController(composition);
   }
   return new PTController(config as ControlComposition);

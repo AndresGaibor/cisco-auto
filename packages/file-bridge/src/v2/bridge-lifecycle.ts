@@ -4,6 +4,7 @@
  * Estados:
  * - stopped: bridge no inicializado, sin lease, sin consumer
  * - starting: bridge inicializándose, directorios creados
+ * - client: bridge en modo cliente, listo para encolar sin lease
  * - leased: lease adquirido, listo para recovery
  * - recovering: crash recovery en curso
  * - running: consumer activo, procesando comandos
@@ -21,6 +22,7 @@
 export type BridgeLifecycleState =
   | "stopped"
   | "starting"
+  | "client"
   | "leased"
   | "recovering"
   | "running"
@@ -49,10 +51,15 @@ export class BridgeLifecycle {
 
   /**
    * Indica si el bridge está listo para operaciones.
-   * Incluye estados running, recovering y leased.
+   * Incluye estados client, running, recovering y leased.
    */
   get isReady(): boolean {
-    return this._state === "running" || this._state === "recovering" || this._state === "leased";
+    return (
+      this._state === "client" ||
+      this._state === "running" ||
+      this._state === "recovering" ||
+      this._state === "leased"
+    );
   }
 
   /**
@@ -111,7 +118,8 @@ export class BridgeLifecycle {
 
 const TRANSITIONS: Record<BridgeLifecycleState, BridgeLifecycleState[]> = {
   stopped: ["starting"],
-  starting: ["leased", "stopped"],
+  starting: ["client", "leased", "stopped"],
+  client: ["stopping"],
   leased: ["recovering", "running"],
   recovering: ["running"],
   running: ["stopping"],

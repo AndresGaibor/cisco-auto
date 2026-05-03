@@ -56,6 +56,76 @@ describe("FileBridgeV2", () => {
     });
   });
 
+  describe("client role", () => {
+    let testDir: string;
+
+    beforeEach(() => {
+      testDir = join(
+        tmpdir(),
+        `file-bridge-client-role-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      );
+    });
+
+    afterEach(() => {
+      if (existsSync(testDir)) {
+        rmSync(testDir, { recursive: true, force: true });
+      }
+    });
+
+    it("client starts ready without acquiring owner lease", async () => {
+      const client = new FileBridgeV2({ root: testDir, role: "client" } as any);
+
+      client.start();
+
+      expect(client.isReady()).toBe(true);
+
+      await client.stop();
+    });
+
+    it("client can start while owner holds lease", async () => {
+      const owner = new FileBridgeV2({ root: testDir, role: "owner" } as any);
+      const client = new FileBridgeV2({ root: testDir, role: "client" } as any);
+
+      owner.start();
+      client.start();
+
+      expect(owner.isReady()).toBe(true);
+      expect(client.isReady()).toBe(true);
+
+      await client.stop();
+      await owner.stop();
+    });
+
+    it("multiple clients can enqueue concurrently without lease conflicts", async () => {
+      const owner = new FileBridgeV2({ root: testDir, role: "owner" } as any);
+      owner.start();
+
+      const clients = Array.from({ length: 12 }, (_, i) =>
+        new FileBridgeV2({
+          root: testDir,
+          role: "client",
+          consumerId: `client-${i}`,
+          enableBackpressure: false,
+        } as any),
+      );
+
+      for (const client of clients) {
+        client.start();
+      }
+
+      const envelopes = clients.map((client, i) =>
+        client.sendCommand("__runtimeStatus", { index: i }, Date.now() + 30_000),
+      );
+
+      expect(new Set(envelopes.map((e) => e.id)).size).toBe(12);
+
+      for (const client of clients) {
+        await client.stop();
+      }
+      await owner.stop();
+    });
+  });
+
   describe("sendCommand", () => {
     it("should create command file in commands directory", () => {
       bridge.start();

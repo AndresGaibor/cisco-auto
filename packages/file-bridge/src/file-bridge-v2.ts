@@ -60,6 +60,8 @@ const debugLog = (...args: unknown[]) => {
 export interface FileBridgeV2Options {
   /** Directorio raíz del bridge (pt-dev) */
   root: string;
+  /** Rol de la instancia. owner administra lease/recovery; client solo encola y espera resultados. */
+  role?: "owner" | "client";
   /** ID del consumer para tracking de posición (default: "cli-main") */
   consumerId?: string;
   /** Timeout por defecto para esperar resultados (default: 120000ms) */
@@ -170,6 +172,10 @@ export class FileBridgeV2 extends EventEmitter {
     });
   }
 
+  private get role(): "owner" | "client" {
+    return this.options.role ?? "owner";
+  }
+
   /**
    * Inicia el bridge: crea estructura de directorios, adquiere lease,
    * ejecuta crash recovery y comienza a consumir eventos.
@@ -191,6 +197,11 @@ export class FileBridgeV2 extends EventEmitter {
       ensureDir(this.paths.consumerStateDir());
       ensureDir(this.paths.deadLetterDir());
       ensureFile(this.paths.currentEventsFile(), "");
+
+      if (this.role === "client") {
+        this.lifecycle.transition("client");
+        return;
+      }
 
       const acquiredLease = this.leaseManager.acquireLease();
       if (!acquiredLease) {
@@ -218,7 +229,9 @@ export class FileBridgeV2 extends EventEmitter {
         error: String(err),
       });
       try {
-        this.leaseManager.releaseLease();
+        if (this.role === "owner") {
+          this.leaseManager.releaseLease();
+        }
       } catch {}
       this.lifecycle.transition("stopped");
     }
@@ -246,10 +259,12 @@ export class FileBridgeV2 extends EventEmitter {
     this.lifecycle.transition("stopping");
 
     try {
-      this.stopMonitoring();
-      this.consumer.stop();
+      if (this.role === "owner") {
+        this.stopMonitoring();
+        this.consumer.stop();
+        this.leaseManager.releaseLease();
+      }
       this.resultWatcher.destroy();
-      this.leaseManager.releaseLease();
     } catch (err) {
       this.eventWriter.append({
         seq: this.seq.next(),
