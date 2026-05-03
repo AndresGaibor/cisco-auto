@@ -556,6 +556,136 @@ describe("ExecutionEngine auto attach", () => {
     }
   });
 
+  test("native fallback marca show interfaces parcial cuando completa sin eco y sin encabezado inicial", async () => {
+    const nativeTerminal = {
+      registerEvent: vi.fn(),
+      unregisterEvent: vi.fn(),
+      enterCommand: vi.fn(),
+      enterChar: vi.fn(),
+      getCommandInput: vi.fn(() => ""),
+      getAllOutput: vi.fn(() =>
+        [
+          "Queueing strategy: fifo",
+          "Output queue: 0/40",
+          "ARP type: ARPA, ARP Timeout 04:00:00",
+          "SW-SRV-DIST#",
+        ].join("\n"),
+      ),
+      getPrompt: vi.fn(() => "SW-SRV-DIST#"),
+      getMode: vi.fn(() => "enable"),
+    } as any;
+
+    const terminal = {
+      attach: vi.fn(),
+      detach: vi.fn(),
+      getSession: vi.fn(),
+      getMode: vi.fn(),
+      isBusy: vi.fn(() => false),
+      isAnyBusy: vi.fn(() => false),
+      executeCommand: vi.fn().mockReturnValue(new Promise(() => {})),
+      continuePager: vi.fn(),
+      confirmPrompt: vi.fn(),
+    } as any;
+
+    const previousIpc = (globalThis as any).ipc;
+    const previousDprint = (globalThis as any).dprint;
+
+    (globalThis as any).ipc = {
+      network: () => ({
+        getDevice: () => ({
+          getCommandLine: () => nativeTerminal,
+        }),
+      }),
+    };
+    (globalThis as any).dprint = vi.fn();
+
+    try {
+      const engine = createExecutionEngine(terminal);
+      const plan = createDeferredJobPlan("SW-SRV-DIST", [commandStep("show interfaces")]);
+      const job = engine.startJob(plan);
+
+      job.context.updatedAt = Date.now() - 1000;
+      const refreshed = engine.getJob(job.id);
+
+      expect(refreshed?.context.finished).toBe(true);
+      expect(refreshed?.context.phase).toBe("completed");
+      expect(refreshed?.context.result?.ok).toBe(true);
+      expect((refreshed?.context.result as any)?.warnings).toContain(
+        "Output posiblemente parcial: el comando largo terminó sin eco ni encabezado inicial esperado.",
+      );
+      expect((refreshed?.context.result as any)?.diagnostics?.partialOutput).toBe(true);
+    } finally {
+      (globalThis as any).ipc = previousIpc;
+      (globalThis as any).dprint = previousDprint;
+    }
+  });
+
+  test("native fallback marca show interfaces parcial aunque exista eco si empieza con tail", async () => {
+    const nativeTerminal = {
+      registerEvent: vi.fn(),
+      unregisterEvent: vi.fn(),
+      enterCommand: vi.fn(),
+      enterChar: vi.fn(),
+      getCommandInput: vi.fn(() => ""),
+      getAllOutput: vi.fn(() =>
+        [
+          "SW-SRV-DIST>show interfaces",
+          "2357 packets output, 263570 bytes, 0 underruns",
+          "     0 output errors, 0 collisions, 10 interface resets",
+          "",
+          "FastEthernet0/22 is down, line protocol is down (disabled)",
+          "SW-SRV-DIST>",
+        ].join("\n"),
+      ),
+      getPrompt: vi.fn(() => "SW-SRV-DIST>"),
+      getMode: vi.fn(() => "user"),
+    } as any;
+
+    const terminal = {
+      attach: vi.fn(),
+      detach: vi.fn(),
+      getSession: vi.fn(),
+      getMode: vi.fn(),
+      isBusy: vi.fn(() => false),
+      isAnyBusy: vi.fn(() => false),
+      executeCommand: vi.fn().mockReturnValue(new Promise(() => {})),
+      continuePager: vi.fn(),
+      confirmPrompt: vi.fn(),
+    } as any;
+
+    const previousIpc = (globalThis as any).ipc;
+    const previousDprint = (globalThis as any).dprint;
+
+    (globalThis as any).ipc = {
+      network: () => ({
+        getDevice: () => ({
+          getCommandLine: () => nativeTerminal,
+        }),
+      }),
+    };
+    (globalThis as any).dprint = vi.fn();
+
+    try {
+      const engine = createExecutionEngine(terminal);
+      const plan = createDeferredJobPlan("SW-SRV-DIST", [commandStep("show interfaces")]);
+      const job = engine.startJob(plan);
+
+      job.context.updatedAt = Date.now() - 1000;
+      const refreshed = engine.getJob(job.id);
+
+      expect(refreshed?.context.finished).toBe(true);
+      expect(refreshed?.context.phase).toBe("completed");
+      expect(refreshed?.context.result?.ok).toBe(true);
+      expect((refreshed?.context.result as any)?.warnings).toContain(
+        "Output posiblemente parcial: el comando largo terminó sin eco ni encabezado inicial esperado.",
+      );
+      expect((refreshed?.context.result as any)?.diagnostics?.partialOutput).toBe(true);
+    } finally {
+      (globalThis as any).ipc = previousIpc;
+      (globalThis as any).dprint = previousDprint;
+    }
+  });
+
   test("getJobState rescata un job aunque pendingCommand sea null", () => {
     let outputPhase = 0;
     const nativeTerminal = {

@@ -55,6 +55,13 @@ interface SimpleRuntimeResultValue {
     raw?: string;
     output?: string;
     status?: number;
+    warnings?: string[];
+    diagnostics?: {
+      commandStatus?: number;
+      statusCode?: number;
+      completionReason?: string;
+      partialOutput?: boolean;
+    };
     session?: {
       mode?: string;
       prompt?: string;
@@ -114,6 +121,7 @@ export interface ParsedCommandResponse {
   diagnostics?: {
     completionReason?: string;
     statusCode?: number;
+    partialOutput?: boolean;
   };
 }
 
@@ -465,13 +473,21 @@ export function createResponseParser() {
 
     const errorText = rawSemanticErrorText ?? topLevelErrorText ?? nestedErrorText;
 
-    if (Array.isArray(resAny.warnings)) {
-      for (const warning of resAny.warnings.map(String)) {
+    const warningSources = [resAny.warnings, nestedResult?.warnings];
+
+    for (const sourceWarnings of warningSources) {
+      if (!Array.isArray(sourceWarnings)) {
+        continue;
+      }
+
+      for (const warning of sourceWarnings.map(String)) {
         if (failed && shouldSuppressWarningForSemanticFailure(warning, raw, errorText)) {
           continue;
         }
 
-        warnings.push(warning);
+        if (!warnings.includes(warning)) {
+          warnings.push(warning);
+        }
       }
     }
 
@@ -512,8 +528,14 @@ export function createResponseParser() {
       warnings,
       error: errorText || undefined,
       diagnostics: {
-        completionReason: resAny.diagnostics?.completionReason,
+        completionReason:
+          resAny.diagnostics?.completionReason ??
+          nestedResult?.diagnostics?.completionReason,
         statusCode: status,
+        partialOutput: Boolean(
+          resAny.diagnostics?.partialOutput ??
+            nestedResult?.diagnostics?.partialOutput,
+        ),
       },
     };
   }

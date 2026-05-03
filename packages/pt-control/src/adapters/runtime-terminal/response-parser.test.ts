@@ -205,4 +205,45 @@ describe("response-parser", () => {
     expect(parsed.error).not.toContain("[cleanup]");
     expect(parsed.warnings).toEqual([]);
   });
+
+  test("propaga warnings y diagnostics desde result anidado", () => {
+    const parser = createResponseParser();
+
+    const parsed = parser.parseCommandResponse(
+      {
+        ok: true,
+        status: 0,
+        result: {
+          ok: true,
+          status: 0,
+          rawOutput: "Queueing strategy: fifo\nSW-SRV-DIST#",
+          output: "Queueing strategy: fifo",
+          warnings: [
+            "Output posiblemente parcial: el comando largo terminó sin eco ni encabezado inicial esperado.",
+          ],
+          diagnostics: {
+            completionReason: "native-long-output-without-echo",
+            partialOutput: true,
+            statusCode: 0,
+          },
+          session: {
+            mode: "privileged-exec",
+            prompt: "SW-SRV-DIST#",
+          },
+        },
+      } as never,
+      {
+        stepIndex: 0,
+        isHost: false,
+        command: "show interfaces",
+      },
+    );
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.warnings).toContain(
+      "Output posiblemente parcial: el comando largo terminó sin eco ni encabezado inicial esperado.",
+    );
+    expect(parsed.diagnostics?.completionReason).toBe("native-long-output-without-echo");
+    expect(parsed.diagnostics?.partialOutput).toBe(true);
+  });
 });

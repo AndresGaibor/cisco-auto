@@ -1008,6 +1008,56 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
     );
   }
 
+  const PARTIAL_LONG_OUTPUT_WARNING =
+    "Output posiblemente parcial: el comando largo terminó sin eco ni encabezado inicial esperado.";
+
+  function firstMeaningfulNativeOutputLine(output: unknown, command?: string): string {
+    const lines = normalizeEol(output)
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => {
+        if (!line) return false;
+        if (isIosPrompt(line)) return false;
+        if (isPagerOnlyLine(line)) return false;
+        if (command && lineContainsCommandEcho(line, command)) return false;
+        return true;
+      });
+
+    return lines[0] ?? "";
+  }
+
+  function lineLooksLikeNativeInterfaceHeader(line: string): boolean {
+    return /^(?:FastEthernet|GigabitEthernet|TenGigabitEthernet|Ethernet|Serial|Vlan|Port-channel|Loopback|Tunnel|Null)\S*\s+is\s+/i.test(
+      String(line ?? "").trim(),
+    );
+  }
+
+  function nativeLongOutputLooksPartial(args: {
+    command: string;
+    block: string;
+    hasCommandEcho: boolean;
+  }): boolean {
+    if (!/^show\s+interfaces?\b/.test(normalizeCommandForFallback(args.command))) {
+      return false;
+    }
+
+    const firstLine = firstMeaningfulNativeOutputLine(args.block, args.command);
+
+    if (!firstLine) {
+      return false;
+    }
+
+    return !lineLooksLikeNativeInterfaceHeader(firstLine);
+  }
+
+  function buildNativeLongOutputWarnings(args: {
+    command: string;
+    block: string;
+    hasCommandEcho: boolean;
+  }): string[] {
+    return nativeLongOutputLooksPartial(args) ? [PARTIAL_LONG_OUTPUT_WARNING] : [];
+  }
+
   function nativeLongOutputCanCompleteWithoutEcho(args: { block: string; command: string; prompt: string }): boolean {
     if (!isLongOutputReadOnlyIosCommand(args.command)) {
       return false;
@@ -1795,7 +1845,12 @@ function semanticErrorNeedsCleanupToPrivilegedExec(
       raw: block,
       status: 0,
       completedAt: Date.now(),
-    });
+      warnings: buildNativeLongOutputWarnings({
+        command,
+        block: longOutputBlock || block,
+        hasCommandEcho: strictBlock.hasCommandEcho,
+      }),
+    } as any);
 
     const semanticCleanupActive = (ctx as any).semanticErrorCleanupInProgress === true;
 
@@ -1806,9 +1861,17 @@ function semanticErrorNeedsCleanupToPrivilegedExec(
     }
     ctx.updatedAt = Date.now();
 
+    const nativeWarnings = buildNativeLongOutputWarnings({
+      command,
+      block: longOutputBlock || block,
+      hasCommandEcho: strictBlock.hasCommandEcho,
+    });
+
     const terminalResult = {
       ok: true,
       output: block,
+      rawOutput: block,
+      raw: block,
       status: 0,
       session: {
         mode,
@@ -1817,6 +1880,14 @@ function semanticErrorNeedsCleanupToPrivilegedExec(
         awaitingConfirm: false,
       },
       mode,
+      warnings: nativeWarnings,
+      diagnostics: {
+        statusCode: 0,
+        completionReason: echoLessLongOutputComplete
+          ? "native-long-output-without-echo"
+          : "native-fallback-complete",
+        partialOutput: nativeWarnings.length > 0,
+      },
     } as unknown as TerminalResult;
 
     if (semanticCleanupActive) {
@@ -2800,6 +2871,8 @@ export function toKernelJobState(ctx: JobContext): KernelJobState {
       code: result.code,
       error: result.error,
       session: ctx.result.session,
+      warnings: Array.isArray(result.warnings) ? result.warnings : [],
+      diagnostics: result.diagnostics,
     };
   }
 

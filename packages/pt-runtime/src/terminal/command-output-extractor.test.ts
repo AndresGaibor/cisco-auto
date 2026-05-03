@@ -117,4 +117,74 @@ describe("extractCommandOutput", () => {
     expect(result.output).toContain("Cisco IOS Software");
     expect(result.output).not.toContain("% Invalid input detected");
   });
+
+  test("marca show interfaces como parcial cuando empieza en medio del bloque sin eco", () => {
+    const result = extractCommandOutput({
+      command: "show interfaces",
+      sessionKind: "ios",
+      promptBefore: "SW-SRV-DIST#",
+      promptAfter: "SW-SRV-DIST#",
+      eventOutput: [
+        "Queueing strategy: fifo",
+        "Output queue: 0/40",
+        "ARP type: ARPA, ARP Timeout 04:00:00",
+        "SW-SRV-DIST#",
+      ].join("\n"),
+      snapshotDelta: "",
+      commandEndedSeen: true,
+      outputEventsCount: 1,
+    });
+
+    expect(result.output).toContain("Queueing strategy");
+    expect(result.warnings).toContain(
+      "Output posiblemente parcial: el comando largo terminó sin eco ni encabezado inicial esperado.",
+    );
+  });
+
+  test("marca show interfaces como parcial aunque exista eco si el primer contenido real es tail", () => {
+    const result = extractCommandOutput({
+      command: "show interfaces",
+      sessionKind: "ios",
+      promptBefore: "SW-SRV-DIST>",
+      promptAfter: "SW-SRV-DIST>",
+      eventOutput: [
+        "SW-SRV-DIST>show interfaces",
+        "2357 packets output, 263570 bytes, 0 underruns",
+        "     0 output errors, 0 collisions, 10 interface resets",
+        "",
+        "FastEthernet0/22 is down, line protocol is down (disabled)",
+        "SW-SRV-DIST>",
+      ].join("\n"),
+      snapshotDelta: "",
+      commandEndedSeen: true,
+      outputEventsCount: 1,
+    });
+
+    expect(result.output).toContain("2357 packets output");
+    expect(result.warnings).toContain(
+      "Output posiblemente parcial: el comando largo terminó sin eco ni encabezado inicial esperado.",
+    );
+  });
+
+  test("no marca show interfaces como parcial cuando empieza con encabezado de interfaz", () => {
+    const result = extractCommandOutput({
+      command: "show interfaces",
+      sessionKind: "ios",
+      promptBefore: "SW-SRV-DIST#",
+      promptAfter: "SW-SRV-DIST#",
+      eventOutput: [
+        "FastEthernet0/1 is up, line protocol is up (connected)",
+        "  Hardware is Lance, address is 0060.5c93.4501",
+        "SW-SRV-DIST#",
+      ].join("\n"),
+      snapshotDelta: "",
+      commandEndedSeen: true,
+      outputEventsCount: 1,
+    });
+
+    expect(result.output).toContain("FastEthernet0/1 is up");
+    expect(result.warnings).not.toContain(
+      "Output posiblemente parcial: el comando largo terminó sin eco ni encabezado inicial esperado.",
+    );
+  });
 });

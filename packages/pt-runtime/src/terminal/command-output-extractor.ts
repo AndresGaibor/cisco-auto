@@ -30,6 +30,65 @@ export interface ExtractResult {
   asyncNoise: string[];
 }
 
+const PARTIAL_LONG_OUTPUT_WARNING =
+  "Output posiblemente parcial: el comando largo terminó sin eco ni encabezado inicial esperado.";
+
+function normalizeExtractorCommand(command: unknown): string {
+  return String(command ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function isShowInterfacesCommand(command: unknown): boolean {
+  return /^show\s+interfaces?\b/.test(normalizeExtractorCommand(command));
+}
+
+function firstMeaningfulOutputLine(output: unknown, command?: string): string {
+  const lines = normalizeExtractorEol(output)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => {
+      if (!line) return false;
+      if (lineLooksLikePrompt(line)) return false;
+      if (/^--More--$/i.test(line)) return false;
+      if (command && lineLooksLikeCommandEcho(line, command)) return false;
+      return true;
+    });
+
+  return lines[0] ?? "";
+}
+
+function lineLooksLikeInterfaceHeader(line: string): boolean {
+  return /^(?:FastEthernet|GigabitEthernet|TenGigabitEthernet|Ethernet|Serial|Vlan|Port-channel|Loopback|Tunnel|Null)\S*\s+is\s+/i.test(
+    String(line ?? "").trim(),
+  );
+}
+
+function detectPartialLongOutputWarning(input: {
+  command: string;
+  raw: string;
+  output: string;
+  source: string;
+}): string | null {
+  if (!isShowInterfacesCommand(input.command)) {
+    return null;
+  }
+
+  if (!input.output.trim()) {
+    return null;
+  }
+
+  const firstLine = firstMeaningfulOutputLine(input.output, input.command);
+
+  if (!firstLine) {
+    return null;
+  }
+
+  if (lineLooksLikeInterfaceHeader(firstLine)) {
+    return null;
+  }
+
+  return PARTIAL_LONG_OUTPUT_WARNING;
+}
+
 /**
  * Extrae output del comando actual usando múltiples fuentes.
  * Combina output de eventos y delta de snapshots.
@@ -144,8 +203,20 @@ export function extractCommandOutput(input: ExtractOptions): ExtractResult {
     ? stripCommandEchoAndPrompt(commandOutput, input.command, input.promptBefore, input.promptAfter)
     : commandOutput;
 
+  const finalOutput = finalClean(cleanedOutput, input.snapshotAfter?.raw || "");
+  const partialWarning = detectPartialLongOutputWarning({
+    command: input.command,
+    raw: chosen.raw,
+    output: finalOutput,
+    source: chosen.source,
+  });
+
+  if (partialWarning && !warnings.includes(partialWarning)) {
+    warnings.push(partialWarning);
+  }
+
   return {
-    output: finalClean(cleanedOutput, input.snapshotAfter?.raw || ""),
+    output: finalOutput,
     raw: chosen.raw,
     source: chosen.source,
     confidence: chosen.confidence,

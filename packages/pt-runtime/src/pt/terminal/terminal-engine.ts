@@ -31,6 +31,16 @@ export interface TerminalResult {
   status: number;
   session: SessionStateSnapshot;
   mode: IosMode;
+  rawOutput?: string;
+  raw?: string;
+  warnings?: string[];
+  diagnostics?: {
+    completionReason?: string;
+    partialOutput?: boolean;
+    statusCode?: number;
+  };
+  error?: string;
+  code?: string;
 }
 
 export type { ExecuteOptions };
