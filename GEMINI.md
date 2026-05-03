@@ -1,63 +1,127 @@
-# GEMINI.md — cisco-auto
+# GEMINI.md — cisco-auto / PT Control
 
-Contexto mínimo para Gemini CLI. Mantén este archivo corto; usa `AGENTS.md` como guía compartida.
+Contexto mínimo para Gemini CLI.
 
-## Lectura obligatoria según tarea
+La fuente canónica es `AGENTS.md`. No dupliques documentación extensa aquí.
 
-- Siempre: `AGENTS.md`.
-- Si trabajas dentro de un paquete: `packages/<paquete>/AGENTS.md`.
-- CLI/talleres Cisco/PT: `.skills/pt-cli/SKILL.md` y `docs/CLI_AGENT_SKILL.md`.
-- Arquitectura: `docs/ARCHITECTURE_BOUNDARIES.md`.
-- Runtime vs control: `docs/architecture/runtime-control-boundary.md`.
-- Packet Tracer internals/Omni: `docs/PT_ENGINE_INTERNALS.md` y `docs/PT_EVALUATE_HACKING_GUIDE.md`.
+---
+
+## Qué leer primero
+
+1. `AGENTS.md` en la raíz.
+2. `AGENTS.md` del paquete que vas a modificar si existe.
+3. `README.md` para onboarding humano.
+4. `docs/CLI_AGENT_SKILL.md` si la tarea es operar talleres de redes con Packet Tracer y el archivo existe.
+
+---
 
 ## Identidad del proyecto
 
-`cisco-auto` automatiza Cisco Packet Tracer con una CLI Bun-first (`bun run pt`) y un runtime JavaScript cargado dentro de PT.
+`cisco-auto` automatiza Cisco Packet Tracer con:
 
-Paquetes clave:
+- CLI pública: `bun run pt`
+- Runtime generado para Packet Tracer
+- Bridge por filesystem en `PT_DEV_DIR`, normalmente `~/pt-dev`
+- Workflows de control en TypeScript/Bun
 
-- `apps/pt-cli`: comandos públicos.
-- `packages/pt-control`: orquestación, diagnóstico, verification, policies.
-- `packages/pt-runtime`: kernel PT-safe y primitives de bajo nivel.
-- `packages/file-bridge`: IPC con Packet Tracer.
-- `packages/ios-domain` / `packages/ios-primitives`: IOS puro.
-- `.skills/pt-cli`: guía para operar labs de redes.
+Paquetes principales:
 
-## Reglas de trabajo
+```text
+apps/pt-cli                 CLI pública
+packages/pt-control         Orquestación, doctor, verification, planners
+packages/pt-runtime         Runtime PT-safe, kernel, handlers
+packages/file-bridge        IPC por filesystem con Packet Tracer
+packages/terminal-contracts Contratos terminales
+packages/ios-domain         IOS puro: parsers/builders
+packages/ios-primitives     Value objects IOS
+```
 
-- No supongas: confirma con archivos reales o pregunta por evidencia.
-- Antes de modificar CLI, verifica `apps/pt-cli/src/program.ts` y `apps/pt-cli/src/commands/command-registry.ts`.
-- No uses comandos legacy si no están registrados públicamente.
-- No edites artefactos generados en `~/pt-dev/` como si fueran source.
-- No pongas semántica de red/lab en `pt-runtime`; debe vivir en `pt-control`.
-- Usa `--json` cuando necesites que otro agente parsee resultados.
-- Todo éxito de Packet Tracer debe tener evidencia posterior: `verify`, `cmd show...`, `ping`, `device list`, `link verify`.
+---
 
-## Comandos frecuentes
+## Comandos esenciales
 
 ```bash
 bun run pt --help
 bun run pt doctor
+bun run pt build
+bun test
+```
+
+Para comandos específicos de Packet Tracer, consulta `AGENTS.md`:
+
+- CLI pública actual
+- Packet Tracer y PT_DEV_DIR
+- Packet Tracer real: cómo validar
+- Comandos de emergencia
+
+---
+
+## Reglas críticas
+
+- No asumas. Lee archivos reales, busca referencias y valida contratos actuales.
+- Bun primero; no uses `npm`, `yarn`, `pnpm`, `node` o `ts-node` sin motivo explícito.
+- No documentes comandos que no salgan en `bun run pt --help` o `bun run pt <cmd> --help`.
+- No edites artefactos generados en `~/pt-dev` como si fueran source.
+- No pongas lógica de negocio o workflows altos en `pt-runtime`; eso vive en `pt-control`.
+- No mezcles cambios grandes no relacionados.
+- Si una tarea toca Packet Tracer real, valida con evidencia de CLI o deja comandos exactos para que el usuario los ejecute.
+
+---
+
+## Validación mínima
+
+Antes de entregar cambios:
+
+```bash
+git status --short
+git diff --stat
+git diff --check
+```
+
+Ejecuta tests focalizados según el archivo tocado.
+
+Para docs:
+
+```bash
+git diff -- README.md AGENTS.md CLAUDE.md GEMINI.md
+git diff --check
+```
+
+Para CLI:
+
+```bash
+bun run pt --help
+bun run pt <cmd> --help
+```
+
+Para Packet Tracer real:
+
+```bash
+bun run pt doctor
 bun run pt runtime status --json
 bun run pt device list --json
-bun run pt device ports <device> --json
-bun run pt link suggest <a> <b> --json
-bun run pt cmd <device> "<command>"
-bun run pt set host <device> ip <ip/cidr> --gateway <gw>
+bun run pt cmd <device> "show version" --json
 bun run pt verify ping <source> <target>
 ```
 
-Calidad:
+---
 
-```bash
-bun run lint
-bun run typecheck
-bun test
-bun run architecture:check
-bun run quality:check
+## Respuesta esperada
+
+Cuando termines, reporta:
+
+```
+Cambios:
+- archivo 1
+- archivo 2
+
+Validación:
+- comando A: pass/fail
+- comando B: pass/fail
+
+Pendiente:
+- qué no se validó
+- si requiere Packet Tracer abierto
 ```
 
-## Entrega
-
-Indica archivos cambiados, validaciones ejecutadas, validaciones pendientes y si algo requiere Packet Tracer real.
+Si algo requiere PT abierto, dilo explícitamente.
