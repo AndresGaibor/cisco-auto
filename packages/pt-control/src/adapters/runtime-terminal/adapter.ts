@@ -29,6 +29,57 @@ function addTiming(timings: AdapterTimingMap, name: string, value: number): void
   timings[name] = (timings[name] ?? 0) + Math.max(0, value);
 }
 
+function setTiming(timings: AdapterTimingMap, name: string, value: number): void {
+  if (!Number.isFinite(value)) {
+    return;
+  }
+
+  timings[name] = Math.max(0, value);
+}
+
+function readTimingValue(source: unknown, name: string): number | null {
+  if (!source || typeof source !== "object") {
+    return null;
+  }
+
+  const value = (source as Record<string, unknown>)[name];
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function recordBridgeResultTimings(
+  timings: AdapterTimingMap,
+  prefix: string,
+  bridgeResult: unknown,
+): void {
+  const bridgeTimings =
+    bridgeResult && typeof bridgeResult === "object"
+      ? (bridgeResult as { timings?: unknown }).timings
+      : null;
+
+  const waitMs = readTimingValue(bridgeTimings, "waitMs");
+  const queueLatencyMs = readTimingValue(bridgeTimings, "queueLatencyMs");
+  const execLatencyMs = readTimingValue(bridgeTimings, "execLatencyMs");
+  const completedAtMs = readTimingValue(bridgeTimings, "completedAtMs");
+
+  if (waitMs !== null) {
+    addTiming(timings, `${prefix}BridgeWaitMs`, waitMs);
+  }
+
+  if (queueLatencyMs !== null) {
+    addTiming(timings, `${prefix}QueueLatencyMs`, queueLatencyMs);
+  }
+
+  if (execLatencyMs !== null) {
+    addTiming(timings, `${prefix}ExecLatencyMs`, execLatencyMs);
+  }
+
+  if (completedAtMs !== null) {
+    setTiming(timings, `${prefix}CompletedAtMs`, completedAtMs);
+  }
+}
+
 async function measureAdapterAsync<T>(
   timings: AdapterTimingMap,
   name: string,
@@ -538,7 +589,7 @@ export function createRuntimeTerminalAdapter(
       ),
     );
     let finalTimings: unknown = submitResult.timings;
-    timings.terminalPlanSubmitBridgeWaitMs = Number((submitResult as any)?.timings?.waitMs ?? 0);
+    recordBridgeResultTimings(timings, "terminalPlanSubmit", submitResult);
 
     if (isUnsupportedTerminalPlanRun(submitResult)) {
       return null;
@@ -584,6 +635,8 @@ export function createRuntimeTerminalAdapter(
       timings.terminalPlanPollTimeoutMs = pollTimeoutMs;
       timings.terminalPlanPollIntervalMs = pollIntervalMs;
       timings.terminalPlanPollCount = 0;
+      timings.terminalPlanPollPendingCount = 0;
+      timings.terminalPlanPollCompletedCount = 0;
 
       let pollValue: unknown = null;
 
@@ -596,11 +649,18 @@ export function createRuntimeTerminalAdapter(
               { ticket: submitValue.ticket },
               Math.max(pollTimeoutMs - (Date.now() - startedAt), 1000),
               { resolveDeferred: false },
-            ),
-          );
+          ),
+        );
 
+          recordBridgeResultTimings(timings, "terminalPlanPoll", pollResult);
           finalTimings = pollResult.timings;
           pollValue = normalizeBridgeValue(pollResult);
+
+          if (isStillPending(pollValue)) {
+            addTiming(timings, "terminalPlanPollPendingCount", 1);
+          } else {
+            addTiming(timings, "terminalPlanPollCompletedCount", 1);
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error ?? "Unknown poll error");
 

@@ -346,4 +346,119 @@ describe("createRuntimeTerminalAdapter deferred flow", () => {
     expect(calls.map((call) => call.type)).toEqual(["terminal.plan.run", "__pollDeferred"]);
     expect((result.evidence as any)?.timings?.adapter?.terminalPlanPollIntervalMs).toBe(120);
   });
+
+  test("desglosa latencias bridge de submit y polls diferidos", async () => {
+    const calls: Array<{ type: string; timeoutMs?: number; options?: unknown }> = [];
+    let pollCount = 0;
+
+    const bridge = {
+      sendCommandAndWait: vi.fn(async (type: string, _payload: unknown, timeoutMs?: number, options?: unknown) => {
+        calls.push({ type, timeoutMs, options });
+
+        if (type === "terminal.plan.run") {
+          return {
+            ok: true,
+            status: 0,
+            completedAt: 100,
+            timings: {
+              waitMs: 12,
+              queueLatencyMs: 5,
+              execLatencyMs: 2,
+              completedAtMs: 100,
+            },
+            value: { deferred: true, ticket: "ticket-timings" },
+          };
+        }
+
+        if (type === "__pollDeferred") {
+          pollCount += 1;
+
+          if (pollCount === 1) {
+            return {
+              ok: true,
+              status: 0,
+              completedAt: 200,
+              timings: {
+                waitMs: 20,
+                queueLatencyMs: 10,
+                execLatencyMs: 3,
+                completedAtMs: 200,
+              },
+              value: {
+                done: false,
+                state: "running",
+                currentStep: 0,
+                totalSteps: 1,
+              },
+            };
+          }
+
+          return {
+            ok: true,
+            status: 0,
+            completedAt: 300,
+            timings: {
+              waitMs: 30,
+              queueLatencyMs: 15,
+              execLatencyMs: 4,
+              completedAtMs: 300,
+            },
+            value: {
+              done: true,
+              ok: true,
+              output: "show version\nCisco IOS Software\nR1#",
+              result: {
+                ok: true,
+                raw: "show version\nCisco IOS Software\nR1#",
+                status: 0,
+                session: {
+                  modeBefore: "user-exec",
+                  modeAfter: "priv-exec",
+                  promptBefore: "R1>",
+                  promptAfter: "R1#",
+                },
+              },
+            },
+          };
+        }
+
+        throw new Error(`unexpected ${type}`);
+      }),
+    };
+
+    const adapter = createRuntimeTerminalAdapter({
+      bridge: bridge as never,
+      generateId: () => "id-timings",
+      defaultTimeout: 45000,
+    });
+
+    const result = await adapter.runTerminalPlan({
+      id: "plan-timings",
+      device: "R1",
+      metadata: { deferredPollIntervalMs: 75 },
+      steps: [{ command: "show version" }],
+    } as never);
+
+    const adapterTimings = (result.evidence as any)?.timings?.adapter;
+
+    expect(result.ok).toBe(true);
+    expect(calls.map((call) => call.type)).toEqual([
+      "terminal.plan.run",
+      "__pollDeferred",
+      "__pollDeferred",
+    ]);
+
+    expect(adapterTimings.terminalPlanSubmitBridgeWaitMs).toBe(12);
+    expect(adapterTimings.terminalPlanSubmitQueueLatencyMs).toBe(5);
+    expect(adapterTimings.terminalPlanSubmitExecLatencyMs).toBe(2);
+    expect(adapterTimings.terminalPlanSubmitCompletedAtMs).toBe(100);
+
+    expect(adapterTimings.terminalPlanPollCount).toBe(2);
+    expect(adapterTimings.terminalPlanPollPendingCount).toBe(1);
+    expect(adapterTimings.terminalPlanPollCompletedCount).toBe(1);
+    expect(adapterTimings.terminalPlanPollBridgeWaitMs).toBe(50);
+    expect(adapterTimings.terminalPlanPollQueueLatencyMs).toBe(25);
+    expect(adapterTimings.terminalPlanPollExecLatencyMs).toBe(7);
+    expect(adapterTimings.terminalPlanPollCompletedAtMs).toBe(300);
+  });
 });
