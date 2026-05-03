@@ -153,4 +153,56 @@ describe("response-parser", () => {
     expect(parsed.raw).toContain("Cisco IOS Software");
     expect(parsed.raw).not.toContain("channel-group 7 mode active");
   });
+
+  test("no convierte cleanup semántico en warning gigante", () => {
+    const parser = createResponseParser();
+
+    const semanticError = [
+      "channel-group 7 mode active",
+      "                                           ^",
+      "% Invalid input detected at '^' marker.",
+    ].join("\n");
+
+    const semanticErrorWithCleanup = [
+      semanticError,
+      "",
+      "[cleanup]",
+      "end",
+      "SW-SRV-DIST#",
+      "%SYS-5-CONFIG_I: Configured from console by console",
+    ].join("\n");
+
+    const parsed = parser.parseCommandResponse(
+      {
+        ok: false,
+        status: 1,
+        error: semanticErrorWithCleanup,
+        warnings: [semanticErrorWithCleanup],
+        result: {
+          ok: false,
+          status: 1,
+          rawOutput: semanticError,
+          output: semanticError,
+          code: "IOS_INVALID_INPUT",
+          error: semanticErrorWithCleanup,
+          session: {
+            mode: "privileged-exec",
+            prompt: "SW-SRV-DIST#",
+          },
+        },
+      } as never,
+      {
+        stepIndex: 0,
+        isHost: false,
+        command: "channel-group 7 mode active",
+      },
+    );
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.status).toBe(1);
+    expect(parsed.raw).toContain("% Invalid input detected");
+    expect(parsed.error).toContain("% Invalid input detected");
+    expect(parsed.error).not.toContain("[cleanup]");
+    expect(parsed.warnings).toEqual([]);
+  });
 });

@@ -128,6 +128,46 @@ export function createResponseParser() {
     return String(value ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   }
 
+  function extractIosSemanticErrorText(value: unknown): string | null {
+    const text = normalizeResponseText(value).trim();
+
+    if (!text) return null;
+
+    const lines = text.split("\n");
+    const errorLineIndex = lines.findIndex((line) =>
+      /%\s*(Invalid input detected|Incomplete command|Ambiguous command|Unknown command)/i.test(line),
+    );
+
+    if (errorLineIndex < 0) {
+      return null;
+    }
+
+    const startIndex = Math.max(0, errorLineIndex - 2);
+
+    return lines.slice(startIndex, errorLineIndex + 1).join("\n").trim();
+  }
+
+  function semanticErrorsMatch(a: unknown, b: unknown): boolean {
+    const left = extractIosSemanticErrorText(a);
+    const right = extractIosSemanticErrorText(b);
+
+    if (!left || !right) return false;
+
+    return left === right || left.includes(right) || right.includes(left);
+  }
+
+  function shouldSuppressWarningForSemanticFailure(warning: unknown, raw: unknown, errorText: unknown): boolean {
+    const text = normalizeResponseText(warning).trim();
+
+    if (!text) return true;
+
+    if (!extractIosSemanticErrorText(text)) {
+      return false;
+    }
+
+    return semanticErrorsMatch(text, raw) || semanticErrorsMatch(text, errorText);
+  }
+
   function escapeResponseRegExp(value: string): string {
     return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
@@ -411,17 +451,37 @@ export function createResponseParser() {
 
     const modeAfter = String(sessionInfo.modeAfter ?? sessionInfo.mode ?? "");
 
-    if (Array.isArray(resAny.warnings)) {
-      warnings.push(...resAny.warnings.map(String));
-    }
+    const rawSemanticErrorText = extractIosSemanticErrorText(raw);
 
-    const errorText =
+    const topLevelErrorText =
       typeof resAny.error === "string"
         ? resAny.error
         : String(resAny.error?.message ?? resAny.message ?? resAny.code ?? resAny.errorCode ?? "");
 
-    if (failed && errorText && !raw.includes(errorText)) {
-      warnings.push(errorText);
+    const nestedErrorText =
+      typeof nestedResult?.error === "string"
+        ? nestedResult.error
+        : String(nestedResult?.error?.message ?? nestedResult?.message ?? nestedResult?.code ?? nestedResult?.errorCode ?? "");
+
+    const errorText = rawSemanticErrorText ?? topLevelErrorText ?? nestedErrorText;
+
+    if (Array.isArray(resAny.warnings)) {
+      for (const warning of resAny.warnings.map(String)) {
+        if (failed && shouldSuppressWarningForSemanticFailure(warning, raw, errorText)) {
+          continue;
+        }
+
+        warnings.push(warning);
+      }
+    }
+
+    if (
+      failed &&
+      topLevelErrorText &&
+      !raw.includes(topLevelErrorText) &&
+      !shouldSuppressWarningForSemanticFailure(topLevelErrorText, raw, errorText)
+    ) {
+      warnings.push(topLevelErrorText);
     }
 
     if (sessionInfo.paging) {
