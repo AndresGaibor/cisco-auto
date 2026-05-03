@@ -128,7 +128,7 @@ Cisco IOS Software...`;
 
       // handleDnsLookup should have recovered the prompt
       expect(session.getState().awaitingDnsLookup).toBe(false);
-      expect(session.getState().mode).toBe("priv-exec");
+      expect(session.getState().mode).toBe("privileged-exec");
       // Classification stays dns-lookup since it triggered but recovered
       expect(result.classification).toBe("dns-lookup");
     });
@@ -166,7 +166,7 @@ Cisco IOS Software...`;
       await session.resyncPrompt();
       
       expect(session.getState().awaitingDnsLookup).toBe(false);
-      expect(session.getState().mode).toBe("priv-exec");
+      expect(session.getState().mode).toBe("privileged-exec");
     });
   });
 
@@ -206,7 +206,7 @@ Cisco IOS Software...`;
       const result = await session.executeAndWait("shwo");
 
       // handleDnsLookup should have recovered the prompt
-      expect(session.getState().mode).toBe("priv-exec");
+      expect(session.getState().mode).toBe("privileged-exec");
       expect(session.getState().awaitingDnsLookup).toBe(false);
     });
   });

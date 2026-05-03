@@ -423,9 +423,16 @@ export function sanitizeTerminalText(output: string): string {
 
   let result = sanitizeTerminalBase(output);
 
-  result = result.replace(/[\b]+\x08/g, "");
-
-  result = result.replace(/[\b]/g, "");
+  // Procesar backspaces: \x08 debe borrar el carácter anterior
+  const processed: string[] = [];
+  for (const char of result) {
+    if (char === "\x08" || char === "\b") {
+      processed.pop(); // Borra el carácter anterior
+    } else {
+      processed.push(char);
+    }
+  }
+  result = processed.join("");
 
   result = result.replace(/[\r\n]+/g, "\n");
 

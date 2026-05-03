@@ -73,9 +73,9 @@ describe("inferPromptState", () => {
     expect(result.deviceName).toBe("Router");
   });
 
-  test("infers priv-exec mode", () => {
+  test("infers privileged-exec mode", () => {
     const result = inferPromptState("Router#");
-    expect(result.mode).toBe("priv-exec");
+    expect(result.mode).toBe("privileged-exec");
     expect(result.deviceName).toBe("Router");
   });
 
@@ -165,15 +165,15 @@ describe("needsResponse", () => {
 
   test("returns false for non-interactive modes", () => {
     expect(needsResponse("user-exec")).toBe(false);
-    expect(needsResponse("priv-exec")).toBe(false);
+    expect(needsResponse("privileged-exec")).toBe(false);
     expect(needsResponse("config")).toBe(false);
     expect(needsResponse("config-if")).toBe(false);
   });
 });
 
 describe("isPrivilegedMode", () => {
-  test("returns true for priv-exec and config modes", () => {
-    expect(isPrivilegedMode("priv-exec")).toBe(true);
+  test("returns true for privileged-exec and config modes", () => {
+    expect(isPrivilegedMode("privileged-exec")).toBe(true);
     expect(isPrivilegedMode("config")).toBe(true);
     expect(isPrivilegedMode("config-if")).toBe(true);
     expect(isPrivilegedMode("config-router")).toBe(true);
@@ -196,7 +196,7 @@ describe("isConfigMode", () => {
   });
 
   test("returns false for non-config modes", () => {
-    expect(isConfigMode("priv-exec")).toBe(false);
+    expect(isConfigMode("privileged-exec")).toBe(false);
     expect(isConfigMode("user-exec")).toBe(false);
     expect(isConfigMode("awaiting-password")).toBe(false);
   });
@@ -214,7 +214,7 @@ describe("isInteractiveDialog", () => {
   });
 
   test("returns false for normal modes", () => {
-    expect(isInteractiveDialog("priv-exec")).toBe(false);
+    expect(isInteractiveDialog("privileged-exec")).toBe(false);
     expect(isInteractiveDialog("config")).toBe(false);
     expect(isInteractiveDialog("paging")).toBe(false);
   });
@@ -229,7 +229,7 @@ describe("isRecoverableState", () => {
   });
 
   test("returns false for stable states", () => {
-    expect(isRecoverableState("priv-exec")).toBe(false);
+    expect(isRecoverableState("privileged-exec")).toBe(false);
     expect(isRecoverableState("config")).toBe(false);
   });
 });

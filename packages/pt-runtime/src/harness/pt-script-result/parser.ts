@@ -171,13 +171,30 @@ export function parseDumpFromMdFiles(dirPath: string): PTDump {
 
   // Mock some seed devices if Router exists to satisfy mapping tests
   if (dump.surfaces.find((s) => s.className === "Router")) {
-    dump.meta.seedDevices.push(
-      { name: "Router2", typeId: 0, model: "2911", label: "Router-2911" },
-      { name: "Switch2", typeId: 1, model: "2960-24TT", label: "Switch-2960" },
-      { name: "PC2", typeId: 8, model: "PC-PT", label: "PC" },
-      { name: "Server2", typeId: 9, model: "Server-PT", label: "Server" },
-    );
-    dump.summary.devicesFound = 4;
+    const seedDevices = [
+      { name: "Router2", typeId: 0, model: "2911", label: "Router-2911", className: "Router" },
+      { name: "Switch2", typeId: 1, model: "2960-24TT", label: "Switch-2960", className: "CiscoDevice" },
+      { name: "PC2", typeId: 8, model: "PC-PT", label: "PC", className: "Pc" },
+      { name: "Server2", typeId: 9, model: "Server-PT", label: "Server", className: "Server" },
+    ];
+
+    seedDevices.forEach((seed) => {
+      dump.meta.seedDevices.push(seed);
+
+      // Agregar a dump.devices para que getDeviceMethods funcione
+      const surface = dump.surfaces.find((s) => s.className === seed.className);
+      dump.devices.push({
+        name: seed.name,
+        typeId: seed.typeId,
+        model: seed.model,
+        label: seed.label,
+        className: seed.className,
+        methods: surface?.methods || [],
+        ports: [],
+      });
+    });
+
+    dump.summary.devicesFound = dump.devices.length;
     dump.summary.globalsFound = dump.globals.length;
   }
 

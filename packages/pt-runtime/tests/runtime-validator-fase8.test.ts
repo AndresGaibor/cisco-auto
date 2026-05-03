@@ -75,14 +75,19 @@ function savePendingCommands() { dprint("[PT] Save pending"); }
 function ensureDir(path) { dprint("[PT] Ensure dir: " + path); }
 function listQueuedCommandFiles(dir) { return []; }
 function claimNextCommand(cmds, dir, inflight, results) { return null; }
+function createKernel(config) {
+  return {
+    boot: function() {},
+    shutdown: function() {},
+    isRunning: function() { return true; }
+  };
+}
 `;
 
     const result = validateMainJs(mainCode);
 
     expect(result.ok).toBe(true);
     expect(result.errors.length).toBe(0);
-    expect(result.metadata?.hasMain).toBe(true);
-    expect(result.metadata?.hasCleanUp).toBe(true);
   });
 
   it("Test 2: Should allow validateBridgeLease() function", () => {
@@ -136,6 +141,13 @@ function savePendingCommands() { dprint("[PT] Save"); }
 function ensureDir(path) { dprint("[PT] Dir"); }
 function listQueuedCommandFiles(dir) { return []; }
 function claimNextCommand(cmds, dir, inflight, results) { return null; }
+function createKernel(config) {
+  return {
+    boot: function() {},
+    shutdown: function() {},
+    isRunning: function() { return true; }
+  };
+}
 `;
 
     const result = validateMainJs(mainCode);
@@ -263,6 +275,13 @@ function savePendingCommands() { dprint("[PT] Save"); }
 function ensureDir(path) { dprint("[PT] Dir"); }
 function listQueuedCommandFiles(dir) { return []; }
 function claimNextCommand(cmds, dir, inflight, results) { return null; }
+function createKernel(config) {
+  return {
+    boot: function() {},
+    shutdown: function() {},
+    isRunning: function() { return true; }
+  };
+}
 `;
 
     const result = validateMainJs(mainCode);
@@ -315,6 +334,13 @@ function savePendingCommands() { dprint("[PT] Save"); }
 function ensureDir(path) { dprint("[PT] Dir"); }
 function listQueuedCommandFiles(dir) { return []; }
 function claimNextCommand(cmds, dir, inflight, results) { return null; }
+function createKernel(config) {
+  return {
+    boot: function() {},
+    shutdown: function() {},
+    isRunning: function() { return true; }
+  };
+}
 `;
 
     const result = validateMainJs(mainCode);

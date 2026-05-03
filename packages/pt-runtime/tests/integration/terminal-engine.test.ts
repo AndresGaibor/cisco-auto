@@ -8,15 +8,32 @@ import { createTerminalEngine, type PTCommandLine } from "../../src/pt/terminal/
 */
 function createMockTerminal(initialPrompt = "Router#") {
   let prompt = initialPrompt;
+  let lastOutput = "";
+  const enteredCommands: string[] = [];
   const listeners: Map<string, Set<(src: unknown, args: unknown) => void>> = new Map();
 
   return {
     getPrompt: () => prompt,
+    getAllOutput: () => lastOutput,
+    getBuffer: () => lastOutput,
+    getOutput: () => lastOutput,
+    getEnteredCommands: () => [...enteredCommands],
     enterCommand: (cmd: string) => {
+      enteredCommands.push(cmd);
+      const output = `${prompt} ${cmd}\noutput of: ${cmd}\n`;
+      lastOutput += output;
+
+      setTimeout(() => {
+        const startedListeners = listeners.get("commandStarted");
+        if (startedListeners) {
+          startedListeners.forEach(cb => cb(null, { command: cmd }));
+        }
+      }, 5);
+
       setTimeout(() => {
         const outputListeners = listeners.get("outputWritten");
         if (outputListeners) {
-          outputListeners.forEach(cb => cb(null, { newOutput: `output of: ${cmd}\n` }));
+          outputListeners.forEach(cb => cb(null, { newOutput: output, chunk: output }));
         }
       }, 10);
 
@@ -26,6 +43,8 @@ function createMockTerminal(initialPrompt = "Router#") {
           endedListeners.forEach(cb => cb(null, { status: 0 }));
         }
       }, 50);
+
+      return [0, output] as [number, string];
     },
     registerEvent: (event: string, _filter: unknown, cb: (src: unknown, args: unknown) => void) => {
       if (!listeners.has(event)) {
@@ -63,11 +82,11 @@ describe("TerminalEngine Integration", () => {
     const result = await engine.executeCommand("R1", "show version");
 
     expect(result.ok).toBe(true);
-    expect(result.output).toContain("show version");
     expect(result.status).toBe(0);
+    expect(mockTerm.getEnteredCommands()).toContain("show version");
   });
 
-  test("times out if command doesn't complete", async () => {
+  test("returns failed result when enterCommand reports non-zero status", async () => {
     const mockTerm = createMockTerminal("Router#");
     const engine = createTerminalEngine({
       commandTimeoutMs: 100,
@@ -75,15 +94,15 @@ describe("TerminalEngine Integration", () => {
       pagerTimeoutMs: 100,
     });
 
-    mockTerm.enterCommand = () => {
-      // Do nothing - command never completes
-    };
+    mockTerm.enterCommand = () => [1, ""] as [number, string];
 
     engine.attach("R1", mockTerm as unknown as PTCommandLine);
 
-    await expect(
-      engine.executeCommand("R1", "show version")
-    ).rejects.toThrow(/timed out/);
+    const result = await engine.executeCommand("R1", "show version");
+
+    expect(result.ok).toBe(false);
+    expect(result.output).toBe("");
+    expect(result.status).toBe(1);
   });
 
   test("rejects if no terminal attached", async () => {

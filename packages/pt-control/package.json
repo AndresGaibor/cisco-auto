@@ -20,6 +20,7 @@
     "@cisco-auto/pt-runtime": "workspace:*",
     "@cisco-auto/terminal-contracts": "workspace:*",
     "@cisco-auto/types": "workspace:*",
+    "picocolors": "^1.1.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

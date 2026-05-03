@@ -40,8 +40,8 @@ export class IosConfigOperations {
   ): Promise<CommandResult[]> {
     const caps = this.getCapabilities(device);
     const vlan = VlanId(vlanId);
-    const ip = Ipv4Address(ipAddress);
-    const mask = SubnetMask(subnetMask);
+    const ip = new Ipv4Address(ipAddress);
+    const mask = new SubnetMask(subnetMask);
     const input: ConfigureSviInput = { vlan, ip, mask };
     const plan = planConfigureSvi(caps, input);
     return this.executePlan(device, plan);
@@ -83,8 +83,8 @@ export class IosConfigOperations {
     const caps = this.getCapabilities(device);
     const ifName = InterfaceName(interfaceName);
     const vlan = VlanId(subVlanId);
-    const ip = Ipv4Address(ipAddress);
-    const mask = SubnetMask(subnetMask);
+    const ip = new Ipv4Address(ipAddress);
+    const mask = new SubnetMask(subnetMask);
     const input: ConfigureSubinterfaceInput = { parent: ifName, vlan, ip, mask };
     const plan = planConfigureSubinterface(caps, input);
     return this.executePlan(device, plan);
@@ -97,9 +97,9 @@ export class IosConfigOperations {
     nextHopIpAddress: string,
   ): Promise<CommandResult[]> {
     const caps = this.getCapabilities(device);
-    const destNetwork = Ipv4Address(destinationNetwork);
-    const destMask = SubnetMask(subnetMask);
-    const nextHop = Ipv4Address(nextHopIpAddress);
+    const destNetwork = new Ipv4Address(destinationNetwork);
+    const destMask = new SubnetMask(subnetMask);
+    const nextHop = new Ipv4Address(nextHopIpAddress);
     const input: ConfigureStaticRouteInput = { network: destNetwork, mask: destMask, nextHop: nextHop };
     const plan = planConfigureStaticRoute(caps, input);
     return this.executePlan(device, plan);
@@ -112,7 +112,7 @@ export class IosConfigOperations {
   ): Promise<CommandResult[]> {
     const caps = this.getCapabilities(device);
     const ifName = InterfaceName(interfaceName);
-    const serverIp = Ipv4Address(dhcpServerIp);
+    const serverIp = new Ipv4Address(dhcpServerIp);
     const input: ConfigureDhcpRelayInput = { interface: ifName, helperAddress: serverIp };
     const plan = planConfigureDhcpRelay(caps, input);
     return this.executePlan(device, plan);

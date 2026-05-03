@@ -114,6 +114,12 @@ skills-lock.json
 **/state.json
 **/heartbeat.json
 
+# === Windows path pollution (file-bridge cross-platform artifact) ===
+**/C:
+**/C:/
+**/C:\*
+!**/pt-runtime/scripts/pt-dev-*.js
+
 # === Local Packet Tracer runtime dumps ===
 *.pkt
 *.pka

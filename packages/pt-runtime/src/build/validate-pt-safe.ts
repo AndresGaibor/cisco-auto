@@ -146,8 +146,14 @@ function isForbiddenGlobalThisLine(line: string): boolean {
     return false;
   }
 
+  // Ternary expression: self ? self : this or similar
+  // This is a deliberate global scope fallback pattern, not unsafe global this
+  if (/^\s*\S[^:]*\?\s*\S[^:]*:\s*this\s*[;)]/.test(trimmed)) {
+    return false;
+  }
+
   // Only flag suspicious bare/global this usage, not instance member access.
-  return /(?:^|[=(:,?])\s*this\s*(?:[),;:]|$)/.test(trimmed);
+  return /(?:^|[=(:,?])\s*this\b(?:\s*[),;:]|$)/.test(trimmed);
 }
 
 const PT_FORBIDDEN_PATTERNS: PatternRule[] = [

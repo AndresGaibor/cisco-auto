@@ -64,6 +64,7 @@ export function renderRuntimeFromHandlers(options: RenderFromHandlersOptions): s
     replaceConsoleWithDprint: true,
     wrapIIFE: false,
     minify: options.minify ?? false,
+    treeShake: false,
   });
 
   if (!validation.valid) {

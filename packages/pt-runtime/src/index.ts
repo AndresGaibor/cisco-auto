@@ -138,6 +138,13 @@ export {
   type ModularManifest,
 } from "./build/index.js";
 
+// Alias legacy — mantener backwards compatibility con tests existentes
+import { renderMainV2 } from "./build/render-main-v2.js";
+import { renderRuntimeV2Sync } from "./build/render-runtime-v2.js";
+
+export const renderMainSource = renderMainV2;
+export const renderRuntimeSource = renderRuntimeV2Sync;
+
 export type {
   RuntimeArtifactManifest,
   RuntimeBuildChangeReport,

@@ -22,9 +22,9 @@ describe("IOS Prompt State Machine", () => {
       expect(state.mode).toBe("user-exec");
     });
 
-    it("infers priv-exec mode from '#' prompt", () => {
+    it("infers privileged-exec mode from '#' prompt", () => {
       const state = inferPromptState("Router1#");
-      expect(state.mode).toBe("priv-exec");
+      expect(state.mode).toBe("privileged-exec");
     });
 
     it("infers config mode from '(config)#' prompt", () => {
@@ -64,7 +64,7 @@ describe("IOS Prompt State Machine", () => {
 
     it("handles hostname with domain", () => {
       const state = inferPromptState("Router1.cisco-lab.com#");
-      expect(state.mode).toBe("priv-exec");
+      expect(state.mode).toBe("privileged-exec");
     });
 
     it("handles interface submode (config-if)#", () => {
@@ -119,7 +119,7 @@ describe("CLI Session State Management", () => {
       });
 
       session.execute("enable");
-      expect(session.getState().mode).toBe("priv-exec");
+      expect(session.getState().mode).toBe("privileged-exec");
     });
 
     it("updates state after configure terminal", () => {
@@ -165,7 +165,7 @@ describe("CLI Session State Management", () => {
       // Start in config mode
       session["state"].mode = "config";
       session.execute("exit");
-      expect(session.getState().mode).toBe("priv-exec");
+      expect(session.getState().mode).toBe("privileged-exec");
     });
 
     it("tracks command history", () => {
@@ -319,20 +319,20 @@ describe("Command Result Classification", () => {
 
 describe("Mode Transitions", () => {
   describe("ensurePrivileged", () => {
-    it("stays in priv-exec if already privileged", async () => {
+    it("stays in privileged-exec if already privileged", async () => {
       const session = new CliSession("Router1", {
         enterCommand: () => [0, "Router1#"],
       });
 
-      session["state"].mode = "priv-exec";
+      session["state"].mode = "privileged-exec";
       
       const result = await session.ensurePrivileged();
       
       expect(result).toBe(true);
-      expect(session.getState().mode).toBe("priv-exec");
+      expect(session.getState().mode).toBe("privileged-exec");
     });
 
-    it("enters priv-exec from user-exec", async () => {
+    it("enters privileged-exec from user-exec", async () => {
       const session = new CliSession("Router1", {
         enterCommand: (cmd: string) => {
           if (cmd === "enable") {
@@ -347,7 +347,7 @@ describe("Mode Transitions", () => {
       const result = await session.ensurePrivileged();
       
       expect(result).toBe(true);
-      expect(session.getState().mode).toBe("priv-exec");
+      expect(session.getState().mode).toBe("privileged-exec");
     });
   });
 
@@ -365,7 +365,7 @@ describe("Mode Transitions", () => {
       expect(session.getState().mode).toBe("config");
     });
 
-    it("enters config from priv-exec", async () => {
+    it("enters config from privileged-exec", async () => {
       const session = new CliSession("Router1", {
         enterCommand: (cmd: string) => {
           if (cmd === "configure terminal") {
@@ -375,7 +375,7 @@ describe("Mode Transitions", () => {
         },
       });
 
-      session["state"].mode = "priv-exec";
+      session["state"].mode = "privileged-exec";
       
       const result = await session.ensureConfigMode();
       
@@ -397,7 +397,7 @@ describe("Mode Transitions", () => {
         },
       });
 
-      session["state"].mode = "priv-exec";
+      session["state"].mode = "privileged-exec";
       await session.handlePaging();
 
       // After handling paging, the state should be back to normal
@@ -416,7 +416,7 @@ describe("Mode Transitions", () => {
         },
       });
 
-      session["state"].mode = "priv-exec";
+      session["state"].mode = "privileged-exec";
       session["state"].paging = true;
       await session.continuePaging();
 

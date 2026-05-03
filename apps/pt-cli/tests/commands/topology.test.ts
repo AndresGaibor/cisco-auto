@@ -1,5 +1,5 @@
 import { describe, test, expect, mock } from 'bun:test';
-import { toLabSpec, snapshotToLabSpec, type ParsedLabYaml } from '../../src/types/lab-spec.types';
+import { toLabSpec, snapshotToLabSpec, type ParsedLabYaml } from '../../src/legacy-yaml/types/lab-spec.types';
 
 describe('topology command utilities', () => {
   describe('toLabSpec', () => {

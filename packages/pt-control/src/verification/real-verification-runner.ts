@@ -259,7 +259,7 @@ export async function executeScenario(
     verificationStrength: "observed",
   };
 
-  const scenarioTimeoutMs = scenario.timeoutMs ?? DEFAULT_SCENARIO_TIMEOUT_MS;
+  const scenarioTimeoutMs = scenario.timeoutMs ?? state.commandTimeoutMs;
 
   const timeoutForPhase = (
     phase: "setup" | "execute" | "verify" | "cleanup",

@@ -11,7 +11,7 @@ describe("handlePing", () => {
     const result = await handlePing({ device: "R1", target: "192.168.1.1" }, api);
 
     expect(result.ok).toBe(false);
-    expect(result.code).toBe("DEVICE_NOT_FOUND");
+    expect((result as any).code).toBe("DEVICE_NOT_FOUND");
   });
 
   it("should return error when terminal is not accessible", async () => {
@@ -27,7 +27,7 @@ describe("handlePing", () => {
     const result = await handlePing({ device: "R1", target: "192.168.1.1" }, api);
 
     expect(result.ok).toBe(false);
-    expect(result.code).toBe("NO_TERMINAL");
+    expect((result as any).code).toBe("RUNTIME_API_MISSING_CREATE_JOB");
   });
 
   it("should detect PC device type correctly", async () => {

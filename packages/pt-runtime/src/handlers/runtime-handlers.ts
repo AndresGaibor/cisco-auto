@@ -30,6 +30,12 @@ import {
 } from "./registration/stable-handlers.js";
 
 import {
+  handleExecIos,
+  handleConfigIos,
+  handleDeferredPoll,
+} from "./ios-execution.js";
+
+import {
   registerExperimentalRuntimeHandlers,
 } from "./registration/experimental-handlers.js";
 
@@ -119,8 +125,15 @@ export {
   HANDLER_MAP,
   getRegisteredTypes,
   getHandler,
+} from "./dispatcher.js";
+
+export {
   registerRuntimeHandlers,
   registerRuntimeHandlersFromGlobals,
-  registerStableRuntimeHandlers,
-  registerExperimentalRuntimeHandlers,
-};
+} from "./registration/runtime-registration.js";
+
+export { registerStableRuntimeHandlers } from "./registration/stable-handlers.js";
+export { registerExperimentalRuntimeHandlers } from "./registration/experimental-handlers.js";
+
+export { handleDeferredPoll, handleExecIos, handleConfigIos } from "./ios-execution.js";
+export { handleConfigHost } from "./host-handler.js";

@@ -161,11 +161,17 @@ const rules: BoundaryRule[] = [
       "packages/pt-runtime/src/build",
       "packages/pt-runtime/src/scripts",
       "packages/pt-runtime/src/cli.ts",
-      "packages/pt-runtime/src/__tests__",
       "packages/pt-runtime/src/harness",
       "packages/pt-runtime/src/runtime-artifacts.ts",
       "packages/pt-runtime/src/value-objects/hardware-maps.ts",
       "packages/pt-runtime/src/fase-7-runtime.test.ts",
+      "packages/pt-runtime/src/system",
+      "packages/pt-runtime/src/pt/kernel/__tests__/runtime-loader-status.test.ts",
+      "packages/pt-runtime/src/__tests__/queue-claim.test.ts",
+      "packages/pt-runtime/src/__tests__/harness/pt-script-result-parser.test.ts",
+      "packages/pt-runtime/src/__tests__/architecture/runtime-handlers-boundary.test.ts",
+      "packages/pt-runtime/src/__tests__/session.test.ts",
+      "packages/pt-runtime/src/__tests__/queue-cleanup-ttl.test.ts",
     ],
     forbidden: [
       {

@@ -71,7 +71,7 @@ describe("collectLiveLinks", () => {
     expect(links[0].device2).toBe("S1");
     expect(links[0].port2).toBe("FastEthernet0/1");
     expect(links[0].state).toBe("green");
-    expect(links[0].cableType).toBe("straight");
+    expect(links[0].cableType).toBe("ethernet-straight");
   });
 
   test("usa getLinkAt como respaldo cuando Port.getLink() no existe", () => {

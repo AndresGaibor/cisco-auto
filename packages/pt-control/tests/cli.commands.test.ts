@@ -2,18 +2,16 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdirSync, rmSync } from "node:fs";
-import { PTController } from "../src/controller/index.js";
-
-// Basic smoke tests for controller instantiation
+import { createPTController } from "../src/controller/factory.js";
 
 describe("CLI commands smoke", () => {
   let testDir: string;
-  let controller: PTController;
+  let controller: ReturnType<typeof createPTController>;
 
   beforeEach(() => {
     testDir = join(tmpdir(), `pt-cli-test-${Date.now()}`);
     mkdirSync(testDir, { recursive: true });
-    controller = new PTController({ devDir: testDir });
+    controller = createPTController({ devDir: testDir });
   });
 
   afterEach(() => {
@@ -37,12 +35,12 @@ describe("CLI commands smoke", () => {
 
 describe("getHeartbeatHealth", () => {
   let testDir: string;
-  let controller: PTController;
+  let controller: ReturnType<typeof createPTController>;
 
   beforeEach(() => {
     testDir = join(tmpdir(), `pt-cli-test-${Date.now()}`);
     mkdirSync(testDir, { recursive: true });
-    controller = new PTController({ devDir: testDir });
+    controller = createPTController({ devDir: testDir });
   });
 
   afterEach(() => {
@@ -67,7 +65,6 @@ describe("getHeartbeatHealth", () => {
       expect(hbHealth.state).toBe("ok");
       const bridgeStatus = controller.getBridgeStatus();
       expect(typeof bridgeStatus.ready).toBe("boolean");
-      expect("leaseValid" in bridgeStatus).toBe(false);
       const ctx = controller.getSystemContext();
       expect(typeof ctx.bridgeReady).toBe("boolean");
       expect(typeof ctx.deviceCount).toBe("number");

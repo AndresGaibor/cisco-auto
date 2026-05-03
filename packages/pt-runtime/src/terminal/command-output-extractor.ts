@@ -262,7 +262,7 @@ export function sliceAroundCommand(
 export function finalClean(output: string, fullRaw: string = ""): string {
   if (!output) return "";
 
-  let result = output;
+  let result = sanitizeTerminalText(output);
 
   const pagerPatterns = [
     /---\s*More\s*---/gi,

@@ -40,7 +40,6 @@ const stableHandlers = [
   "hardwareInfo",
   "hardwareCatalog",
   "commandLog",
-  "deepInspect",
 ];
 
 // Handlers experimentales/omni que ahora se registran juntos

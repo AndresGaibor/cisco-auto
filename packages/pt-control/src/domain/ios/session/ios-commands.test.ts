@@ -20,8 +20,8 @@ describe("IosCommandStrategy", () => {
       expect(strategy.dismissSetupCommand()).toBe("no");
     });
 
-    test("pressReturnCommand devuelve ''", () => {
-      expect(strategy.pressReturnCommand()).toBe("");
+    test("pressReturnCommand devuelve '\\r\\n'", () => {
+      expect(strategy.pressReturnCommand()).toBe("\r\n");
     });
     
     test("confirmationCommand devuelve 'y'", () => {
@@ -46,8 +46,8 @@ describe("IosCommandStrategy", () => {
       expect(strategy.dismissSetupCommand()).toBe("no");
     });
 
-    test("pressReturnCommand devuelve ''", () => {
-      expect(strategy.pressReturnCommand()).toBe("");
+    test("pressReturnCommand devuelve '\\r\\n'", () => {
+      expect(strategy.pressReturnCommand()).toBe("\r\n");
     });
 
     test("confirmationCommand devuelve 'y'", () => {
@@ -72,8 +72,8 @@ describe("IosCommandStrategy", () => {
       expect(strategy.dismissSetupCommand()).toBeNull();
     });
 
-    test("pressReturnCommand devuelve ''", () => {
-      expect(strategy.pressReturnCommand()).toBe("");
+    test("pressReturnCommand devuelve '\\r\\n'", () => {
+      expect(strategy.pressReturnCommand()).toBe("\r\n");
     });
 
     test("confirmationCommand devuelve 'y'", () => {

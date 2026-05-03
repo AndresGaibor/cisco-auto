@@ -2,16 +2,16 @@ import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdirSync, rmSync } from 'node:fs';
-import { PTController } from '@cisco-auto/pt-control/controller';
+import { createPTController } from '@cisco-auto/pt-control/controller';
 
 describe('Fase 10 - CLI integration', () => {
   let testDir: string;
-  let controller: PTController;
+  let controller: ReturnType<typeof createPTController>;
 
   beforeEach(() => {
     testDir = join(tmpdir(), `pt-cli-wave10-${Date.now()}`);
     mkdirSync(testDir, { recursive: true });
-    controller = new PTController({ devDir: testDir });
+    controller = createPTController({ devDir: testDir });
   });
 
   afterEach(async () => {

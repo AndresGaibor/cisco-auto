@@ -24,12 +24,19 @@ describe("pt-cli helper", () => {
     ]);
 
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("Usage: cisco-auto");
-    expect(stdout).toContain("inspect");
-    expect(stdout).toContain("layout");
+    expect(stdout).toContain("PT Control");
+    expect(stdout).toContain("pt <comando>");
+    expect(stdout).toContain("cmd");
+    expect(stdout).toContain("device");
+    expect(stdout).toContain("doctor");
+    expect(stdout).toContain("link");
+    expect(stdout).toContain("omni");
+    expect(stdout).toContain("runtime");
+    expect(stdout).toContain("set");
     expect(stdout).toContain("verify");
-    expect(stdout).toContain("agent");
-    expect(stdout).toContain("topology-show");
+    expect(stdout).toContain("build");
+    expect(stdout).toContain("logs");
+    expect(stdout).toContain("completion");
   });
 
   it("collectContextStatus refresca la snapshot viva antes de persistir estado", async () => {

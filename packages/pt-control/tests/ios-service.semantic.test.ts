@@ -2,17 +2,95 @@ import { expect, test, describe } from 'bun:test';
 import { IosService } from '../src/application/services/ios-service.js';
 import type { FileBridgePort } from '../src/application/ports/file-bridge.port.js';
 
+function normalizeBridgeResult(result: any) {
+  const inner = result && typeof result === "object" ? result : {};
+  const value = inner.value ?? inner;
+
+  if (typeof inner.ok === "boolean" && (inner.raw || inner.output)) {
+    return {
+      ok: inner.ok,
+      status: typeof inner.status === "number" ? inner.status : inner.ok ? 0 : 1,
+      output: String(inner.raw ?? inner.output ?? inner.rawOutput ?? value.rawOutput ?? value.output ?? ""),
+      rawOutput: String(inner.rawOutput ?? inner.output ?? inner.raw ?? value.rawOutput ?? value.output ?? ""),
+      warnings: Array.isArray(inner.warnings) ? inner.warnings : [],
+      evidence: inner.evidence ?? {},
+    };
+  }
+
+  if (typeof value.ok === "boolean") {
+    return {
+      ok: value.ok,
+      status: typeof value.status === "number" ? value.status : value.ok ? 0 : 1,
+      output: String(value.raw ?? value.output ?? inner.rawOutput ?? inner.output ?? ""),
+      rawOutput: String(value.rawOutput ?? value.output ?? inner.rawOutput ?? inner.output ?? ""),
+      warnings: Array.isArray(value.warnings) ? value.warnings : [],
+      evidence: value.evidence ?? {},
+    };
+  }
+
+  const success = Boolean(inner.success ?? inner.ok ?? value.success ?? value.ok);
+
+  return {
+    ok: success,
+    status: success ? 0 : 1,
+    output: String(value.raw ?? value.output ?? inner.raw ?? inner.output ?? ""),
+    rawOutput: String(value.rawOutput ?? value.output ?? inner.rawOutput ?? inner.output ?? ""),
+    warnings: Array.isArray(value.warnings) ? value.warnings : [],
+    evidence: value.evidence ?? {},
+    error: success
+      ? undefined
+      : {
+          code: String(value?.error?.code ?? value?.code ?? "IOS_CONFIG_FAILED"),
+          message: String(value?.error?.message ?? value?.message ?? "IOS configuration failed"),
+          phase: "execution",
+        },
+  };
+}
+
+function createTerminalPortFromBridge(bridge: any) {
+  return {
+    runTerminalPlan: async (plan: any) => {
+      const commands = (plan.steps ?? [])
+        .map((step: any) => step.command)
+        .filter(Boolean)
+        .join("\n");
+
+      let result;
+      if (plan.steps?.some((s: any) => s.command?.startsWith("show "))) {
+        // Para comandos show, usar execInteractive del bridge
+        result = await bridge.sendCommandAndWait("execInteractive", {
+          device: plan.device,
+          command: commands,
+        });
+      } else {
+        // Para configIos
+        result = await bridge.sendCommandAndWait("configIos", {
+          device: plan.device,
+          commands,
+        });
+      }
+
+      return normalizeBridgeResult(result);
+    },
+    ensureSession: async () => ({ ok: true }),
+    runPrimitive: async (type: string, payload: unknown) =>
+      normalizeBridgeResult(await bridge.sendCommandAndWait(type, payload)),
+  } as any;
+}
+
 function makeBridge(responseMap: Record<string, any>) {
   return {
     sendCommandAndWait: async (type: string, payload: any) => {
       const key = type;
-      if (responseMap[key]) {
-        if (typeof responseMap[key] === 'function') {
-          return { value: responseMap[key](payload) };
-        }
-        return { value: responseMap[key] };
-      }
-      return { value: { ok: true, raw: '', source: 'terminal' } };
+      const response =
+        typeof responseMap[key] === 'function'
+          ? responseMap[key](payload)
+          : responseMap[key] ?? { ok: true, raw: '', source: 'terminal' };
+
+      return {
+        ...response,
+        value: response,
+      };
     },
     start: () => {},
     stop: async () => {},
@@ -60,7 +138,12 @@ describe('configureDhcpPool()', () => {
         return { ...terminalResponse, raw: '' };
       },
     });
-    const svc = new IosService(bridge, generateId, mockInspect);
+    const svc = new IosService(
+      bridge,
+      generateId,
+      mockInspect,
+      createTerminalPortFromBridge(bridge),
+    );
     await svc.configureDhcpPool('R1', 'MYPOOL', '192.168.1.0', '255.255.255.0', '192.168.1.1');
     expect(callLog).toContain('show running-config');
   });
@@ -73,7 +156,12 @@ describe('configureDhcpPool()', () => {
         raw: 'Building configuration...\nno dhcp pools configured\n',
       },
     });
-    const svc = new IosService(bridge, generateId, mockInspect);
+    const svc = new IosService(
+      bridge,
+      generateId,
+      mockInspect,
+      createTerminalPortFromBridge(bridge),
+    );
     await expect(svc.configureDhcpPool('R1', 'MISSING', '10.0.0.0', '255.255.255.0', '10.0.0.1')).rejects.toThrow('MISSING');
   });
 });
@@ -91,7 +179,12 @@ describe('configureOspfNetwork()', () => {
         return { ...terminalResponse, raw: '' };
       },
     });
-    const svc = new IosService(bridge, generateId, mockInspect);
+    const svc = new IosService(
+      bridge,
+      generateId,
+      mockInspect,
+      createTerminalPortFromBridge(bridge),
+    );
     await svc.configureOspfNetwork('R1', 1, '192.168.1.0', '0.0.0.255', 0);
     expect(callLog).toContain('show ip protocols');
   });
@@ -106,7 +199,12 @@ describe('configureSshAccess()', () => {
         raw: 'Building configuration...\nline vty 0 4\n transport input ssh\n login local\n',
       },
     });
-    const svc = new IosService(bridge, generateId, mockInspect);
+    const svc = new IosService(
+      bridge,
+      generateId,
+      mockInspect,
+      createTerminalPortFromBridge(bridge),
+    );
     await svc.configureSshAccess('R1', 'lab.local', 'admin', 'secret123');
   });
 });
@@ -124,7 +222,12 @@ describe('configureAccessListStandard()', () => {
         return { ...terminalResponse, raw: '' };
       },
     });
-    const svc = new IosService(bridge, generateId, mockInspect);
+    const svc = new IosService(
+      bridge,
+      generateId,
+      mockInspect,
+      createTerminalPortFromBridge(bridge),
+    );
     await svc.configureAccessListStandard('R1', 10, ['permit 192.168.1.0 0.0.0.255']);
     expect(callLog).toContain('show access-lists');
   });

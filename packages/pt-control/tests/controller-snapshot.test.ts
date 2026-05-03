@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { PTController } from "../src/controller/index.js";
+import { createPTController } from "../src/controller/factory.js";
 import type { FileBridgePort } from "../src/application/ports/file-bridge.port.js";
 
 function createBridge(freshSnapshot: unknown): FileBridgePort {
@@ -47,7 +47,10 @@ describe("PTController snapshot cache", () => {
       },
     };
 
-    const controller = new PTController(createBridge(snapshot));
+    const bridge = createBridge(snapshot);
+    const { createControlComposition } = await import("../src/application/bootstrap/control-composition.js");
+    const composition = createControlComposition({ bridge: bridge as any });
+    const controller = createPTController(composition);
 
     const result = await controller.snapshot();
 
@@ -56,7 +59,7 @@ describe("PTController snapshot cache", () => {
   });
 
   test("getCachedSnapshot() no expone el cache vacío como snapshot materializada", () => {
-    const controller = new PTController(createBridge({
+    const bridge = createBridge({
       version: "1.0",
       timestamp: 123,
       devices: {},
@@ -65,7 +68,10 @@ describe("PTController snapshot cache", () => {
         deviceCount: 0,
         linkCount: 0,
       },
-    }));
+    });
+    const { createControlComposition } = require("../src/application/bootstrap/control-composition.js");
+    const composition = createControlComposition({ bridge: bridge as any });
+    const controller = createPTController(composition);
 
     expect(controller.getCachedSnapshot()).toBeNull();
   });

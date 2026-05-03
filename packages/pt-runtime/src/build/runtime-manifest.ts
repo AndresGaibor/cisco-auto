@@ -107,15 +107,16 @@ utils: [
     "handlers/terminal-plan-run.ts",
     "handlers/poll-deferred.ts",
     "handlers/terminal-native-exec.ts",
+    "handlers/ios-execution.ts",
     "handlers/ios/index.ts",
-    "handlers/terminal-sanitizer.ts",
-    "handlers/cable-recommender.ts",
     "handlers/ios/exec-ios-handler.ts",
     "handlers/ios/config-ios-handler.ts",
     "handlers/ios/deferred-poll-handler.ts",
     "handlers/ios/ping-handler.ts",
     "handlers/ios/exec-pc-handler.ts",
     "handlers/ios/read-terminal-handler.ts",
+    "handlers/terminal-sanitizer.ts",
+    "handlers/cable-recommender.ts",
     // Main dispatcher - runtime default solo registra estables
     "handlers/runtime-handlers.ts",
     // Registration handlers - stable + raw/evaluate experimental aliases.

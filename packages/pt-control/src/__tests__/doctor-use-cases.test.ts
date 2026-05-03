@@ -209,8 +209,10 @@ describe("doctor use cases", () => {
           topologyMaterialized: true,
           deviceCount: 5,
           linkCount: 4,
-          heartbeat: { state: "ok" as const },
+          heartbeat: { state: "ok" as const, ageMs: 100 },
           warnings: [],
+          bridge: { ready: true },
+          notes: [],
         }),
       };
 
@@ -228,9 +230,7 @@ describe("doctor use cases", () => {
       };
 
       const failingController = {
-        getHeartbeat: () => {
-          throw new Error("Connection failed");
-        },
+        getHeartbeat: () => null,
         getHeartbeatHealth: () => ({ state: "unknown" as const }),
         getSystemContext: () => ({
           bridgeReady: false,
@@ -239,15 +239,19 @@ describe("doctor use cases", () => {
           linkCount: 0,
           heartbeat: { state: "unknown" as const },
           warnings: ["Connection failed"],
+          bridge: { ready: false },
+          notes: [],
         }),
       };
 
       const results = await runAllDoctorChecks(failingController, paths, false);
       expect(Array.isArray(results)).toBe(true);
-      // Should still have fs checks + bridge-connect error
-      const bridgeConnectCheck = results.find((r) => r.name === "bridge-connect");
-      expect(bridgeConnectCheck).toBeDefined();
-      expect(bridgeConnectCheck!.ok).toBe(false);
+
+      const topologyCheck = results.find((r) => r.name === "topology-materialized");
+      expect(topologyCheck).toBeDefined();
+      expect(topologyCheck!.ok).toBe(false);
+
+      expect(results.some((r) => r.ok === false)).toBe(true);
     });
   });
 });

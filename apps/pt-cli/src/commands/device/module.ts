@@ -54,12 +54,24 @@ interface ModuleProbeResult {
   ports: DevicePortSnapshot[];
 }
 
+const MINIMAL_MODULE_FALLBACK: ModuleCatalogEntry[] = [
+  { code: "HWIC-4ESW", slotType: "2", name: "HWIC-4ESW Ethernet Switch" },
+  { code: "WIC-2T", slotType: "2", name: "WIC-2T Serial" },
+  { code: "NM-2W", slotType: "1", name: "NM-2W Network Module" },
+];
+
 export function listCatalogEntries(): ModuleCatalogEntry[] {
-  return Object.values(PT_MODULE_CATALOG as Record<string, ModuleCatalogEntry>).map((entry) => ({
+  const entries = Object.values(PT_MODULE_CATALOG as Record<string, ModuleCatalogEntry>).map((entry) => ({
     code: entry.code,
     slotType: entry.slotType,
     name: entry.name,
   }));
+
+  if (entries.length === 0) {
+    return MINIMAL_MODULE_FALLBACK;
+  }
+
+  return entries;
 }
 
 export function suggestModulesForNeed(need: string | undefined, candidateCodes: string[]): Array<{ code: string; reason: string; confidence: number }> {

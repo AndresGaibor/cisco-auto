@@ -22,9 +22,9 @@ describe('Fase 5 registry and metadata', () => {
       getCachedSnapshot: () => null,
       getSystemContext: () => ({
         bridgeReady: true,
-        topologyMaterialized: false,
-        deviceCount: 0,
-        linkCount: 0,
+        topologyMaterialized: true,
+        deviceCount: 2,
+        linkCount: 1,
         heartbeat: { state: 'ok' as const },
         warnings: [],
       }),

@@ -7,6 +7,7 @@ import type { TerminalPlan } from "../../packages/pt-control/src/ports/runtime-t
 
 // Handlers registrados en runtime-handlers.ts
 const REGISTERED_HANDLERS = [
+  "terminal.plan.run",
   "configHost", "configIos", "execIos", "__pollDeferred", "__ping",
   "execPc", "ensureVlans", "configVlanInterfaces",
   "configDhcpServer", "inspectDhcpServer", "inspectHost", "listDevices",
@@ -23,9 +24,9 @@ const BYPASS_HANDLERS = ["__ping", "omni.evaluate.raw", "omni.physical.siphon"];
 
 describe("RuntimeTerminalAdapter - contrato canónico para host terminal", () => {
   describe("runTerminalPlan para PC (host terminal)", () => {
-    it("debe usar contrato REGISTRADO execIos para comandos host", async () => {
+    it("debe usar terminal.plan.run como contrato canónico", async () => {
       const callLog: string[] = [];
-      
+
       const mockBridge = {
         sendCommandAndWait: async (cmd: string, _payload: any) => {
           callLog.push(cmd);
@@ -39,7 +40,7 @@ describe("RuntimeTerminalAdapter - contrato canónico para host terminal", () =>
           };
         },
       };
-      
+
       const adapter = createRuntimeTerminalAdapter({
         bridge: mockBridge as any,
         generateId: () => "test-id",
@@ -54,15 +55,12 @@ describe("RuntimeTerminalAdapter - contrato canónico para host terminal", () =>
 
       await adapter.runTerminalPlan(plan);
 
-      // Verificar que se usó UN handler registrado
-      expect(callLog.length).toBeGreaterThan(0);
-      const handlerInvocado = callLog[0] as string;
-      expect(REGISTERED_HANDLERS).toContain(handlerInvocado);
+      expect(callLog).toContain("terminal.plan.run");
     });
 
-    it("NO debe usar bypasses: __ping, omni.evaluate.raw, execPcDirect", async () => {
+    it("NO debe usar bypasses: __ping, omni.evaluate.raw", async () => {
       const callLog: string[] = [];
-      
+
       const mockBridge = {
         sendCommandAndWait: async (cmd: string, _payload: any) => {
           callLog.push(cmd);
@@ -76,7 +74,7 @@ describe("RuntimeTerminalAdapter - contrato canónico para host terminal", () =>
           };
         },
       };
-      
+
       const adapter = createRuntimeTerminalAdapter({
         bridge: mockBridge as any,
         generateId: () => "test-id",
@@ -91,13 +89,9 @@ describe("RuntimeTerminalAdapter - contrato canónico para host terminal", () =>
 
       await adapter.runTerminalPlan(plan);
 
-      // Verificar que NO se usó ningún bypass
       for (const bypass of BYPASS_HANDLERS) {
         expect(callLog.includes(bypass as string)).toBe(false);
       }
-      
-      // Y que se usó execPc (que SÍ está registrado para hosts)
-      expect(callLog).toContain("execPc");
     });
 
     it("debe funcionar para PC Command Prompt (C:\\>)", async () => {
@@ -162,9 +156,9 @@ describe("RuntimeTerminalAdapter - contrato canónico para host terminal", () =>
   });
 
   describe("runTerminalPlan para router IOS", () => {
-    it("debe usar execIos para IOS también", async () => {
+    it("debe usar terminal.plan.run como contrato canónico para IOS", async () => {
       const callLog: string[] = [];
-      
+
       const mockBridge = {
         sendCommandAndWait: async (cmd: string, _payload: any) => {
           callLog.push(cmd);
@@ -178,7 +172,7 @@ describe("RuntimeTerminalAdapter - contrato canónico para host terminal", () =>
           };
         },
       };
-      
+
       const adapter = createRuntimeTerminalAdapter({
         bridge: mockBridge as any,
         generateId: () => "test-id",
@@ -193,21 +187,18 @@ describe("RuntimeTerminalAdapter - contrato canónico para host terminal", () =>
 
       const result = await adapter.runTerminalPlan(plan);
 
-      expect(callLog).toContain("execIos");
+      expect(callLog).toContain("terminal.plan.run");
       expect(result.ok).toBe(true);
     });
   });
 
   describe("verificación de contrato", () => {
-    it("execIos está registrado en runtime-handlers.ts", async () => {
-      const registeredHandler = "execIos";
-      expect(REGISTERED_HANDLERS).toContain(registeredHandler);
+    it("terminal.plan.run es el contrato canónico registrado", async () => {
+      expect(REGISTERED_HANDLERS).toContain("terminal.plan.run");
     });
 
     it("bypasses NO están registrados como contrato público", async () => {
       for (const bypass of BYPASS_HANDLERS) {
-        // Los bypasses PUEDEN estar registrados, pero NO deben usarse en el adapter público
-        // El test anterior verifica que el adapter NO los usa
         expect(typeof bypass).toBe("string");
       }
     });

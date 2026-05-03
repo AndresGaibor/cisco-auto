@@ -26,7 +26,7 @@ describe("handleExecPc", () => {
     const result = await handleExecPc({ type: "execPc", device: "PC1", command: "ipconfig" } as any, api);
 
     expect(result.ok).toBe(false);
-    expect((result as any).code).toBe("NO_TERMINAL");
+    expect((result as any).code).toBe("RUNTIME_API_MISSING_CREATE_JOB");
   });
 
   it("should detect long-running commands (ping, tracert, trace)", async () => {
@@ -59,17 +59,24 @@ describe("handleExecPc", () => {
       unregisterEvent: () => {},
     } as any;
 
+    const jobs: unknown[] = [];
     const api = {
       getDeviceByName: () => ({
         getCommandLine: () => cli,
         getModel: () => "PC-PT",
       }),
       dprint: () => {},
+      createJob: (job: unknown) => {
+        jobs.push(job);
+        return "execPc:PC1";
+      },
     } as any;
 
     const result = await handleExecPc({ type: "execPc", device: "PC1", command: "ipconfig" } as any, api);
 
     expect(result.ok).toBe(true);
-    expect((result as any).deferred).toBeUndefined();
+    expect((result as any).deferred).toBe(true);
+    expect((result as any).ticket).toBe("execPc:PC1");
+    expect(jobs).toHaveLength(1);
   });
 });

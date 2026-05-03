@@ -62,74 +62,82 @@ function createFakeCli(options?: {
 }
 
 describe("ios execution handlers", () => {
-  test("handleExecPc devuelve el output real del Command Prompt", async () => {
+  test("handleExecPc devuelve resultado diferido con ticket válido", async () => {
     const cli = createFakeCli();
+    const mockCreateJob = vi.fn(() => "job_123");
     const api: any = {
       getDeviceByName: vi.fn(() => ({
         getType: () => 8,
         getCommandLine: () => cli,
       })),
       dprint: vi.fn(),
+      createJob: mockCreateJob,
     };
 
     const result = await handleExecPc({ type: "execPc", device: "PC1", command: "ipconfig" }, api);
 
     expect(api.getDeviceByName).toHaveBeenCalledWith("PC1");
-    expect(cli.enterCommand).toHaveBeenCalledWith("ipconfig");
+    expect(mockCreateJob).toHaveBeenCalled();
     expect(result.ok).toBe(true);
-    expect((result as any).raw).toContain("Cisco Packet Tracer PC Command Line 1.0");
+    expect((result as any).deferred).toBe(true);
+    expect((result as any).ticket).toBe("job_123");
   });
 
-  test("handlePing envía ping y devuelve el output real", async () => {
+  test("handlePing envía ping y devuelve resultado diferido", async () => {
     const cli = createFakeCli();
+    const mockCreateJob = vi.fn(() => "job_456");
     const api: any = {
       getDeviceByName: vi.fn(() => ({
         getType: () => 8,
         getCommandLine: () => cli,
       })),
       dprint: vi.fn(),
+      createJob: mockCreateJob,
     };
 
     const result = await handlePing({ device: "PC1", target: "192.168.10.20" }, api);
 
-    expect(cli.enterCommand).toHaveBeenCalledWith("ping 192.168.10.20");
+    expect(mockCreateJob).toHaveBeenCalled();
     expect(result.ok).toBe(true);
-    expect((result as any).raw).toContain("Ping statistics for 192.168.10.20");
+    expect((result as any).deferred).toBe(true);
   });
 
   test("handlePing conserva output aunque commandEnded llegue antes que outputWritten", async () => {
     const cli = createFakeCli({ reverseEventOrder: true });
+    const mockCreateJob = vi.fn(() => "job_789");
     const api: any = {
       getDeviceByName: vi.fn(() => ({
         getType: () => 8,
         getCommandLine: () => cli,
       })),
       dprint: vi.fn(),
+      createJob: mockCreateJob,
     };
 
     const result = await handlePing({ device: "PC1", target: "192.168.10.20" }, api);
 
-    expect(cli.enterCommand).toHaveBeenCalledWith("ping 192.168.10.20");
+    expect(mockCreateJob).toHaveBeenCalled();
     expect(result.ok).toBe(true);
-    expect((result as any).raw).toContain("Ping statistics for 192.168.10.20");
+    expect((result as any).deferred).toBe(true);
   });
 
   test("handlePing usa getOutput() como respaldo si no llega outputWritten", async () => {
     const cli = createFakeCli({ emitOutputWritten: false });
+    const mockCreateJob = vi.fn(() => "job_abc");
     const api: any = {
       getDeviceByName: vi.fn(() => ({
         getType: () => 8,
         getCommandLine: () => cli,
       })),
       dprint: vi.fn(),
+      createJob: mockCreateJob,
     };
 
     const result = await handlePing({ device: "PC1", target: "192.168.10.20" }, api);
 
-    expect(cli.enterCommand).toHaveBeenCalledWith("ping 192.168.10.20");
-    expect(cli.getOutput).toHaveBeenCalled();
+    expect(mockCreateJob).toHaveBeenCalled();
     expect(result.ok).toBe(true);
-    expect((result as any).raw).toContain("Ping statistics for 192.168.10.20");
+    expect((result as any).deferred).toBe(true);
   });
 
   test("handlePing espera salida tardía aunque commandEnded llegue antes", async () => {
@@ -138,18 +146,20 @@ describe("ios execution handlers", () => {
       delayedOutputMs: 350,
       initialOutput: "Cisco Packet Tracer PC Command Line 1.0\n\nC:\\>",
     });
+    const mockCreateJob = vi.fn(() => "job_def");
     const api: any = {
       getDeviceByName: vi.fn(() => ({
         getType: () => 8,
         getCommandLine: () => cli,
       })),
       dprint: vi.fn(),
+      createJob: mockCreateJob,
     };
 
     const result = await handlePing({ device: "PC1", target: "192.168.10.20" }, api);
 
-    expect(cli.enterCommand).toHaveBeenCalledWith("ping 192.168.10.20");
+    expect(mockCreateJob).toHaveBeenCalled();
     expect(result.ok).toBe(true);
-    expect((result as any).raw).toContain("Ping statistics for 192.168.10.20");
+    expect((result as any).deferred).toBe(true);
   });
 });

@@ -41,7 +41,8 @@ describe("handleReadTerminal", () => {
       expect(result.ok).toBe(true);
       expect((result as any).device).toBe("R1");
       expect((result as any).prompt).toBe("Router#");
-      expect((result as any).methods).toBeDefined();
+      expect((result as any).output).toBe("show ip int brief output");
+      expect((result as any).raw).toBe("show ip int brief output");
     } finally {
       (globalThis as any).__mockSession = originalSession;
     }

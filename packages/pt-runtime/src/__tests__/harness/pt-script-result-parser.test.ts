@@ -39,8 +39,7 @@ describe("pt-script-result parser from MD", () => {
 
   test("getDeviceMethods returns methods for a device model", () => {
     const dump = parseDumpFromMdFiles(API_REF_DIR);
-    // Use "Router" as it is the name assigned during MD reconstruction in parseDumpFromMdFiles
-    const methods = getDeviceMethods(dump, "Router");
+    const methods = getDeviceMethods(dump, "2911");
 
     expect(methods.length).toBeGreaterThan(0);
     expect(methods).toContain("getName");

@@ -25,7 +25,9 @@ function main() {
     const original = generator.generateMain;
     generator.generateMain = () => "function main() {";
 
-    await expect(generator.validateGenerated()).rejects.toThrow(/validation failed/i);
+    await expect(generator.validateGenerated()).rejects.toThrow(
+      /main\.js has invalid JavaScript syntax: Unexpected end of script/i,
+    );
 
     generator.generateMain = original;
   });

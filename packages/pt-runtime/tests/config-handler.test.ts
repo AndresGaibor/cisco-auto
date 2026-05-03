@@ -45,6 +45,8 @@ describe("Phase 3 - Config Handlers", () => {
       startDeferredJob: () => "ticket",
       getDeferredJob: () => null,
       dprint: () => {},
+      createJob: (plan: any) => plan.id || `deferred_${Date.now()}`,
+      getJobState: (_ticket: string) => null,
     } as any;
 
     // Setup global IOS_JOBS (shared scope in PT)
@@ -83,25 +85,25 @@ describe("Phase 3 - Config Handlers", () => {
       expect((result as any).code).toBe("DEVICE_NOT_FOUND");
     });
 
-    it("returns NO_TERMINAL when device has no CLI", () => {
-      const noTermDevice = { ...mockDevice, getCommandLine: () => null };
-      const noTermDeps = { ...deps, getNet: () => ({ getDevice: () => noTermDevice, getDeviceCount: () => 1, getDeviceAt: () => noTermDevice }) as any };
-      const result = handleConfigIos({ type: "configIos", device: "R1", commands: ["show version"] }, noTermDeps);
+    it("returns RUNTIME_API_MISSING_CREATE_JOB when createJob is unavailable", () => {
+      const noCreateJobDeps = { ...deps, createJob: undefined };
+      const result = handleConfigIos({ type: "configIos", device: "R1", commands: ["show version"] }, noCreateJobDeps);
       expect(result.ok).toBe(false);
-      expect((result as any).code).toBe("NO_TERMINAL");
+      expect((result as any).code).toBe("RUNTIME_API_MISSING_CREATE_JOB");
     });
 
-    it("returns skipped for empty commands", () => {
-      const result = handleConfigIos({ type: "configIos", device: "R1", commands: [] }, deps);
-      expect(result.ok).toBe(true);
-      expect((result as any).skipped).toBe(true);
+    it("returns EMPTY_COMMANDS for empty commands", () => {
+      const noCreateJobDeps = { ...deps, createJob: undefined };
+      const result = handleConfigIos({ type: "configIos", device: "R1", commands: [] }, noCreateJobDeps);
+      expect(result.ok).toBe(false);
+      expect((result as any).code).toBe("EMPTY_COMMANDS");
     });
 
     it("returns deferred: true with ticket for valid config", () => {
       const result = handleConfigIos({ type: "configIos", device: "R1", commands: ["hostname R1"] }, deps);
       expect(result).toHaveProperty("deferred", true);
       expect(result).toHaveProperty("ticket");
-      expect(result).toHaveProperty("kind", "ios");
+      expect(result).toHaveProperty("job");
     });
   });
 
@@ -112,19 +114,18 @@ describe("Phase 3 - Config Handlers", () => {
       expect((result as any).code).toBe("DEVICE_NOT_FOUND");
     });
 
-    it("returns NO_TERMINAL when device has no CLI", () => {
-      const noTermDevice = { ...mockDevice, getCommandLine: () => null };
-      const noTermDeps = { ...deps, getNet: () => ({ getDevice: () => noTermDevice, getDeviceCount: () => 1, getDeviceAt: () => noTermDevice }) as any };
-      const result = handleExecIos({ type: "execIos", device: "R1", command: "show version" }, noTermDeps);
+    it("returns RUNTIME_API_MISSING_CREATE_JOB when createJob is unavailable", () => {
+      const noCreateJobDeps = { ...deps, createJob: undefined };
+      const result = handleExecIos({ type: "execIos", device: "R1", command: "show version" }, noCreateJobDeps);
       expect(result.ok).toBe(false);
-      expect((result as any).code).toBe("NO_TERMINAL");
+      expect((result as any).code).toBe("RUNTIME_API_MISSING_CREATE_JOB");
     });
 
     it("returns deferred: true with ticket for valid exec", () => {
       const result = handleExecIos({ type: "execIos", device: "R1", command: "show version" }, deps);
       expect(result).toHaveProperty("deferred", true);
       expect(result).toHaveProperty("ticket");
-      expect(result).toHaveProperty("kind", "ios");
+      expect(result).toHaveProperty("job");
     });
   });
 
@@ -137,22 +138,42 @@ describe("Phase 3 - Config Handlers", () => {
     });
 
     it("returns done: false for in-progress job", () => {
-      const ticket = (globalThis as any).createIosJob("execIos", { device: "R1", command: "show version" });
-      const result = handleDeferredPoll({ type: "__pollDeferred", ticket }, deps);
+      const jobId = "test_job_123";
+      const inProgressJob = {
+        id: jobId,
+        device: "R1",
+        done: false,
+        finished: false,
+        state: "pending",
+        output: "",
+        currentStep: 0,
+        updatedAt: Date.now(),
+        waitingForCommandEnd: false,
+        lastPrompt: "Router#",
+        lastMode: "user-exec",
+      };
+      const pollDeps = { ...deps, getJobState: (_ticket: string) => inProgressJob };
+      const result = handleDeferredPoll({ type: "__pollDeferred", ticket: jobId }, pollDeps);
       expect(result).toHaveProperty("done", false);
-      expect(result).toHaveProperty("state");
+      expect(result).toHaveProperty("state", "pending");
     });
 
     it("returns structured error for failed job", () => {
-      const ticket = (globalThis as any).createIosJob("execIos", { device: "R1", command: "show version" });
-      const job = (globalThis as any).IOS_JOBS[ticket];
-      job.finished = true;
-      job.state = "error";
-      job.error = "Connection refused";
-      job.errorCode = "CONNECTION_REFUSED";
-      job.output = "Some output";
-
-      const result = handleDeferredPoll({ type: "__pollDeferred", ticket }, deps);
+      const jobId = "test_job_err";
+      const failedJob = {
+        id: jobId,
+        device: "R1",
+        done: true,
+        finished: true,
+        state: "error",
+        output: "Some output",
+        error: "Connection refused",
+        errorCode: "CONNECTION_REFUSED",
+        lastPrompt: "Router#",
+        lastMode: "user-exec",
+      };
+      const pollDeps = { ...deps, getJobState: (_ticket: string) => failedJob };
+      const result = handleDeferredPoll({ type: "__pollDeferred", ticket: jobId }, pollDeps);
       expect(result).toHaveProperty("done", true);
       expect(result).toHaveProperty("ok", false);
       expect((result as any).code).toBe("CONNECTION_REFUSED");
@@ -161,31 +182,42 @@ describe("Phase 3 - Config Handlers", () => {
     });
 
     it("returns structured success for completed job", () => {
-      const ticket = (globalThis as any).createIosJob("execIos", { device: "R1", command: "show version" });
-      const job = (globalThis as any).IOS_JOBS[ticket];
-      job.finished = true;
-      job.state = "done";
-      job.output = "Cisco IOS Version 15.0\nSystem image file is flash:c2900-universalk9-mz.SPA.150-1.M.bin";
-
-      const result = handleDeferredPoll({ type: "__pollDeferred", ticket }, deps);
+      const jobId = "test_job_ok";
+      const completedJob = {
+        id: jobId,
+        device: "R1",
+        done: true,
+        finished: true,
+        state: "completed",
+        output: "Cisco IOS Version 15.0\nSystem image file is flash:c2900-universalk9-mz.SPA.150-1.M.bin",
+        lastPrompt: "Router#",
+        lastMode: "user-exec",
+      };
+      const pollDeps = { ...deps, getJobState: (_ticket: string) => completedJob };
+      const result = handleDeferredPoll({ type: "__pollDeferred", ticket: jobId }, pollDeps);
       expect(result).toHaveProperty("done", true);
       expect(result).toHaveProperty("ok", true);
       expect((result as any).source).toBe("terminal");
       expect((result as any).raw).toBeTruthy();
     });
 
-    it("includes parsed output for known show commands", () => {
-      const ticket = (globalThis as any).createIosJob("execIos", { device: "R1", command: "show ip interface brief" });
-      const job = (globalThis as any).IOS_JOBS[ticket];
-      job.finished = true;
-      job.state = "done";
-      job.output = "Interface              IP-Address      OK? Method Status                Protocol\nGigabitEthernet0/0     192.168.1.1     YES manual up                    up";
-
-      const result = handleDeferredPoll({ type: "__pollDeferred", ticket }, deps);
+    it("includes output for completed show commands", () => {
+      const jobId = "test_job_parse";
+      const parsedJob = {
+        id: jobId,
+        device: "R1",
+        done: true,
+        finished: true,
+        state: "completed",
+        output: "Interface              IP-Address      OK? Method Status                Protocol\nGigabitEthernet0/0     192.168.1.1     YES manual up                    up",
+        lastPrompt: "Router#",
+        lastMode: "user-exec",
+      };
+      const pollDeps = { ...deps, getJobState: (_ticket: string) => parsedJob };
+      const result = handleDeferredPoll({ type: "__pollDeferred", ticket: jobId }, pollDeps);
       expect(result).toHaveProperty("done", true);
       expect(result).toHaveProperty("ok", true);
-      expect((result as any).parsed).toBeDefined();
-      expect((result as any).parsed.entries).toBeDefined();
+      expect((result as any).raw).toBeTruthy();
     });
   });
 

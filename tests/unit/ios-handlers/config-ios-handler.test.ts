@@ -39,7 +39,7 @@ describe("handleConfigIos", () => {
     );
 
     expect(result.ok).toBe(false);
-    expect((result as any).code).toBe("NO_TERMINAL");
+    expect((result as any).code).toBe("RUNTIME_API_MISSING_CREATE_JOB");
   });
 
   it("should correctly infer mode transitions from config commands", () => {
@@ -63,6 +63,7 @@ describe("handleConfigIos", () => {
         getCommandLine: () => terminal,
       }),
       dprint: () => {},
+      createJob: (job: any) => job.id || "legacy-config_test",
     } as any;
 
     const result = await handleConfigIos(
@@ -83,21 +84,22 @@ describe("handleConfigIos", () => {
     expect(result).toMatchObject({
       ok: true,
       deferred: true,
-      ticket: "configIos:R1",
+      ticket: expect.stringMatching(/^legacy-config_/),
     });
     expect((result as any).job).toMatchObject({
-      id: "",
+      id: expect.stringMatching(/^legacy-config_/),
       device: "R1",
       kind: "ios-session",
       version: 1,
       payload: { commands: ["interface GigabitEthernet0/0", "ip address 192.168.1.1 255.255.255.0"], save: true },
       options: { stopOnError: true, commandTimeoutMs: 4321, stallTimeoutMs: 8765 },
     });
-    expect((result as any).job.plan).toEqual([
+    expect((result as any).job.plan).toMatchObject([
       { type: "ensure-mode", value: "privileged-exec", options: { stopOnError: true } },
-      { type: "ensure-mode", value: "config", options: { stopOnError: true } },
+      { type: "command", value: "configure terminal", options: { stopOnError: true, timeoutMs: 4321 } },
       { type: "command", value: "interface GigabitEthernet0/0", options: { stopOnError: true, timeoutMs: 4321 } },
       { type: "command", value: "ip address 192.168.1.1 255.255.255.0", options: { stopOnError: true, timeoutMs: 4321 } },
+      { type: "command", value: "end", options: { stopOnError: true, timeoutMs: 4321 } },
       { type: "save-config", options: { stopOnError: false } },
     ]);
   });

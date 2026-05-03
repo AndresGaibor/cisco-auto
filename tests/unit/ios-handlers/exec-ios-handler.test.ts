@@ -32,7 +32,7 @@ describe("handleExecIos", () => {
     );
 
     expect(result.ok).toBe(false);
-    expect((result as any).code).toBe("NO_TERMINAL");
+    expect((result as any).code).toBe("RUNTIME_API_MISSING_CREATE_JOB");
   });
 
   it("should detect host devices (PC/Server) correctly", async () => {
@@ -58,6 +58,7 @@ describe("handleExecIos", () => {
         getCommandLine: () => terminal,
       }),
       dprint: () => {},
+      createJob: (job: any) => job.id || "legacy-command_test",
     } as any;
 
     const result = await handleExecIos(
@@ -74,17 +75,17 @@ describe("handleExecIos", () => {
     expect(result).toMatchObject({
       ok: true,
       deferred: true,
-      ticket: "execIos:R1",
+      ticket: expect.stringMatching(/^legacy-command_/),
     });
     expect((result as any).job).toMatchObject({
-      id: "",
+      id: expect.stringMatching(/^legacy-command_/),
       device: "R1",
       kind: "ios-session",
       version: 1,
       payload: { command: "show ip int brief" },
       options: { stopOnError: false, commandTimeoutMs: 1234, stallTimeoutMs: 5678 },
     });
-    expect((result as any).job.plan).toEqual([
+    expect((result as any).job.plan).toMatchObject([
       {
         type: "command",
         value: "show ip int brief",

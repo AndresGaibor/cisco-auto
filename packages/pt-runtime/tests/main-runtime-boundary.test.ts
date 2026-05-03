@@ -4,14 +4,20 @@ import { validatePtSafe } from "../src/build/validate-pt-safe.ts";
 import { renderMainSource, renderRuntimeSource } from "../src/index.js";
 
 // Functions that should be in main kernel
-const mainKernelFunctions = ["main", "cleanUp", "createJob", "getJobState", "createKernel("];
+const mainKernelFunctions = [
+  "function main()",
+  "function cleanUp()",
+  "createKernel(",
+  "kernel.boot()",
+  "_ptLoadModule",
+];
 
 // Symbols that should be in runtime (legacy names from template)
-const runtimeLegacyFunctions = [
-  "handleConfigIos",
-  "handleInspect",
-  "handleDeferredPoll",
-  "handleCommandLog",
+const runtimeContractSymbols = [
+  "_ptDispatch",
+  "runtimeDispatcher",
+  "createPtDepsFromGlobals",
+  "runtimeDispatcher(payload, api || deps)",
 ];
 
 describe("main/runtime boundary (kernel architecture)", () => {
@@ -42,15 +48,15 @@ describe("main/runtime boundary (kernel architecture)", () => {
     }
     expect(validation.valid).toBe(true);
 
-    // Verify runtime contains handler functions (legacy template)
-    for (const symbol of runtimeLegacyFunctions) {
+    // Verify runtime contains contract symbols (modular architecture)
+    for (const symbol of runtimeContractSymbols) {
       expect(runtime).toContain(symbol);
     }
   });
 
   test("main does NOT contain handler implementations", () => {
     const main = renderMainSource({ srcDir: "src", outputPath: "/tmp/main.js" });
-    for (const symbol of runtimeLegacyFunctions) {
+    for (const symbol of runtimeContractSymbols) {
       expect(main).not.toContain("function " + symbol);
     }
   });

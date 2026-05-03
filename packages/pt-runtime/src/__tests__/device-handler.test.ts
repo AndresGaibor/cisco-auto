@@ -3,12 +3,22 @@ import { handleListDevices } from "../handlers/device";
 import type { HandlerDeps } from "../utils/helpers";
 
 class MockPort {
+  public name: string;
+  public ip: string;
+  public mask: string;
+  public mac: string;
+  public link: MockLink | null = null;
   constructor(
-    public name: string,
-    public ip = "0.0.0.0",
-    public mask = "0.0.0.0",
-    public mac = "00:00:00:00:00:00",
-  ) {}
+    public _name: string,
+    public _ip = "0.0.0.0",
+    public _mask = "0.0.0.0",
+    public _mac = "00:00:00:00:00:00",
+  ) {
+    this.name = _name;
+    this.ip = _ip;
+    this.mask = _mask;
+    this.mac = _mac;
+  }
   getName() {
     return this.name;
   }
@@ -26,6 +36,9 @@ class MockPort {
   }
   isProtocolUp() {
     return true;
+  }
+  getLink() {
+    return this.link;
   }
 }
 
@@ -136,11 +149,15 @@ describe("handleListDevices", () => {
 
       const link1 = new MockLink(pc1.ports[0], sw.ports[0]);
       const link2 = new MockLink(pc2.ports[0], sw.ports[1]);
+      pc1.ports[0].link = link1;
+      sw.ports[0].link = link1;
+      pc2.ports[0].link = link2;
+      sw.ports[1].link = link2;
 
       const net = new MockNetwork([pc1, pc2, sw], [link1, link2]);
       const deps = createDeps(net);
 
-      const result = handleListDevices({ type: "listDevices" }, deps) as any;
+      const result = handleListDevices({ type: "listDevices", includeLinks: true }, deps) as any;
 
       expect(result.ok).toBe(true);
       expect(result.connectionsByDevice).toBeDefined();
@@ -167,11 +184,13 @@ describe("handleListDevices", () => {
       ]);
 
       const link = new MockLink(dev1.ports[0], dev2.ports[0]);
+      dev1.ports[0].link = link;
+      dev2.ports[0].link = link;
 
       const net = new MockNetwork([dev1, dev2], [link]);
       const deps = createDeps(net);
 
-      const result = handleListDevices({ type: "listDevices" }, deps) as any;
+      const result = handleListDevices({ type: "listDevices", includeLinks: true }, deps) as any;
 
       const allConns = Object.values(result.connectionsByDevice).flat();
       expect(allConns.every((c: any) => c.confidence === "exact")).toBe(true);
@@ -182,10 +201,12 @@ describe("handleListDevices", () => {
       const dev1 = new MockDevice("DEV1", "Generic", 0, true, [new MockPort("FastEthernet0")]);
       const dev2 = new MockDevice("DEV2", "Generic", 0, true, [new MockPort("FastEthernet1")]);
       const link = new MockLink(dev1.ports[0], dev2.ports[0]);
+      dev1.ports[0].link = link;
+      dev2.ports[0].link = link;
       const net = new MockNetwork([dev1, dev2], [link]);
       const deps = createDeps(net);
 
-      const result = handleListDevices({ type: "listDevices" }, deps) as any;
+      const result = handleListDevices({ type: "listDevices", includeLinks: true }, deps) as any;
 
       const dev1Port = result.devices.find((d: any) => d.name === "DEV1")?.ports?.[0];
       expect(dev1Port?.connection).toBeDefined();
@@ -196,10 +217,12 @@ describe("handleListDevices", () => {
       const dev1 = new MockDevice("DEV1", "Generic", 0, true, [new MockPort("FastEthernet0")]);
       const dev2 = new MockDevice("DEV2", "Generic", 0, true, [new MockPort("FastEthernet1")]);
       const link = new MockLink(dev1.ports[0], dev2.ports[0]);
+      dev1.ports[0].link = link;
+      dev2.ports[0].link = link;
       const net = new MockNetwork([dev1, dev2], [link]);
       const deps = createDeps(net);
 
-      const result = handleListDevices({ type: "listDevices" }, deps) as any;
+      const result = handleListDevices({ type: "listDevices", includeLinks: true }, deps) as any;
 
       const conns = result.connectionsByDevice["DEV1"] || [];
       expect(conns.length).toBeGreaterThan(0);
@@ -215,6 +238,8 @@ describe("handleListDevices", () => {
       ]);
 
       const link = new MockLink(dev1.ports[0], dev2.ports[0]);
+      dev1.ports[0].link = link;
+      dev2.ports[0].link = link;
 
       const net = new MockNetwork([dev1, dev2], [link]);
       const uuidByObject = new WeakMap<object, string>([
@@ -223,7 +248,7 @@ describe("handleListDevices", () => {
       ]);
       const deps = createDeps(net, {}, { uuidByObject });
 
-      const result = handleListDevices({ type: "listDevices" }, deps) as any;
+      const result = handleListDevices({ type: "listDevices", includeLinks: true }, deps) as any;
 
       const dev1Conn = result.connectionsByDevice["DEV1"]?.[0];
       expect(dev1Conn?.confidence).toBe("exact");
@@ -245,6 +270,8 @@ describe("handleListDevices", () => {
         new UuidPort("FastEthernet1", "0.0.0.0", "0.0.0.0", "aa:aa:aa:aa:aa:02"),
       ]);
       const link = new MockLink(dev1.ports[0], dev2.ports[0]);
+      dev1.ports[0].link = link;
+      dev2.ports[0].link = link;
       const net = new MockNetwork([dev1, dev2], [link]);
 
       const deps = {
@@ -257,7 +284,7 @@ describe("handleListDevices", () => {
         },
       } as any;
 
-      const result = handleListDevices({ type: "listDevices" }, deps) as any;
+      const result = handleListDevices({ type: "listDevices", includeLinks: true }, deps) as any;
 
       const dev1Conn = result.connectionsByDevice["DEV1"]?.[0];
       expect(dev1Conn?.confidence).toBe("exact");
@@ -269,12 +296,14 @@ describe("handleListDevices", () => {
       const sw = new MockDevice("SW1", "2960-24TT", 1, true, [new MockPort("FastEthernet0/1")]);
 
       const link = new MockLink(pc1.ports[0], sw.ports[0]);
+      pc1.ports[0].link = link;
+      sw.ports[0].link = link;
 
       const net = new MockNetwork([pc1, sw], [link]);
 
       const deps = createDeps(net);
 
-      const result = handleListDevices({ type: "listDevices" }, deps) as any;
+      const result = handleListDevices({ type: "listDevices", includeLinks: true }, deps) as any;
 
       expect(result.ok).toBe(true);
       const allConns = Object.values(result.connectionsByDevice).flat();
@@ -300,11 +329,13 @@ describe("handleListDevices", () => {
       const dev2 = new MockDevice("DEV2", "Generic", 0, true, [new MockPort("Serial0/0")]);
 
       const link = new MockLink(dev1.ports[0], dev2.ports[0]);
+      dev1.ports[0].link = link;
+      dev2.ports[0].link = link;
 
       const net = new MockNetwork([dev1, dev2], [link]);
       const deps = createDeps(net);
 
-      const result = handleListDevices({ type: "listDevices" }, deps) as any;
+      const result = handleListDevices({ type: "listDevices", includeLinks: true }, deps) as any;
 
       const allConns = Object.values(result.connectionsByDevice).flat();
       expect(result.unresolvedLinks).toHaveLength(0);
@@ -318,11 +349,13 @@ describe("handleListDevices", () => {
       const sw = new MockDevice("SW1", "2960-24TT", 1, true, [new MockPort("FastEthernet0/1")]);
 
       const link = new MockLink(pc1.ports[0], sw.ports[0]);
+      pc1.ports[0].link = link;
+      sw.ports[0].link = link;
 
       const net = new MockNetwork([pc1, sw], [link]);
       const deps = createDeps(net);
 
-      const result = handleListDevices({ type: "listDevices" }, deps) as any;
+      const result = handleListDevices({ type: "listDevices", includeLinks: true }, deps) as any;
 
       expect(result.connectionsByDevice).toBeDefined();
 
@@ -348,11 +381,15 @@ describe("handleListDevices", () => {
 
       const link1 = new MockLink(pc1.ports[0], sw.ports[0]);
       const link2 = new MockLink(pc2.ports[0], sw.ports[1]);
+      pc1.ports[0].link = link1;
+      sw.ports[0].link = link1;
+      pc2.ports[0].link = link2;
+      sw.ports[1].link = link2;
 
       const net = new MockNetwork([pc1, pc2, sw], [link1, link2]);
       const deps = createDeps(net);
 
-      const result = handleListDevices({ type: "listDevices" }, deps) as any;
+      const result = handleListDevices({ type: "listDevices", includeLinks: true }, deps) as any;
 
       const allConns = Object.values(result.connectionsByDevice).flat();
       expect(allConns.length).toBe(4);
@@ -365,11 +402,13 @@ describe("handleListDevices", () => {
       const sw = new MockDevice("SW1", "2960-24TT", 1, true, [new MockPort("FastEthernet0/1")]);
 
       const link = new MockLink(pc1.ports[0], sw.ports[0]);
+      pc1.ports[0].link = link;
+      sw.ports[0].link = link;
 
       const net = new MockNetwork([pc1, sw], [link]);
       const deps = createDeps(net);
 
-      const result = handleListDevices({ type: "listDevices" }, deps) as any;
+      const result = handleListDevices({ type: "listDevices", includeLinks: true }, deps) as any;
 
       expect(result.ptLinkDebug).toBeDefined();
       expect(typeof result.ptLinkDebug.getLinkCountResult).toBe("number");

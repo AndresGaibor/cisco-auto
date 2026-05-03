@@ -408,7 +408,7 @@ describe("createRuntimeTerminalAdapter", () => {
     });
 
     expect(result.events).toHaveLength(1);
-    expect((result.events[0] as any).command).toBe("terminal.plan.run");
+    expect((result.events[0] as any).command).toBe("show ip interface brief");
   });
 
   test("confidence es menor cuando hay advertencias", async () => {

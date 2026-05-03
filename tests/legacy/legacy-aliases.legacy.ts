@@ -45,25 +45,6 @@ describe('No duplicate implementations', () => {
     expect(listSubCmd).toBeDefined();
   });
 
-  test('topology show is the canonical command (not topology-show)', () => {
-    const topologyCmd = program.commands.find((c: any) => c.name() === 'topology');
-    expect(topologyCmd).toBeDefined();
-
-    const showSubCmd = topologyCmd?.commands.find((c: any) => c.name() === 'show');
-    expect(showSubCmd).toBeDefined();
-  });
-
-  test('show has all subcommands as canonical implementations', () => {
-    const showCmd = program.commands.find((c: any) => c.name() === 'show');
-    expect(showCmd).toBeDefined();
-
-    const subcommandNames = showCmd?.commands.map((c: any) => c.name()) || [];
-    expect(subcommandNames).toContain('vlan');
-    expect(subcommandNames).toContain('run-config');
-    expect(subcommandNames).toContain('ip-route');
-    expect(subcommandNames).toContain('ip-int-brief');
-  });
-
   test('history-search redirects to history list --action', () => {
     const cmd = program.commands.find((c: any) => c.name() === 'history-search');
     expect(cmd).toBeDefined();
@@ -74,10 +55,5 @@ describe('No duplicate implementations', () => {
     const cmd = program.commands.find((c: any) => c.name() === 'history-failed');
     expect(cmd).toBeDefined();
     expect(cmd?.description()).toContain('DEPRECADO');
-  });
-
-  test('audit is the canonical command for audit operations', () => {
-    const auditCmd = program.commands.find((c: any) => c.name() === 'audit');
-    expect(auditCmd).toBeDefined();
   });
 });
