@@ -22,10 +22,58 @@ export interface KernelLifecycle {
   shutdown: () => void;
 }
 
-const MIN_POLL_DELAY_MS = 150;
-const MAX_IDLE_POLL_DELAY_MS = 1000;
-const POLL_ERROR_DELAY_MS = 3000;
-const HOT_POLL_TICKS_AFTER_ACTIVITY = 8;
+const DEFAULT_MIN_POLL_DELAY_MS = 100;
+const DEFAULT_MAX_IDLE_POLL_DELAY_MS = 500;
+const DEFAULT_POLL_ERROR_DELAY_MS = 3000;
+const DEFAULT_HOT_POLL_TICKS_AFTER_ACTIVITY = 16;
+
+function readPositiveInt(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return Math.max(min, Math.min(Math.trunc(parsed), max));
+}
+
+function readPollTuning(config: unknown): {
+  minPollDelayMs: number;
+  maxIdlePollDelayMs: number;
+  pollErrorDelayMs: number;
+  hotPollTicksAfterActivity: number;
+} {
+  const record = config && typeof config === "object" ? (config as Record<string, unknown>) : {};
+
+  const minPollDelayMs = readPositiveInt(
+    record.minPollDelayMs ?? record.pollIntervalMs,
+    DEFAULT_MIN_POLL_DELAY_MS,
+    75,
+    500,
+  );
+
+  return {
+    minPollDelayMs,
+    maxIdlePollDelayMs: readPositiveInt(
+      record.maxIdlePollDelayMs,
+      DEFAULT_MAX_IDLE_POLL_DELAY_MS,
+      minPollDelayMs,
+      2000,
+    ),
+    pollErrorDelayMs: readPositiveInt(
+      record.pollErrorDelayMs,
+      DEFAULT_POLL_ERROR_DELAY_MS,
+      500,
+      10_000,
+    ),
+    hotPollTicksAfterActivity: readPositiveInt(
+      record.hotPollTicksAfterActivity,
+      DEFAULT_HOT_POLL_TICKS_AFTER_ACTIVITY,
+      1,
+      100,
+    ),
+  };
+}
 
 export function createKernelLifecycle(
   subsystems: KernelSubsystems,
@@ -44,9 +92,11 @@ export function createKernelLifecycle(
     kernelLogSubsystem,
   } = subsystems;
 
+  const pollTuning = readPollTuning(config);
+
   let commandPollTimer: ReturnType<typeof setTimeout> | null = null;
   let bootRetryTimer: ReturnType<typeof setTimeout> | null = null;
-  let idlePollDelayMs = Math.max(Number(config.pollIntervalMs || MIN_POLL_DELAY_MS), MIN_POLL_DELAY_MS);
+  let idlePollDelayMs = pollTuning.minPollDelayMs;
   let pollInProgress = false;
   let hotPollBudget = 0;
 
@@ -130,12 +180,12 @@ export function createKernelLifecycle(
 
     if (pollInProgress) {
       state.pollStats.skippedBusyCount += 1;
-      state.pollStats.nextDelayMs = MAX_IDLE_POLL_DELAY_MS;
-      state.pollStats.idlePollDelayMs = MAX_IDLE_POLL_DELAY_MS;
+      state.pollStats.nextDelayMs = pollTuning.maxIdlePollDelayMs;
+      state.pollStats.idlePollDelayMs = pollTuning.maxIdlePollDelayMs;
       state.pollStats.hotPollBudget = hotPollBudget;
 
       kernelLogSubsystem("queue", "Skipping poll: previous poll still in progress");
-      scheduleNextPoll(MAX_IDLE_POLL_DELAY_MS);
+      scheduleNextPoll(pollTuning.maxIdlePollDelayMs);
       return;
     }
 
@@ -167,22 +217,22 @@ export function createKernelLifecycle(
       state.pollStats.lastAfterCount = afterCount;
 
       if (state.activeCommand || beforeCount > 0 || afterCount > 0) {
-        hotPollBudget = HOT_POLL_TICKS_AFTER_ACTIVITY;
-        idlePollDelayMs = MIN_POLL_DELAY_MS;
+        hotPollBudget = pollTuning.hotPollTicksAfterActivity;
+        idlePollDelayMs = pollTuning.minPollDelayMs;
       } else if (hotPollBudget > 0) {
         hotPollBudget -= 1;
-        idlePollDelayMs = MIN_POLL_DELAY_MS;
+        idlePollDelayMs = pollTuning.minPollDelayMs;
       } else {
         idlePollDelayMs = Math.min(
-          Math.max(idlePollDelayMs * 2, MIN_POLL_DELAY_MS),
-          MAX_IDLE_POLL_DELAY_MS,
+          Math.max(idlePollDelayMs * 2, pollTuning.minPollDelayMs),
+          pollTuning.maxIdlePollDelayMs,
         );
       }
     } catch (e) {
       state.pollStats.errorCount += 1;
       state.pollStats.lastError = formatKernelError(e);
       kernelLog("FATAL POLL ERROR: " + formatKernelError(e), "error");
-      idlePollDelayMs = POLL_ERROR_DELAY_MS;
+      idlePollDelayMs = pollTuning.pollErrorDelayMs;
     } finally {
       state.pollStats.lastPollDurationMs = Date.now() - pollStartedAt;
       state.pollStats.idlePollDelayMs = idlePollDelayMs;
@@ -257,7 +307,7 @@ export function createKernelLifecycle(
 
       setBootFlag("__ptKernelBootStage", "activate");
       state.isRunning = true;
-      idlePollDelayMs = MIN_POLL_DELAY_MS;
+      idlePollDelayMs = pollTuning.minPollDelayMs;
 
       heartbeat.setQueuedCount(getQueueCountSafe());
 
@@ -273,11 +323,13 @@ export function createKernelLifecycle(
 
       kernelLog(
         "Starting adaptive poll loop min=" +
-          MIN_POLL_DELAY_MS +
+          pollTuning.minPollDelayMs +
           " maxIdle=" +
-          MAX_IDLE_POLL_DELAY_MS +
+          pollTuning.maxIdlePollDelayMs +
           " hotTicks=" +
-          HOT_POLL_TICKS_AFTER_ACTIVITY +
+          pollTuning.hotPollTicksAfterActivity +
+          " errorDelay=" +
+          pollTuning.pollErrorDelayMs +
           "ms...",
       );
 
