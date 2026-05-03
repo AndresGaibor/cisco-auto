@@ -250,11 +250,19 @@ export function createKernelLifecycle(
         state.pollStats.processedCount > processedBefore
           ? state.pollStats.lastClaimedCommandType
           : null;
+      const activeCommandType =
+        state.activeCommand && typeof state.activeCommand === "object"
+          ? (state.activeCommand as { type?: unknown; payload?: { type?: unknown } }).type ??
+            (state.activeCommand as { payload?: { type?: unknown } }).payload?.type
+          : null;
+
       const claimedControlCommand = isControlPollCommandType(claimedCommandType);
+      const activeControlCommand = isControlPollCommandType(activeCommandType);
+      const recentControlCommand = isControlPollCommandType(state.pollStats.lastClaimedCommandType);
 
       state.pollStats.lastAfterCount = afterCount;
 
-      if (claimedControlCommand) {
+      if (claimedControlCommand || activeControlCommand) {
         hotPollBudget = pollTuning.controlHotPollTicksAfterActivity;
         idlePollDelayMs = pollTuning.controlPollDelayMs;
       } else if (state.activeCommand || beforeCount > 0 || afterCount > 0) {
@@ -262,9 +270,7 @@ export function createKernelLifecycle(
         idlePollDelayMs = pollTuning.minPollDelayMs;
       } else if (hotPollBudget > 0) {
         hotPollBudget -= 1;
-        idlePollDelayMs = isControlPollCommandType(state.pollStats.lastClaimedCommandType)
-          ? pollTuning.controlPollDelayMs
-          : pollTuning.minPollDelayMs;
+        idlePollDelayMs = recentControlCommand ? pollTuning.controlPollDelayMs : pollTuning.minPollDelayMs;
       } else {
         idlePollDelayMs = Math.min(
           Math.max(idlePollDelayMs * 2, pollTuning.minPollDelayMs),

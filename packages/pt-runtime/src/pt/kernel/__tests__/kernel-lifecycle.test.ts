@@ -277,4 +277,67 @@ describe("createKernelLifecycle", () => {
     expect(state.pollStats.nextDelayMs).toBe(75);
     expect(timeoutDelays[1]).toBe(75);
   });
+
+  test("mantiene control-hot polling mientras un comando de control sigue activo", () => {
+    const pollSpy = vi.spyOn(queuePoller, "pollCommandQueue").mockImplementation(() => {
+      // Simula que pollCommandQueue vio activeCommand y retornó sin reclamar.
+    });
+
+    const subsystems = createSubsystems();
+    subsystems.config.minPollDelayMs = 100;
+    subsystems.config.controlPollDelayMs = 75;
+    subsystems.config.controlHotPollTicksAfterActivity = 12;
+
+    const state = {
+      isRunning: true,
+      isShuttingDown: false,
+      activeCommand: {
+        id: "cmd-control-active",
+        seq: 1,
+        type: "__pollDeferred",
+        payload: { type: "__pollDeferred", ticket: "job-1" },
+        startedAt: Date.now(),
+      },
+      activeCommandFilename: "000000000001-__pollDeferred.json",
+      pollStats: {
+        tickCount: 0,
+        processedCount: 1,
+        emptyCount: 0,
+        skippedBusyCount: 0,
+        errorCount: 0,
+        lastPollAt: 0,
+        lastPollDurationMs: 0,
+        lastBeforeCount: 0,
+        lastAfterCount: 0,
+        nextDelayMs: 0,
+        idlePollDelayMs: 0,
+        hotPollBudget: 0,
+        lastClaimedCommandId: "cmd-control-active",
+        lastClaimedCommandType: "__pollDeferred",
+        lastError: null,
+      },
+    } as any;
+
+    const timeoutCallbacks: Array<() => void> = [];
+    const timeoutDelays: number[] = [];
+
+    vi.spyOn(globalThis, "setTimeout").mockImplementation(((callback: () => void, delayMs?: number) => {
+      timeoutCallbacks.push(callback);
+      timeoutDelays.push(Number(delayMs ?? 0));
+      return timeoutCallbacks.length as any;
+    }) as typeof setTimeout);
+
+    const lifecycle = createKernelLifecycle(subsystems, state);
+    lifecycle.boot();
+
+    expect(timeoutDelays[0]).toBe(0);
+
+    timeoutCallbacks[0]!();
+
+    expect(pollSpy).toHaveBeenCalledTimes(1);
+    expect(state.pollStats.hotPollBudget).toBe(12);
+    expect(state.pollStats.idlePollDelayMs).toBe(75);
+    expect(state.pollStats.nextDelayMs).toBe(75);
+    expect(timeoutDelays[1]).toBe(75);
+  });
 });
