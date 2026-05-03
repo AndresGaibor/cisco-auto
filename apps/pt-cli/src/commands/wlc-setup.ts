@@ -25,12 +25,26 @@ interface NetworkReport {
   allConnected: boolean;
 }
 
-async function getNetworkStatus(): Promise<NetworkReport> {
-  const { execSync } = await import('child_process');
-  const repoRoot = resolve(import.meta.dir, '../../../../');
+const repoRoot = resolve(import.meta.dir, '../../../../');
 
-  const result = execSync(
-    `bun run pt omni raw "(function() {
+function runPtOmniRaw(script: string): string {
+  const result = Bun.spawnSync({
+    cmd: ['bun', 'run', 'pt', 'omni', 'raw', script],
+    cwd: repoRoot,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+
+  if (!result.success) {
+    const errorOutput = result.stderr?.toString().trim();
+    throw new Error(errorOutput || 'No fue posible ejecutar pt omni raw');
+  }
+
+  return result.stdout.toString();
+}
+
+async function getNetworkStatus(): Promise<NetworkReport> {
+  const result = runPtOmniRaw(`(function() {
       var net = ipc.network();
       var devs = ['PC0', 'WLC1', 'SW1', 'AAA_Server', 'AP1', 'AP2', 'AP3'];
       var report = [];
@@ -62,9 +76,7 @@ async function getNetworkStatus(): Promise<NetworkReport> {
         }
       });
       return JSON.stringify(report);
-    })();"`,
-    { encoding: 'utf-8', timeout: 30000, cwd: repoRoot }
-  );
+    })();`);
 
   const jsonMatch = result.match(/🚀 RESULTADO: ([\s\S]*?)$/m);
   if (!jsonMatch) throw new Error('Failed to get network status');
@@ -84,12 +96,8 @@ async function getNetworkStatus(): Promise<NetworkReport> {
 }
 
 async function ensurePowerOnDevice(deviceName: string): Promise<boolean> {
-  const { execSync } = await import('child_process');
-  const repoRoot = resolve(import.meta.dir, '../../../../');
-
   try {
-    execSync(
-      `bun run pt omni raw "(function() {
+    runPtOmniRaw(`(function() {
         var net = ipc.network();
         var d = net.getDevice('${deviceName}');
         if (d && !d.getPower()) {
@@ -97,9 +105,7 @@ async function ensurePowerOnDevice(deviceName: string): Promise<boolean> {
           return '${deviceName} powered on';
         }
         return '${deviceName} already powered';
-      })();"`,
-      { encoding: 'utf-8', timeout: 30000, cwd: repoRoot }
-    );
+      })();`);
     return true;
   } catch (e) {
     return false;
@@ -107,20 +113,14 @@ async function ensurePowerOnDevice(deviceName: string): Promise<boolean> {
 }
 
 async function addPowerAdapter(deviceName: string): Promise<boolean> {
-  const { execSync } = await import('child_process');
-  const repoRoot = resolve(import.meta.dir, '../../../../');
-
   try {
-    const result = execSync(
-      `bun run pt omni raw "(function() {
+    const result = runPtOmniRaw(`(function() {
         var net = ipc.network();
         var d = net.getDevice('${deviceName}');
         var rm = d.getRootModule();
         var result = rm.addModuleAt('ACCESS_POINT_POWER_ADAPTER', 1);
         return result ? 'success' : 'failed';
-      })();"`,
-      { encoding: 'utf-8', timeout: 30000, cwd: repoRoot }
-    );
+      })();`);
     return result.toString().includes('success');
   } catch (e) {
     return false;
@@ -128,20 +128,14 @@ async function addPowerAdapter(deviceName: string): Promise<boolean> {
 }
 
 async function enablePoE(switchName: string, portName: string): Promise<boolean> {
-  const { execSync } = await import('child_process');
-  const repoRoot = resolve(import.meta.dir, '../../../../');
-
   try {
-    execSync(
-      `bun run pt omni raw "(function() {
+    runPtOmniRaw(`(function() {
         var net = ipc.network();
         var sw = net.getDevice('${switchName}');
         var p = sw.getPort('${portName}');
         p.setPower(true);
         return 'PoE enabled on ${switchName}:${portName}';
-      })();"`,
-      { encoding: 'utf-8', timeout: 30000, cwd: repoRoot }
-    );
+      })();`);
     return true;
   } catch (e) {
     return false;
@@ -149,21 +143,15 @@ async function enablePoE(switchName: string, portName: string): Promise<boolean>
 }
 
 async function setWLCManagementIP(ip: string, mask: string, gateway: string): Promise<boolean> {
-  const { execSync } = await import('child_process');
-  const repoRoot = resolve(import.meta.dir, '../../../../');
-
   try {
-    execSync(
-      `bun run pt omni raw "(function() {
+    runPtOmniRaw(`(function() {
         var net = ipc.network();
         var wlc = net.getDevice('WLC1');
         var mgmt = wlc.getPort('management');
         mgmt.setIpSubnetMask('${ip}', '${mask}');
         mgmt.setDefaultGateway('${gateway}');
         return 'WLC management set to ${ip}';
-      })();"`,
-      { encoding: 'utf-8', timeout: 30000, cwd: repoRoot }
-    );
+      })();`);
     return true;
   } catch (e) {
     return false;
@@ -238,3 +226,7 @@ export function createWlcSetupCommand(): Command {
     .description('Setup WLC network with power, PoE, and basic configuration')
     .action(runFullSetup);
 }
+
+export const __test__ = {
+  runPtOmniRaw,
+};
