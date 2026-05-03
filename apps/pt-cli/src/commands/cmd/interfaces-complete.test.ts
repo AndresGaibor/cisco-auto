@@ -252,6 +252,25 @@ describe("interfaces-complete", () => {
     expect(extractInterfaceShowBlock(output, "FastEthernet0/1")).toBeNull();
   });
 
+  test("corta el bloque cuando aparece eco de otro show interfaces específico", () => {
+    const output = [
+      "Vlan99 is up, line protocol is up",
+      "  Hardware is CPU Interface",
+      "  Internet address is 192.168.99.6/24",
+      "SW-SRV-DIST>show interfaces FastEthernet0/1",
+      "FastEthernet0/1 is up, line protocol is up (connected)",
+      "  Hardware is Lance",
+    ].join("\n");
+
+    expect(extractInterfaceShowBlock(output, "Vlan99")).toBe(
+      [
+        "Vlan99 is up, line protocol is up",
+        "  Hardware is CPU Interface",
+        "  Internet address is 192.168.99.6/24",
+      ].join("\n"),
+    );
+  });
+
   test("executeCompleteShowInterfaces no concatena historial contaminado", async () => {
     const result = await executeCompleteShowInterfaces({
       device: "SW1",
@@ -570,6 +589,57 @@ describe("interfaces-complete", () => {
         code: undefined,
       },
     ]);
+
+    const [entry] = result.evidence?.completeInterfaces?.perInterface ?? [];
+
+    expect(entry?.blockSource).toBe("output");
+    expect(entry?.rejectedAttempts?.map((attempt) => ({
+      attempt: attempt.attempt,
+      status: attempt.status,
+      candidateReasons: attempt.candidates.map((candidate) => ({
+        source: candidate.source,
+        ok: candidate.ok,
+        reason: candidate.reason,
+        matchedInterface: candidate.matchedInterface,
+      })),
+    }))).toEqual([
+      {
+        attempt: 1,
+        status: 0,
+        candidateReasons: [
+          {
+            source: "output",
+            ok: false,
+            reason: "matched_different_interface_header",
+            matchedInterface: "FastEthernet0/21",
+          },
+          {
+            source: "rawOutput",
+            ok: false,
+            reason: "empty_candidate",
+            matchedInterface: undefined,
+          },
+          {
+            source: "raw",
+            ok: false,
+            reason: "empty_candidate",
+            matchedInterface: undefined,
+          },
+          {
+            source: "parsed.raw",
+            ok: false,
+            reason: "empty_candidate",
+            matchedInterface: undefined,
+          },
+          {
+            source: "parsed.output",
+            ok: false,
+            reason: "empty_candidate",
+            matchedInterface: undefined,
+          },
+        ],
+      },
+    ]);
   });
 
   test("marca failed después de agotar retries de bloque limpio", async () => {
@@ -646,5 +716,18 @@ describe("interfaces-complete", () => {
         status: 0,
       },
     ]);
+
+    const [failEntry] = result.evidence?.completeInterfaces?.perInterface ?? [];
+
+    expect(failEntry?.rejectedAttempts?.length).toBe(3);
+    expect(
+      failEntry?.rejectedAttempts?.every((attempt) =>
+        attempt.candidates.some(
+          (candidate) =>
+            candidate.reason === "matched_different_interface_header" &&
+            candidate.matchedInterface === "FastEthernet0/21",
+        ),
+      ),
+    ).toBe(true);
   });
 });

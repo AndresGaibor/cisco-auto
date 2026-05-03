@@ -17,6 +17,34 @@ export interface CompleteInterfaceFailure {
   status?: number;
 }
 
+export type CompleteInterfaceBlockCandidateSource =
+  | "output"
+  | "rawOutput"
+  | "raw"
+  | "parsed.raw"
+  | "parsed.output";
+
+export type CompleteInterfaceBlockRejectReason =
+  | "empty_candidate"
+  | "missing_requested_interface_header"
+  | "matched_different_interface_header"
+  | "invalid_block_start";
+
+export interface CompleteInterfaceBlockCandidateEvidence {
+  source: CompleteInterfaceBlockCandidateSource;
+  ok: boolean;
+  reason?: CompleteInterfaceBlockRejectReason;
+  matchedInterface?: string;
+  preview?: string;
+}
+
+export interface CompleteInterfaceRejectedAttemptEvidence {
+  attempt: number;
+  status?: number;
+  warnings: string[];
+  candidates: CompleteInterfaceBlockCandidateEvidence[];
+}
+
 export interface CompleteInterfaceExecutionEvidence {
   interface: string;
   command: string;
@@ -26,6 +54,8 @@ export interface CompleteInterfaceExecutionEvidence {
   code?: string;
   message?: string;
   status?: number;
+  blockSource?: CompleteInterfaceBlockCandidateSource;
+  rejectedAttempts?: CompleteInterfaceRejectedAttemptEvidence[];
 }
 
 export interface CompleteInterfacesEvidence {
@@ -120,6 +150,14 @@ function lineLooksLikeCommandEchoForInterface(line: string, iface: string): bool
   ).test(value);
 }
 
+function lineLooksLikeAnyShowInterfacesCommandEcho(line: string): boolean {
+  const value = String(line ?? "").trim();
+
+  return /^(?:[A-Za-z0-9._-]+(?:\(config[^)]*\))?[>#]\s*)?show\s+interfaces?\s+(?:FastEthernet|GigabitEthernet|TenGigabitEthernet|Ethernet|Serial|Vlan|Port-channel|Port-Channel|Loopback|Tunnel|Null)\S+\s*$/i.test(
+    value,
+  );
+}
+
 function stripPromptAndEchoEdges(block: string, iface: string): string {
   const lines = normalizeEol(block).split("\n");
 
@@ -175,6 +213,11 @@ export function extractInterfaceShowBlock(output: string, iface: string): string
       break;
     }
 
+    if (lineLooksLikeAnyShowInterfacesCommandEcho(line)) {
+      endIndex = index;
+      break;
+    }
+
     if (lineLooksLikeCommandEchoForInterface(line, iface)) {
       endIndex = index;
       break;
@@ -210,24 +253,115 @@ export function extractInterfaceShowBlock(output: string, iface: string): string
   return block;
 }
 
-function extractBestInterfaceBlock(result: TerminalCommandResult, iface: string): string | null {
-  const candidates = [
-    result.output,
-    result.rawOutput,
-    (result as any).raw,
-    (result as any).parsed?.raw,
-    (result as any).parsed?.output,
-  ];
+function truncatePreview(value: unknown, maxLength = 160): string {
+  const normalized = normalizeEol(value)
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+    .slice(0, 4)
+    .join("\\n");
 
-  for (const candidate of candidates) {
-    const block = extractInterfaceShowBlock(String(candidate ?? ""), iface);
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
 
-    if (block) {
-      return block;
+  return `${normalized.slice(0, maxLength)}…`;
+}
+
+function firstInterfaceHeaderName(output: unknown): string | undefined {
+  for (const line of normalizeEol(output).split("\n")) {
+    const match = line.trim().match(
+      /^((?:FastEthernet|GigabitEthernet|TenGigabitEthernet|Ethernet|Serial|Vlan|Port-channel|Port-Channel|Loopback|Tunnel|Null)\S*)\s+is\s+/i,
+    );
+
+    if (match?.[1]) {
+      return normalizeInterfaceName(match[1]);
     }
   }
 
-  return null;
+  return undefined;
+}
+
+function inspectInterfaceShowBlockCandidate(
+  source: CompleteInterfaceBlockCandidateSource,
+  candidate: unknown,
+  iface: string,
+): { block: string | null; evidence: CompleteInterfaceBlockCandidateEvidence } {
+  const text = normalizeEol(candidate);
+
+  if (!text.trim()) {
+    return {
+      block: null,
+      evidence: {
+        source,
+        ok: false,
+        reason: "empty_candidate",
+      },
+    };
+  }
+
+  const block = extractInterfaceShowBlock(text, iface);
+
+  if (block) {
+    return {
+      block,
+      evidence: {
+        source,
+        ok: true,
+      },
+    };
+  }
+
+  const matchedInterface = firstInterfaceHeaderName(text);
+  const normalizedIface = normalizeInterfaceName(iface);
+
+  return {
+    block: null,
+    evidence: {
+      source,
+      ok: false,
+      reason:
+        matchedInterface && matchedInterface.toLowerCase() !== normalizedIface.toLowerCase()
+          ? "matched_different_interface_header"
+          : "missing_requested_interface_header",
+      matchedInterface,
+      preview: truncatePreview(text),
+    },
+  };
+}
+
+function extractBestInterfaceBlock(result: TerminalCommandResult, iface: string): {
+  block: string | null;
+  source?: CompleteInterfaceBlockCandidateSource;
+  candidates: CompleteInterfaceBlockCandidateEvidence[];
+} {
+  const candidates: Array<[CompleteInterfaceBlockCandidateSource, unknown]> = [
+    ["output", result.output],
+    ["rawOutput", result.rawOutput],
+    ["raw", (result as any).raw],
+    ["parsed.raw", (result as any).parsed?.raw],
+    ["parsed.output", (result as any).parsed?.output],
+  ];
+
+  const evidence: CompleteInterfaceBlockCandidateEvidence[] = [];
+
+  for (const [source, candidate] of candidates) {
+    const inspected = inspectInterfaceShowBlockCandidate(source, candidate, iface);
+    evidence.push(inspected.evidence);
+
+    if (inspected.block) {
+      return {
+        block: inspected.block,
+        source,
+        candidates: evidence,
+      };
+    }
+  }
+
+  return {
+    block: null,
+    candidates: evidence,
+  };
 }
 
 export function parseInterfacesFromRunningConfig(output: string): string[] {
@@ -500,6 +634,8 @@ export async function executeCompleteShowInterfaces(
 
     let lastResult: TerminalCommandResult | null = null;
     let lastBlock: string | null = null;
+    let blockSource: CompleteInterfaceBlockCandidateSource | undefined;
+    const rejectedAttempts: CompleteInterfaceRejectedAttemptEvidence[] = [];
     let attempts = 0;
 
     for (let attempt = 0; attempt <= blockRetryCount; attempt += 1) {
@@ -515,12 +651,20 @@ export async function executeCompleteShowInterfaces(
         break;
       }
 
-      const block = extractBestInterfaceBlock(result, iface);
+      const extracted = extractBestInterfaceBlock(result, iface);
 
-      if (block) {
-        lastBlock = block;
+      if (extracted.block) {
+        lastBlock = extracted.block;
+        blockSource = extracted.source;
         break;
       }
+
+      rejectedAttempts.push({
+        attempt: attempts,
+        status: result.status,
+        warnings: mergeWarnings(result.warnings),
+        candidates: extracted.candidates,
+      });
 
       if (attempt < blockRetryCount) {
         retryCount += 1;
@@ -545,6 +689,7 @@ export async function executeCompleteShowInterfaces(
         code: "IOS_INTERFACE_NOT_EXECUTED",
         message: `No se ejecutó "${command}".`,
         status: 1,
+        ...(rejectedAttempts.length > 0 ? { rejectedAttempts } : {}),
       });
       continue;
     }
@@ -567,6 +712,7 @@ export async function executeCompleteShowInterfaces(
         code: lastResult.error?.code,
         message: lastResult.error?.message,
         status: lastResult.status,
+        ...(rejectedAttempts.length > 0 ? { rejectedAttempts } : {}),
       });
       continue;
     }
@@ -588,6 +734,7 @@ export async function executeCompleteShowInterfaces(
         code: "IOS_INTERFACE_BLOCK_NOT_FOUND",
         message: `La salida de "${command}" no contiene un bloque limpio que empiece con "${iface} is ...".`,
         status: lastResult.status,
+        ...(rejectedAttempts.length > 0 ? { rejectedAttempts } : {}),
       });
       continue;
     }
@@ -602,6 +749,8 @@ export async function executeCompleteShowInterfaces(
       ok: true,
       durationMs: elapsedSince(interfaceStartedAtMs),
       status: lastResult.status,
+      blockSource,
+      ...(rejectedAttempts.length > 0 ? { rejectedAttempts } : {}),
     });
   }
 
