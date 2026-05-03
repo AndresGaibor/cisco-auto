@@ -9,6 +9,10 @@ import { runCommand } from "../../application/run-command.js";
 import { createSuccessResult, createErrorResult } from "../../contracts/cli-result.js";
 import { getGlobalFlags } from "../../flags.js";
 import { printCmdResult, toCmdCliResult, type CmdCliResult } from "./render.js";
+import {
+  executeCompleteShowInterfaces,
+  isCompleteShowInterfacesRequest,
+} from "./interfaces-complete.js";
 
 const DEFAULT_CMD_TIMEOUT_MS = 12_000;
 
@@ -144,6 +148,7 @@ export function createCmdCommand(): Command {
     .option("--logs", "Incluir syslogs IOS asíncronos en la salida limpia", false)
     .option("--history", "Mostrar historial del dispositivo si el runtime lo soporta", false)
     .option("--repl", "Abrir modo interactivo guiado para el dispositivo", false)
+    .option("--complete", "Para show interfaces, recolecta cada interfaz por separado y une el resultado completo", false)
     .addHelpText(
       "after",
       `
@@ -153,6 +158,7 @@ Ejemplos:
   pt cmd PC1 "ipconfig"
   pt cmd PC1 "ping 192.168.10.1"
   pt cmd SW1 "comando 1" "comando 2" "comando 3"
+  pt cmd SW1 "show interfaces" --complete
 
 Configuración automática (detectada por el CLI):
   pt cmd R1 "interface g0/0" "no shutdown"
@@ -162,6 +168,7 @@ Configuración automática (detectada por el CLI):
 Nota:
   - Si pasas varios argumentos y parecen comandos IOS separados, el CLI los ejecuta como líneas independientes.
   - Si pasas un comando simple con espacios, puedes usar comillas o escribirlo sin comillas.
+  - Usa --complete con "show interfaces" si Packet Tracer recorta la salida larga.
 
 Legacy --config (envuelve en configure terminal/end):
   pt cmd R1 --config "interface g0/0" "no shutdown"
@@ -232,6 +239,20 @@ Reglas:
       const mode = options.mode === "prompt" && !flags.noInput ? await promptForMode() : options.mode;
       const finalCommand = options.config ? buildConfigCommand(commands, Boolean(options.save)) : commands.join("\n");
 
+      if (Boolean(options.complete) && !isCompleteShowInterfacesRequest(finalCommand)) {
+        const result = createErrorResult<CmdCliResult>("cmd.exec", {
+          code: "CMD_COMPLETE_UNSUPPORTED",
+          message: '--complete solo está soportado para el comando exacto "show interfaces".',
+          details: {
+            received: finalCommand,
+            supported: ['pt cmd <device> "show interfaces" --complete'],
+          },
+        });
+        process.stderr.write(`${JSON.stringify(result, null, 2)}\n`);
+        process.exitCode = 2;
+        return;
+      }
+
       const wrapped = await runCommand<CmdCliResult>({
         action: "cmd.exec",
         meta: {
@@ -287,13 +308,23 @@ Reglas:
             generateId: () => `cmd-${randomUUID().slice(0, 8)}`,
           });
 
-          const result = await service.executeCommand(device!, finalCommand, {
-            timeoutMs: flags.timeout ?? DEFAULT_CMD_TIMEOUT_MS,
-            mode,
-            allowConfirm: Boolean(options.allowConfirm),
-            allowDestructive: Boolean(options.allowDestructive),
-            evidenceLevel: flags.verbose ? "full" : "summary",
-          });
+          const executeCommand = (commandToRun: string, timeoutMs = flags.timeout ?? DEFAULT_CMD_TIMEOUT_MS) =>
+            service.executeCommand(device!, commandToRun, {
+              timeoutMs,
+              mode,
+              allowConfirm: Boolean(options.allowConfirm),
+              allowDestructive: Boolean(options.allowDestructive),
+              evidenceLevel: flags.verbose ? "full" : "summary",
+            });
+
+          const result =
+            Boolean(options.complete) && isCompleteShowInterfacesRequest(finalCommand)
+              ? await executeCompleteShowInterfaces({
+                  device: device!,
+                  execute: executeCommand,
+                  timeoutMs: flags.timeout ?? DEFAULT_CMD_TIMEOUT_MS,
+                })
+              : await executeCommand(finalCommand);
 
           const cliResult = toCmdCliResult(result, {
             includeSyslogs: Boolean(options.logs),
