@@ -9,23 +9,42 @@ export interface CompleteShowInterfacesOptions {
   blockRetryDelayMs?: number;
 }
 
+export interface CompleteInterfaceFailure {
+  interface: string;
+  command: string;
+  code?: string;
+  message?: string;
+  status?: number;
+}
+
+export interface CompleteInterfaceExecutionEvidence {
+  interface: string;
+  command: string;
+  attempts: number;
+  ok: boolean;
+  durationMs: number;
+  code?: string;
+  message?: string;
+  status?: number;
+}
+
+export interface CompleteInterfacesEvidence {
+  enabled: true;
+  discoveryCommand: string;
+  interfaces: string[];
+  total: number;
+  succeeded: string[];
+  failed: CompleteInterfaceFailure[];
+  retryCount: number;
+  durationMs: number;
+  attemptedCommands: string[];
+  perInterface: CompleteInterfaceExecutionEvidence[];
+  partialGlobalAvoided: true;
+}
+
 export interface CompleteShowInterfacesResult extends Omit<TerminalCommandResult, "evidence"> {
   evidence: TerminalCommandResult["evidence"] & {
-    completeInterfaces?: {
-      enabled: true;
-      discoveryCommand: string;
-      interfaces: string[];
-      succeeded: string[];
-      failed: Array<{
-        interface: string;
-        command: string;
-        code?: string;
-        message?: string;
-        status?: number;
-      }>;
-      retryCount: number;
-      partialGlobalAvoided: true;
-    };
+    completeInterfaces?: CompleteInterfacesEvidence;
   };
 }
 
@@ -277,23 +296,38 @@ function mergeWarnings(...sources: Array<unknown>): string[] {
   return result;
 }
 
+function elapsedSince(startedAtMs: number): number {
+  return Math.max(0, Date.now() - startedAtMs);
+}
+
+function recordAttemptedCommand(commands: string[], command: string): void {
+  if (!commands.includes(command)) {
+    commands.push(command);
+  }
+}
+
+interface BuildCompleteInterfacesEvidenceInput
+  extends Omit<CompleteInterfacesEvidence, "total" | "durationMs" | "attemptedCommands" | "perInterface"> {
+  startedAtMs: number;
+  attemptedCommands: string[];
+  perInterface: CompleteInterfaceExecutionEvidence[];
+}
+
+function buildCompleteInterfacesEvidence(input: BuildCompleteInterfacesEvidenceInput): CompleteInterfacesEvidence {
+  const { startedAtMs, attemptedCommands, perInterface, ...base } = input;
+
+  return {
+    ...base,
+    total: base.interfaces.length,
+    durationMs: elapsedSince(startedAtMs),
+    attemptedCommands: [...attemptedCommands],
+    perInterface: [...perInterface],
+  };
+}
+
 function mergeEvidence(
   base: unknown,
-  completeInterfaces: {
-    enabled: true;
-    discoveryCommand: string;
-    interfaces: string[];
-    succeeded: string[];
-    failed: Array<{
-      interface: string;
-      command: string;
-      code?: string;
-      message?: string;
-      status?: number;
-    }>;
-    retryCount: number;
-    partialGlobalAvoided: true;
-  },
+  completeInterfaces: CompleteInterfacesEvidence,
 ): CompleteShowInterfacesResult["evidence"] {
   const evidence =
     base && typeof base === "object"
@@ -309,6 +343,10 @@ function mergeEvidence(
 export async function executeCompleteShowInterfaces(
   options: CompleteShowInterfacesOptions,
 ): Promise<CompleteShowInterfacesResult> {
+  const startedAtMs = Date.now();
+  const attemptedCommands: string[] = [];
+  const perInterface: CompleteInterfaceExecutionEvidence[] = [];
+
   const briefDiscoveryTimeoutMs = Math.max(
     Number(options.timeoutMs ?? 0) || 0,
     DEFAULT_BRIEF_DISCOVERY_TIMEOUT_MS,
@@ -332,6 +370,7 @@ export async function executeCompleteShowInterfaces(
   let retryCount = 0;
 
   let discoveryCommand = PRIMARY_DISCOVERY_COMMAND;
+  recordAttemptedCommand(attemptedCommands, PRIMARY_DISCOVERY_COMMAND);
   let discovery = await options.execute(PRIMARY_DISCOVERY_COMMAND, briefDiscoveryTimeoutMs);
 
   if (!discovery.ok) {
@@ -341,29 +380,36 @@ export async function executeCompleteShowInterfaces(
       warnings: mergeWarnings(discovery.warnings, [
         "No se pudo completar show interfaces por partes porque falló show ip interface brief.",
       ]),
-      evidence: mergeEvidence(discovery.evidence, {
-        enabled: true,
-        discoveryCommand: PRIMARY_DISCOVERY_COMMAND,
-        interfaces: [],
-        succeeded: [],
-        failed: [
-          {
-            interface: "*discovery*",
-            command: PRIMARY_DISCOVERY_COMMAND,
-            code: discovery.error?.code,
-            message: discovery.error?.message,
-            status: discovery.status,
-          },
-        ],
-        retryCount: 0,
-        partialGlobalAvoided: true,
-      }),
+      evidence: mergeEvidence(
+        discovery.evidence,
+        buildCompleteInterfacesEvidence({
+          startedAtMs,
+          attemptedCommands,
+          perInterface,
+          enabled: true,
+          discoveryCommand: PRIMARY_DISCOVERY_COMMAND,
+          interfaces: [],
+          succeeded: [],
+          failed: [
+            {
+              interface: "*discovery*",
+              command: PRIMARY_DISCOVERY_COMMAND,
+              code: discovery.error?.code,
+              message: discovery.error?.message,
+              status: discovery.status,
+            },
+          ],
+          retryCount: 0,
+          partialGlobalAvoided: true,
+        }),
+      ),
     };
   }
 
   let interfaces = parseInterfacesFromIpInterfaceBrief(discovery.output || discovery.rawOutput || "");
 
   if (interfaces.length === 0) {
+    recordAttemptedCommand(attemptedCommands, FALLBACK_DISCOVERY_COMMAND);
     const fallback = await options.execute(FALLBACK_DISCOVERY_COMMAND, runningConfigDiscoveryTimeoutMs);
 
     if (!fallback.ok) {
@@ -373,23 +419,29 @@ export async function executeCompleteShowInterfaces(
         warnings: mergeWarnings(fallback.warnings, [
           "No se pudo completar show interfaces por partes: show ip interface brief no listó interfaces y falló show running-config.",
         ]),
-        evidence: mergeEvidence(fallback.evidence, {
-          enabled: true,
-          discoveryCommand: FALLBACK_DISCOVERY_COMMAND,
-          interfaces: [],
-          succeeded: [],
-          failed: [
-            {
-              interface: "*discovery*",
-              command: FALLBACK_DISCOVERY_COMMAND,
-              code: fallback.error?.code,
-              message: fallback.error?.message,
-              status: fallback.status,
-            },
-          ],
-          retryCount: 0,
-          partialGlobalAvoided: true,
-        }),
+        evidence: mergeEvidence(
+          fallback.evidence,
+          buildCompleteInterfacesEvidence({
+            startedAtMs,
+            attemptedCommands,
+            perInterface,
+            enabled: true,
+            discoveryCommand: FALLBACK_DISCOVERY_COMMAND,
+            interfaces: [],
+            succeeded: [],
+            failed: [
+              {
+                interface: "*discovery*",
+                command: FALLBACK_DISCOVERY_COMMAND,
+                code: fallback.error?.code,
+                message: fallback.error?.message,
+                status: fallback.status,
+              },
+            ],
+            retryCount: 0,
+            partialGlobalAvoided: true,
+          }),
+        ),
       };
     }
 
@@ -412,15 +464,21 @@ export async function executeCompleteShowInterfaces(
         phase: "execution",
       },
       warnings: mergeWarnings(discovery.warnings),
-      evidence: mergeEvidence(discovery.evidence, {
-        enabled: true,
-        discoveryCommand,
-        interfaces: [],
-        succeeded: [],
-        failed: [],
-        retryCount: 0,
-        partialGlobalAvoided: true,
-      }),
+      evidence: mergeEvidence(
+        discovery.evidence,
+        buildCompleteInterfacesEvidence({
+          startedAtMs,
+          attemptedCommands,
+          perInterface,
+          enabled: true,
+          discoveryCommand,
+          interfaces: [],
+          succeeded: [],
+          failed: [],
+          retryCount: 0,
+          partialGlobalAvoided: true,
+        }),
+      ),
     };
   }
 
@@ -437,9 +495,12 @@ export async function executeCompleteShowInterfaces(
 
   for (const iface of interfaces) {
     const command = `show interfaces ${iface}`;
+    const interfaceStartedAtMs = Date.now();
+    recordAttemptedCommand(attemptedCommands, command);
 
     let lastResult: TerminalCommandResult | null = null;
     let lastBlock: string | null = null;
+    let attempts = 0;
 
     for (let attempt = 0; attempt <= blockRetryCount; attempt += 1) {
       if (settleDelayMs > 0) {
@@ -448,6 +509,7 @@ export async function executeCompleteShowInterfaces(
 
       const result = await options.execute(command, interfaceTimeoutMs);
       lastResult = result;
+      attempts += 1;
 
       if (!result.ok) {
         break;
@@ -474,6 +536,16 @@ export async function executeCompleteShowInterfaces(
         message: `No se ejecutó "${command}".`,
         status: 1,
       });
+      perInterface.push({
+        interface: iface,
+        command,
+        attempts,
+        ok: false,
+        durationMs: elapsedSince(interfaceStartedAtMs),
+        code: "IOS_INTERFACE_NOT_EXECUTED",
+        message: `No se ejecutó "${command}".`,
+        status: 1,
+      });
       continue;
     }
 
@@ -482,6 +554,16 @@ export async function executeCompleteShowInterfaces(
       failed.push({
         interface: iface,
         command,
+        code: lastResult.error?.code,
+        message: lastResult.error?.message,
+        status: lastResult.status,
+      });
+      perInterface.push({
+        interface: iface,
+        command,
+        attempts,
+        ok: false,
+        durationMs: elapsedSince(interfaceStartedAtMs),
         code: lastResult.error?.code,
         message: lastResult.error?.message,
         status: lastResult.status,
@@ -497,12 +579,30 @@ export async function executeCompleteShowInterfaces(
         message: `La salida de "${command}" no contiene un bloque limpio que empiece con "${iface} is ...".`,
         status: lastResult.status,
       });
+      perInterface.push({
+        interface: iface,
+        command,
+        attempts,
+        ok: false,
+        durationMs: elapsedSince(interfaceStartedAtMs),
+        code: "IOS_INTERFACE_BLOCK_NOT_FOUND",
+        message: `La salida de "${command}" no contiene un bloque limpio que empiece con "${iface} is ...".`,
+        status: lastResult.status,
+      });
       continue;
     }
 
     warnings.push(...mergeNonPartialWarnings(lastResult.warnings));
     succeeded.push(iface);
     blocks.push(lastBlock);
+    perInterface.push({
+      interface: iface,
+      command,
+      attempts,
+      ok: true,
+      durationMs: elapsedSince(interfaceStartedAtMs),
+      status: lastResult.status,
+    });
   }
 
   const output = blocks.join("\n\n").trim();
@@ -531,14 +631,20 @@ export async function executeCompleteShowInterfaces(
         ? [`${failed.length} interfaz(es) no pudieron recolectarse en modo completo.`]
         : [],
     ),
-    evidence: mergeEvidence(discovery.evidence, {
-      enabled: true,
-      discoveryCommand,
-      interfaces,
-      succeeded,
-      failed,
-      retryCount,
-      partialGlobalAvoided: true,
-    }),
+    evidence: mergeEvidence(
+      discovery.evidence,
+      buildCompleteInterfacesEvidence({
+        startedAtMs,
+        attemptedCommands,
+        perInterface,
+        enabled: true,
+        discoveryCommand,
+        interfaces,
+        succeeded,
+        failed,
+        retryCount,
+        partialGlobalAvoided: true,
+      }),
+    ),
   };
 }

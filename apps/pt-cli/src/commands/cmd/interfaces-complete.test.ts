@@ -118,6 +118,35 @@ describe("interfaces-complete", () => {
       "GigabitEthernet0/1",
     ]);
     expect(result.evidence?.completeInterfaces?.failed).toEqual([]);
+    expect(result.evidence?.completeInterfaces?.total).toBe(2);
+    expect(result.evidence?.completeInterfaces?.durationMs).toBeGreaterThanOrEqual(0);
+    expect(result.evidence?.completeInterfaces?.attemptedCommands).toEqual([
+      "show ip interface brief",
+      "show interfaces FastEthernet0/1",
+      "show interfaces GigabitEthernet0/1",
+    ]);
+    expect(result.evidence?.completeInterfaces?.perInterface.map((entry) => ({
+      interface: entry.interface,
+      command: entry.command,
+      attempts: entry.attempts,
+      ok: entry.ok,
+      status: entry.status,
+    }))).toEqual([
+      {
+        interface: "FastEthernet0/1",
+        command: "show interfaces FastEthernet0/1",
+        attempts: 1,
+        ok: true,
+        status: 0,
+      },
+      {
+        interface: "GigabitEthernet0/1",
+        command: "show interfaces GigabitEthernet0/1",
+        attempts: 1,
+        ok: true,
+        status: 0,
+      },
+    ]);
   });
 
   test("conserva éxito parcial si una interfaz falla", async () => {
@@ -524,6 +553,23 @@ describe("interfaces-complete", () => {
     expect(result.evidence?.completeInterfaces?.succeeded).toEqual(["FastEthernet0/22"]);
     expect(result.evidence?.completeInterfaces?.failed).toEqual([]);
     expect(result.evidence?.completeInterfaces?.retryCount).toBe(1);
+    expect(result.evidence?.completeInterfaces?.attemptedCommands).toEqual([
+      "show ip interface brief",
+      "show interfaces FastEthernet0/22",
+    ]);
+    expect(result.evidence?.completeInterfaces?.perInterface.map((entry) => ({
+      interface: entry.interface,
+      attempts: entry.attempts,
+      ok: entry.ok,
+      code: entry.code,
+    }))).toEqual([
+      {
+        interface: "FastEthernet0/22",
+        attempts: 2,
+        ok: true,
+        code: undefined,
+      },
+    ]);
   });
 
   test("marca failed después de agotar retries de bloque limpio", async () => {
@@ -578,6 +624,25 @@ describe("interfaces-complete", () => {
         code: "IOS_INTERFACE_BLOCK_NOT_FOUND",
         message:
           'La salida de "show interfaces GigabitEthernet0/1" no contiene un bloque limpio que empiece con "GigabitEthernet0/1 is ...".',
+        status: 0,
+      },
+    ]);
+    expect(result.evidence?.completeInterfaces?.attemptedCommands).toEqual([
+      "show ip interface brief",
+      "show interfaces GigabitEthernet0/1",
+    ]);
+    expect(result.evidence?.completeInterfaces?.perInterface.map((entry) => ({
+      interface: entry.interface,
+      attempts: entry.attempts,
+      ok: entry.ok,
+      code: entry.code,
+      status: entry.status,
+    }))).toEqual([
+      {
+        interface: "GigabitEthernet0/1",
+        attempts: 3,
+        ok: false,
+        code: "IOS_INTERFACE_BLOCK_NOT_FOUND",
         status: 0,
       },
     ]);
