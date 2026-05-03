@@ -26,6 +26,23 @@ const DEFAULT_MIN_POLL_DELAY_MS = 100;
 const DEFAULT_MAX_IDLE_POLL_DELAY_MS = 500;
 const DEFAULT_POLL_ERROR_DELAY_MS = 3000;
 const DEFAULT_HOT_POLL_TICKS_AFTER_ACTIVITY = 16;
+const DEFAULT_CONTROL_POLL_DELAY_MS = 75;
+const DEFAULT_CONTROL_HOT_POLL_TICKS_AFTER_ACTIVITY = 12;
+
+function isControlPollCommandType(type: unknown): boolean {
+  const normalized = String(type ?? "").trim();
+
+  return (
+    normalized === "__pollDeferred" ||
+    normalized === "__ping" ||
+    normalized === "__runtimeStatus" ||
+    normalized === "__reloadRuntime" ||
+    normalized === "inspectDeviceFast" ||
+    normalized === "readTerminal" ||
+    normalized === "omni.evaluate.raw" ||
+    normalized === "__evaluate"
+  );
+}
 
 function readPositiveInt(value: unknown, fallback: number, min: number, max: number): number {
   const parsed = Number(value);
@@ -42,6 +59,8 @@ function readPollTuning(config: unknown): {
   maxIdlePollDelayMs: number;
   pollErrorDelayMs: number;
   hotPollTicksAfterActivity: number;
+  controlPollDelayMs: number;
+  controlHotPollTicksAfterActivity: number;
 } {
   const record = config && typeof config === "object" ? (config as Record<string, unknown>) : {};
 
@@ -69,6 +88,18 @@ function readPollTuning(config: unknown): {
     hotPollTicksAfterActivity: readPositiveInt(
       record.hotPollTicksAfterActivity,
       DEFAULT_HOT_POLL_TICKS_AFTER_ACTIVITY,
+      1,
+      100,
+    ),
+    controlPollDelayMs: readPositiveInt(
+      record.controlPollDelayMs,
+      DEFAULT_CONTROL_POLL_DELAY_MS,
+      50,
+      minPollDelayMs,
+    ),
+    controlHotPollTicksAfterActivity: readPositiveInt(
+      record.controlHotPollTicksAfterActivity,
+      DEFAULT_CONTROL_HOT_POLL_TICKS_AFTER_ACTIVITY,
       1,
       100,
     ),
@@ -203,6 +234,7 @@ export function createKernelLifecycle(
       }
 
       const beforeCount = getQueueCountSafe();
+      const processedBefore = state.pollStats.processedCount;
       state.pollStats.lastBeforeCount = beforeCount;
 
       try {
@@ -214,14 +246,25 @@ export function createKernelLifecycle(
       }
 
       const afterCount = getQueueCountSafe();
+      const claimedCommandType =
+        state.pollStats.processedCount > processedBefore
+          ? state.pollStats.lastClaimedCommandType
+          : null;
+      const claimedControlCommand = isControlPollCommandType(claimedCommandType);
+
       state.pollStats.lastAfterCount = afterCount;
 
-      if (state.activeCommand || beforeCount > 0 || afterCount > 0) {
+      if (claimedControlCommand) {
+        hotPollBudget = pollTuning.controlHotPollTicksAfterActivity;
+        idlePollDelayMs = pollTuning.controlPollDelayMs;
+      } else if (state.activeCommand || beforeCount > 0 || afterCount > 0) {
         hotPollBudget = pollTuning.hotPollTicksAfterActivity;
         idlePollDelayMs = pollTuning.minPollDelayMs;
       } else if (hotPollBudget > 0) {
         hotPollBudget -= 1;
-        idlePollDelayMs = pollTuning.minPollDelayMs;
+        idlePollDelayMs = isControlPollCommandType(state.pollStats.lastClaimedCommandType)
+          ? pollTuning.controlPollDelayMs
+          : pollTuning.minPollDelayMs;
       } else {
         idlePollDelayMs = Math.min(
           Math.max(idlePollDelayMs * 2, pollTuning.minPollDelayMs),
@@ -328,6 +371,10 @@ export function createKernelLifecycle(
           pollTuning.maxIdlePollDelayMs +
           " hotTicks=" +
           pollTuning.hotPollTicksAfterActivity +
+          " controlDelay=" +
+          pollTuning.controlPollDelayMs +
+          " controlHotTicks=" +
+          pollTuning.controlHotPollTicksAfterActivity +
           " errorDelay=" +
           pollTuning.pollErrorDelayMs +
           "ms...",
