@@ -5,6 +5,7 @@ import { renderMainV2 } from "./render-main-v2";
 import { renderCatalog } from "./render-catalog";
 import { readExistingManifest, writeRuntimeManifest, type RuntimeBuildReport } from "./manifest";
 import { validateGeneratedArtifacts } from "./validation";
+import { assertJavaScriptSyntaxOrThrow } from "./syntax-assert";
 
 export interface RuntimeGeneratorConfig {
   outputDir?: string;
@@ -27,12 +28,11 @@ export class RuntimeGenerator {
   }
 
   generateMain(): string {
-    const buildId = Date.now().toString();
     return renderMainV2({
       srcDir: this.resolveSourceDir(),
       outputPath: "",
       injectDevDir: this.config.devDir,
-    }).replace('runtime.js', 'runtime.js?v=' + buildId);
+    });
   }
 
   generateCatalog(): string {
@@ -53,6 +53,10 @@ export class RuntimeGenerator {
     const catalog = this.generateCatalog();
     const runtime = this.generateRuntime();
     const main = this.generateMain();
+
+    assertJavaScriptSyntaxOrThrow("main.js", main);
+    assertJavaScriptSyntaxOrThrow("runtime.js", runtime);
+    assertJavaScriptSyntaxOrThrow("catalog.js", catalog);
 
     const outDir = this.resolveOutputDir();
     await fs.promises.mkdir(outDir, { recursive: true });
@@ -75,6 +79,10 @@ export class RuntimeGenerator {
     const runtime = this.generateRuntime();
     const main = this.generateMain();
 
+    assertJavaScriptSyntaxOrThrow("main.js", main);
+    assertJavaScriptSyntaxOrThrow("runtime.js", runtime);
+    assertJavaScriptSyntaxOrThrow("catalog.js", catalog);
+
     validateGeneratedArtifacts(main, catalog, runtime);
 
     await fs.promises.mkdir(this.config.devDir, { recursive: true });
@@ -91,6 +99,10 @@ export class RuntimeGenerator {
     const catalog = this.generateCatalog();
     const runtime = this.generateRuntime();
     const main = this.generateMain();
+
+    assertJavaScriptSyntaxOrThrow("main.js", main);
+    assertJavaScriptSyntaxOrThrow("runtime.js", runtime);
+    assertJavaScriptSyntaxOrThrow("catalog.js", catalog);
 
     validateGeneratedArtifacts(main, catalog, runtime);
 

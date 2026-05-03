@@ -27,7 +27,7 @@ export function createTerminalSession(device: string): TerminalSessionState {
   };
 }
 
-export function toSnapshot(state: TerminalSessionState): SessionStateSnapshot {
+export function ptTerminalToSnapshot(state: TerminalSessionState): SessionStateSnapshot {
   return {
     mode: state.mode,
     prompt: state.prompt,
@@ -36,18 +36,18 @@ export function toSnapshot(state: TerminalSessionState): SessionStateSnapshot {
   };
 }
 
-export function updateMode(state: TerminalSessionState, mode: string): TerminalSessionState {
+export function ptTerminalUpdateMode(state: TerminalSessionState, mode: string): TerminalSessionState {
   return { ...state, mode, lastOutputAt: Date.now() };
 }
 
-export function updatePrompt(state: TerminalSessionState, prompt: string): TerminalSessionState {
+export function ptTerminalUpdatePrompt(state: TerminalSessionState, prompt: string): TerminalSessionState {
   return { ...state, prompt, lastOutputAt: Date.now() };
 }
 
-export function setPaging(state: TerminalSessionState, paging: boolean): TerminalSessionState {
+export function ptTerminalSetPaging(state: TerminalSessionState, paging: boolean): TerminalSessionState {
   return { ...state, paging };
 }
 
-export function setBusy(state: TerminalSessionState, jobId: string | null): TerminalSessionState {
+export function ptTerminalSetBusy(state: TerminalSessionState, jobId: string | null): TerminalSessionState {
   return { ...state, busyJobId: jobId };
 }

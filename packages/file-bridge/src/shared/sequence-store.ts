@@ -8,6 +8,7 @@
  * con exponential backoff. Lock files stale se limpian automáticamente.
  */
 import { join } from "node:path";
+import { statSync } from "node:fs";
 import {
   closeSync,
   existsSync,
@@ -18,6 +19,7 @@ import {
 } from "node:fs";
 import { atomicWriteFile } from "./fs-atomic.js";
 import { CommandSeq } from "./command-seq.js";
+import { sleepSync } from "./fs-retry.js";
 
 interface SequenceState {
   nextSeq: number;
@@ -146,8 +148,7 @@ export class SequenceStore {
 
   private isLockStale(): boolean {
     try {
-      const fs = require("node:fs");
-      const stat = fs.statSync(this.lockFile);
+      const stat = statSync(this.lockFile);
       return Date.now() - stat.mtimeMs > LOCK_STALE_THRESHOLD_MS;
     } catch {
       return true;
@@ -155,9 +156,6 @@ export class SequenceStore {
   }
 
   private sleep(ms: number): void {
-    const deadline = Date.now() + ms;
-    while (Date.now() < deadline) {
-      // busy wait for precise timing
-    }
+    sleepSync(ms);
   }
 }

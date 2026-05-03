@@ -8,6 +8,8 @@
  */
 
 import { FileBridgeV2 } from "./file-bridge-v2.js";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 
 /**
  * Resultado de una operación de push de comandos.
@@ -49,7 +51,27 @@ export async function waitForBridgeReady(
 }
 
 function getDevDir(): string {
-  return process.env.PT_DEV_DIR || `${process.env.HOME ?? ""}/pt-dev`;
+  const fromEnv = process.env.PT_DEV_DIR?.trim();
+
+  if (fromEnv) {
+    return normalizeHostPath(fromEnv);
+  }
+
+  return join(homedir(), "pt-dev");
+}
+
+function looksLikeWindowsAbsolutePath(value: string): boolean {
+  return /^[a-zA-Z]:[\\/]/.test(value) || /^\\\\[^\\]+\\[^\\]+/.test(value);
+}
+
+function normalizeHostPath(value: string): string {
+  const trimmed = value.trim();
+
+  if (looksLikeWindowsAbsolutePath(trimmed)) {
+    return trimmed.replace(/\\/g, "/").replace(/\/+$/g, "");
+  }
+
+  return resolve(trimmed);
 }
 
 /**

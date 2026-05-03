@@ -8,8 +8,29 @@ import type { TerminalMode, TerminalSessionKind } from "./session-state";
 import { 
   stripAnsi, 
   normalizeWhitespace, 
-  sanitizeCommandOutput as internalSanitizeOutput 
 } from "./command-sanitizer";
+
+function sanitizeDetectionText(output: string, preserveWhitespace = false): string {
+  if (!output) return "";
+
+  const text = preserveWhitespace ? String(output) : normalizeWhitespace(output);
+  return text.toLowerCase();
+}
+
+function includesAll(text: string, terms: string[]): boolean {
+  return terms.every((term) => term.length > 0 && text.includes(term));
+}
+
+function includesAny(text: string, terms: string[]): boolean {
+  return terms.some((term) => term.length > 0 && text.includes(term));
+}
+
+function sanitizeTerminalBase(output: string): string {
+  return output
+    .replace(/\u0007/g, "")
+    .replace(/\u001b\[[0-9;]*[a-zA-Z]/g, "")
+    .replace(/\r/g, "");
+}
 
 function lastNonEmptyLine(input: string): string {
   const lines = stripAnsi(input)
@@ -28,7 +49,7 @@ function lastNonEmptyLine(input: string): string {
  * @param prompt - Prompt raw del terminal
  * @returns Prompt normalizado sin colores ni espacios extras
  */
-export function normalizePrompt(prompt: string): string {
+export function normalizePrompt(prompt: unknown): string {
   return normalizeWhitespace(prompt);
 }
 
@@ -174,7 +195,7 @@ export function detectModeFromPrompt(prompt: string): TerminalMode {
  * @param output - Output del terminal
  * @returns true si se detectó el wizard
  */
-export function detectWizardFromOutput(output: string): boolean {
+export function promptDetectWizard(output: string): boolean {
   const text = normalizeWhitespace(output).toLowerCase();
   if (!text) return false;
 
@@ -248,26 +269,26 @@ export function detectBootOutput(output: string): boolean {
  * @returns true si parece output de ping/traceroute
  */
 export function detectHostBusy(output: string): boolean {
-  const text = normalizeWhitespace(output).toLowerCase();
+  const text = sanitizeDetectionText(output);
   if (!text) return false;
 
-  return (
-    text.includes("reply from") ||
-    text.includes("request timed out") ||
-    text.includes("destination host unreachable") ||
-    text.includes("tracing route") ||
-    text.includes("trace complete") ||
-    text.includes("ping statistics") ||
-    text.includes("connected to") ||
-    text.includes("trying") ||
-    text.includes("escape character is") ||
-    text.includes("connection closed")
-  );
+  return includesAny(text, [
+    "reply from",
+    "request timed out",
+    "destination host unreachable",
+    "tracing route",
+    "trace complete",
+    "ping statistics",
+    "connected to",
+    "trying",
+    "escape character is",
+    "connection closed",
+  ]);
 }
 
 export function detectDnsLookup(output: string): boolean {
-  const text = output.toLowerCase();
-  return text.indexOf("translating") !== -1 && (text.indexOf("domain server") !== -1 || text.indexOf("...") !== -1);
+  const text = sanitizeDetectionText(output, true);
+  return includesAll(text, ["translating"]) && includesAny(text, ["domain server", "..."]);
 }
 
 export function detectAuthPrompt(output: string): boolean {
@@ -285,19 +306,13 @@ export function detectAuthPrompt(output: string): boolean {
 }
 
 export function detectReloadPrompt(output: string): boolean {
-  const text = normalizeWhitespace(output).toLowerCase();
-  return (
-    text.includes("reload") &&
-    text.includes("confirm")
-  );
+  const text = sanitizeDetectionText(output);
+  return includesAll(text, ["reload", "confirm"]);
 }
 
 export function detectErasePrompt(output: string): boolean {
-  const text = normalizeWhitespace(output).toLowerCase();
-  return (
-    text.includes("erase") &&
-    text.includes("confirm")
-  );
+  const text = sanitizeDetectionText(output);
+  return includesAll(text, ["erase", "confirm"]);
 }
 
 export function isPrivilegedMode(mode: TerminalMode): boolean {
@@ -406,11 +421,7 @@ export function readTerminalSnapshot(terminal: any): TerminalSnapshot {
 export function sanitizeTerminalText(output: string): string {
   if (!output) return "";
 
-  let result = output;
-
-  result = result.replace(/\u0007/g, "");
-
-  result = result.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, "");
+  let result = sanitizeTerminalBase(output);
 
   result = result.replace(/[\b]+\x08/g, "");
 
@@ -467,10 +478,7 @@ export function diffSnapshotStrict(before: string, after: string): { delta: stri
  */
 export function sanitizeOutput(output: string): string {
     if (!output) return "";
-    return output
-      .replace(/\r/g, "")
-      .replace(/\u0007/g, "") // Bell
-      .replace(/\u001b\[[0-9;]*[a-zA-Z]/g, ""); // ANSI
+    return sanitizeTerminalBase(output);
 }
 
 /**

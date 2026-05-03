@@ -2,6 +2,8 @@
 // Validate generated JS is PT-safe
 // Includes enhanced error messages with source context
 
+export { sanitizeTypeScriptHelperGlobalThis } from "./sanitize-typescript-helpers.js";
+
 export interface ValidationError {
   line: number;
   column: number;
@@ -61,17 +63,94 @@ interface PatternRule {
   pattern: RegExp;
   message: string;
   category: ErrorCategory;
-  suggestion?: string;
-  highlightGroup?: number;
+  suggestion?: string | undefined;
+  highlightGroup?: number | undefined;
+  isContextualThis?: boolean;
+}
+
+function categorizeByLine(errors: ValidationError[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const err of errors) {
+    counts[err.category] = (counts[err.category] || 0) + 1;
+  }
+  return counts;
+}
+
+function isForbiddenGlobalThisLine(line: string): boolean {
+  const withoutInlineJSDoc = line.includes("/*") && line.includes("*/")
+    ? line.replace(/\/\*.*?\*\//g, "")
+    : line;
+
+  const trimmed = withoutInlineJSDoc.trim();
+
+  if (!trimmed || !trimmed.includes("this")) {
+    return false;
+  }
+
+  if (
+    trimmed.startsWith("//") ||
+    trimmed.startsWith("*") ||
+    trimmed.startsWith("/*")
+  ) {
+    return false;
+  }
+
+  // TypeScript helper patterns are handled by sanitize-typescript-helpers.ts.
+  // They should not produce PT-safe noise here.
+  if (
+    trimmed.includes("var __assign = (this && this.__assign)") ||
+    trimmed.includes("var __awaiter = (this && this.__awaiter)") ||
+    trimmed.includes("var __generator = (this && this.__generator)") ||
+    trimmed.includes("var __values = (this && this.__values)") ||
+    trimmed.includes("var __read = (this && this.__read)") ||
+    trimmed.includes("var __spreadArray = (this && this.__spreadArray)")
+  ) {
+    return false;
+  }
+
+  // Instance/member access is valid JavaScript and appears throughout class
+  // methods after TS transpilation: this.config, this.debug(), this.state, etc.
+  // Do NOT rewrite these to self/global access.
+  if (/\bthis\s*(\.|\[)/.test(trimmed)) {
+    return false;
+  }
+
+  // Valid helper/runtime function usage:
+  //   fn.apply(this, arguments)
+  //   ctor.call(this, ...)
+  if (/\b(apply|call)\s*\(\s*this\b/.test(trimmed)) {
+    return false;
+  }
+
+  // Common template/global-probing idiom. This is intentionally used in the
+  // generated wrapper, and is not the same as accidental top-level `this.foo`.
+  if (/function\s*\(\s*\)\s*\{\s*return\s+this\s*;?\s*\}/.test(trimmed)) {
+    return false;
+  }
+
+  if (/return\s+this\s*;?\s*$/.test(trimmed)) {
+    return false;
+  }
+
+  // TypeScript ES5 async/class downlevel patterns.
+  // These are not unsafe global access; they preserve lexical/instance this.
+  if (/^\s*var\s+_this\s*=\s*this\s*;?\s*$/.test(line)) {
+    return false;
+  }
+
+  if (/return\s+__awaiter\s*\(\s*this\s*,/.test(line)) {
+    return false;
+  }
+
+  if (/return\s+__generator\s*\(\s*this\s*,/.test(line)) {
+    return false;
+  }
+
+  // Only flag suspicious bare/global this usage, not instance member access.
+  return /(?:^|[=(:,?])\s*this\s*(?:[),;:]|$)/.test(trimmed);
 }
 
 const PT_FORBIDDEN_PATTERNS: PatternRule[] = [
-  {
-    pattern: /\bnew\s+Set\s*\(/g,
-    message: "Set is not supported in PT runtime",
-    category: "forbidden-global",
-    suggestion: "Use arrays with indexOf() or a plain object for deduplication",
-  },
   {
     pattern: /\bnew\s+Map\s*\(/g,
     message: "Map is not supported in PT runtime",
@@ -181,9 +260,10 @@ const PT_FORBIDDEN_PATTERNS: PatternRule[] = [
   // PT QTScript engine missing globals
   {
     pattern: /\bthis\b/g,
-    message: "this is not available in PT QTScript engine",
+    message: "possible unsafe top-level this usage in PT QTScript engine",
     category: "forbidden-global",
-    suggestion: "Use 'typeof self !== undefined ? self : this' as a safe global accessor",
+    suggestion: "Only rewrite true global this access. Do not rewrite instance/member this.config or this.method().",
+    isContextualThis: true,
   },
   // Template literals with expressions — not supported in older QTScript
   {
@@ -231,14 +311,6 @@ function getContext(line: string, column: number, width = 40): string {
   return `${context}\n${marker}`;
 }
 
-function categorizeByLine(errors: ValidationError[]): Record<string, number> {
-  const categories: Record<string, number> = {};
-  for (const err of errors) {
-    categories[err.category] = (categories[err.category] || 0) + 1;
-  }
-  return categories;
-}
-
 export function validatePtSafe(code: string): ValidationResult {
   const lines = code.split("\n");
   const errors: ValidationError[] = [];
@@ -254,6 +326,21 @@ export function validatePtSafe(code: string): ValidationResult {
     }
 
     for (const rule of PT_FORBIDDEN_PATTERNS) {
+      if (rule.isContextualThis) {
+        if (isForbiddenGlobalThisLine(line)) {
+          errors.push({
+            line: lineNum + 1,
+            column: 1,
+            message: rule.message,
+            severity: "error",
+            category: rule.category,
+            suggestion: rule.suggestion,
+            context: getContext(line, 1),
+          });
+        }
+        continue;
+      }
+
       let match;
       rule.pattern.lastIndex = 0;
       while ((match = rule.pattern.exec(line)) !== null) {

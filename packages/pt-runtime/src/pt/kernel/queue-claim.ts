@@ -16,6 +16,11 @@ import { writeDebugLog } from "./debug-log";
 
 const USE_LEGACY_QUEUE_INDEX = true;
 
+let lastEmptyCandidatesLogAt = 0;
+let emptyCandidatesSkipped = 0;
+
+const EMPTY_CANDIDATES_LOG_INTERVAL_MS = 5000;
+
 export interface QueueClaim {
   poll(): CommandEnvelope | null;
   pollAllowedTypes(allowedTypes: string[]): CommandEnvelope | null;
@@ -33,21 +38,64 @@ export function createQueueClaim(
     writeDebugLog("queue", message);
   }
 
+  function normalizeCandidateName(value: unknown): string | null {
+    const name = String(value == null ? "" : value).trim();
+
+    if (!name) return null;
+    if (name === "_queue.json") return null;
+    if (name.indexOf(".json") === -1) return null;
+    if (name.indexOf("/") >= 0) return null;
+    if (name.indexOf("\\") >= 0) return null;
+
+    return name;
+  }
+
+  function safeListFromDiscovery(): string[] {
+    try {
+      const out: string[] = [];
+
+      for (const raw of queueDiscovery.scan()) {
+        const name = normalizeCandidateName(raw);
+        if (name) out.push(name);
+      }
+
+      return out;
+    } catch (e) {
+      logQueue("[queue-claim] discovery scan failed: " + String(e));
+      return [];
+    }
+  }
+
+  function safeListFromIndex(): string[] {
+    try {
+      const out: string[] = [];
+
+      for (const raw of queueIndex.read()) {
+        const name = normalizeCandidateName(raw);
+        if (name) out.push(name);
+      }
+
+      return out;
+    } catch (e) {
+      logQueue("[queue-claim] queue index read failed: " + String(e));
+      return [];
+    }
+  }
+
   function listCandidates(): string[] {
     const seen: Record<string, boolean> = {};
     const files: string[] = [];
 
     // Fuente primary: filesystem (commands/*.json)
-    for (const file of queueDiscovery.scan()) {
+    for (const file of safeListFromDiscovery()) {
       if (seen[file]) continue;
       seen[file] = true;
       files.push(file);
     }
 
     // Legacy fallback: _queue.json (solo si flag habilitado)
-    // Este índice puede estar desactualizado vs el filesystem real
     if (USE_LEGACY_QUEUE_INDEX) {
-      for (const file of queueIndex.read()) {
+      for (const file of safeListFromIndex()) {
         if (seen[file]) continue;
         seen[file] = true;
         files.push(file);
@@ -55,8 +103,38 @@ export function createQueueClaim(
     }
 
     files.sort();
-    logQueue("[queue-claim] candidatos vistos: " + files.length);
+    logCandidatesSeen(files.length);
     return files;
+  }
+
+  function logCandidatesSeen(count: number): void {
+    if (count > 0) {
+      if (emptyCandidatesSkipped > 0) {
+        logQueue("[queue-claim] candidatos vistos: " + count + " skippedEmpty=" + emptyCandidatesSkipped);
+        emptyCandidatesSkipped = 0;
+      } else {
+        logQueue("[queue-claim] candidatos vistos: " + count);
+      }
+      return;
+    }
+
+    emptyCandidatesSkipped++;
+
+    const now = Date.now();
+
+    if (now - lastEmptyCandidatesLogAt < EMPTY_CANDIDATES_LOG_INTERVAL_MS) {
+      return;
+    }
+
+    logQueue(
+      "[queue-claim] candidatos vistos: 0 skipped=" +
+        emptyCandidatesSkipped +
+        " windowMs=" +
+        EMPTY_CANDIDATES_LOG_INTERVAL_MS,
+    );
+
+    emptyCandidatesSkipped = 0;
+    lastEmptyCandidatesLogAt = now;
   }
 
   function count(): number {
@@ -226,51 +304,63 @@ export function createQueueClaim(
       logQueue("[queue-claim] candidatos: " + files.length + " " + JSON.stringify(files.slice(0, 3)));
     }
 
-    for (const filename of files) {
-      const srcPath = commandsDir + "/" + filename;
-      const dstPath = inFlightDir + "/" + filename;
+    for (const rawFilename of files) {
+      const filename = normalizeCandidateName(rawFilename);
 
-      if (fm.fileExists(dstPath)) {
-        logQueue("[queue-claim] destino existe, reclaim: " + filename);
-        const cmd = reclaimFromInFlight(filename, dstPath);
-        if (cmd) return cmd;
-
-        logQueue("[queue-claim] reclaim fallback: " + filename);
-        const fallback = claimFromCommands(filename, srcPath, dstPath);
-        if (fallback) return fallback;
+      if (!filename) {
+        logQueue("[queue-claim] candidato inválido ignorado: " + String(rawFilename));
         continue;
       }
 
-      if (!fm.fileExists(srcPath)) {
-        continue;
-      }
+      try {
+        const srcPath = commandsDir + "/" + filename;
+        const dstPath = inFlightDir + "/" + filename;
 
-      const modo = s.claimMode;
-      logQueue("[queue-claim] claim nuevo: " + filename + " modo=" + modo);
+        if (fm.fileExists(dstPath)) {
+          logQueue("[queue-claim] destino existe, reclaim: " + filename);
+          const cmd = reclaimFromInFlight(filename, dstPath);
+          if (cmd) return cmd;
 
-      if (modo === "copy-delete") {
-        const ok = s.moveOrCopyDelete(srcPath, dstPath, false);
-        if (!ok) {
-          logQueue("[queue-claim] claim copy-delete falló: " + filename);
+          logQueue("[queue-claim] reclaim fallback: " + filename);
+          const fallback = claimFromCommands(filename, srcPath, dstPath);
+          if (fallback) return fallback;
           continue;
         }
-        if (fm.fileExists(srcPath)) {
-          logQueue("[queue-claim] source residue post-claim: " + filename);
+
+        if (!fm.fileExists(srcPath)) {
+          continue;
+        }
+
+        const modo = s.claimMode;
+        logQueue("[queue-claim] claim nuevo: " + filename + " modo=" + modo);
+
+        if (modo === "copy-delete") {
+          const ok = s.moveOrCopyDelete(srcPath, dstPath, false);
+          if (!ok) {
+            logQueue("[queue-claim] claim copy-delete falló: " + filename);
+            continue;
+          }
+          if (fm.fileExists(srcPath)) {
+            logQueue("[queue-claim] source residue post-claim: " + filename);
+            try {
+              fm.removeFile(srcPath);
+            } catch {}
+          }
+        } else {
           try {
-            fm.removeFile(srcPath);
-          } catch {}
+            fm.moveSrcFileToDestFile(srcPath, dstPath, false);
+          } catch (e) {
+            logQueue("[queue-claim] claim move falló: " + filename + " - " + String(e));
+            continue;
+          }
         }
-      } else {
-        try {
-          fm.moveSrcFileToDestFile(srcPath, dstPath, false);
-        } catch (e) {
-          logQueue("[queue-claim] claim move falló: " + filename + " - " + String(e));
-          continue;
-        }
-      }
 
-      const cmd = parseEnvelopeAtPath(filename, dstPath);
-      if (cmd) return cmd;
+        const cmd = parseEnvelopeAtPath(filename, dstPath);
+        if (cmd) return cmd;
+      } catch (e) {
+        logQueue("[queue-claim] candidato falló sin tumbar poll: " + filename + " error=" + String(e));
+        continue;
+      }
     }
 
     return null;
@@ -296,50 +386,62 @@ export function createQueueClaim(
       );
     }
 
-    for (const filename of files) {
-      const srcPath = commandsDir + "/" + filename;
-      const dstPath = inFlightDir + "/" + filename;
+    for (const rawFilename of files) {
+      const filename = normalizeCandidateName(rawFilename);
 
-      if (fm.fileExists(dstPath)) {
-        const inFlightType = readEnvelopeTypeAtPath(dstPath);
+      if (!filename) {
+        logQueue("[queue-claim] control candidato inválido: " + String(rawFilename));
+        continue;
+      }
 
-        if (!isAllowedType(inFlightType, allowed)) {
+      try {
+        const srcPath = commandsDir + "/" + filename;
+        const dstPath = inFlightDir + "/" + filename;
+
+        if (fm.fileExists(dstPath)) {
+          const inFlightType = readEnvelopeTypeAtPath(dstPath);
+
+          if (!isAllowedType(inFlightType, allowed)) {
+            logQueue(
+              "[queue-claim] control skip in-flight no permitido: " +
+                filename +
+                " tipo=" +
+                String(inFlightType),
+            );
+            continue;
+          }
+
+          logQueue("[queue-claim] control reclaim permitido: " + filename);
+          const cmd = reclaimFromInFlight(filename, dstPath);
+          if (cmd) return cmd;
+
+          continue;
+        }
+
+        if (!fm.fileExists(srcPath)) {
+          continue;
+        }
+
+        const sourceType = readEnvelopeTypeAtPath(srcPath);
+
+        if (!isAllowedType(sourceType, allowed)) {
           logQueue(
-            "[queue-claim] control skip in-flight no permitido: " +
+            "[queue-claim] control skip commands no permitido: " +
               filename +
               " tipo=" +
-              String(inFlightType),
+              String(sourceType),
           );
           continue;
         }
 
-        logQueue("[queue-claim] control reclaim permitido: " + filename);
-        const cmd = reclaimFromInFlight(filename, dstPath);
-        if (cmd) return cmd;
+        logQueue("[queue-claim] control claim permitido: " + filename + " tipo=" + sourceType);
 
+        const claimed = claimFromCommands(filename, srcPath, dstPath);
+        if (claimed) return claimed;
+      } catch (e) {
+        logQueue("[queue-claim] control candidato falló: " + filename + " error=" + String(e));
         continue;
       }
-
-      if (!fm.fileExists(srcPath)) {
-        continue;
-      }
-
-      const sourceType = readEnvelopeTypeAtPath(srcPath);
-
-      if (!isAllowedType(sourceType, allowed)) {
-        logQueue(
-          "[queue-claim] control skip commands no permitido: " +
-            filename +
-            " tipo=" +
-            String(sourceType),
-        );
-        continue;
-      }
-
-      logQueue("[queue-claim] control claim permitido: " + filename + " tipo=" + sourceType);
-
-      const claimed = claimFromCommands(filename, srcPath, dstPath);
-      if (claimed) return claimed;
     }
 
     return null;

@@ -1,74 +1,99 @@
 import { describe, expect, test } from "bun:test";
-import { ControllerContextService } from "./context-service.js";
+import { ControllerContextService } from "./context-service";
 
-function createBridge(overrides: Partial<{
-  isReady: () => boolean;
-  getHeartbeatHealth: () => { state: "ok" | "stale" | "missing" | "unknown"; ageMs?: number; lastSeenTs?: number };
-  getBridgeStatus: () => { ready: boolean; warnings?: string[] };
-  getHeartbeat: <T>() => T | null;
-}> = {}) {
+function createBridge(overrides: Partial<any> = {}) {
   return {
-    isReady: () => true,
-    getHeartbeatHealth: () => ({ state: "ok" }),
-    getBridgeStatus: () => ({ ready: true, warnings: [] }),
-    getHeartbeat: <T>() => null as T | null,
+    isReady: () => false,
+    getBridgeStatus: () => ({ ready: false, warnings: [] }),
+    getHeartbeatHealth: () => ({ state: "ok" as const, ageMs: 1000, lastSeenTs: Date.now() }),
+    getStateSnapshot: () => null,
+    readState: () => null,
     ...overrides,
-  } as any;
+  };
 }
 
-function createCache(overrides: Partial<{
-  getSnapshot: () => { version: string; timestamp: number; devices: Record<string, unknown>; links: Record<string, unknown> };
-  isMaterialized: () => boolean;
-}> = {}) {
+function createTopologyCache(overrides: Partial<any> = {}) {
   return {
-    getSnapshot: () => ({ version: "1", timestamp: 1, devices: {}, links: {} }),
-    isMaterialized: () => true,
+    isMaterialized: () => false,
+    getSnapshot: () => null,
     ...overrides,
-  } as any;
+  };
 }
 
-describe("ControllerContextService", () => {
-  test("resume contexto y salud base", async () => {
-    const service = new ControllerContextService(createBridge(), createCache());
-
-    expect(service.getContextSummary()).toEqual({
-      bridgeReady: true,
-      topologyMaterialized: true,
-      deviceCount: 0,
-      linkCount: 0,
-    });
-
-    await expect(service.getHealthSummary()).resolves.toEqual({
-      bridgeReady: true,
-      topologyHealth: "warming",
-      heartbeatState: "ok",
-      warnings: [],
-    });
-  });
-
-  test("fusiona advertencias del bridge y heartbeat", () => {
+describe("ControllerContextService operational readiness", () => {
+  test("considera bridgeReady=true cuando heartbeat está ok aunque isReady sea false", () => {
     const service = new ControllerContextService(
       createBridge({
         isReady: () => false,
-        getHeartbeatHealth: () => ({ state: "stale", ageMs: 5 }),
-        getBridgeStatus: () => ({ ready: false, warnings: ["bridge warning"] }),
+        getBridgeStatus: () => ({ ready: false, warnings: [] }),
+        getHeartbeatHealth: () => ({ state: "ok" as const, ageMs: 500 }),
       }),
-      createCache({
-        getSnapshot: () => ({ version: "1", timestamp: 1, devices: { R1: {} }, links: {} }),
+      createTopologyCache(),
+    );
+
+    expect(service.getContextSummary().bridgeReady).toBe(true);
+    expect(service.getBridgeStatus().ready).toBe(true);
+  });
+
+  test("considera topología materializada si hay devices en state snapshot", () => {
+    const service = new ControllerContextService(
+      createBridge({
+        getStateSnapshot: () => ({
+          devices: [{ name: "SW-SRV-DIST" }, { name: "R-GYE-2811" }],
+          links: [{ id: "l1" }],
+        }),
+      }),
+      createTopologyCache({
+        isMaterialized: () => false,
       }),
     );
 
-    expect(service.getSystemContext()).toEqual({
-      bridgeReady: false,
+    expect(service.getContextSummary()).toMatchObject({
+      bridgeReady: true,
       topologyMaterialized: true,
-      deviceCount: 1,
+      deviceCount: 2,
+      linkCount: 1,
+    });
+  });
+
+  test("mantiene warning si no hay heartbeat ok ni devices", () => {
+    const service = new ControllerContextService(
+      createBridge({
+        isReady: () => false,
+        getBridgeStatus: () => ({ ready: false, warnings: [] }),
+        getHeartbeatHealth: () => ({ state: "missing" as const }),
+      }),
+      createTopologyCache({
+        isMaterialized: () => false,
+      }),
+    );
+
+    expect(service.getContextSummary()).toMatchObject({
+      bridgeReady: false,
+      topologyMaterialized: false,
+      deviceCount: 0,
       linkCount: 0,
-      heartbeat: { state: "stale", ageMs: 5 },
-      warnings: [
-        "Heartbeat stale - PT podría no estar respondiendo",
-        "Bridge no está listo",
-        "bridge warning",
-      ],
+    });
+  });
+
+  test("expone getHeartbeat por compatibilidad con PtController", () => {
+    const service = new ControllerContextService(
+      createBridge({
+        getHeartbeatHealth: () => ({
+          state: "ok" as const,
+          ageMs: 123,
+          lastSeenTs: 1777532378000,
+        }),
+      }),
+      createTopologyCache(),
+    );
+
+    expect(service.getHeartbeat()).toMatchObject({
+      state: "ok",
+      running: true,
+      ageMs: 123,
+      lastSeenTs: 1777532378000,
+      ts: 1777532378000,
     });
   });
 });

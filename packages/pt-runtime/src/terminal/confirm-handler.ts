@@ -26,7 +26,7 @@ export function createConfirmState(autoConfirm: boolean = true): ConfirmState {
  * @param output -Chunk de output del terminal
  * @returns true si es un prompt de confirmación
  */
-export function isConfirmPrompt(output: string): boolean {
+export function confirmHandlerIsConfirmPrompt(output: string): boolean {
   return detectConfirmPrompt(output);
 }
 
@@ -107,7 +107,7 @@ export function createConfirmHandler(config: ConfirmHandlerConfig = {}): {
       return state;
     },
     handleOutput(_output: string): boolean {
-      if (isConfirmPrompt(_output)) {
+      if (confirmHandlerIsConfirmPrompt(_output)) {
         state = activateConfirm(state);
         return true;
       }

@@ -47,17 +47,25 @@ export function handlePollDeferred(payload: PollDeferredPayload, api: RuntimeApi
     } as unknown as RuntimeResult;
   }
 
-  const output = String(jobState.outputBuffer ?? (jobState.result as any)?.raw ?? (jobState.result as any)?.output ?? "");
-  const status = jobState.error || jobState.state === "error" ? 1 : Number((jobState.result as any)?.status ?? 0);
+  const result = (jobState.result ?? {}) as any;
+  const output = String(
+    result.rawOutput ??
+      result.raw ??
+      result.output ??
+      jobState.outputBuffer ??
+      "",
+  );
+  const status = Number(result.status ?? (jobState.error || jobState.state === "error" ? 1 : 0));
+  const ok = Boolean(result.ok ?? (!jobState.error && jobState.state !== "error" && status === 0));
 
   return {
     done: true,
-    ok: !jobState.error && jobState.state !== "error",
+    ok,
     status,
-    result: jobState.result,
-    error: jobState.error || undefined,
-    code: jobState.errorCode || undefined,
-    errorCode: jobState.errorCode || undefined,
+    result: result,
+    error: jobState.error || result.error || undefined,
+    code: jobState.errorCode || result.code || result.errorCode || undefined,
+    errorCode: jobState.errorCode || result.code || result.errorCode || undefined,
     raw: output,
     output,
     source: "terminal",

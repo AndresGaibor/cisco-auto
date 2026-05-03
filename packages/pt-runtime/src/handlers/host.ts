@@ -8,7 +8,7 @@ export interface InspectHostPayload {
   device: string;
 }
 
-function collectPorts(device: PTDevice): Array<Record<string, unknown>> {
+function hostCollectPorts(device: PTDevice): Array<Record<string, unknown>> {
   const ports: Array<Record<string, unknown>> = [];
 
   for (let i = 0; i < device.getPortCount(); i++) {
@@ -37,6 +37,6 @@ export function handleInspectHost(payload: InspectHostPayload, deps: PtDeps): Pt
     model: device.getModel(),
     type: device.getType(),
     power: device.getPower(),
-    ports: collectPorts(device),
+    ports: hostCollectPorts(device),
   });
 }

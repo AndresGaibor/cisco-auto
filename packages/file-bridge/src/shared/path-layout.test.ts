@@ -3,16 +3,22 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, rmSync, mkdtempSync } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
 import { BridgePathLayout } from './path-layout';
 
-const TEST_ROOT = '/tmp/bridge-paths-test-' + Math.random().toString(36).slice(2);
+function makeTestRoot(prefix: string): string {
+  return mkdtempSync(join(tmpdir(), prefix));
+}
+
+let TEST_ROOT: string;
 
 describe('BridgePathLayout', () => {
   let paths: BridgePathLayout;
 
   beforeEach(() => {
+    TEST_ROOT = makeTestRoot('file-bridge-paths-');
     mkdirSync(TEST_ROOT, { recursive: true });
     paths = new BridgePathLayout(TEST_ROOT);
   });
@@ -145,8 +151,8 @@ describe('BridgePathLayout', () => {
 
   describe('isolation', () => {
     test('should use separate roots for different instances', () => {
-      const root1 = '/tmp/bridge-1';
-      const root2 = '/tmp/bridge-2';
+      const root1 = join(TEST_ROOT, 'bridge-1');
+      const root2 = join(TEST_ROOT, 'bridge-2');
       const paths1 = new BridgePathLayout(root1);
       const paths2 = new BridgePathLayout(root2);
 

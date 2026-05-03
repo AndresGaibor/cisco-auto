@@ -16,8 +16,9 @@
  * El watcher es lazy: solo se crea cuando hay listeners activos y
  * se destruye cuando no queda ninguno.
  */
-import { watch, type FSWatcher } from "node:fs";
+import { existsSync, readdirSync, watch, type FSWatcher } from "node:fs";
 import { EventEmitter } from "node:events";
+import { join } from "node:path";
 
 /**
  * Watcher compartido que multiplexa notificaciones de archivos de resultado.
@@ -27,6 +28,8 @@ import { EventEmitter } from "node:events";
  */
 export class SharedResultWatcher extends EventEmitter {
   private watcher: FSWatcher | null = null;
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private seenFiles = new Set<string>();
   private callbacks = new Map<string, Set<() => void>>();
   private refCount = 0;
   private watching = false;
@@ -59,7 +62,7 @@ export class SharedResultWatcher extends EventEmitter {
     this.refCount++;
 
     if (!this.watching) {
-      this.startWatcher();
+      this.startWatching();
     }
   }
 
@@ -102,7 +105,7 @@ export class SharedResultWatcher extends EventEmitter {
       try {
         callback();
       } catch (err) {
-        this.emit("error", err);
+        this.emitCallbackError(err);
       }
     }
   }
@@ -111,39 +114,43 @@ export class SharedResultWatcher extends EventEmitter {
    * Inicia el fs.watch del directorio de resultados.
    * Filtra solo archivos .json y extrae el commandId del nombre.
    */
-  private startWatcher(): void {
+  private startWatching(): void {
     if (this.watcher) return;
 
-    try {
-      this.watcher = watch(this.resultsDir, (eventType, filename) => {
-        if (!filename || !filename.endsWith(".json")) return;
+    this.watching = true;
 
-        const commandId = filename.replace(/\.json$/, "");
-        this.notify(commandId);
+    try {
+      this.watcher = watch(this.resultsDir, (_eventType, filename) => {
+        if (filename) {
+          this.handleMaybeResult(String(filename));
+        } else {
+          this.scanResultsDir();
+        }
       });
 
       this.watcher.on("error", (err) => {
         this.emit("error", err);
-        this.watcher = null;
-        this.watching = false;
-
-        if (this.refCount > 0) {
-          setTimeout(() => this.startWatcher(), 1000);
-        }
+        this.stopFsWatcherOnly();
+        this.startPollingFallback();
       });
-
-      this.watching = true;
     } catch (err) {
       this.emit("error", err);
-      this.watcher = null;
-      this.watching = false;
     }
+
+    this.startPollingFallback();
   }
 
   /**
    * Detiene y cierra el watcher de forma segura.
    */
   private stopWatcher(): void {
+    this.stopFsWatcherOnly();
+    this.stopPollingFallback();
+    this.watching = false;
+    this.seenFiles.clear();
+  }
+
+  private stopFsWatcherOnly(): void {
     if (this.watcher) {
       try {
         this.watcher.close();
@@ -152,7 +159,80 @@ export class SharedResultWatcher extends EventEmitter {
       }
       this.watcher = null;
     }
-    this.watching = false;
+  }
+
+  private startPollingFallback(): void {
+    if (this.pollTimer) return;
+
+    this.pollTimer = setInterval(() => {
+      this.scanResultsDir();
+    }, 100);
+
+    if (typeof this.pollTimer.unref === "function") {
+      this.pollTimer.unref();
+    }
+  }
+
+  private stopPollingFallback(): void {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+  }
+
+  private scanResultsDir(): void {
+    if (!existsSync(this.resultsDir)) {
+      return;
+    }
+
+    let files: string[] = [];
+
+    try {
+      files = readdirSync(this.resultsDir).filter((file) => file.endsWith(".json"));
+    } catch {
+      return;
+    }
+
+    for (const file of files) {
+      const fullPath = join(this.resultsDir, file);
+
+      if (!existsSync(fullPath)) {
+        continue;
+      }
+
+      this.handleMaybeResult(file);
+    }
+  }
+
+  private handleMaybeResult(filename: string): void {
+    if (!filename.endsWith(".json")) return;
+
+    if (this.seenFiles.has(filename)) {
+      return;
+    }
+
+    this.seenFiles.add(filename);
+
+    const commandId = filename.slice(0, -5);
+    const callbacks = this.callbacks.get(commandId);
+
+    if (!callbacks || callbacks.size === 0) return;
+
+    for (const callback of [...callbacks]) {
+      try {
+        callback();
+      } catch (error) {
+        this.emitCallbackError(error);
+      }
+    }
+  }
+
+  private emitCallbackError(error: unknown): void {
+    if (this.listenerCount("error") > 0) {
+      this.emit("error", error);
+    }
+
+    this.emit("callback-error", error);
   }
 
   /**

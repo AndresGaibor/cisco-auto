@@ -35,7 +35,7 @@ export function handleEvaluate(payload: EvaluatePayload, deps: HandlerDeps): Han
   } catch (error: any) {
     var errMsg = "EVAL_ERROR: " + String(error.message || error);
     if (dprint) dprint(errMsg);
-    
+
     return {
       ok: false,
       error: errMsg,
@@ -47,14 +47,14 @@ export function handleEvaluate(payload: EvaluatePayload, deps: HandlerDeps): Han
 function serializeResult(val: any): any {
   if (val === null || val === undefined) return null;
   var type = typeof val;
-  
+
   if (type === "string" || type === "number" || type === "boolean") return val;
-  
+
   if (type === "object") {
     if (typeof val.getClassName === 'function') {
         return "[PT_OBJECT:" + val.getClassName() + "]";
     }
-    
+
     if (val instanceof Array) {
         var arr = [];
         for (var i = 0; i < val.length; i++) {
@@ -73,6 +73,6 @@ function serializeResult(val: any): any {
     }
     return count > 0 ? obj : "[Object]";
   }
-  
+
   return String(val);
 }

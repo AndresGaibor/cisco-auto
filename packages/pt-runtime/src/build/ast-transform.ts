@@ -6,6 +6,7 @@
 
 import * as ts from "typescript";
 import { formatValidationResult, validatePtSafe, type ValidationResult } from "./validate-pt-safe.js";
+import { sanitizeTypeScriptHelperGlobalThis } from "./sanitize-typescript-helpers.js";
 
 export interface AstTransformOptions {
   target?: ts.ScriptTarget;
@@ -119,7 +120,8 @@ export function transformToPtSafeAst(
       target: opts.target ?? ts.ScriptTarget.ES5,
       module: ts.ModuleKind.None,
       strict: false,
-      noEmitHelpers: false, // Changed from true to false
+      noEmitHelpers: true,
+      importHelpers: false,
       sourceMap: false,
       declaration: false,
       removeComments: false,
@@ -139,6 +141,12 @@ export function transformToPtSafeAst(
   let output = transpiled.outputText;
 
   output = postProcessES5(output);
+
+  assertNoCommonJsArtifacts("AST transform output after postProcessES5", output);
+
+  output = sanitizeTypeScriptHelperGlobalThis(output);
+
+  assertNoCommonJsArtifacts("AST transform output after sanitizeTypeScriptHelperGlobalThis", output);
 
   if (opts.minify) {
     output = minifyES5(output);
@@ -411,8 +419,8 @@ function stripModuleSyntax(source: string): string {
       continue;
     }
     if (trimmed.startsWith("/**")) {
-      inJSDocComment = true;
       result.push(line);
+      inJSDocComment = !line.includes("*/");
       continue;
     }
 
@@ -573,6 +581,23 @@ function postProcessES5(code: string): string {
   }
 
   return result.join("\n");
+}
+
+function assertNoCommonJsArtifacts(label: string, code: string): void {
+  const forbidden = [
+    "Object.defineProperty(exports",
+    "exports.",
+    "module.exports",
+    "require(",
+  ];
+
+  const hits = forbidden.filter((marker) => code.includes(marker));
+
+  if (hits.length > 0) {
+    throw new Error(
+      `${label} contains CommonJS artifacts not supported by Packet Tracer runtime: ${hits.join(", ")}`,
+    );
+  }
 }
 
 function replaceNullishCoalescing(code: string): string {

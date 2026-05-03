@@ -4,7 +4,8 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { join } from "node:path";
-import { mkdirSync, writeFileSync, existsSync, readdirSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync, readdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { CommandProcessor } from "../src/v2/command-processor";
 import { BridgePathLayout } from "../src/shared/path-layout";
@@ -16,18 +17,18 @@ function checksumOf(input: unknown): string {
   return `sha256:${createHash("sha256").update(JSON.stringify(input)).digest("hex")}`;
 }
 
-const TEMP_DIR = "/tmp/cisco-auto-cmdproc-tests";
-const TEST_DEV_DIR = join(TEMP_DIR, "dev");
+let TEMP_DIR: string;
+let TEST_DEV_DIR: string;
 
 beforeEach(() => {
-  if (!existsSync(TEMP_DIR)) mkdirSync(TEMP_DIR, { recursive: true });
-  if (!existsSync(TEST_DEV_DIR)) mkdirSync(TEST_DEV_DIR, { recursive: true });
+  TEMP_DIR = mkdtempSync(join(tmpdir(), "cisco-auto-cmdproc-tests-"));
+  TEST_DEV_DIR = join(TEMP_DIR, "dev");
+  mkdirSync(TEST_DEV_DIR, { recursive: true });
 });
 
 afterEach(() => {
   try {
-    const cmd = require("child_process");
-    cmd.execSync(`rm -rf ${TEST_DEV_DIR}/*`);
+    rmSync(TEMP_DIR, { recursive: true, force: true });
   } catch (e) {}
 });
 

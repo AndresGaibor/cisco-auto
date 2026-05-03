@@ -3,6 +3,7 @@ export interface CleanCmdOutputOptions {
   output: string;
   deviceKind: string;
   includeSyslogs?: boolean;
+  preserveCommandEcho?: boolean;
 }
 
 export interface CleanCmdOutputResult {
@@ -47,10 +48,12 @@ function matchesCommandEcho(line: string, command: string): boolean {
   const fullCommand = lines.join(" ; ");
   const lastCommand = lines.at(-1)!;
 
+  const promptPrefix = String.raw`(?:[A-Za-z0-9._-]+(?:\(config[^)]*\))?[>#]\s*)?`;
+
   return (
-    new RegExp(`^${escapeRegExp(lastCommand)}\\s*$`, "i").test(normalizedLine) ||
-    new RegExp(`^${escapeRegExp(fullCommand)}\\s*$`, "i").test(normalizedLine) ||
-    lines.some((cmd) => new RegExp(`^${escapeRegExp(cmd)}\\s*$`, "i").test(normalizedLine))
+    new RegExp(`^${promptPrefix}${escapeRegExp(lastCommand)}\\s*$`, "i").test(normalizedLine) ||
+      new RegExp(`^${promptPrefix}${escapeRegExp(fullCommand)}\\s*$`, "i").test(normalizedLine) ||
+      lines.some((cmd) => new RegExp(`^${promptPrefix}${escapeRegExp(cmd)}\\s*$`, "i").test(normalizedLine))
   );
 }
 
@@ -135,9 +138,13 @@ export function cleanCmdOutput(options: CleanCmdOutputOptions): CleanCmdOutputRe
   let removedLineCount = 0;
   let lines = rawOutput.split("\n");
 
-  const withoutEcho = removeLeadingCommandEcho(lines, options.command);
-  lines = withoutEcho.lines;
-  removedLineCount += withoutEcho.removed;
+  let withoutEcho = { lines, removed: 0 };
+
+  if (!options.preserveCommandEcho) {
+    withoutEcho = removeLeadingCommandEcho(lines, options.command);
+    lines = withoutEcho.lines;
+    removedLineCount += withoutEcho.removed;
+  }
 
   if (!options.includeSyslogs) {
     const withoutSyslogs = removeSyslogs(lines);
@@ -153,7 +160,7 @@ export function cleanCmdOutput(options: CleanCmdOutputOptions): CleanCmdOutputRe
   lines = withoutPrompt.lines;
   removedLineCount += withoutPrompt.removed;
 
-  if (withoutEcho.removed > 0) {
+  if (!options.preserveCommandEcho && withoutEcho.removed > 0) {
     warnings.push(`Se filtró el eco del comando (${withoutEcho.removed} línea/s).`);
   }
 

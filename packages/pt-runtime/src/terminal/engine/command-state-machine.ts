@@ -244,6 +244,7 @@ export class CommandStateMachine {
 
     this.pagerHandler = createPagerHandler({
       maxAdvances: this.config.options.maxPagerAdvances ?? 50,
+      enabled: this.config.options.autoAdvancePager !== false,
     });
 
     this.confirmHandler = createConfirmHandler({
@@ -608,7 +609,12 @@ export class CommandStateMachine {
         const delta = currentRaw.raw.substring(this.lastTerminalSnapshot.raw.length);
         this.lastTerminalSnapshot = currentRaw;
         this.debug("poll output deltaLen=" + delta.length);
-        this.onOutput(null, { chunk: delta, newOutput: delta });
+
+        if (this.outputEventsCount === 0) {
+          this.onOutput(null, { chunk: delta, newOutput: delta });
+        } else {
+          this.debug("poll output delta ignored because event output is active");
+        }
       }
     };
 
@@ -654,11 +660,12 @@ export class CommandStateMachine {
     const input = this.getCommandInputSafe();
 
     if (input.length === 0) return false;
-    if (input.replace(/\s+/g, "") !== "") return false;
+    if (String(input ?? "").replace(/\s+/g, "") !== "") return false;
 
     try {
       this.config.terminal.enterChar?.(21, 0);
     } catch {}
+
 
     for (let i = 0; i < Math.min(input.length + 8, 32); i += 1) {
       try {
@@ -724,9 +731,40 @@ export class CommandStateMachine {
     }, stallTimeoutMs);
   }
 
+  private normalizeIncomingOutputChunk(rawChunk: string): string {
+    const chunk = String(rawChunk ?? "");
+    const current = this.outputBuffer;
+
+    if (!chunk) return "";
+    if (!current) return chunk;
+
+    if (chunk === current) {
+      return "";
+    }
+
+    if (chunk.indexOf(current) === 0) {
+      return chunk.slice(current.length);
+    }
+
+    if (current.endsWith(chunk)) {
+      return "";
+    }
+
+    const maxOverlap = Math.min(current.length, chunk.length, 4096);
+
+    for (let size = maxOverlap; size > 0; size -= 1) {
+      if (current.slice(current.length - size) === chunk.slice(0, size)) {
+        return chunk.slice(size);
+      }
+    }
+
+    return chunk;
+  }
+
   private onOutput(_src: unknown, args: unknown): void {
     const payload = args as any;
-    const chunk = String(payload?.newOutput ?? payload?.data ?? payload?.output ?? payload?.chunk ?? "");
+    const rawChunk = String(payload?.newOutput ?? payload?.data ?? payload?.output ?? payload?.chunk ?? "");
+    const chunk = this.normalizeIncomingOutputChunk(rawChunk);
     if (!chunk) return;
 
     this.outputEventsCount++;

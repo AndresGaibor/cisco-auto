@@ -3,16 +3,22 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { BridgePathLayout } from './shared/path-layout';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
-const TEST_ROOT = '/tmp/consumer-test-' + Math.random().toString(36).slice(2);
+function makeTestRoot(prefix: string): string {
+  return mkdtempSync(join(tmpdir(), prefix));
+}
+
+let TEST_ROOT: string;
 
 describe('DurableNdjsonConsumer', () => {
   let paths: BridgePathLayout;
 
   beforeEach(() => {
+    TEST_ROOT = makeTestRoot('file-bridge-consumer-');
     mkdirSync(TEST_ROOT, { recursive: true });
     paths = new BridgePathLayout(TEST_ROOT);
   });

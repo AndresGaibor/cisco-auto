@@ -1,15 +1,21 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { BridgePathLayout } from './shared/path-layout';
 import { join } from 'node:path';
 import { SharedResultWatcher } from './shared-result-watcher.js';
 
-const TEST_ROOT = '/tmp/watcher-test-' + Math.random().toString(36).slice(2);
+function makeTestRoot(prefix: string): string {
+  return mkdtempSync(join(tmpdir(), prefix));
+}
+
+let TEST_ROOT: string;
 
 describe('SharedResultWatcher', () => {
   let paths: BridgePathLayout;
 
   beforeEach(() => {
+    TEST_ROOT = makeTestRoot('file-bridge-watcher-');
     mkdirSync(TEST_ROOT, { recursive: true });
     paths = new BridgePathLayout(TEST_ROOT);
     mkdirSync(paths.resultsDir(), { recursive: true });
@@ -98,6 +104,47 @@ describe('SharedResultWatcher', () => {
       writeFileSync(resultFile, JSON.stringify({ status: 'completed' }));
 
       expect(resultFile).toBeDefined();
+    });
+
+    test('detects existing result files after registration', async () => {
+      const resultFile = join(paths.resultsDir(), 'cmd-1.json');
+      writeFileSync(resultFile, JSON.stringify({ status: 'completed' }));
+
+      const watcher = new SharedResultWatcher(paths.resultsDir());
+      let called = false;
+
+      watcher.watch('cmd-1', () => {
+        called = true;
+      });
+
+      const deadline = Date.now() + 1000;
+      while (!called && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+
+      watcher.destroy();
+      expect(called).toBe(true);
+    });
+
+    test('calls callback only once when watch and polling see same file', async () => {
+      const watcher = new SharedResultWatcher(paths.resultsDir());
+      let calls = 0;
+
+      watcher.watch('cmd-2', () => {
+        calls++;
+      });
+
+      writeFileSync(join(paths.resultsDir(), 'cmd-2.json'), JSON.stringify({ status: 'completed' }));
+
+      const deadline = Date.now() + 1000;
+      while (calls === 0 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      watcher.destroy();
+
+      expect(calls).toBe(1);
     });
 
     test('should match file patterns', () => {

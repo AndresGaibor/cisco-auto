@@ -68,4 +68,47 @@ describe("response-parser", () => {
     expect(parsed.promptAfter).toBe("SW-SRV-DIST#");
     expect(parsed.modeAfter).toBe("privileged-exec");
   });
+
+  test("no recorta un fallo semántico aunque el comando visible sea end", () => {
+    const parser = createResponseParser();
+
+    const errorText = [
+      "SW-SRV-DIST(config-if-range)#channel-group 7 mode active",
+      "                                             ^",
+      "% Invalid input detected at '^' marker.",
+    ].join("\n");
+
+    const parsed = parser.parseCommandResponse(
+      {
+        ok: false,
+        output: "end\nSW-SRV-DIST#",
+        raw: "end\nSW-SRV-DIST#",
+        result: {
+          ok: false,
+          rawOutput: errorText,
+          raw: errorText,
+          output: errorText,
+          status: 1,
+          code: "IOS_INVALID_INPUT",
+          error: errorText,
+          session: {
+            mode: "privileged-exec",
+            prompt: "SW-SRV-DIST#",
+          },
+        },
+        error: errorText,
+        code: "IOS_INVALID_INPUT",
+      },
+      {
+        stepIndex: 0,
+        isHost: false,
+        command: "end",
+      },
+    );
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.status).toBe(1);
+    expect(parsed.raw).toContain("channel-group 7 mode active");
+    expect(parsed.warnings).not.toContain(errorText);
+  });
 });

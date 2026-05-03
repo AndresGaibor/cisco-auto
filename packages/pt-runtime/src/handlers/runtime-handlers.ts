@@ -2,18 +2,13 @@
 // Runtime Handlers - Public registration barrel
 // ============================================================================
 //
-// Este archivo mantiene compatibilidad con el build actual, que usa
-// handlers/runtime-handlers.ts como entrypoint.
-//
 // IMPORTANTE:
-// - Por defecto registra solo handlers estables.
-// - Experimental/omni requieren opt-in explícito vía registerRuntimeHandlers()
-//   o flags globales antes de cargar runtime.js.
+// runtime.js default agora registra apenas handlers estaveis.
+// Experimental/omni foram movidos para runtime-extended.
+//
 // ============================================================================
 
 import type { PtResult } from "../pt-api/pt-results.js";
-
-import { getParser, type ParserFn } from "./parsers/ios-parsers.js";
 
 import {
   runtimeDispatcher,
@@ -33,14 +28,6 @@ import {
 import {
   registerStableRuntimeHandlers,
 } from "./registration/stable-handlers.js";
-
-import {
-  registerExperimentalRuntimeHandlers,
-} from "./registration/experimental-handlers.js";
-
-import {
-  registerOmniRuntimeHandlers,
-} from "./registration/omni-handlers.js";
 
 // ============================================================================
 // Backward-compatible type exports
@@ -84,10 +71,12 @@ export type {
 } from "./deep-inspect.js";
 
 export type {
-  ParserFn,
   HandlerFn,
+} from "./dispatcher.js";
+
+export type {
   RuntimeHandlerRegistrationOptions,
-};
+} from "./registration/runtime-registration.js";
 
 // Runtime result compatibility alias used by some old tests/consumers.
 export type RuntimeHandlerResult = PtResult;
@@ -125,10 +114,7 @@ export {
   HANDLER_MAP,
   getRegisteredTypes,
   getHandler,
-  getParser,
   registerRuntimeHandlers,
   registerRuntimeHandlersFromGlobals,
   registerStableRuntimeHandlers,
-  registerExperimentalRuntimeHandlers,
-  registerOmniRuntimeHandlers,
 };

@@ -1,12 +1,14 @@
 // LabRuntimeManager - Gestor unificado de runtime PT para laboratorios declarativos
 // Fase 5: Unificar runtime PT y file-bridge
 
+import { join } from "node:path";
 import {
   RuntimeGenerator,
   type RuntimeGeneratorConfig,
   assertCatalogLoaded,
 } from "@cisco-auto/pt-runtime";
 import type { FileBridgePort } from "../ports/file-bridge.port.js";
+import { resolvePtDevDir } from "../../system/paths.js";
 
 export interface LabRuntimeStatus {
   runtimeDeployed: boolean;
@@ -23,7 +25,7 @@ export interface LabRuntimeManagerConfig {
 }
 
 const DEFAULT_CONFIG: LabRuntimeManagerConfig = {
-  devDir: process.env.PT_DEV_DIR ?? `${process.env.HOME}/pt-dev`,
+  devDir: resolvePtDevDir(),
   autoDeploy: true,
   autoLoad: true,
 };
@@ -70,7 +72,7 @@ export class LabRuntimeManager {
       throw new Error("FileBridge not available - cannot load runtime in PT");
     }
 
-    const runtimePath = `${this.config.devDir}/runtime.js`;
+    const runtimePath = join(this.config.devDir, "runtime.js").replace(/\\/g, "/");
     await this.bridge.loadRuntimeFromFile(runtimePath);
     this.status.runtimeLoaded = true;
   }

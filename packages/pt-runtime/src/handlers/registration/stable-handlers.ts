@@ -41,8 +41,6 @@ import {
   handleInspectModuleSlots,
 } from "../module/index.js";
 
-import { handleDeepInspect } from "../deep-inspect.js";
-
 import {
   handleInspect,
   handleInspectDeviceFast,
@@ -59,12 +57,21 @@ import { handlePollDeferred } from "../poll-deferred.js";
 import {
   handleExecIos,
   handleConfigIos,
-  handlePing,
   handleExecPc,
   handleReadTerminal,
 } from "../ios/index.js";
 
 let stableHandlersRegistered = false;
+
+function handleRuntimePing(_payload: Record<string, unknown>, deps: any): any {
+  return {
+    ok: true,
+    action: "__ping",
+    pong: true,
+    ts: Date.now(),
+    runtimeLoaded: true,
+  };
+}
 
 /**
  * Registra únicamente handlers operativos/estables.
@@ -76,6 +83,7 @@ let stableHandlersRegistered = false;
  * - exfiltrate*
  * - skipBoot
  * - evaluateInternalVariable
+ * - deepInspect (movido a extended)
  */
 export function registerStableRuntimeHandlers(): void {
   if (stableHandlersRegistered) {
@@ -89,11 +97,9 @@ export function registerStableRuntimeHandlers(): void {
   registerHandler("terminal.native.exec", handleTerminalNativeExec as unknown as HandlerFn);
   registerHandler("__pollDeferred", handlePollDeferred as unknown as HandlerFn);
 
-  // Legacy IOS/terminal handlers.
-  // Se mantienen registrados para compatibilidad con adapters/comandos antiguos.
   registerHandler("configIos", handleConfigIos as unknown as HandlerFn);
   registerHandler("execIos", handleExecIos as unknown as HandlerFn);
-  registerHandler("__ping", handlePing as unknown as HandlerFn);
+  registerHandler("__ping", handleRuntimePing as unknown as HandlerFn);
   registerHandler("execPc", handleExecPc as unknown as HandlerFn);
   registerHandler("readTerminal", handleReadTerminal as unknown as HandlerFn);
 
@@ -132,8 +138,4 @@ export function registerStableRuntimeHandlers(): void {
   registerHandler("hardwareInfo", handleHardwareInfo as unknown as HandlerFn);
   registerHandler("hardwareCatalog", handleHardwareCatalog as unknown as HandlerFn);
   registerHandler("commandLog", handleCommandLog as unknown as HandlerFn);
-
-  // Deep inspect sigue siendo estable porque ya existía como comando de inspección
-  // explícito y no ejecuta evaluación arbitraria.
-  registerHandler("deepInspect", handleDeepInspect as unknown as HandlerFn);
 }

@@ -120,15 +120,57 @@ export function createRuntimeTerminalAdapter(
     return command || null;
   }
 
+  function getLastVisibleCommand(plan: TerminalPlan): string | null {
+    const commands = getVisibleCommandSteps(plan);
+
+    for (let index = commands.length - 1; index >= 0; index -= 1) {
+      const command = String(commands[index]?.command ?? "").trim();
+
+      if (command) {
+        return command;
+      }
+    }
+
+    return null;
+  }
+
+  function getTerminalPlanParseCommand(plan: TerminalPlan): string {
+    return getSingleVisibleCommand(plan) ?? getLastVisibleCommand(plan) ?? "terminal.plan.run";
+  }
+
+  function getTerminalPlanEventStep(plan: TerminalPlan): { kind: "command"; command: string } {
+    return {
+      kind: "command",
+      command: getTerminalPlanParseCommand(plan),
+    };
+  }
+
   function shouldUseNativeExec(plan: TerminalPlan): boolean {
-    const metadata = plan.metadata as { deviceKind?: string } | undefined;
+    const metadata = plan.metadata as {
+      deviceKind?: string;
+      transport?: string;
+      nativeExec?: boolean;
+      experimentalNativeExec?: boolean;
+    } | undefined;
 
     if (metadata?.deviceKind !== "ios") return false;
 
-    const command = getSingleVisibleCommand(plan);
-    if (!command) return false;
-
-    return !command.includes("\n") && !isProbablyConfigChangingCommand(command);
+    /**
+     * terminal.native.exec queda desactivado como ruta default.
+     *
+     * Motivo:
+     * - terminal.plan.run/config está estable.
+     * - terminal.native.exec presentó fallos intermitentes con output vacío
+     *   en comandos read-only repetidos como show version/show running-config.
+     *
+     * Se conserva como opt-in explícito para futuras pruebas, pero no debe
+     * usarse automáticamente por pt cmd.
+     */
+    return (
+      metadata?.transport === "terminal.native.exec" ||
+      metadata?.nativeExec === true ||
+      metadata?.experimentalNativeExec === true
+    );
   }
 
   function buildTerminalTransportFailure(
@@ -364,6 +406,8 @@ export function createRuntimeTerminalAdapter(
     plan: TerminalPlan,
     timeoutMs: number,
   ): Promise<TerminalPortResult | null> {
+    const parseCommand = getTerminalPlanParseCommand(plan);
+    const parseEventStep = getTerminalPlanEventStep(plan);
     const submitTimeoutMs = computeTerminalPlanSubmitTimeoutMs(plan, timeoutMs);
     const submitResult = await bridge.sendCommandAndWait(
       "terminal.plan.run",
@@ -387,7 +431,7 @@ export function createRuntimeTerminalAdapter(
       const parsed = responseParser.parseCommandResponse(submitValue, {
         stepIndex: 0,
         isHost: false,
-        command: "terminal.plan.run",
+        command: parseCommand,
       });
 
       return {
@@ -399,11 +443,7 @@ export function createRuntimeTerminalAdapter(
         modeBefore: parsed.modeBefore,
         modeAfter: parsed.modeAfter,
         events: [
-          responseParser.buildEventFromResponse(
-            parsed,
-            { kind: "command", command: "terminal.plan.run" },
-            0,
-          ),
+          responseParser.buildEventFromResponse(parsed, parseEventStep, 0),
         ],
         warnings: parsed.warnings,
         parsed: parsed.parsed,
@@ -475,7 +515,7 @@ export function createRuntimeTerminalAdapter(
       const parsed = responseParser.parseCommandResponse(pollValue, {
         stepIndex: 0,
         isHost: false,
-        command: "terminal.plan.run",
+        command: parseCommand,
       });
 
       const warnings = [...parsed.warnings];
@@ -490,7 +530,7 @@ export function createRuntimeTerminalAdapter(
         promptAfter: parsed.promptAfter,
         modeBefore: parsed.modeBefore,
         modeAfter: parsed.modeAfter,
-        events: [responseParser.buildEventFromResponse(parsed, { kind: "command", command: "terminal.plan.run" }, 0)],
+        events: [responseParser.buildEventFromResponse(parsed, parseEventStep, 0)],
         warnings,
         parsed: parsed.parsed,
         evidence: buildTimingsEvidence(finalTimings),
@@ -501,7 +541,7 @@ export function createRuntimeTerminalAdapter(
     const parsed = responseParser.parseCommandResponse(submitValue, {
       stepIndex: 0,
       isHost: false,
-      command: "terminal.plan.run",
+      command: parseCommand,
     });
 
     const warnings = [...parsed.warnings];
@@ -516,7 +556,7 @@ export function createRuntimeTerminalAdapter(
       promptAfter: parsed.promptAfter,
       modeBefore: parsed.modeBefore,
       modeAfter: parsed.modeAfter,
-      events: [responseParser.buildEventFromResponse(parsed, { kind: "command", command: "terminal.plan.run" }, 0)],
+      events: [responseParser.buildEventFromResponse(parsed, parseEventStep, 0)],
       warnings,
       parsed: parsed.parsed,
       evidence: buildTimingsEvidence(submitResult.timings),
@@ -546,7 +586,72 @@ export function createRuntimeTerminalAdapter(
       { resolveDeferred: false },
     );
 
-    const parsed = responseParser.parseCommandResponse(normalizeBridgeValue(nativeResult), {
+    let finalTimings: unknown = nativeResult.timings;
+    let nativeValue = normalizeBridgeValue(nativeResult);
+
+    if (isDeferredValue(nativeValue)) {
+      const ticket = nativeValue.ticket;
+      const startedAt = Date.now();
+      const pollTimeoutMs = computeDeferredPollTimeoutMs(plan, timeoutMs);
+      const pollIntervalMs = 300;
+      let pollValue: unknown = null;
+
+      while (Date.now() - startedAt < pollTimeoutMs) {
+        try {
+          const pollResult = await bridge.sendCommandAndWait(
+            "__pollDeferred",
+            { ticket },
+            Math.max(pollTimeoutMs - (Date.now() - startedAt), 1000),
+            { resolveDeferred: false },
+          );
+
+          finalTimings = pollResult.timings;
+          pollValue = normalizeBridgeValue(pollResult);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error ?? "Unknown poll error");
+
+          return buildTerminalDeferredFailure(
+            "TERMINAL_NATIVE_DEFERRED_POLL_TIMEOUT",
+            `__pollDeferred no respondió en ${pollTimeoutMs}ms para ticket ${ticket}: ${message}`,
+            {
+              phase: "terminal-native-poll",
+              ticket,
+              pollTimeoutMs,
+              elapsedMs: Date.now() - startedAt,
+              error: message,
+            },
+          );
+        }
+
+        if (!isStillPending(pollValue)) {
+          nativeValue = pollValue;
+          break;
+        }
+
+        const remainingMs = pollTimeoutMs - (Date.now() - startedAt);
+        if (remainingMs <= 0) {
+          break;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, Math.min(pollIntervalMs, remainingMs)));
+      }
+
+      if (isStillPending(nativeValue)) {
+        return buildTerminalDeferredFailure(
+          "TERMINAL_NATIVE_DEFERRED_STALLED",
+          `terminal.native.exec creó el ticket ${ticket}, pero el job siguió pendiente después de ${pollTimeoutMs}ms.`,
+          {
+            phase: "terminal-native-poll",
+            ticket,
+            pollTimeoutMs,
+            elapsedMs: Date.now() - startedAt,
+            pollValue: nativeValue,
+          },
+        );
+      }
+    }
+
+    const parsed = responseParser.parseCommandResponse(nativeValue, {
       stepIndex: 0,
       isHost: false,
       command,
@@ -567,7 +672,7 @@ export function createRuntimeTerminalAdapter(
       events: [responseParser.buildEventFromResponse(parsed, { kind: "command", command }, 0)],
       warnings,
       parsed: parsed.parsed,
-      evidence: buildTimingsEvidence(nativeResult.timings),
+      evidence: buildTimingsEvidence(finalTimings),
       confidence: !parsed.ok || parsed.status !== 0 ? 0 : warnings.length > 0 ? 0.8 : 1,
     };
   }

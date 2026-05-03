@@ -1,11 +1,8 @@
 import { describe, expect, test, vi } from "bun:test";
-import { registerStableRuntimeHandlers } from "../../handlers/registration/stable-handlers.js";
-import { runtimeDispatcher } from "../../handlers/dispatcher.js";
+import { handlePollDeferred } from "../../handlers/poll-deferred.js";
 
 describe("__pollDeferred", () => {
   test("responde el estado del job diferido registrado", () => {
-    registerStableRuntimeHandlers();
-
     const api = {
       dprint: vi.fn(),
       getJobState: vi.fn().mockReturnValue({
@@ -19,7 +16,7 @@ describe("__pollDeferred", () => {
       }),
     } as any;
 
-    const result = runtimeDispatcher({ type: "__pollDeferred", ticket: "ticket-1" }, api);
+    const result = handlePollDeferred({ ticket: "ticket-1" }, api as any);
 
     expect(api.getJobState).toHaveBeenCalledWith("ticket-1");
     expect(result).toMatchObject({
@@ -31,8 +28,6 @@ describe("__pollDeferred", () => {
   });
 
   test("incluye evidencia de depuración y pasos", () => {
-    registerStableRuntimeHandlers();
-
     const api = {
       dprint: vi.fn(),
       getJobState: vi.fn().mockReturnValue({
@@ -53,12 +48,63 @@ describe("__pollDeferred", () => {
       }),
     } as any;
 
-    const result = runtimeDispatcher({ type: "__pollDeferred", ticket: "ticket-1" }, api);
+    const result = handlePollDeferred({ ticket: "ticket-1" }, api as any);
 
     expect(result).toMatchObject({
       done: false,
       debug: ["trace-1"],
       stepResults: expect.any(Array),
     });
+  });
+
+  test("preserva el resultado fallido completo al finalizar", () => {
+    const raw = [
+      "SW-SRV-DIST(config-if-range)#channel-group 7 mode active",
+      "                                             ^",
+      "% Invalid input detected at '^' marker.",
+      "",
+      "[cleanup]",
+      "end",
+      "SW-SRV-DIST#",
+    ].join("\n");
+
+    const api = {
+      dprint: vi.fn(),
+      getJobState: vi.fn().mockReturnValue({
+        finished: true,
+        state: "error",
+        error: raw,
+        errorCode: "IOS_INVALID_INPUT",
+        outputBuffer: "end\nSW-SRV-DIST#",
+        result: {
+          ok: false,
+          raw,
+          rawOutput: raw,
+          output: raw,
+          status: 1,
+          error: "SW-SRV-DIST(config-if-range)#channel-group 7 mode active\n                                             ^\n% Invalid input detected at '^' marker.",
+          code: "IOS_INVALID_INPUT",
+          session: {
+            mode: "privileged-exec",
+            prompt: "SW-SRV-DIST#",
+            paging: false,
+            awaitingConfirm: false,
+          },
+        },
+        lastPrompt: "SW-SRV-DIST#",
+        lastMode: "privileged-exec",
+      }),
+    } as any;
+
+    const result = handlePollDeferred({ ticket: "ticket-2" }, api as any);
+
+    expect(result).toMatchObject({
+      done: true,
+      ok: false,
+      code: "IOS_INVALID_INPUT",
+      errorCode: "IOS_INVALID_INPUT",
+    });
+    expect(String((result as any).raw || "")).toContain("% Invalid input detected");
+    expect(String((result as any).output || "")).toContain("% Invalid input detected");
   });
 });

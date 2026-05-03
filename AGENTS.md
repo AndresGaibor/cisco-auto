@@ -44,8 +44,11 @@ bun run pt doctor
 bun run pt runtime <status|logs|releases|rollback|reload>
 bun run pt device <list|add|get|interactive|module|ports|move|remove>
 bun run pt link <add|list|remove|suggest|verify|doctor>
-bun run pt cmd <device> "<command>"
-bun run pt cmd --config <device> "<ios config line>" ...
+bun run pt cmd <device> "<command>"...
+  # multilínea detectada como config:
+  pt cmd R1 "interface g0/0" "no shutdown"
+  # --config es DEPRECADO (detección automática ahora funciona):
+  bun run pt cmd --config <device> "<ios config line>" ...
 bun run pt set host <device> <ip|dhcp>
 bun run pt verify <ping|vlan>
 bun run pt omni <env|scope|process|physical|genome|port|running-config|item|correct|time|set|list|show|run|raw>

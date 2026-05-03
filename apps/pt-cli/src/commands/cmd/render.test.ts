@@ -36,6 +36,46 @@ describe("toCmdCliResult", () => {
     });
     expect(result.rawOutput).toBe("raw output");
   });
+
+  test("deja output limpio para errores IOS y rawOutput completo", () => {
+    const result = toCmdCliResult({
+      ok: false,
+      action: "ios.exec",
+      device: "SW-SRV-DIST",
+      deviceKind: "ios",
+      command: "interface range f0/21 - 22\nchannel-group 7 mode active",
+      output: [
+        "channel-group 7 mode active",
+        "                                           ^",
+        "% Invalid input detected at '^' marker.",
+        "",
+        "[cleanup]",
+        "end",
+      ].join("\n"),
+      rawOutput: [
+        "channel-group 7 mode active",
+        "                                           ^",
+        "% Invalid input detected at '^' marker.",
+        "",
+        "[cleanup]",
+        "end",
+        "SW-SRV-DIST#",
+        "%SYS-5-CONFIG_I: Configured from console by console",
+      ].join("\n"),
+      status: 1,
+      warnings: [],
+      error: {
+        code: "IOS_INVALID_INPUT",
+        message: "channel-group 7 mode active\n                                           ^\n% Invalid input detected at '^' marker.",
+      },
+    } as never);
+
+    expect(result.ok).toBe(false);
+    expect(result.output).toContain("channel-group 7 mode active");
+    expect(result.output).toContain("% Invalid input detected");
+    expect(result.rawOutput).toContain("[cleanup]");
+    expect(result.rawOutput).toContain("%SYS-5-CONFIG_I");
+  });
 });
 
 describe("printCmdResult", () => {

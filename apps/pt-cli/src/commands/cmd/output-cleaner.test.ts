@@ -54,4 +54,39 @@ describe("cleanCmdOutput", () => {
 
     expect(result.output).toContain("ipconfig");
   });
+
+  test("remueve eco IOS cuando viene precedido por prompt", () => {
+    const result = cleanCmdOutput({
+      deviceKind: "ios",
+      command: "show version",
+      output: "SW-SRV-DIST>show version\nCisco IOS Software\nSW-SRV-DIST>",
+    });
+
+    expect(result.output).toBe("Cisco IOS Software");
+    expect(result.rawOutput).toContain("SW-SRV-DIST>show version");
+  });
+
+  test("preserva eco del comando en errores IOS cuando preserveCommandEcho=true", () => {
+    const result = cleanCmdOutput({
+      deviceKind: "ios",
+      command: "channel-group 7 mode active",
+      preserveCommandEcho: true,
+      output: [
+        "channel-group 7 mode active",
+        "                                           ^",
+        "% Invalid input detected at '^' marker.",
+        "",
+        "[cleanup]",
+        "end",
+        "SW-SRV-DIST#",
+        "%SYS-5-CONFIG_I: Configured from console by console",
+      ].join("\n"),
+    });
+
+    expect(result.output).toContain("channel-group 7 mode active");
+    expect(result.output).toContain("^");
+    expect(result.output).toContain("% Invalid input detected");
+    expect(result.output).not.toContain("%SYS-5-CONFIG_I");
+    expect(result.warnings).not.toContain("Se filtró el eco del comando (1 línea/s).");
+  });
 });

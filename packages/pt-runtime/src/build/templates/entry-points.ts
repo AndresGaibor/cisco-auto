@@ -50,7 +50,7 @@ function main() {
         deadLetterDir:          devDir + "/dead-letter",
         logsDir:                devDir + "/logs",
         commandsTraceDir:       devDir + "/logs/commands",
-        pollIntervalMs:         100,
+        pollIntervalMs:         250,
         deferredPollIntervalMs: 200,
         heartbeatIntervalMs:    5000,
         demoRuntime:            false,
@@ -76,7 +76,20 @@ function main() {
       if (_g.__ptRuntimeLoaded === true && typeof dprint === "function") {
         dprint("[main] runtime-loaded flag = true");
       }
-      if (typeof dprint === "function") dprint("[main] kernel booted — runtime hot-reload active");
+      var kernelRunning = false;
+      try {
+        kernelRunning = !!(kernel && typeof kernel.isRunning === "function" && kernel.isRunning());
+      } catch(e) {
+        kernelRunning = false;
+      }
+
+      if (typeof dprint === "function") {
+        if (kernelRunning) {
+          dprint("[main] kernel booted — runtime active");
+        } else {
+          dprint("[main] kernel boot did not reach running state");
+        }
+      }
     } else {
       if (typeof dprint === "function") dprint("[main] ERROR: createKernel not found");
     }

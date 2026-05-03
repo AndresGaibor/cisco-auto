@@ -80,7 +80,7 @@ describe("terminal-plan-builder", () => {
       "no shutdown",
       "end",
     ]);
-    expect(plan.targetMode).toBe("global-config");
+    expect(plan.targetMode).toBe("privileged-exec");
   });
 
   test("buildUniversalTerminalPlan inserta enable para show IOS sin desactivar pager", () => {
@@ -142,5 +142,123 @@ describe("terminal-plan-builder", () => {
       command: "show running-config",
       timeout: 9000,
     });
+  });
+
+  test("envuelve hostname en configure terminal/end automáticamente", () => {
+    const plan = buildUniversalTerminalPlan({
+      id: "plan-hostname",
+      device: "SW1",
+      command: "hostname SW1-CORE",
+      deviceKind: "ios",
+      timeoutMs: 12000,
+    });
+
+    expect(plan.metadata?.autoConfig).toBe(true);
+    expect(plan.targetMode).toBe("privileged-exec");
+    expect(plan.steps.map((step: TerminalPlanStep) => step.command ?? step.expectMode)).toEqual([
+      "privileged-exec",
+      "configure terminal",
+      "hostname SW1-CORE",
+      "end",
+    ]);
+  });
+
+  test("envuelve configuración de interfaz automáticamente", () => {
+    const plan = buildUniversalTerminalPlan({
+      id: "plan-iface",
+      device: "SW1",
+      command: "interface f0/1\nswitchport mode access\nno shutdown",
+      deviceKind: "ios",
+      timeoutMs: 12000,
+    });
+
+    expect(plan.metadata?.autoConfig).toBe(true);
+    expect(plan.steps.map((step: TerminalPlanStep) => step.command ?? step.expectMode)).toEqual([
+      "privileged-exec",
+      "configure terminal",
+      "interface f0/1",
+      "switchport mode access",
+      "no shutdown",
+      "end",
+    ]);
+  });
+
+  test("no envuelve show version", () => {
+    const plan = buildUniversalTerminalPlan({
+      id: "plan-show-version",
+      device: "SW1",
+      command: "show version",
+      deviceKind: "ios",
+      timeoutMs: 12000,
+    });
+
+    expect(plan.metadata?.autoConfig).toBe(false);
+    expect(plan.steps.map((step: TerminalPlanStep) => step.command ?? step.expectMode)).toEqual([
+      "show version",
+    ]);
+  });
+
+  test("show running-config sigue usando privileged exec sin configure terminal", () => {
+    const plan = buildUniversalTerminalPlan({
+      id: "plan-show-run",
+      device: "SW1",
+      command: "show running-config",
+      deviceKind: "ios",
+      timeoutMs: 12000,
+    });
+
+    expect(plan.metadata?.autoConfig).toBe(false);
+    expect(plan.steps.map((step: TerminalPlanStep) => step.command ?? step.expectMode)).toEqual([
+      "privileged-exec",
+      "show running-config",
+    ]);
+  });
+
+  test("no duplica configure terminal/end cuando el comando ya viene envuelto por --config", () => {
+    const plan = buildUniversalTerminalPlan({
+      id: "plan-explicit-config",
+      device: "SW1",
+      command: "configure terminal\nhostname SW1\nend",
+      deviceKind: "ios",
+      timeoutMs: 12000,
+    });
+
+    const commands = plan.steps
+      .map((step: TerminalPlanStep) => step.command)
+      .filter(Boolean);
+
+    expect(commands.filter((cmd) => cmd === "configure terminal")).toHaveLength(1);
+    expect(commands.filter((cmd) => cmd === "end")).toHaveLength(1);
+    expect(plan.metadata?.autoConfig).toBe(false);
+  });
+
+  test("raw mode desactiva auto-config", () => {
+    const plan = buildUniversalTerminalPlan({
+      id: "plan-raw-hostname",
+      device: "SW1",
+      command: "hostname SW1-CORE",
+      deviceKind: "ios",
+      mode: "raw",
+      timeoutMs: 12000,
+    });
+
+    expect(plan.metadata?.autoConfig).toBe(false);
+    expect(plan.steps.map((step: TerminalPlanStep) => step.command ?? step.expectMode)).toEqual([
+      "hostname SW1-CORE",
+    ]);
+  });
+
+  test("host no usa auto-config IOS", () => {
+    const plan = buildUniversalTerminalPlan({
+      id: "plan-host",
+      device: "PC1",
+      command: "ipconfig",
+      deviceKind: "host",
+      timeoutMs: 12000,
+    });
+
+    expect(plan.metadata?.autoConfig).toBeUndefined();
+    expect(plan.targetMode).toBe("host-prompt");
+    expect(plan.steps.map((step: TerminalPlanStep) => step.command)).toEqual(["ipconfig"]);
   });
 });

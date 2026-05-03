@@ -25,12 +25,26 @@ function ptDeviceTypeToString(typeId: number): DeviceState["type"] {
   return map[typeId] ?? "generic";
 }
 
+interface ListDevicesOptions {
+  includePorts?: boolean;
+  includeLinks?: boolean;
+  deep?: boolean;
+}
+
 interface ListDevicesResultWithLinks {
   devices?: DeviceState[];
   connectionsByDevice?: Record<string, ConnectionInfo[]>;
   unresolvedLinks?: UnresolvedLink[];
   count?: number;
   ptLinkDebug?: LinkStats;
+  meta?: {
+    mode?: string;
+    includePorts?: boolean;
+    includeLinks?: boolean;
+    deep?: boolean;
+    deviceCount?: number;
+    linkCount?: number;
+  };
 }
 
 export class TopologyQueryService {
@@ -68,12 +82,23 @@ export class TopologyQueryService {
     return this.cache.isMaterialized() ? this.cache.getSnapshot() : null;
   }
 
-  async listDevices(filter?: string | number | string[]): Promise<{
+  async listDevices(
+    filter?: string | number | string[],
+    options?: ListDevicesOptions,
+  ): Promise<{
     devices: DeviceState[];
     connectionsByDevice: Record<string, ConnectionInfo[]>;
     unresolvedLinks: UnresolvedLink[];
     count: number;
     ptLinkDebug?: LinkStats;
+    meta?: {
+      mode?: string;
+      includePorts?: boolean;
+      includeLinks?: boolean;
+      deep?: boolean;
+      deviceCount?: number;
+      linkCount?: number;
+    };
   }> {
     const filterDevices = (devices: DeviceState[]) => {
       if (typeof filter === "number") {
@@ -104,9 +129,17 @@ export class TopologyQueryService {
     const cachedDevices = removeNonCreatable(this.cache.getDevices());
 
     try {
+      const payload = {
+        id: this.generateId(),
+        filter,
+        includePorts: options?.includePorts === true,
+        includeLinks: options?.includeLinks === true,
+        deep: options?.deep === true,
+      };
+
       const result = await this.primitivePort.runPrimitive(
         "topology.list",
-        { filter, id: this.generateId() },
+        payload,
         { timeoutMs: cachedDevices.length > 0 ? 15000 : 60000 },
       );
 
@@ -115,13 +148,22 @@ export class TopologyQueryService {
 
       if (Array.isArray(value)) {
         const devices = filterDevices(removeNonCreatable(value as DeviceState[]));
+        const mode = options?.deep ? "deep" : options?.includeLinks ? "links" : options?.includePorts ? "ports" : "safe";
         return {
           devices,
             connectionsByDevice: {},
             unresolvedLinks: [],
             count: devices.length,
+            meta: {
+              mode,
+              includePorts: options?.includePorts === true,
+              includeLinks: options?.includeLinks === true,
+              deep: options?.deep === true,
+              deviceCount: devices.length,
+              linkCount: 0,
+            },
           };
-        }
+      }
 
         if (value && typeof value === "object") {
           const typed = value as ListDevicesResultWithLinks;
@@ -145,6 +187,17 @@ export class TopologyQueryService {
             unresolvedLinks: typed.unresolvedLinks ?? [],
             count: typeof typed.count === "number" ? typed.count : devices.length,
             ptLinkDebug: typed.ptLinkDebug,
+            meta: typed.meta ?? (() => {
+              const mode = options?.deep ? "deep" : options?.includeLinks ? "links" : options?.includePorts ? "ports" : "safe";
+              return {
+                mode,
+                includePorts: options?.includePorts === true,
+                includeLinks: options?.includeLinks === true,
+                deep: options?.deep === true,
+                deviceCount: devices.length,
+                linkCount: 0,
+              };
+            })(),
           };
         }
       }
@@ -179,11 +232,21 @@ export class TopologyQueryService {
       }
 
       const devices = filterDevices(cachedDevices);
+      const mode = options?.deep ? "deep" : options?.includeLinks ? "links" : options?.includePorts ? "ports" : "safe";
+      const meta = {
+        mode,
+        includePorts: options?.includePorts === true,
+        includeLinks: options?.includeLinks === true,
+        deep: options?.deep === true,
+        deviceCount: devices.length,
+        linkCount: cachedLinks.length,
+      };
       return {
         devices,
         connectionsByDevice,
         unresolvedLinks: [],
         count: devices.length,
+        meta,
       };
     }
 

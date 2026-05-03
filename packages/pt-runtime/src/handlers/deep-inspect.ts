@@ -78,7 +78,7 @@ export function handleDeepInspect(payload: DeepInspectPayload, deps: HandlerDeps
     // 4. Return result, serializing basic types or providing info for objects
     return {
       ok: true,
-      result: serializeResult(result)
+      result: deepInspectSerializeResult(result)
     };
 
   } catch (error: any) {
@@ -137,7 +137,7 @@ function resolvePath(root: any, path: string): any {
   return current;
 }
 
-function serializeResult(val: any): any {
+function deepInspectSerializeResult(val: any): any {
   if (val === null || val === undefined) return null;
   if (typeof val !== 'object') return val;
   

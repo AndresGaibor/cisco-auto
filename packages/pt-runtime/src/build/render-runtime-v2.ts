@@ -8,6 +8,7 @@ import { sanitizeTypeScriptHelperGlobalThis } from "./sanitize-typescript-helper
 import { assertJavaScriptSyntaxOrThrow } from "./syntax-assert.js";
 import { assertNoDuplicateTopLevelSymbols } from "./top-level-symbols.js";
 import { tslibHelpersTemplate } from "./templates/index.js";
+import { toPtRuntimePathLiteral } from "./pt-paths.js";
 
 export interface RenderRuntimeV2Options {
   srcDir: string;
@@ -195,11 +196,12 @@ export async function renderRuntimeV2(options: RenderRuntimeV2Options): Promise<
 
   reportPtSafeValidation("render-runtime-v2", validation);
 
-  const devDirLiteral = options.injectDevDir ? JSON.stringify(options.injectDevDir) : 'DEV_DIR + "/pt-dev"';
+  const devDirLiteral = options.injectDevDir
+    ? toPtRuntimePathLiteral(options.injectDevDir)
+    : '"/pt-dev"';
   let output = `
 // PT Runtime - Generated from TypeScript via AST pipeline V2
-// Do not edit directly - regenerate with: bun run build:runtime-v2
-// Generated at: ${new Date().toISOString()}
+// Do not edit directly - regenerate with: bun run pt build
 ${assembleRuntimeOutput(code, devDirLiteral)}`;
 
   assertJavaScriptSyntaxOrThrow("runtime.js after assembleRuntimeOutput", output);
@@ -227,11 +229,12 @@ export function renderRuntimeV2Sync(options: RenderRuntimeV2Options): string {
 
   reportPtSafeValidation("render-runtime-v2 (sync)", validation);
 
-  const devDirLiteral = options.injectDevDir ? JSON.stringify(options.injectDevDir) : 'DEV_DIR + "/pt-dev"';
+  const devDirLiteral = options.injectDevDir
+    ? toPtRuntimePathLiteral(options.injectDevDir)
+    : '"/pt-dev"';
   let output = `
 // PT Runtime - Generated from TypeScript via AST pipeline V2
-// Do not edit directly - regenerate with: bun run build:runtime-v2
-// Generated at: ${new Date().toISOString()}
+// Do not edit directly - regenerate with: bun run pt build
 ${assembleRuntimeOutput(code, devDirLiteral)}`;
 
   assertJavaScriptSyntaxOrThrow("runtime.js after assembleRuntimeOutput (sync)", output);

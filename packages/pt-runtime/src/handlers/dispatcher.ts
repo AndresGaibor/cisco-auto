@@ -93,7 +93,12 @@ export function runtimeDispatcher(
     const result = handler(payload, api);
     if (result && typeof (result as unknown as { then: unknown }).then === "function") {
       api.dprint(`[runtime:${type}] result is PROMISE (async handler)`);
-      return result;
+      return {
+        ok: false,
+        error: "Runtime handler returned Promise; handlers must be synchronous in Packet Tracer runtime",
+        code: "ASYNC_HANDLER_NOT_SUPPORTED",
+        source: "synthetic",
+      } as RuntimeResult;
     }
     const isDeferred = result && "deferred" in result && (result as { deferred?: boolean }).deferred === true;
     api.dprint(`[runtime:${type}] result ok=${result ? result.ok : "null"} deferred=${isDeferred}`);

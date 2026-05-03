@@ -19,6 +19,49 @@ describe("cmd --config", () => {
     ]);
   });
 
+  test("mantiene show version sin comillas como un solo comando", () => {
+    expect(
+      __test__.readCommandsFromOptions(
+        { config: false },
+        ["show", "version"],
+      ),
+    ).toEqual(["show version"]);
+  });
+
+  test("mantiene show version con comillas como un solo comando", () => {
+    expect(
+      __test__.readCommandsFromOptions(
+        { config: false },
+        ["show version"],
+      ),
+    ).toEqual(["show version"]);
+  });
+
+  test("trata argumentos config encadenados como comandos separados", () => {
+    expect(
+      __test__.readCommandsFromOptions(
+        { config: false },
+        ["interface f0/6", "description AUTO-CONFIG-TEST", "no shutdown"],
+      ),
+    ).toEqual([
+      "interface f0/6",
+      "description AUTO-CONFIG-TEST",
+      "no shutdown",
+    ]);
+  });
+
+  test("permite varios comandos show con argumentos entre comillas", () => {
+    expect(
+      __test__.readCommandsFromOptions(
+        { config: false },
+        ["show version", "show ip interface brief"],
+      ),
+    ).toEqual([
+      "show version",
+      "show ip interface brief",
+    ]);
+  });
+
   test("buildConfigCommand no concatena subcomandos IOS", () => {
     const command = __test__.buildConfigCommand(
       [

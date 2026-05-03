@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
+  mkdtempSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -8,12 +9,13 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { createQueueClaim } from "../pt/kernel/queue-claim";
 import { createQueueIndex } from "../pt/kernel/queue-index";
 import { createQueueDiscovery } from "../pt/kernel/queue-discovery";
 import { createDeadLetter } from "../pt/kernel/dead-letter";
 
-const TEST_ROOT = "/tmp/queue-claim-test-" + Math.random().toString(36).slice(2);
+let TEST_ROOT = "";
 
 function buildFm() {
   return {
@@ -63,7 +65,7 @@ describe("queue-claim", () => {
   const originalDprint = (globalThis as any).dprint;
 
   beforeEach(() => {
-    mkdirSync(TEST_ROOT, { recursive: true });
+    TEST_ROOT = mkdtempSync(join(tmpdir(), "queue-claim-test-"));
     (globalThis as any).fm = buildFm();
     (globalThis as any).dprint = () => {};
   });

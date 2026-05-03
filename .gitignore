@@ -120,3 +120,8 @@ skills-lock.json
 *.pkz
 *.ptdump.json
 *.runtime-dump.json
+
+# Validation reports (large files)
+.pt-validation-reports/
+.pt-review/
+pbcopy

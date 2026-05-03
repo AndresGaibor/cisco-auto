@@ -185,6 +185,7 @@ export async function executeTerminalCommand(
 
   const pagerHandler = createPagerHandler({
     maxAdvances: options.maxPagerAdvances ?? 50,
+    enabled: options.autoAdvancePager !== false,
   });
 
   const confirmHandler = createConfirmHandler({

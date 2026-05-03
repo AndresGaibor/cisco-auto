@@ -22,9 +22,11 @@
 import * as pc from "picocolors";
 import { readFileSync, existsSync } from "fs";
 import { readdir, unlink } from "node:fs/promises";
+import { join } from "node:path";
 import { createDefaultPTController } from "../src/controller/index.js";
 import { buildTrunkCommands, buildSshCommands } from '@cisco-auto/ios-domain';
 import type { DeviceState } from "../src/types/index.js";
+import { resolveDevDir } from "../src/build/dev-dir.js";
 
 // ============================================================================
 // Tipos de Configuración Dinámica
@@ -220,17 +222,17 @@ async function waitForDeviceNames(controller: ReturnType<typeof createDefaultPTC
 }
 
 async function clearBridgeQueue(): Promise<void> {
-  const ptDevDir = process.env.PT_DEV_DIR ?? `${process.env.HOME ?? ""}/pt-dev`;
+  const ptDevDir = resolveDevDir();
   const dirs = [
-    `${ptDevDir}/commands`,
-    `${ptDevDir}/in-flight`,
-    `${ptDevDir}/results`,
+    join(ptDevDir, "commands"),
+    join(ptDevDir, "in-flight"),
+    join(ptDevDir, "results"),
   ];
 
   for (const dir of dirs) {
     try {
       const entries = await readdir(dir);
-      await Promise.all(entries.filter((entry) => entry.endsWith('.json')).map((entry) => unlink(`${dir}/${entry}`)));
+      await Promise.all(entries.filter((entry) => entry.endsWith('.json')).map((entry) => unlink(join(dir, entry))));
     } catch {
       // Ignore missing directories or cleanup errors; we only want a best-effort reset.
     }

@@ -3,18 +3,25 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdirSync, rmSync, readFileSync, statSync } from 'node:fs';
+import { mkdirSync, rmSync, readFileSync, statSync, mkdtempSync } from 'node:fs';
 import { BridgePathLayout } from './shared/path-layout';
 import { EventLogWriter } from './event-log-writer';
 import type { BridgeEvent } from './shared/protocol';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-const TEST_ROOT = '/tmp/event-log-writer-test-' + Math.random().toString(36).slice(2);
+function makeTestRoot(prefix: string): string {
+  return mkdtempSync(join(tmpdir(), prefix));
+}
+
+let TEST_ROOT: string;
 
 describe('EventLogWriter', () => {
   let paths: BridgePathLayout;
   let writer: EventLogWriter;
 
   beforeEach(() => {
+    TEST_ROOT = makeTestRoot('file-bridge-event-log-');
     mkdirSync(TEST_ROOT, { recursive: true });
     paths = new BridgePathLayout(TEST_ROOT);
     writer = new EventLogWriter(paths);

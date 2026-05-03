@@ -100,10 +100,8 @@ export function generateCatalogAsset(config: CatalogGeneratorConfig): GeneratedC
     );
   }
 
-  const buildTimestamp = new Date().toISOString();
   const header = `// PT Catalog - Generated from TypeScript via AST pipeline
-// Do not edit directly — regenerate with: bun run build:catalog
-// Generated at: ${buildTimestamp}
+// Do not edit directly — regenerate with: bun run pt build
 `;
 
   const fullCode = header + assembleCatalogOutput(code);

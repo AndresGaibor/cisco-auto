@@ -5,8 +5,11 @@
 import type { CapabilityRunResult, EnvironmentFingerprint } from "./capability-types.js";
 import * as fs from "fs";
 import * as path from "path";
+import { resolvePtDevDir } from "../system/paths.js";
 
-const LEDGER_DIR = process.env.OMNI_LEDGER_DIR ?? path.join(process.env.HOME ?? ".", "pt-dev", "omni", "ledger");
+const LEDGER_DIR = process.env.OMNI_LEDGER_DIR
+  ? path.resolve(process.env.OMNI_LEDGER_DIR)
+  : path.join(resolvePtDevDir(), "omni", "ledger");
 const RUNS_DIR = path.join(LEDGER_DIR, "runs");
 const INDEX_FILE = path.join(LEDGER_DIR, "index.ndjson");
 

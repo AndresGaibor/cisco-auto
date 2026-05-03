@@ -25,4 +25,52 @@ describe("extractCommandOutput", () => {
     );
     expect(result.raw).toContain("%LINK-3-UPDOWN");
   });
+
+  test("usa solo el último bloque cuando eventOutput trae dos ejecuciones del mismo comando", () => {
+    const result = extractCommandOutput({
+      command: "show version",
+      sessionKind: "ios",
+      promptBefore: "SW-SRV-DIST>",
+      promptAfter: "SW-SRV-DIST>",
+      eventOutput: [
+        "SW-SRV-DIST>show version",
+        "OLD VERSION OUTPUT",
+        "SW-SRV-DIST>",
+        "SW-SRV-DIS  show version",
+        "NEW VERSION OUTPUT",
+        "SW-SRV-DIST>",
+      ].join("\n"),
+      snapshotDelta: "",
+      commandEndedSeen: true,
+    });
+
+    expect(result.raw).toContain("NEW VERSION OUTPUT");
+    expect(result.raw).not.toContain("OLD VERSION OUTPUT");
+    expect(result.output).toContain("NEW VERSION OUTPUT");
+    expect(result.output).not.toContain("OLD VERSION OUTPUT");
+  });
+
+  test("puede cortar snapshotDelta cuando eventOutput no trae bloque confiable", () => {
+    const result = extractCommandOutput({
+      command: "show running-config",
+      sessionKind: "ios",
+      promptBefore: "SW-SRV-DIST#",
+      promptAfter: "SW-SRV-DIST#",
+      eventOutput: "",
+      snapshotDelta: [
+        "SW-SRV-DIST#show running-config",
+        "OLD CONFIG",
+        "SW-SRV-DIST#",
+        "SW-SRV-DIST#  show running-config",
+        "NEW CONFIG",
+        "SW-SRV-DIST#",
+      ].join("\n"),
+      commandEndedSeen: true,
+    });
+
+    expect(result.raw).toContain("NEW CONFIG");
+    expect(result.raw).not.toContain("OLD CONFIG");
+    expect(result.output).toContain("NEW CONFIG");
+    expect(result.output).not.toContain("OLD CONFIG");
+  });
 });

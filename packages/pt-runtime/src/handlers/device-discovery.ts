@@ -8,12 +8,38 @@ import type { ConnectionInfo } from "../domain";
 import { collectLiveLinks } from "../domain/live-link";
 import { composeDeviceListing } from "./device-listing";
 
+function bool(value: unknown): boolean {
+  return value === true || value === "true" || value === 1 || value === "1";
+}
+
+export interface ListDevicesOptions {
+  includePorts: boolean;
+  includeLinks: boolean;
+  deep: boolean;
+}
+
+export function getListDeviceOptions(payload: unknown): ListDevicesOptions {
+  const p = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+
+  const deep = bool(p.deep);
+  const includeLinks = deep || bool(p.includeLinks);
+  const includePorts = deep || includeLinks || bool(p.includePorts);
+
+  return {
+    includePorts,
+    includeLinks,
+    deep,
+  };
+}
+
 /**
  * Payload para listar todos los dispositivos en la red.
- * Incluye información de puertos, conexiones, y estado de links.
  */
 export interface ListDevicesPayload {
   type: "listDevices";
+  includePorts?: boolean;
+  includeLinks?: boolean;
+  deep?: boolean;
 }
 
 /**
@@ -65,32 +91,43 @@ export type ListDevicesResult = HandlerResult & {
  * List all devices in the network
  */
 export function handleListDevices(
-  _payload: ListDevicesPayload,
+  payload: ListDevicesPayload,
   deps: HandlerDeps,
 ): ListDevicesResult {
   const { getNet, dprint } = deps;
   const net = getNet();
   const count = net.getDeviceCount();
 
-  dprint(`[handler:listDevices] starting deviceCount=${count}`);
+  const options = getListDeviceOptions(payload);
+  const modeLabel = options.deep ? "deep" : options.includeLinks ? "links" : options.includePorts ? "ports" : "safe";
 
-  const portIndex = buildPortOwnerIndex(net, deps);
-  const liveLinks = collectLiveLinks(net);
-  const links = liveLinks.map((link) => ({
-    id: link.id,
-    device1: link.device1,
-    port1: link.port1,
-    device2: link.device2,
-    port2: link.port2,
-    source: "pt" as const,
-    confidence: (link.state === "green" ? "exact" : link.state === "amber" ? "merged" : "unknown") as any,
-    evidence: link.evidence,
-  }));
-  const connectionsByDevice = buildConnectionsByDevice(links);
+  dprint(`[handler:listDevices] starting deviceCount=${count} mode=${modeLabel}`);
 
-  dprint(
-    `[handler:listDevices] liveLinks=${links.length}`,
-  );
+  let liveLinks: any[] = [];
+  let links: any[] = [];
+  let connectionsByDevice: Record<string, ConnectionInfo[]> = {};
+  let portIndex: ReturnType<typeof buildPortOwnerIndex> | null = null;
+
+  if (options.includeLinks) {
+    dprint("[handler:listDevices] collecting liveLinks because includeLinks/deep=true");
+    portIndex = buildPortOwnerIndex(net, deps);
+    liveLinks = collectLiveLinks(net);
+    links = liveLinks.map((link) => ({
+      id: link.id,
+      device1: link.device1,
+      port1: link.port1,
+      device2: link.device2,
+      port2: link.port2,
+      source: "pt" as const,
+      confidence: (link.state === "green" ? "exact" : link.state === "amber" ? "merged" : "unknown") as any,
+      evidence: link.evidence,
+    }));
+    connectionsByDevice = buildConnectionsByDevice(links);
+
+    dprint(`[handler:listDevices] liveLinks=${links.length}`);
+  } else {
+    dprint("[handler:listDevices] skip liveLinks in safe mode");
+  }
 
   const ptLinkDebug = {
     getLinkCountResult: typeof net.getLinkCount === "function" ? net.getLinkCount() : 0,
@@ -107,6 +144,7 @@ export function handleListDevices(
     net,
     connectionsByDevice,
     portIndex,
+    includePorts: options.includePorts,
   });
 
   dprint(`[handler:listDevices] SUCCESS returned ${devices.length} devices`);
@@ -118,5 +156,13 @@ export function handleListDevices(
     connectionsByDevice,
     unresolvedLinks,
     ptLinkDebug,
+    meta: {
+      mode: modeLabel,
+      includePorts: options.includePorts,
+      includeLinks: options.includeLinks,
+      deep: options.deep,
+      deviceCount: devices.length,
+      linkCount: links.length,
+    },
   };
 }

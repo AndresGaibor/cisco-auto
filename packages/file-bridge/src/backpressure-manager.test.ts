@@ -5,16 +5,22 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { BackpressureManager, BackpressureError } from './backpressure-manager';
 import { BridgePathLayout } from './shared/path-layout';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
-const TEST_ROOT = '/tmp/backpressure-test-' + Math.random().toString(36).slice(2);
+function makeTestRoot(prefix: string): string {
+  return mkdtempSync(join(tmpdir(), prefix));
+}
+
+let TEST_ROOT: string;
 
 describe('BackpressureManager', () => {
   let paths: BridgePathLayout;
   let manager: BackpressureManager;
 
   beforeEach(() => {
+    TEST_ROOT = makeTestRoot('file-bridge-backpressure-');
     mkdirSync(TEST_ROOT, { recursive: true });
     paths = new BridgePathLayout(TEST_ROOT);
     manager = new BackpressureManager(paths, { maxPending: 5 });

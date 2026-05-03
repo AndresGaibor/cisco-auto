@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, mock } from "bun:test";
 import { ControllerTopologyService } from "./topology-service.js";
 
 describe("ControllerTopologyService", () => {
@@ -8,10 +8,20 @@ describe("ControllerTopologyService", () => {
       removeDevice: async () => undefined,
       renameDevice: async () => undefined,
       moveDevice: async () => ({ ok: true, name: "R1", x: 1, y: 2 }),
-      listDevices: async () => [],
+      listDevices: async () => ({
+        devices: [],
+        connectionsByDevice: {},
+        unresolvedLinks: [],
+        count: 0,
+      }),
       addLink: async () => ({ id: "L1" }),
       removeLink: async () => undefined,
-      clearTopology: async () => ({ removedDevices: 0, removedLinks: 0, remainingDevices: 0, remainingLinks: 0 }),
+      clearTopology: async () => ({
+        removedDevices: 0,
+        removedLinks: 0,
+        remainingDevices: 0,
+        remainingLinks: 0,
+      }),
     } as any;
 
     const deviceService = {
@@ -21,7 +31,59 @@ describe("ControllerTopologyService", () => {
     const service = new ControllerTopologyService(topologyService, deviceService);
 
     await expect(service.addDevice("R1", "2911")).resolves.toEqual({ name: "R1" });
-    await expect(service.moveDevice("R1", 1, 2)).resolves.toEqual({ ok: true, name: "R1", x: 1, y: 2 });
+    await expect(service.moveDevice("R1", 1, 2)).resolves.toEqual({
+      ok: true,
+      name: "R1",
+      x: 1,
+      y: 2,
+    });
     await expect(service.configHost("R1", { ip: "10.0.0.1" })).resolves.toBeUndefined();
+  });
+
+  test("listDevices propaga includePorts/includeLinks/deep al TopologyService", async () => {
+    const topologyService = {
+      listDevices: mock(async () => ({
+        devices: [],
+        connectionsByDevice: {},
+        unresolvedLinks: [],
+        count: 0,
+        meta: {
+          mode: "links",
+          includePorts: true,
+          includeLinks: true,
+          deep: false,
+        },
+      })),
+      addDevice: async () => ({ name: "R1" }),
+      removeDevice: async () => undefined,
+      renameDevice: async () => undefined,
+      moveDevice: async () => ({ ok: true, name: "R1", x: 1, y: 2 }),
+      addLink: async () => ({ id: "L1" }),
+      removeLink: async () => undefined,
+      clearTopology: async () => ({
+        removedDevices: 0,
+        removedLinks: 0,
+        remainingDevices: 0,
+        remainingLinks: 0,
+      }),
+    } as any;
+
+    const deviceService = {
+      configHost: async () => undefined,
+    } as any;
+
+    const service = new ControllerTopologyService(topologyService, deviceService);
+
+    await service.listDevices(undefined, {
+      includePorts: true,
+      includeLinks: true,
+      deep: false,
+    });
+
+    expect(topologyService.listDevices).toHaveBeenCalledWith(undefined, {
+      includePorts: true,
+      includeLinks: true,
+      deep: false,
+    });
   });
 });

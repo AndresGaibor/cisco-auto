@@ -8,7 +8,19 @@ import type { DeviceState, LinkState, DeviceListResult } from "../contracts/inde
  */
 export class ControllerTopologyService {
   constructor(
-    private readonly topologyService: TopologyService,
+    private readonly topologyService: {
+      listDevices(
+        filter?: string | number | string[],
+        options?: { includePorts?: boolean; includeLinks?: boolean; deep?: boolean },
+      ): Promise<DeviceListResult & { meta?: Record<string, unknown> }>;
+      addDevice(name: string, model: string, options?: { x?: number; y?: number }): Promise<DeviceState>;
+      removeDevice(name: string): Promise<void>;
+      renameDevice(oldName: string, newName: string): Promise<void>;
+      moveDevice(name: string, x: number, y: number): Promise<{ ok: true; name: string; x: number; y: number } | { ok: false; error: string; code: string }>;
+      addLink(device1: string, port1: string, device2: string, port2: string, linkType?: unknown): Promise<LinkState>;
+      removeLink(device: string, port: string): Promise<void>;
+      clearTopology(): Promise<{ removedDevices: number; removedLinks: number; remainingDevices: number; remainingLinks: number }>;
+    },
     private readonly deviceService: DeviceService,
   ) {}
 
@@ -38,8 +50,13 @@ export class ControllerTopologyService {
     return this.topologyService.moveDevice(name, x, y);
   }
 
-  listDevices(filter?: string | number | string[]): Promise<DeviceListResult> {
-    return this.topologyService.listDevices(filter);
+  listDevices(
+    filter?: string | number | string[],
+    options?: { includePorts?: boolean; includeLinks?: boolean; deep?: boolean },
+  ): Promise<DeviceListResult & { meta?: Record<string, unknown> }> {
+    return this.topologyService.listDevices(filter, options) as Promise<
+      DeviceListResult & { meta?: Record<string, unknown> }
+    >;
   }
 
   addLink(

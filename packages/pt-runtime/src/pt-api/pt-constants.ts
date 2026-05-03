@@ -1,4 +1,13 @@
-import type { PtHelperMaps } from "./pt-helpers";
+export interface PtHelperMaps {
+  PT_MODEL_MAP: Record<string, string>;
+  PT_DEVICE_TYPE_MAP: Record<string, number>;
+  PT_PORT_MAP: Record<string, Record<string, string>>;
+  PT_MODULE_CATALOG: Record<string, { slotType: string; [k: string]: unknown }>;
+  PT_DEVICE_MODULE_SLOTS: Record<string, Array<{ type: string; supportedModules?: string[] }>>;
+  CABLE_CONNECTOR_COMPATIBILITY: Record<string, string[]>;
+  CABLE_TYPES: Record<string, number>;
+  DEVICE_TYPES: Record<string, number>;
+}
 
 export const PT_HELPER_MAPS: PtHelperMaps = {
   PT_MODEL_MAP: {},

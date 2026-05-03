@@ -6,7 +6,8 @@ import type { PortOwnerIndex, ConnectionInfo } from "../domain";
 export interface DeviceListingInput {
   net: ReturnType<HandlerDeps["getNet"]>;
   connectionsByDevice: Record<string, ConnectionInfo[]>;
-  portIndex: PortOwnerIndex;
+  portIndex: PortOwnerIndex | null;
+  includePorts?: boolean;
 }
 
 export interface ListedDevice {
@@ -45,7 +46,7 @@ function setPortConnection(port: unknown, connection: ConnectionInfo): void {
 }
 
 export function composeDeviceListing(input: DeviceListingInput): ListedDevice[] {
-  const { net, connectionsByDevice, portIndex } = input;
+  const { net, connectionsByDevice, portIndex, includePorts } = input;
   const devices: ListedDevice[] = [];
   const deviceCount = net.getDeviceCount();
 
@@ -59,7 +60,9 @@ export function composeDeviceListing(input: DeviceListingInput): ListedDevice[] 
       const connectionsRaw = connectionsByDevice[name] || [];
       const connections = filterValidConnections(connectionsRaw);
 
-      attachConnectionsToPorts(devicePorts, connections, portIndex, name);
+      if (portIndex) {
+        attachConnectionsToPorts(devicePorts, connections, portIndex, name);
+      }
 
       devices.push({
         name,
@@ -67,7 +70,7 @@ export function composeDeviceListing(input: DeviceListingInput): ListedDevice[] 
         type:
           typeof device.getType === "function" ? getDeviceTypeString(device.getType()) : "unknown",
         power: typeof device.getPower === "function" ? Boolean(device.getPower()) : false,
-        ports: devicePorts,
+        ports: includePorts ? devicePorts : [],
       });
     } catch {
       continue;

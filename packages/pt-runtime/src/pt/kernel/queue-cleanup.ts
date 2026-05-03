@@ -43,6 +43,21 @@ export function createQueueCleanup(
     }
   }
 
+  function isControlCommandFilename(filename: string): boolean {
+    return (
+      filename.indexOf("-terminal.plan.run.json") >= 0 ||
+      filename.indexOf("-terminal.native.exec.json") >= 0 ||
+      filename.indexOf("-__pollDeferred.json") >= 0 ||
+      filename.indexOf("-__ping.json") >= 0 ||
+      filename.indexOf("-__runtimeStatus.json") >= 0 ||
+      filename.indexOf("-__reloadRuntime.json") >= 0 ||
+      filename.indexOf("-inspectDeviceFast.json") >= 0 ||
+      filename.indexOf("-readTerminal.json") >= 0 ||
+      filename.indexOf("-__evaluate.json") >= 0 ||
+      filename.indexOf("-omni.evaluate.raw.json") >= 0
+    );
+  }
+
   function isStale(fm: NonNullable<SafeFM["fm"]>, filePath: string, now: number): boolean {
     try {
       if (!fm.getFileModificationTime) return false;
@@ -103,21 +118,20 @@ export function createQueueCleanup(
 
     for (const filename of currentCommandFiles) {
       const commandPath = commandsDir + "/" + filename;
-      if (!isStale(fm, commandPath, now)) continue;
 
-      try {
-        fm.removeFile(commandPath);
+      if (!fm.fileExists(commandPath)) {
         queueIndex.remove(filename);
-        dprint("[queue-cleanup] removed stale command: " + filename);
-      } catch (e) {
-        dprint("[queue-cleanup] stale command error: " + String(e));
+        dprint("[queue-cleanup] pruned index for missing command file: " + filename);
+        continue;
       }
-    }
 
-    for (const filename of currentCommandFiles) {
-      if (indexedSet[filename]) continue;
       queueIndex.add(filename);
-      dprint("[queue-cleanup] reindexed missing queue entry: " + filename);
+
+      if (isStale(fm, commandPath, now)) {
+        dprint("[queue-cleanup] preserved stale pending command and reindexed: " + filename);
+      } else {
+        dprint("[queue-cleanup] preserved pending command and reindexed: " + filename);
+      }
     }
 
     for (const filename of indexedFiles) {

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, vi } from "bun:test";
 
 import {
   getHandler,
@@ -103,5 +103,18 @@ describe("runtime handler groups", () => {
     for (const type of [...stableHandlers, ...evaluateHandlers, ...omniHandlers]) {
       expect(registered).toContain(type);
     }
+  });
+
+  test("__ping handler returns synchronously", () => {
+    registerRuntimeHandlers();
+
+    const handler = getHandler("__ping");
+    expect(handler).toBeDefined();
+
+    const result = handler?.({ type: "__ping" }, { dprint: vi.fn() } as any);
+
+    expect(typeof (result as any)?.then).toBe("undefined");
+    expect((result as any)?.ok).toBe(true);
+    expect((result as any)?.action).toBe("__ping");
   });
 });

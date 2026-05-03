@@ -124,6 +124,75 @@ export interface ParseResponseOptions {
 }
 
 export function createResponseParser() {
+  function normalizeResponseText(value: unknown): string {
+    return String(value ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  }
+
+  function escapeResponseRegExp(value: string): string {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function lineLooksLikePrompt(line: string): boolean {
+    const value = String(line ?? "").trim();
+
+    if (!value) return false;
+
+    return /^[A-Za-z0-9._-]+(?:\(config[^)]*\))?[>#]$/.test(value);
+  }
+
+  function lineLooksLikeCommandEcho(line: string, command: string): boolean {
+    const value = String(line ?? "").trim();
+    const cmd = String(command ?? "").trim();
+
+    if (!value || !cmd) return false;
+
+    if (value.toLowerCase() === cmd.toLowerCase()) return true;
+
+    const escaped = escapeResponseRegExp(cmd);
+
+    if (new RegExp(`^[A-Za-z0-9._-]+(?:\\(config[^)]*\\))?[>#]\\s*${escaped}\\s*$`, "i").test(value)) {
+      return true;
+    }
+
+    return new RegExp(`^[A-Za-z0-9._-]+(?:\\(config[^)]*\\))?[>#]?\\s+${escaped}\\s*$`, "i").test(value);
+  }
+
+  function sliceOutputByCommand(raw: string, command: string): string {
+    const text = normalizeResponseText(raw);
+    const cmd = String(command ?? "").trim();
+
+    if (!text || !cmd) return text;
+
+    const lines = text.split("\n");
+    let commandLineIndex = -1;
+
+    for (let index = lines.length - 1; index >= 0; index -= 1) {
+      if (lineLooksLikeCommandEcho(lines[index] || "", cmd)) {
+        commandLineIndex = index;
+        break;
+      }
+    }
+
+    if (commandLineIndex === -1) {
+      const commandIndex = text.toLowerCase().lastIndexOf(cmd.toLowerCase());
+      if (commandIndex === -1) return text;
+      return text.slice(commandIndex).trim();
+    }
+
+    let endIndex = lines.length;
+
+    for (let index = commandLineIndex + 1; index < lines.length; index += 1) {
+      const line = lines[index] || "";
+
+      if (index > commandLineIndex + 1 && lineLooksLikePrompt(line)) {
+        endIndex = index + 1;
+        break;
+      }
+    }
+
+    return lines.slice(commandLineIndex, endIndex).join("\n").trim();
+  }
+
   function normalizeStatusFromLegacy(value: LegacyContractValue | undefined): number {
     if (typeof value?.diagnostics?.commandStatus === "number") {
       return value.diagnostics.commandStatus;
@@ -184,7 +253,7 @@ export function createResponseParser() {
     const { stepIndex, isHost, command } = options;
     const tr = res;
 
-    const raw = String(tr.output ?? "");
+    const raw = sliceOutputByCommand(String(tr.output ?? ""), command);
     const status = Number(tr.diagnostics?.statusCode ?? (tr.ok ? 0 : 1));
 
     const promptBefore = stepIndex === 0 ? String(tr.session?.promptBefore ?? "") : "";
@@ -237,9 +306,9 @@ export function createResponseParser() {
   ): ParsedCommandResponse {
     const { isHost, command } = options;
 
-    const raw = String(
+    const raw = sliceOutputByCommand(String(
       res?.output ?? res?.raw ?? (typeof res?.value === "string" ? res.value : "") ?? "",
-    );
+    ), command);
     const status = normalizeStatusFromLegacy(res);
 
     const parsedInfo = (res?.parsed ?? {}) as {
@@ -298,27 +367,34 @@ export function createResponseParser() {
     warnings: string[],
   ): ParsedCommandResponse {
     const { stepIndex, isHost, command } = options;
+    const resAny = res as any;
 
-    const nestedResult = res.result;
+    const nestedResult = resAny.result;
+    const status = Number(
+      nestedResult?.status ??
+        resAny.status ??
+        resAny.diagnostics?.statusCode ??
+        resAny.diagnostics?.commandStatus ??
+        (nestedResult?.ok ?? resAny.ok ? 0 : 1),
+    );
 
-    const raw = String(
-      nestedResult?.output ??
+    const resultOk = Boolean(nestedResult?.ok ?? resAny.ok);
+    const failed = !resultOk || status !== 0 || Boolean(resAny.code || resAny.errorCode || nestedResult?.code);
+
+    const rawSource = String(
+      nestedResult?.rawOutput ??
         nestedResult?.raw ??
-        res.output ??
-        res.raw ??
-        (typeof res.value === "string" ? res.value : "") ??
+        nestedResult?.output ??
+        resAny.raw ??
+        resAny.output ??
+        (typeof resAny.error === "string" ? resAny.error : resAny.error?.message) ??
+        resAny.message ??
         "",
     );
 
-    const status = Number(
-      nestedResult?.status ??
-        res.status ??
-        res.diagnostics?.statusCode ??
-        res.diagnostics?.commandStatus ??
-        (nestedResult?.ok ?? res.ok ? 0 : 1),
-    );
+    const raw = failed ? normalizeResponseText(rawSource) : sliceOutputByCommand(rawSource, command);
 
-    const sessionInfo = nestedResult?.session ?? res.session ?? {};
+    const sessionInfo = nestedResult?.session ?? resAny.session ?? {};
 
     const promptBefore =
       stepIndex === 0
@@ -334,16 +410,16 @@ export function createResponseParser() {
 
     const modeAfter = String(sessionInfo.modeAfter ?? sessionInfo.mode ?? "");
 
-    if (Array.isArray(res.warnings)) {
-      warnings.push(...res.warnings.map(String));
+    if (Array.isArray(resAny.warnings)) {
+      warnings.push(...resAny.warnings.map(String));
     }
 
     const errorText =
-      typeof res.error === "string"
-        ? res.error
-        : String(res.error?.message ?? res.message ?? res.code ?? res.errorCode ?? "");
+      typeof resAny.error === "string"
+        ? resAny.error
+        : String(resAny.error?.message ?? resAny.message ?? resAny.code ?? resAny.errorCode ?? "");
 
-    if (!(nestedResult?.ok ?? res.ok) && errorText) {
+    if (failed && errorText && !raw.includes(errorText)) {
       warnings.push(errorText);
     }
 
@@ -362,12 +438,12 @@ export function createResponseParser() {
     return {
       raw,
       status,
-      ok: Boolean(nestedResult?.ok ?? res.ok),
+      ok: resultOk,
       promptBefore,
       promptAfter,
       modeBefore,
       modeAfter,
-      parsed: res.parsed ?? res,
+      parsed: resAny.parsed ?? resAny,
       paging: Boolean(sessionInfo.paging),
       awaitingConfirm: Boolean(sessionInfo.awaitingConfirm),
       autoDismissedInitialDialog: Boolean(sessionInfo.autoDismissedInitialDialog),
@@ -375,7 +451,7 @@ export function createResponseParser() {
       warnings,
       error: errorText || undefined,
       diagnostics: {
-        completionReason: res.diagnostics?.completionReason,
+        completionReason: resAny.diagnostics?.completionReason,
         statusCode: status,
       },
     };

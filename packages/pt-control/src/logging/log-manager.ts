@@ -1,17 +1,12 @@
 import { appendFile, mkdir, unlink } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { homedir } from 'node:os';
+import { resolvePtDevDir } from '../system/paths.js';
 import type { LogConfig, LogEntry, LogQueryOptions, LogSession, LogStats } from './types.js';
 
 type SessionLog = LogSession & LogEntry[];
 
 function getDefaultLogDir(): string {
-  const home = homedir();
-  const isWindows = process.platform === 'win32';
-  if (isWindows) {
-    return join(process.env.USERPROFILE ?? home, 'pt-dev', 'logs', 'sessions');
-  }
-  return join(home, 'pt-dev', 'logs', 'sessions');
+  return join(resolvePtDevDir(), 'logs', 'sessions');
 }
 
 export class LogManager {

@@ -1,27 +1,30 @@
 // ============================================================================
-// Omniscience Logical Handlers - L3+ and Assessment (ES5 Strict)
+// Omniscience Logical Handlers - L3+ and Assessment (Sync)
 // ============================================================================
 
-import { createCommandExecutor } from "../terminal/index";
 import type { HandlerDeps, HandlerResult } from "../utils/helpers.js";
+import {
+  buildDeferredConfigPlan,
+  startDeferredJobOrError,
+} from "./deferred-job-factory.js";
 
 export function handleSiphonAllConfigs(_payload: any, deps: HandlerDeps): HandlerResult {
-  var global = (deps as any).global;
-  var am = global ? global.AssessmentModel : null;
+  const global = (deps as any).global;
+  const am = global ? global.AssessmentModel : null;
   if (!am) {
     return { ok: false, error: "AssessmentModel not available", code: "NO_ASSESSMENT_MODEL" };
   }
 
-  var net = deps.ipc.network();
-  var count = net.getDeviceCount();
-  var result = [];
+  const net = deps.ipc.network();
+  const count = net.getDeviceCount();
+  const result = [];
 
-  for (var i = 0; i < count; i++) {
-    var dev = net.getDeviceAt(i) as any;
+  for (let i = 0; i < count; i++) {
+    const dev = net.getDeviceAt(i) as any;
     if (!dev) continue;
-    var name = dev.getName();
+    const name = dev.getName();
     try {
-      var cfg = am.getRunningConfig(name);
+      const cfg = am.getRunningConfig(name);
       if (cfg) {
         result.push(String(name) + ":::" + String(cfg));
       }
@@ -32,14 +35,14 @@ export function handleSiphonAllConfigs(_payload: any, deps: HandlerDeps): Handle
 }
 
 export function handleGetAssessmentState(_payload: any, deps: HandlerDeps): HandlerResult {
-  var global = (deps as any).global;
-  var am = global ? global.AssessmentModel : null;
+  const global = (deps as any).global;
+  const am = global ? global.AssessmentModel : null;
   if (!am) {
     return { ok: false, error: "AssessmentModel not available" };
   }
 
   try {
-    var state = {
+    const state = {
       totalItems: (typeof am.getTotalItemCountByComponent === "function") ? am.getTotalItemCountByComponent("all") : 0,
       correctItems: (typeof am.getCorrectItemCountByComponent === "function") ? am.getCorrectItemCountByComponent("all") : 0,
       points: (typeof am.getPointsByComponent === "function") ? am.getPointsByComponent("all") : 0,
@@ -53,8 +56,8 @@ export function handleGetAssessmentState(_payload: any, deps: HandlerDeps): Hand
 }
 
 export function handleSetInstructionPanel(payload: { html: string }, deps: HandlerDeps): HandlerResult {
-  var global = (deps as any).global;
-  var am = global ? global.AssessmentModel : null;
+  const global = (deps as any).global;
+  const am = global ? global.AssessmentModel : null;
   if (!am) return { ok: false, error: "AssessmentModel not available" };
 
   try {
@@ -69,13 +72,13 @@ export function handleSetInstructionPanel(payload: { html: string }, deps: Handl
 }
 
 export function handleEvaluateInternalVariable(payload: { expr: string }, deps: HandlerDeps): HandlerResult {
-  var global = (deps as any).global;
-  var am = global ? global.AssessmentModel : null;
+  const global = (deps as any).global;
+  const am = global ? global.AssessmentModel : null;
   if (!am) return { ok: false, error: "AssessmentModel not available" };
 
   try {
     if (typeof am.evaluateVariable === "function") {
-        var val = am.evaluateVariable(payload.expr);
+        const val = am.evaluateVariable(payload.expr);
         return { ok: true, result: String(val) };
     }
     return { ok: false, error: "evaluateVariable method not found" };
@@ -85,46 +88,42 @@ export function handleEvaluateInternalVariable(payload: { expr: string }, deps: 
 }
 
 export function handleGetActivityTreeXml(payload: { deviceName: string }, deps: HandlerDeps): HandlerResult {
-  var dev = deps.ipc.network().getDevice(payload.deviceName) as any;
+  const dev = deps.ipc.network().getDevice(payload.deviceName) as any;
   if (!dev) return { ok: false, error: "Device not found" };
 
   try {
-    var xml = (typeof dev.activityTreeToXml === "function") ? dev.activityTreeToXml() : "";
+    const xml = (typeof dev.activityTreeToXml === "function") ? dev.activityTreeToXml() : "";
     return { ok: true, result: String(xml) };
   } catch (e) {
     return { ok: false, error: String(e) };
   }
 }
 
-
-export async function handleExecIosOmni(payload: { deviceName: string, commands: string[] }, deps: HandlerDeps): Promise<HandlerResult> {
+export function handleExecIosOmni(
+  payload: { deviceName: string, commands: string[] },
+  deps: HandlerDeps,
+): HandlerResult {
   const deviceName = payload.deviceName;
-  var dev = deps.ipc.network().getDevice(deviceName) as any;
+  const dev = deps.ipc.network().getDevice(deviceName) as any;
   if (!dev) return { ok: false, error: "Device not found" };
 
-  var cli = (typeof dev.getCommandLine === "function") ? dev.getCommandLine() : null;
-  if (!cli) return { ok: false, error: "CLI not available" };
+  if (!dev.getCommandLine || !dev.getCommandLine()) {
+    return { ok: false, error: "CLI not available" };
+  }
 
   try {
-    const executor = createCommandExecutor({
-        commandTimeoutMs: 10000,
-        stallTimeoutMs: 5000,
+    const plan = buildDeferredConfigPlan(deviceName, {
+      commands: payload.commands,
+      save: false,
+      stopOnError: true,
+      ensurePrivileged: true,
+      dismissInitialDialog: true,
+      commandTimeoutMs: 10000,
+      stallTimeoutMs: 5000,
+      closeSession: false,
     });
 
-    let fullOutput = "";
-    for (var i = 0; i < payload.commands.length; i++) {
-        const cmd = String(payload.commands[i]);
-        const result = await executor.executeCommand(deviceName, cmd, cli, {
-            autoAdvancePager: true,
-            autoDismissWizard: true
-        });
-        fullOutput += result.output;
-        if (!result.ok) {
-            return { ok: false, error: result.error || "Command failed: " + cmd, raw: fullOutput };
-        }
-    }
-
-    return { ok: true, result: fullOutput };
+    return startDeferredJobOrError(plan, deps as any) as any;
   } catch (e) {
     return { ok: false, error: String(e) };
   }

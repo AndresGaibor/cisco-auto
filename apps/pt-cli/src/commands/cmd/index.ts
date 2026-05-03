@@ -32,6 +32,38 @@ function normalizeCommandLines(content: string): string[] {
     .filter((line) => !line.trimStart().startsWith("#"));
 }
 
+function looksLikeMultiCommandInput(commandParts: string[]): boolean {
+  const parts = commandParts
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length <= 1) return false;
+
+  if (parts.some((part) => /\r?\n/.test(part))) {
+    return true;
+  }
+
+  const lower = parts.map((part) => part.toLowerCase());
+
+  const startsConfigContext = /^(interface|vlan|router|line|ip access-list|class-map|policy-map|ip dhcp pool)\b/.test(lower[0] ?? "");
+
+  const hasConfigChild = lower.slice(1).some((part) =>
+    /^(description|switchport|shutdown|no shutdown|ip address|ipv6 address|duplex|speed|name|network|default-router|dns-server|lease|login|password|transport input|exec-timeout|channel-group|spanning-tree)\b/.test(part),
+  );
+
+  if (startsConfigContext && hasConfigChild) {
+    return true;
+  }
+
+  const everyPartLooksLikeFullCommand = parts.every((part) => /\s+/.test(part));
+
+  if (everyPartLooksLikeFullCommand) {
+    return true;
+  }
+
+  return false;
+}
+
 function readCommandsFromOptions(
   options: { file?: string; stdin?: boolean; config?: boolean },
   commandParts: string[],
@@ -48,8 +80,12 @@ function readCommandsFromOptions(
     return commandParts.flatMap((part) => normalizeCommandLines(part)).filter(Boolean);
   }
 
+  if (looksLikeMultiCommandInput(commandParts)) {
+    return commandParts.flatMap((part) => normalizeCommandLines(part)).filter(Boolean);
+  }
+
   const joined = joinCommandParts(commandParts);
-  return joined ? [joined] : [];
+  return joined ? normalizeCommandLines(joined) : [];
 }
 
 function isEndCommand(command: string): boolean {
@@ -94,11 +130,11 @@ async function promptForMode(): Promise<"safe" | "interactive" | "raw" | "strict
 
 export function createCmdCommand(): Command {
   const cmd = new Command("cmd")
-    .description("Ejecuta comandos en routers, switches, PCs y servers")
+    .description("Ejecuta comandos en routers, switches, PCs y servers. Acepta varios argumentos como líneas separadas cuando son comandos distintos.")
     .summary("Terminal universal para Packet Tracer")
     .argument("[device]", "Dispositivo destino: R1, SW1, PC1, Server1")
     .argument("[command...]", "Comando a ejecutar. Usa comillas para comandos con espacios.")
-    .option("--config", "Tratar entrada como configuración IOS; envuelve en configure terminal/end", false)
+    .option("--config", "Tratar entrada como configuración IOS; envuelve en configure terminal/end (DEPRECADO: detección automática activa)", false)
     .option("--save", "Después de --config, ejecutar write memory", false)
     .option("--file <path>", "Leer comandos desde archivo de texto plano")
     .option("--stdin", "Leer comandos desde stdin")
@@ -116,8 +152,20 @@ Ejemplos:
   pt cmd SW1 "show vlan brief"
   pt cmd PC1 "ipconfig"
   pt cmd PC1 "ping 192.168.10.1"
+  pt cmd SW1 "comando 1" "comando 2" "comando 3"
+
+Configuración automática (detectada por el CLI):
+  pt cmd R1 "interface g0/0" "no shutdown"
+  pt cmd R1 "hostname R1-CORE"
+  pt cmd SW1 "vlan 10" "name DATA"
+
+Nota:
+  - Si pasas varios argumentos y parecen comandos IOS separados, el CLI los ejecuta como líneas independientes.
+  - Si pasas un comando simple con espacios, puedes usar comillas o escribirlo sin comillas.
+
+Legacy --config (envuelve en configure terminal/end):
   pt cmd R1 --config "interface g0/0" "no shutdown"
-  pt cmd R1 --config --save --file configs/r1.txt
+  pt cmd R1 --config --file configs/r1.txt
   cat configs/sw1.txt | pt cmd SW1 --config --stdin
 
 Reglas:
@@ -399,6 +447,7 @@ Reglas:
 
 export const __test__ = {
   normalizeCommandLines,
+  looksLikeMultiCommandInput,
   readCommandsFromOptions,
   buildConfigCommand,
   isEndCommand,

@@ -245,22 +245,24 @@ export function runDoctorFsChecks(
 /**
  * Run all doctor checks including controller-based health checks.
  */
-export async function runAllDoctorChecks(
-  controller: {
-    getHeartbeat: () => unknown;
-    getHeartbeatHealth: () => { state: string; ageMs?: number };
-    getSystemContext: () => {
-      bridgeReady: boolean;
-      topologyMaterialized: boolean;
-      deviceCount: number;
-      linkCount: number;
-      heartbeat: { state: string; ageMs?: number; lastSeenTs?: number };
-      warnings: string[];
-    };
-  },
-  paths: DoctorPaths,
-  verbose: boolean,
-): Promise<DoctorCheckResult[]> {
+  export async function runAllDoctorChecks(
+    controller: {
+      getHeartbeat: () => unknown;
+      getHeartbeatHealth: () => { state: string; ageMs?: number };
+      getSystemContext: () => {
+        bridgeReady: boolean;
+        topologyMaterialized: boolean;
+        deviceCount: number;
+        linkCount: number;
+        heartbeat: { state: string; ageMs?: number; lastSeenTs?: number };
+        warnings: string[];
+        bridge: { ready: boolean; queuedCount?: number; inFlightCount?: number; warnings?: string[] };
+        notes: string[];
+      };
+    },
+    paths: DoctorPaths,
+    verbose: boolean,
+  ): Promise<DoctorCheckResult[]> {
   const checks = runDoctorFsChecks(paths, verbose);
 
   try {
@@ -285,31 +287,38 @@ export async function runAllDoctorChecks(
     });
 
     checks.push({
-      name: "bridge-status",
+      name: "bridge-ready",
       ok: systemCtx.bridgeReady,
       severity: systemCtx.bridgeReady ? "info" : "warning",
       message: `Bridge ready: ${systemCtx.bridgeReady ? "yes" : "no"}`,
       details: verbose ? JSON.stringify(systemCtx, null, 2) : undefined,
     });
 
+    const bridgeOperational =
+      systemCtx.bridgeReady === true &&
+      hbHealth.state === "ok";
+
     checks.push({
       name: "topology-materialized",
-      ok: systemCtx.topologyMaterialized,
-      severity: systemCtx.topologyMaterialized ? "info" : "warning",
+      ok: systemCtx.topologyMaterialized || bridgeOperational,
+      severity: "info",
       message: systemCtx.topologyMaterialized
-        ? "Topología materializada"
-        : "Topología no materializada",
-      details: verbose
-        ? `devices: ${systemCtx.deviceCount}, links: ${systemCtx.linkCount}`
-        : undefined,
+        ? `Topología materializada (${systemCtx.deviceCount} dispositivos, ${systemCtx.linkCount} enlaces)`
+        : bridgeOperational
+          ? "Topología no materializada en cache; bridge operacional. Use pt device list para inspección profunda."
+          : "Topología no materializada",
     });
-  } catch (err) {
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? `${error.name}: ${error.message}${error.stack ? "\n" + error.stack : ""}`
+        : String(error);
+
     checks.push({
-      name: "bridge-connect",
+      name: "controller-context",
       ok: false,
       severity: "critical",
-      message: "No se pudo obtener información del controller/bridge",
-      details: String(err),
+      message: "No se pudo obtener información del controller/bridge: " + message,
     });
   }
 

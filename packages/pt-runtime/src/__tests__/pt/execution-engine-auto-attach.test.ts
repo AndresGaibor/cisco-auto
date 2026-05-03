@@ -44,7 +44,10 @@ describe("ExecutionEngine auto attach", () => {
 
     try {
       const engine = createExecutionEngine(terminal);
-      const plan = createDeferredJobPlan("R1", [commandStep("show version")]);
+      const plan = createDeferredJobPlan("R1", [commandStep("show version")], {
+        targetMode: "privileged-exec",
+      } as any);
+      (plan as any).targetMode = "privileged-exec";
 
       const job = engine.startJob(plan);
 
@@ -88,7 +91,10 @@ describe("ExecutionEngine auto attach", () => {
 
     try {
       const engine = createExecutionEngine(terminal);
-      const plan = createDeferredJobPlan("R1", [commandStep("show version")]);
+      const plan = createDeferredJobPlan("R1", [commandStep("show version")], {
+        targetMode: "privileged-exec",
+      } as any);
+      (plan as any).targetMode = "privileged-exec";
 
       const job = engine.startJob(plan);
 
@@ -275,13 +281,17 @@ describe("ExecutionEngine auto attach", () => {
   });
 
   test("reapStaleJobs rescata un comando atascado desde el terminal nativo", async () => {
+    let outputPhase = 0;
     const nativeTerminal = {
       registerEvent: vi.fn(),
       unregisterEvent: vi.fn(),
       enterCommand: vi.fn(),
       enterChar: vi.fn(),
       getCommandInput: vi.fn(() => " "),
-      getAllOutput: vi.fn(() => "show version\nCisco IOS Software\nRouter#"),
+      getAllOutput: vi.fn(() => {
+        outputPhase += 1;
+        return outputPhase === 1 ? "Router#" : "Router#show version\nCisco IOS Software\nRouter#";
+      }),
       getPrompt: vi.fn(() => "Router#"),
       getMode: vi.fn(() => "enable"),
     } as any;
@@ -338,13 +348,84 @@ describe("ExecutionEngine auto attach", () => {
     }
   });
 
-  test("getJobState rescata un job aunque pendingCommand sea null", () => {
+  test("reapStaleJobs usa solo el delta del step actual y no el historial viejo", async () => {
+    let outputPhase = 0;
     const nativeTerminal = {
       registerEvent: vi.fn(),
       unregisterEvent: vi.fn(),
       enterCommand: vi.fn(),
       enterChar: vi.fn(),
-      getAllOutput: vi.fn(() => "show version\nCisco IOS Software\nRouter#"),
+      getCommandInput: vi.fn(() => " "),
+      getAllOutput: vi.fn(() => {
+        outputPhase += 1;
+        return outputPhase === 1
+          ? ["show version", "Cisco IOS Software", "Router#"].join("\n")
+          : ["show version", "Cisco IOS Software", "Router#", "Router#"].join("\n");
+      }),
+      getPrompt: vi.fn(() => "Router#"),
+      getMode: vi.fn(() => "enable"),
+    } as any;
+
+    const terminal = {
+      attach: vi.fn(),
+      detach: vi.fn(),
+      getSession: vi.fn(),
+      getMode: vi.fn(),
+      isBusy: vi.fn(() => false),
+      isAnyBusy: vi.fn(() => false),
+      executeCommand: vi.fn().mockReturnValue(new Promise(() => {})),
+      continuePager: vi.fn(),
+      confirmPrompt: vi.fn(),
+    } as any;
+
+    const previousIpc = (globalThis as any).ipc;
+    const previousDprint = (globalThis as any).dprint;
+
+    (globalThis as any).ipc = {
+      network: () => ({
+        getDevice: () => ({
+          getCommandLine: () => nativeTerminal,
+        }),
+      }),
+    };
+    (globalThis as any).dprint = vi.fn();
+
+    try {
+      const engine = createExecutionEngine(terminal);
+      const plan = createDeferredJobPlan("R1", [commandStep("show version")]);
+      const job = engine.startJob(plan);
+
+      (job.context as any).nativeBaselineOutput = ["show version", "Cisco IOS Software", "Router#"].join("\n");
+      (job.context as any).nativeBaselineStep = job.context.currentStep;
+      job.context.updatedAt = Date.now() - 1000;
+
+      const context = engine.getJobState(job.id);
+
+      expect(context?.finished).toBe(false);
+      expect(context?.phase).toBe("waiting-command");
+      expect((context as any)?.debug).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining("native-tick reason=getJobState"),
+          expect.stringContaining("deltaLen="),
+        ]),
+      );
+    } finally {
+      (globalThis as any).ipc = previousIpc;
+      (globalThis as any).dprint = previousDprint;
+    }
+  });
+
+  test("getJobState rescata un job aunque pendingCommand sea null", () => {
+    let outputPhase = 0;
+    const nativeTerminal = {
+      registerEvent: vi.fn(),
+      unregisterEvent: vi.fn(),
+      enterCommand: vi.fn(),
+      enterChar: vi.fn(),
+      getAllOutput: vi.fn(() => {
+        outputPhase += 1;
+        return outputPhase === 1 ? "Router#" : "Router#show version\nCisco IOS Software\nRouter#";
+      }),
       getPrompt: vi.fn(() => "Router#"),
       getMode: vi.fn(() => "enable"),
     } as any;
@@ -453,7 +534,299 @@ describe("ExecutionEngine auto attach", () => {
     }
   });
 
+  test("native force-complete no finaliza un auto-config si sigue en config-if", async () => {
+    const nativeTerminal = {
+      registerEvent: vi.fn(),
+      unregisterEvent: vi.fn(),
+      enterCommand: vi.fn(),
+      enterChar: vi.fn(),
+      getCommandInput: vi.fn(() => ""),
+      getAllOutput: vi.fn(() => "description TEST\nSW1(config-if)#"),
+      getPrompt: vi.fn(() => "SW1(config-if)#"),
+      getMode: vi.fn(() => "config"),
+    } as any;
+
+    const terminal = {
+      attach: vi.fn(),
+      detach: vi.fn(),
+      getSession: vi.fn(),
+      getMode: vi.fn(),
+      isBusy: vi.fn(() => false),
+      isAnyBusy: vi.fn(() => false),
+      executeCommand: vi.fn().mockReturnValue(new Promise(() => {})),
+      continuePager: vi.fn(),
+      confirmPrompt: vi.fn(),
+    } as any;
+
+    const previousIpc = (globalThis as any).ipc;
+    const previousDprint = (globalThis as any).dprint;
+
+    (globalThis as any).ipc = {
+      network: () => ({
+        getDevice: () => ({
+          getCommandLine: () => nativeTerminal,
+        }),
+      }),
+    };
+    (globalThis as any).dprint = vi.fn();
+
+    try {
+      const engine = createExecutionEngine(terminal);
+      const plan = createDeferredJobPlan("SW1", [commandStep("description TEST")], {
+        targetMode: "privileged-exec",
+      } as any);
+      (plan as any).targetMode = "privileged-exec";
+
+      const job = engine.startJob(plan);
+      job.context.updatedAt = Date.now() - 1000;
+
+      const context = engine.getJobState(job.id);
+
+      expect(context?.finished).toBe(false);
+      expect(context?.phase).not.toBe("completed");
+      expect(context?.currentStep).toBe(0);
+      expect(context?.stepResults).toHaveLength(0);
+    } finally {
+      (globalThis as any).ipc = previousIpc;
+      (globalThis as any).dprint = previousDprint;
+    }
+  });
+
+  test("native fallback completa end cuando el prompt final ya es privileged-exec", async () => {
+    let outputPhase = 0;
+    const nativeTerminal = {
+      registerEvent: vi.fn(),
+      unregisterEvent: vi.fn(),
+      enterCommand: vi.fn(),
+      enterChar: vi.fn(),
+      getCommandInput: vi.fn(() => ""),
+      getAllOutput: vi.fn(() => {
+        outputPhase += 1;
+        return outputPhase === 1 ? "SW1(config-if)#" : "SW1(config-if)#end\nSW1#";
+      }),
+      getPrompt: vi.fn(() => "SW1#"),
+      getMode: vi.fn(() => "privileged-exec"),
+    } as any;
+
+    const terminal = {
+      attach: vi.fn(),
+      detach: vi.fn(),
+      getSession: vi.fn(),
+      getMode: vi.fn(),
+      isBusy: vi.fn(() => false),
+      isAnyBusy: vi.fn(() => false),
+      executeCommand: vi.fn().mockReturnValue(new Promise(() => {})),
+      continuePager: vi.fn(),
+      confirmPrompt: vi.fn(),
+    } as any;
+
+    const previousIpc = (globalThis as any).ipc;
+    const previousDprint = (globalThis as any).dprint;
+
+    (globalThis as any).ipc = {
+      network: () => ({
+        getDevice: () => ({
+          getCommandLine: () => nativeTerminal,
+        }),
+      }),
+    };
+    (globalThis as any).dprint = vi.fn();
+
+    try {
+      const engine = createExecutionEngine(terminal);
+      const plan = createDeferredJobPlan("SW1", [commandStep("end")], {
+        targetMode: "privileged-exec",
+      } as any);
+      (plan as any).targetMode = "privileged-exec";
+
+      const job = engine.startJob(plan);
+      job.context.updatedAt = Date.now() - 1000;
+
+      const context = engine.getJobState(job.id);
+
+      expect(context?.finished).toBe(true);
+      expect(context?.phase).toBe("completed");
+      expect(context?.currentStep).toBe(1);
+      expect(context?.stepResults).toHaveLength(1);
+      expect(String(context?.outputBuffer || "")).toContain("end\nSW1#");
+      expect(String(context?.lastPrompt || "")).toBe("SW1#");
+    } finally {
+      (globalThis as any).ipc = previousIpc;
+      (globalThis as any).dprint = previousDprint;
+    }
+  });
+
+  test("native fallback completa disable cuando solo hay eco y prompt de usuario", async () => {
+    let outputPhase = 0;
+    const nativeTerminal = {
+      registerEvent: vi.fn(),
+      unregisterEvent: vi.fn(),
+      enterCommand: vi.fn(),
+      enterChar: vi.fn(),
+      getCommandInput: vi.fn(() => ""),
+      getAllOutput: vi.fn(() => {
+        outputPhase += 1;
+        return outputPhase === 1 ? "SW-SRV-DIST>" : "disable\nSW-SRV-DIST>";
+      }),
+      getPrompt: vi.fn(() => "SW-SRV-DIST>"),
+      getMode: vi.fn(() => "user-exec"),
+    } as any;
+
+    const terminal = {
+      attach: vi.fn(),
+      detach: vi.fn(),
+      getSession: vi.fn(),
+      getMode: vi.fn(),
+      isBusy: vi.fn(() => false),
+      isAnyBusy: vi.fn(() => false),
+      executeCommand: vi.fn().mockReturnValue(new Promise(() => {})),
+      continuePager: vi.fn(),
+      confirmPrompt: vi.fn(),
+    } as any;
+
+    const previousIpc = (globalThis as any).ipc;
+    const previousDprint = (globalThis as any).dprint;
+
+    (globalThis as any).ipc = {
+      network: () => ({
+        getDevice: () => ({
+          getCommandLine: () => nativeTerminal,
+        }),
+      }),
+    };
+    (globalThis as any).dprint = vi.fn();
+
+    try {
+      const engine = createExecutionEngine(terminal);
+      const plan = createDeferredJobPlan("SW-SRV-DIST", [commandStep("disable")]);
+      const job = engine.startJob(plan);
+      job.context.updatedAt = Date.now() - 1000;
+
+      const context = engine.getJobState(job.id);
+
+      expect(context?.finished).toBe(true);
+      expect(context?.phase).toBe("completed");
+      expect(context?.currentStep).toBe(1);
+      expect(context?.stepResults).toHaveLength(1);
+      expect(String(context?.outputBuffer || "")).toContain("disable\nSW-SRV-DIST>");
+    } finally {
+      (globalThis as any).ipc = previousIpc;
+      (globalThis as any).dprint = previousDprint;
+    }
+  });
+
+  test("native fallback falla cuando un step intermedio trae error IOS aunque end salga bien", async () => {
+    let cleanupPhase = 0;
+    let nativeOutput = [
+      "SW-SRV-DIST(config-if-range)#channel-group 7 mode active",
+      "                                             ^",
+      "% Invalid input detected at '^' marker.",
+      "SW-SRV-DIST(config-if-range)#",
+    ].join("\n");
+    const nativeTerminal = {
+      registerEvent: vi.fn(),
+      unregisterEvent: vi.fn(),
+      enterCommand: vi.fn(() => {
+        cleanupPhase = 1;
+        nativeOutput += "end\nSW-SRV-DIST#";
+      }),
+      enterChar: vi.fn(),
+      getCommandInput: vi.fn(() => ""),
+      getAllOutput: vi.fn(() => nativeOutput),
+      getPrompt: vi.fn(() => (cleanupPhase === 0 ? "SW-SRV-DIST(config-if-range)#" : "SW-SRV-DIST#")),
+      getMode: vi.fn(() => (cleanupPhase === 0 ? "config-if-range" : "privileged-exec")),
+    } as any;
+
+    const terminal = {
+      attach: vi.fn(),
+      detach: vi.fn(),
+      getSession: vi.fn(),
+      getMode: vi.fn(),
+      isBusy: vi.fn(() => false),
+      isAnyBusy: vi.fn(() => false),
+      executeCommand: vi.fn().mockResolvedValue({
+        ok: true,
+        output: "end\nSW-SRV-DIST#",
+        rawOutput: "end\nSW-SRV-DIST#",
+        raw: "end\nSW-SRV-DIST#",
+        status: 0,
+        session: { mode: "privileged-exec", prompt: "SW-SRV-DIST#", paging: false, awaitingConfirm: false },
+        mode: "privileged-exec",
+      }),
+      continuePager: vi.fn(),
+      confirmPrompt: vi.fn(),
+    } as any;
+
+    const previousIpc = (globalThis as any).ipc;
+    const previousDprint = (globalThis as any).dprint;
+
+    (globalThis as any).ipc = {
+      network: () => ({
+        getDevice: () => ({
+          getCommandLine: () => nativeTerminal,
+        }),
+      }),
+    };
+    (globalThis as any).dprint = vi.fn();
+
+    try {
+      const engine = createExecutionEngine(terminal);
+      const plan = createDeferredJobPlan("SW-SRV-DIST", [
+        commandStep("configure terminal"),
+        commandStep("interface range f0/21 - 22"),
+        commandStep("channel-group 7 mode active"),
+        commandStep("end"),
+      ], {
+        targetMode: "privileged-exec",
+      } as any);
+      (plan as any).targetMode = "privileged-exec";
+
+      const job = engine.startJob(plan);
+      job.context.updatedAt = Date.now() - 1000;
+
+      const context = engine.getJobState(job.id);
+
+      expect(context?.finished).toBe(false);
+      expect(context?.phase).toBe("waiting-command");
+      expect(terminal.executeCommand).toHaveBeenCalledWith(
+        "SW-SRV-DIST",
+        "configure terminal",
+        expect.objectContaining({ allowPager: true, autoAdvancePager: true, maxPagerAdvances: 25 }),
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 750));
+
+      const finalContext = engine.getJobState(job.id);
+
+      expect(finalContext?.finished).toBe(true);
+      expect(finalContext?.phase).toBe("completed");
+      expect(finalContext?.errorCode).toBe("IOS_INVALID_INPUT");
+      expect(finalContext?.result?.ok).toBe(false);
+    } finally {
+      (globalThis as any).ipc = previousIpc;
+      (globalThis as any).dprint = previousDprint;
+    }
+  });
+
   test("startJob limpia config con end cuando un comando falla", async () => {
+    let cleanupPhase = 0;
+    let nativeOutput =
+      "R1(config-if)#show version\n% Invalid input detected at '^' marker.\nR1(config-if)#";
+
+    const nativeTerminal = {
+      registerEvent: vi.fn(),
+      unregisterEvent: vi.fn(),
+      enterCommand: vi.fn(() => {
+        cleanupPhase = 1;
+        nativeOutput += "\nend\nR1#";
+      }),
+      enterChar: vi.fn(),
+      getCommandInput: vi.fn(() => ""),
+      getAllOutput: vi.fn(() => nativeOutput),
+      getPrompt: vi.fn(() => (cleanupPhase === 0 ? "R1(config-if)#" : "R1#")),
+      getMode: vi.fn(() => (cleanupPhase === 0 ? "config-if" : "privileged-exec")),
+    } as any;
+
     const terminal = {
       attach: vi.fn(),
       detach: vi.fn(),
@@ -478,12 +851,7 @@ describe("ExecutionEngine auto attach", () => {
     (globalThis as any).ipc = {
       network: () => ({
         getDevice: () => ({
-          getCommandLine: () => ({
-            registerEvent: vi.fn(),
-            unregisterEvent: vi.fn(),
-            enterCommand: vi.fn(),
-            enterChar: vi.fn(),
-          }),
+          getCommandLine: () => nativeTerminal,
         }),
       }),
     };
@@ -491,26 +859,189 @@ describe("ExecutionEngine auto attach", () => {
 
     try {
       const engine = createExecutionEngine(terminal);
-      const plan = createDeferredJobPlan("R1", [commandStep("show version")]);
+      const plan = createDeferredJobPlan("R1", [commandStep("show version")], {
+        targetMode: "privileged-exec",
+      } as any);
+      (plan as any).targetMode = "privileged-exec";
 
       const job = engine.startJob(plan);
 
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 750));
 
-      expect(job.context.phase).toBe("error");
-      expect(job.context.errorCode).toBe("CMD_FAILED");
-      expect(terminal.executeCommand).toHaveBeenNthCalledWith(
-        1,
-        "R1",
-        "show version",
-        expect.any(Object),
-      );
-      expect(terminal.executeCommand).toHaveBeenNthCalledWith(
-        2,
-        "R1",
-        "end",
-        expect.objectContaining({ autoConfirm: false, allowPager: false }),
-      );
+      expect(job.context.phase).toBe("completed");
+      expect(job.context.finished).toBe(true);
+      expect(job.context.errorCode).toBe("IOS_INVALID_INPUT");
+      expect(String(job.context.result?.output || "")).toContain("% Invalid input detected");
+      expect(String(job.context.result?.output || "")).toContain("[cleanup]");
+      expect(String(job.context.result?.output || "")).toContain("end\nR1#");
+      expect(terminal.executeCommand).toHaveBeenCalledTimes(1);
+      expect(nativeTerminal.enterCommand).toHaveBeenCalledTimes(1);
+      expect(nativeTerminal.enterCommand).toHaveBeenCalledWith("end");
+    } finally {
+      (globalThis as any).ipc = previousIpc;
+      (globalThis as any).dprint = previousDprint;
+    }
+  });
+
+  test("startJob limpia config sin depender de targetMode cuando hay error semántico", async () => {
+    let cleanupPhase = 0;
+    let nativeOutput =
+      "SW-SRV-DIST(config-if-range)#channel-group 7 mode active\n                                             ^\n% Invalid input detected at '^' marker.\nSW-SRV-DIST(config-if-range)#";
+
+    const nativeTerminal = {
+      registerEvent: vi.fn(),
+      unregisterEvent: vi.fn(),
+      enterCommand: vi.fn(() => {
+        cleanupPhase = 1;
+        nativeOutput += "\nend\nSW-SRV-DIST#";
+      }),
+      enterChar: vi.fn(),
+      getCommandInput: vi.fn(() => ""),
+      getAllOutput: vi.fn(() => nativeOutput),
+      getPrompt: vi.fn(() => (cleanupPhase === 0 ? "SW-SRV-DIST(config-if-range)#" : "SW-SRV-DIST#")),
+      getMode: vi.fn(() => (cleanupPhase === 0 ? "config-if-range" : "privileged-exec")),
+    } as any;
+
+    const terminal = {
+      attach: vi.fn(),
+      detach: vi.fn(),
+      getSession: vi.fn(() => ({ mode: "config-if-range", prompt: "SW-SRV-DIST(config-if-range)#", paging: false, awaitingConfirm: false })),
+      getMode: vi.fn(),
+      isBusy: vi.fn(() => false),
+      isAnyBusy: vi.fn(() => false),
+      executeCommand: vi.fn().mockResolvedValue({
+        ok: false,
+        output: "                                             ^\n% Invalid input detected at '^' marker.\n",
+        status: 1,
+        session: { mode: "config-if-range", prompt: "SW-SRV-DIST(config-if-range)#", paging: false, awaitingConfirm: false },
+        mode: "config-if-range",
+      }),
+      continuePager: vi.fn(),
+      confirmPrompt: vi.fn(),
+    } as any;
+
+    const previousIpc = (globalThis as any).ipc;
+    const previousDprint = (globalThis as any).dprint;
+
+    (globalThis as any).ipc = {
+      network: () => ({
+        getDevice: () => ({
+          getCommandLine: () => nativeTerminal,
+        }),
+      }),
+    };
+    (globalThis as any).dprint = vi.fn();
+
+    try {
+      const engine = createExecutionEngine(terminal);
+      const plan = createDeferredJobPlan("SW-SRV-DIST", [commandStep("channel-group 7 mode active")]);
+
+      const job = engine.startJob(plan);
+
+      await new Promise((resolve) => setTimeout(resolve, 750));
+
+      expect(job.context.phase).toBe("completed");
+      expect(job.context.finished).toBe(true);
+      expect(job.context.errorCode).toBe("IOS_INVALID_INPUT");
+      expect(String(job.context.result?.output || "")).toContain("% Invalid input detected");
+      expect(String(job.context.result?.output || "")).toContain("[cleanup]");
+      expect(String(job.context.result?.output || "")).toContain("end\nSW-SRV-DIST#");
+      expect(terminal.executeCommand).toHaveBeenCalledTimes(1);
+      expect(nativeTerminal.enterCommand).toHaveBeenCalledTimes(1);
+    } finally {
+      (globalThis as any).ipc = previousIpc;
+      (globalThis as any).dprint = previousDprint;
+    }
+  });
+
+  test("cleanup semántico no reprocresa el mismo step mientras end está en curso", async () => {
+    let resolverCleanup: ((value: any) => void) | null = null;
+    const cleanupPromise = new Promise<any>((resolve) => {
+      resolverCleanup = resolve;
+    });
+
+    let cleanupPhase = 0;
+    let nativeOutput =
+      "SW-SRV-DIST(config-if-range)#channel-group 7 mode active\n                                             ^\n% Invalid input detected at '^' marker.\nSW-SRV-DIST(config-if-range)#";
+
+    const nativeTerminal = {
+      registerEvent: vi.fn(),
+      unregisterEvent: vi.fn(),
+      enterCommand: vi.fn(() => {
+        cleanupPhase = 1;
+        nativeOutput += "\nend\nSW-SRV-DIST#";
+      }),
+      enterChar: vi.fn(),
+      getCommandInput: vi.fn(() => " "),
+      getAllOutput: vi.fn(() => nativeOutput),
+      getPrompt: vi.fn(() => (cleanupPhase === 0 ? "SW-SRV-DIST(config-if-range)#" : "SW-SRV-DIST#")),
+      getMode: vi.fn(() => (cleanupPhase === 0 ? "config-if-range" : "privileged-exec")),
+    } as any;
+
+    const terminal = {
+      attach: vi.fn(),
+      detach: vi.fn(),
+      getSession: vi.fn(() => ({ mode: "config-if-range", prompt: "SW-SRV-DIST(config-if-range)#", paging: false, awaitingConfirm: false })),
+      getMode: vi.fn(),
+      isBusy: vi.fn(() => false),
+      isAnyBusy: vi.fn(() => false),
+      executeCommand: vi.fn().mockResolvedValue({
+        ok: false,
+        output: "\n% Invalid input detected at '^' marker.\n",
+        status: 1,
+        session: { mode: "config-if-range", prompt: "SW-SRV-DIST(config-if-range)#", paging: false, awaitingConfirm: false },
+        mode: "config-if-range",
+      }),
+      continuePager: vi.fn(),
+      confirmPrompt: vi.fn(),
+    } as any;
+
+    const previousIpc = (globalThis as any).ipc;
+    const previousDprint = (globalThis as any).dprint;
+
+    (globalThis as any).ipc = {
+      network: () => ({
+        getDevice: () => ({
+          getCommandLine: () => nativeTerminal,
+        }),
+      }),
+    };
+    (globalThis as any).dprint = vi.fn();
+
+    try {
+      const engine = createExecutionEngine(terminal);
+      const plan = createDeferredJobPlan("SW-SRV-DIST", [commandStep("channel-group 7 mode active")]);
+      const job = engine.startJob(plan);
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(terminal.executeCommand).toHaveBeenCalledTimes(1);
+      expect(nativeTerminal.enterCommand).toHaveBeenCalledTimes(1);
+
+      const midState = engine.getJobState(job.id);
+      expect(midState?.finished).toBe(false);
+      expect(midState?.phase).toBe("waiting-delay");
+      expect(terminal.executeCommand).toHaveBeenCalledTimes(1);
+
+      if (resolverCleanup) {
+        const cleanupResolver = resolverCleanup as (value: any) => void;
+        cleanupResolver({
+          ok: true,
+          output: "end\nSW-SRV-DIST#",
+          rawOutput: "end\nSW-SRV-DIST#",
+          raw: "end\nSW-SRV-DIST#",
+          status: 0,
+          session: { mode: "privileged-exec", prompt: "SW-SRV-DIST#", paging: false, awaitingConfirm: false },
+          mode: "privileged-exec",
+        });
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 700));
+
+      const finalState = engine.getJobState(job.id);
+      expect(finalState?.finished).toBe(true);
+      expect(String(finalState?.result?.output || "")).toContain("[cleanup]");
+      expect(String(finalState?.result?.output || "")).toContain("end\nSW-SRV-DIST#");
     } finally {
       (globalThis as any).ipc = previousIpc;
       (globalThis as any).dprint = previousDprint;

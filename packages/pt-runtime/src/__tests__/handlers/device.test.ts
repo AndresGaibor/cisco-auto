@@ -85,6 +85,6 @@ describe("Device handlers (rename/move)", () => {
     const deps = createDeps(device);
     const result = handleMoveDevice({ type: "moveDevice", name: "R1", x: 100, y: 200 }, deps);
     expect(result.ok).toBe(false);
-    expect((result as any).code).toBe("INTERNAL_ERROR");
+    expect((result as any).code).toBe("MOVE_REJECTED");
   });
 });

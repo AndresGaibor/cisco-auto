@@ -23,6 +23,10 @@ export function getDefaultDevDir(): string {
   return process.env.PT_DEV_DIR ?? join(home, "pt-dev");
 }
 
+export function getDevDir(): string {
+  return getDefaultDevDir();
+}
+
 /**
  * Resuelve una ruta dentro del directorio pt-dev.
  * @param parts - Partes de la ruta a concatenar

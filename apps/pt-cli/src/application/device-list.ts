@@ -121,6 +121,8 @@ export interface ListedDevice {
 export interface LiveDeviceListOptions {
   refreshCache?: boolean;
   deep?: boolean;
+  ports?: boolean;
+  links?: boolean;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -130,16 +132,21 @@ function sleep(ms: number): Promise<void> {
 async function listDevicesWithRetry(
   controller: PTController,
   type?: string,
+  options?: LiveDeviceListOptions,
 ): Promise<Awaited<ReturnType<PTController["listDevices"]>>> {
+  const listOptions = options?.deep || options?.links || options?.ports
+    ? { includePorts: Boolean(options.ports || options.links || options.deep), includeLinks: Boolean(options.links || options.deep), deep: Boolean(options.deep) }
+    : undefined;
+
   try {
-    const firstResult = await controller.listDevices(type);
+    const firstResult = await controller.listDevices(type, listOptions);
     if (getControllerDevices(firstResult).length > 0) {
       return firstResult;
     }
 
     log("controller.listDevices() returned empty on first attempt, retrying once");
     await sleep(250);
-    return await controller.listDevices(type);
+    return await controller.listDevices(type, listOptions);
   } catch (firstError) {
     log(
       `controller.listDevices() first attempt failed, retrying once: ${
@@ -148,23 +155,8 @@ async function listDevicesWithRetry(
     );
 
     await sleep(250);
-    return await controller.listDevices(type);
+    return await controller.listDevices(type, listOptions);
   }
-}
-
-export interface TopologyDeviceLike {
-  name: string;
-  model: string;
-  type: string;
-  power: boolean;
-  ports?: Array<unknown>;
-  displayName?: string;
-  x?: number;
-  y?: number;
-  hostname?: string;
-  ip?: string;
-  mask?: string;
-  mac?: string;
 }
 
 export type { UnresolvedLink };
@@ -441,7 +433,7 @@ export async function loadLiveDeviceListFromController(
   let result: Awaited<ReturnType<PTController["listDevices"]>>;
   try {
     // La ruta viva manda: el estado del bridge solo influye en el fallback.
-    result = await listDevicesWithRetry(controller, type);
+    result = await listDevicesWithRetry(controller, type, options);
     log(`controller.listDevices() ok, devices=${getControllerDevices(result).length}`);
   } catch (err) {
     if (isBridgeResultTimeout(err)) {
@@ -532,19 +524,10 @@ export async function loadLiveDeviceList(
   type?: string,
   options?: LiveDeviceListOptions,
 ): Promise<DeviceListResult> {
-  let controller: PTController;
   try {
-    controller = createDefaultPTController();
-  } catch (err) {
-    throw new Error(
-      "No se pudo crear el controller PT. Asegurate de que Packet Tracer esté abierto: " +
-        String(err),
+    return await withLiveController((controller) =>
+      loadLiveDeviceListFromController(controller, type, 15000, options),
     );
-  }
-
-  try {
-    await controller.start();
-    return await loadLiveDeviceListFromController(controller, type, 15000, options);
   } catch (err) {
     if (err instanceof Error && err.message.includes("no respondió a tiempo")) {
       throw new Error(
@@ -552,12 +535,6 @@ export async function loadLiveDeviceList(
       );
     }
     throw err;
-  } finally {
-    try {
-      await controller.stop();
-    } catch {
-      // Ignorar fallos de cierre: ya tenemos el resultado o el error principal.
-    }
   }
 }
 
@@ -602,10 +579,7 @@ function extractXmlSummary(xmlParsed: Record<string, unknown> | null | undefined
   };
 }
 
-export async function loadLiveDeviceListXml(
-  type?: string,
-  options?: LiveDeviceListOptions,
-): Promise<DeviceListResult> {
+async function withLiveController<T>(run: (controller: PTController) => Promise<T>): Promise<T> {
   let controller: PTController;
   try {
     controller = createDefaultPTController();
@@ -618,35 +592,46 @@ export async function loadLiveDeviceListXml(
 
   try {
     await controller.start();
-
-    const baseResult = await loadLiveDeviceListFromController(controller, type, 15000, options);
-
-    const enrichedDevices: ListedDevice[] = [];
-    for (const device of baseResult.devices) {
-      try {
-        const inspected = await controller.inspectDevice(device.name, true);
-        const inspectedAny = inspected as unknown as Record<string, unknown>;
-        const xmlRaw = inspectedAny.xmlParsed as Record<string, unknown> | undefined;
-        const xmlSummary = extractXmlSummary(xmlRaw);
-        const enriched: ListedDevice = { ...device } as ListedDevice;
-        if (xmlSummary) {
-          enriched.xmlParsed = xmlSummary;
-        }
-        enrichedDevices.push(enriched);
-      } catch {
-        enrichedDevices.push(device);
-      }
+    return await run(controller);
+  } finally {
+    try {
+      await controller.stop();
+    } catch {
+      // Ignorar fallos de cierre: ya tenemos el resultado o el error principal.
     }
+  }
+}
 
-    return {
-      ...baseResult,
-      devices: enrichedDevices as ListedDevice[],
-    };
+export async function loadLiveDeviceListXml(
+  type?: string,
+  options?: LiveDeviceListOptions,
+): Promise<DeviceListResult> {
+  try {
+    return await withLiveController(async (controller) => {
+      const baseResult = await loadLiveDeviceListFromController(controller, type, 15000, options);
 
-    return {
-      ...baseResult,
-      devices: enrichedDevices,
-    };
+      const enrichedDevices: ListedDevice[] = [];
+      for (const device of baseResult.devices) {
+        try {
+          const inspected = await controller.inspectDevice(device.name, true);
+          const inspectedAny = inspected as unknown as Record<string, unknown>;
+          const xmlRaw = inspectedAny.xmlParsed as Record<string, unknown> | undefined;
+          const xmlSummary = extractXmlSummary(xmlRaw);
+          const enriched: ListedDevice = { ...device } as ListedDevice;
+          if (xmlSummary) {
+            enriched.xmlParsed = xmlSummary;
+          }
+          enrichedDevices.push(enriched);
+        } catch {
+          enrichedDevices.push(device);
+        }
+      }
+
+      return {
+        ...baseResult,
+        devices: enrichedDevices,
+      };
+    });
   } catch (err) {
     if (err instanceof Error && err.message.includes("no respondió a tiempo")) {
       throw new Error(
@@ -654,11 +639,5 @@ export async function loadLiveDeviceListXml(
       );
     }
     throw err;
-  } finally {
-    try {
-      await controller.stop();
-    } catch {
-      // Ignorar fallos de cierre: ya tenemos el resultado o el error principal.
-    }
   }
 }

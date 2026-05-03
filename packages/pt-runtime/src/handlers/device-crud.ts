@@ -145,16 +145,54 @@ export function handleRemoveDevice(payload: RemoveDevicePayload, deps: HandlerDe
 }
 
 export function handleRenameDevice(payload: any, deps: HandlerDeps): HandlerResult {
-  var net = deps.getNet();
-  var device = net.getDevice(payload.oldName);
-  if (!device) return { ok: false, error: "Device not found: " + payload.oldName, code: "DEVICE_NOT_FOUND" };
-  if (net.getDevice(payload.newName)) return { ok: false, error: "Device already exists: " + payload.newName, code: "DEVICE_ALREADY_EXISTS" };
-
   try {
-    device.setName(payload.newName);
-    return { ok: true, oldName: payload.oldName, newName: payload.newName };
-  } catch (e) {
-    return { ok: false, error: "Rename failed: " + String(e), code: "RENAME_FAILED" };
+    const device = deps.getDeviceByName(payload.oldName);
+
+    if (!device) {
+      return {
+        ok: false,
+        error: "Device not found: " + payload.oldName,
+        code: "DEVICE_NOT_FOUND",
+      };
+    }
+
+    if (!payload.newName || typeof payload.newName !== "string") {
+      return {
+        ok: false,
+        error: "New device name is required",
+        code: "INVALID_DEVICE_NAME",
+      };
+    }
+
+    if (typeof device.setName !== "function") {
+      return {
+        ok: false,
+        error: "Device does not support setName: " + payload.oldName,
+        code: "UNSUPPORTED_DEVICE_OPERATION",
+      };
+    }
+
+    const renameResult = (device as any).setName(payload.newName);
+
+    if (renameResult === false) {
+      return {
+        ok: false,
+        error: "Rename rejected by Packet Tracer: " + payload.oldName + " -> " + payload.newName,
+        code: "RENAME_REJECTED",
+      };
+    }
+
+    return {
+      ok: true,
+      oldName: payload.oldName,
+      newName: payload.newName,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+      code: "RENAME_FAILED",
+    };
   }
 }
 

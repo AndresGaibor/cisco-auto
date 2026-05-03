@@ -40,10 +40,14 @@ export class TopologyService {
   /**
    * Lista dispositivos con filtros opcionales.
    * @param filter - Filter por tipo, nombre o array de nombres
+   * @param options - Opciones de list: includePorts, includeLinks, deep
    * @returns Resultado con dispositivos y conexiones
    */
-  listDevices(filter?: string | number | string[]): Promise<DeviceListResult> {
-    return this.query.listDevices(filter);
+  listDevices(
+    filter?: string | number | string[],
+    options?: { includePorts?: boolean; includeLinks?: boolean; deep?: boolean },
+  ): Promise<DeviceListResult & { meta?: Record<string, unknown> }> {
+    return this.query.listDevices(filter, options) as Promise<DeviceListResult & { meta?: Record<string, unknown> }>;
   }
 
   /**

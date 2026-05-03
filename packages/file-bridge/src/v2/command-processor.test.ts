@@ -1,6 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdirSync, rmSync, readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs";
+import { mkdirSync, rmSync, readFileSync, writeFileSync, existsSync, readdirSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { BridgePathLayout } from "../shared/path-layout";
 import { EventLogWriter } from "../event-log-writer.js";
 import { SequenceStore } from "../shared/sequence-store.js";
@@ -8,7 +9,11 @@ import { BackpressureManager, BackpressureError } from "../backpressure-manager.
 import { CommandProcessor } from "./command-processor.js";
 import { CrashRecovery } from "./crash-recovery.js";
 
-const TEST_ROOT = "/tmp/command-processor-test-" + Math.random().toString(36).slice(2);
+function makeTestRoot(prefix: string): string {
+  return mkdtempSync(join(tmpdir(), prefix));
+}
+
+let TEST_ROOT: string;
 
 function commandEnvelope(seq: number, type: string, payload: Record<string, unknown> = {}) {
   return {
@@ -30,6 +35,7 @@ describe("CommandProcessor + CrashRecovery contract", () => {
   let backpressure: BackpressureManager;
 
   beforeEach(() => {
+    TEST_ROOT = makeTestRoot('file-bridge-command-processor-');
     mkdirSync(TEST_ROOT, { recursive: true });
     paths = new BridgePathLayout(TEST_ROOT);
     seq = new SequenceStore(TEST_ROOT);

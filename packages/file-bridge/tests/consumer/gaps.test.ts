@@ -1,14 +1,15 @@
 import { test, expect, afterEach, beforeEach } from "bun:test";
-import { rmSync, mkdirSync, writeFileSync } from "node:fs";
+import { rmSync, mkdirSync, writeFileSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DurableNdjsonConsumer } from "../../src/durable-ndjson-consumer.js";
 import { BridgePathLayout } from "../../src/shared/path-layout.js";
 
-const TEST_DIR = "/tmp/bridge-consumer-gaps";
+let TEST_DIR: string;
 let layout: BridgePathLayout;
 
 beforeEach(() => {
-  rmSync(TEST_DIR, { recursive: true, force: true });
+  TEST_DIR = mkdtempSync(join(tmpdir(), "bridge-consumer-gaps-"));
   mkdirSync(join(TEST_DIR, "logs"), { recursive: true });
   mkdirSync(join(TEST_DIR, "consumer-state"), { recursive: true });
   layout = new BridgePathLayout(TEST_DIR);

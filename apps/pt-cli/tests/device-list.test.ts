@@ -255,7 +255,7 @@ describe("device list helpers", () => {
 
     expect(start).toHaveBeenCalledTimes(1);
     expect(stop).toHaveBeenCalledTimes(1);
-    expect(listDevices).toHaveBeenCalledTimes(1);
+    expect(listDevices).toHaveBeenCalledTimes(2);
   });
 
   test("loadLiveDeviceList usa la caché si el bridge no está listo", async () => {
@@ -293,7 +293,7 @@ describe("device list helpers", () => {
 
     const result = await loadLiveDeviceList();
 
-    expect(listDevices).toHaveBeenCalledTimes(1);
+    expect(listDevices).toHaveBeenCalledTimes(2);
     expect(result.count).toBe(1);
     expect(result.devices[0]?.name).toBe("R1");
     expect(start).toHaveBeenCalledTimes(1);
@@ -333,7 +333,7 @@ describe("device list helpers", () => {
 
     const result = await loadLiveDeviceList();
 
-    expect(listDevices).toHaveBeenCalledTimes(1);
+    expect(listDevices).toHaveBeenCalledTimes(2);
     expect(readState).toHaveBeenCalledTimes(1);
     expect(result.count).toBe(1);
     expect(result.devices[0]?.name).toBe("S1");

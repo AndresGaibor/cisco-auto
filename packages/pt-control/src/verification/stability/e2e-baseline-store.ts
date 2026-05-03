@@ -7,6 +7,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { E2EReport } from "../e2e/e2e-report.js";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 /**
  * Baseline histórico de una corrida E2E.
@@ -48,7 +50,9 @@ export interface E2EBaselineTiming {
  * Obtiene la ruta del directorio de baselines E2E.
  */
 function obtenerDirectorioBaselines(): string {
-  const baseDir = process.env.PT_ARTIFACTS_DIR ?? "/tmp/pt-e2e-artifacts";
+  const baseDir = process.env.PT_ARTIFACTS_DIR
+    ? resolve(process.env.PT_ARTIFACTS_DIR)
+    : join(tmpdir(), "pt-e2e-artifacts");
   return path.join(baseDir, "baselines");
 }
 

@@ -13,6 +13,7 @@ import { LabRuntimeManager } from "./lab-runtime-manager.js";
 import { LabPlanPersistence } from "./lab-plan-persistence.js";
 import type { VerificationReport } from "./lab-verifier.js";
 import { PTSafeValidator } from "./pt-safe-validator.js";
+import { resolvePtDevDir } from "../../system/paths.js";
 
 export interface LabCLIConfig {
   devDir: string;
@@ -66,7 +67,7 @@ export class LabCLI {
     config: Partial<LabCLIConfig> = {},
   ) {
     this.config = {
-      devDir: config.devDir ?? process.env.PT_DEV_DIR ?? `${process.env.HOME}/pt-dev`,
+      devDir: config.devDir ?? resolvePtDevDir(),
       stateDir: config.stateDir ?? "./lab-state",
       autoVerify: config.autoVerify ?? true,
       autoSave: config.autoSave ?? true,

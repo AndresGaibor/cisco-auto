@@ -361,8 +361,11 @@ export class PTController {
     }
   }
 
-  async listDevices(filter?: string | number | string[]): Promise<DeviceState[]> {
-    const result = await this._topologyController.listDevices(filter);
+  async listDevices(
+    filter?: string | number | string[],
+    options?: { includePorts?: boolean; includeLinks?: boolean; deep?: boolean },
+  ): Promise<DeviceState[]> {
+    const result = await this._topologyController.listDevices(filter, options) as any;
 
     if (Array.isArray(result)) {
       return result as DeviceState[];

@@ -35,6 +35,6 @@ export function createBridgeCommand(): Command {
       console.log(`Devices      : ${status.topology.deviceCount}`);
       console.log(`Links        : ${status.topology.linkCount}`);
       console.log("");
-      console.log("Para más detalles: bun run pt status");
+        console.log("Para más detalles: bun run pt doctor");
     });
 }

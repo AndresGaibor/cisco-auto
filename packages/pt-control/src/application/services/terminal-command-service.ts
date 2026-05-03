@@ -4,7 +4,7 @@ import type {
   TerminalCommandResult,
 } from "@cisco-auto/terminal-contracts";
 import type { RuntimeTerminalPort } from "../../ports/runtime-terminal-port.js";
-import { buildUniversalTerminalPlan } from "./terminal-plan-builder.js";
+import { buildUniversalTerminalPlan, splitCommandLines } from "./terminal-plan-builder.js";
 
 export interface TerminalControllerPort {
   inspectDeviceFast?(device: string): Promise<{
@@ -42,6 +42,11 @@ export interface TerminalControllerPort {
     };
     parsed?: unknown;
   }>;
+  getHeartbeatHealth?(): {
+    state: "ok" | "stale" | "missing" | "unknown";
+    ageMs?: number;
+    lastSeenTs?: number;
+  };
 }
 
 export interface TerminalCommandServiceDeps {
@@ -71,6 +76,64 @@ function normalizeText(value: unknown): string {
   return String(value ?? "").trim().toLowerCase();
 }
 
+function normalizeTerminalText(value: unknown): string {
+  return String(value ?? "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .trim();
+}
+
+function isIosSyslogLine(line: string): boolean {
+  return /^%[A-Z0-9_]+-\d+-[A-Z0-9_]+:/i.test(String(line ?? "").trim());
+}
+
+function stripSemanticCleanupSection(value: string): string {
+  const text = normalizeTerminalText(value);
+  const marker = "\n[cleanup]\n";
+  const index = text.indexOf(marker);
+
+  if (index >= 0) {
+    return text.slice(0, index).trim();
+  }
+
+  return text;
+}
+
+function extractPrimaryIosErrorMessage(value: unknown): string {
+  const withoutCleanup = stripSemanticCleanupSection(normalizeTerminalText(value));
+  const lines = withoutCleanup
+    .split("\n")
+    .filter((line) => !isIosSyslogLine(line));
+
+  const markerIndex = lines.findIndex((line) =>
+    /%\s*(Invalid input detected|Incomplete command|Ambiguous command|Unknown command|Invalid command)/i.test(line),
+  );
+
+  if (markerIndex < 0) {
+    return lines.join("\n").trim();
+  }
+
+  let start = markerIndex;
+
+  while (start > 0) {
+    const previous = lines[start - 1] ?? "";
+
+    if (/^\s*\^+\s*$/.test(previous)) {
+      start -= 1;
+      continue;
+    }
+
+    if (previous.trim() && !/^[A-Za-z0-9._-]+(?:\(config[^)]*\))?[>#]\s*$/.test(previous.trim())) {
+      start -= 1;
+      continue;
+    }
+
+    break;
+  }
+
+  return lines.slice(start, markerIndex + 1).join("\n").trim();
+}
+
 function createRuntimePollingError(device: string, cause: string): Error {
   const error = new Error(
     `No se pudo inspeccionar "${device}" porque el runtime de Packet Tracer no respondió.`,
@@ -92,14 +155,14 @@ function extractIosFailureDetails(input: {
   if (loweredOutput.includes("invalid input detected") || loweredOutput.includes("invalid command")) {
     return {
       code: "IOS_INVALID_INPUT",
-      message: output || "Entrada inválida en IOS",
+      message: extractPrimaryIosErrorMessage(output) || output || "Entrada inválida en IOS",
     };
   }
 
   if (loweredOutput.includes("not recognized")) {
     return {
       code: "IOS_UNKNOWN_COMMAND",
-      message: output || "Comando IOS no reconocido",
+      message: extractPrimaryIosErrorMessage(output) || output || "Comando IOS no reconocido",
     };
   }
 
@@ -125,14 +188,180 @@ function extractIosFailureDetails(input: {
   if (parsedCode) {
     return {
       code: parsedCode,
-      message: output || parsedMessage || parsedCode,
+      message: extractPrimaryIosErrorMessage(output) || output || parsedMessage || parsedCode,
     };
   }
 
   return {
     code: String(input.error?.code ?? "IOS_EXEC_FAILED"),
-    message: output || String(input.error?.message ?? "Error en ejecución de comando IOS"),
+    message: extractPrimaryIosErrorMessage(output) || output || String(input.error?.message ?? "Error en ejecución de comando IOS"),
   };
+}
+
+function detectIosSemanticFailure(output: unknown): { code: string; message: string } | null {
+  const text = String(output ?? "");
+  const recent = text.split(/\r?\n/).slice(-30).join("\n");
+  const lower = recent.toLowerCase();
+
+  if (lower.includes("% invalid input detected") || lower.includes("% invalid command")) {
+    return {
+      code: "IOS_INVALID_INPUT",
+      message: recent.trim() || "Comando IOS con input inválido detectado",
+    };
+  }
+
+  if (lower.includes("% incomplete command")) {
+    return {
+      code: "IOS_INCOMPLETE_COMMAND",
+      message: recent.trim() || "Comando IOS incompleto",
+    };
+  }
+
+  if (lower.includes("% ambiguous command")) {
+    return {
+      code: "IOS_AMBIGUOUS_COMMAND",
+      message: recent.trim() || "Comando IOS ambiguo",
+    };
+  }
+
+  if (lower.includes("% unknown command")) {
+    return {
+      code: "IOS_INVALID_INPUT",
+      message: recent.trim() || "Comando IOS desconocido",
+    };
+  }
+
+  if (lower.includes("translating...")) {
+    return {
+      code: "IOS_DNS_LOOKUP_TRIGGERED",
+      message: recent.trim() || "DNS lookup activado durante ejecución de comando",
+    };
+  }
+
+  if (lower.includes("% bad secrets")) {
+    return {
+      code: "IOS_PRIVILEGE_REQUIRED",
+      message: recent.trim() || "Se requiere privilegio elevado",
+    };
+  }
+
+  if (lower.includes("% not in config mode")) {
+    return {
+      code: "IOS_CONFIG_MODE_REQUIRED",
+      message: recent.trim() || "Se requiere modo configuración",
+    };
+  }
+
+  return null;
+}
+
+function isIosConfigModeText(value: unknown): boolean {
+  const text = String(value ?? "").trim().toLowerCase();
+
+  return (
+    text.startsWith("global-config") ||
+    text.startsWith("interface-config") ||
+    text.startsWith("router-config") ||
+    text.startsWith("line-config") ||
+    text.startsWith("config") ||
+    /\(config[^)]*\)#\s*$/.test(text)
+  );
+}
+
+function getLastNonEmptyLine(value: unknown): string {
+  const lines = String(value ?? "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return lines.at(-1) ?? "";
+}
+
+function isIosPrivilegedPromptText(value: unknown): boolean {
+  const text = String(value ?? "").trim();
+
+  return /^[A-Za-z0-9._-]+#\s*$/.test(text) && !/\(config[^)]*\)#\s*$/.test(text);
+}
+
+function inferRuntimeFinalPromptFromOutput(runtimeResult: any): string {
+  return getLastNonEmptyLine(
+    firstString(
+      runtimeResult?.rawOutput,
+      runtimeResult?.output,
+      runtimeResult?.raw,
+      runtimeResult?.result?.raw,
+      runtimeResult?.result?.output,
+    ),
+  );
+}
+
+function getRuntimeFailureText(runtimeResult: any): string {
+  return firstString(
+    runtimeResult?.parsed?.result?.output,
+    runtimeResult?.parsed?.result?.rawOutput,
+    runtimeResult?.parsed?.result?.raw,
+    runtimeResult?.rawOutput,
+    runtimeResult?.output,
+    runtimeResult?.error?.message,
+    runtimeResult?.error,
+  );
+}
+
+function getRuntimeModeAfter(runtimeResult: any): string {
+  return String(
+    runtimeResult?.modeAfter ??
+      runtimeResult?.session?.modeAfter ??
+      runtimeResult?.session?.mode ??
+      runtimeResult?.parsed?.session?.modeAfter ??
+      runtimeResult?.parsed?.session?.mode ??
+      "",
+  );
+}
+
+function getRuntimePromptAfter(runtimeResult: any): string {
+  return String(
+    runtimeResult?.promptAfter ??
+      runtimeResult?.session?.promptAfter ??
+      runtimeResult?.session?.prompt ??
+      runtimeResult?.parsed?.session?.promptAfter ??
+      runtimeResult?.parsed?.session?.prompt ??
+      "",
+  );
+}
+
+function detectAutoConfigFinalModeFailure(
+  plan: any,
+  runtimeResult: any,
+): { code: string; message: string } | null {
+  const metadata = plan?.metadata as { autoConfig?: unknown } | undefined;
+
+  if (metadata?.autoConfig !== true) {
+    return null;
+  }
+
+  const modeAfter = getRuntimeModeAfter(runtimeResult);
+  const promptAfter = getRuntimePromptAfter(runtimeResult);
+  const rawOutput = firstString(runtimeResult?.rawOutput, runtimeResult?.output);
+  const finalPromptFromOutput = inferRuntimeFinalPromptFromOutput(runtimeResult);
+
+  if (isIosPrivilegedPromptText(finalPromptFromOutput)) {
+    return null;
+  }
+
+  if (isIosConfigModeText(modeAfter) || isIosConfigModeText(promptAfter)) {
+    return {
+      code: "IOS_AUTOCONFIG_DID_NOT_EXIT_CONFIG_MODE",
+      message:
+        `Auto-config terminó en modo configuración. modeAfter=${JSON.stringify(modeAfter)} ` +
+        `promptAfter=${JSON.stringify(promptAfter)} ` +
+        `finalPromptFromOutput=${JSON.stringify(finalPromptFromOutput)}\n` +
+        rawOutput,
+    };
+  }
+
+  return null;
 }
 
 function getDeviceModel(deviceState: { model?: unknown; customDeviceModel?: unknown }): string {
@@ -191,6 +420,167 @@ function isHostLikeDevice(deviceState: {
   );
 }
 
+function classifyDeviceState(deviceState: {
+  type?: string | number;
+  model?: unknown;
+  customDeviceModel?: unknown;
+}): TerminalDeviceKind {
+  if (isIosLikeDevice(deviceState)) {
+    return "ios";
+  }
+
+  if (isHostLikeDevice(deviceState)) {
+    return "host";
+  }
+
+  return "unknown";
+}
+
+function normalizeWarnings(warnings: unknown): string[] {
+  return Array.isArray(warnings) ? warnings : [];
+}
+
+function firstString(...values: unknown[]): string {
+  for (const value of values) {
+    if (value !== undefined && value !== null) {
+      return String(value);
+    }
+  }
+
+  return "";
+}
+
+function normalizeIosCommand(line: string): string {
+  return line.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function isPrivilegedIosCommand(line: string): boolean {
+  const cmd = normalizeIosCommand(line);
+
+  return (
+    /^write\b/.test(cmd) ||
+    /^copy\b/.test(cmd) ||
+    /^erase\b/.test(cmd) ||
+    /^reload\b/.test(cmd) ||
+    /^clear\b/.test(cmd) ||
+    /^debug\b/.test(cmd) ||
+    /^undebug\b/.test(cmd)
+  );
+}
+
+function getHeartbeatHealth(controller: TerminalControllerPort): {
+  state: "ok" | "stale" | "missing" | "unknown";
+  ageMs?: number;
+  lastSeenTs?: number;
+} | null {
+  try {
+    return controller.getHeartbeatHealth?.() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function getHeartbeatAgeMs(health: { ageMs?: number } | null): number | null {
+  if (!health || typeof health.ageMs !== "number" || !Number.isFinite(health.ageMs)) {
+    return null;
+  }
+
+  return health.ageMs;
+}
+
+function isHighRiskIosCommand(command: string, plan: any): boolean {
+  if (plan?.metadata?.autoConfig === true) {
+    return true;
+  }
+
+  return splitCommandLines(command).some(isPrivilegedIosCommand);
+}
+
+function createRuntimeUnavailableResult(args: {
+  action: "ios.exec" | "host.exec";
+  device: string;
+  deviceKind: TerminalDeviceKind;
+  command: string;
+  health: { state: "ok" | "stale" | "missing" | "unknown"; ageMs?: number; lastSeenTs?: number } | null;
+  reason: string;
+}): TerminalCommandResult {
+  return buildCommandResult({
+    ok: false,
+    action: args.action,
+    device: args.device,
+    deviceKind: args.deviceKind,
+    command: args.command,
+    output: "",
+    rawOutput: "",
+    status: 1,
+    error: {
+      code: "PT_RUNTIME_UNAVAILABLE",
+      message: args.reason,
+      phase: "detection",
+    },
+    warnings: [],
+    evidence: {
+      heartbeat: args.health,
+      reason: args.reason,
+    },
+  });
+}
+
+function isHostInvalidCommand(output: string): boolean {
+  const lowered = output.toLowerCase();
+  return lowered.includes("invalid command") || lowered.includes("not recognized");
+}
+
+function buildCommandResult(input: {
+  ok: boolean;
+  action: "ios.exec" | "host.exec";
+  device: string;
+  deviceKind: TerminalDeviceKind;
+  command: string;
+  output: string;
+  rawOutput: string;
+  status: number;
+  warnings: unknown;
+  evidence: unknown;
+  error?: {
+    code: string;
+    message: string;
+    phase: "detection" | "execution";
+  };
+}): TerminalCommandResult {
+  const result: TerminalCommandResult = {
+    ok: input.ok,
+    action: input.action,
+    device: input.device,
+    deviceKind: input.deviceKind,
+    command: input.command,
+    output: input.output,
+    rawOutput: input.rawOutput,
+    status: input.status,
+    warnings: normalizeWarnings(input.warnings),
+    evidence: input.evidence,
+  };
+
+  if (input.error) {
+    result.error = input.error;
+  }
+
+  return result;
+}
+
+function resolveHostCapabilityId(command: string): string {
+  const cmdName = command.split(" ")[0]!.toLowerCase();
+
+  if (cmdName === "ipconfig") return "host.ipconfig";
+  if (cmdName === "ping") return "host.ping";
+  if (cmdName === "tracert") return "host.tracert";
+  if (cmdName === "arp") return "host.arp";
+  if (cmdName === "nslookup") return "host.nslookup";
+  if (cmdName === "netstat") return "host.netstat";
+
+  return "host.exec";
+}
+
 export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
   async function resolveDeviceKind(device: string): Promise<TerminalDeviceKind> {
     try {
@@ -220,15 +610,7 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
           return "unknown";
         }
 
-        if (isIosLikeDevice(fastDeviceState)) {
-          return "ios";
-        }
-
-        if (isHostLikeDevice(fastDeviceState)) {
-          return "host";
-        }
-
-        return "unknown";
+        return classifyDeviceState(fastDeviceState);
       }
 
       const deviceState = await deps.controller.inspectDevice(device).catch(() => null);
@@ -237,15 +619,7 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
         return "unknown";
       }
 
-      if (isIosLikeDevice(deviceState)) {
-        return "ios";
-      }
-
-      if (isHostLikeDevice(deviceState)) {
-        return "host";
-      }
-
-      return "unknown";
+      return classifyDeviceState(deviceState);
     } catch (error) {
       const runtimeError = error as Error & { code?: string };
 
@@ -265,59 +639,128 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
     const runtimeTerminal = deps.runtimeTerminal;
     const executionTimeout = options?.timeoutMs ?? 45000;
     const bridgeTimeout = executionTimeout + 5000; // Margen para que el runtime falle primero
+    const plan = buildUniversalTerminalPlan({
+      id: deps.generateId(),
+      device,
+      command,
+      deviceKind: "ios",
+      mode: options?.mode,
+      allowConfirm: options?.allowConfirm,
+      allowDestructive: options?.allowDestructive,
+      timeoutMs: executionTimeout,
+    });
+    const heartbeat = getHeartbeatHealth(deps.controller);
+    const heartbeatAgeMs = getHeartbeatAgeMs(heartbeat);
+
+    if (heartbeatAgeMs !== null && heartbeatAgeMs > 20000) {
+      return createRuntimeUnavailableResult({
+        action: "ios.exec",
+        device,
+        deviceKind: "ios",
+        command,
+        health: heartbeat,
+        reason: "PT_RUNTIME_UNAVAILABLE: el heartbeat del runtime supera 20s.",
+      });
+    }
+
+    if (heartbeatAgeMs !== null && heartbeatAgeMs > 10000 && isHighRiskIosCommand(command, plan)) {
+      return createRuntimeUnavailableResult({
+        action: "ios.exec",
+        device,
+        deviceKind: "ios",
+        command,
+        health: heartbeat,
+        reason: "PT_RUNTIME_UNAVAILABLE: el heartbeat del runtime supera 10s para un comando IOS de alto riesgo.",
+      });
+    }
 
     if (runtimeTerminal?.runTerminalPlan) {
-      const plan = buildUniversalTerminalPlan({
-        id: deps.generateId(),
-        device,
-        command,
-        deviceKind: "ios",
-        mode: options?.mode,
-        allowConfirm: options?.allowConfirm,
-        allowDestructive: options?.allowDestructive,
-        timeoutMs: executionTimeout,
-      });
-
       const runtimeResult = (await runtimeTerminal.runTerminalPlan(plan, { timeoutMs: bridgeTimeout })) as any;
 
       if (!runtimeResult.ok) {
         const iosFailure = extractIosFailureDetails({
-          output: runtimeResult.output,
+          output: getRuntimeFailureText(runtimeResult),
           error: runtimeResult.error,
           parsed: runtimeResult.parsed,
         });
 
-        return {
+        return buildCommandResult({
           ok: false,
           action: "ios.exec",
           device,
           deviceKind: "ios",
           command,
-          output: String(runtimeResult.output ?? ""),
-          rawOutput: String(runtimeResult.rawOutput ?? runtimeResult.output ?? ""),
+          output: firstString(runtimeResult.output),
+          rawOutput: firstString(runtimeResult.rawOutput, runtimeResult.output),
           status: Number(runtimeResult.status ?? 1),
           error: {
             code: iosFailure.code,
             message: iosFailure.message,
             phase: "execution",
           },
-          warnings: Array.isArray(runtimeResult.warnings) ? runtimeResult.warnings : [],
+          warnings: runtimeResult.warnings,
           evidence: runtimeResult.evidence,
-        };
+        });
       }
 
-      return {
+      const semanticFailure = detectIosSemanticFailure(
+        firstString(runtimeResult.output, runtimeResult.rawOutput),
+      );
+
+      if (semanticFailure) {
+        return buildCommandResult({
+          ok: false,
+          action: "ios.exec",
+          device,
+          deviceKind: "ios",
+          command,
+          output: firstString(runtimeResult.output),
+          rawOutput: firstString(runtimeResult.rawOutput, runtimeResult.output),
+          status: 1,
+          error: {
+            code: semanticFailure.code,
+            message: semanticFailure.message,
+            phase: "execution",
+          },
+          warnings: runtimeResult.warnings,
+          evidence: runtimeResult.evidence,
+        });
+      }
+
+      const autoConfigFinalModeFailure = detectAutoConfigFinalModeFailure(plan, runtimeResult);
+
+      if (autoConfigFinalModeFailure) {
+        return buildCommandResult({
+          ok: false,
+          action: "ios.exec",
+          device,
+          deviceKind: "ios",
+          command,
+          output: firstString(runtimeResult.output),
+          rawOutput: firstString(runtimeResult.rawOutput, runtimeResult.output),
+          status: 1,
+          error: {
+            code: autoConfigFinalModeFailure.code,
+            message: autoConfigFinalModeFailure.message,
+            phase: "execution",
+          },
+          warnings: runtimeResult.warnings,
+          evidence: runtimeResult.evidence,
+        });
+      }
+
+      return buildCommandResult({
         ok: true,
         action: "ios.exec",
         device,
         deviceKind: "ios",
         command,
-        output: String(runtimeResult.output ?? ""),
-        rawOutput: String(runtimeResult.rawOutput ?? runtimeResult.output ?? ""),
+        output: firstString(runtimeResult.output),
+        rawOutput: firstString(runtimeResult.rawOutput, runtimeResult.output),
         status: Number(runtimeResult.status ?? 0),
-        warnings: Array.isArray(runtimeResult.warnings) ? runtimeResult.warnings : [],
+        warnings: runtimeResult.warnings,
         evidence: runtimeResult.evidence,
-      };
+      });
     }
 
     let execResult: any;
@@ -327,28 +770,26 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
     } catch (error) {
       const err = error as any;
 
-      return {
-        ok: false,
-        action: "ios.exec",
-        device,
-        deviceKind: "ios",
-        command,
-        output: String(
-          err?.details?.output ??
-            err?.details?.evidence?.raw ??
-            err?.details?.parsed?.raw ??
-            err?.output ??
-            err?.raw ??
-            ""
-        ),
-        rawOutput: String(
-          err?.details?.rawOutput ??
-            err?.details?.output ??
-            err?.details?.evidence?.raw ??
-            err?.details?.parsed?.raw ??
-            err?.output ??
-            err?.raw ??
-            ""
+        return buildCommandResult({
+          ok: false,
+          action: "ios.exec",
+          device,
+          deviceKind: "ios",
+          command,
+          output: firstString(
+            err?.details?.output,
+            err?.details?.evidence?.raw,
+            err?.details?.parsed?.raw,
+            err?.output,
+            err?.raw,
+          ),
+        rawOutput: firstString(
+          err?.details?.rawOutput,
+          err?.details?.output,
+          err?.details?.evidence?.raw,
+          err?.details?.parsed?.raw,
+          err?.output,
+          err?.raw,
         ),
         status: 1,
         error: {
@@ -368,20 +809,20 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
           details: err?.details ?? null,
           stack: err?.stack ?? null,
         },
-      };
+      });
     }
 
-    const output = String(
-      execResult.raw ??
-        execResult.output ??
-        execResult.evidence?.raw ??
-        execResult.parsed?.raw ??
-        execResult.parsed?.output ??
-        execResult.error?.details?.output ??
-        "",
+    const output = firstString(
+      execResult.raw,
+      execResult.output,
+      execResult.evidence?.raw,
+      execResult.parsed?.raw,
+      execResult.parsed?.output,
+      execResult.error?.details?.output,
     );
 
     const ok = Boolean(execResult.ok ?? false);
+    const semanticFailure = detectIosSemanticFailure(output);
 
     if (!ok) {
       const evidence = execResult.evidence as any;
@@ -393,45 +834,81 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
         error: parsedError,
       });
 
-      return {
+      return buildCommandResult({
         ok: false,
         action: "ios.exec",
         device,
         deviceKind: "ios",
         command,
         output,
+        rawOutput: firstString(
+          execResult.rawOutput,
+          execResult.raw,
+          execResult.output,
+          execResult.evidence?.raw,
+          execResult.parsed?.raw,
+          execResult.parsed?.output,
+          execResult.error?.details?.output,
+        ),
         status: 1,
         error: {
           code: String(parsedError?.code ?? failureEvent?.code ?? iosFailure.code),
           message: String(parsedError?.message ?? failureEvent?.error ?? iosFailure.message),
           phase: "execution",
         },
-        warnings: Array.isArray(execResult.warnings) ? execResult.warnings : [],
+        warnings: execResult.warnings,
         evidence,
-      };
+      });
     }
 
-      return {
-        ok: true,
+    if (semanticFailure) {
+      return buildCommandResult({
+        ok: false,
         action: "ios.exec",
         device,
         deviceKind: "ios",
         command,
         output,
-        rawOutput: String(
-          execResult.rawOutput ??
-            execResult.raw ??
-            execResult.output ??
-            execResult.evidence?.raw ??
-            execResult.parsed?.raw ??
-            execResult.parsed?.output ??
-            execResult.error?.details?.output ??
-            "",
+        rawOutput: firstString(
+          execResult.rawOutput,
+          execResult.raw,
+          execResult.output,
+          execResult.evidence?.raw,
+          execResult.parsed?.raw,
+          execResult.parsed?.output,
+          execResult.error?.details?.output,
         ),
-        status: 0,
-        warnings: Array.isArray(execResult.warnings) ? execResult.warnings : [],
+        status: 1,
+        error: {
+          code: semanticFailure.code,
+          message: semanticFailure.message,
+          phase: "execution",
+        },
+        warnings: execResult.warnings,
         evidence: execResult.evidence,
-      };
+      });
+    }
+
+    return buildCommandResult({
+      ok: true,
+      action: "ios.exec",
+      device,
+      deviceKind: "ios",
+      command,
+      output,
+      rawOutput: firstString(
+        execResult.rawOutput,
+        execResult.raw,
+        execResult.output,
+        execResult.evidence?.raw,
+        execResult.parsed?.raw,
+        execResult.parsed?.output,
+        execResult.error?.details?.output,
+      ),
+      status: 0,
+      warnings: execResult.warnings,
+      evidence: execResult.evidence,
+    });
   }
 
   async function executeHostCommand(
@@ -440,28 +917,34 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
     options?: RunTerminalCommandOptions
   ): Promise<TerminalCommandResult> {
     const runtimeTerminal = deps.runtimeTerminal;
-    const cmdName = command.split(" ")[0]!.toLowerCase();
-    let capabilityId = "host.exec";
-
-    if (cmdName === "ipconfig") capabilityId = "host.ipconfig";
-    else if (cmdName === "ping") capabilityId = "host.ping";
-    else if (cmdName === "tracert") capabilityId = "host.tracert";
-    else if (cmdName === "arp") capabilityId = "host.arp";
-    else if (cmdName === "nslookup") capabilityId = "host.nslookup";
-    else if (cmdName === "netstat") capabilityId = "host.netstat";
+    const capabilityId = resolveHostCapabilityId(command);
 
     const timeoutMs = options?.timeoutMs ?? 45000;
+    const heartbeat = getHeartbeatHealth(deps.controller);
+    const heartbeatAgeMs = getHeartbeatAgeMs(heartbeat);
+
+    if (heartbeatAgeMs !== null && heartbeatAgeMs > 20000) {
+      return createRuntimeUnavailableResult({
+        action: "host.exec",
+        device,
+        deviceKind: "host",
+        command,
+        health: heartbeat,
+        reason: "PT_RUNTIME_UNAVAILABLE: el heartbeat del runtime supera 20s.",
+      });
+    }
+
     if (runtimeTerminal?.runTerminalPlan) {
-        const plan = buildUniversalTerminalPlan({
-          id: deps.generateId(),
-          device,
-          command,
-          deviceKind: "host",
-          mode: options?.mode,
-          allowConfirm: options?.allowConfirm,
-          allowDestructive: options?.allowDestructive,
-          timeoutMs,
-        });
+      const plan = buildUniversalTerminalPlan({
+        id: deps.generateId(),
+        device,
+        command,
+        deviceKind: "host",
+        mode: options?.mode,
+        allowConfirm: options?.allowConfirm,
+        allowDestructive: options?.allowDestructive,
+        timeoutMs,
+      });
 
       const runtimeResult = (await runtimeTerminal.runTerminalPlan(plan, { timeoutMs })) as any;
 
@@ -473,70 +956,64 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
             ? "HOST_INVALID_COMMAND"
             : "HOST_EXEC_FAILED";
 
-        return {
+        return buildCommandResult({
           ok: false,
           action: "host.exec",
           device,
           deviceKind: "host",
           command,
           output: hostOutput,
-          rawOutput: String(runtimeResult.rawOutput ?? runtimeResult.output ?? ""),
+          rawOutput: firstString(runtimeResult.rawOutput, runtimeResult.output),
           status: Number(runtimeResult.status ?? 1),
           error: {
             code: String(runtimeResult.error?.code ?? hostCode),
             message: String(runtimeResult.error?.message ?? "Error en ejecución de comando Host"),
             phase: "execution",
           },
-          warnings: Array.isArray(runtimeResult.warnings) ? runtimeResult.warnings : [],
+          warnings: runtimeResult.warnings,
           evidence: runtimeResult.evidence,
-        };
+        });
       }
 
-      return {
+      return buildCommandResult({
         ok: true,
         action: "host.exec",
         device,
         deviceKind: "host",
         command,
-        output: String(runtimeResult.output ?? ""),
-        rawOutput: String(runtimeResult.rawOutput ?? runtimeResult.output ?? ""),
+        output: firstString(runtimeResult.output),
+        rawOutput: firstString(runtimeResult.rawOutput, runtimeResult.output),
         status: Number(runtimeResult.status ?? 0),
-        warnings: Array.isArray(runtimeResult.warnings) ? runtimeResult.warnings : [],
+        warnings: runtimeResult.warnings,
         evidence: runtimeResult.evidence,
-      };
+      });
     }
 
     const execResult = await deps.controller.execHost(device, command, capabilityId, {
       timeoutMs,
     });
 
-    const hostOutput = String(
-      execResult.raw ??
-        (execResult as any).output ??
-        execResult.verdict?.reason ??
-        "",
+    const hostOutput = firstString(
+      execResult.raw,
+      (execResult as any).output,
+      execResult.verdict?.reason,
     );
-    const hostCode =
-      hostOutput.toLowerCase().includes("invalid command") ||
-      hostOutput.toLowerCase().includes("not recognized")
-        ? "HOST_INVALID_COMMAND"
-        : "HOST_EXEC_FAILED";
+    const hostCode = isHostInvalidCommand(hostOutput) ? "HOST_INVALID_COMMAND" : "HOST_EXEC_FAILED";
 
     if (!execResult.success || execResult.verdict?.ok === false) {
       const execResultAny = execResult as any;
-      return {
+      return buildCommandResult({
         ok: false,
         action: "host.exec",
         device,
         deviceKind: "host",
         command,
         output: hostOutput,
-        rawOutput: String(
-          execResultAny.rawOutput ??
-            execResultAny.raw ??
-            execResultAny.output ??
-            execResult.verdict?.reason ??
-            "",
+        rawOutput: firstString(
+          execResultAny.rawOutput,
+          execResultAny.raw,
+          execResultAny.output,
+          execResult.verdict?.reason,
         ),
         status: 1,
         error: {
@@ -551,22 +1028,21 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
           verdict: execResult.verdict,
           parsed: execResult.parsed,
         },
-      };
+      });
     }
 
-    return {
+    return buildCommandResult({
       ok: true,
       action: "host.exec",
       device,
       deviceKind: "host",
       command,
       output: hostOutput,
-      rawOutput: String(
-        (execResult as any).rawOutput ??
-          (execResult as any).raw ??
-          (execResult as any).output ??
-          execResult.verdict?.reason ??
-          "",
+      rawOutput: firstString(
+        (execResult as any).rawOutput,
+        (execResult as any).raw,
+        (execResult as any).output,
+        execResult.verdict?.reason,
       ),
       status: 0,
       warnings: [],
@@ -574,7 +1050,7 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
         verdict: execResult.verdict,
         parsed: execResult.parsed,
       },
-    };
+    });
   }
 
   async function executeCommand(
@@ -610,6 +1086,32 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
       }
 
       deviceKind = "unknown";
+    }
+
+    const heartbeat = getHeartbeatHealth(deps.controller);
+    const heartbeatAgeMs = getHeartbeatAgeMs(heartbeat);
+
+    if (heartbeatAgeMs !== null && heartbeatAgeMs > 20000) {
+      return {
+        ok: false,
+        action: deviceKind === "host" ? "host.exec" : "ios.exec",
+        device,
+        deviceKind,
+        command,
+        output: "",
+        rawOutput: "",
+        status: 1,
+        error: {
+          code: "PT_RUNTIME_UNAVAILABLE",
+          message: "PT_RUNTIME_UNAVAILABLE: el heartbeat del runtime supera 20s.",
+          phase: "detection",
+        },
+        warnings: [],
+        evidence: {
+          heartbeat,
+          reason: "PT_RUNTIME_UNAVAILABLE: el heartbeat del runtime supera 20s.",
+        },
+      };
     }
 
     if (deviceKind === "ios") {

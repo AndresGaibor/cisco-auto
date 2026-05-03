@@ -34,8 +34,11 @@ export class TopologyFacade {
     return this.topologyService.moveDevice(name, x, y);
   }
 
-  async listDevices(filter?: string | number | string[]): Promise<DeviceListResult> {
-    return this.topologyService.listDevices(filter);
+  async listDevices(
+    filter?: string | number | string[],
+    options?: { includePorts?: boolean; includeLinks?: boolean; deep?: boolean },
+  ): Promise<DeviceListResult & { meta?: Record<string, unknown> }> {
+    return this.topologyService.listDevices(filter, options) as Promise<DeviceListResult & { meta?: Record<string, unknown> }>;
   }
 
   async addLink(

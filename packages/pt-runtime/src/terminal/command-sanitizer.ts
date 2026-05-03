@@ -45,7 +45,7 @@ export function processBackspaces(input: string): string {
  * @returns Texto sin Bell
  */
 export function stripBell(input: string): string {
-  return input.replace(/\x07/g, "");
+  return String(input ?? "").replace(/\x07/g, "");
 }
 
 /**
@@ -55,7 +55,7 @@ export function stripBell(input: string): string {
  * @returns Texto solo con caracteres imprimibles
  */
 export function stripNonPrintable(input: string): string {
-  return input.replace(NON_PRINTABLE_RE, "");
+  return String(input ?? "").replace(NON_PRINTABLE_RE, "");
 }
 
 /**
@@ -65,8 +65,8 @@ export function stripNonPrintable(input: string): string {
  * @param input -Texto raw
  * @returns Texto normalizado
  */
-export function normalizeWhitespace(input: string): string {
-  return input
+export function normalizeWhitespace(input: unknown): string {
+  return String(input ?? "")
     .replace(/\r/g, "")
     .replace(/\t/g, " ")
     .replace(/[ ]+/g, " ")
@@ -117,7 +117,8 @@ export function sanitizeCommandOutput(raw: string): string {
 export function sanitizeCommandOutputSimple(raw: string): string {
   if (!raw) return "";
 
-  const backspaceProcessed = raw
+  const safeRaw = String(raw ?? "");
+  const backspaceProcessed = safeRaw
     .split("")
     .map((char) => (char === BACKSPACE_CHAR ? null : char))
     .filter(Boolean)
@@ -127,7 +128,6 @@ export function sanitizeCommandOutputSimple(raw: string): string {
     .replace(ANSI_ESCAPE_RE, "")
     .replace(NON_PRINTABLE_RE, "")
     .replace(/\r/g, "")
-    .replace(/\t/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }

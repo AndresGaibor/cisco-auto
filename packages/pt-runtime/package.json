@@ -16,7 +16,7 @@
     "lint": "eslint src/ --max-warnings 0",
     "format": "prettier --write 'src/**/*.ts'",
     "format:check": "prettier --check 'src/**/*.ts'",
-    "clean": "rm -rf dist build generated",
+    "clean": "bun run src/scripts/clean.ts",
     "validate:api": "bun run src/build/validate-pt-api.ts",
     "generate-models": "bun run src/scripts/generate-model-map.ts",
     "generate": "bun run src/cli.ts generate",

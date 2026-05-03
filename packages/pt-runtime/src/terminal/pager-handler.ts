@@ -16,7 +16,7 @@ export function createPagerState(maxAdvances: number = 50): PagerState {
   };
 }
 
-export function detectPager(output: string): boolean {
+export function pagerDetectPager(output: string): boolean {
   if (!output) return false;
 
   const text = String(output)
@@ -79,17 +79,17 @@ export function createPagerHandler(config: PagerHandlerConfig = {}): {
     },
     handleOutput(output: string): boolean {
       lastOutput = output;
-      if (detectPager(output)) {
+      if (pagerDetectPager(output)) {
         pagerState = activate(pagerState);
         return true;
-      } else if (pagerState.active && !detectPager(output)) {
+      } else if (pagerState.active && !pagerDetectPager(output)) {
         pagerState = deactivate(pagerState);
         return false;
       }
       return false;
     },
     isLoop(): boolean {
-      return detectLoop(pagerState);
+      return config.enabled !== false && detectLoop(pagerState);
     },
     canContinue(): boolean {
       return config.enabled !== false && shouldAdvance(pagerState);

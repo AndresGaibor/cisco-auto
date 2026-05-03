@@ -14,10 +14,11 @@
 import { FileBridgeV2 } from "@cisco-auto/file-bridge";
 import { createPTController } from "@cisco-auto/pt-control";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import { existsSync, rmSync } from "node:fs";
 
 // Configuración
-const PT_DEV_DIR = `${homedir()}/pt-dev-validation-test`;
+const PT_DEV_DIR = join(homedir(), "pt-dev-validation-test");
 
 async function main() {
   console.log("═".repeat(70));

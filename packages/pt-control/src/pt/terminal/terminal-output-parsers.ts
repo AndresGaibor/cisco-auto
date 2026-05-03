@@ -11,6 +11,41 @@ function linesOf(raw: string): string[] {
     .filter(Boolean);
 }
 
+type LineRecordParser<T> = {
+  skip?: (line: string) => boolean;
+  parse: (line: string) => T | null;
+};
+
+function parseLineRecords<T>(raw: string, parser: LineRecordParser<T>): T[] {
+  const records: T[] = [];
+
+  for (const line of linesOf(raw)) {
+    if (parser.skip?.(line)) {
+      continue;
+    }
+
+    const record = parser.parse(line);
+    if (record) {
+      records.push(record);
+    }
+  }
+
+  return records;
+}
+
+function splitCsvList(raw: string | undefined): string[] {
+  return raw
+    ? raw.split(",").map((part) => part.trim()).filter(Boolean)
+    : [];
+}
+
+function createRawEvidence(parserId: string, raw: string): ParsedTerminalEvidence {
+  return {
+    parserId,
+    facts: { raw: String(raw ?? "") },
+  };
+}
+
 export function parseIosShowVersion(raw: string): ParsedTerminalEvidence {
   const lines = linesOf(raw);
   const facts: Record<string, unknown> = {};
@@ -55,31 +90,26 @@ export function parseIosShowRunningConfig(raw: string): ParsedTerminalEvidence {
 }
 
 export function parseIosShowIpInterfaceBrief(raw: string): ParsedTerminalEvidence {
-  const lines = linesOf(raw);
-  const interfaces: Array<Record<string, string>> = [];
-
-  for (const line of lines) {
-    if (
+  const interfaces = parseLineRecords(raw, {
+    skip: (line) =>
       /^interface/i.test(line) ||
       /^-+/.test(line) ||
-      /^show ip interface brief/i.test(line)
-    ) {
-      continue;
-    }
+      /^show ip interface brief/i.test(line),
+    parse: (line) => {
+      const match = line.match(/^(\S+)\s+(\S+)\s+\S+\s+\S+\s+(\S+)\s+(\S+)$/i);
 
-    const match = line.match(
-      /^(\S+)\s+(\S+)\s+\S+\s+\S+\s+(\S+)\s+(\S+)$/i,
-    );
+      if (!match) {
+        return null;
+      }
 
-    if (match) {
-      interfaces.push({
+      return {
         interface: match[1]!,
         ipAddress: match[2]!,
         status: match[3]!,
         protocol: match[4]!,
-      });
-    }
-  }
+      };
+    },
+  });
 
   return {
     parserId: "ios.show-ip-interface-brief",
@@ -92,29 +122,23 @@ export function parseIosShowIpInterfaceBrief(raw: string): ParsedTerminalEvidenc
 }
 
 export function parseIosShowVlanBrief(raw: string): ParsedTerminalEvidence {
-  const lines = linesOf(raw);
-  const vlans: Array<Record<string, unknown>> = [];
+  const vlans = parseLineRecords(raw, {
+    skip: (line) => /^vlan/i.test(line) || /^----/.test(line) || /^show vlan/i.test(line),
+    parse: (line) => {
+      const match = line.match(/^(\d+)\s+(\S+)\s+(\S+)\s*(.*)$/i);
 
-  for (const line of lines) {
-    if (
-      /^vlan/i.test(line) ||
-      /^----/.test(line) ||
-      /^show vlan/i.test(line)
-    ) {
-      continue;
-    }
+      if (!match) {
+        return null;
+      }
 
-    const match = line.match(/^(\d+)\s+(\S+)\s+(\S+)\s*(.*)$/i);
-    if (match) {
-      const ports = match[4] ? match[4].split(",").map((p) => p.trim()).filter(Boolean) : [];
-      vlans.push({
+      return {
         vlanId: Number(match[1]!),
         name: match[2]!,
         status: match[3]!,
-        ports,
-      });
-    }
-  }
+        ports: splitCsvList(match[4]),
+      };
+    },
+  });
 
   return {
     parserId: "ios.show-vlan-brief",
@@ -126,30 +150,26 @@ export function parseIosShowVlanBrief(raw: string): ParsedTerminalEvidence {
 }
 
 export function parseIosShowCdpNeighbors(raw: string): ParsedTerminalEvidence {
-  const lines = linesOf(raw);
-  const neighbors: Array<Record<string, string>> = [];
+  const neighbors = parseLineRecords(raw, {
+    skip: (line) => /^device id/i.test(line) || /^-+/.test(line) || /^show cdp neighbors/i.test(line),
+    parse: (line) => {
+      const parts = line.split(/\s+/).filter(Boolean);
 
-  for (const line of lines) {
-    if (
-      /^device id/i.test(line) ||
-      /^-+/.test(line) ||
-      /^show cdp neighbors/i.test(line)
-    ) {
-      continue;
-    }
+      if (parts.length < 4) {
+        return null;
+      }
 
-    const parts = line.split(/\s+/).filter(Boolean);
-    if (parts.length >= 4) {
       const capIdx = parts.length - 2;
       const platIdx = parts.length - 1;
-      neighbors.push({
+
+      return {
         deviceId: parts[0]!,
         localInterface: parts[1]!,
         capability: parts[capIdx]!,
         platform: parts[platIdx]!,
-      });
-    }
-  }
+      };
+    },
+  });
 
   return {
     parserId: "ios.show-cdp-neighbors",
@@ -227,7 +247,7 @@ export function parseHostPing(raw: string): ParsedTerminalEvidence {
 
   // Si no hay líneas de "Reply from" pero el resumen dice que se recibieron paquetes, 
   // confiamos en el resumen (caso donde el buffer solo capturó las estadísticas).
-  const effectiveSuccessCount = Math.max(successReplies, stats.received);
+  const effectiveSuccessCount = Math.max(successReplies, stats.received ?? 0);
 
   return {
     parserId: "host.ping",
@@ -245,24 +265,23 @@ export function parseHostPing(raw: string): ParsedTerminalEvidence {
 
 export function parseHostTracert(raw: string): ParsedTerminalEvidence {
   const lines = linesOf(raw);
-  const hops: Array<Record<string, unknown>> = [];
+  const hops = parseLineRecords(raw, {
+    skip: (line) =>
+      /^tracing|^routing|^packets|^traceroute|^over|^maximum|^hops|^timeout|^reply|^request/i.test(line),
+    parse: (line) => {
+      const hopMatch = line.match(/^\s*(\d+)\s+(\S+)\s+(.+)/i);
 
-  for (const line of lines) {
-    if (
-      /^tracing|^routing|^packets|^traceroute|^over|^maximum|^hops|^timeout|^reply|^request/i.test(line)
-    ) {
-      continue;
-    }
+      if (!hopMatch) {
+        return null;
+      }
 
-    const hopMatch = line.match(/^\s*(\d+)\s+(\S+)\s+(.+)/i);
-    if (hopMatch) {
-      hops.push({
+      return {
         hop: Number(hopMatch[1]!),
         address: hopMatch[2]!,
         latency: hopMatch[3]!,
-      });
-    }
-  }
+      };
+    },
+  });
 
   return {
     parserId: "host.tracert",
@@ -276,22 +295,22 @@ export function parseHostTracert(raw: string): ParsedTerminalEvidence {
 
 export function parseHostArp(raw: string): ParsedTerminalEvidence {
   const lines = linesOf(raw);
-  const entries: Array<Record<string, unknown>> = [];
+  const entries = parseLineRecords(raw, {
+    skip: (line) => /^interface|^internet|^ethernet|^dhcp|^static/i.test(line),
+    parse: (line) => {
+      const match = line.match(/^(\d{1,3}(?:\.\d{1,3}){3})\s+([0-9a-fA-F]{4}(?:\.[0-9a-fA-F]{4}){2})\s+(\S+)/i);
 
-  for (const line of lines) {
-    if (/^interface|^internet|^ethernet|^dhcp|^static/i.test(line) || line.trim() === "") {
-      continue;
-    }
+      if (!match) {
+        return null;
+      }
 
-    const match = line.match(/^(\d{1,3}(?:\.\d{1,3}){3})\s+([0-9a-fA-F]{4}(?:\.[0-9a-fA-F]{4}){2})\s+(\S+)/i);
-    if (match) {
-      entries.push({
+      return {
         internet: match[1]!,
         mac: match[2]!,
         type: match[3]!,
-      });
-    }
-  }
+      };
+    },
+  });
 
   return {
     parserId: "host.arp",
@@ -327,20 +346,22 @@ export function parseHostNslookup(raw: string): ParsedTerminalEvidence {
 }
 
 export function parseHostNetstat(raw: string): ParsedTerminalEvidence {
-  const lines = linesOf(raw);
-  const connections: Array<Record<string, string>> = [];
+  const connections = parseLineRecords(raw, {
+    parse: (line) => {
+      const parts = line.split(/\s+/).filter(Boolean);
 
-  for (const line of lines) {
-    const parts = line.split(/\s+/).filter(Boolean);
-    if (parts.length >= 3 && (parts[0] === "TCP" || parts[0] === "UDP")) {
-      connections.push({
+      if (parts.length < 3 || (parts[0] !== "TCP" && parts[0] !== "UDP")) {
+        return null;
+      }
+
+      return {
         proto: parts[0]!,
         localAddress: parts[1]!,
         foreignAddress: parts[2]!,
         state: parts[3] || "",
-      });
-    }
-  }
+      };
+    },
+  });
 
   return {
     parserId: "host.netstat",
@@ -391,28 +412,26 @@ export function parseHostHistory(raw: string): ParsedTerminalEvidence {
 }
 
 export function parseIosShowIpRoute(raw: string): ParsedTerminalEvidence {
-  const lines = linesOf(raw);
-  const routes: Array<Record<string, unknown>> = [];
-
-  for (const line of lines) {
-    if (
+  const routes = parseLineRecords(raw, {
+    skip: (line) =>
       /^gateway|^interface|^subnet|^default|^code|^familia|^ Routing Table/i.test(line) ||
       /^-+/.test(line) ||
-      /^show ip route/i.test(line)
-    ) {
-      continue;
-    }
+      /^show ip route/i.test(line),
+    parse: (line) => {
+      const match = line.match(/^([CMLS])(?:\s+(\S+))?(?:\s+(\S+))?\s+/i);
 
-    const match = line.match(/^([CMLS])(?:\s+(\S+))?(?:\s+(\S+))?\s+/i);
-    if (match) {
-      routes.push({
+      if (!match) {
+        return null;
+      }
+
+      return {
         code: match[1]!,
         network: match[2] ?? null,
         metric: match[3] ?? null,
         raw: line,
-      });
-    }
-  }
+      };
+    },
+  });
 
   return {
     parserId: "ios.show-ip-route",
@@ -426,27 +445,23 @@ export function parseIosShowIpRoute(raw: string): ParsedTerminalEvidence {
 }
 
 export function parseIosShowMacAddressTable(raw: string): ParsedTerminalEvidence {
-  const lines = linesOf(raw);
-  const entries: Array<Record<string, unknown>> = [];
+  const entries = parseLineRecords(raw, {
+    skip: (line) => /^mac|^address|^vlan|^behaviour|^-+|^show mac/i.test(line),
+    parse: (line) => {
+      const match = line.match(/^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)/i);
 
-  for (const line of lines) {
-    if (
-      /^mac|^address|^vlan|^behaviour|^-+|^show mac/i.test(line) ||
-      /^-+/.test(line)
-    ) {
-      continue;
-    }
+      if (!match) {
+        return null;
+      }
 
-    const match = line.match(/^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)/i);
-    if (match) {
-      entries.push({
+      return {
         mac: match[1]!,
         type: match[2]!,
         vlan: match[3]!,
         port: match[4]!,
-      });
-    }
-  }
+      };
+    },
+  });
 
   return {
     parserId: "ios.show-mac-address-table",
@@ -461,40 +476,24 @@ export function parseTerminalOutput(
   capabilityId: string,
   raw: string,
 ): ParsedTerminalEvidence | null {
-  switch (capabilityId) {
-    case "terminal.show-version":
-      return parseIosShowVersion(raw);
-    case "terminal.show-running-config":
-      return parseIosShowRunningConfig(raw);
-    case "terminal.show-ip-interface-brief":
-      return parseIosShowIpInterfaceBrief(raw);
-    case "terminal.show-vlan-brief":
-      return parseIosShowVlanBrief(raw);
-    case "terminal.show-cdp-neighbors":
-      return parseIosShowCdpNeighbors(raw);
-    case "terminal.show-ip-route":
-      return parseIosShowIpRoute(raw);
-    case "terminal.show-mac-address-table":
-      return parseIosShowMacAddressTable(raw);
-    case "host.ipconfig":
-      return parseHostIpconfig(raw);
-    case "host.ping":
-      return parseHostPing(raw);
-    case "host.tracert":
-      return parseHostTracert(raw);
-    case "host.arp":
-      return parseHostArp(raw);
-    case "host.nslookup":
-      return parseHostNslookup(raw);
-    case "host.netstat":
-      return parseHostNetstat(raw);
-    case "host.history":
-      return parseHostHistory(raw);
-    case "host.route":
-      return { parserId: "host.route", facts: { raw: String(raw ?? "") } };
-    case "host.command":
-      return { parserId: "host.command", facts: { raw: String(raw ?? "") } };
-    default:
-      return null;
-  }
+  const handlers: Record<string, (input: string) => ParsedTerminalEvidence | null> = {
+    "terminal.show-version": parseIosShowVersion,
+    "terminal.show-running-config": parseIosShowRunningConfig,
+    "terminal.show-ip-interface-brief": parseIosShowIpInterfaceBrief,
+    "terminal.show-vlan-brief": parseIosShowVlanBrief,
+    "terminal.show-cdp-neighbors": parseIosShowCdpNeighbors,
+    "terminal.show-ip-route": parseIosShowIpRoute,
+    "terminal.show-mac-address-table": parseIosShowMacAddressTable,
+    "host.ipconfig": parseHostIpconfig,
+    "host.ping": parseHostPing,
+    "host.tracert": parseHostTracert,
+    "host.arp": parseHostArp,
+    "host.nslookup": parseHostNslookup,
+    "host.netstat": parseHostNetstat,
+    "host.history": parseHostHistory,
+    "host.route": (input) => createRawEvidence("host.route", input),
+    "host.command": (input) => createRawEvidence("host.command", input),
+  };
+
+  return handlers[capabilityId]?.(raw) ?? null;
 }

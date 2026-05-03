@@ -32,7 +32,7 @@ var RUNTIME_EXPORTS = {};
 (function() {
   var ipc = (typeof ipc !== "undefined") ? ipc : null;
   var dprint = (typeof dprint !== "undefined") ? dprint : function() {};
-  var DEV_DIR = (typeof DEV_DIR !== "undefined") ? DEV_DIR : "/tmp/pt-dev";
+  var DEV_DIR = (typeof DEV_DIR !== "undefined") ? DEV_DIR : "/pt-dev";
   var fm = ipc ? ipc.systemFileManager() : null;
 
 ${code}

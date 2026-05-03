@@ -2,11 +2,11 @@
 import { describe, test, expect } from "bun:test";
 import {
   createTerminalSession,
-  toSnapshot,
-  updateMode,
-  updatePrompt,
-  setPaging,
-  setBusy,
+  ptTerminalToSnapshot as toSnapshot,
+  ptTerminalUpdateMode as updateMode,
+  ptTerminalUpdatePrompt as updatePrompt,
+  ptTerminalSetPaging as setPaging,
+  ptTerminalSetBusy as setBusy,
 } from "../../pt/terminal/terminal-session";
 
 describe("createTerminalSession", () => {

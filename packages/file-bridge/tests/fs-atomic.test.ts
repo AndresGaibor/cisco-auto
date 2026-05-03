@@ -11,13 +11,16 @@ import {
   mkdirSync,
   rmSync,
   writeFileSync,
+  readdirSync,
+  mkdtempSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const TEST_DIR = "/tmp/bridge-v2-test";
+let TEST_DIR: string;
 
 beforeEach(() => {
-  rmSync(TEST_DIR, { recursive: true, force: true });
+  TEST_DIR = mkdtempSync(join(tmpdir(), "bridge-v2-test-"));
   mkdirSync(TEST_DIR, { recursive: true });
 });
 
@@ -42,18 +45,13 @@ test("atomicWriteFile creates parent directories", () => {
 
 test("atomicWriteFile never leaves partial files", () => {
   const file = join(TEST_DIR, "partial.txt");
-  const tmp = `${file}.tmp`;
-
-  // Write something to tmp first
-  writeFileSync(tmp, "partial content", "utf8");
 
   // Now atomic write
   atomicWriteFile(file, "full content");
 
-  // Tmp should be gone
-  expect(existsSync(tmp)).toBe(false);
   // File should have full content
   expect(readFileSync(file, "utf8")).toBe("full content");
+  expect(readdirSync(TEST_DIR).some((entry) => entry.includes("partial.txt") && entry.endsWith(".tmp"))).toBe(false);
 });
 
 test("atomicWriteFile overwrites existing files atomically", () => {

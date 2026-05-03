@@ -85,7 +85,14 @@ export function createKernel(config: KernelConfig) {
     try {
       writeDebugLog("kernel", message, level);
     } catch {}
-    if (!isDebugEnabled()) return;
+
+    const shouldPrint =
+      level === "error" ||
+      level === "warn" ||
+      isDebugEnabled();
+
+    if (!shouldPrint) return;
+
     try {
       dprint("[kernel] " + message);
     } catch {}

@@ -9,8 +9,18 @@ export const RUNTIME_MANIFEST = {
   version: 3,
   description: "Lista completa de archivos TypeScript para generar los módulos PT via AST pipeline V2",
 
-  // catalog: constantes estáticas de PT — raramente cambian.
-  // Se genera como catalog.js separado, cargado primero por main.js.
+// runtime.js default contiene solo:
+// - contratos/runtime helpers mínimos
+// - handlers PT-native estables
+// - wrappers deferred sync
+// - dispatcher/registry simple
+//
+// NO contiene:
+// - terminal engine
+// - parsers IOS
+// - parser-generator
+// - async session helpers
+// - omni/evaluate en fase slim fuerte
   catalog: [
     "pt-api/pt-constants.ts",
   ],
@@ -51,13 +61,11 @@ ptApi: [
 utils: [
     "utils/constants.ts",
     "utils/helpers.ts",
-    "utils/parser-generator.ts",
     "utils/device-creation.ts",
     "utils/device-utils.ts",
     "utils/device-xml-parser.ts",
     "utils/handler-types.ts",
     "utils/port-utils.ts",
-    // utils/index.ts removido - solo re-exports, causa duplicados
   ],
 
   valueObjects: [
@@ -65,8 +73,6 @@ utils: [
   ],
 
   core: [
-    "core/registry.ts",
-    "core/dispatcher.ts",
   ],
 
   handlers: [
@@ -79,61 +85,44 @@ utils: [
     "handlers/device-classifier.ts",
     "handlers/device-listing.ts",
     "handlers/device-config.ts",
-    "handlers/deep-inspect.ts",
-    "handlers/evaluate.ts",
-    "handlers/omniscience-physical.ts",
-    "handlers/omniscience-logical.ts",
-    "handlers/omniscience-environment.ts",
-    "handlers/omniscience-telepathy.ts",
-    "handlers/omniscience-utils.ts",
-    "handlers/link.ts",
-    "handlers/list-links.ts",
-    "handlers/add-link.ts",
-    "handlers/remove-link.ts",
-    "handlers/verify-link.ts",
     "handlers/inspect.ts",
-    "handlers/module.ts",
     "handlers/module/index.ts",
     "handlers/module/constants.ts",
     "handlers/module/helpers.ts",
     "handlers/module/handlers.ts",
     "handlers/module/slot-finder.ts",
+    "handlers/link.ts",
+    "handlers/list-links.ts",
+    "handlers/add-link.ts",
+    "handlers/remove-link.ts",
+    "handlers/verify-link.ts",
     "handlers/canvas.ts",
     "handlers/vlan.ts",
     "handlers/dhcp.ts",
     "handlers/host.ts",
     "handlers/result-factories.ts",
+    "handlers/deferred-job-factory.ts",
     "handlers/host-handler.ts",
     "handlers/terminal-plan-run.ts",
     "handlers/poll-deferred.ts",
     "handlers/terminal-native-exec.ts",
     "handlers/ios/index.ts",
-    "handlers/ios-execution.ts",
-    "handlers/ios-plan-builder.ts",
     "handlers/terminal-sanitizer.ts",
     "handlers/cable-recommender.ts",
-    "handlers/ios/ios-session-utils.ts",
-    "handlers/ios/host-stabilize.ts",
-    "handlers/ios/ios-result-mapper.ts",
     "handlers/ios/exec-ios-handler.ts",
     "handlers/ios/config-ios-handler.ts",
     "handlers/ios/deferred-poll-handler.ts",
     "handlers/ios/ping-handler.ts",
     "handlers/ios/exec-pc-handler.ts",
     "handlers/ios/read-terminal-handler.ts",
-    // IOS show command parsers (pure functions, no PT dependencies)
-    "handlers/parsers/ios-parsers.ts",
-    // IOS output classification (pure functions, no event handling)
-    "handlers/ios-output-classifier.ts",
-    // Main dispatcher
+    // Main dispatcher - runtime default solo registra estables
     "handlers/runtime-handlers.ts",
-    // Registration handlers
+    // Registration handlers - solo stable (omni/experimental removidos del default)
     "handlers/registration/stable-handlers.ts",
-    "handlers/registration/experimental-handlers.ts",
-    "handlers/registration/omni-handlers.ts",
     "handlers/registration/runtime-registration.ts",
     // NOTE: ios-engine.ts removed — IosSessionEngine duplicated terminal-engine.ts + job-executor.ts
     // NOTE: ios-session.ts removed — inferModeFromPrompt duplicated prompt-parser.ts
+    // NOTE: deep-inspect.ts, evaluate.ts, omniscience* removidos - van a runtime extended
   ],
 
   primitives: [
@@ -142,42 +131,7 @@ utils: [
     "primitives/module/index.ts",
   ],
 
-  terminal: [
-    "pt/terminal/prompt-parser.ts",
-    "pt/terminal/command-executor.ts",
-    "pt/terminal/terminal-engine.ts",
-    "pt/terminal/terminal-session.ts",
-    "pt/terminal/terminal-events.ts",
-    "terminal/command-executor.ts",
-    "terminal/prompt-detector.ts",
-    "terminal/session-registry.ts",
-    "terminal/session-state.ts",
-    "terminal/pager-handler.ts",
-    "terminal/confirm-handler.ts",
-    "terminal/command-sanitizer.ts",
-    "terminal/stability-heuristic.ts",
-    "terminal/terminal-errors.ts",
-    "terminal/terminal-ready.ts",
-    "terminal/command-output-extractor.ts",
-    "terminal/terminal-semantic-verifier.ts",
-    "terminal/terminal-recovery.ts",
-    "terminal/terminal-plan.ts",
-    "terminal/mode-guard.ts",
-    "terminal/plan-engine.ts",
-    "terminal/standard-plans.ts",
-    "terminal/ios-evidence.ts",
-    "terminal/engine/index.ts",
-    "terminal/engine/terminal-event-collector.ts",
-    "terminal/engine/terminal-completion-controller.ts",
-    "terminal/engine/terminal-output-pipeline.ts",
-    "terminal/engine/terminal-error-resolver.ts",
-    "terminal/engine/terminal-recovery-controller.ts",
-    "terminal/engine/terminal-observability.ts",
-    "terminal/engine/command-executor.ts",
-    "terminal/engine/command-state-machine.ts",
-    "terminal/terminal-utils.ts",
-    "terminal/index.ts",
-  ],
+  
 
   ptApiRegistry: [
     "pt-api/registry/index.ts",
@@ -198,7 +152,7 @@ export function getCatalogFiles(): string[] {
 export function getAllRuntimeFiles(): string[] {
   const files: string[] = [];
   // Exclude "catalog" section — it goes to catalog.js, not runtime.js
-  const excluded = new Set<string>(["version", "description", "catalog"]);
+  const excluded = new Set<string>(["version", "description", "catalog", "terminal"]);
   for (const section of Object.keys(RUNTIME_MANIFEST) as RuntimeManifestSection[]) {
     if (excluded.has(section)) continue;
     files.push(...(RUNTIME_MANIFEST[section] as readonly string[]));

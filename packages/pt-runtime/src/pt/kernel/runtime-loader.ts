@@ -13,28 +13,124 @@ import type { RuntimeApi } from "../../runtime/contracts";
 import { createFileAccess, type FileAccess } from "./file-access";
 import { writeDebugLog } from "./debug-log.js";
 
+export type RuntimeDispatchFn = (
+  payload: Record<string, unknown>,
+  api: RuntimeApi,
+) => unknown;
+
+export type RuntimeLoaderStatus = {
+  runtimeFile: string;
+  runtimeLoaded: boolean;
+  hasRuntimeFn: boolean;
+  lastMtime: number;
+  pendingReload: boolean;
+  reloadCount: number;
+  loadAttempted: boolean;
+  loadSucceeded: boolean;
+  lastLoadError: string | null;
+  lastReload: {
+    ok: boolean;
+    at: number;
+    mtime: number;
+    error?: string;
+  } | null;
+};
+
+export type RuntimeLoadResult = {
+  ok: boolean;
+  loaded: boolean;
+  changed: boolean;
+  mtime: number;
+  error?: string;
+  status: RuntimeLoaderStatus;
+};
+
 export interface RuntimeLoader {
-  load(): void;
+  load(force?: boolean): RuntimeLoadResult;
   loadDemo(): void;
   reloadIfNeeded(isBusyCheck: () => boolean): void;
+  reloadNow(): RuntimeLoadResult;
   getLastMtime(): number;
-  getRuntimeFn(): ((payload: Record<string, unknown>, api: RuntimeApi) => unknown) | null;
+  getRuntimeFn(): RuntimeDispatchFn | null;
   hasPendingReload(): boolean;
+  getStatus(): RuntimeLoaderStatus;
 }
 
 export function createRuntimeLoader(config: { runtimeFile: string }) {
   let lastMtime = 0;
-  let runtimeFn: ((payload: Record<string, unknown>, api: RuntimeApi) => unknown) | null = null;
-  let lastGoodRuntimeFn: ((payload: Record<string, unknown>, api: RuntimeApi) => unknown) | null =
-    null;
+  let runtimeFn: RuntimeDispatchFn | null = null;
+  let lastGoodRuntimeFn: RuntimeDispatchFn | null = null;
   let pendingReload = false;
+  let reloadCount = 0;
+  let loadAttempted = false;
+  let loadSucceeded = false;
+  let lastLoadError: string | null = null;
+  let lastReload: RuntimeLoaderStatus["lastReload"] = null;
 
   const fa = createFileAccess();
 
-  function load(force = false): void {
+  function getGlobalScope(): any {
+    return typeof self !== "undefined" ? self : Function("return this")();
+  }
+
+  function getStatus(): RuntimeLoaderStatus {
+    return {
+      runtimeFile: config.runtimeFile,
+      runtimeLoaded: runtimeFn !== null,
+      hasRuntimeFn: typeof runtimeFn === "function",
+      lastMtime,
+      pendingReload,
+      reloadCount,
+      loadAttempted,
+      loadSucceeded,
+      lastLoadError,
+      lastReload,
+    };
+  }
+
+  function makeResult(
+    ok: boolean,
+    loaded: boolean,
+    changed: boolean,
+    mtime: number,
+    error?: string,
+  ): RuntimeLoadResult {
+    return {
+      ok,
+      loaded,
+      changed,
+      mtime,
+      error,
+      status: getStatus(),
+    };
+  }
+
+  function load(force = false): RuntimeLoadResult {
+    loadAttempted = true;
+    let previousDispatch: unknown = null;
+    let previousRuntimeFn: RuntimeDispatchFn | null = runtimeFn;
+
     if (!fa.fileExists(config.runtimeFile)) {
-      dprint("[loader] runtime.js not found at " + config.runtimeFile);
-      return;
+      const error = "runtime.js not found at " + config.runtimeFile;
+      dprint("[loader] " + error);
+      try {
+        getGlobalScope().__ptRuntimeLoaded = runtimeFn !== null;
+      } catch {}
+      try {
+        getGlobalScope().__ptRuntimeLoadSucceeded = false;
+      } catch {}
+      try {
+        getGlobalScope().__ptRuntimeLoadError = error;
+      } catch {}
+      lastLoadError = error;
+      loadSucceeded = false;
+      lastReload = {
+        ok: false,
+        at: Date.now(),
+        mtime: lastMtime,
+        error,
+      };
+      return makeResult(false, runtimeFn !== null, false, lastMtime, error);
     }
 
     const visibleLog = (message: string, level: "debug" | "info" | "warn" | "error" = "debug") => {
@@ -50,26 +146,40 @@ export function createRuntimeLoader(config: { runtimeFile: string }) {
     };
 
     try {
-      try {
-        (typeof self !== "undefined" ? self : Function("return this")()).__ptRuntimeLoadAttempted =
-          true;
-      } catch {}
+      getGlobalScope().__ptRuntimeLoadAttempted = true;
 
       visibleLog("[loader] Loading runtime.js...", "info");
       const mtime = fa.getFileMtime(config.runtimeFile);
+      loadAttempted = true;
+      lastLoadError = null;
       if (!force && mtime === lastMtime && runtimeFn) {
         visibleLog("[loader] No change detected (mtime=" + mtime + "), skipping");
-        return;
+        loadSucceeded = true;
+        return makeResult(true, true, false, mtime);
       }
 
       let code = fa.getFileContents(config.runtimeFile);
       if (!code || code.length < 50) {
-        dprint(
-          "[loader] Runtime file too small (" +
-            (code?.length || 0) +
-            " bytes), keeping previous version",
-        );
-        return;
+        const error = "Runtime file too small (" + (code?.length || 0) + " bytes)";
+        dprint("[loader] " + error + ", keeping previous version");
+        try {
+          getGlobalScope().__ptRuntimeLoaded = runtimeFn !== null;
+        } catch {}
+        try {
+          getGlobalScope().__ptRuntimeLoadSucceeded = false;
+        } catch {}
+        try {
+          getGlobalScope().__ptRuntimeLoadError = error;
+        } catch {}
+        loadSucceeded = false;
+        lastLoadError = error;
+        lastReload = {
+          ok: false,
+          at: Date.now(),
+          mtime,
+          error,
+        };
+        return makeResult(false, runtimeFn !== null, false, mtime, error);
       }
 
       visibleLog("[loader] Evaluating runtime code (" + code.length + " bytes)...");
@@ -111,6 +221,10 @@ if (typeof Object.fromEntries !== "function") {
 }
 `;
 
+      const _global = getGlobalScope();
+      previousDispatch = _global._ptDispatch;
+      previousRuntimeFn = runtimeFn;
+
       visibleLog("[loader] Creating Function wrapper...");
       const fn = new Function(
         "ipc",
@@ -123,6 +237,9 @@ if (typeof Object.fromEntries !== "function") {
         shim + code,
       );
       visibleLog("[loader] Evaluating runtime...");
+      try {
+        _global._ptDispatch = undefined;
+      } catch {}
       fn(_ipc, _fm, _dprint, _DEV_DIR, _exports, { exports: _moduleExports }, _g);
 
       visibleLog("[loader] Checking _ptDispatch registration...");
@@ -140,30 +257,63 @@ if (typeof Object.fromEntries !== "function") {
       lastMtime = mtime;
       pendingReload = false;
       _g.__ptRuntimeLoaded = true;
+      reloadCount += 1;
+      loadSucceeded = true;
+      lastLoadError = null;
+      lastReload = {
+        ok: true,
+        at: Date.now(),
+        mtime,
+      };
       try {
-        (typeof self !== "undefined" ? self : Function("return this")()).__ptRuntimeLoadSucceeded =
-          true;
+        getGlobalScope().__ptRuntimeLoadSucceeded = true;
       } catch {}
       visibleLog("[loader] SUCCESS: runtime.js loaded (mtime=" + mtime + ")", "info");
       visibleLog("[loader] _ptDispatch registered, ready for dispatch");
+      return makeResult(true, true, true, mtime);
     } catch (e) {
+      const error = String(e instanceof Error ? e.message : e);
       try {
-        (typeof self !== "undefined" ? self : Function("return this")()).__ptRuntimeLoaded = false;
+        getGlobalScope().__ptRuntimeLoaded = false;
       } catch {}
       try {
-        (typeof self !== "undefined" ? self : Function("return this")()).__ptRuntimeLoadSucceeded =
-          false;
+        getGlobalScope().__ptRuntimeLoadSucceeded = false;
       } catch {}
       try {
-        (typeof self !== "undefined" ? self : Function("return this")()).__ptRuntimeLoadError =
-          String(e);
+        getGlobalScope().__ptRuntimeLoadError = error;
       } catch {}
-      visibleLog("[loader] LOAD ERROR: " + String(e), "error");
+      try {
+        const _global = getGlobalScope();
+        if (typeof lastGoodRuntimeFn === "function") {
+          _global._ptDispatch = lastGoodRuntimeFn;
+        } else if (typeof previousDispatch === "function") {
+          _global._ptDispatch = previousDispatch;
+        }
+      } catch {}
+
+      runtimeFn =
+        typeof lastGoodRuntimeFn === "function"
+          ? lastGoodRuntimeFn
+          : typeof previousRuntimeFn === "function"
+            ? previousRuntimeFn
+            : runtimeFn;
+
+      loadSucceeded = false;
+      lastLoadError = error;
+      lastReload = {
+        ok: false,
+        at: Date.now(),
+        mtime: lastMtime,
+        error,
+      };
+
+      visibleLog("[loader] LOAD ERROR: " + error, "error");
       visibleLog("[loader] Keeping previous runtime if available", "warn");
-      if (!runtimeFn && lastGoodRuntimeFn) {
-        runtimeFn = lastGoodRuntimeFn;
+      if (runtimeFn) {
         visibleLog("[loader] Reverted to last good runtime", "info");
       }
+
+      return makeResult(false, runtimeFn !== null, false, lastMtime, error);
     }
   }
 
@@ -207,6 +357,15 @@ if (typeof Object.fromEntries !== "function") {
       lastMtime = Date.now();
       pendingReload = false;
       _g.__ptRuntimeDemoLoaded = true;
+      reloadCount += 1;
+      loadAttempted = true;
+      loadSucceeded = true;
+      lastLoadError = null;
+      lastReload = {
+        ok: true,
+        at: Date.now(),
+        mtime: lastMtime,
+      };
       visibleLog("[runtime-demo] Demo runtime loaded", "info");
     } catch (e) {
       try {
@@ -246,6 +405,11 @@ if (typeof Object.fromEntries !== "function") {
     load(true);
   }
 
+  function reloadNow(): RuntimeLoadResult {
+    pendingReload = false;
+    return load(true);
+  }
+
   function getLastMtime(): number {
     return lastMtime;
   }
@@ -258,5 +422,14 @@ if (typeof Object.fromEntries !== "function") {
     return pendingReload;
   }
 
-  return { load, loadDemo, reloadIfNeeded, getLastMtime, getRuntimeFn, hasPendingReload };
+  return {
+    load,
+    loadDemo,
+    reloadIfNeeded,
+    reloadNow,
+    getLastMtime,
+    getRuntimeFn,
+    hasPendingReload,
+    getStatus,
+  };
 }

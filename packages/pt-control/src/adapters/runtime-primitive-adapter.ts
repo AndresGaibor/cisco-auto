@@ -99,7 +99,7 @@ const PRIMITIVE_REGISTRY: Record<string, PrimitiveMetadata> = {
   "topology.list": {
     domain: "topology",
     description: "Listar dispositivos y conexiones de la topología",
-    supportedPayloadFields: ["filter"],
+    supportedPayloadFields: ["filter", "includePorts", "includeLinks", "deep"],
   },
   "hardware.info": {
     domain: "hardware",

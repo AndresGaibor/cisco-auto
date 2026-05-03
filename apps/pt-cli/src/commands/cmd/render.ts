@@ -44,6 +44,19 @@ function formatTimingsSummary(timings: BridgeResultTimings): string {
   return `Timings: ${parts.join(" | ")}`;
 }
 
+function isIosErrorResult(result: {
+  ok?: boolean;
+  status?: number;
+  error?: { code?: string };
+}): boolean {
+  return (
+    result.ok === false &&
+    Number(result.status ?? 1) !== 0 &&
+    typeof result.error?.code === "string" &&
+    result.error.code.startsWith("IOS_")
+  );
+}
+
 export function toCmdCliResult(
   result: TerminalCommandResult,
   options: { includeSyslogs?: boolean } = {},
@@ -58,8 +71,11 @@ export function toCmdCliResult(
     output: result.output,
     deviceKind: result.deviceKind,
     includeSyslogs: options.includeSyslogs,
+    preserveCommandEcho: isIosErrorResult(result),
   });
   const mergedWarnings = [...(result.warnings ?? []), ...cleaned.warnings];
+  const isIosError = isIosErrorResult(result);
+  const primaryErrorOutput = String(result.error?.message ?? cleaned.output).trim();
 
   if (result.deviceKind === "ios") {
     nextSteps.push(`pt cmd ${result.device} "show running-config"`);
@@ -82,7 +98,7 @@ export function toCmdCliResult(
     device: result.device,
     deviceKind: result.deviceKind,
     command: result.command,
-    output: cleaned.output,
+    output: isIosError ? (primaryErrorOutput || cleaned.output) : cleaned.output,
     rawOutput: result.rawOutput ?? cleaned.rawOutput,
     status: result.status,
     warnings: mergedWarnings,

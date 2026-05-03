@@ -3,12 +3,17 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdirSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { BridgePathLayout } from './shared/path-layout';
 import { CheckpointManager } from './consumer-checkpoint';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
-const TEST_ROOT = '/tmp/checkpoint-test-' + Math.random().toString(36).slice(2);
+function makeTestRoot(prefix: string): string {
+  return mkdtempSync(join(tmpdir(), prefix));
+}
+
+let TEST_ROOT: string;
 
 describe('CheckpointManager', () => {
   let paths: BridgePathLayout;
@@ -16,6 +21,7 @@ describe('CheckpointManager', () => {
   const consumerId = 'test-consumer';
 
   beforeEach(() => {
+    TEST_ROOT = makeTestRoot('file-bridge-checkpoint-');
     mkdirSync(TEST_ROOT, { recursive: true });
     paths = new BridgePathLayout(TEST_ROOT);
   });

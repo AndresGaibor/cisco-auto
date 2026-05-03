@@ -46,7 +46,7 @@ export function createDevicePortsCommand(): Command {
       const globalFlags = rootCmd ? getGlobalFlags(rootCmd) : ({ json: false } as const);
       const useJson = Boolean(globalFlags.json || options.json);
 
-      const result = await loadLiveDeviceList(undefined, { refreshCache: Boolean(options.refresh) });
+      const result = await loadLiveDeviceList(undefined, { refreshCache: Boolean(options.refresh), ports: true });
       const devices = (result.devices ?? []) as Array<{ name: string; model?: string; type?: string; ports?: DevicePort[] }>;
       const device = devices.find((item) => item.name === deviceName);
 

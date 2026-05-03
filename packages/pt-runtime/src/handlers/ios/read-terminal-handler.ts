@@ -1,53 +1,86 @@
 // ============================================================================
-// Read Terminal Handler - Diagnostic terminal read
+// Read Terminal Handler - Diagnostic terminal read (Minimal Sync)
 // ============================================================================
 
 import type { PtRuntimeApi } from "../../pt-api/pt-deps.js";
 import type { PtResult } from "../../pt-api/pt-results.js";
 import { createErrorResult, createSuccessResult } from "../result-factories";
-import { readTerminalOutput } from "../../terminal/prompt-detector";
-import { getSession } from "../../terminal/session-registry";
-import { getTerminalDevice } from "./ios-session-utils";
+
+function getTerminalDevice(api: PtRuntimeApi, deviceName: string): any {
+  try {
+    const globalIpc = typeof ipc !== "undefined" ? ipc : null;
+    const net = globalIpc && typeof globalIpc.network === "function"
+      ? globalIpc.network()
+      : null;
+
+    if (net && typeof net.getDevice === "function") {
+      const dev = net.getDevice(deviceName);
+      if (dev && typeof dev.getCommandLine === "function") {
+        return dev.getCommandLine();
+      }
+    }
+  } catch {}
+
+  try {
+    const device = api.getDeviceByName(deviceName);
+    if (!device) return null;
+
+    const maybeCli = (device as any).getCommandLine;
+    if (typeof maybeCli === "function") {
+      return maybeCli.call(device);
+    }
+  } catch {}
+
+  return null;
+}
+
+function readTerminalText(terminal: any): string {
+  const methods = [
+    "getAllOutput",
+    "getBuffer",
+    "getOutput",
+    "getText",
+    "readAll",
+    "read",
+    "getHistory",
+  ];
+
+  for (let i = 0; i < methods.length; i++) {
+    const method = methods[i];
+    try {
+      if (terminal && typeof terminal[method] === "function") {
+        const value = terminal[method]();
+        if (typeof value === "string") return value;
+      }
+    } catch {}
+  }
+
+  return "";
+}
 
 export function handleReadTerminal(payload: { device: string }, api: PtRuntimeApi): PtResult {
-  const terminal = getTerminalDevice(api, payload.device);
-  if (!terminal) return createErrorResult("Terminal inaccessible", "NO_TERMINAL");
+  const deviceName = String(payload.device || "").trim();
 
-  const raw = readTerminalOutput(terminal);
-  const session = getSession(payload.device);
-
-  // Descubrimiento de métodos (force test some common ones since for..in might fail on Qt objects)
-  const allProps: string[] = [];
-  try {
-    const keys = Object.keys(terminal);
-    for (var j = 0; j < keys.length; j++) {
-      allProps.push(keys[j] + " (keys)");
-    }
-  } catch(e) {}
-
-  try {
-    for (var k in terminal) {
-      allProps.push(k + " (in)");
-    }
-  } catch(e) {}
-
-  const methodsToTest = ["getOutput", "getAllOutput", "getBuffer", "getText", "getHistory", "history", "getCommandInput", "getConsole", "readAll", "read", "toString", "className", "objectName"];
-  for (var i = 0; i < methodsToTest.length; i++) {
-    var m = methodsToTest[i];
-    try {
-      if (m !== undefined && terminal[m as keyof typeof terminal] !== undefined) {
-        allProps.push(m + " (exists)");
-      }
-    } catch(e) {
-      allProps.push(m + " (throws)");
-    }
+  if (!deviceName) {
+    return createErrorResult("readTerminal requiere device", "INVALID_PAYLOAD");
   }
+
+  const terminal = getTerminalDevice(api, deviceName);
+  if (!terminal) {
+    return createErrorResult("Terminal inaccessible", "NO_TERMINAL");
+  }
+
+  const raw = readTerminalText(terminal);
+  let prompt = "";
+
+  try {
+    prompt = typeof terminal.getPrompt === "function" ? String(terminal.getPrompt() || "") : "";
+  } catch {}
 
   return createSuccessResult({
     raw,
-    device: payload.device,
-    prompt: terminal.getPrompt ? terminal.getPrompt() : "",
-    methods: allProps,
-    history: session ? session.history : [],
+    output: raw,
+    device: deviceName,
+    prompt,
   });
 }

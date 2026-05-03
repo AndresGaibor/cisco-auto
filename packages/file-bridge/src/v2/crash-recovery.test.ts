@@ -1,12 +1,17 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { BridgePathLayout } from "../shared/path-layout.js";
 import { SequenceStore } from "../shared/sequence-store.js";
 import { EventLogWriter } from "../event-log-writer.js";
 import { CrashRecovery } from "./crash-recovery.js";
 
-const TEST_ROOT = "/tmp/crash-recovery-test-" + Math.random().toString(36).slice(2);
+function makeTestRoot(prefix: string): string {
+  return mkdtempSync(join(tmpdir(), prefix));
+}
+
+let TEST_ROOT: string;
 
 function commandEnvelope(seq: number, type: string) {
   return {
@@ -27,6 +32,7 @@ describe("CrashRecovery", () => {
   let recovery: CrashRecovery;
 
   beforeEach(() => {
+    TEST_ROOT = makeTestRoot('file-bridge-crash-recovery-');
     mkdirSync(TEST_ROOT, { recursive: true });
     paths = new BridgePathLayout(TEST_ROOT);
     seq = new SequenceStore(TEST_ROOT);

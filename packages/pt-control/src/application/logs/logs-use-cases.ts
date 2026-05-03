@@ -1,12 +1,14 @@
-import {
-  existsSync,
-  readFileSync,
-  readdirSync,
-  statSync,
-} from "node:fs";
-import { join, resolve, sep } from "node:path";
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { categorizeLogErrorLayer, extractPayloadDevice } from "./categorize.js";
+import {
+  assertInsideDir,
+  normalizeCommandId,
+  readJsonFile,
+  readNdjsonFile,
+  resolveNumberOrDefault,
+} from "../../shared/filesystem.js";
 
 export interface LogEventRecord extends Record<string, unknown> {
   timestamp?: string;
@@ -100,38 +102,6 @@ export type LogsUseCaseResult<T> =
       };
     };
 
-function assertInsideDir(parentDir: string, childPath: string): void {
-  const parent = resolve(parentDir);
-  const child = resolve(childPath);
-
-  if (child !== parent && !child.startsWith(parent + sep)) {
-    throw new Error(`Ruta fuera del directorio permitido: ${childPath}`);
-  }
-}
-
-function readJsonFile(path: string): unknown {
-  return JSON.parse(readFileSync(path, "utf-8"));
-}
-
-function readNdjsonFile(path: string): LogEventRecord[] {
-  const content = readFileSync(path, "utf-8");
-  const lines = content.split("\n").filter(Boolean);
-  const entries: LogEventRecord[] = [];
-
-  for (const line of lines) {
-    try {
-      const parsed = JSON.parse(line);
-      if (parsed && typeof parsed === "object") {
-        entries.push(parsed as LogEventRecord);
-      }
-    } catch {
-      // línea corrupta: se ignora
-    }
-  }
-
-  return entries;
-}
-
 function getRecentNdjsonFiles(logsDir: string, fileLimit: number): string[] {
   if (!existsSync(logsDir)) {
     return [];
@@ -171,8 +141,8 @@ export async function tailLogs(input: {
   fileLimit?: number;
 }): Promise<LogsUseCaseResult<LogsTailResult>> {
   try {
-    const lines = input.lines && input.lines > 0 ? input.lines : 20;
-    const fileLimit = input.fileLimit && input.fileLimit > 0 ? input.fileLimit : 3;
+    const lines = resolveNumberOrDefault(input.lines, 20);
+    const fileLimit = resolveNumberOrDefault(input.fileLimit, 3);
 
     const files = getRecentNdjsonFiles(input.logsDir, fileLimit);
     const entries: LogEventRecord[] = [];
@@ -244,7 +214,7 @@ export async function inspectCommandLogs(input: {
 }): Promise<LogsUseCaseResult<LogsCommandResult>> {
   try {
     const commandId = input.commandId.trim();
-    const normalizedId = commandId.replace(/\.json$/i, "").replace(/^cmd_/, "");
+    const normalizedId = normalizeCommandId(commandId);
 
     const traceCandidates = [
       resolve(input.commandLogsDir, `${commandId}.json`),
@@ -323,8 +293,8 @@ export async function findRecentLogErrors(input: {
   fileLimit?: number;
 }): Promise<LogsUseCaseResult<LogsErrorsResult>> {
   try {
-    const limit = input.limit && input.limit > 0 ? input.limit : 10;
-    const fileLimit = input.fileLimit && input.fileLimit > 0 ? input.fileLimit : 5;
+    const limit = resolveNumberOrDefault(input.limit, 10);
+    const fileLimit = resolveNumberOrDefault(input.fileLimit, 5);
     const files = getRecentNdjsonFiles(input.logsDir, fileLimit);
 
     const errors: LogsErrorEntry[] = [];
@@ -426,8 +396,8 @@ export async function listIosLogEntries(input: {
   fileLimit?: number;
 }): Promise<LogsUseCaseResult<LogsIosResult>> {
   try {
-    const limit = input.limit && input.limit > 0 ? input.limit : 20;
-    const fileLimit = input.fileLimit && input.fileLimit > 0 ? input.fileLimit : 10;
+    const limit = resolveNumberOrDefault(input.limit, 20);
+    const fileLimit = resolveNumberOrDefault(input.fileLimit, 10);
     const files = getRecentNdjsonFiles(input.logsDir, fileLimit);
 
     const entries: LogsIosEntry[] = [];

@@ -203,4 +203,89 @@ describe("createRuntimeTerminalAdapter deferred flow", () => {
     expect(calls[1]?.type).toBe("__pollDeferred");
     expect(calls[1]?.timeoutMs).toBeGreaterThan(12000);
   });
+
+  test("terminal.plan.run parsea pollValue con el comando real y no con terminal.plan.run", async () => {
+    const calls: Array<{ type: string; timeoutMs?: number; options?: unknown }> = [];
+
+    const bridge = {
+      sendCommandAndWait: vi.fn(async (type: string, _payload: unknown, timeoutMs?: number, options?: unknown) => {
+        calls.push({ type, timeoutMs, options });
+
+        if (type === "terminal.plan.run") {
+          return {
+            ok: true,
+            status: 0,
+            completedAt: Date.now(),
+            value: { deferred: true, ticket: "ticket-real-command" },
+          };
+        }
+
+        if (type === "__pollDeferred") {
+          const raw = [
+            "SW1#show version",
+            "OLD VERSION OUTPUT",
+            "SW1#",
+            "SW1#show ip interface brief",
+            "Interface              IP-Address      OK? Method Status                Protocol",
+            "Vlan99                 192.168.99.6    YES manual up                    up",
+            "SW1#",
+          ].join("\n");
+
+          return {
+            ok: true,
+            status: 0,
+            completedAt: Date.now(),
+            value: {
+              done: true,
+              ok: true,
+              status: 0,
+              raw,
+              output: raw,
+              result: {
+                ok: true,
+                raw,
+                status: 0,
+                session: {
+                  mode: "privileged-exec",
+                  prompt: "SW1#",
+                },
+              },
+              session: {
+                mode: "privileged-exec",
+                prompt: "SW1#",
+              },
+            },
+          };
+        }
+
+        throw new Error(`unexpected ${type}`);
+      }),
+    };
+
+    const adapter = createRuntimeTerminalAdapter({
+      bridge: bridge as never,
+      generateId: () => "id-real-command",
+      defaultTimeout: 45000,
+    });
+
+    const result = await adapter.runTerminalPlan(
+      {
+        id: "plan-real-command",
+        device: "SW1",
+        targetMode: "privileged-exec",
+        steps: [{ kind: "command", command: "show ip interface brief" }],
+        timeouts: { commandTimeoutMs: 30000, stallTimeoutMs: 15000 },
+        policies: { autoAdvancePager: true },
+        metadata: { deviceKind: "ios" },
+      } as never,
+      { timeoutMs: 45000 },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.output).toContain("Interface");
+    expect(result.output).toContain("Vlan99");
+    expect(result.output).not.toContain("OLD VERSION OUTPUT");
+    expect((result.events[0] as any)?.command).toBe("show ip interface brief");
+    expect(calls.map((call) => call.type)).toEqual(["terminal.plan.run", "__pollDeferred"]);
+  });
 });

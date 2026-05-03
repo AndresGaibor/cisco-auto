@@ -3,16 +3,21 @@ import * as path from "path";
 import { computeChecksum, normalizeArtifactForChecksum } from "./checksum";
 
 export interface RuntimeArtifactManifest {
+  schemaVersion: string;
   cliVersion: string;
   protocolVersion: number;
   mainChecksum: string;
   runtimeChecksum: string;
   catalogChecksum: string;
-  generatedAt: number;
   modules: {
     main: string;
     catalog: string;
     runtime: string;
+  };
+  reload: {
+    mainManualReloadRequiredWhenChanged: boolean;
+    runtimeHotReloadable: boolean;
+    catalogHotReloadable: boolean;
   };
 }
 
@@ -52,16 +57,21 @@ export async function writeRuntimeManifest(
   outputDir: string,
 ): Promise<RuntimeArtifactManifest> {
   const manifest: RuntimeArtifactManifest = {
+    schemaVersion: "1.0",
     cliVersion: RUNTIME_CLI_VERSION,
     protocolVersion: RUNTIME_PROTOCOL_VERSION,
     mainChecksum: computeChecksum(normalizeArtifactForChecksum(main)),
     catalogChecksum: computeChecksum(normalizeArtifactForChecksum(catalog)),
     runtimeChecksum: computeChecksum(normalizeArtifactForChecksum(runtime)),
-    generatedAt: Date.now(),
     modules: {
       main: "main.js",
       catalog: "catalog.js",
       runtime: "runtime.js",
+    },
+    reload: {
+      mainManualReloadRequiredWhenChanged: true,
+      runtimeHotReloadable: true,
+      catalogHotReloadable: false,
     },
   };
 

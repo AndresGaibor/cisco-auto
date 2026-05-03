@@ -132,6 +132,48 @@ describe("CommandStateMachine", () => {
       expect(setIntervalMock).toHaveBeenCalledTimes(1);
     });
 
+    test("ignora el delta del polling cuando ya hubo eventos de output", () => {
+      const terminal = createMockTerminal();
+      const session = createMockSession();
+      const events: TerminalEventRecord[] = [];
+      const setIntervalMock = vi.fn(() => 1 as any);
+      const snapshot = {
+        raw: "Router#show version\nCisco IOS Software\nRouter#\nNEW VERSION OUTPUT\nRouter#",
+        source: "poll",
+      };
+
+      const sm = new CommandStateMachine({
+        deviceName: "Router1",
+        command: "show version",
+        terminal,
+        options: {},
+        session,
+        events,
+        warnings: [],
+        sessionKind: "ios",
+        promptBefore: "Router#",
+        modeBefore: "privileged-exec",
+        baselineSnapshot: { raw: "Router#show version\nCisco IOS Software\nRouter#", source: "test" },
+        baselineOutput: "Router#show version\nCisco IOS Software\nRouter#",
+        readTerminalSnapshotFn: vi.fn(() => snapshot) as any,
+        getPromptSafeFn: vi.fn(() => "Router#") as any,
+        getModeSafeFn: vi.fn(() => "privileged-exec") as any,
+        setInterval: setIntervalMock as any,
+        clearInterval: vi.fn() as any,
+      } as any);
+
+      (sm as any).outputEventsCount = 1;
+      (sm as any).lastTerminalSnapshot = { raw: "Router#show version\nCisco IOS Software\nRouter#", source: "event" };
+      (sm as any).outputBuffer = "Router#show version\nCisco IOS Software\nRouter#";
+      (sm as any).onOutput = vi.fn();
+
+      (sm as any).startOutputPolling();
+
+      expect((sm as any).onOutput).not.toHaveBeenCalled();
+      expect((sm as any).outputBuffer).toBe("Router#show version\nCisco IOS Software\nRouter#");
+      expect(setIntervalMock).toHaveBeenCalledTimes(1);
+    });
+
     test("mantiene pagerActive mientras el pager siga visible en el snapshot", () => {
       const terminal = createMockTerminal({
         getPrompt: () => "Router#",
@@ -165,6 +207,42 @@ describe("CommandStateMachine", () => {
 
       expect(terminal.enterChar).toHaveBeenCalledWith(32, 0);
       expect(session.pagerActive).toBe(true);
+    });
+
+    test("no trata el pager como loop fatal cuando autoAdvancePager es false", () => {
+      const terminal = createMockTerminal({
+        getPrompt: () => "Router#",
+        enterChar: vi.fn(),
+      });
+      const session = createMockSession();
+      const events: TerminalEventRecord[] = [];
+
+      const sm = new CommandStateMachine({
+        deviceName: "Router1",
+        command: "show version",
+        terminal,
+        options: { autoAdvancePager: false, maxPagerAdvances: 0 },
+        session,
+        events,
+        warnings: [],
+        sessionKind: "ios",
+        promptBefore: "Router#",
+        modeBefore: "privileged-exec",
+        baselineSnapshot: { raw: "show version\n--More--", source: "test" },
+        baselineOutput: "show version\n--More--",
+        readTerminalSnapshotFn: vi.fn(() => ({ raw: "show version\n--More--", source: "poll" })) as any,
+        getPromptSafeFn: vi.fn(() => "Router#") as any,
+        getModeSafeFn: vi.fn(() => "privileged-exec") as any,
+        setInterval: vi.fn(() => 1 as any) as any,
+        clearInterval: vi.fn() as any,
+      } as any);
+
+      const finalizeFailureSpy = vi.spyOn(sm as any, "finalizeFailure");
+
+      (sm as any).onMoreDisplayed({}, {});
+
+      expect(finalizeFailureSpy).not.toHaveBeenCalled();
+      expect(terminal.enterChar).not.toHaveBeenCalled();
     });
   });
 

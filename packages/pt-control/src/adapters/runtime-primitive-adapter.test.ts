@@ -73,4 +73,24 @@ describe("RuntimePrimitiveAdapter", () => {
     expect(result.ok).toBe(true);
     expect(bridge.calls[0]?.type).toBe("listLinks");
   });
+
+  test("topology.list preserva includePorts/includeLinks/deep", async () => {
+    const bridge = createBridge();
+    const adapter = new RuntimePrimitiveAdapter(bridge);
+
+    await adapter.runPrimitive("topology.list", {
+      id: "id-list",
+      filter: undefined,
+      includePorts: true,
+      includeLinks: true,
+      deep: false,
+    });
+
+    expect(bridge.calls[0]?.type).toBe("listDevices");
+    expect(bridge.calls[0]?.payload).toMatchObject({
+      includePorts: true,
+      includeLinks: true,
+      deep: false,
+    });
+  });
 });

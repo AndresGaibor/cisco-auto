@@ -43,7 +43,7 @@ export class TopologyController {
         remainingDevices: number;
         remainingLinks: number;
       }>;
-      listDevices(filter?: string | number | string[]): Promise<DeviceListResult>;
+      listDevices(filter?: string | number | string[], options?: { includePorts?: boolean; includeLinks?: boolean; deep?: boolean }): Promise<DeviceListResult & { meta?: Record<string, unknown> }>;
     },
     private readonly deviceService: {
       inspect(name: string, includeXml?: boolean): Promise<DeviceState>;
@@ -79,8 +79,11 @@ export class TopologyController {
     return this.topologyFacade.moveDevice(name, x, y);
   }
 
-  async listDevices(filter?: string | number | string[]): Promise<DeviceListResult> {
-    return this.topologyFacade.listDevices(filter);
+  async listDevices(
+    filter?: string | number | string[],
+    options?: { includePorts?: boolean; includeLinks?: boolean; deep?: boolean },
+  ): Promise<DeviceListResult & { meta?: Record<string, unknown> }> {
+    return this.topologyFacade.listDevices(filter, options);
   }
 
   async inspectDevice(name: string, includeXml = false): Promise<DeviceState> {

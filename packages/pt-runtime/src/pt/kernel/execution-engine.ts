@@ -50,6 +50,8 @@ export interface JobContext {
   errorCode: string | null;
   pendingDelay: number | null;
   waitingForConfirm: boolean;
+  nativeBaselineOutput: string;
+  nativeBaselineStep: number;
 }
 
 export interface ActiveJob {
@@ -98,6 +100,16 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
     return job.context.finished === true || job.context.phase === "completed" || job.context.phase === "error";
   }
 
+  function isDeviceTerminalBusy(device: string): boolean {
+    try {
+      if (terminal && typeof (terminal as any).isBusy === "function") {
+        return (terminal as any).isBusy(device) === true;
+      }
+    } catch {}
+
+    return false;
+  }
+
   function createJobContext(plan: DeferredJobPlan): JobContext {
     const now = Date.now();
 
@@ -120,6 +132,8 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
       errorCode: null,
       pendingDelay: null,
       waitingForConfirm: false,
+      nativeBaselineOutput: "",
+      nativeBaselineStep: -1,
     };
   }
 
@@ -462,12 +476,12 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
     //   SW-SRV-DIST>show version
     //   Router#show ip interface brief
     //   Switch(config)#interface vlan 10
-    const promptEchoPattern = new RegExp(
-      "^[A-Za-z0-9._-]+(?:\\(config[^)]*\\))?[>#]\\s*" +
-        rawCommand.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") +
-        "\\s*$",
-      "i",
-    );
+      const promptEchoPattern = new RegExp(
+        "^[A-Za-z0-9._-]+(?:\\(config[^)]*\\))?[>#]\\s*" +
+          String(rawCommand ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&") +
+          "\\s*$",
+        "i",
+      );
 
     return promptEchoPattern.test(rawLine);
   }
@@ -580,7 +594,7 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
 
     if (!completeJobIfLastStep(job, terminalResult)) {
       ctx.phase = "pending";
-      advanceJob(job.id);
+      deferAdvanceJob(job.id, String(step.value || ""));
     }
 
     return true;
@@ -608,6 +622,73 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
     return rawLine;
   }
 
+  function isConfigPromptText(value: string): boolean {
+    return /\(config[^)]*\)#\s*$/.test(String(value ?? "").trim());
+  }
+
+  function nativeConfigCommandEchoAndPromptLooksComplete(
+    lines: string[],
+    command: string,
+    prompt: string,
+  ): boolean {
+    const promptLine = lastNonEmptyLine(lines.join("\n"));
+    const hasConfigPrompt = isConfigPromptText(prompt) || isConfigPromptText(promptLine);
+
+    if (!hasConfigPrompt) return false;
+
+    const hasCommandEcho = lines.some((line) => lineContainsCommandEcho(line, command));
+    if (!hasCommandEcho) return false;
+
+    return true;
+  }
+
+  function isEndCommand(command: string): boolean {
+    return String(command ?? "").trim().toLowerCase() === "end";
+  }
+
+  function isPromptOnlyTransitionCommand(command: string): boolean {
+    const normalized = String(command ?? "").trim().toLowerCase();
+
+    return (
+      normalized === "disable" ||
+      normalized === "enable" ||
+      normalized === "end" ||
+      normalized === "exit"
+    );
+  }
+
+  function nativePromptOnlyTransitionLooksComplete(
+    lines: string[],
+    command: string,
+    prompt: string,
+  ): boolean {
+    if (!isPromptOnlyTransitionCommand(command)) return false;
+
+    const hasCommandEcho = blockHasCommandEcho(lines, command);
+    if (!hasCommandEcho) return false;
+
+    const promptLine = lastNonEmptyLine(lines.join("\n"));
+    const resolvedPrompt = String(prompt || promptLine || "").trim();
+
+    return isIosPrompt(resolvedPrompt);
+  }
+
+  function blockHasCommandEcho(lines: string[], command: string): boolean {
+    return lines.some((line) => lineContainsCommandEcho(line, command));
+  }
+
+  function nativeEndCommandLooksComplete(lines: string[], command: string, prompt: string): boolean {
+    if (!isEndCommand(command)) return false;
+
+    const hasCommandEcho = blockHasCommandEcho(lines, command);
+    if (!hasCommandEcho) return false;
+
+    const promptLine = lastNonEmptyLine(lines.join("\n"));
+    const resolvedPrompt = String(prompt || promptLine || "").trim();
+
+    return /^[A-Za-z0-9._-]+#\s*$/.test(resolvedPrompt) && !/\(config[^)]*\)#\s*$/.test(resolvedPrompt);
+  }
+
   function nativeFallbackBlockLooksComplete(block: string, command: string, prompt: string): boolean {
     const text = normalizeEol(block);
     const lines = text
@@ -630,7 +711,19 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
       return true;
     });
 
-    return meaningfulLines.length > 0;
+    if (meaningfulLines.length > 0) {
+      return true;
+    }
+
+    if (nativeEndCommandLooksComplete(lines, command, prompt)) {
+      return true;
+    }
+
+    if (nativePromptOnlyTransitionLooksComplete(lines, command, prompt)) {
+      return true;
+    }
+
+    return nativeConfigCommandEchoAndPromptLooksComplete(lines, command, prompt);
   }
 
   function nativeOutputTailHasActivePager(output: string): boolean {
@@ -655,6 +748,10 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
     return "";
   }
 
+  function isBlankText(value: unknown): boolean {
+    return String(value ?? "").replace(/\s+/g, "") === "";
+  }
+
   function nativeInputIsOnlyPagerResidue(input: string): boolean {
     const value = String(input ?? "");
 
@@ -662,7 +759,7 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
       return false;
     }
 
-    return value.replace(/\s+/g, "") === "";
+    return isBlankText(value);
   }
 
   function clearNativeInputIfPagerResidue(deviceName: string): void {
@@ -723,6 +820,91 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
     return readTerminalTextSafe(term);
   }
 
+  function captureNativeBaselineForCurrentStep(job: ActiveJob): void {
+    try {
+      job.context.nativeBaselineOutput = readNativeTerminalOutput(job.device);
+      job.context.nativeBaselineStep = job.context.currentStep;
+    } catch {
+      job.context.nativeBaselineOutput = "";
+      job.context.nativeBaselineStep = job.context.currentStep;
+    }
+  }
+
+  function getNativeDeltaForCurrentStep(_job: ActiveJob, currentOutput: string, command: string): string {
+    const ctx = _job.context;
+    const output = normalizeEol(currentOutput);
+    const strict = extractCurrentCommandBlockStrict(output, command);
+    const baseline = normalizeEol(ctx.nativeBaselineOutput || "");
+
+    if (ctx.nativeBaselineStep !== ctx.currentStep) {
+      if (strict.hasCommandEcho) {
+        return strict.block;
+      }
+
+      if (isPromptOnlyTransitionCommand(command)) {
+        return extractLatestCommandBlock(output, command).trim();
+      }
+
+      return "";
+    }
+
+    if (!baseline) {
+      if (strict.hasCommandEcho) {
+        return strict.block;
+      }
+
+      if (isPromptOnlyTransitionCommand(command)) {
+        return extractLatestCommandBlock(output, command).trim();
+      }
+
+      return "";
+    }
+
+    if (output.length >= baseline.length && output.slice(0, baseline.length) === baseline) {
+      const delta = output.slice(baseline.length).trim();
+      if (!delta) {
+        return isPromptOnlyTransitionCommand(command) ? extractLatestCommandBlock(output, command).trim() : "";
+      }
+
+      const deltaStrict = extractCurrentCommandBlockStrict(delta, command);
+      if (deltaStrict.hasCommandEcho) {
+        return deltaStrict.block;
+      }
+
+      const deltaBlock = extractLatestCommandBlock(delta, command).trim();
+      return deltaBlock || "";
+    }
+
+    const marker = lastNonEmptyLine(baseline);
+    const overlapStart = marker ? output.lastIndexOf(marker) : -1;
+
+    if (overlapStart >= 0) {
+      const afterOverlap = output.slice(overlapStart);
+      const markerIndex = afterOverlap.indexOf(marker);
+
+      if (markerIndex >= 0) {
+        const sliced = afterOverlap.slice(markerIndex + marker.length).trim();
+        if (sliced) {
+          const slicedStrict = extractCurrentCommandBlockStrict(sliced, command);
+          if (slicedStrict.hasCommandEcho) {
+            return slicedStrict.block;
+          }
+
+          const slicedBlock = extractLatestCommandBlock(sliced, command).trim();
+          if (slicedBlock) {
+            return slicedBlock;
+          }
+        }
+      }
+    }
+
+    if (isPromptOnlyTransitionCommand(command)) {
+      return extractLatestCommandBlock(output, command).trim();
+    }
+
+    return strict.hasCommandEcho ? strict.block : "";
+  }
+
   function getNativePrompt(device: string, output: string): string {
     try {
       const term = getNativeTerminalForDevice(device);
@@ -758,6 +940,10 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
   function shouldTryNativeFallback(job: ActiveJob, now: number): boolean {
     const ctx = job.context as any;
 
+    if (ctx.semanticErrorCleanupInProgress === true) {
+      return false;
+    }
+
     if (!job || ctx.finished === true || ctx.phase === "completed" || ctx.phase === "error") {
       return false;
     }
@@ -776,7 +962,15 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
 
     const ageMs = now - Number(ctx.updatedAt || ctx.startedAt || now);
 
-    return ageMs > 750;
+    if (ageMs <= 750) {
+      return false;
+    }
+
+    if (isDeviceTerminalBusy(job.device) && ageMs <= 1200) {
+      return false;
+    }
+
+    return true;
   }
 
   function tickNativeFallback(job: ActiveJob, reason: string): boolean {
@@ -863,8 +1057,377 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
     return lines.slice(startIndex).join("\n");
   }
 
+  function extractCurrentCommandBlockStrict(
+    output: string,
+    command: string,
+  ): { block: string; hasCommandEcho: boolean } {
+    const text = normalizeEol(output);
+    const cmd = String(command || "").trim();
+
+    if (!text.trim() || !cmd) {
+      return { block: "", hasCommandEcho: false };
+    }
+
+    const lines = text.split("\n");
+    let startIndex = -1;
+
+    for (let index = lines.length - 1; index >= 0; index -= 1) {
+      if (lineContainsCommandEcho(lines[index] || "", cmd)) {
+        startIndex = index;
+        break;
+      }
+    }
+
+    if (startIndex < 0) {
+      return { block: "", hasCommandEcho: false };
+    }
+
+    let endIndex = lines.length;
+
+    for (let index = startIndex + 1; index < lines.length; index += 1) {
+      const line = String(lines[index] || "").trim();
+
+      if (index > startIndex + 1 && isIosPrompt(line)) {
+        endIndex = index + 1;
+        break;
+      }
+    }
+
+    return {
+      block: lines.slice(startIndex, endIndex).join("\n").trim(),
+      hasCommandEcho: true,
+    };
+  }
+
+  function appendStepOutput(current: string, next: unknown): string {
+    const value = String(next ?? "");
+
+    if (!value.trim()) {
+      return current;
+    }
+
+    if (!current.trim()) {
+      return value;
+    }
+
+    return current.replace(/\s+$/g, "") + "\n" + value.replace(/^\s+/g, "");
+  }
+
+  function detectIosSemanticErrorFromOutput(output: unknown): { code: string; message: string } | null {
+    const text = String(output ?? "");
+
+    if (!text.trim()) {
+      return null;
+    }
+
+    if (/%\s*Invalid input detected/i.test(text)) {
+      return {
+        code: "IOS_INVALID_INPUT",
+        message: text.trim(),
+      };
+    }
+
+    if (/%\s*Incomplete command/i.test(text)) {
+      return {
+        code: "IOS_INCOMPLETE_COMMAND",
+        message: text.trim(),
+      };
+    }
+
+    if (/%\s*Ambiguous command/i.test(text)) {
+      return {
+        code: "IOS_AMBIGUOUS_COMMAND",
+        message: text.trim(),
+      };
+    }
+
+    if (/%\s*Unknown command/i.test(text)) {
+      return {
+        code: "IOS_UNKNOWN_COMMAND",
+        message: text.trim(),
+      };
+    }
+
+    return null;
+  }
+
+function semanticErrorNeedsCleanupToPrivilegedExec(
+    _job: ActiveJob,
+    prompt: unknown,
+    mode: unknown,
+  ): boolean {
+    return nativeSnapshotIsStillInConfigMode({ prompt, mode });
+  }
+
+  function buildSemanticErrorResult(
+    semanticError: { code: string; message: string },
+    prompt: unknown,
+    mode: unknown,
+    cleanupOutput?: string,
+  ): TerminalResult {
+    const baseMessage = semanticError.message.replace(/\s+$/g, "");
+    const message = cleanupOutput
+      ? baseMessage + "\n\n[cleanup]\n" + cleanupOutput.replace(/^\s+/g, "")
+      : baseMessage;
+
+    return {
+      ok: false,
+      output: message,
+      rawOutput: message,
+      raw: message,
+      status: 1,
+      error: message,
+      code: semanticError.code,
+      prompt: String(prompt || ""),
+      mode: String(mode || ""),
+    } as any;
+  }
+
+  function extractNativeCleanupOutputSinceBaseline(fullOutput: string, baselineOutput: string): string {
+    const normalizedFull = normalizeEol(fullOutput);
+    const normalizedBaseline = normalizeEol(baselineOutput);
+
+    if (!normalizedFull.trim()) {
+      return "";
+    }
+
+    if (normalizedBaseline && normalizedFull.startsWith(normalizedBaseline)) {
+      const delta = normalizedFull.slice(normalizedBaseline.length).trim();
+      if (delta) {
+        return delta;
+      }
+    }
+
+    const block = extractLatestCommandBlock(normalizedFull, "end").trim();
+    if (block && block !== normalizedFull.trim()) {
+      return block;
+    }
+
+    return "";
+  }
+
+  function finishJobWithSemanticError(
+    job: ActiveJob,
+    semanticError: { code: string; message: string },
+    prompt: unknown,
+    mode: unknown,
+    cleanupOutput?: string,
+  ): void {
+    const ctx = job.context;
+    const finalResult = buildSemanticErrorResult(semanticError, prompt, mode, cleanupOutput);
+
+    job.pendingCommand = null;
+    ctx.waitingForCommandEnd = false;
+    ctx.pendingDelay = null;
+    ctx.outputBuffer = appendStepOutput(ctx.outputBuffer, finalResult.output);
+    ctx.error = finalResult.output;
+    ctx.errorCode = semanticError.code;
+    ctx.phase = "completed";
+    ctx.finished = true;
+    ctx.updatedAt = Date.now();
+    ctx.result = finalResult;
+    (ctx as any).semanticErrorCleanupInProgress = false;
+    wakePendingJobsForDevice(job.device);
+  }
+
+  function sendNativeEndForSemanticCleanup(job: ActiveJob): boolean {
+    try {
+      const term = getNativeTerminalForDevice(job.device);
+
+      if (!term || typeof term.enterCommand !== "function") {
+        execLog("JOB SEMANTIC ERROR CLEANUP END NATIVE unavailable id=" + job.id + " device=" + job.device);
+        return false;
+      }
+
+      term.enterCommand("end");
+      return true;
+    } catch (error) {
+      execLog(
+        "JOB SEMANTIC ERROR CLEANUP END NATIVE threw id=" +
+          job.id +
+          " device=" +
+          job.device +
+          " error=" +
+          String(error),
+      );
+      return false;
+    }
+  }
+
+  function finishSemanticCleanupFromNativeSnapshot(
+    job: ActiveJob,
+    semanticError: { code: string; message: string },
+    fallbackPrompt: unknown,
+    fallbackMode: unknown,
+    cleanupBaselineOutput: string,
+  ): void {
+    const ctx = job.context;
+
+    if (ctx.finished === true) {
+      return;
+    }
+
+    const fullOutput = readNativeTerminalOutput(job.device);
+    const cleanupOutput = extractNativeCleanupOutputSinceBaseline(fullOutput, cleanupBaselineOutput);
+    const prompt = getNativePrompt(job.device, fullOutput) || String(fallbackPrompt || "");
+    const mode = getNativeMode(job.device, prompt) || String(fallbackMode || "");
+
+    finishJobWithSemanticError(job, semanticError, prompt, mode, cleanupOutput);
+  }
+
+  function cleanupToPrivilegedExecBeforeSemanticError(
+    job: ActiveJob,
+    semanticError: { code: string; message: string },
+    prompt: unknown,
+    mode: unknown,
+  ): boolean {
+    const ctx = job.context;
+
+    if ((ctx as any).semanticErrorCleanupInProgress === true) {
+      execLog("JOB SEMANTIC ERROR CLEANUP already-in-progress id=" + job.id + " device=" + job.device);
+      return true;
+    }
+
+    (ctx as any).semanticErrorCleanupInProgress = true;
+    (ctx as any).semanticErrorOriginal = semanticError;
+    ctx.error = semanticError.message;
+    ctx.errorCode = semanticError.code;
+
+    if (!semanticErrorNeedsCleanupToPrivilegedExec(job, prompt, mode)) {
+      finishJobWithSemanticError(job, semanticError, prompt, mode);
+      return true;
+    }
+
+    execLog(
+      "JOB SEMANTIC ERROR CLEANUP END id=" +
+        job.id +
+        " device=" +
+        job.device +
+        " prompt=" +
+        String(prompt || "") +
+        " mode=" +
+        String(mode || ""),
+    );
+
+    try {
+      const cleanupBaselineOutput = readNativeTerminalOutput(job.device);
+      const sent = sendNativeEndForSemanticCleanup(job);
+
+      job.pendingCommand = null;
+      ctx.waitingForCommandEnd = false;
+      ctx.pendingDelay = 650;
+      ctx.phase = "waiting-delay";
+      ctx.updatedAt = Date.now();
+
+      if (!sent) {
+        finishJobWithSemanticError(job, semanticError, prompt, mode);
+        return true;
+      }
+
+      const cleanupStartedAt = Date.now();
+
+      setTimeout(function semanticCleanupTick() {
+        if (ctx.finished === true) {
+          return;
+        }
+
+        if (isDeviceTerminalBusy(job.device) && Date.now() - cleanupStartedAt <= 1200) {
+          ctx.updatedAt = Date.now();
+          ctx.pendingDelay = 100;
+          setTimeout(semanticCleanupTick, 100);
+          return;
+        }
+
+        const fullOutput = readNativeTerminalOutput(job.device);
+        const currentPrompt = getNativePrompt(job.device, fullOutput);
+        const currentMode = getNativeMode(job.device, currentPrompt);
+
+        if (nativeSnapshotIsStillInConfigMode({ prompt: currentPrompt, mode: currentMode })) {
+          execLog(
+            "JOB SEMANTIC ERROR CLEANUP END RETRY id=" +
+              job.id +
+              " device=" +
+              job.device +
+              " prompt=" +
+              currentPrompt +
+              " mode=" +
+              currentMode,
+          );
+
+          if (sendNativeEndForSemanticCleanup(job)) {
+            ctx.updatedAt = Date.now();
+            ctx.pendingDelay = 650;
+            setTimeout(semanticCleanupTick, 650);
+            return;
+          }
+
+          finishSemanticCleanupFromNativeSnapshot(job, semanticError, prompt, mode, cleanupBaselineOutput);
+          return;
+        }
+
+        finishSemanticCleanupFromNativeSnapshot(job, semanticError, currentPrompt, currentMode, cleanupBaselineOutput);
+      }, 650);
+
+      return true;
+    } catch (err) {
+      execLog(
+        "JOB SEMANTIC ERROR CLEANUP END THREW id=" +
+          job.id +
+          " device=" +
+          job.device +
+          " error=" +
+          String(err),
+      );
+
+      finishJobWithSemanticError(job, semanticError, prompt, mode);
+      return true;
+    }
+  }
+
+  function isLikelyConfigStep(command: string): boolean {
+    const normalized = String(command ?? "").trim().toLowerCase();
+
+    return (
+      normalized === "configure terminal" ||
+      normalized === "end" ||
+      /^interface\b/.test(normalized) ||
+      /^vlan\b/.test(normalized) ||
+      /^no\s+vlan\b/.test(normalized) ||
+      /^router\b/.test(normalized) ||
+      /^line\b/.test(normalized) ||
+      /^hostname\b/.test(normalized) ||
+      /^ip\s+/.test(normalized) ||
+      /^no\s+ip\s+/.test(normalized) ||
+      /^spanning-tree\b/.test(normalized) ||
+      /^switchport\b/.test(normalized) ||
+      /^shutdown$/.test(normalized) ||
+      /^no\s+shutdown$/.test(normalized) ||
+      /^description\b/.test(normalized) ||
+      /^no\s+description$/.test(normalized)
+    );
+  }
+
+  function deferAdvanceJob(jobId: string, command: string): void {
+    const delayMs = isLikelyConfigStep(command) ? 350 : 25;
+
+    if (delayMs <= 0) {
+      advanceJob(jobId);
+      return;
+    }
+
+    setTimeout(function () {
+      advanceJob(jobId);
+    }, delayMs);
+  }
+
   function forceCompleteFromNativeTerminal(job: ActiveJob, reason: string): boolean {
     const ctx = job.context;
+
+    if ((ctx as any).semanticErrorCleanupInProgress === true) {
+      jobDebug(job, "native-fallback-skip-semantic-cleanup reason=" + reason);
+      return false;
+    }
+
     const step = getCurrentStep(ctx);
     const command = String(step?.value || "");
 
@@ -872,8 +1435,19 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
 
     jobDebug(job, "native-fallback-enter reason=" + reason);
 
-    const output = readNativeTerminalOutput(job.device);
-    jobDebug(job, "native-output-len=" + String(output.length));
+    const fullOutput = readNativeTerminalOutput(job.device);
+    const output = getNativeDeltaForCurrentStep(job, fullOutput, command);
+    jobDebug(
+      job,
+      "native-output-len=" +
+        String(fullOutput.length) +
+        " deltaLen=" +
+        String(output.length) +
+        " baselineStep=" +
+        String(ctx.nativeBaselineStep) +
+        " currentStep=" +
+        String(ctx.currentStep),
+    );
 
     if (!output.trim()) {
       jobDebug(job, "native-no-output");
@@ -936,8 +1510,46 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
       return completeEnsureModeFromNativeTerminal(job, step, prompt, mode);
     }
 
-    const block = extractLatestCommandBlock(output, command);
+    const strictBlock = extractCurrentCommandBlockStrict(output, command);
+    const block = strictBlock.hasCommandEcho
+      ? strictBlock.block
+      : extractLatestCommandBlock(output, command);
+    const semanticError = strictBlock.hasCommandEcho
+      ? detectIosSemanticErrorFromOutput(strictBlock.block)
+      : null;
+
+    if (semanticError) {
+      execLog(
+        "JOB NATIVE IOS SEMANTIC ERROR id=" +
+          job.id +
+          " device=" +
+          job.device +
+          " command=" +
+          command +
+          " code=" +
+          semanticError.code,
+      );
+      return cleanupToPrivilegedExecBeforeSemanticError(job, semanticError, prompt, mode);
+    }
+
     const complete = nativeFallbackBlockLooksComplete(block, command, prompt);
+
+    if (!strictBlock.hasCommandEcho && !isEndCommand(command) && !isPromptOnlyTransitionCommand(command)) {
+      execLog(
+        "JOB NATIVE REFUSE STALE BLOCK id=" +
+          job.id +
+          " device=" +
+          job.device +
+          " command=" +
+          command +
+          " step=" +
+          ctx.currentStep +
+          " blockTail=" +
+          block.slice(-240),
+      );
+
+      return false;
+    }
 
     jobDebug(
       job,
@@ -977,6 +1589,40 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
       return false;
     }
 
+    if (jobRequiresPrivilegedExecFinalMode(job) && nativeSnapshotIsStillInConfigMode({ prompt, mode })) {
+      if (hasRemainingEndStep(job)) {
+        execLog(
+          "JOB NATIVE FORCE STEP CONFIG MODE WITH END PENDING id=" +
+            job.id +
+            " device=" +
+            job.device +
+            " step=" +
+            ctx.currentStep +
+            "/" +
+            ctx.plan.plan.length +
+            " nextCommand=" +
+            JSON.stringify(getNextCommandStep(job)),
+        );
+      }
+
+      execLog(
+        "JOB NATIVE FORCE REFUSE FINAL CONFIG MODE id=" +
+          job.id +
+          " device=" +
+          job.device +
+          " step=" +
+          ctx.currentStep +
+          "/" +
+          ctx.plan.plan.length +
+          " prompt=" +
+          String(prompt || "") +
+          " mode=" +
+          String(mode || ""),
+      );
+
+      return false;
+    }
+
     execLog(
       "JOB FORCE COMPLETE FROM NATIVE TERMINAL id=" +
         job.id +
@@ -994,7 +1640,7 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
 
     job.pendingCommand = null;
     ctx.waitingForCommandEnd = false;
-    ctx.outputBuffer += block;
+    ctx.outputBuffer = appendStepOutput(ctx.outputBuffer, block);
     ctx.lastPrompt = prompt;
     ctx.lastMode = mode;
     ctx.paged = false;
@@ -1008,9 +1654,13 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
       completedAt: Date.now(),
     });
 
+    const semanticCleanupActive = (ctx as any).semanticErrorCleanupInProgress === true;
+
     ctx.currentStep++;
-    ctx.error = null;
-    ctx.errorCode = null;
+    if (!semanticCleanupActive) {
+      ctx.error = null;
+      ctx.errorCode = null;
+    }
     ctx.updatedAt = Date.now();
 
     const terminalResult = {
@@ -1026,6 +1676,11 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
       mode,
     } as unknown as TerminalResult;
 
+    if (semanticCleanupActive) {
+      ctx.phase = "waiting-delay";
+      return true;
+    }
+
     if (!completeJobIfLastStep(job, terminalResult)) {
       ctx.phase = "pending";
       advanceJob(job.id);
@@ -1035,7 +1690,7 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
   }
 
   function reapStaleJobs(): void {
-    execLog("REAP STALE JOBS tick");
+    // No loguear cada tick en idle; solo loguear cuando se recoja un job stale.
     const now = Date.now();
 
     for (const key in jobs) {
@@ -1061,7 +1716,12 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
         job.context.phase === "waiting-command" ||
         job.context.phase === "waiting-ensure-mode";
 
-      if (waitingForCommandEnd && waitingPhase && elapsedMs > 500) {
+      if (
+        waitingForCommandEnd &&
+        waitingPhase &&
+        elapsedMs > 500 &&
+        (job.context as any).semanticErrorCleanupInProgress !== true
+      ) {
         try {
           const completedFromNative = forceCompleteFromNativeTerminal(
             job,
@@ -1099,6 +1759,101 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
           hasOutput &&
           now - job.context.updatedAt > 750
         ) {
+          const currentStepForPromptForce = getCurrentStep(job.context);
+          const isLastStepForPromptForce =
+            job.context.currentStep >= job.context.plan.plan.length - 1;
+
+          if (currentStepForPromptForce && !isLastStepForPromptForce) {
+            try {
+              job.context.debug.push(
+                String(Date.now()) +
+                  " prompt-force-skip-non-final step=" +
+                  String(job.context.currentStep) +
+                  "/" +
+                  String(job.context.plan.plan.length - 1) +
+                  " command=" +
+                  String((currentStepForPromptForce as any).value || (currentStepForPromptForce as any).command || "") +
+                  " prompt=" +
+                  String(prompt || ""),
+              );
+            } catch {}
+
+            execLog(
+              "JOB PROMPT FORCE SKIP non-final id=" +
+                job.id +
+                " device=" +
+                job.device +
+                " step=" +
+                job.context.currentStep +
+                "/" +
+                (job.context.plan.plan.length - 1) +
+                " prompt=" +
+                String(lastPrompt || ""),
+            );
+
+            job.context.updatedAt = Date.now();
+            continue;
+          }
+
+          const promptForceCurrentStep = currentStepForPromptForce;
+          const promptForceCommand = String(
+            (promptForceCurrentStep as any)?.value ??
+              (promptForceCurrentStep as any)?.command ??
+              "",
+          ).trim();
+
+          const nativeOutputForPromptForce = readNativeTerminalOutput(job.device);
+          const nativePromptForPromptForce = getNativePrompt(job.device, nativeOutputForPromptForce);
+          const nativeModeForPromptForce = getNativeMode(job.device, nativePromptForPromptForce);
+
+          if (
+            promptForceCommand.toLowerCase() === "end" &&
+            nativePromptForPromptForce &&
+            nativePromptForPromptForce !== lastPrompt
+          ) {
+            execLog(
+              "JOB PROMPT FORCE SKIP stale prompt for end id=" +
+                job.id +
+                " device=" +
+                job.device +
+                " lastPrompt=" +
+                String(lastPrompt || "") +
+                " nativePrompt=" +
+                String(nativePromptForPromptForce || "") +
+                " nativeMode=" +
+                String(nativeModeForPromptForce || ""),
+            );
+
+            job.context.updatedAt = now;
+            continue;
+          }
+
+          if (
+            jobRequiresPrivilegedExecFinalMode(job) &&
+            nativeSnapshotIsStillInConfigMode({
+              prompt: lastPrompt,
+              mode: job.context.lastMode,
+            })
+          ) {
+            execLog(
+              "JOB PROMPT FORCE REFUSE CONFIG MODE id=" +
+                job.id +
+                " device=" +
+                job.device +
+                " step=" +
+                job.context.currentStep +
+                "/" +
+                job.context.plan.plan.length +
+                " prompt=" +
+                String(lastPrompt || "") +
+                " mode=" +
+                String(job.context.lastMode || ""),
+            );
+
+            job.context.updatedAt = now;
+            continue;
+          }
+
           execLog(
             "JOB FORCE COMPLETE FROM PROMPT id=" +
               job.id +
@@ -1143,6 +1898,11 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
   }
 
   function wakePendingJobsForDevice(device: string): void {
+    if (isDeviceTerminalBusy(device)) {
+      execLog("WAKE DEFERRED terminal busy device=" + device);
+      return;
+    }
+
     setTimeout(function () {
       for (const key in jobs) {
         const other = jobs[key];
@@ -1246,6 +2006,61 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
     return ctx.plan.plan[ctx.currentStep];
   }
 
+  function isIosConfigPromptText(value: unknown): boolean {
+    const text = String(value ?? "").trim();
+
+    return /\(config[^)]*\)#\s*$/.test(text);
+  }
+
+  function isIosConfigModeText(value: unknown): boolean {
+    const text = String(value ?? "").trim().toLowerCase();
+
+    return (
+      text === "config" ||
+      text === "global-config" ||
+      text === "interface-config" ||
+      text === "router-config" ||
+      text === "line-config" ||
+      text.startsWith("config") ||
+      text.endsWith("-config")
+    );
+  }
+
+  function jobRequiresPrivilegedExecFinalMode(job: ActiveJob): boolean {
+    const targetMode = String((job.context as any)?.targetMode ?? (job.context as any)?.plan?.targetMode ?? "").trim();
+
+    return targetMode === "privileged-exec";
+  }
+
+  function nativeSnapshotIsStillInConfigMode(snapshot: { prompt?: unknown; mode?: unknown }): boolean {
+    return isIosConfigPromptText(snapshot.prompt) || isIosConfigModeText(snapshot.mode);
+  }
+
+  function getNextCommandStep(job: ActiveJob): string {
+    const ctx = job.context;
+    const nextStep = ctx.plan.plan[ctx.currentStep + 1];
+
+    if (!nextStep || nextStep.type !== "command") {
+      return "";
+    }
+
+    return String(nextStep.value ?? "").trim();
+  }
+
+  function hasRemainingEndStep(job: ActiveJob): boolean {
+    const ctx = job.context;
+
+    for (let index = ctx.currentStep + 1; index < ctx.plan.plan.length; index += 1) {
+      const step = ctx.plan.plan[index];
+
+      if (step && step.type === "command" && String(step.value ?? "").trim().toLowerCase() === "end") {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   function executeCurrentStep(job: ActiveJob): void {
     const ctx = job.context;
     const step = getCurrentStep(ctx);
@@ -1314,7 +2129,7 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
           ctx.currentStep++;
           ctx.phase = "pending";
           ctx.updatedAt = Date.now();
-          if (!completeJobIfLastStep(job, null)) advanceJob(job.id);
+          if (!completeJobIfLastStep(job, null)) deferAdvanceJob(job.id, String(command || ""));
           return;
         }
 
@@ -1335,6 +2150,7 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
         const ensureModeTimeoutMs = Number((step.options as any)?.timeoutMs ?? 8000);
 
         ctx.waitingForCommandEnd = true;
+        captureNativeBaselineForCurrentStep(job);
         job.pendingCommand = terminal.executeCommand(job.device, command, {
           commandTimeoutMs: ensureModeTimeoutMs,
           stallTimeoutMs: ctx.plan.options.stallTimeoutMs,
@@ -1348,13 +2164,26 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
           sendEnterFallback: false,
         });
 
-        job.pendingCommand
+        const runningCommand = job.pendingCommand;
+
+        runningCommand
           .then(function (result) {
             if (ctx.finished) return;
+            if (job.pendingCommand !== runningCommand) {
+              execLog(
+                "STALE ENSURE-MODE RESULT ignored id=" +
+                  job.id +
+                  " device=" +
+                  job.device +
+                  " step=" +
+                  ctx.currentStep,
+              );
+              return;
+            }
 
             job.pendingCommand = null;
             ctx.waitingForCommandEnd = false;
-            ctx.outputBuffer += result.output;
+            ctx.outputBuffer = appendStepOutput(ctx.outputBuffer, result.output);
             ctx.lastPrompt = result.session.prompt;
             ctx.lastMode = result.session.mode;
             ctx.paged = result.session.paging;
@@ -1397,6 +2226,19 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
           })
           .catch(function (err) {
             if (ctx.finished) return;
+            if (job.pendingCommand !== runningCommand) {
+              execLog(
+                "STALE ENSURE-MODE ERROR ignored id=" +
+                  job.id +
+                  " device=" +
+                  job.device +
+                  " step=" +
+                  ctx.currentStep +
+                  " error=" +
+                  String(err),
+              );
+              return;
+            }
             execLog("ENSURE MODE ERROR id=" + job.id + " error=" + String(err));
             job.pendingCommand = null;
             ctx.waitingForCommandEnd = false;
@@ -1523,6 +2365,7 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
 
         const stepOptions = (step.options || {}) as any;
 
+        captureNativeBaselineForCurrentStep(job);
         job.pendingCommand = terminal.executeCommand(job.device, command, {
           commandTimeoutMs: timeout,
           stallTimeoutMs: ctx.plan.options.stallTimeoutMs,
@@ -1535,9 +2378,24 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
           autoDismissWizard: true,
         });
 
-        job.pendingCommand
+        const runningCommand = job.pendingCommand;
+
+        runningCommand
           .then(function (result) {
             if (ctx.finished) return;
+            if (job.pendingCommand !== runningCommand) {
+              execLog(
+                "STALE COMMAND RESULT ignored id=" +
+                  job.id +
+                  " device=" +
+                  job.device +
+                  " command=" +
+                  command +
+                  " step=" +
+                  ctx.currentStep,
+              );
+              return;
+            }
             execLog(
               "CMD OK id=" +
                 job.id +
@@ -1550,19 +2408,44 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
             );
             job.pendingCommand = null;
             ctx.waitingForCommandEnd = false;
-            ctx.outputBuffer += result.output;
             ctx.lastPrompt = result.session.prompt;
             ctx.lastMode = result.session.mode;
             ctx.paged = result.session.paging;
+
+            const rawOutput = String(
+              (result as any).rawOutput ?? (result as any).raw ?? result.output ?? "",
+            );
+            const strictResultBlock = extractCurrentCommandBlockStrict(rawOutput || result.output, command);
+            const semanticError = strictResultBlock.hasCommandEcho
+              ? detectIosSemanticErrorFromOutput(strictResultBlock.block)
+              : null;
 
             ctx.stepResults.push({
               stepIndex: ctx.currentStep,
               stepType: stepType,
               command: command,
-              raw: result.output,
+              raw: semanticError ? semanticError.message : (strictResultBlock.block || result.output),
               status: result.status,
               completedAt: Date.now(),
             });
+
+            if (semanticError) {
+              execLog(
+                "JOB STEP IOS SEMANTIC ERROR id=" +
+                  job.id +
+                  " device=" +
+                  job.device +
+                  " command=" +
+                  command +
+                  " code=" +
+                  semanticError.code,
+              );
+
+              cleanupToPrivilegedExecBeforeSemanticError(job, semanticError, ctx.lastPrompt, ctx.lastMode);
+              return;
+            }
+
+            ctx.outputBuffer = appendStepOutput(ctx.outputBuffer, result.output);
 
             if (result.status !== 0 && stopOnError) {
               execLog("CMD FAILED (stopOnError) id=" + job.id + " status=" + result.status);
@@ -1583,11 +2466,26 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
             ctx.updatedAt = Date.now();
 
             if (!completeJobIfLastStep(job, result)) {
-              advanceJob(job.id);
+              deferAdvanceJob(job.id, command);
             }
           })
           .catch(function (err) {
             if (ctx.finished) return;
+            if (job.pendingCommand !== runningCommand) {
+              execLog(
+                "STALE COMMAND ERROR ignored id=" +
+                  job.id +
+                  " device=" +
+                  job.device +
+                  " command=" +
+                  command +
+                  " step=" +
+                  ctx.currentStep +
+                  " error=" +
+                  String(err),
+              );
+              return;
+            }
             execLog("CMD ERROR id=" + job.id + " error=" + String(err));
             job.pendingCommand = null;
             ctx.waitingForCommandEnd = false;
@@ -1614,6 +2512,12 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
     if (!job || isJobFinished(jobId) || job.pendingCommand !== null) return;
 
     const device = job.device;
+
+    if (isDeviceTerminalBusy(device)) {
+      execLog("ADVANCE DEFERRED terminal busy id=" + job.id + " device=" + device);
+      return;
+    }
+
     const jobIdStr = job.id;
 
     for (const key in jobs) {
@@ -1722,16 +2626,25 @@ export function toKernelJobState(ctx: JobContext): KernelJobState {
     errorCode: ctx.errorCode,
   };
 
-  if (ctx.result && ctx.result.ok) {
+  if (ctx.result) {
+    const result = ctx.result as any;
+    const raw = result.rawOutput ?? result.raw ?? result.output;
+
     base.result = {
-      ok: true,
-      raw: ctx.result.output,
+      ok: ctx.result.ok,
+      raw,
+      rawOutput: raw,
+      output: ctx.result.output,
       status: ctx.result.status,
+      code: result.code,
+      error: result.error,
       session: ctx.result.session,
     };
-    return base as KernelJobState;
   }
 
-  base.result = null;
+  if (!ctx.result) {
+    base.result = null;
+  }
+
   return base as KernelJobState;
 }

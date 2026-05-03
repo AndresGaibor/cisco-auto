@@ -5,10 +5,11 @@ import type { TerminalSessionState } from "./terminal-session";
 import type { SessionStateSnapshot } from "../../domain";
 import {
   createTerminalSession,
-  toSnapshot,
-  updateMode,
-  updatePrompt,
-  setPaging,
+  ptTerminalToSnapshot as toSnapshot,
+  ptTerminalUpdateMode as updateMode,
+  ptTerminalUpdatePrompt as updatePrompt,
+  ptTerminalSetPaging as setPaging,
+  ptTerminalSetBusy as setBusy,
 } from "./terminal-session";
 import type { IosMode } from "./prompt-parser";
 import {
@@ -167,28 +168,66 @@ export function createTerminalEngine(config: TerminalEngineConfig) {
     options?: ExecuteOptions,
   ): Promise<TerminalResult> {
     const term = terminals[device];
+
     if (!term) {
       try {
         dprint("[term] EXEC ERROR: no terminal for device=" + device);
       } catch {}
+
       return Promise.reject(new Error(`No terminal attached to ${device}`));
     }
 
-    const execResult = await executeCommand(device, command, term as any, options);
-    
-    // Mapear al formato antiguo esperado por ExecutionEngine
-    return {
-      ok: execResult.ok,
-      output: execResult.output,
-      status: execResult.status ?? 0,
-      session: {
-        mode: execResult.modeAfter as any,
-        prompt: execResult.promptAfter,
-        paging: execResult.warnings.some(w => w.toLowerCase().includes("paginación")),
-        awaitingConfirm: execResult.warnings.some(w => w.toLowerCase().includes("confirmación")),
-      },
-      mode: execResult.modeAfter as IosMode,
-    };
+    const busyToken =
+      "cmd:" +
+      String(Date.now()) +
+      ":" +
+      String(Math.floor(Math.random() * 100000));
+
+    try {
+      const current = sessions[device];
+
+      if (current) {
+        sessions[device] = setBusy(current, busyToken);
+      }
+    } catch {}
+
+    try {
+      const execResult = await executeCommand(device, command, term as any, options);
+
+      try {
+        const current = sessions[device];
+
+        if (current) {
+          let updated = setBusy(current, null);
+          updated = updatePrompt(updated, execResult.promptAfter);
+          updated = updateMode(updated, normalizePacketTracerMode(execResult.modeAfter, execResult.promptAfter));
+          sessions[device] = updated;
+        }
+      } catch {}
+
+      return {
+        ok: execResult.ok,
+        output: execResult.output,
+        status: execResult.status ?? 0,
+        session: {
+          mode: execResult.modeAfter as any,
+          prompt: execResult.promptAfter,
+          paging: execResult.warnings.some((w) => w.toLowerCase().includes("paginación")),
+          awaitingConfirm: execResult.warnings.some((w) => w.toLowerCase().includes("confirmación")),
+        },
+        mode: execResult.modeAfter as IosMode,
+      };
+    } catch (error) {
+      try {
+        const current = sessions[device];
+
+        if (current) {
+          sessions[device] = setBusy(current, null);
+        }
+      } catch {}
+
+      throw error;
+    }
   }
 
   function continuePager(device: string): void {

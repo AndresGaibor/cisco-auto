@@ -1,6 +1,4 @@
 import { registerStableRuntimeHandlers } from "./stable-handlers.js";
-import { registerExperimentalRuntimeHandlers } from "./experimental-handlers.js";
-import { registerOmniRuntimeHandlers } from "./omni-handlers.js";
 
 export interface RuntimeHandlerRegistrationOptions {
   experimental?: boolean;
@@ -8,24 +6,15 @@ export interface RuntimeHandlerRegistrationOptions {
 }
 
 /**
- * Registra handlers del runtime.
+ * Runtime default: registra solo handlers estables.
  *
- * Siempre registra handlers estables, omni y experimentales.
- * Los tres grupos se registran sin necesidad de opt-in.
+ * No importa omni/experimental aquí para que runtime.js default no cargue
+ * handlers de inspección/evaluación/debug.
  */
-export function registerRuntimeHandlers(): void {
+export function registerRuntimeHandlers(_options?: RuntimeHandlerRegistrationOptions): void {
   registerStableRuntimeHandlers();
-  registerOmniRuntimeHandlers();
-  registerExperimentalRuntimeHandlers();
 }
 
-/**
- * Entrada usada por runtime-handlers.ts.
- *
- * Registra todos los handlers (estables, omni y experimentales) sin
- * necesidad de flags globales. El runtime debe tener disponibles
- * todos los comandos desde el inicio.
- */
 export function registerRuntimeHandlersFromGlobals(): void {
   registerRuntimeHandlers();
 }

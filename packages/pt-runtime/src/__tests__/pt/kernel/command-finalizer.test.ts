@@ -45,7 +45,7 @@ describe("buildCommandResultEnvelope", () => {
     expect(envelope.type).toBe("terminal.plan.run");
   });
 
-  test("no limpia la cola si el result file no queda verificado", () => {
+  test("limpia el estado activeCommand aunque falle verificación de result file", () => {
     const fm = {
       writePlainTextToFile: vi.fn(),
       fileExists: vi.fn(() => false),
@@ -75,8 +75,8 @@ describe("buildCommandResultEnvelope", () => {
 
     expect(fm.writePlainTextToFile).toHaveBeenCalled();
     expect(subsystems.queue.cleanup).not.toHaveBeenCalled();
-    expect(subsystems.heartbeat.setActiveCommand).not.toHaveBeenCalled();
-    expect(state.activeCommand).not.toBeNull();
-    expect(state.activeCommandFilename).toBe("cmd-3.json");
+    expect(subsystems.heartbeat.setActiveCommand).toHaveBeenCalledWith(null);
+    expect(state.activeCommand).toBeNull();
+    expect(state.activeCommandFilename).toBeNull();
   });
 });

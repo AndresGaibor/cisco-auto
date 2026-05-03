@@ -5,12 +5,19 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdirSync, rmSync, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { atomicWriteFile, appendLine, ensureDir, ensureFile } from './fs-atomic';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { atomicWriteFile, appendLine, ensureDir, ensureFile, safeRename, safeRenameDetailed } from './fs-atomic';
 
-const TEST_DIR = '/tmp/fs-atomic-test-' + Math.random().toString(36).slice(2);
+function makeTestDir(prefix: string): string {
+  return mkdtempSync(join(tmpdir(), prefix));
+}
+
+let TEST_DIR: string;
 
 describe('fs-atomic utilities', () => {
   beforeEach(() => {
+    TEST_DIR = makeTestDir('file-bridge-fs-atomic-');
     mkdirSync(TEST_DIR, { recursive: true });
   });
 
@@ -225,6 +232,20 @@ describe('fs-atomic utilities', () => {
       expect(lines).toHaveLength(2);
       expect(JSON.parse(lines[0]!)).toEqual({ id: 1, msg: 'first' });
       expect(JSON.parse(lines[1]!)).toEqual({ id: 2, msg: 'second' });
+    });
+  });
+
+  describe('safeRename', () => {
+    test('should rename a file and expose detailed success state', () => {
+      const src = join(TEST_DIR, 'rename-src.txt');
+      const dst = join(TEST_DIR, 'nested', 'rename-dst.txt');
+      atomicWriteFile(src, 'rename me');
+
+      const detailed = safeRenameDetailed(src, dst);
+
+      expect(detailed.ok).toBe(true);
+      expect(safeRename(dst, join(TEST_DIR, 'rename-final.txt'))).toBe(true);
+      expect(readFileSync(join(TEST_DIR, 'rename-final.txt'), 'utf8')).toBe('rename me');
     });
   });
 });

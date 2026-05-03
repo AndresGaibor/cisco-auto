@@ -32,7 +32,7 @@ export {
   normalizePrompt,
   promptMatches,
   createPagerState,
-  detectPagerOutput,
+  pagerDetectPager,
   createPagerHandler,
   createCommandExecutor,
   createModeGuard,

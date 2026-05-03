@@ -23,9 +23,8 @@ export {
 export {
   detectModeFromPrompt,
   detectSessionKind,
-  detectWizardFromOutput,
+  promptDetectWizard as detectWizardFromOutput,
   detectConfirmPrompt,
-  detectPager,
   detectBootOutput,
   detectHostBusy,
   normalizePrompt,
@@ -46,7 +45,7 @@ export {
 // Pager
 export {
   createPagerState,
-  detectPager as detectPagerOutput,
+  pagerDetectPager,
   createPagerHandler,
   type PagerState,
 } from "./pager-handler";
@@ -55,7 +54,7 @@ export {
 export {
   createConfirmHandler,
   createConfirmState,
-  isConfirmPrompt,
+  confirmHandlerIsConfirmPrompt,
   resolveConfirmType,
   type ConfirmState,
 } from "./confirm-handler";
@@ -146,5 +145,5 @@ export {
 
 // Re-export existing pt/terminal where still useful
 export { isStatusOk, CommandStatus, type CommandEndedPayload } from "../pt/terminal/terminal-events";
-export { createTerminalSession, toSnapshot, type TerminalSessionState as ExistingSessionState } from "../pt/terminal/terminal-session";
+export { createTerminalSession, ptTerminalToSnapshot as toSnapshot, type TerminalSessionState as ExistingSessionState } from "../pt/terminal/terminal-session";
 export { parsePrompt, type IosMode } from "../pt/terminal/prompt-parser";

@@ -16,6 +16,7 @@ import {
   unlinkSync,
 } from "node:fs";
 import { dirname } from "node:path";
+import { retrySync, isRetryableFsError } from "./fs-retry.js";
 
 /**
  * Ensure a directory exists, creating it recursively if needed.
@@ -40,7 +41,16 @@ export function atomicWriteFile(path: string, content: string): void {
     closeSync(fd);
   }
 
-  renameSync(tmp, path);
+  try {
+    retrySync(() => renameSync(tmp, path), {
+      attempts: 8,
+      baseDelayMs: 10,
+      maxDelayMs: 250,
+    });
+  } catch (error) {
+    safeUnlink(tmp);
+    throw error;
+  }
 }
 
 /**
@@ -101,14 +111,32 @@ export function safeUnlink(path: string): boolean {
  * Uses atomic rename which is atomic on POSIX systems.
  * Returns true if rename succeeded.
  */
-export function safeRename(src: string, dst: string): boolean {
+export type SafeRenameResult =
+  | { ok: true }
+  | { ok: false; code?: string; message: string };
+
+export function safeRenameDetailed(src: string, dst: string): SafeRenameResult {
   try {
     ensureDir(dirname(dst));
-    renameSync(src, dst);
-    return true;
-  } catch {
-    return false;
+    retrySync(() => renameSync(src, dst), {
+      attempts: 6,
+      baseDelayMs: 10,
+      maxDelayMs: 200,
+      shouldRetry: isRetryableFsError,
+    });
+    return { ok: true };
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    return {
+      ok: false,
+      code: err.code,
+      message: err.message,
+    };
   }
+}
+
+export function safeRename(src: string, dst: string): boolean {
+  return safeRenameDetailed(src, dst).ok;
 }
 
 /**

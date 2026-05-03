@@ -3,8 +3,174 @@
 
 import { finishActiveCommand } from "./command-finalizer";
 import { createRuntimeApi } from "./runtime-api";
+import { safeFM } from "./safe-fm";
 import type { KernelSubsystems } from "./kernel-lifecycle";
 import type { KernelState } from "./kernel-state";
+
+let terminalBusySince: number | null = null;
+
+const TERMINAL_BUSY_GRACE_MS = 1500;
+
+function isControlCommand(type: string): boolean {
+  return (
+    type === "__pollDeferred" ||
+    type === "__ping" ||
+    type === "__runtimeStatus" ||
+    type === "__reloadRuntime" ||
+    type === "inspectDeviceFast" ||
+    type === "readTerminal" ||
+    type === "omni.evaluate.raw" ||
+    type === "__evaluate"
+  );
+}
+
+function getControlCommandTypes(): string[] {
+  return [
+    "__pollDeferred",
+    "__ping",
+    "__runtimeStatus",
+    "__reloadRuntime",
+    "inspectDeviceFast",
+    "readTerminal",
+    "omni.evaluate.raw",
+    "__evaluate",
+  ].filter(isControlCommand);
+}
+
+function readRuntimeManifest(config: any): unknown {
+  try {
+    const s = safeFM();
+    const fm = s.fm;
+    const manifestPath = String(config.devDir || "") + "/manifest.json";
+
+    if (!fm || typeof fm.fileExists !== "function" || !fm.fileExists(manifestPath)) {
+      return null;
+    }
+
+    const raw = String(fm.getFileContents(manifestPath) || "");
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    return {
+      error: String(error instanceof Error ? error.message : error),
+    };
+  }
+}
+
+function handleKernelControlCommand(subsystems: KernelSubsystems, state: KernelState, claimed: any): boolean {
+  const type = String((claimed as any).type || (claimed as any).payload?.type || "");
+
+  if (type === "__runtimeStatus") {
+    const status =
+      typeof (subsystems.runtimeLoader as any).getStatus === "function"
+        ? (subsystems.runtimeLoader as any).getStatus()
+        : {
+            runtimeLoaded: !!subsystems.runtimeLoader.getRuntimeFn(),
+            lastMtime: subsystems.runtimeLoader.getLastMtime(),
+            pendingReload: subsystems.runtimeLoader.hasPendingReload(),
+          };
+
+    finishActiveCommand(subsystems, state, {
+      ok: true,
+      type: "__runtimeStatus",
+      mainLoaded: true,
+      runtimeLoaded: !!status.runtimeLoaded,
+      runtime: status,
+      manifest: readRuntimeManifest((subsystems as any).config),
+      activeCommand: state.activeCommand
+        ? {
+            id: state.activeCommand.id,
+            type: (state.activeCommand as any).type,
+            startedAt: state.activeCommand.startedAt,
+          }
+        : null,
+    });
+
+    return true;
+  }
+
+  if (type === "__reloadRuntime") {
+    const before =
+      typeof (subsystems.runtimeLoader as any).getStatus === "function"
+        ? (subsystems.runtimeLoader as any).getStatus()
+        : null;
+
+    const result =
+      typeof (subsystems.runtimeLoader as any).reloadNow === "function"
+        ? (subsystems.runtimeLoader as any).reloadNow()
+        : { ok: false, error: "runtimeLoader.reloadNow is not available" };
+
+    const after =
+      typeof (subsystems.runtimeLoader as any).getStatus === "function"
+        ? (subsystems.runtimeLoader as any).getStatus()
+        : null;
+
+    finishActiveCommand(subsystems, state, {
+      ok: !!result.ok,
+      type: "__reloadRuntime",
+      reloaded: !!result.ok,
+      before,
+      after,
+      result,
+      error: result.ok
+        ? undefined
+        : {
+            code: "RUNTIME_RELOAD_FAILED",
+            message: String(result.error || "Runtime reload failed"),
+          },
+    });
+
+    return true;
+  }
+
+  return false;
+}
+
+function getTerminalBusy(terminal: unknown): boolean {
+  try {
+    if (terminal && typeof (terminal as any).isAnyBusy === "function") {
+      return (terminal as any).isAnyBusy() === true;
+    }
+  } catch {}
+
+  return false;
+}
+
+function shouldTreatAsBusy(
+  activeJobsCount: number,
+  terminalBusy: boolean,
+  now: number,
+  kernelLogSubsystem: (name: string, message: string) => void,
+): boolean {
+  if (activeJobsCount > 0) {
+    terminalBusySince = terminalBusy ? terminalBusySince ?? now : null;
+    return true;
+  }
+
+  if (!terminalBusy) {
+    terminalBusySince = null;
+    return false;
+  }
+
+  if (terminalBusySince === null) {
+    terminalBusySince = now;
+  }
+
+  const busyForMs = now - terminalBusySince;
+
+  if (busyForMs <= TERMINAL_BUSY_GRACE_MS) {
+    return true;
+  }
+
+  kernelLogSubsystem(
+    "queue",
+    "terminalBusy stale ignored: activeJobs=0 busyForMs=" +
+      busyForMs +
+      " graceMs=" +
+      TERMINAL_BUSY_GRACE_MS,
+  );
+
+  return false;
+}
 
 export function pollCommandQueue(subsystems: KernelSubsystems, state: KernelState): void {
   const {
@@ -13,100 +179,137 @@ export function pollCommandQueue(subsystems: KernelSubsystems, state: KernelStat
     executionEngine,
     terminal,
     heartbeat,
-    config,
     kernelLog,
     kernelLogSubsystem,
   } = subsystems;
 
-  kernelLogSubsystem(
-    "queue",
-    "poll tick: isRunning=" +
-      state.isRunning +
-      " isShuttingDown=" +
-      state.isShuttingDown +
-      " active=" +
-      (state.activeCommand ? state.activeCommand.id : "null"),
-  );
-  if (!state.isRunning || state.isShuttingDown) return;
+  let stage = "start";
 
-  if (state.activeCommand) {
-    kernelLogSubsystem("queue", "Skipping poll: command already active=" + state.activeCommand.id);
-    return;
-  }
-
-  function isControlCommand(type: string): boolean {
-    return (
-      type === "__pollDeferred" ||
-      type === "__ping" ||
-      type === "inspectDeviceFast" ||
-      type === "readTerminal" ||
-      type === "omni.evaluate.raw" ||
-      type === "__evaluate"
+  try {
+    stage = "log-poll-tick";
+    kernelLogSubsystem(
+      "queue",
+      "poll tick: isRunning=" +
+        state.isRunning +
+        " isShuttingDown=" +
+        state.isShuttingDown +
+        " active=" +
+        (state.activeCommand ? state.activeCommand.id : "null"),
     );
-  }
 
-  const activeJobs = executionEngine.getActiveJobs();
-  const terminalIsBusy =
-    typeof (terminal as any).isAnyBusy === "function" ? (terminal as any).isAnyBusy() : false;
-  const isBusy = activeJobs.length > 0 || terminalIsBusy;
-  kernelLogSubsystem("loader", "Checking runtime reload... busy=" + isBusy);
-  runtimeLoader.reloadIfNeeded(() => isBusy);
+    stage = "state-check";
+    if (!state.isRunning || state.isShuttingDown) return;
 
-  let claimed = null as ReturnType<typeof queue.poll>;
+    stage = "active-command-check";
+    if (state.activeCommand) {
+      kernelLogSubsystem("queue", "Skipping poll: command already active=" + state.activeCommand.id);
+      return;
+    }
 
-  if (isBusy) {
-    claimed =
-      typeof (queue as any).pollAllowedTypes === "function"
-        ? (queue as any).pollAllowedTypes([
-            "__pollDeferred",
-            "__ping",
-            "inspectDeviceFast",
-            "readTerminal",
-            "omni.evaluate.raw",
-            "__evaluate",
-          ].filter(isControlCommand))
-        : null;
+    stage = "get-active-jobs";
+    const activeJobs = executionEngine.getActiveJobs();
 
-    if (!claimed) {
+    stage = "get-terminal-busy";
+    const terminalBusy = getTerminalBusy(terminal);
+
+    stage = "compute-busy";
+    const now = Date.now();
+    const busyForPoll = shouldTreatAsBusy(
+      activeJobs.length,
+      terminalBusy,
+      now,
+      kernelLogSubsystem,
+    );
+
+    stage = "loader-log";
+    kernelLogSubsystem(
+      "loader",
+      "Checking runtime reload... activeJobs=" +
+        activeJobs.length +
+        " terminalBusy=" +
+        terminalBusy +
+        " busyForPoll=" +
+        busyForPoll,
+    );
+
+    stage = "skip-hot-reload";
+    // Packet Tracer es sensible a recargas/evaluaciones frecuentes.
+    // Desactivamos hot reload automático en el loop normal; se recarga manualmente con runtime reload/deploy.
+    if (false) {
+      runtimeLoader.reloadIfNeeded(() => busyForPoll);
+    }
+
+    let claimed = null as ReturnType<typeof queue.poll>;
+
+    stage = "poll-claim";
+    if (busyForPoll) {
+      stage = "poll-allowed-types";
+      claimed =
+        typeof (queue as any).pollAllowedTypes === "function"
+          ? (queue as any).pollAllowedTypes(getControlCommandTypes())
+          : null;
+
+      if (!claimed) {
+        stage = "busy-no-claim";
+        kernelLogSubsystem(
+          "queue",
+          "System busy, skipping non-control poll. Active jobs=" +
+            activeJobs.length +
+            " terminalBusy=" +
+            terminalBusy,
+        );
+
+        stage = "busy-count";
+        heartbeat.setQueuedCount(queue.count());
+        return;
+      }
+
+      stage = "busy-control-claim-log";
       kernelLogSubsystem(
         "queue",
-        "System busy, skipping non-control poll. Active jobs=" +
-          activeJobs.length +
-          " terminalBusy=" +
-          terminalIsBusy,
+        "System busy, but processing control command=" +
+          claimed.id +
+          " type=" +
+          String((claimed as any).type),
       );
+    } else {
+      stage = "poll-normal";
+      claimed = queue.poll();
+    }
+
+    stage = "poll-result-log";
+    kernelLogSubsystem("queue", "Poll result: claimed=" + (claimed ? claimed.id : "null"));
+
+    if (!claimed) {
+      stage = "no-claim-log";
+      kernelLogSubsystem("queue", "No command claimed, checking files...");
+
+      stage = "no-claim-count";
       heartbeat.setQueuedCount(queue.count());
       return;
     }
 
-    kernelLogSubsystem(
-      "queue",
-      "System busy, but processing control command=" +
-        claimed.id +
-        " type=" +
-        String((claimed as any).type),
+    stage = "set-active-command";
+    state.activeCommand = { ...claimed, startedAt: Date.now() };
+    state.activeCommandFilename = (claimed as any).filename ?? null;
+    heartbeat.setActiveCommand(claimed.id);
+
+    stage = "dispatch-log";
+    kernelLog(
+      ">>> DISPATCH: " + claimed.id + " type=" + ((claimed as any).type || "unknown"),
+      "info",
     );
-  } else {
-    claimed = queue.poll();
-  }
-  kernelLogSubsystem("queue", "Poll result: claimed=" + (claimed ? claimed.id : "null"));
-  if (!claimed) {
-    kernelLogSubsystem("queue", "No command claimed, checking files...");
-    heartbeat.setQueuedCount(queue.count());
-    return;
-  }
 
-  state.activeCommand = { ...claimed, startedAt: Date.now() };
-  state.activeCommandFilename = (claimed as any).filename ?? null;
-  heartbeat.setActiveCommand(claimed.id);
-  kernelLog(
-    ">>> DISPATCH: " + claimed.id + " type=" + ((claimed as any).type || "unknown"),
-    "info",
-  );
+    stage = "kernel-control-command";
+    if (handleKernelControlCommand(subsystems, state, claimed)) {
+      return;
+    }
 
-  try {
+    stage = "get-runtime-fn";
     const runtimeFn = runtimeLoader.getRuntimeFn();
+
     if (!runtimeFn) {
+      stage = "runtime-missing-finalize";
       kernelLog("RUNTIME NOT LOADED - rejecting command", "error");
       finishActiveCommand(subsystems, state, {
         ok: false,
@@ -116,11 +319,18 @@ export function pollCommandQueue(subsystems: KernelSubsystems, state: KernelStat
       return;
     }
 
+    stage = "create-runtime-api";
     const runtimeApi = createRuntimeApi(subsystems);
+
+    stage = "runtime-dispatch";
     Promise.resolve(runtimeFn(claimed.payload, runtimeApi))
       .then((result) => {
         try {
-          const keys = result && typeof result === "object" ? Object.keys(result as Record<string, unknown>) : [];
+          const keys =
+            result && typeof result === "object"
+              ? Object.keys(result as Record<string, unknown>)
+              : [];
+
           kernelLogSubsystem(
             "queue",
             "runtime result resolved type=" +
@@ -133,6 +343,7 @@ export function pollCommandQueue(subsystems: KernelSubsystems, state: KernelStat
         } catch (debugError) {
           kernelLogSubsystem("queue", "runtime result debug failed: " + String(debugError));
         }
+
         finishActiveCommand(subsystems, state, result);
       })
       .catch((e) => {
@@ -144,11 +355,7 @@ export function pollCommandQueue(subsystems: KernelSubsystems, state: KernelStat
         });
       });
   } catch (e) {
-    kernelLog("RUNTIME FATAL ERROR: " + String(e), "error");
-    finishActiveCommand(subsystems, state, {
-      ok: false,
-      error: "Runtime fatal: " + String(e),
-      code: "EXEC_ERROR",
-    });
+    kernelLog("POLL COMMAND QUEUE STAGE ERROR stage=" + stage + " error=" + String(e), "error");
+    throw e;
   }
 }

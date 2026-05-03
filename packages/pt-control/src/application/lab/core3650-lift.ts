@@ -152,6 +152,19 @@ const VLAN_MGMT = 99;
 
 const SWITCH_NAMES = ["SW1", "SW2", "SW3", "SW4"] as const;
 const PC_NAMES = ["PC1", "PC2", "PC3", "PC4"] as const;
+const STANDARD_VLAN_SPECS = [
+  { id: VLAN_USERS, name: "USERS" },
+  { id: VLAN_ADMIN, name: "ADMIN" },
+  { id: VLAN_SERVERS, name: "SERVERS" },
+  { id: VLAN_MGMT, name: "MGMT" },
+] as const;
+const CORE_TRUNK_PORTS = ["FastEthernet0/1", "FastEthernet0/2", "FastEthernet0/3", "FastEthernet0/4"] as const;
+const ACCESS_SWITCH_SPECS = [
+  { name: "SW1", accessVlan: VLAN_USERS, managementSuffix: 2 },
+  { name: "SW2", accessVlan: VLAN_USERS, managementSuffix: 3 },
+  { name: "SW3", accessVlan: VLAN_ADMIN, managementSuffix: 4 },
+  { name: "SW4", accessVlan: VLAN_ADMIN, managementSuffix: 5 },
+] as const;
 
 export function buildCore3650LiftScenarioPlan(): LabLiftScenarioPlan {
   const devices: LabLiftDeviceSpec[] = [
@@ -243,6 +256,68 @@ export function buildCore3650LiftScenarioPlan(): LabLiftScenarioPlan {
   };
 }
 
+function buildStandardVlanCommands(): string[] {
+  const commands: string[] = [];
+
+  for (const vlan of STANDARD_VLAN_SPECS) {
+    commands.push(`vlan ${vlan.id}`);
+    commands.push(` name ${vlan.name}`);
+    commands.push(" exit");
+  }
+
+  return commands;
+}
+
+function buildVlanInterfaceCommands(vlan: number, ipAddress: string): string[] {
+  return [
+    `interface vlan ${vlan}`,
+    ` ip address ${ipAddress} 255.255.255.0`,
+    " no shutdown",
+    " exit",
+  ];
+}
+
+function buildTrunkInterfaceCommands(portName: string): string[] {
+  return [
+    `interface ${portName}`,
+    " switchport mode trunk",
+    ` switchport trunk native vlan ${VLAN_MGMT}`,
+    ` switchport trunk allowed vlan ${VLAN_USERS},${VLAN_ADMIN},${VLAN_SERVERS},${VLAN_MGMT}`,
+    " no shutdown",
+    " exit",
+  ];
+}
+
+function buildAccessSwitchIosCommands(
+  name: string,
+  accessVlan: number,
+  managementSuffix: number,
+): string[] {
+  return [
+    "configure terminal",
+    `hostname ${name}`,
+    "spanning-tree mode rapid-pvst",
+    ...buildStandardVlanCommands(),
+    "interface GigabitEthernet0/1",
+    " switchport mode trunk",
+    ` switchport trunk native vlan ${VLAN_MGMT}`,
+    ` switchport trunk allowed vlan ${VLAN_USERS},${VLAN_ADMIN},${VLAN_SERVERS},${VLAN_MGMT}`,
+    " no shutdown",
+    " exit",
+    "interface FastEthernet0/1",
+    " switchport mode access",
+    ` switchport access vlan ${accessVlan}`,
+    " spanning-tree portfast",
+    " no shutdown",
+    " exit",
+    "interface vlan 99",
+    ` ip address 192.168.99.${managementSuffix} 255.255.255.0`,
+    " no shutdown",
+    " exit",
+    `ip default-gateway ${MGMT_GATEWAY}`,
+  ];
+}
+
 export function buildCore3650LiftCoreCommands(): string[] {
   return [
     "configure terminal",
@@ -250,41 +325,12 @@ export function buildCore3650LiftCoreCommands(): string[] {
     "spanning-tree mode rapid-pvst",
     "ip routing",
 
-    `vlan ${VLAN_USERS}`,
-    " name USERS",
-    " exit",
+    ...buildStandardVlanCommands(),
 
-    `vlan ${VLAN_ADMIN}`,
-    " name ADMIN",
-    " exit",
-
-    `vlan ${VLAN_SERVERS}`,
-    " name SERVERS",
-    " exit",
-
-    `vlan ${VLAN_MGMT}`,
-    " name MGMT",
-    " exit",
-
-    `interface vlan ${VLAN_USERS}`,
-    " ip address 192.168.10.1 255.255.255.0",
-    " no shutdown",
-    " exit",
-
-    `interface vlan ${VLAN_ADMIN}`,
-    " ip address 192.168.20.1 255.255.255.0",
-    " no shutdown",
-    " exit",
-
-    `interface vlan ${VLAN_SERVERS}`,
-    " ip address 192.168.30.1 255.255.255.0",
-    " no shutdown",
-    " exit",
-
-    `interface vlan ${VLAN_MGMT}`,
-    ` ip address ${MGMT_GATEWAY} 255.255.255.0`,
-    " no shutdown",
-    " exit",
+    ...buildVlanInterfaceCommands(VLAN_USERS, "192.168.10.1"),
+    ...buildVlanInterfaceCommands(VLAN_ADMIN, "192.168.20.1"),
+    ...buildVlanInterfaceCommands(VLAN_SERVERS, "192.168.30.1"),
+    ...buildVlanInterfaceCommands(VLAN_MGMT, MGMT_GATEWAY),
 
     "ip dhcp excluded-address 192.168.10.1 192.168.10.20",
     "ip dhcp excluded-address 192.168.20.1 192.168.20.20",
@@ -307,33 +353,7 @@ export function buildCore3650LiftCoreCommands(): string[] {
     " no shutdown",
     " exit",
 
-    "interface FastEthernet0/1",
-    " switchport mode trunk",
-    ` switchport trunk native vlan ${VLAN_MGMT}`,
-    ` switchport trunk allowed vlan ${VLAN_USERS},${VLAN_ADMIN},${VLAN_SERVERS},${VLAN_MGMT}`,
-    " no shutdown",
-    " exit",
-
-    "interface FastEthernet0/2",
-    " switchport mode trunk",
-    ` switchport trunk native vlan ${VLAN_MGMT}`,
-    ` switchport trunk allowed vlan ${VLAN_USERS},${VLAN_ADMIN},${VLAN_SERVERS},${VLAN_MGMT}`,
-    " no shutdown",
-    " exit",
-
-    "interface FastEthernet0/3",
-    " switchport mode trunk",
-    ` switchport trunk native vlan ${VLAN_MGMT}`,
-    ` switchport trunk allowed vlan ${VLAN_USERS},${VLAN_ADMIN},${VLAN_SERVERS},${VLAN_MGMT}`,
-    " no shutdown",
-    " exit",
-
-    "interface FastEthernet0/4",
-    " switchport mode trunk",
-    ` switchport trunk native vlan ${VLAN_MGMT}`,
-    ` switchport trunk allowed vlan ${VLAN_USERS},${VLAN_ADMIN},${VLAN_SERVERS},${VLAN_MGMT}`,
-    " no shutdown",
-    " exit",
+    ...CORE_TRUNK_PORTS.flatMap((portName) => buildTrunkInterfaceCommands(portName)),
   ];
 }
 
@@ -342,48 +362,7 @@ export function buildCore3650LiftAccessSwitchCommands(
   accessVlan: number,
   managementSuffix: number,
 ): string[] {
-  return [
-    "configure terminal",
-    `hostname ${name}`,
-    "spanning-tree mode rapid-pvst",
-
-    `vlan ${VLAN_USERS}`,
-    " name USERS",
-    " exit",
-
-    `vlan ${VLAN_ADMIN}`,
-    " name ADMIN",
-    " exit",
-
-    `vlan ${VLAN_SERVERS}`,
-    " name SERVERS",
-    " exit",
-
-    `vlan ${VLAN_MGMT}`,
-    " name MGMT",
-    " exit",
-
-    "interface GigabitEthernet0/1",
-    " switchport mode trunk",
-    ` switchport trunk native vlan ${VLAN_MGMT}`,
-    ` switchport trunk allowed vlan ${VLAN_USERS},${VLAN_ADMIN},${VLAN_SERVERS},${VLAN_MGMT}`,
-    " no shutdown",
-    " exit",
-
-    "interface FastEthernet0/1",
-    " switchport mode access",
-    ` switchport access vlan ${accessVlan}`,
-    " spanning-tree portfast",
-    " no shutdown",
-    " exit",
-
-    "interface vlan 99",
-    ` ip address 192.168.99.${managementSuffix} 255.255.255.0`,
-    " no shutdown",
-    " exit",
-
-    `ip default-gateway ${MGMT_GATEWAY}`,
-  ];
+  return buildAccessSwitchIosCommands(name, accessVlan, managementSuffix);
 }
 
 export function buildCore3650LiftPlanText(plan = buildCore3650LiftScenarioPlan()): string {
@@ -650,21 +629,20 @@ export async function executeCore3650LiftLab(
     const coreCommands = buildCore3650LiftCoreCommands();
     await controller.configIos(CORE_NAME, coreCommands);
 
-    const accessSwitchCommands = [
-      buildCore3650LiftAccessSwitchCommands("SW1", VLAN_USERS, 2),
-      buildCore3650LiftAccessSwitchCommands("SW2", VLAN_USERS, 3),
-      buildCore3650LiftAccessSwitchCommands("SW3", VLAN_ADMIN, 4),
-      buildCore3650LiftAccessSwitchCommands("SW4", VLAN_ADMIN, 5),
-    ];
-
-    for (let i = 0; i < accessSwitchCommands.length; i++) {
-      await controller.configIos(SWITCH_NAMES[i]!, accessSwitchCommands[i]!);
+    for (const switchSpec of ACCESS_SWITCH_SPECS) {
+      await controller.configIos(
+        switchSpec.name,
+        buildCore3650LiftAccessSwitchCommands(
+          switchSpec.name,
+          switchSpec.accessVlan,
+          switchSpec.managementSuffix,
+        ),
+      );
     }
 
-    await controller.configHost("PC1", { dhcp: true });
-    await controller.configHost("PC2", { dhcp: true });
-    await controller.configHost("PC3", { dhcp: true });
-    await controller.configHost("PC4", { dhcp: true });
+    for (const pcName of PC_NAMES) {
+      await controller.configHost(pcName, { dhcp: true });
+    }
 
     await controller.configHost(SERVER_NAME, {
       ip: SERVER_IP,

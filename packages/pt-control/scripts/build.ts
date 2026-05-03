@@ -4,18 +4,25 @@
  *
  * Uses the modern RuntimeGenerator pipeline from @cisco-auto/pt-runtime.
  * Generates main.js, runtime.js, catalog.js, and manifest.json and deploys
- * them to PT_DEV_DIR. The kernel's runtime-loader handles hot reload
- * by monitoring runtime.js mtime — no external reload trigger needed.
+ * them to PT_DEV_DIR. Hot reload is decided from real file hashes;
+ * __ping is only used as a wake-up when non-main artifacts change.
  *
  * Usage:
  *   bun run pt:build         # Full build + deploy to PT_DEV_DIR
  *   bun run pt:build --watch # Watch mode with auto-rebuild
  */
 
-import { resolve } from "node:path";
-import { existsSync, readFileSync, writeFileSync, mkdirSync, utimesSync } from "node:fs";
-import { homedir } from "node:os";
+import { resolve, join } from "node:path";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { createHash } from "node:crypto";
+import {
+  classifyDeploy,
+  computeDeployDiff,
+  copyChangedArtifacts,
+  shortHash,
+} from "../src/build/deploy-diff.js";
+import { resolveDevDir } from "../src/build/dev-dir.js";
+import { isForeignWindowsPathOnThisHost } from "../src/system/paths.js";
 
 // ============================================================================
 // Configuration
@@ -23,19 +30,19 @@ import { createHash } from "node:crypto";
 
 const ROOT_DIR = resolve(import.meta.dirname, "..");
 const GENERATED_DIR = resolve(ROOT_DIR, "generated");
-const DEV_DIR = process.env.PT_DEV_DIR || `${process.env.HOME ?? homedir()}/pt-dev`;
-const COMMANDS_DIR = resolve(DEV_DIR, "commands");
-const RESULTS_DIR = resolve(DEV_DIR, "results");
-const PROTOCOL_SEQ = resolve(DEV_DIR, "protocol.seq.json");
+const DEV_DIR = resolveDevDir();
+const DEPLOY_ENABLED = !isForeignWindowsPathOnThisHost(DEV_DIR);
+const COMMANDS_DIR = join(DEV_DIR, "commands");
+const RESULTS_DIR = join(DEV_DIR, "results");
+const PROTOCOL_SEQ = join(DEV_DIR, "protocol.seq.json");
 
 // ============================================================================
 // Modern Runtime Generator (pipeline V2)
 // ============================================================================
 
 async function generateAndDeploy(): Promise<{
-  mainChanged: boolean;
-  runtimeChanged: boolean;
-  catalogChanged: boolean;
+  diff: ReturnType<typeof computeDeployDiff>;
+  deployed: boolean;
 } | null> {
   console.log("\n🔧 Generating runtime files via RuntimeGenerator...");
 
@@ -47,7 +54,7 @@ async function generateAndDeploy(): Promise<{
       outputDir: GENERATED_DIR,
     });
 
-    const report = await generator.build();
+    await generator.build();
 
     console.log("✅ Runtime files generated:");
     console.log(`   - ${GENERATED_DIR}/main.js`);
@@ -55,35 +62,31 @@ async function generateAndDeploy(): Promise<{
     console.log(`   - ${GENERATED_DIR}/catalog.js`);
     console.log(`   - ${GENERATED_DIR}/manifest.json`);
 
+    if (!DEPLOY_ENABLED) {
+      console.log("\n⚠ PT_DEV_DIR parece una ruta Windows y este host no es Windows.");
+      console.log("   Se generaron artefactos para validación, pero se omitió el deploy local.");
+      console.log(`   PT_DEV_DIR=${DEV_DIR}`);
+
+      return { diff: [], deployed: false };
+    }
+
     if (!existsSync(GENERATED_DIR)) {
       mkdirSync(GENERATED_DIR, { recursive: true });
     }
 
-    const artifacts = [
-      { src: "main.js", dest: resolve(DEV_DIR, "main.js") },
-      { src: "runtime.js", dest: resolve(DEV_DIR, "runtime.js") },
-      { src: "catalog.js", dest: resolve(DEV_DIR, "catalog.js") },
-      { src: "manifest.json", dest: resolve(DEV_DIR, "manifest.json") },
-    ];
+    const diff = computeDeployDiff(GENERATED_DIR, DEV_DIR);
 
-    for (const { src, dest } of artifacts) {
-      const srcPath = resolve(GENERATED_DIR, src);
-      if (!existsSync(srcPath)) {
-        console.error(`   ✗ ${src} not found, aborting deploy`);
-        return null;
-      }
-      mkdirSync(resolve(dest, ".."), { recursive: true });
-      writeFileSync(dest, readFileSync(srcPath));
-      if (src === "runtime.js") {
-        const now = Date.now();
-        utimesSync(dest, new Date(now), new Date(now + 2000));
-      }
-      console.log(`   ✓ ${dest}`);
+    console.log("\n📦 Deployment diff:");
+    for (const item of diff) {
+      const label = item.changed ? "changed" : "unchanged";
+      console.log(`   ${item.name}: ${label} ${shortHash(item.beforeHash)} -> ${shortHash(item.afterHash)}`);
     }
+
+    copyChangedArtifacts(diff);
 
     console.log("✅ Deployment complete");
 
-    return report.changes;
+    return { diff, deployed: true };
   } catch (error) {
     console.error("❌ Runtime generation/deploy error:", error);
     return null;
@@ -133,8 +136,41 @@ function validateArtifacts(): boolean {
   return true;
 }
 
+function validateGeneratedArtifactsOrThrow(): void {
+  const files = [
+    { path: resolve(GENERATED_DIR, "main.js"), name: "main.js" },
+    { path: resolve(GENERATED_DIR, "runtime.js"), name: "runtime.js" },
+    { path: resolve(GENERATED_DIR, "catalog.js"), name: "catalog.js" },
+    { path: resolve(GENERATED_DIR, "manifest.json"), name: "manifest.json" },
+  ];
+
+  for (const { path, name } of files) {
+    if (!existsSync(path)) {
+      throw new Error(`${name} not found in generated dir`);
+    }
+
+    const content = readFileSync(path, "utf-8");
+    if (content.length < 50) {
+      throw new Error(`${name} is too short (${content.length} bytes)`);
+    }
+  }
+
+  const mainContent = readFileSync(resolve(GENERATED_DIR, "main.js"), "utf-8");
+  if (!mainContent.includes("createKernel")) {
+    throw new Error("generated main.js missing createKernel");
+  }
+
+  const runtimeContent = readFileSync(resolve(GENERATED_DIR, "runtime.js"), "utf-8");
+  if (!runtimeContent.includes("_ptDispatch")) {
+    throw new Error("generated runtime.js missing _ptDispatch");
+  }
+
+  console.log("✅ generated main.js contains 'createKernel'");
+  console.log("✅ generated runtime.js contains '_ptDispatch'");
+}
+
 // ============================================================================
-// Reload Trigger
+// Runtime Wakeup
 // ============================================================================
 
 function getNextSeq(): number {
@@ -156,7 +192,7 @@ function bumpSeq(): void {
   } catch {}
 }
 
-function triggerReload(): void {
+function triggerRuntimeWakeup(): void {
   if (!existsSync(COMMANDS_DIR)) {
     mkdirSync(COMMANDS_DIR, { recursive: true });
   }
@@ -178,7 +214,7 @@ function triggerReload(): void {
     checksum: createHash("sha256").update(JSON.stringify({ type: "__ping", payload })).digest("hex"),
   });
   writeFileSync(cmdFile, cmd);
-  console.log(`🔄 Reload triggered: ${cmdFile}`);
+  console.log(`🔄 Runtime wake-up triggered: ${cmdFile}`);
 
   setTimeout(() => {
     try {
@@ -225,34 +261,47 @@ async function build(triggerReloadFlag: boolean = true): Promise<boolean> {
   console.log("       PT Control V2 - Build");
   console.log("═══════════════════════════════════════════");
 
-  const changes = await generateAndDeploy();
-  if (!changes) {
+  const deploy = await generateAndDeploy();
+  if (!deploy) {
     console.error("\n❌ Runtime generation/deploy failed");
     process.exit(1);
   }
 
-  const valid = validateArtifacts();
-  if (!valid) {
-    console.error("\n❌ Artifact validation failed");
-    process.exit(1);
-  }
-
-  if (triggerReloadFlag) {
-    triggerReload();
-  }
-
-  if (changes.mainChanged) {
-    console.log("\n✅ Build completado. main.js y runtime.js actualizados.");
-    console.log("💡 Recarga ~/pt-dev/main.js en Packet Tracer.");
-  } else if (changes.runtimeChanged) {
-    console.log("\n✅ Build completado. runtime.js actualizado; main.js sin cambios.");
-    console.log("💡 Runtime hot-reload activo en Packet Tracer.");
-  } else if (changes.catalogChanged) {
-    console.log("\n✅ Build completado. Solo catalog.js cambió.");
-    console.log("💡 No necesitas recargar main.js.");
+  if (deploy.deployed) {
+    const valid = validateArtifacts();
+    if (!valid) {
+      console.error("\n❌ Artifact validation failed");
+      process.exit(1);
+    }
   } else {
-    console.log("\n✅ Build completado. Sin cambios efectivos en main.js ni runtime.js.");
+    console.log("\n🔍 Validating generated artifacts only...");
+    validateGeneratedArtifactsOrThrow();
+  }
+
+  if (!deploy.deployed) {
+    console.log("\n✅ Build generado para validación cross-platform.");
+    console.log("💡 No se desplegó porque esta ruta PT_DEV_DIR pertenece a Windows y el host actual no es Windows.");
+    return true;
+  }
+
+  const classification = classifyDeploy(deploy.diff);
+
+  if (triggerReloadFlag && classification.runtimeWakeupRecommended) {
+    triggerRuntimeWakeup();
+    console.log("🔄 Runtime wake-up triggered via __ping.");
+  }
+
+  if (classification.noReloadRequired) {
+    console.log("\n✅ Build idempotente: sin cambios funcionales.");
     console.log("💡 No necesitas recargar main.js.");
+  } else if (classification.manualMainReloadRequired) {
+    console.log("\n✅ Build completado. main.js cambió.");
+    console.log(`💡 Recarga ${DEV_DIR.replace(/\\/g, "/")}/main.js en Packet Tracer.`);
+  } else if (classification.runtimeWakeupRecommended) {
+    console.log("\n✅ Build completado. main.js sin cambios.");
+    console.log("💡 Runtime hot-reload activo; no necesitas recargar main.js.");
+  } else {
+    console.log("\n✅ Build completado.");
   }
 
   return true;

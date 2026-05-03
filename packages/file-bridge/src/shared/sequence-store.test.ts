@@ -3,15 +3,22 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdirSync, rmSync, readFileSync } from 'node:fs';
+import { mkdirSync, rmSync, readFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { SequenceStore } from './sequence-store';
 
-const TEST_ROOT = '/tmp/sequence-store-test-' + Math.random().toString(36).slice(2);
+function makeTestRoot(prefix: string): string {
+  return mkdtempSync(join(tmpdir(), prefix));
+}
+
+let TEST_ROOT: string;
 
 describe('SequenceStore', () => {
   let store: SequenceStore;
 
   beforeEach(() => {
+    TEST_ROOT = makeTestRoot('file-bridge-sequence-store-');
     mkdirSync(TEST_ROOT, { recursive: true });
     store = new SequenceStore(TEST_ROOT);
   });

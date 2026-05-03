@@ -4,8 +4,12 @@
 
 import type { CapabilitySupportStatus, CapabilityRunResult, SupportMatrixEntry, EnvironmentFingerprint } from "./capability-types.js";
 import { queryRuns, readRunResult } from "./evidence-ledger.js";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
-const SUPPORT_CACHE_FILE = process.env.OMNI_SUPPORT_CACHE ?? "/tmp/omni-support-cache.json";
+const SUPPORT_CACHE_FILE = process.env.OMNI_SUPPORT_CACHE
+  ? resolve(process.env.OMNI_SUPPORT_CACHE)
+  : join(tmpdir(), "omni-support-cache.json");
 
 export async function querySupportMatrix(capabilityId: string): Promise<SupportMatrixEntry | null> {
   const runs = await queryRuns({ capabilityId });

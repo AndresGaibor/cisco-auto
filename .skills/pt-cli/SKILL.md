@@ -31,7 +31,7 @@ Usa estos comandos como API primaria:
 |---|---|
 | Salud/runtime | `bun run pt doctor`, `bun run pt runtime status`, `bun run pt runtime logs`, `bun run pt runtime reload` |
 | Topología | `bun run pt device list/get/ports/add/move/remove`, `bun run pt device module slots/add`, `bun run pt link list/add/remove/suggest/verify/doctor` |
-| Terminal | `bun run pt cmd <device> "<comando>"`, `bun run pt cmd <device> --config ...`, `bun run pt cmd each --devices A,B "<comando>"` |
+| Terminal | `bun run pt cmd <device> "<comando>"...`, multilínea detectada como config, `bun run pt cmd <device> --config ...` (deprecated) |
 | Hosts GUI/API | `bun run pt set host <PC|Server> ip ...`, `bun run pt set host <PC|Server> dhcp` |
 | Verificación | `bun run pt verify ping <source> <target>`, `bun run pt verify vlan <switch> <vlan>`, `bun run pt verify ios <device> <command...>` |
 | Forense/último recurso | `bun run pt omni status`, `bun run pt omni inspect env`, `bun run pt omni topology physical`, `bun run pt omni device genome <device>`, `bun run pt omni raw ... --dry-run/--yes` |
@@ -49,7 +49,7 @@ Si una referencia antigua menciona esos comandos, tradúcelos así:
 |---|---|
 | `pt status` | `bun run pt doctor` + `bun run pt runtime status` |
 | `pt config ip PC1 ...` | `bun run pt set host PC1 ip ...` |
-| `pt config-ios R1 ...` | `bun run pt cmd R1 --config ...` |
+| `pt config-ios R1 ...` | `bun run pt cmd R1 "configure terminal" ... "end"` (autodetección activa, --config es legacy) |
 | `pt show ...` | `bun run pt cmd <device> "show ..."` |
 | `pt ping PC1 X` | `bun run pt verify ping PC1 X` o `bun run pt cmd PC1 "ping X"` |
 | `pt show-mac SW1` | `bun run pt cmd SW1 "show mac address-table"` |

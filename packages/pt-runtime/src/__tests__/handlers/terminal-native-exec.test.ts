@@ -2,8 +2,22 @@ import { describe, expect, test, vi } from "bun:test";
 
 import { handleTerminalNativeExec } from "../../handlers/terminal-native-exec.js";
 
+function makeApi(terminal: unknown, ticket = "ticket-1") {
+  return {
+    now: () => 1,
+    createJob: vi.fn(() => ticket),
+    ipc: {
+      network: () => ({
+        getDevice: () => ({
+          getCommandLine: () => terminal,
+        }),
+      }),
+    },
+  } as any;
+}
+
 describe("terminal.native.exec", () => {
-  test("conserva el receiver nativo al leer prompt y modo", async () => {
+  test("crea un job diferido y conserva el receiver nativo", async () => {
     const terminal = {
       prompt: "SW1>",
       mode: "user",
@@ -27,30 +41,11 @@ describe("terminal.native.exec", () => {
       getCommandInput: vi.fn(function (this: any) {
         return this.input;
       }),
-      enterCommand: vi.fn(function (this: any, command: string) {
-        if (command === "enable") {
-          this.prompt = "SW1#";
-          this.mode = "enable";
-          this.output += "\nSW1#";
-          return;
-        }
-
-        if (command === "show running-config") {
-          this.output += "\nSW1#show running-config\nhostname SW1\nSW1#";
-        }
-      }),
+      enterCommand: vi.fn(),
       enterChar: vi.fn(),
     };
 
-    const api = {
-      ipc: {
-        network: () => ({
-          getDevice: () => ({
-            getCommandLine: () => terminal,
-          }),
-        }),
-      },
-    } as any;
+    const api = makeApi(terminal, "ticket-1");
 
     const result = await handleTerminalNativeExec(
       {
@@ -63,328 +58,56 @@ describe("terminal.native.exec", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(terminal.enterCommand).toHaveBeenCalledWith("enable");
-    expect(terminal.enterCommand).toHaveBeenCalledWith("show running-config");
-    expect(String((result as any).raw)).toContain("hostname SW1");
+    expect((result as any).deferred).toBe(true);
+    expect((result as any).ticket).toBe("ticket-1");
+    expect(api.createJob).toHaveBeenCalledTimes(1);
+    expect(terminal.enterCommand).not.toHaveBeenCalled();
+    expect((result as any).job.plan[0].kind).toBe("ensure-mode");
+    expect((result as any).job.plan[1].command).toBe("show running-config");
   });
 
-  test("espera a que el prompt privilegiado aparezca antes de ejecutar", async () => {
-    let prompt = "SW1>";
-    let mode = "user";
-    let output = "SW1>";
-
+  test("registra un enable explicito como job diferido", async () => {
     const terminal = {
-      getPrompt: vi.fn(() => prompt),
-      getMode: vi.fn(() => mode),
-      getOutput: vi.fn(() => output),
-      getAllOutput: vi.fn(() => output),
-      getBuffer: vi.fn(() => output),
-      getCommandInput: vi.fn(() => ""),
-      enterCommand: vi.fn((cmd) => {
-        if (cmd === "enable") {
-          setTimeout(() => {
-            prompt = "SW1#";
-            mode = "enable";
-            output += "\nSW1#";
-          }, 900);
-          return;
-        }
-
-        if (cmd === "show running-config") {
-          output += "\nSW1#show running-config\nhostname SW1\nSW1#";
-        }
-      }),
-      enterChar: vi.fn(),
-    };
-
-    const api = {
-      ipc: {
-        network: () => ({
-          getDevice: () => ({
-            getCommandLine: () => terminal,
-          }),
-        }),
-      },
-    } as any;
-
-    const result = await handleTerminalNativeExec(
-      {
-        device: "SW1",
-        command: "show running-config",
-        timeoutMs: 2500,
-        sampleDelayMs: 10,
-      },
-      api,
-    );
-
-    expect(result.ok).toBe(true);
-    expect(terminal.enterCommand).toHaveBeenCalledWith("enable");
-    expect(terminal.enterCommand).toHaveBeenCalledWith("show running-config");
-    expect(String((result as any).raw)).toContain("hostname SW1");
-  });
-
-  test("ejecuta show running-config y devuelve salida estable", async () => {
-    const terminal = {
-      getPrompt: vi.fn(() => "SW1#"),
-      getMode: vi.fn(() => "privileged-exec"),
-      getOutput: vi.fn(() => "show running-config\nhostname SW1\nSW1#"),
-      getAllOutput: vi.fn(() => "show running-config\nhostname SW1\nSW1#"),
-      getBuffer: vi.fn(() => "show running-config\nhostname SW1\nSW1#"),
+      getPrompt: vi.fn(() => "SW1>"),
+      getMode: vi.fn(() => "user"),
+      getOutput: vi.fn(() => "SW1>"),
+      getAllOutput: vi.fn(() => "SW1>"),
+      getBuffer: vi.fn(() => "SW1>"),
       getCommandInput: vi.fn(() => ""),
       enterCommand: vi.fn(),
       enterChar: vi.fn(),
     };
 
-    const api = {
-      ipc: {
-        network: () => ({
-          getDevice: () => ({
-            getCommandLine: () => terminal,
-          }),
-        }),
-      },
-    } as any;
+    const api = makeApi(terminal, "ticket-2");
 
     const result = await handleTerminalNativeExec(
       {
         device: "SW1",
-        command: "show running-config",
-        timeoutMs: 2000,
+        command: "enable",
+        timeoutMs: 2500,
       },
       api,
     );
 
     expect(result.ok).toBe(true);
-    expect(result.raw).toContain("hostname SW1");
-    expect(result.status).toBe(0);
+    expect((result as any).deferred).toBe(true);
+    expect((result as any).job.plan).toHaveLength(1);
+    expect((result as any).job.plan[0].kind).toBe("command");
+    expect((result as any).job.plan[0].command).toBe("enable");
   });
 
-  test("despierta terminal en logout antes de ejecutar comando privilegiado", async () => {
-    let prompt = "";
-    let mode = "logout";
-    let output = "";
+  test("rechaza payload sin device o command", () => {
+    const api = makeApi(null, "ticket-3");
 
-    const terminal = {
-      getPrompt: vi.fn(() => prompt),
-      getMode: vi.fn(() => mode),
-      getOutput: vi.fn(() => output),
-      getAllOutput: vi.fn(() => output),
-      getBuffer: vi.fn(() => output),
-      getCommandInput: vi.fn(() => ""),
-      enterCommand: vi.fn((cmd) => {
-        if (cmd === "enable") {
-          prompt = "SW1#";
-          mode = "enable";
-          output += "\nSW1#";
-          return;
-        }
-
-        if (cmd === "show running-config") {
-          output += "\nSW1#show running-config\nhostname SW1\nSW1#";
-        }
-      }),
-      enterChar: vi.fn((charCode) => {
-        if (charCode === 13) {
-          prompt = "SW1>";
-          mode = "user";
-          output += "\nSW1>";
-        }
-      }),
-    };
-
-    const api = {
-      ipc: {
-        network: () => ({
-          getDevice: () => ({
-            getCommandLine: () => terminal,
-          }),
-        }),
-      },
-    } as any;
-
-    const result = await handleTerminalNativeExec(
+    const result = handleTerminalNativeExec(
       {
         device: "SW1",
-        command: "show running-config",
-        timeoutMs: 2500,
-        sampleDelayMs: 10,
-      },
-      api,
-    );
-
-    expect(result.ok).toBe(true);
-    expect(terminal.enterCommand).toHaveBeenCalledWith("enable");
-    expect(terminal.enterCommand).toHaveBeenCalledWith("show running-config");
-    expect(String((result as any).raw)).toContain("hostname SW1");
-  });
-
-  test("devuelve NATIVE_EXEC_IOS_ERROR cuando IOS rechaza el comando", async () => {
-    const terminal = {
-      getPrompt: vi.fn(() => "SW-SRV-DIST#"),
-      getMode: vi.fn(() => "privileged-exec"),
-      getOutput: vi.fn(() => "SW-SRV-DIST#"),
-      getAllOutput: vi.fn(() => "SW-SRV-DIST#"),
-      getBuffer: vi.fn(() => "SW-SRV-DIST#"),
-      getCommandInput: vi.fn(() => ""),
-      enterCommand: vi.fn((cmd) => {
-        if (cmd === "show version2") {
-          return;
-        }
-
-        throw new Error(`unexpected command ${cmd}`);
-      }),
-      enterChar: vi.fn(),
-    };
-
-    const api = {
-      ipc: {
-        network: () => ({
-          getDevice: () => ({
-            getCommandLine: () => terminal,
-          }),
-        }),
-      },
-    } as any;
-
-    terminal.getOutput.mockImplementation(() =>
-      "SW-SRV-DIST#show version2\n                         ^\n% Invalid input detected at '^' marker.",
-    );
-    terminal.getAllOutput.mockImplementation(() =>
-      "SW-SRV-DIST#show version2\n                         ^\n% Invalid input detected at '^' marker.",
-    );
-    terminal.getBuffer.mockImplementation(() =>
-      "SW-SRV-DIST#show version2\n                         ^\n% Invalid input detected at '^' marker.",
-    );
-
-    const result = await handleTerminalNativeExec(
-      {
-        device: "SW-SRV-DIST",
-        command: "show version2",
-        timeoutMs: 2500,
-        sampleDelayMs: 10,
+        command: "",
       },
       api,
     );
 
     expect(result.ok).toBe(false);
-    expect((result as any).code).toBe("NATIVE_EXEC_IOS_ERROR");
-    expect(String((result as any).raw)).toContain("% Invalid input detected");
-    expect((result as any).status).toBe(1);
-  });
-
-  test("limpia el pager antes de enviar enable", async () => {
-    let prompt = "SW-SRV-DIST>";
-    let mode = "user";
-    let output = "SW-SRV-DIST>show running-config\nline 1\n--More-- ";
-    let pagerActive = true;
-
-    const terminal = {
-      getPrompt: vi.fn(() => prompt),
-      getMode: vi.fn(() => mode),
-      getOutput: vi.fn(() => output),
-      getAllOutput: vi.fn(() => output),
-      getBuffer: vi.fn(() => output),
-      getCommandInput: vi.fn(() => ""),
-      enterCommand: vi.fn((cmd) => {
-        if (cmd === "enable") {
-          if (pagerActive) {
-            output += "\nSW-SRV-DIST>nable\nTranslating \"nable\"";
-            prompt = "SW-SRV-DIST>";
-            mode = "user";
-            return;
-          }
-
-          output += "\nSW-SRV-DIST#";
-          prompt = "SW-SRV-DIST#";
-          mode = "enable";
-          return;
-        }
-
-        if (cmd === "show running-config") {
-          output += "\nSW-SRV-DIST#show running-config\nhostname SW-SRV-DIST\nSW-SRV-DIST#";
-        }
-      }),
-      enterChar: vi.fn((charCode) => {
-        if (charCode === 32) {
-          pagerActive = false;
-          output = output.replace(/--More--\s*$/, "");
-        }
-      }),
-    };
-
-    const api = {
-      ipc: {
-        network: () => ({
-          getDevice: () => ({
-            getCommandLine: () => terminal,
-          }),
-        }),
-      },
-    } as any;
-
-    const result = await handleTerminalNativeExec(
-      {
-        device: "SW-SRV-DIST",
-        command: "show running-config",
-        timeoutMs: 2500,
-        sampleDelayMs: 10,
-        maxPagerAdvances: 10,
-      },
-      api,
-    );
-
-    expect(result.ok).toBe(true);
-    expect(terminal.enterChar).toHaveBeenCalledWith(32, 0);
-    expect(terminal.enterCommand).toHaveBeenCalledWith("enable");
-    expect(terminal.enterCommand).toHaveBeenCalledWith("show running-config");
-    expect(String((result as any).raw)).toContain("hostname SW-SRV-DIST");
-  });
-
-  test("falla rápido si IOS rechaza el comando", async () => {
-    let prompt = "SW1>";
-    let output = "SW1>show running-config\n          ^\n% Invalid input detected at '^' marker.\nSW1>";
-
-    const terminal = {
-      getPrompt: vi.fn(() => prompt),
-      getMode: vi.fn(() => (prompt.endsWith("#") ? "privileged-exec" : "user-exec")),
-      getOutput: vi.fn(() => output),
-      getAllOutput: vi.fn(() => output),
-      getBuffer: vi.fn(() => output),
-      getCommandInput: vi.fn(() => ""),
-      enterCommand: vi.fn((cmd) => {
-        if (cmd === "enable") {
-          prompt = "SW1#";
-          return;
-        }
-        if (cmd === "show running-config") {
-          // ya está en output
-        }
-      }),
-      enterChar: vi.fn(),
-    };
-
-    const api = {
-      ipc: {
-        network: () => ({
-          getDevice: () => ({
-            getCommandLine: () => terminal,
-          }),
-        }),
-      },
-    } as any;
-
-    const result = await handleTerminalNativeExec(
-      {
-        device: "SW1",
-        command: "show running-config",
-        timeoutMs: 500,
-        sampleDelayMs: 10,
-      },
-      api,
-    );
-
-    expect(result.ok).toBe(false);
-    expect((result as any).code).toBe("NATIVE_EXEC_IOS_ERROR");
-    expect((result as any).status).toBe(1);
+    expect((result as any).code).toBe("INVALID_TERMINAL_NATIVE_EXEC");
   });
 });

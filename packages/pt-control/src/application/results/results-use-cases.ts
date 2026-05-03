@@ -5,7 +5,15 @@ import {
   statSync,
 } from "node:fs";
 import { unlink } from "node:fs/promises";
-import { basename, join, resolve, sep } from "node:path";
+import { basename, resolve } from "node:path";
+
+import {
+  assertInsideDir,
+  countJsonFiles,
+  normalizeCommandId,
+  readJsonFile,
+  resolveNumberOrDefault,
+} from "../../shared/filesystem.js";
 
 export interface ResultFileInfo {
   name: string;
@@ -112,15 +120,6 @@ function commandLogsDirFromDevDir(devDir: string): string {
   return resolve(devDir, "logs", "commands");
 }
 
-function assertInsideDir(parentDir: string, childPath: string): void {
-  const parent = resolve(parentDir);
-  const child = resolve(childPath);
-
-  if (child !== parent && !child.startsWith(parent + sep)) {
-    throw new Error(`Ruta fuera del directorio permitido: ${childPath}`);
-  }
-}
-
 function sanitizeResultFileName(file: string): string {
   const clean = basename(file.trim());
 
@@ -137,10 +136,6 @@ function sanitizeResultFileName(file: string): string {
   }
 
   return clean;
-}
-
-function normalizeCommandId(commandId: string): string {
-  return commandId.trim().replace(/\.json$/i, "").replace(/^cmd_/, "");
 }
 
 function resolveResultPathForCommandId(resultsDir: string, commandId: string): {
@@ -168,11 +163,6 @@ function resolveResultPathForCommandId(resultsDir: string, commandId: string): {
     file: cmdFile,
     path: cmdPath,
   };
-}
-
-function readJsonFile(filePath: string): unknown {
-  const content = readFileSync(filePath, "utf-8");
-  return JSON.parse(content);
 }
 
 function isResultFileName(name: string): boolean {
@@ -258,7 +248,7 @@ export async function listResults(input: {
     return infos;
   }
 
-  const limit = Number.isFinite(input.limit) && input.limit && input.limit > 0 ? input.limit : 20;
+  const limit = resolveNumberOrDefault(input.limit, 20);
 
   return {
     ok: true,
@@ -452,7 +442,10 @@ export async function showResult(input: {
     }
 
     const normalized = normalizeCommandId(input.commandId);
-    const directTracePath = resolve(commandLogsDir, `${input.commandId.trim().replace(/\.json$/i, "")}.json`);
+    const directTracePath = resolve(
+      commandLogsDir,
+      `${input.commandId.trim().replace(/\.json$/i, "")}.json`,
+    );
     const normalizedTracePath = resolve(commandLogsDir, `${normalized}.json`);
     const tracePath = existsSync(directTracePath) ? directTracePath : normalizedTracePath;
 
@@ -497,7 +490,7 @@ export async function listFailedResults(input: {
     return infos;
   }
 
-  const limit = Number.isFinite(input.limit) && input.limit && input.limit > 0 ? input.limit : 20;
+  const limit = resolveNumberOrDefault(input.limit, 20);
   const failed: FailedResultInfo[] = [];
   let scanned = 0;
 
@@ -547,18 +540,6 @@ export async function listFailedResults(input: {
   };
 }
 
-function countJsonFiles(dir: string): number {
-  if (!existsSync(dir)) {
-    return 0;
-  }
-
-  try {
-    return readdirSync(dir).filter((file) => file.endsWith(".json")).length;
-  } catch {
-    return 0;
-  }
-}
-
 export async function inspectPendingResults(input: {
   devDir: string;
 }): Promise<ResultsUseCaseResult<ResultsPendingResult>> {
@@ -575,7 +556,7 @@ export async function inspectPendingResults(input: {
 
   if (existsSync(pendingFile)) {
     try {
-      const pending = JSON.parse(readFileSync(pendingFile, "utf-8"));
+      const pending = readJsonFile(pendingFile);
       if (pending && typeof pending === "object") {
         pendingDeferred = Object.keys(pending).length;
       }

@@ -9,38 +9,19 @@
  * ~/pt-dev/logs/bundles/<sessionId>.bundle.json
  */
 
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { LogManager, redactSensitive } from '@cisco-auto/pt-control/logging';
 import { createPTController, type CommandTraceEntry } from '@cisco-auto/pt-control/controller';
 import type { GlobalFlags } from '../flags';
+import { getDevDir } from '../system/paths.js';
 
 function getDefaultLogDir(): string {
-  const home = homedir();
-  const isWindows = process.platform === 'win32';
-  if (isWindows) {
-    return join(process.env.USERPROFILE ?? home, 'pt-dev', 'logs', 'sessions');
-  }
-  return join(home, 'pt-dev', 'logs', 'sessions');
+  return join(getDevDir(), 'logs', 'sessions');
 }
 
 function getDefaultBundlesDir(): string {
-  const home = homedir();
-  const isWindows = process.platform === 'win32';
-  if (isWindows) {
-    return join(process.env.USERPROFILE ?? home, 'pt-dev', 'logs', 'bundles');
-  }
-  return join(home, 'pt-dev', 'logs', 'bundles');
-}
-
-function getPtDevDir(): string {
-  const home = homedir();
-  const isWindows = process.platform === 'win32';
-  if (isWindows) {
-    return process.env.PT_DEV_DIR ?? join(process.env.USERPROFILE ?? home, 'pt-dev');
-  }
-  return process.env.PT_DEV_DIR ?? join(home, 'pt-dev');
+  return join(getDevDir(), 'logs', 'bundles');
 }
 
 export interface TraceContext {
@@ -99,7 +80,7 @@ async function generateBundle(
   endTime: number,
   outcome: 'success' | 'error' | 'failure'
 ): Promise<Record<string, unknown>> {
-  const ptDevDir = getPtDevDir();
+  const ptDevDir = getDevDir();
   const resultsDir = join(ptDevDir, 'results');
   const commandsTraceDir = join(ptDevDir, 'logs', 'commands');
 
@@ -166,7 +147,7 @@ export async function runTracedPtCommand<T>({
   let outcome: 'success' | 'error' | 'failure' = 'success';
   let bridgeEvents: unknown[] = [];
 
-  const ptDevDir = getPtDevDir();
+  const ptDevDir = getDevDir();
   const resultsDir = join(ptDevDir, 'results');
   const commandsTraceDir = join(ptDevDir, 'logs', 'commands');
 
