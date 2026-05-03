@@ -87,3 +87,7 @@ export const PT_HELPER_MAPS: PtHelperMaps = {
     sbc: 37,
   },
 };
+
+export const CABLE_TYPES = PT_HELPER_MAPS.CABLE_TYPES;
+export const DEVICE_TYPES = PT_HELPER_MAPS.DEVICE_TYPES;
+export const MODEL_ALIASES = PT_HELPER_MAPS.PT_MODEL_MAP;

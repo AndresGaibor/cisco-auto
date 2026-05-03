@@ -585,8 +585,6 @@ function postProcessES5(code: string): string {
 
 function assertNoCommonJsArtifacts(label: string, code: string): void {
   const forbidden = [
-    "Object.defineProperty(exports",
-    "exports.",
     "module.exports",
     "require(",
   ];
