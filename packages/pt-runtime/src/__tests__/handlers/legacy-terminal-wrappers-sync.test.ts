@@ -131,4 +131,62 @@ describe("legacy terminal wrappers are synchronous", () => {
     expect((jobs[0] as any).id).toBe(result.ticket);
     expect((result.job as any).id).toBe(result.ticket);
   });
+
+  test("execIos legacy incluye ensure-mode cuando ensurePrivileged=true", () => {
+    const { api, jobs } = fakeApi();
+
+    const result = handleExecIos(
+      {
+        type: "execIos",
+        device: "SW1",
+        command: "show running-config",
+        ensurePrivileged: true,
+      } as any,
+      api,
+    ) as any;
+
+    expect(result.ok).toBe(true);
+    expect(result.deferred).toBe(true);
+    expect(result.ticket).toBeTruthy();
+
+    expect(jobs).toHaveLength(1);
+
+    const job = jobs[0] as any;
+
+    expect(job.id).toBe(result.ticket);
+    expect(job.plan[0]).toMatchObject({
+      type: "ensure-mode",
+      value: "privileged-exec",
+      options: { stopOnError: true },
+    });
+    expect(job.plan[1]).toMatchObject({
+      type: "command",
+      value: "show running-config",
+    });
+  });
+
+  test("execIos legacy no incluye ensure-mode cuando ensurePrivileged=false", () => {
+    const { api, jobs } = fakeApi();
+
+    const result = handleExecIos(
+      {
+        type: "execIos",
+        device: "SW1",
+        command: "show version",
+        ensurePrivileged: false,
+      } as any,
+      api,
+    ) as any;
+
+    expect(result.ok).toBe(true);
+    expect(result.deferred).toBe(true);
+
+    const job = jobs[0] as any;
+
+    expect(job.plan[0]).toMatchObject({
+      type: "command",
+      value: "show version",
+    });
+    expect(job.plan.some((step: any) => step.type === "ensure-mode")).toBe(false);
+  });
 });

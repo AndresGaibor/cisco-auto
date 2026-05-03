@@ -214,6 +214,84 @@ describe("terminal-plan-builder", () => {
     ]);
   });
 
+  for (const command of [
+    "show startup-config",
+    "show archive",
+    "show tech-support",
+    "write memory",
+    "copy running-config startup-config",
+    "erase startup-config",
+    "clear counters",
+    "debug ip packet",
+    "undebug all",
+  ]) {
+    test(`auto-eleva comando privilegiado IOS: ${command}`, () => {
+      const plan = buildUniversalTerminalPlan({
+        id: `plan-${command.replace(/\s+/g, "-")}`,
+        device: "SW1",
+        command,
+        deviceKind: "ios",
+        mode: "safe",
+        timeoutMs: 12000,
+      });
+
+      expect(plan.metadata?.autoConfig).toBe(false);
+      expect(plan.targetMode).toBe("privileged-exec");
+      expect(plan.steps[0]).toMatchObject({
+        kind: "ensureMode",
+        expectMode: "privileged-exec",
+        metadata: {
+          reason: "auto-enable-for-privileged-ios-command",
+        },
+      });
+      expect(plan.steps[1]).toMatchObject({
+        kind: "command",
+        command,
+      });
+
+      const visibleCommands = plan.steps
+        .map((step: TerminalPlanStep) => step.command)
+        .filter(Boolean);
+
+      expect(visibleCommands).not.toContain("configure terminal");
+      expect(visibleCommands).not.toContain("end");
+    });
+  }
+
+  test("raw mode no auto-eleva show running-config", () => {
+    const plan = buildUniversalTerminalPlan({
+      id: "plan-show-run-raw",
+      device: "SW1",
+      command: "show running-config",
+      deviceKind: "ios",
+      mode: "raw",
+      timeoutMs: 12000,
+    });
+
+    expect(plan.metadata?.autoConfig).toBe(false);
+    expect(plan.targetMode).toBeUndefined();
+    expect(plan.steps.map((step: TerminalPlanStep) => step.command ?? step.expectMode)).toEqual([
+      "show running-config",
+    ]);
+  });
+
+  test("show version permanece como comando exec normal sin auto-enable", () => {
+    const plan = buildUniversalTerminalPlan({
+      id: "plan-show-version-no-auto-enable",
+      device: "SW1",
+      command: "show version",
+      deviceKind: "ios",
+      mode: "safe",
+      timeoutMs: 12000,
+    });
+
+    expect(plan.metadata?.autoConfig).toBe(false);
+    expect(plan.targetMode).toBeUndefined();
+    expect(plan.steps.map((step: TerminalPlanStep) => step.command ?? step.expectMode)).toEqual([
+      "show version",
+    ]);
+  });
+
   test("no duplica configure terminal/end cuando el comando ya viene envuelto por --config", () => {
     const plan = buildUniversalTerminalPlan({
       id: "plan-explicit-config",

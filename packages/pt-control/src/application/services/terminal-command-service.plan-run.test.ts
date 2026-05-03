@@ -256,4 +256,80 @@ describe("createTerminalCommandService plan run", () => {
     expect(result.error?.code).toBe("RUNTIME_NOT_POLLING");
     expect(result.error?.phase).toBe("detection");
   });
+
+  test("runTerminalPlan recibe ensureMode para show running-config", async () => {
+    const runTerminalPlan = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 0,
+      output: "Building configuration...\nend",
+      warnings: [],
+      evidence: { source: "runtime-ios" },
+    });
+
+    const controller = createController({
+      deviceType: "switch",
+      model: "2960-24TT",
+      runtimeTerminal: { runTerminalPlan },
+    });
+
+    const service = createTerminalCommandService({
+      controller: controller as any,
+      runtimeTerminal: { runTerminalPlan } as any,
+      generateId: () => "show-run-plan-id",
+    });
+
+    const result = await service.executeCommand("SW1", "show running-config");
+
+    expect(result.ok).toBe(true);
+    expect(runTerminalPlan).toHaveBeenCalledTimes(1);
+
+    const firstArg = runTerminalPlan.mock.calls[0]?.[0] as any;
+    const submittedPlan = firstArg?.plan ?? firstArg;
+
+    expect(submittedPlan).toMatchObject({
+      id: "show-run-plan-id",
+      device: "SW1",
+      targetMode: "privileged-exec",
+    });
+
+    expect(submittedPlan.steps.map((step: any) => step.command ?? step.expectMode)).toEqual([
+      "privileged-exec",
+      "show running-config",
+    ]);
+  });
+
+  test("runTerminalPlan no agrega ensureMode para show version", async () => {
+    const runTerminalPlan = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 0,
+      output: "Cisco IOS Software",
+      warnings: [],
+      evidence: { source: "runtime-ios" },
+    });
+
+    const controller = createController({
+      deviceType: "switch",
+      model: "2960-24TT",
+      runtimeTerminal: { runTerminalPlan },
+    });
+
+    const service = createTerminalCommandService({
+      controller: controller as any,
+      runtimeTerminal: { runTerminalPlan } as any,
+      generateId: () => "show-version-plan-id",
+    });
+
+    const result = await service.executeCommand("SW1", "show version");
+
+    expect(result.ok).toBe(true);
+    expect(runTerminalPlan).toHaveBeenCalledTimes(1);
+
+    const firstArg = runTerminalPlan.mock.calls[0]?.[0] as any;
+    const submittedPlan = firstArg?.plan ?? firstArg;
+
+    expect(submittedPlan.targetMode).toBeUndefined();
+    expect(submittedPlan.steps.map((step: any) => step.command ?? step.expectMode)).toEqual([
+      "show version",
+    ]);
+  });
 });
