@@ -19,6 +19,82 @@ import { createPayloadBuilder } from "./payload-builder.js";
 import { createResponseParser } from "./response-parser.js";
 import { createTerminalPlanAdapter } from "./terminal-plan-adapter.js";
 
+type AdapterTimingMap = Record<string, number>;
+
+function nowMs(): number {
+  return Date.now();
+}
+
+function addTiming(timings: AdapterTimingMap, name: string, value: number): void {
+  timings[name] = (timings[name] ?? 0) + Math.max(0, value);
+}
+
+async function measureAdapterAsync<T>(
+  timings: AdapterTimingMap,
+  name: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const startedAt = nowMs();
+
+  try {
+    return await fn();
+  } finally {
+    addTiming(timings, name, nowMs() - startedAt);
+  }
+}
+
+function measureAdapterSync<T>(
+  timings: AdapterTimingMap,
+  name: string,
+  fn: () => T,
+): T {
+  const startedAt = nowMs();
+
+  try {
+    return fn();
+  } finally {
+    addTiming(timings, name, nowMs() - startedAt);
+  }
+}
+
+function mergeTimingScope(
+  evidence: unknown,
+  scope: string,
+  timings: AdapterTimingMap,
+): Record<string, unknown> {
+  const base =
+    evidence && typeof evidence === "object"
+      ? { ...(evidence as Record<string, unknown>) }
+      : {};
+
+  const existingTimings =
+    base.timings && typeof base.timings === "object"
+      ? { ...(base.timings as Record<string, unknown>) }
+      : {};
+
+  base.timings = {
+    ...existingTimings,
+    [scope]: {
+      ...(existingTimings[scope] && typeof existingTimings[scope] === "object"
+        ? (existingTimings[scope] as Record<string, unknown>)
+        : {}),
+      ...timings,
+    },
+  };
+
+  return base;
+}
+
+function finalizeAdapterResult(
+  result: TerminalPortResult,
+  timings: AdapterTimingMap,
+  startedAt: number,
+): TerminalPortResult {
+  timings.adapterTotalMs = Math.max(0, nowMs() - startedAt);
+  result.evidence = mergeTimingScope(result.evidence, "adapter", timings);
+  return result;
+}
+
 export interface RuntimeTerminalAdapterDeps {
   bridge: FileBridgePort;
   generateId: () => string;
@@ -222,7 +298,10 @@ export function createRuntimeTerminalAdapter(
     };
   }
 
-  async function executeLegacyPlan(normalizedPlan: ReturnType<typeof planAdapter.normalizePlan>): Promise<TerminalPortResult> {
+  async function executeLegacyPlan(
+    normalizedPlan: ReturnType<typeof planAdapter.normalizePlan>,
+    timings: AdapterTimingMap,
+  ): Promise<TerminalPortResult> {
     let promptBefore = "";
     let modeBefore = "";
     let promptAfter = "";
@@ -235,7 +314,9 @@ export function createRuntimeTerminalAdapter(
     const warnings: string[] = [];
     const events: Array<Record<string, unknown>> = [];
 
-    const deviceType = await detectDeviceType(bridge, normalizedPlan.device);
+    const deviceType = await measureAdapterAsync(timings, "legacyDetectDeviceTypeMs", () =>
+      detectDeviceType(bridge, normalizedPlan.device),
+    );
     const isHost = deviceType === "host";
     const handlerName = isHost ? "execPc" : "execIos";
 
@@ -246,17 +327,22 @@ export function createRuntimeTerminalAdapter(
       const step = normalizedPlan.steps[i]!;
 
       if (step.kind === "ensureMode") {
-        const { event, result, returnEarly, returnValue } = await handleEnsureModeStep(
-          {
-            bridge,
-            device: normalizedPlan.device,
-            isHost,
-            handlerName,
-            defaultTimeouts,
-            planTargetMode: normalizedPlan.targetMode,
-          },
-          step,
-          i,
+        const { event, result, returnEarly, returnValue } = await measureAdapterAsync(
+          timings,
+          "legacyEnsureModeMs",
+          () =>
+            handleEnsureModeStep(
+              {
+                bridge,
+                device: normalizedPlan.device,
+                isHost,
+                handlerName,
+                defaultTimeouts,
+                planTargetMode: normalizedPlan.targetMode,
+              },
+              step,
+              i,
+            ),
         );
 
         if (result.promptBefore && !promptBefore) promptBefore = result.promptBefore;
@@ -281,15 +367,17 @@ export function createRuntimeTerminalAdapter(
       }
 
       if (step.kind === "confirm") {
-        const { event } = await handleConfirmStep(
-          {
-            bridge,
-            device: normalizedPlan.device,
-            isHost,
-            handlerName,
-            defaultTimeouts,
-          },
-          i,
+        const { event } = await measureAdapterAsync(timings, "legacyConfirmMs", () =>
+          handleConfirmStep(
+            {
+              bridge,
+              device: normalizedPlan.device,
+              isHost,
+              handlerName,
+              defaultTimeouts,
+            },
+            i,
+          ),
         );
         events.push(event);
         continue;
@@ -299,32 +387,38 @@ export function createRuntimeTerminalAdapter(
       const stepTimeout = step.timeout ?? defaultTimeouts.commandTimeoutMs;
       const stepStallTimeout = defaultTimeouts.stallTimeoutMs;
 
-      const payload = payloadBuilder.buildCommandPayload({
-        handlerName,
-        device: normalizedPlan.device,
-        command,
-        targetMode: normalizedPlan.targetMode,
-        expectMode: step.expectMode,
-        expectPromptPattern: step.expectPromptPattern,
-        allowPager: step.allowPager ?? defaultPolicies.autoAdvancePager,
-        allowConfirm: step.allowConfirm ?? false,
-        ensurePrivileged: payloadBuilder.shouldEnsurePrivilegedForStep({
-          isHost,
-          planTargetMode: normalizedPlan.targetMode,
+      const payload = measureAdapterSync(timings, "legacyBuildPayloadMs", () =>
+        payloadBuilder.buildCommandPayload({
+          handlerName,
+          device: normalizedPlan.device,
           command,
-          stepIndex: i,
+          targetMode: normalizedPlan.targetMode,
+          expectMode: step.expectMode,
+          expectPromptPattern: step.expectPromptPattern,
+          allowPager: step.allowPager ?? defaultPolicies.autoAdvancePager,
+          allowConfirm: step.allowConfirm ?? false,
+          ensurePrivileged: payloadBuilder.shouldEnsurePrivilegedForStep({
+            isHost,
+            planTargetMode: normalizedPlan.targetMode,
+            command,
+            stepIndex: i,
+          }),
+          commandTimeoutMs: stepTimeout,
+          stallTimeoutMs: stepStallTimeout,
         }),
-        commandTimeoutMs: stepTimeout,
-        stallTimeoutMs: stepStallTimeout,
-      });
+      );
 
-      const bridgeResult = await bridge.sendCommandAndWait<unknown>(handlerName, payload, stepTimeout);
+      const bridgeResult = await measureAdapterAsync(timings, "legacyBridgeCommandMs", () =>
+        bridge.sendCommandAndWait<unknown>(handlerName, payload, stepTimeout),
+      );
       finalTimings = bridgeResult.timings;
-      const parsed = responseParser.parseCommandResponse(normalizeBridgeValue(bridgeResult), {
-        stepIndex: i,
-        isHost,
-        command,
-      });
+      const parsed = measureAdapterSync(timings, "legacyParseResponseMs", () =>
+        responseParser.parseCommandResponse(normalizeBridgeValue(bridgeResult), {
+          stepIndex: i,
+          isHost,
+          command,
+        }),
+      );
 
       if (i === 0) {
         promptBefore = parsed.promptBefore;
@@ -390,6 +484,31 @@ export function createRuntimeTerminalAdapter(
     return Math.max(requestedTimeoutMs, totalBudgetMs, 25000);
   }
 
+  function clampDeferredPollIntervalMs(value: unknown, fallbackMs: number): number {
+    const parsed = Number(value);
+
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return fallbackMs;
+    }
+
+    return Math.max(75, Math.min(Math.trunc(parsed), 500));
+  }
+
+  function computeDeferredPollIntervalMs(plan: TerminalPlan): number {
+    const metadata = plan.metadata as {
+      deferredPollIntervalMs?: unknown;
+      terminalPlanPollIntervalMs?: unknown;
+      pollIntervalMs?: unknown;
+    } | undefined;
+
+    return clampDeferredPollIntervalMs(
+      metadata?.deferredPollIntervalMs ??
+        metadata?.terminalPlanPollIntervalMs ??
+        metadata?.pollIntervalMs,
+      100,
+    );
+  }
+
   function computeTerminalPlanSubmitTimeoutMs(plan: TerminalPlan, requestedTimeoutMs: number): number {
     const firstStepTimeoutMs = Number(plan.steps[0]?.timeout ?? requestedTimeoutMs ?? 30000);
 
@@ -405,17 +524,21 @@ export function createRuntimeTerminalAdapter(
   async function executeTerminalPlanRun(
     plan: TerminalPlan,
     timeoutMs: number,
+    timings: AdapterTimingMap,
   ): Promise<TerminalPortResult | null> {
     const parseCommand = getTerminalPlanParseCommand(plan);
     const parseEventStep = getTerminalPlanEventStep(plan);
     const submitTimeoutMs = computeTerminalPlanSubmitTimeoutMs(plan, timeoutMs);
-    const submitResult = await bridge.sendCommandAndWait(
-      "terminal.plan.run",
-      { plan, options: { timeoutMs } },
-      submitTimeoutMs,
-      { resolveDeferred: false },
+    const submitResult = await measureAdapterAsync(timings, "terminalPlanSubmitMs", () =>
+      bridge.sendCommandAndWait(
+        "terminal.plan.run",
+        { plan, options: { timeoutMs } },
+        submitTimeoutMs,
+        { resolveDeferred: false },
+      ),
     );
     let finalTimings: unknown = submitResult.timings;
+    timings.terminalPlanSubmitBridgeWaitMs = Number((submitResult as any)?.timings?.waitMs ?? 0);
 
     if (isUnsupportedTerminalPlanRun(submitResult)) {
       return null;
@@ -428,11 +551,13 @@ export function createRuntimeTerminalAdapter(
       typeof submitValue === "object" &&
       (submitValue as { ok?: unknown }).ok === false
     ) {
-      const parsed = responseParser.parseCommandResponse(submitValue, {
-        stepIndex: 0,
-        isHost: false,
-        command: parseCommand,
-      });
+      const parsed = measureAdapterSync(timings, "terminalPlanParseResponseMs", () =>
+        responseParser.parseCommandResponse(submitValue, {
+          stepIndex: 0,
+          isHost: false,
+          command: parseCommand,
+        }),
+      );
 
       return {
         ok: false,
@@ -455,17 +580,23 @@ export function createRuntimeTerminalAdapter(
     if (isDeferredValue(submitValue)) {
       const startedAt = Date.now();
       const pollTimeoutMs = computeDeferredPollTimeoutMs(plan, timeoutMs);
-      const pollIntervalMs = 300;
+      const pollIntervalMs = computeDeferredPollIntervalMs(plan);
+      timings.terminalPlanPollTimeoutMs = pollTimeoutMs;
+      timings.terminalPlanPollIntervalMs = pollIntervalMs;
+      timings.terminalPlanPollCount = 0;
 
       let pollValue: unknown = null;
 
       while (Date.now() - startedAt < pollTimeoutMs) {
         try {
-          const pollResult = await bridge.sendCommandAndWait(
-            "__pollDeferred",
-            { ticket: submitValue.ticket },
-            Math.max(pollTimeoutMs - (Date.now() - startedAt), 1000),
-            { resolveDeferred: false },
+          timings.terminalPlanPollCount += 1;
+          const pollResult = await measureAdapterAsync(timings, "terminalPlanPollBridgeMs", () =>
+            bridge.sendCommandAndWait(
+              "__pollDeferred",
+              { ticket: submitValue.ticket },
+              Math.max(pollTimeoutMs - (Date.now() - startedAt), 1000),
+              { resolveDeferred: false },
+            ),
           );
 
           finalTimings = pollResult.timings;
@@ -495,7 +626,10 @@ export function createRuntimeTerminalAdapter(
           break;
         }
 
-        await new Promise((resolve) => setTimeout(resolve, Math.min(pollIntervalMs, remainingMs)));
+        const sleepMs = Math.min(pollIntervalMs, remainingMs);
+        await measureAdapterAsync(timings, "terminalPlanPollSleepMs", () =>
+          new Promise((resolve) => setTimeout(resolve, sleepMs)),
+        );
       }
 
       if (isStillPending(pollValue)) {
@@ -512,11 +646,13 @@ export function createRuntimeTerminalAdapter(
         );
       }
 
-      const parsed = responseParser.parseCommandResponse(pollValue, {
-        stepIndex: 0,
-        isHost: false,
-        command: parseCommand,
-      });
+      const parsed = measureAdapterSync(timings, "terminalPlanParseResponseMs", () =>
+        responseParser.parseCommandResponse(pollValue, {
+          stepIndex: 0,
+          isHost: false,
+          command: parseCommand,
+        }),
+      );
 
       const warnings = [...parsed.warnings];
       const mismatchWarning = responseParser.checkPromptMismatch(parsed, plan.steps[0] ?? {});
@@ -538,11 +674,13 @@ export function createRuntimeTerminalAdapter(
       };
     }
 
-    const parsed = responseParser.parseCommandResponse(submitValue, {
-      stepIndex: 0,
-      isHost: false,
-      command: parseCommand,
-    });
+    const parsed = measureAdapterSync(timings, "terminalPlanParseResponseMs", () =>
+      responseParser.parseCommandResponse(submitValue, {
+        stepIndex: 0,
+        isHost: false,
+        command: parseCommand,
+      }),
+    );
 
     const warnings = [...parsed.warnings];
     const mismatchWarning = responseParser.checkPromptMismatch(parsed, plan.steps[0] ?? {});
@@ -681,38 +819,64 @@ export function createRuntimeTerminalAdapter(
     plan: TerminalPlan,
     options?: TerminalPortOptions,
   ): Promise<TerminalPortResult> {
+    const adapterStartedAt = nowMs();
+    const timings: AdapterTimingMap = {};
     const timeoutMs = options?.timeoutMs ?? defaultTimeout;
 
-    const validation = planAdapter.validatePlan(plan);
+    const validation = measureAdapterSync(timings, "validatePlanMs", () =>
+      planAdapter.validatePlan(plan),
+    );
     if (!validation.valid) {
-      return {
-        ok: false,
-        output: "",
-        status: 1,
-        promptBefore: "",
-        promptAfter: "",
-        modeBefore: "",
-        modeAfter: "",
-        events: [],
-        warnings: validation.errors,
-        confidence: 0,
-      };
+      return finalizeAdapterResult(
+        {
+          ok: false,
+          output: "",
+          status: 1,
+          promptBefore: "",
+          promptAfter: "",
+          modeBefore: "",
+          modeAfter: "",
+          events: [],
+          warnings: validation.errors,
+          confidence: 0,
+        },
+        timings,
+        adapterStartedAt,
+      );
     }
 
     if (validation.warnings.length > 0) {
       console.warn("[runtime-terminal] Plan warnings:", validation.warnings);
     }
 
-    const normalizedPlan = planAdapter.normalizePlan(plan);
+    const normalizedPlan = measureAdapterSync(timings, "normalizePlanMs", () =>
+      planAdapter.normalizePlan(plan),
+    );
 
     if (shouldUseNativeExec(normalizedPlan)) {
-      return executeTerminalNativeExec(normalizedPlan, timeoutMs);
+      return finalizeAdapterResult(
+        await measureAdapterAsync(timings, "nativeExecMs", () =>
+          executeTerminalNativeExec(normalizedPlan, timeoutMs),
+        ),
+        timings,
+        adapterStartedAt,
+      );
     }
 
-    const deferredResult = await executeTerminalPlanRun(normalizedPlan, timeoutMs);
-    if (deferredResult) return deferredResult;
+    const deferredResult = await measureAdapterAsync(timings, "terminalPlanRunMs", () =>
+      executeTerminalPlanRun(normalizedPlan, timeoutMs, timings),
+    );
+    if (deferredResult) {
+      return finalizeAdapterResult(deferredResult, timings, adapterStartedAt);
+    }
 
-    return executeLegacyPlan(normalizedPlan);
+    return finalizeAdapterResult(
+      await measureAdapterAsync(timings, "legacyPlanMs", () =>
+        executeLegacyPlan(normalizedPlan, timings),
+      ),
+      timings,
+      adapterStartedAt,
+    );
   }
 
   return {

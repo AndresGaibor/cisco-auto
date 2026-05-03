@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, vi } from "bun:test";
 
 import { createTerminalCommandService } from "./terminal-command-service.js";
 
@@ -190,6 +190,42 @@ describe("TerminalCommandService IOS semantic errors", () => {
     expect(result.status).toBe(0);
   });
 
+  test("cachea resolveDeviceKind para host y registra miss/hit en timings", async () => {
+    const inspectDeviceFast = vi.fn().mockResolvedValue({ type: "pc", model: "PC-PT" });
+    const execHost = vi.fn().mockResolvedValue({
+      success: true,
+      raw: "IP Configuration",
+      verdict: { ok: true },
+      parsed: { source: "host" },
+    });
+
+    const service = createTerminalCommandService({
+      generateId: () => "host-cache-id",
+      controller: {
+        inspectDeviceFast,
+        inspectDevice: async () => ({ type: "pc", model: "PC-PT" }),
+        execHost,
+        execIos: async () => ({ ok: true }),
+      } as any,
+      runtimeTerminal: null,
+    });
+
+    const first = await service.executeCommand("PC1", "ipconfig");
+    const second = await service.executeCommand("PC1", "ipconfig");
+
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    expect(inspectDeviceFast).toHaveBeenCalledTimes(1);
+
+    const firstTimings = (first.evidence as any)?.timings?.terminalCommandService;
+    const secondTimings = (second.evidence as any)?.timings?.terminalCommandService;
+
+    expect(firstTimings.resolveDeviceKindCacheMiss).toBe(1);
+    expect(firstTimings.inspectDeviceFastMs).toBeGreaterThanOrEqual(0);
+    expect(secondTimings.resolveDeviceKindCacheHit).toBe(1);
+    expect(secondTimings.resolveDeviceKindMs).toBeGreaterThanOrEqual(0);
+  });
+
   test("auto-config acepta rawOutput con prompt privilegiado aunque promptAfter venga stale en config-if", async () => {
     const service = createTerminalCommandService({
       generateId: () => "test-autoconfig-stale-prompt-raw-ok",
@@ -312,6 +348,45 @@ describe("TerminalCommandService IOS semantic errors", () => {
     expect(result.status).toBe(0);
     expect(result.error).toBeUndefined();
     expect(runTerminalPlanCalls).toBe(1);
+  });
+
+  test("falla rapido antes de inspectDeviceFast si el heartbeat supera 20s", async () => {
+    const inspectDeviceFast = vi.fn().mockImplementation(async () => {
+      throw new Error("inspectDeviceFast no debio ejecutarse");
+    });
+
+    const service = createTerminalCommandService({
+      generateId: () => "test-heartbeat-preflight-before-inspect",
+      controller: {
+        inspectDeviceFast,
+        inspectDevice: vi.fn().mockResolvedValue(null),
+        execIos: vi.fn(),
+        execHost: vi.fn(),
+        getHeartbeatHealth: () => ({
+          state: "stale",
+          ageMs: 39_604,
+          lastSeenTs: Date.now() - 39_604,
+        }),
+      } as any,
+      runtimeTerminal: {
+        runTerminalPlan: vi.fn(),
+        ensureSession: vi.fn(),
+        pollTerminalJob: vi.fn(),
+      } as any,
+    });
+
+    const result = await service.executeCommand("SW-SRV-DIST", "show version");
+
+    expect(result.ok).toBe(false);
+    expect(result.deviceKind).toBe("unknown");
+    expect(result.error?.code).toBe("PT_RUNTIME_UNAVAILABLE");
+    expect(inspectDeviceFast).not.toHaveBeenCalled();
+
+    const timings = (result.evidence as any)?.timings?.terminalCommandService;
+    expect(timings.executeCommandHeartbeatMs).toBeGreaterThanOrEqual(0);
+    expect(timings.executeCommandHeartbeatAgeMs).toBeGreaterThanOrEqual(0);
+    expect(timings.resolveDeviceKindMs).toBeUndefined();
+    expect(timings.inspectDeviceFastMs).toBeUndefined();
   });
 
   test("bloquea show version si el heartbeat supera 20s", async () => {

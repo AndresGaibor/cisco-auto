@@ -6,6 +6,82 @@ import type {
 import type { RuntimeTerminalPort } from "../../ports/runtime-terminal-port.js";
 import { buildUniversalTerminalPlan, splitCommandLines } from "./terminal-plan-builder.js";
 
+type TerminalServiceTimingMap = Record<string, number>;
+
+function serviceNowMs(): number {
+  return Date.now();
+}
+
+function addServiceTiming(
+  timings: TerminalServiceTimingMap,
+  name: string,
+  value: number,
+): void {
+  timings[name] = (timings[name] ?? 0) + Math.max(0, value);
+}
+
+async function measureServiceAsync<T>(
+  timings: TerminalServiceTimingMap,
+  name: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const startedAt = serviceNowMs();
+
+  try {
+    return await fn();
+  } finally {
+    addServiceTiming(timings, name, serviceNowMs() - startedAt);
+  }
+}
+
+function measureServiceSync<T>(
+  timings: TerminalServiceTimingMap,
+  name: string,
+  fn: () => T,
+): T {
+  const startedAt = serviceNowMs();
+
+  try {
+    return fn();
+  } finally {
+    addServiceTiming(timings, name, serviceNowMs() - startedAt);
+  }
+}
+
+function attachTerminalServiceTimings<T extends { evidence?: unknown }>(
+  result: T,
+  timings: TerminalServiceTimingMap,
+  startedAt: number,
+): T {
+  timings.terminalCommandServiceTotalMs = Math.max(0, serviceNowMs() - startedAt);
+
+  const evidence =
+    result.evidence && typeof result.evidence === "object"
+      ? { ...(result.evidence as Record<string, unknown>) }
+      : {};
+
+  const evidenceTimings =
+    evidence.timings && typeof evidence.timings === "object"
+      ? { ...(evidence.timings as Record<string, unknown>) }
+      : {};
+
+  result.evidence = {
+    ...evidence,
+    timings: {
+      ...evidenceTimings,
+      terminalCommandService: {
+        ...(evidenceTimings.terminalCommandService &&
+        typeof evidenceTimings.terminalCommandService === "object"
+          ? (evidenceTimings.terminalCommandService as Record<string, unknown>)
+          : {}),
+        ...timings,
+      },
+    },
+  };
+
+  return result;
+}
+
 export interface TerminalControllerPort {
   inspectDeviceFast?(device: string): Promise<{
     type?: string | number;
@@ -581,15 +657,106 @@ function resolveHostCapabilityId(command: string): string {
   return "host.exec";
 }
 
+function createExecuteCommandRuntimeUnavailableResult(args: {
+  device: string;
+  deviceKind: TerminalDeviceKind;
+  command: string;
+  heartbeat: { state: "ok" | "stale" | "missing" | "unknown"; ageMs?: number; lastSeenTs?: number } | null;
+  reason: string;
+}): TerminalCommandResult {
+  return {
+    ok: false,
+    action: args.deviceKind === "host" ? "host.exec" : "ios.exec",
+    device: args.device,
+    deviceKind: args.deviceKind,
+    command: args.command,
+    output: "",
+    rawOutput: "",
+    status: 1,
+    error: {
+      code: "PT_RUNTIME_UNAVAILABLE",
+      message: args.reason,
+      phase: "detection",
+    },
+    warnings: [],
+    evidence: {
+      heartbeat: args.heartbeat,
+      reason: args.reason,
+    },
+  };
+}
+
+const DEVICE_KIND_CACHE_TTL_MS = 30_000;
+
+type DeviceKindCacheEntry = {
+  kind: TerminalDeviceKind;
+  expiresAtMs: number;
+};
+
+function getDeviceKindCacheKey(device: string): string {
+  return String(device ?? "").trim().toLowerCase();
+}
+
+function isCacheableDeviceKind(kind: TerminalDeviceKind): boolean {
+  return kind === "ios" || kind === "host";
+}
+
 export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
-  async function resolveDeviceKind(device: string): Promise<TerminalDeviceKind> {
+  const deviceKindCache = new Map<string, DeviceKindCacheEntry>();
+
+  function readCachedDeviceKind(device: string): TerminalDeviceKind | null {
+    const cacheKey = getDeviceKindCacheKey(device);
+    if (!cacheKey) return null;
+
+    const cached = deviceKindCache.get(cacheKey);
+    if (!cached) return null;
+
+    if (cached.expiresAtMs <= serviceNowMs()) {
+      deviceKindCache.delete(cacheKey);
+      return null;
+    }
+
+    return cached.kind;
+  }
+
+  function writeCachedDeviceKind(device: string, kind: TerminalDeviceKind): void {
+    if (!isCacheableDeviceKind(kind)) return;
+
+    const cacheKey = getDeviceKindCacheKey(device);
+    if (!cacheKey) return;
+
+    deviceKindCache.set(cacheKey, {
+      kind,
+      expiresAtMs: serviceNowMs() + DEVICE_KIND_CACHE_TTL_MS,
+    });
+  }
+
+  async function resolveDeviceKind(
+    device: string,
+    timings?: TerminalServiceTimingMap,
+  ): Promise<TerminalDeviceKind> {
+    const serviceTimings = timings ?? {};
+    const cachedKind = readCachedDeviceKind(device);
+
+    if (cachedKind) {
+      serviceTimings.resolveDeviceKindCacheHit = 1;
+      return cachedKind;
+    }
+
+    serviceTimings.resolveDeviceKindCacheMiss = 1;
+
     try {
       const fastInspector = deps.controller.inspectDeviceFast;
+
       if (fastInspector) {
         let fastDeviceState: unknown = null;
 
         try {
-          fastDeviceState = await fastInspector.call(deps.controller, device);
+          fastDeviceState = await measureServiceAsync(
+            serviceTimings,
+            "inspectDeviceFastMs",
+            () => fastInspector.call(deps.controller, device),
+          );
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error ?? "");
           const lowered = message.toLowerCase();
@@ -610,16 +777,24 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
           return "unknown";
         }
 
-        return classifyDeviceState(fastDeviceState);
+        const kind = classifyDeviceState(fastDeviceState);
+        writeCachedDeviceKind(device, kind);
+        return kind;
       }
 
-      const deviceState = await deps.controller.inspectDevice(device).catch(() => null);
+      const deviceState = await measureServiceAsync(
+        serviceTimings,
+        "inspectDeviceMs",
+        () => deps.controller.inspectDevice(device).catch(() => null),
+      );
 
       if (!deviceState) {
         return "unknown";
       }
 
-      return classifyDeviceState(deviceState);
+      const kind = classifyDeviceState(deviceState);
+      writeCachedDeviceKind(device, kind);
+      return kind;
     } catch (error) {
       const runtimeError = error as Error & { code?: string };
 
@@ -631,15 +806,18 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
     }
   }
 
-  async function executeIosCommand(
-    device: string,
-    command: string,
-    options?: RunTerminalCommandOptions
-  ): Promise<TerminalCommandResult> {
-    const runtimeTerminal = deps.runtimeTerminal;
-    const executionTimeout = options?.timeoutMs ?? 45000;
-    const bridgeTimeout = executionTimeout + 5000; // Margen para que el runtime falle primero
-    const plan = buildUniversalTerminalPlan({
+async function executeIosCommand(
+  device: string,
+  command: string,
+  options?: RunTerminalCommandOptions,
+  timings?: TerminalServiceTimingMap,
+): Promise<TerminalCommandResult> {
+  const serviceTimings = timings ?? {};
+  const runtimeTerminal = deps.runtimeTerminal;
+  const executionTimeout = options?.timeoutMs ?? 45000;
+  const bridgeTimeout = executionTimeout + 5000; // Margen para que el runtime falle primero
+  const plan = measureServiceSync(serviceTimings, "buildIosPlanMs", () =>
+    buildUniversalTerminalPlan({
       id: deps.generateId(),
       device,
       command,
@@ -648,9 +826,14 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
       allowConfirm: options?.allowConfirm,
       allowDestructive: options?.allowDestructive,
       timeoutMs: executionTimeout,
-    });
-    const heartbeat = getHeartbeatHealth(deps.controller);
-    const heartbeatAgeMs = getHeartbeatAgeMs(heartbeat);
+    }),
+  );
+  const heartbeat = measureServiceSync(serviceTimings, "getHeartbeatHealthMs", () =>
+    getHeartbeatHealth(deps.controller),
+  );
+  const heartbeatAgeMs = measureServiceSync(serviceTimings, "getHeartbeatAgeMs", () =>
+    getHeartbeatAgeMs(heartbeat),
+  );
 
     if (heartbeatAgeMs !== null && heartbeatAgeMs > 20000) {
       return createRuntimeUnavailableResult({
@@ -675,7 +858,9 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
     }
 
     if (runtimeTerminal?.runTerminalPlan) {
-      const runtimeResult = (await runtimeTerminal.runTerminalPlan(plan, { timeoutMs: bridgeTimeout })) as any;
+      const runtimeResult = (await measureServiceAsync(serviceTimings, "runtimeTerminalRunPlanMs", () =>
+        runtimeTerminal.runTerminalPlan(plan, { timeoutMs: bridgeTimeout }),
+      )) as any;
 
       if (!runtimeResult.ok) {
         const iosFailure = extractIosFailureDetails({
@@ -766,7 +951,9 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
     let execResult: any;
 
     try {
-      execResult = await deps.controller.execIos(device, command, false, executionTimeout);
+      execResult = await measureServiceAsync(serviceTimings, "legacyExecIosMs", () =>
+        deps.controller.execIos(device, command, false, executionTimeout),
+      );
     } catch (error) {
       const err = error as any;
 
@@ -911,17 +1098,25 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
     });
   }
 
-  async function executeHostCommand(
-    device: string,
-    command: string,
-    options?: RunTerminalCommandOptions
-  ): Promise<TerminalCommandResult> {
-    const runtimeTerminal = deps.runtimeTerminal;
-    const capabilityId = resolveHostCapabilityId(command);
+async function executeHostCommand(
+  device: string,
+  command: string,
+  options?: RunTerminalCommandOptions,
+  timings?: TerminalServiceTimingMap,
+): Promise<TerminalCommandResult> {
+  const serviceTimings = timings ?? {};
+  const runtimeTerminal = deps.runtimeTerminal;
+  const capabilityId = measureServiceSync(serviceTimings, "resolveHostCapabilityIdMs", () =>
+    resolveHostCapabilityId(command),
+  );
 
-    const timeoutMs = options?.timeoutMs ?? 45000;
-    const heartbeat = getHeartbeatHealth(deps.controller);
-    const heartbeatAgeMs = getHeartbeatAgeMs(heartbeat);
+  const timeoutMs = options?.timeoutMs ?? 45000;
+  const heartbeat = measureServiceSync(serviceTimings, "getHeartbeatHealthMs", () =>
+    getHeartbeatHealth(deps.controller),
+  );
+  const heartbeatAgeMs = measureServiceSync(serviceTimings, "getHeartbeatAgeMs", () =>
+    getHeartbeatAgeMs(heartbeat),
+  );
 
     if (heartbeatAgeMs !== null && heartbeatAgeMs > 20000) {
       return createRuntimeUnavailableResult({
@@ -935,18 +1130,22 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
     }
 
     if (runtimeTerminal?.runTerminalPlan) {
-      const plan = buildUniversalTerminalPlan({
-        id: deps.generateId(),
-        device,
-        command,
-        deviceKind: "host",
-        mode: options?.mode,
-        allowConfirm: options?.allowConfirm,
-        allowDestructive: options?.allowDestructive,
-        timeoutMs,
-      });
+      const plan = measureServiceSync(serviceTimings, "buildHostPlanMs", () =>
+        buildUniversalTerminalPlan({
+          id: deps.generateId(),
+          device,
+          command,
+          deviceKind: "host",
+          mode: options?.mode,
+          allowConfirm: options?.allowConfirm,
+          allowDestructive: options?.allowDestructive,
+          timeoutMs,
+        }),
+      );
 
-      const runtimeResult = (await runtimeTerminal.runTerminalPlan(plan, { timeoutMs })) as any;
+      const runtimeResult = (await measureServiceAsync(serviceTimings, "runtimeTerminalRunPlanMs", () =>
+        runtimeTerminal.runTerminalPlan(plan, { timeoutMs }),
+      )) as any;
 
       if (!runtimeResult.ok) {
         const hostOutput = String(runtimeResult.output ?? "");
@@ -989,9 +1188,11 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
       });
     }
 
-    const execResult = await deps.controller.execHost(device, command, capabilityId, {
-      timeoutMs,
-    });
+    const execResult = await measureServiceAsync(serviceTimings, "legacyExecHostMs", () =>
+      deps.controller.execHost(device, command, capabilityId, {
+        timeoutMs,
+      }),
+    );
 
     const hostOutput = firstString(
       execResult.raw,
@@ -1053,20 +1254,46 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
     });
   }
 
-  async function executeCommand(
-    device: string,
-    command: string,
-    options?: RunTerminalCommandOptions
-  ): Promise<TerminalCommandResult> {
-    let deviceKind: TerminalDeviceKind;
+async function executeCommand(
+  device: string,
+  command: string,
+  options?: RunTerminalCommandOptions
+): Promise<TerminalCommandResult> {
+  const serviceStartedAt = serviceNowMs();
+  const serviceTimings: TerminalServiceTimingMap = {};
+  let deviceKind: TerminalDeviceKind = "unknown";
 
-    try {
-      deviceKind = await resolveDeviceKind(device);
-    } catch (error) {
-      const runtimeError = error as Error & { code?: string; details?: Record<string, unknown> };
+  const heartbeat = measureServiceSync(serviceTimings, "executeCommandHeartbeatMs", () =>
+    getHeartbeatHealth(deps.controller),
+  );
+  const heartbeatAgeMs = measureServiceSync(serviceTimings, "executeCommandHeartbeatAgeMs", () =>
+    getHeartbeatAgeMs(heartbeat),
+  );
 
-      if (runtimeError.code === "RUNTIME_NOT_POLLING") {
-        return {
+  if (heartbeatAgeMs !== null && heartbeatAgeMs > 20000) {
+    return attachTerminalServiceTimings(
+      createExecuteCommandRuntimeUnavailableResult({
+        device,
+        deviceKind: "unknown",
+        command,
+        heartbeat,
+        reason: "PT_RUNTIME_UNAVAILABLE: el heartbeat del runtime supera 20s.",
+      }),
+      serviceTimings,
+      serviceStartedAt,
+    );
+  }
+
+  try {
+    deviceKind = await measureServiceAsync(serviceTimings, "resolveDeviceKindMs", () =>
+      resolveDeviceKind(device, serviceTimings),
+    );
+  } catch (error) {
+    const runtimeError = error as Error & { code?: string; details?: Record<string, unknown> };
+
+    if (runtimeError.code === "RUNTIME_NOT_POLLING") {
+      return attachTerminalServiceTimings(
+        {
           ok: false,
           action: "ios.exec",
           device,
@@ -1082,47 +1309,51 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
           },
           warnings: [],
           evidence: runtimeError.details ?? null,
-        };
-      }
-
-      deviceKind = "unknown";
+        } as TerminalCommandResult,
+        serviceTimings,
+        serviceStartedAt,
+      );
     }
 
-    const heartbeat = getHeartbeatHealth(deps.controller);
-    const heartbeatAgeMs = getHeartbeatAgeMs(heartbeat);
+    deviceKind = "unknown";
+  }
 
-    if (heartbeatAgeMs !== null && heartbeatAgeMs > 20000) {
-      return {
-        ok: false,
-        action: deviceKind === "host" ? "host.exec" : "ios.exec",
+  if (heartbeatAgeMs !== null && heartbeatAgeMs > 20000) {
+    return attachTerminalServiceTimings(
+      createExecuteCommandRuntimeUnavailableResult({
         device,
         deviceKind,
         command,
-        output: "",
-        rawOutput: "",
-        status: 1,
-        error: {
-          code: "PT_RUNTIME_UNAVAILABLE",
-          message: "PT_RUNTIME_UNAVAILABLE: el heartbeat del runtime supera 20s.",
-          phase: "detection",
-        },
-        warnings: [],
-        evidence: {
-          heartbeat,
-          reason: "PT_RUNTIME_UNAVAILABLE: el heartbeat del runtime supera 20s.",
-        },
-      };
-    }
+        heartbeat,
+        reason: "PT_RUNTIME_UNAVAILABLE: el heartbeat del runtime supera 20s.",
+      }),
+      serviceTimings,
+      serviceStartedAt,
+    );
+  }
 
-    if (deviceKind === "ios") {
-      return executeIosCommand(device, command, options);
-    }
+  if (deviceKind === "ios") {
+    return attachTerminalServiceTimings(
+      await measureServiceAsync(serviceTimings, "executeIosCommandMs", () =>
+        executeIosCommand(device, command, options, serviceTimings),
+      ),
+      serviceTimings,
+      serviceStartedAt,
+    );
+  }
 
-    if (deviceKind === "host") {
-      return executeHostCommand(device, command, options);
-    }
+  if (deviceKind === "host") {
+    return attachTerminalServiceTimings(
+      await measureServiceAsync(serviceTimings, "executeHostCommandMs", () =>
+        executeHostCommand(device, command, options, serviceTimings),
+      ),
+      serviceTimings,
+      serviceStartedAt,
+    );
+  }
 
-    return {
+  return attachTerminalServiceTimings(
+    {
       ok: false,
       action: "unknown",
       device,
@@ -1139,8 +1370,11 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
         "Ejecuta `bun run pt device list --json` para ver los nombres exactos de dispositivos.",
       ],
       evidence: null,
-    };
-  }
+    } as TerminalCommandResult,
+    serviceTimings,
+    serviceStartedAt,
+  );
+}
 
   return {
     executeCommand,

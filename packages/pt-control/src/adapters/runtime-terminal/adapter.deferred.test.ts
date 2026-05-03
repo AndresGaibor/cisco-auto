@@ -58,7 +58,9 @@ describe("createRuntimeTerminalAdapter deferred flow", () => {
     expect(calls.map((call) => call.type)).toEqual(["terminal.plan.run", "__pollDeferred"]);
     expect(calls[0]?.timeoutMs).toBe(30000);
     expect(calls[0]?.options).toMatchObject({ resolveDeferred: false });
-    expect(calls[1]?.timeoutMs).toBe(63000);
+    expect(calls[1]?.timeoutMs).toBeGreaterThanOrEqual(62990);
+    expect(calls[1]?.timeoutMs).toBeLessThanOrEqual(63000);
+    expect((result.evidence as any)?.timings?.adapter?.terminalPlanPollIntervalMs).toBe(100);
   });
 
   test("sigue consultando hasta que el job diferido termine", async () => {
@@ -287,5 +289,61 @@ describe("createRuntimeTerminalAdapter deferred flow", () => {
     expect(result.output).not.toContain("OLD VERSION OUTPUT");
     expect((result.events[0] as any)?.command).toBe("show ip interface brief");
     expect(calls.map((call) => call.type)).toEqual(["terminal.plan.run", "__pollDeferred"]);
+  });
+
+  test("usa el intervalo diferido definido en metadata", async () => {
+    const calls: Array<{ type: string; timeoutMs?: number; options?: unknown }> = [];
+
+    const bridge = {
+      sendCommandAndWait: vi.fn(async (type: string, _payload: unknown, timeoutMs?: number, options?: unknown) => {
+        calls.push({ type, timeoutMs, options });
+
+        if (type === "terminal.plan.run") {
+          return {
+            ok: true,
+            status: 0,
+            completedAt: Date.now(),
+            value: { deferred: true, ticket: "ticket-4" },
+          };
+        }
+
+        if (type === "__pollDeferred") {
+          return {
+            ok: true,
+            status: 0,
+            completedAt: Date.now(),
+            value: {
+              done: true,
+              ok: true,
+              output: "show version\nCisco IOS Software\nR1#",
+              result: {
+                ok: true,
+                raw: "show version\nCisco IOS Software\nR1#",
+                status: 0,
+              },
+            },
+          };
+        }
+
+        throw new Error(`unexpected ${type}`);
+      }),
+    };
+
+    const adapter = createRuntimeTerminalAdapter({
+      bridge: bridge as never,
+      generateId: () => "id-4",
+      defaultTimeout: 45000,
+    });
+
+    const result = await adapter.runTerminalPlan({
+      id: "plan-4",
+      device: "R1",
+      metadata: { deferredPollIntervalMs: 120 },
+      steps: [{ command: "show version" }],
+    } as never);
+
+    expect(result.ok).toBe(true);
+    expect(calls.map((call) => call.type)).toEqual(["terminal.plan.run", "__pollDeferred"]);
+    expect((result.evidence as any)?.timings?.adapter?.terminalPlanPollIntervalMs).toBe(120);
   });
 });
