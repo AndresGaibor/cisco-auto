@@ -1,126 +1,405 @@
-# AGENTS.md — cisco-auto
+# AGENTS.md — cisco-auto / PT Control
 
-Guía raíz para agentes que modifican este repo. Mantén este archivo corto: el detalle vive en docs y en los `AGENTS.md` de cada paquete.
+Guía raíz para agentes de IA que modifican este repo.
 
-## Principio operativo
+Este archivo es la fuente canónica de comportamiento para agentes. Manténlo corto, operativo y verificable. La documentación humana empieza en `README.md`.
 
-No supongas. Antes de cambiar algo:
+---
 
-1. Inspecciona los archivos reales involucrados.
-2. Revisa la documentación canónica indicada abajo.
-3. Si la tarea toca Packet Tracer real, valida con CLI/evidencia o deja explícito qué debe ejecutar el usuario en PT.
-4. Si encuentras conflicto entre docs y código, el código registrado gana y la doc debe corregirse.
+## Principio principal
+
+No asumas.
+
+Antes de proponer o aplicar cambios:
+
+1. Lee los archivos reales involucrados.
+2. Busca referencias con `grep`, `rg`, tests o la CLI antes de inferir.
+3. Si falta contexto, pide el archivo, reporte o comando exacto.
+4. Si la tarea toca Packet Tracer real, valida con evidencia de CLI o deja comandos exactos para que el usuario los ejecute.
+5. Si código y documentación se contradicen, el código/tests actuales ganan y la documentación debe corregirse.
+
+---
+
+## Estado actual del proyecto
+
+`cisco-auto` automatiza Cisco Packet Tracer con:
+
+- CLI pública: `bun run pt`
+- Runtime generado para Packet Tracer: `main.js`, `runtime.js`, `catalog.js`, `manifest.json`
+- Bridge por filesystem en `PT_DEV_DIR`, normalmente `~/pt-dev`
+- Workflows de control en TypeScript/Bun
+- Evidencia reproducible vía JSON, logs, timings y tests
+
+El flujo recomendado actual es `bun run pt`. No documentes ni restaures flujos legacy YAML/lab como superficie pública sin validar primero que siguen conectados al CLI actual.
+
+---
 
 ## Fuentes de verdad
 
 | Tema | Fuente primaria |
 |---|---|
-| CLI pública `pt` | `apps/pt-cli/src/program.ts` y `apps/pt-cli/src/commands/command-registry.ts` |
-| Metadata/catálogo legacy | `apps/pt-cli/src/commands/command-catalog.ts` solo si sigue conectado al flujo actual |
-| Skill de talleres/redes | `.skills/pt-cli/SKILL.md` y `docs/CLI_AGENT_SKILL.md` |
-| Arquitectura entre paquetes | `docs/ARCHITECTURE_BOUNDARIES.md` |
-| Frontera runtime/control | `docs/architecture/runtime-control-boundary.md` |
-| Internals Packet Tracer / Omni | `docs/PT_ENGINE_INTERNALS.md` y `docs/PT_EVALUATE_HACKING_GUIDE.md` |
-| Setup, tests y troubleshooting | `docs/INSTALL.md`, `docs/TESTS.md`, `docs/TROUBLESHOOTING.md` |
+| Onboarding humano | `README.md` |
+| CLI pública real | `bun run pt --help` y `bun run pt <cmd> --help` |
+| CLI source | `apps/pt-cli/src` |
+| Orquestación/control | `packages/pt-control` |
+| Runtime Packet Tracer | `packages/pt-runtime` |
+| Bridge filesystem | `packages/file-bridge` |
+| Contratos terminales | `packages/terminal-contracts` |
+| IOS puro/parsers/builders | `packages/ios-domain`, `packages/ios-primitives` |
+| Reglas específicas de paquete | `packages/<paquete>/AGENTS.md` cuando exista |
+| Skill de talleres PT/CLI | `docs/CLI_AGENT_SKILL.md` si existe |
 
-Para tareas dentro de un paquete, lee también el `AGENTS.md` más cercano, por ejemplo `packages/pt-control/AGENTS.md`.
+Cuando modifiques un paquete, lee primero el `AGENTS.md` más cercano si existe.
+
+---
 
 ## Mapa rápido del repo
 
-- `apps/pt-cli`: CLI pública `bun run pt`.
-- `packages/pt-control`: cerebro de orquestación, planners, workflows, verificación, diagnóstico y policies.
-- `packages/pt-runtime`: kernel PT-safe, lifecycle, dispatch, terminal engine y primitives de bajo nivel.
-- `packages/file-bridge`: IPC por archivos entre CLI y Packet Tracer.
-- `packages/ios-domain` / `ios-primitives`: lógica IOS pura, parsers, builders y capabilities.
-- `packages/types`: contratos y schemas compartidos.
-- `.skills/pt-cli`: skill para operar talleres Cisco/PT de forma autónoma.
+```text
+apps/
+  pt-cli/                 CLI pública `bun run pt`
 
-## CLI actual que no debes inventar
+packages/
+  pt-control/             Orquestación, servicios, planners, doctor, verificación
+  pt-runtime/             Runtime PT-safe, kernel, handlers, terminal engine
+  file-bridge/            IPC por filesystem entre CLI y Packet Tracer
+  terminal-contracts/     Contratos compartidos de terminal/planes
+  ios-domain/             Lógica IOS pura: parsers, builders, capabilities
+  ios-primitives/         Value objects y helpers IOS
+  types/                  Tipos compartidos
+  kernel/                 Núcleo/plugin system legacy o experimental
 
-La superficie pública actual registrada es compacta:
+docs/                      Documentación técnica
+tests/                     Tests transversales
+```
+
+---
+
+## CLI pública actual
+
+No inventes comandos. Verifica con --help.
+
+Comandos raíz esperados en la CLI moderna:
+
+```bash
+bun run pt --help
+bun run pt build
+bun run pt doctor
+bun run pt completion
+bun run pt device
+bun run pt link
+bun run pt cmd
+bun run pt set
+bun run pt verify
+bun run pt runtime
+bun run pt logs
+bun run pt omni
+```
+
+Comandos comunes para validar estado real:
 
 ```bash
 bun run pt doctor
-bun run pt runtime <status|logs|releases|rollback|reload>
-bun run pt device <list|add|get|interactive|module|ports|move|remove>
-bun run pt link <add|list|remove|suggest|verify|doctor>
-bun run pt cmd <device> "<command>"...
-  # multilínea detectada como config:
-  pt cmd R1 "interface g0/0" "no shutdown"
-  # --config es DEPRECADO (detección automática ahora funciona):
-  bun run pt cmd --config <device> "<ios config line>" ...
-bun run pt set host <device> <ip|dhcp>
-bun run pt verify <ping|vlan>
-bun run pt omni <env|scope|process|physical|genome|port|running-config|item|correct|time|set|list|show|run|raw>
-bun run pt completion <shell>
+bun run pt runtime status --json
+bun run pt device list --json
+bun run pt link list --json
+bun run pt cmd <device> "<command>" --json
+bun run pt verify ping <source> <target>
+bun run pt logs
 ```
 
-`lab` existe en código pero está oculto salvo `PT_CLI_LEGACY=1`. No documentes comandos legacy como públicos sin verificar que estén registrados.
+Para inspeccionar subcomandos:
 
-## Workflow para cambios
+```bash
+bun run pt device --help
+bun run pt link --help
+bun run pt cmd --help
+bun run pt runtime --help
+bun run pt omni --help
+```
 
-1. Haz cambios pequeños y enfocados.
-2. No introduzcas dependencias nuevas sin necesidad clara.
-3. No modifiques artefactos generados de `~/pt-dev/`; modifica source y regenera cuando aplique.
-4. Si cambias CLI pública, actualiza en la misma tarea:
-   - `apps/pt-cli/src/commands/command-registry.ts`
-   - ayuda/examples del comando afectado
-   - `.skills/pt-cli/SKILL.md` o referencias relacionadas
-   - tests/documentación que dependan del comando
-5. Si cambias runtime PT, valida compatibilidad ES5/PT-safe y no uses APIs Node dentro del código que corre en Packet Tracer.
+---
+
+## Packet Tracer y PT_DEV_DIR
+
+El runtime se despliega en PT_DEV_DIR.
+
+Rutas típicas:
+
+```
+macOS/Linux: ~/pt-dev
+Windows:     %USERPROFILE%\pt-dev
+Custom:      PT_DEV_DIR=/ruta/absoluta/pt-dev
+```
+
+Artefactos esperados:
+
+```
+main.js
+runtime.js
+catalog.js
+manifest.json
+commands/
+in-flight/
+results/
+logs/
+```
+
+Reglas:
+
+- No edites ~/pt-dev como si fuera source.
+- Modifica TypeScript fuente y ejecuta bun run pt build.
+- Si main.js cambia, Packet Tracer puede requerir recargar el script.
+- Si solo cambia runtime.js, normalmente el hot-reload debe bastar.
+- No guardes artefactos generados dentro del repo.
+
+---
 
 ## Reglas de arquitectura
 
-- `pt-runtime` es thin kernel: PT lifecycle, dispatch, terminal engine, primitives y adapters Omni de bajo nivel. No pongas semántica de VLAN/DHCP/routing/labs ahí.
-- `pt-control` es orchestration brain: planes, diagnóstico, verification, policies y evaluación de evidencia.
-- `apps/pt-cli` debe consumir APIs públicas; no importes internals de paquetes si no existe subpath p��blico.
-- `ios-domain` y `ios-primitives` deben seguir siendo puros y testeables sin Packet Tracer.
+### apps/pt-cli
 
-## Packet Tracer: protocolo seguro
+Debe contener UX, parsing de argumentos, salida humana/JSON y wiring de comandos.
 
-Para operar o validar un lab:
+No debe contener lógica profunda de Packet Tracer ni workflows complejos.
 
-1. Diagnóstico inicial: `bun run pt doctor` y, si hace falta, `bun run pt runtime status --json`.
-2. Inventario: `bun run pt device list --json`; no asumas nombres, modelos ni puertos.
-3. Puertos/enlaces: `bun run pt device ports <device> --json` o `bun run pt link suggest <a> <b> --json` antes de cablear.
-4. Terminal: usa `bun run pt cmd ...` para IOS, PCs, servers, WLC o ASA.
-5. Hosts GUI/API: usa `bun run pt set host ...` y valida con `bun run pt cmd <host> "ipconfig"`.
-6. Verificación: usa `bun run pt verify ...` y comandos `show`/`ping` con evidencia. No declares éxito solo porque una mutación respondió `ok`.
-7. Omni: úsalo como último recurso. Prefiere `pt omni list/show/run`; `pt omni raw` requiere justificación, `--dry-run` cuando sea posible y confirmación `--yes` solo para código revisado.
+### packages/pt-control
 
-## Comandos de calidad
+Debe contener orquestación, servicios de aplicación, doctor, verification, planners y políticas.
 
-Ejecuta el subconjunto más pequeño suficiente y reporta qué sí/no pudiste correr:
+Aquí viven workflows de alto nivel como configurar, validar, inspeccionar y coordinar acciones.
+
+### packages/pt-runtime
+
+Debe contener código que corre en Packet Tracer o se genera para Packet Tracer.
+
+Debe ser PT-safe cuando termina en main.js o runtime.js.
+
+Evita en código generado:
+
+- `import`/`export`
+- `const`/`let`
+- arrow functions
+- `class`
+- `async`/`await`
+- optional chaining
+- template literals
+- `globalThis`
+- `console.*`
+- `require()`
+- `node:*`
+
+No metas workflows altos en pt-runtime por rapidez. Si una feature necesita razonar sobre VLAN/DHCP/routing/labs completos, probablemente pertenece a pt-control.
+
+### packages/file-bridge
+
+Debe manejar colas, resultados, logs, leases y comunicación por filesystem.
+
+No debe conocer detalles de CLI UX ni lógica IOS profunda.
+
+### packages/ios-domain y packages/ios-primitives
+
+Deben mantenerse puros y testeables sin Packet Tracer real.
+
+---
+
+## Reglas de trabajo
+
+### Antes de editar
+
+Ejecuta o pide evidencia equivalente:
 
 ```bash
-bun run lint
-bun run typecheck
-bun test
-bun run architecture:check
-bun run quality:check
+git status --short
+git diff --stat
+git diff --check
 ```
 
-Para runtime/deploy local:
+Para investigar:
 
 ```bash
-bun run "pt build"
+grep -R "texto-o-simbolo" apps packages tests --include='*.ts' -n
+bun run pt --help
+bun run pt <cmd> --help
+```
+
+### Durante el cambio
+
+- Mantén cambios pequeños y atómicos.
+- No mezcles documentación, refactor, bugfix y feature en el mismo patch si se puede evitar.
+- No cambies producción para hacer pasar un test viejo sin confirmar el contrato actual.
+- Si un test parece legacy, primero demuestra cuál es el contrato actual.
+- Si algo depende de Packet Tracer abierto, dilo explícitamente.
+
+### Después de editar
+
+Mínimo:
+
+```bash
+git diff --check
+```
+
+Ejecuta tests focalizados según el cambio.
+
+Ejemplos:
+
+```bash
+bun test apps/pt-cli/src/__tests__/ux/help.test.ts
+bun test tests/architecture/check-architecture-boundaries.test.ts
+bun test packages/pt-runtime/tests/main-runtime-boundary.test.ts
+bun test packages/pt-control/src/application/services/terminal-command-service.plan-run.test.ts
+```
+
+Para cambios de runtime/build:
+
+```bash
+bun run pt build
+bun test packages/pt-runtime/tests/main-runtime-boundary.test.ts
+bun test packages/pt-runtime/src/__tests__/build/preflight-validation.test.ts
+```
+
+Para cambios de CLI:
+
+```bash
+bun run pt --help
+bun run pt <cmd> --help
+bun test apps/pt-cli/src/__tests__/ux/help.test.ts
+bun test apps/pt-cli/src/__tests__/ux/completion.test.ts
+```
+
+Para cambios con PT real:
+
+```bash
 bun run pt doctor
+bun run pt runtime status --json
+bun run pt device list --json
+bun run pt cmd <device> "show version" --json
 ```
 
-## Estilo del proyecto
+---
 
-- Usa Bun: `bun run`, `bun test`, `bun install`, `bunx`.
-- No uses `npm`, `yarn`, `pnpm`, `node` o `ts-node` salvo razón explícita.
-- TypeScript source directo; no ejecutes `tsc` para emitir archivos. Para tipos usa `bun run typecheck`.
-- Mensajes de CLI, errores accionables y docs para usuario: español.
-- Mantén nombres/patrones existentes; no hagas renombramientos masivos cosméticos.
-- Prefiere resultados estructurados `--json` cuando el consumidor sea un agente.
+## Packet Tracer real: cómo validar
 
-## Al entregar
+No declares éxito real solo porque un test unitario pasó.
 
-Incluye:
+Usa evidencia observable:
 
-- Archivos cambiados.
-- Validaciones ejecutadas y resultado.
-- Validaciones no ejecutadas y motivo.
-- Riesgos o pasos que requieren Packet Tracer real.
+```bash
+bun run pt doctor
+bun run pt runtime status --json
+bun run pt device list --json
+bun run pt link list --json
+bun run pt cmd SW1 "show version" --json
+bun run pt cmd SW1 "show interfaces" --complete --json
+bun run pt verify ping PC1 192.168.1.1
+```
+
+Si el usuario debe ejecutar algo, da comandos completos y pide el output completo.
+
+---
+
+## Estilo de respuesta para agentes
+
+Cuando entregues un plan:
+
+1. Di qué archivo tocar.
+2. Di qué bloque buscar.
+3. Di qué bloque reemplazar.
+4. Di por qué.
+5. Da validación focalizada.
+6. No digas "debería funcionar" sin evidencia.
+7. No pidas confirmación si puedes dar el siguiente paso seguro y pequeño.
+
+Cuando entregues un reporte final:
+
+```
+Cambios:
+- archivo 1
+- archivo 2
+
+Validación:
+- comando A: pass/fail
+- comando B: pass/fail
+
+Pendiente:
+- qué no se validó
+- si requiere Packet Tracer abierto
+```
+
+---
+
+## Manejo de tests legacy
+
+Puede haber tests o docs legacy de fases anteriores.
+
+Antes de borrar o actualizar:
+
+1. Confirma si el comando/API existe en la CLI actual.
+2. Busca referencias productivas.
+3. Verifica si el test cubre contrato actual o comportamiento removido.
+4. Si es legacy, muévelo/renómbralo de forma que no contamine bun test global, pero deja trazabilidad si aún aporta contexto.
+
+No uses tests/legacy/*.test.ts si no deben correr en bun test.
+
+---
+
+## Reglas para documentación
+
+- README debe ser onboarding rápido.
+- AGENTS.md debe ser la guía raíz para agentes.
+- CLAUDE.md y GEMINI.md deben ser cortos y apuntar a AGENTS.md.
+- No documentes comandos que no salgan en bun run pt --help.
+- No documentes rutas absolutas locales de un usuario como si fueran generales.
+- No mezcles planes históricos con onboarding actual.
+- Si un documento histórico sigue siendo útil, márcalo como histórico o refactor plan.
+
+---
+
+## Prohibiciones prácticas
+
+No hagas esto salvo que el usuario lo pida explícitamente y entiendas el impacto:
+
+- editar artefactos generados en ~/pt-dev
+- agregar YAML legacy a la CLI pública
+- crear comandos raíz sin actualizar help/completion/tests
+- meter lógica de orquestación en pt-runtime
+- importar internals privados entre paquetes
+- hacer commits gigantes con cambios no relacionados
+- declarar validación real de PT sin output de PT
+
+---
+
+## Comandos de emergencia
+
+Si el bridge/runtime parece roto:
+
+```bash
+bun run pt build
+bun run pt doctor
+bun run pt runtime status --json
+bun run pt logs
+```
+
+Si un comando IOS parece truncado o contaminado:
+
+```bash
+bun run pt cmd <device> "show version" --json
+bun run pt cmd <device> "show interfaces" --complete --json
+```
+
+Si necesitas inspección avanzada:
+
+```bash
+bun run pt omni --help
+bun run pt omni raw --dry-run "<script>"
+```
+
+---
+
+## Resumen
+
+Trabaja con evidencia, no con suposiciones.
+
+El orden correcto es:
+
+**leer → buscar → validar contrato actual → cambiar poco → test focalizado → reportar**
