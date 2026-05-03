@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import * as fs from 'fs';
+import { homedir } from 'node:os';
 import * as path from 'path';
 import yaml from 'js-yaml';
 
@@ -35,7 +36,7 @@ const DEFAULT_CONFIG: Required<CiscoAutoConfig> = {
 };
 
 function getGlobalConfigPath(): string {
-  const home = process.env.HOME || process.env.USERPROFILE || '';
+  const home = homedir();
   return path.join(home, '.cisco-auto', 'config.yaml');
 }
 

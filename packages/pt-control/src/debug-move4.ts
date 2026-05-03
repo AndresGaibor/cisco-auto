@@ -10,8 +10,10 @@ async function main() {
   await controller.start();
   
   try {
+    const resultsDir = join(devDir, "results");
+
     // Limpiar archivos anteriores
-    const resultsBefore = fs.readdirSync(`${devDir}/results`);
+    const resultsBefore = fs.readdirSync(resultsDir);
     console.log("Results before:", resultsBefore.length);
     
     // Monitorear directorio de resultados
@@ -21,13 +23,13 @@ async function main() {
     
     // Esperar un poco y verificar
     await new Promise(r => setTimeout(r, 2000));
-    const resultsAfter = fs.readdirSync(`${devDir}/results`);
+    const resultsAfter = fs.readdirSync(resultsDir);
     console.log("Results after:", resultsAfter.length);
     
     // Mostrar todos los resultados nuevos
     const newResults = resultsAfter.filter(r => !resultsBefore.includes(r));
     for (const r of newResults) {
-      const content = fs.readFileSync(`${devDir}/results/${r}`, "utf-8");
+      const content = fs.readFileSync(join(resultsDir, r), "utf-8");
       const parsed = JSON.parse(content);
       console.log(`Result ${r}:`, {
         status: parsed.status,
