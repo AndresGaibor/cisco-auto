@@ -20,6 +20,7 @@ export interface InspectPayload {
 export interface InspectDeviceFastPayload {
   type: "inspectDeviceFast";
   device: string;
+  includeCommandLine?: boolean;
 }
 
 export interface SnapshotPayload {
@@ -195,18 +196,24 @@ export function handleInspectDeviceFast(
     return { ok: false, error: `Device not found: ${payload.device}`, code: "DEVICE_NOT_FOUND" };
   }
 
-  const commandLine = device as unknown as { getCommandLine?: () => unknown };
-
-  return {
+  const result: Record<string, unknown> = {
     ok: true,
     device: {
       name: device.getName(),
       model: device.getModel(),
       type: device.getType(),
       power: device.getPower(),
-      hasCommandLine: typeof commandLine.getCommandLine === "function" && !!commandLine.getCommandLine(),
     },
-  } as HandlerResult;
+  };
+
+  if (payload.includeCommandLine === true) {
+    const commandLine = device as unknown as { getCommandLine?: () => unknown };
+
+    (result.device as Record<string, unknown>).hasCommandLine =
+      typeof commandLine.getCommandLine === "function" && !!commandLine.getCommandLine();
+  }
+
+  return result as HandlerResult;
 }
 
 /**
