@@ -68,32 +68,54 @@ describe("createKernelLifecycle", () => {
 
   test("el poll interval sigue vivo si el poll lanza", () => {
     let callCount = 0;
+    let shouldThrow = false;
     const pollSpy = vi.spyOn(queuePoller, "pollCommandQueue").mockImplementation(() => {
       callCount += 1;
-      if (callCount === 2) {
+      if (shouldThrow && callCount === 2) {
         throw new Error("poll boom");
       }
     });
 
     const subsystems = createSubsystems();
     const state = {
-      isRunning: false,
+      isRunning: true,
       isShuttingDown: false,
       activeCommand: null,
       activeCommandFilename: null,
+      pollStats: {
+        tickCount: 0,
+        processedCount: 0,
+        emptyCount: 0,
+        skippedBusyCount: 0,
+        errorCount: 0,
+        lastPollAt: 0,
+        lastPollDurationMs: 0,
+        lastBeforeCount: 0,
+        lastAfterCount: 0,
+        nextDelayMs: 0,
+        idlePollDelayMs: 0,
+        hotPollBudget: 0,
+        lastClaimedCommandId: null,
+        lastClaimedCommandType: null,
+        lastError: null,
+      },
     } as any;
 
-    let intervalCallback: (() => void) | null = null;
-    vi.spyOn(globalThis, "setInterval").mockImplementation(((callback: () => void) => {
-      intervalCallback = callback;
+    let timeoutCallback: (() => void) | null = null;
+    vi.spyOn(globalThis, "setTimeout").mockImplementation(((callback: () => void) => {
+      timeoutCallback = callback;
       return 1 as any;
-    }) as typeof setInterval);
+    }) as typeof setTimeout);
 
     const lifecycle = createKernelLifecycle(subsystems, state);
     lifecycle.boot();
 
-    expect(intervalCallback).not.toBeNull();
-    expect(() => intervalCallback?.()).not.toThrow();
+    expect(timeoutCallback).not.toBeNull();
+    const cb = timeoutCallback!;
+    cb();
+    expect(pollSpy).toHaveBeenCalledTimes(1);
+    shouldThrow = true;
+    expect(() => cb()).not.toThrow();
     expect(pollSpy).toHaveBeenCalledTimes(2);
   });
 });

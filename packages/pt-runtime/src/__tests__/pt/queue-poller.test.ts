@@ -74,6 +74,23 @@ describe("pollCommandQueue", () => {
       isShuttingDown: false,
       activeCommand: null,
       activeCommandFilename: null,
+      pollStats: {
+        tickCount: 0,
+        processedCount: 0,
+        emptyCount: 0,
+        skippedBusyCount: 0,
+        errorCount: 0,
+        lastPollAt: 0,
+        lastPollDurationMs: 0,
+        lastBeforeCount: 0,
+        lastAfterCount: 0,
+        nextDelayMs: 0,
+        idlePollDelayMs: 0,
+        hotPollBudget: 0,
+        lastClaimedCommandId: null,
+        lastClaimedCommandType: null,
+        lastError: null,
+      },
     } as any;
 
     pollCommandQueue(subsystems, state);

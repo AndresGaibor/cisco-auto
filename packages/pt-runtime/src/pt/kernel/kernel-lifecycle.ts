@@ -22,9 +22,10 @@ export interface KernelLifecycle {
   shutdown: () => void;
 }
 
-const MIN_POLL_DELAY_MS = 250;
-const MAX_IDLE_POLL_DELAY_MS = 2000;
+const MIN_POLL_DELAY_MS = 150;
+const MAX_IDLE_POLL_DELAY_MS = 1000;
 const POLL_ERROR_DELAY_MS = 3000;
+const HOT_POLL_TICKS_AFTER_ACTIVITY = 8;
 
 export function createKernelLifecycle(
   subsystems: KernelSubsystems,
@@ -47,6 +48,7 @@ export function createKernelLifecycle(
   let bootRetryTimer: ReturnType<typeof setTimeout> | null = null;
   let idlePollDelayMs = Math.max(Number(config.pollIntervalMs || MIN_POLL_DELAY_MS), MIN_POLL_DELAY_MS);
   let pollInProgress = false;
+  let hotPollBudget = 0;
 
   function getGlobalScope(): any {
     try {
@@ -127,27 +129,48 @@ export function createKernelLifecycle(
     if (!state.isRunning || state.isShuttingDown) return;
 
     if (pollInProgress) {
+      state.pollStats.skippedBusyCount += 1;
+      state.pollStats.nextDelayMs = MAX_IDLE_POLL_DELAY_MS;
+      state.pollStats.idlePollDelayMs = MAX_IDLE_POLL_DELAY_MS;
+      state.pollStats.hotPollBudget = hotPollBudget;
+
       kernelLogSubsystem("queue", "Skipping poll: previous poll still in progress");
       scheduleNextPoll(MAX_IDLE_POLL_DELAY_MS);
       return;
     }
 
+    const pollStartedAt = Date.now();
+
+    state.pollStats.tickCount += 1;
+    state.pollStats.lastPollAt = pollStartedAt;
+    state.pollStats.lastError = null;
+
     pollInProgress = true;
 
-      try {
-        if (executionEngine && typeof executionEngine.reapStaleJobs === "function") {
-          executionEngine.reapStaleJobs();
-        }
+    try {
+      if (executionEngine && typeof executionEngine.reapStaleJobs === "function") {
+        executionEngine.reapStaleJobs();
+      }
 
-        const beforeCount = getQueueCountSafe();
-        try {
-          pollCommandQueue(subsystems, state);
-        } catch (pollError) {
-          kernelLog("POLL COMMAND QUEUE ERROR: " + formatKernelError(pollError), "error");
-        }
-        const afterCount = getQueueCountSafe();
+      const beforeCount = getQueueCountSafe();
+      state.pollStats.lastBeforeCount = beforeCount;
+
+      try {
+        pollCommandQueue(subsystems, state);
+      } catch (pollError) {
+        state.pollStats.errorCount += 1;
+        state.pollStats.lastError = formatKernelError(pollError);
+        kernelLog("POLL COMMAND QUEUE ERROR: " + formatKernelError(pollError), "error");
+      }
+
+      const afterCount = getQueueCountSafe();
+      state.pollStats.lastAfterCount = afterCount;
 
       if (state.activeCommand || beforeCount > 0 || afterCount > 0) {
+        hotPollBudget = HOT_POLL_TICKS_AFTER_ACTIVITY;
+        idlePollDelayMs = MIN_POLL_DELAY_MS;
+      } else if (hotPollBudget > 0) {
+        hotPollBudget -= 1;
         idlePollDelayMs = MIN_POLL_DELAY_MS;
       } else {
         idlePollDelayMs = Math.min(
@@ -156,9 +179,15 @@ export function createKernelLifecycle(
         );
       }
     } catch (e) {
+      state.pollStats.errorCount += 1;
+      state.pollStats.lastError = formatKernelError(e);
       kernelLog("FATAL POLL ERROR: " + formatKernelError(e), "error");
       idlePollDelayMs = POLL_ERROR_DELAY_MS;
     } finally {
+      state.pollStats.lastPollDurationMs = Date.now() - pollStartedAt;
+      state.pollStats.idlePollDelayMs = idlePollDelayMs;
+      state.pollStats.nextDelayMs = idlePollDelayMs;
+      state.pollStats.hotPollBudget = hotPollBudget;
       pollInProgress = false;
     }
 
@@ -247,6 +276,8 @@ export function createKernelLifecycle(
           MIN_POLL_DELAY_MS +
           " maxIdle=" +
           MAX_IDLE_POLL_DELAY_MS +
+          " hotTicks=" +
+          HOT_POLL_TICKS_AFTER_ACTIVITY +
           "ms...",
       );
 

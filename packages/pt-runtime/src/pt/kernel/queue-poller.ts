@@ -76,6 +76,14 @@ function handleKernelControlCommand(subsystems: KernelSubsystems, state: KernelS
       runtimeLoaded: !!status.runtimeLoaded,
       runtime: status,
       manifest: readRuntimeManifest((subsystems as any).config),
+      kernel: {
+        isRunning: state.isRunning,
+        isShuttingDown: state.isShuttingDown,
+        activeCommandFilename: state.activeCommandFilename,
+        pollStats: {
+          ...state.pollStats,
+        },
+      },
       activeCommand: state.activeCommand
         ? {
             id: state.activeCommand.id,
@@ -202,6 +210,7 @@ export function pollCommandQueue(subsystems: KernelSubsystems, state: KernelStat
 
     stage = "active-command-check";
     if (state.activeCommand) {
+      state.pollStats.skippedBusyCount += 1;
       kernelLogSubsystem("queue", "Skipping poll: command already active=" + state.activeCommand.id);
       return;
     }
@@ -251,6 +260,8 @@ export function pollCommandQueue(subsystems: KernelSubsystems, state: KernelStat
 
       if (!claimed) {
         stage = "busy-no-claim";
+        state.pollStats.skippedBusyCount += 1;
+
         kernelLogSubsystem(
           "queue",
           "System busy, skipping non-control poll. Active jobs=" +
@@ -282,6 +293,8 @@ export function pollCommandQueue(subsystems: KernelSubsystems, state: KernelStat
 
     if (!claimed) {
       stage = "no-claim-log";
+      state.pollStats.emptyCount += 1;
+
       kernelLogSubsystem("queue", "No command claimed, checking files...");
 
       stage = "no-claim-count";
@@ -293,6 +306,10 @@ export function pollCommandQueue(subsystems: KernelSubsystems, state: KernelStat
     state.activeCommand = { ...claimed, startedAt: Date.now() };
     state.activeCommandFilename = (claimed as any).filename ?? null;
     heartbeat.setActiveCommand(claimed.id);
+
+    state.pollStats.processedCount += 1;
+    state.pollStats.lastClaimedCommandId = String(claimed.id || "");
+    state.pollStats.lastClaimedCommandType = String((claimed as any).type || "");
 
     stage = "dispatch-log";
     kernelLog(
@@ -347,6 +364,9 @@ export function pollCommandQueue(subsystems: KernelSubsystems, state: KernelStat
         finishActiveCommand(subsystems, state, result);
       })
       .catch((e) => {
+        state.pollStats.errorCount += 1;
+        state.pollStats.lastError = String(e);
+
         kernelLog("RUNTIME ASYNC ERROR: " + String(e), "error");
         finishActiveCommand(subsystems, state, {
           ok: false,
@@ -355,6 +375,9 @@ export function pollCommandQueue(subsystems: KernelSubsystems, state: KernelStat
         });
       });
   } catch (e) {
+    state.pollStats.errorCount += 1;
+    state.pollStats.lastError = "stage=" + stage + " error=" + String(e);
+
     kernelLog("POLL COMMAND QUEUE STAGE ERROR stage=" + stage + " error=" + String(e), "error");
     throw e;
   }
