@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 import type { TerminalCommandResult } from "@cisco-auto/terminal-contracts";
 
 export interface CompleteShowInterfacesOptions {

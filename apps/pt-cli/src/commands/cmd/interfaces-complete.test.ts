@@ -8,12 +8,22 @@ import {
 } from "./interfaces-complete.js";
 
 describe("interfaces-complete", () => {
-  test("detecta solo show interfaces global", () => {
+  test("detecta variantes globales soportadas de show interfaces", () => {
     expect(isCompleteShowInterfacesRequest("show interfaces")).toBe(true);
     expect(isCompleteShowInterfacesRequest("show interface")).toBe(true);
+    expect(isCompleteShowInterfacesRequest("SHOW INTERFACES")).toBe(true);
     expect(isCompleteShowInterfacesRequest(" show   interfaces ")).toBe(true);
+    expect(isCompleteShowInterfacesRequest("\tshow\tinterface\n")).toBe(true);
+  });
+
+  test("rechaza --complete para comandos filtrados o distintos a show interfaces global", () => {
     expect(isCompleteShowInterfacesRequest("show interfaces FastEthernet0/1")).toBe(false);
+    expect(isCompleteShowInterfacesRequest("show interface FastEthernet0/1")).toBe(false);
+    expect(isCompleteShowInterfacesRequest("show interfaces status")).toBe(false);
     expect(isCompleteShowInterfacesRequest("show ip interface brief")).toBe(false);
+    expect(isCompleteShowInterfacesRequest("show ip interfaces")).toBe(false);
+    expect(isCompleteShowInterfacesRequest("show running-config")).toBe(false);
+    expect(isCompleteShowInterfacesRequest("")).toBe(false);
   });
 
   test("parsea interfaces desde running-config preservando orden", () => {
