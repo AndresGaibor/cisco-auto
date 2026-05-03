@@ -32,6 +32,53 @@ function normalizeDeferredCommand(value: unknown): string {
   return String(value == null ? "" : value).replace(/^\s+|\s+$/g, "");
 }
 
+function safeRuntimeNow(api: RuntimeApi): number {
+  try {
+    if (api && typeof (api as any).now === "function") {
+      const value = Number((api as any).now());
+      if (Number.isFinite(value) && value > 0) {
+        return value;
+      }
+    }
+  } catch {}
+
+  return Date.now();
+}
+
+function sanitizeDeferredJobIdPart(value: unknown): string {
+  const raw = String(value ?? "").trim();
+
+  const normalized = raw
+    .replace(/[^A-Za-z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  return normalized || "deferred_job";
+}
+
+function createDeferredJobId(plan: DeferredJobPlan, api: RuntimeApi): string {
+  const source = sanitizeDeferredJobIdPart(
+    (plan.payload as any)?.source || plan.kind || "deferred_job",
+  );
+
+  const now = safeRuntimeNow(api);
+  const random = Math.floor(Math.random() * 100000);
+
+  return `${source}_${now}_${random}`;
+}
+
+function ensureDeferredJobId(plan: DeferredJobPlan, api: RuntimeApi): string {
+  const existing = String(plan.id || "").trim();
+
+  if (existing) {
+    plan.id = existing;
+    return existing;
+  }
+
+  const generated = createDeferredJobId(plan, api);
+  plan.id = generated;
+  return generated;
+}
+
 function buildCommandStep(
   command: string,
   options: {
@@ -254,7 +301,26 @@ export function startDeferredJobOrError(
   }
 
   try {
-    const ticket = api.createJob(plan);
+    const ensuredPlanId = ensureDeferredJobId(plan, api);
+    const createdTicket = api.createJob(plan);
+    const ticket = String(createdTicket || ensuredPlanId || plan.id || "").trim();
+
+    if (!ticket) {
+      return createErrorResult(
+        "RuntimeApi.createJob returned an empty ticket",
+        "JOB_START_EMPTY_TICKET",
+        {
+          details: {
+            planId: plan.id,
+            device: plan.device,
+            kind: plan.kind,
+          },
+        } as any,
+      );
+    }
+
+    plan.id = ticket;
+
     return createDeferredResult(ticket, plan);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

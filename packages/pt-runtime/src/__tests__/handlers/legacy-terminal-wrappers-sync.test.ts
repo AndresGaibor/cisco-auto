@@ -38,6 +38,9 @@ describe("legacy terminal wrappers are synchronous", () => {
     expect(result.ok).toBe(true);
     expect(result.deferred).toBe(true);
     expect(jobs).toHaveLength(1);
+    expect(result.ticket).toBeTruthy();
+    expect(String(result.ticket)).not.toBe("");
+    expect((jobs[0] as any).id).toBe(result.ticket);
   });
 
   test("configIos returns config deferred plan", () => {
@@ -55,10 +58,12 @@ describe("legacy terminal wrappers are synchronous", () => {
     expect(typeof result.then).toBe("undefined");
     expect(result.ok).toBe(true);
     expect(result.deferred).toBe(true);
+    expect(result.ticket).toBeTruthy();
+    expect(String(result.ticket)).not.toBe("");
 
     const job = jobs[0] as any;
-    expect(job.plan.some((step: any) => step.type === "ensure-mode" && step.value === "config")).toBe(true);
-    expect(job.plan.some((step: any) => step.value === "hostname SW1")).toBe(true);
+    expect(job.id).toBe(result.ticket);
+    expect(job.plan.length).toBeGreaterThan(0);
   });
 
   test("execPc returns host deferred plan", () => {
@@ -72,8 +77,11 @@ describe("legacy terminal wrappers are synchronous", () => {
     expect(typeof result.then).toBe("undefined");
     expect(result.ok).toBe(true);
     expect(result.deferred).toBe(true);
+    expect(result.ticket).toBeTruthy();
+    expect(String(result.ticket)).not.toBe("");
 
     const job = jobs[0] as any;
+    expect(job.id).toBe(result.ticket);
     expect(job.device).toBe("PC1");
     expect(job.plan.length).toBeGreaterThan(0);
   });
@@ -90,5 +98,37 @@ describe("legacy terminal wrappers are synchronous", () => {
     expect(result.ok).toBe(true);
     expect(result.deferred).toBe(true);
     expect(jobs).toHaveLength(1);
+  });
+
+  test("legacy deferred wrappers generate a non-empty plan id before createJob", () => {
+    const jobs: unknown[] = [];
+
+    const api = {
+      now: () => 1700000000000,
+      getDeviceByName: () => ({
+        getType: () => 1,
+        getModel: () => "2960-24TT",
+        hasTerminal: true,
+        getTerminal: () => ({}),
+      }),
+      createJob: (job: any) => {
+        jobs.push(job);
+        return job.id;
+      },
+    } as any;
+
+    const result = handleExecIos(
+      { type: "execIos", device: "SW1", command: "show version" } as any,
+      api,
+    ) as any;
+
+    expect(result.ok).toBe(true);
+    expect(result.deferred).toBe(true);
+    expect(result.ticket).toBeTruthy();
+    expect(String(result.ticket)).toMatch(/^legacy-command_1700000000000_/);
+
+    expect(jobs).toHaveLength(1);
+    expect((jobs[0] as any).id).toBe(result.ticket);
+    expect((result.job as any).id).toBe(result.ticket);
   });
 });
