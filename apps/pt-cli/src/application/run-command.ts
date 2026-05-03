@@ -257,7 +257,18 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
     }
 
     runtimeContext = await measureAsync(timings, "inspectContextMs", () =>
-      inspectCommandContext(controller),
+      options.flags.lightweightContext
+        ? Promise.resolve({
+            bridgeReady: true,
+            topologyMaterialized: true,
+            deviceCount: 0,
+            linkCount: 0,
+            heartbeat: { state: "ok" as const },
+            bridge: { ready: true, warnings: [] },
+            warnings: [],
+            notes: ["lightweight-context: skipping deep inspection"],
+          } as CommandRuntimeContext)
+        : inspectCommandContext(controller),
     );
 
     await measureAsync(timings, "logStartMs", () =>
@@ -293,9 +304,11 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
     }
   } finally {
     try {
-      contextStatusToPersist = await measureAsync(timings, "collectContextStatusMs", () =>
-        collectContextStatus(controller),
-      );
+      contextStatusToPersist = options.flags.lightweightContext
+        ? null
+        : await measureAsync(timings, "collectContextStatusMs", () =>
+            collectContextStatus(controller),
+          );
     } catch (err) {
       console.warn("No se pudo actualizar context-status:", err);
     }
@@ -467,34 +480,36 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
 
   // Persistir estado de contexto tras la ejecución (Fase 3)
   try {
-    const ctxStatus =
-      contextStatusToPersist ??
-      (await measureAsync(timings, "collectContextStatusAfterMs", () =>
-        collectContextStatus(controller),
-      ));
-    if (result.ok) {
-      ctxStatus.bridge.ready = true;
-    }
-    // Propagar warnings del resultado al estado persistente
-    if (result.warnings && result.warnings.length > 0) {
-      for (const w of result.warnings) {
-        if (!ctxStatus.warnings.includes(w)) ctxStatus.warnings.push(w);
+    if (!options.flags.lightweightContext) {
+      const ctxStatus =
+        contextStatusToPersist ??
+        (await measureAsync(timings, "collectContextStatusAfterMs", () =>
+          collectContextStatus(controller),
+        ));
+      if (result.ok) {
+        ctxStatus.bridge.ready = true;
       }
-    }
-    // Si hubo verificación y falló, marcar posible desincronización con razón
-    if (result.verification && result.verification.verified === false) {
-      ctxStatus.topology.health = "desynced";
-      const desyncReason = `Post-validation failed after ${options.action}`;
-      if (!ctxStatus.warnings.includes(desyncReason)) {
-        ctxStatus.warnings.push(desyncReason);
+      // Propagar warnings del resultado al estado persistente
+      if (result.warnings && result.warnings.length > 0) {
+        for (const w of result.warnings) {
+          if (!ctxStatus.warnings.includes(w)) ctxStatus.warnings.push(w);
+        }
       }
-      // Persistir razón en notes para que status/doctor/history explain la reutilicen
-      if (!ctxStatus.notes) ctxStatus.notes = [];
-      const reasonEntry = `[${new Date().toISOString()}] desynced: ${desyncReason}`;
-      if (!ctxStatus.notes.includes(reasonEntry)) ctxStatus.notes.push(reasonEntry);
+      // Si hubo verificación y falló, marcar posible desincronización con razón
+      if (result.verification && result.verification.verified === false) {
+        ctxStatus.topology.health = "desynced";
+        const desyncReason = `Post-validation failed after ${options.action}`;
+        if (!ctxStatus.warnings.includes(desyncReason)) {
+          ctxStatus.warnings.push(desyncReason);
+        }
+        // Persistir razón en notes para que status/doctor/history explain la reutilicen
+        if (!ctxStatus.notes) ctxStatus.notes = [];
+        const reasonEntry = `[${new Date().toISOString()}] desynced: ${desyncReason}`;
+        if (!ctxStatus.notes.includes(reasonEntry)) ctxStatus.notes.push(reasonEntry);
+      }
+      await measureAsync(timings, "writeContextStatusMs", () => writeContextStatus(ctxStatus));
+      attachCliTimingsToResult(result, timings);
     }
-    await measureAsync(timings, "writeContextStatusMs", () => writeContextStatus(ctxStatus));
-    attachCliTimingsToResult(result, timings);
   } catch (err) {
     console.warn("No se pudo actualizar context-status:", err);
   }

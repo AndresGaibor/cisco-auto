@@ -271,6 +271,7 @@ Reglas:
           yes: false,
           noInput: flags.noInput,
           noColor: false,
+          lightweightContext: flags.lightweightContext,
         },
         payloadPreview: {
           device,
@@ -423,6 +424,7 @@ Reglas:
             yes: false,
             noInput: true,
             noColor: false,
+            lightweightContext: flags.lightweightContext,
           },
           payloadPreview: { device, commandText },
             execute: async (ctx) => {

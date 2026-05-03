@@ -28,6 +28,7 @@ export interface GlobalFlags {
   yes: boolean;
   noInput: boolean;
   noColor: boolean;
+  lightweightContext: boolean;
 }
 
 export function addGlobalFlags(program: Command): Command {
@@ -54,7 +55,8 @@ export function addGlobalFlags(program: Command): Command {
     .option("--no-timeout", "Desactivar timeout global", false)
     .option("-y, --yes", "Aceptar confirmaciones no destructivas", false)
     .option("--no-input", "No hacer prompts interactivos; fallar si faltan datos", false)
-    .option("--no-color", "Desactivar color ANSI", false);
+    .option("--no-color", "Desactivar color ANSI", false)
+    .option("--lightweight-context", "Omitir inspección profunda de contexto para acelerar JSON", false);
 }
 
 export function getGlobalFlags(command: Command): GlobalFlags {
@@ -88,6 +90,7 @@ export function getGlobalFlags(command: Command): GlobalFlags {
     yes: Boolean(opts.yes),
     noInput: Boolean(opts.noInput),
     noColor: Boolean(opts.color === false || opts.noColor),
+    lightweightContext: Boolean(opts.json) || Boolean(opts.lightweightContext),
   };
 }
 
