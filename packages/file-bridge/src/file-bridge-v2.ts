@@ -542,6 +542,20 @@ export class FileBridgeV2 extends EventEmitter {
       completedAtMs: resultMeta?.completedAtMs ?? result.completedAt,
     };
 
+    if (options.resolveDeferred !== false && this.isMalformedDeferredBridgeValue(result.value)) {
+      return {
+        ...result,
+        ok: false,
+        status: "failed",
+        error: {
+          code: "INVALID_DEFERRED_RESULT",
+          message: "Deferred result is missing a non-empty ticket",
+          phase: "result",
+        },
+        timings,
+      };
+    }
+
     if (options.resolveDeferred !== false && this.isDeferredBridgeValue(result.value)) {
       const ticket = result.value.ticket;
       const deferredTiming = this.recordDeferredPoll(options, ticket);
@@ -607,11 +621,29 @@ export class FileBridgeV2 extends EventEmitter {
   }
 
   private isDeferredBridgeValue(value: unknown): value is { deferred: true; ticket: string } {
+    if (!value || typeof value !== "object") {
+      return false;
+    }
+
+    const candidate = value as { deferred?: unknown; ticket?: unknown };
+
     return (
-      typeof value === "object" &&
-      value !== null &&
-      (value as { deferred?: unknown }).deferred === true &&
-      typeof (value as { ticket?: unknown }).ticket === "string"
+      candidate.deferred === true &&
+      typeof candidate.ticket === "string" &&
+      candidate.ticket.trim().length > 0
+    );
+  }
+
+  private isMalformedDeferredBridgeValue(value: unknown): boolean {
+    if (!value || typeof value !== "object") {
+      return false;
+    }
+
+    const candidate = value as { deferred?: unknown; ticket?: unknown };
+
+    return (
+      candidate.deferred === true &&
+      (typeof candidate.ticket !== "string" || candidate.ticket.trim().length === 0)
     );
   }
 
