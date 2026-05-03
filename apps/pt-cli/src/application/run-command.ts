@@ -53,6 +53,60 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+type RunCommandTimingMap = Record<string, number>;
+
+function nowMs(): number {
+  return Date.now();
+}
+
+async function measureAsync<T>(
+  timings: RunCommandTimingMap,
+  name: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const startedAt = nowMs();
+
+  try {
+    return await fn();
+  } finally {
+    timings[name] = (timings[name] ?? 0) + Math.max(0, nowMs() - startedAt);
+  }
+}
+
+function measureSync<T>(
+  timings: RunCommandTimingMap,
+  name: string,
+  fn: () => T,
+): T {
+  const startedAt = nowMs();
+
+  try {
+    return fn();
+  } finally {
+    timings[name] = (timings[name] ?? 0) + Math.max(0, nowMs() - startedAt);
+  }
+}
+
+function attachCliTimingsToResult<T>(
+  result: CliResult<T>,
+  timings: RunCommandTimingMap,
+): void {
+  const meta = (result.meta ?? {}) as Record<string, unknown>;
+  const existingTimings =
+    meta.timings && typeof meta.timings === "object"
+      ? (meta.timings as Record<string, unknown>)
+      : {};
+
+  meta.timings = {
+    ...existingTimings,
+    cli: {
+      ...timings,
+    },
+  };
+
+  result.meta = meta as typeof result.meta;
+}
+
 function summarizeBridgeStatus(status: unknown): string {
   try {
     return JSON.stringify(status, null, 2);
@@ -130,9 +184,10 @@ async function waitForBridgeReady(controller: PTController, timeoutMs = 35_000):
 
 export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliResult<T>> {
   const startTime = Date.now();
-  const sessionId = options.flags.sessionId ?? generateSessionId();
-  const correlationId = generateCorrelationId();
-  const controller = createDefaultPTController();
+  const timings: RunCommandTimingMap = {};
+  const sessionId = measureSync(timings, "sessionIdMs", () => options.flags.sessionId ?? generateSessionId());
+  const correlationId = measureSync(timings, "correlationIdMs", () => generateCorrelationId());
+  const controller = measureSync(timings, "controllerCreateMs", () => createDefaultPTController());
 
   const logPhase = async (phase: string, metadata?: Record<string, unknown>) => {
     await sessionLogStore.append({
@@ -165,8 +220,10 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
 
   try {
     try {
-      await controller.start();
-      await waitForBridgeReady(controller, Number(options.flags.timeout ?? 35_000));
+      await measureAsync(timings, "controllerStartMs", () => controller.start());
+      await measureAsync(timings, "waitBridgeReadyMs", () =>
+        waitForBridgeReady(controller, Number(options.flags.timeout ?? 35_000)),
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
 
@@ -199,18 +256,22 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
       return result;
     }
 
-    runtimeContext = await inspectCommandContext(controller);
+    runtimeContext = await measureAsync(timings, "inspectContextMs", () =>
+      inspectCommandContext(controller),
+    );
 
-    await logPhase("start", {
-      flags: options.flags,
-      payloadPreview: options.payloadPreview,
-      contextSummary: {
-        bridgeReady: runtimeContext.bridgeReady,
-        topologyMaterialized: runtimeContext.topologyMaterialized,
-        deviceCount: runtimeContext.deviceCount,
-        linkCount: runtimeContext.linkCount,
-      },
-    });
+    await measureAsync(timings, "logStartMs", () =>
+      logPhase("start", {
+        flags: options.flags,
+        payloadPreview: options.payloadPreview,
+        contextSummary: {
+          bridgeReady: runtimeContext.bridgeReady,
+          topologyMaterialized: runtimeContext.topologyMaterialized,
+          deviceCount: runtimeContext.deviceCount,
+          linkCount: runtimeContext.linkCount,
+        },
+      }),
+    );
 
     const ctx: CommandContext = {
       sessionId,
@@ -222,7 +283,7 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
     };
 
     try {
-      result = await options.execute(ctx);
+      result = await measureAsync(timings, "executeMs", () => options.execute(ctx));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       result = createErrorResult<T>(options.action, {
@@ -232,12 +293,14 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
     }
   } finally {
     try {
-      contextStatusToPersist = await collectContextStatus(controller);
+      contextStatusToPersist = await measureAsync(timings, "collectContextStatusMs", () =>
+        collectContextStatus(controller),
+      );
     } catch (err) {
       console.warn("No se pudo actualizar context-status:", err);
     }
 
-    await controller.stop();
+    await measureAsync(timings, "controllerStopMs", () => controller.stop());
   }
 
   if (!result) {
@@ -245,6 +308,9 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
       message: "No result produced after execution.",
     });
   }
+
+  timings.runCommandCoreMs = Math.max(0, Date.now() - startTime);
+  attachCliTimingsToResult(result, timings);
 
   const verificationWarnings = result.verification?.warnings ?? [];
   const contextWarnings = buildContextWarnings(runtimeContext);
@@ -258,7 +324,10 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
   result.warnings = mergedWarnings;
 
   // Fase 6: Drenar command trace del controller para trazabilidad end-to-end
-  const commandTrace = controller.drainCommandTrace?.() ?? [];
+  const commandTrace = measureSync(timings, "drainCommandTraceMs", () =>
+    controller.drainCommandTrace?.() ?? [],
+  );
+  attachCliTimingsToResult(result, timings);
   const commandIds = commandTrace.map((t) => t.id);
   const interactionSummary =
     commandTrace.length > 0
@@ -363,39 +432,46 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
   };
 
   try {
-    await historyStore.append(historyEntry);
+    await measureAsync(timings, "historyWriteMs", () => historyStore.append(historyEntry));
   } catch (err) {
     console.error("Error writing history:", err);
   }
 
   try {
-    persistHistoryEntryToMemory(historyEntry);
+    measureSync(timings, "memoryPersistMs", () => persistHistoryEntryToMemory(historyEntry));
   } catch (err) {
     console.error("Error writing memory audit:", err);
   }
 
   if (options.flags.traceBundle) {
     try {
-      await bundleWriter.writeBundle(sessionId);
+      await measureAsync(timings, "bundleWriteMs", () => bundleWriter.writeBundle(sessionId));
     } catch (err) {
       console.error("Error writing bundle:", err);
     }
   }
 
-  await logPhase("end", {
-    ok: result.ok,
-    durationMs,
-    contextWarnings: runtimeContext.warnings,
-    commandIds,
-    completionReason,
-    resultSummary,
-    error: result.error,
-    interactionSummary: interactionSummary ? { summary: interactionSummary } : undefined,
-  });
+  await measureAsync(timings, "logEndMs", () =>
+    logPhase("end", {
+      ok: result.ok,
+      durationMs,
+      contextWarnings: runtimeContext.warnings,
+      commandIds,
+      completionReason,
+      resultSummary,
+      error: result.error,
+      interactionSummary: interactionSummary ? { summary: interactionSummary } : undefined,
+    }),
+  );
+  attachCliTimingsToResult(result, timings);
 
   // Persistir estado de contexto tras la ejecución (Fase 3)
   try {
-    const ctxStatus = contextStatusToPersist ?? (await collectContextStatus(controller));
+    const ctxStatus =
+      contextStatusToPersist ??
+      (await measureAsync(timings, "collectContextStatusAfterMs", () =>
+        collectContextStatus(controller),
+      ));
     if (result.ok) {
       ctxStatus.bridge.ready = true;
     }
@@ -417,10 +493,14 @@ export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliR
       const reasonEntry = `[${new Date().toISOString()}] desynced: ${desyncReason}`;
       if (!ctxStatus.notes.includes(reasonEntry)) ctxStatus.notes.push(reasonEntry);
     }
-    await writeContextStatus(ctxStatus);
+    await measureAsync(timings, "writeContextStatusMs", () => writeContextStatus(ctxStatus));
+    attachCliTimingsToResult(result, timings);
   } catch (err) {
     console.warn("No se pudo actualizar context-status:", err);
   }
+
+  timings.runCommandTotalMs = Math.max(0, Date.now() - startTime);
+  attachCliTimingsToResult(result, timings);
 
   return result;
 }

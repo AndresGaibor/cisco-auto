@@ -336,6 +336,29 @@ Reglas:
         nextSteps: errorDetails?.nextSteps ?? wrapped.advice ?? ["pt doctor"],
       } satisfies CmdCliResult;
 
+      const wrappedMeta = wrapped.meta as { timings?: unknown } | undefined;
+      if (wrappedMeta?.timings && data && typeof data === "object") {
+        const dataAsRecord = data as unknown as Record<string, unknown>;
+        const evidence =
+          dataAsRecord.evidence && typeof dataAsRecord.evidence === "object"
+            ? (dataAsRecord.evidence as Record<string, unknown>)
+            : {};
+
+        const evidenceTimings =
+          evidence.timings && typeof evidence.timings === "object"
+            ? (evidence.timings as Record<string, unknown>)
+            : {};
+
+        dataAsRecord.evidence = {
+          ...evidence,
+          timings: {
+            ...evidenceTimings,
+            ...(dataAsRecord.timings ? { bridge: dataAsRecord.timings } : {}),
+            ...(wrappedMeta.timings as Record<string, unknown>),
+          },
+        };
+      }
+
       printCmdResult(data, {
         json: flags.json,
         raw: flags.raw,
