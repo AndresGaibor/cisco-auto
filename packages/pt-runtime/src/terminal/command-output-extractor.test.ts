@@ -73,4 +73,48 @@ describe("extractCommandOutput", () => {
     expect(result.output).toContain("NEW CONFIG");
     expect(result.output).not.toContain("OLD CONFIG");
   });
+
+  test("prefiere snapshot-after-sliced sobre output crudo con error IOS stale", () => {
+    const staleEventOutput = [
+      "SW-SRV-DIST(config-if-range)#channel-group 7 mode active",
+      "                                           ^",
+      "% Invalid input detected at '^' marker.",
+      "SW-SRV-DIST(config-if-range)#end",
+      "SW-SRV-DIST#",
+    ].join("\n");
+
+    const snapshotAfterRaw = [
+      "SW-SRV-DIST(config-if-range)#channel-group 7 mode active",
+      "                                           ^",
+      "% Invalid input detected at '^' marker.",
+      "SW-SRV-DIST(config-if-range)#end",
+      "SW-SRV-DIST#",
+      "SW-SRV-DIST#show version",
+      "Cisco IOS Software, C2960 Software",
+      "Configuration register is 0xF",
+      "SW-SRV-DIST#",
+    ].join("\n");
+
+    const result = extractCommandOutput({
+      command: "show version",
+      sessionKind: "ios",
+      promptBefore: "SW-SRV-DIST#",
+      promptAfter: "SW-SRV-DIST#",
+      eventOutput: staleEventOutput,
+      snapshotDelta: "",
+      snapshotAfter: {
+        raw: snapshotAfterRaw,
+        source: "test",
+      },
+      commandEndedSeen: true,
+      outputEventsCount: 1,
+    });
+
+    expect(result.source).toBe("snapshot-after-sliced (test)");
+    expect(result.raw).toContain("SW-SRV-DIST#show version");
+    expect(result.raw).toContain("Cisco IOS Software");
+    expect(result.raw).not.toContain("channel-group 7 mode active");
+    expect(result.output).toContain("Cisco IOS Software");
+    expect(result.output).not.toContain("% Invalid input detected");
+  });
 });

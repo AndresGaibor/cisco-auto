@@ -80,22 +80,6 @@ export function extractCommandOutput(input: ExtractOptions): ExtractResult {
     }
   }
 
-  if (input.eventOutput && input.eventOutput.trim()) {
-    candidates.push({
-      raw: input.eventOutput,
-      source: "event",
-      confidence: input.commandEndedSeen ? "medium" : "low",
-    });
-  }
-
-  if (input.snapshotDelta && input.snapshotDelta.trim()) {
-    candidates.push({
-      raw: input.snapshotDelta,
-      source: "delta",
-      confidence: "medium",
-    });
-  }
-
   if (hasCommand && input.snapshotAfter?.raw && input.snapshotAfter.raw.trim()) {
     const sliced = sliceByCommandBoundaries({
       text: input.snapshotAfter.raw,
@@ -111,6 +95,22 @@ export function extractCommandOutput(input: ExtractOptions): ExtractResult {
         confidence: "low",
       });
     }
+  }
+
+  if (input.eventOutput && input.eventOutput.trim()) {
+    candidates.push({
+      raw: input.eventOutput,
+      source: "event",
+      confidence: input.commandEndedSeen ? "medium" : "low",
+    });
+  }
+
+  if (input.snapshotDelta && input.snapshotDelta.trim()) {
+    candidates.push({
+      raw: input.snapshotDelta,
+      source: "delta",
+      confidence: "medium",
+    });
   }
 
   if (!candidates.length && input.snapshotAfter?.raw) {

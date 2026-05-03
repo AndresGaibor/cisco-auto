@@ -392,7 +392,8 @@ export function createResponseParser() {
         "",
     );
 
-    const raw = failed ? normalizeResponseText(rawSource) : sliceOutputByCommand(rawSource, command);
+    const slicedRaw = sliceOutputByCommand(rawSource, command);
+    const raw = slicedRaw.trim() ? slicedRaw : normalizeResponseText(rawSource);
 
     const sessionInfo = nestedResult?.session ?? resAny.session ?? {};
 

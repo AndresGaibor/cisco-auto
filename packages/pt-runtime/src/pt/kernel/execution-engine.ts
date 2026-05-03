@@ -243,6 +243,50 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
     return "";
   }
 
+  function inferIosModeFromPrompt(prompt: unknown): string | null {
+    const value = String(prompt ?? "").trim();
+
+    if (/\(config-if-range\)#\s*$/i.test(value)) return "config-if-range";
+    if (/\(config-if\)#\s*$/i.test(value)) return "config-if";
+    if (/\(config-subif\)#\s*$/i.test(value)) return "config-subif";
+    if (/\(config-router\)#\s*$/i.test(value)) return "config-router";
+    if (/\(config-line\)#\s*$/i.test(value)) return "config-line";
+    if (/\(config-vlan\)#\s*$/i.test(value)) return "config-vlan";
+    if (/\(config\)#\s*$/i.test(value)) return "global-config";
+
+    if (/#\s*$/.test(value)) return "privileged-exec";
+    if (/>$/.test(value)) return "user-exec";
+
+    return null;
+  }
+
+  function normalizeIosMode(mode: unknown, prompt?: unknown): string {
+    const promptMode = inferIosModeFromPrompt(prompt);
+
+    if (promptMode) {
+      return promptMode;
+    }
+
+    const raw = String(mode ?? "").trim().toLowerCase();
+
+    if (raw === "user") return "user-exec";
+    if (raw === "enable" || raw === "privileged" || raw === "privileged-exec") return "privileged-exec";
+    if (raw === "global" || raw === "config" || raw === "global-config") return "global-config";
+    if (raw === "config-if") return "config-if";
+    if (raw === "config-if-range") return "config-if-range";
+    if (raw === "config-subif") return "config-subif";
+    if (raw === "config-router") return "config-router";
+    if (raw === "config-line") return "config-line";
+    if (raw === "config-vlan") return "config-vlan";
+    if (raw === "interface-config") return "config-if";
+    if (raw === "router-config") return "config-router";
+    if (raw === "line-config") return "config-line";
+    if (raw === "vlan-config") return "config-vlan";
+    if (raw === "logout") return "logout";
+
+    return raw || "unknown";
+  }
+
   function createAttachableTerminal(term: any): any {
     return {
       getPrompt: function () {
@@ -259,17 +303,15 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
       },
 
       getMode: function () {
+        const prompt = inferPromptFromTerminalText(readTerminalTextSafe(term));
+
         try {
           if (typeof term.getMode === "function") {
-            return term.getMode();
+            return normalizeIosMode(term.getMode(), prompt);
           }
         } catch {}
 
-        const prompt = inferPromptFromTerminalText(readTerminalTextSafe(term));
-        if (/\(config[^)]*\)#\s*$/.test(prompt)) return "global-config";
-        if (/#\s*$/.test(prompt)) return "privileged-exec";
-        if (/>$/.test(prompt)) return "user-exec";
-        return "unknown";
+        return normalizeIosMode("unknown", prompt);
       },
 
       getOutput: function () {
@@ -416,12 +458,14 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
     }
   }
 
-  function isConfigMode(mode: string | null | undefined): boolean {
-    return String(mode ?? "").startsWith("config");
+  function isConfigMode(mode: string | null | undefined, prompt?: unknown): boolean {
+    const normalized = normalizeIosMode(mode, prompt);
+
+    return normalized === "global-config" || normalized === "config" || normalized.startsWith("config-");
   }
 
   function cleanupConfigSession(device: string, mode: string | null | undefined, prompt: string | null | undefined): void {
-    if (!isConfigMode(mode) && !/\(config[^)]*\)#\s*$/.test(String(prompt ?? ""))) {
+    if (!isConfigMode(mode, prompt) && !/\(config[^)]*\)#\s*$/.test(String(prompt ?? ""))) {
       return;
     }
 
@@ -538,8 +582,8 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
       return mode === "user-exec" || String(prompt || "").trim().endsWith(">");
     }
 
-    if (expected === "global-config") {
-      return mode === "global-config" || String(prompt || "").includes("(config");
+    if (expected === "global-config" || expected === "config") {
+      return isConfigMode(mode, prompt) || String(prompt || "").includes("(config");
     }
 
     return mode === expected;
@@ -921,12 +965,7 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
     try {
       const term = getNativeTerminalForDevice(device);
       if (term && typeof term.getMode === "function") {
-        const raw = String(term.getMode() || "").trim().toLowerCase();
-
-        if (raw === "user") return "user-exec";
-        if (raw === "enable" || raw === "privileged" || raw === "privileged-exec") return "privileged-exec";
-        if (raw === "global" || raw === "config" || raw === "global-config") return "global-config";
-        if (raw === "logout") return "logout";
+        return normalizeIosMode(term.getMode(), prompt);
       }
     } catch {}
 
@@ -1514,9 +1553,14 @@ function semanticErrorNeedsCleanupToPrivilegedExec(
     const block = strictBlock.hasCommandEcho
       ? strictBlock.block
       : extractLatestCommandBlock(output, command);
+    const baselinePrompt = inferPromptFromTerminalText(ctx.nativeBaselineOutput || "");
+    const baselineMode = inferModeFromPrompt(baselinePrompt);
+
     const semanticError = strictBlock.hasCommandEcho
       ? detectIosSemanticErrorFromOutput(strictBlock.block)
-      : null;
+      : nativeSnapshotIsStillInConfigMode({ prompt: baselinePrompt, mode: baselineMode })
+        ? detectIosSemanticErrorFromOutput(output)
+        : null;
 
     if (semanticError) {
       execLog(
@@ -1922,8 +1966,8 @@ function semanticErrorNeedsCleanupToPrivilegedExec(
     if (!target) return true;
     if (current === target) return true;
 
-    if (target === "global-config") {
-      return current === "config" || current === "global-config";
+    if (target === "global-config" || target === "config") {
+      return isConfigMode(current);
     }
 
     if (target === "privileged-exec") {
@@ -1934,13 +1978,7 @@ function semanticErrorNeedsCleanupToPrivilegedExec(
   }
 
   function inferModeFromPrompt(prompt: string): string {
-    const value = String(prompt ?? "").trim();
-
-    if (/\(config[^)]*\)#$/.test(value)) return "config";
-    if (/#$/.test(value)) return "privileged-exec";
-    if (/>$/.test(value)) return "user-exec";
-
-    return "unknown";
+    return normalizeIosMode("unknown", prompt);
   }
 
   function readSession(device: string): { mode: string; prompt: string } {
@@ -2416,9 +2454,28 @@ function semanticErrorNeedsCleanupToPrivilegedExec(
               (result as any).rawOutput ?? (result as any).raw ?? result.output ?? "",
             );
             const strictResultBlock = extractCurrentCommandBlockStrict(rawOutput || result.output, command);
-            const semanticError = strictResultBlock.hasCommandEcho
-              ? detectIosSemanticErrorFromOutput(strictResultBlock.block)
-              : null;
+            const commandReportedFailure =
+              Number(result.status ?? 0) !== 0 ||
+              (result as any).ok === false ||
+              Boolean((result as any).code);
+            const nativeOutput = readNativeTerminalOutput(job.device);
+            const nativeDelta = getNativeDeltaForCurrentStep(job, nativeOutput, command);
+            const nativeBaselinePrompt = inferPromptFromTerminalText(ctx.nativeBaselineOutput || "");
+            const nativeBaselineMode = inferModeFromPrompt(nativeBaselinePrompt);
+            const nativeLooksConfig = nativeSnapshotIsStillInConfigMode({
+              prompt: nativeBaselinePrompt,
+              mode: nativeBaselineMode,
+            });
+
+            const semanticError =
+              (strictResultBlock.hasCommandEcho
+                ? detectIosSemanticErrorFromOutput(strictResultBlock.block)
+                : null) ??
+              (commandReportedFailure
+                ? detectIosSemanticErrorFromOutput(result.output)
+                : nativeLooksConfig
+                  ? detectIosSemanticErrorFromOutput(nativeDelta || nativeOutput)
+                  : null);
 
             ctx.stepResults.push({
               stepIndex: ctx.currentStep,
@@ -2510,6 +2567,11 @@ function semanticErrorNeedsCleanupToPrivilegedExec(
   function advanceJob(jobId: string): void {
     const job = jobs[jobId];
     if (!job || isJobFinished(jobId) || job.pendingCommand !== null) return;
+
+    if ((job.context as any).semanticErrorCleanupInProgress === true) {
+      jobDebug(job, "advance-skip-semantic-cleanup-in-progress");
+      return;
+    }
 
     const device = job.device;
 

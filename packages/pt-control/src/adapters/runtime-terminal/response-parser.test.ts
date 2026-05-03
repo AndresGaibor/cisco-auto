@@ -111,4 +111,46 @@ describe("response-parser", () => {
     expect(parsed.raw).toContain("channel-group 7 mode active");
     expect(parsed.warnings).not.toContain(errorText);
   });
+
+  test("recorta rawOutput histórico aunque la respuesta simple venga marcada como fallo", () => {
+    const parser = createResponseParser();
+
+    const rawOutput = [
+      "SW-SRV-DIST(config-if-range)#channel-group 7 mode active",
+      "                                           ^",
+      "% Invalid input detected at '^' marker.",
+      "SW-SRV-DIST(config-if-range)#end",
+      "SW-SRV-DIST#",
+      "SW-SRV-DIST#show version",
+      "Cisco IOS Software, C2960 Software",
+      "Configuration register is 0xF",
+      "SW-SRV-DIST#",
+    ].join("\n");
+
+    const parsed = parser.parseCommandResponse(
+      {
+        ok: false,
+        status: 1,
+        result: {
+          ok: false,
+          status: 1,
+          rawOutput,
+          output: "% Invalid input detected at '^' marker.",
+          session: {
+            mode: "privileged-exec",
+            prompt: "SW-SRV-DIST#",
+          },
+        },
+      },
+      {
+        stepIndex: 0,
+        isHost: false,
+        command: "show version",
+      },
+    );
+
+    expect(parsed.raw).toContain("SW-SRV-DIST#show version");
+    expect(parsed.raw).toContain("Cisco IOS Software");
+    expect(parsed.raw).not.toContain("channel-group 7 mode active");
+  });
 });

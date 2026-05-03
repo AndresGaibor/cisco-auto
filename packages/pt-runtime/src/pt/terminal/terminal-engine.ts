@@ -35,17 +35,38 @@ export interface TerminalResult {
 
 export type { ExecuteOptions };
 
-function normalizePacketTracerMode(mode: unknown, prompt: string): string {
-  const raw = String(mode ?? "").trim().toLowerCase();
+function inferIosModeFromPrompt(prompt: string): string | null {
   const p = String(prompt ?? "").trim();
 
-  if (/\(config[^)]*\)#\s*$/.test(p)) return "global-config";
+  if (/\(config-if-range\)#\s*$/i.test(p)) return "config-if-range";
+  if (/\(config-if\)#\s*$/i.test(p)) return "config-if";
+  if (/\(config-subif\)#\s*$/i.test(p)) return "config-subif";
+  if (/\(config-router\)#\s*$/i.test(p)) return "config-router";
+  if (/\(config-line\)#\s*$/i.test(p)) return "config-line";
+  if (/\(config-vlan\)#\s*$/i.test(p)) return "config-vlan";
+  if (/\(config\)#\s*$/i.test(p)) return "global-config";
+
   if (/#\s*$/.test(p)) return "privileged-exec";
   if (/>$/.test(p)) return "user-exec";
+
+  return null;
+}
+
+function normalizePacketTracerMode(mode: unknown, prompt: string): string {
+  const raw = String(mode ?? "").trim().toLowerCase();
+  const promptMode = inferIosModeFromPrompt(prompt);
+
+  if (promptMode) return promptMode;
 
   if (raw === "user") return "user-exec";
   if (raw === "enable" || raw === "privileged" || raw === "privileged-exec") return "privileged-exec";
   if (raw === "config" || raw === "global-config") return "global-config";
+  if (raw === "config-if") return "config-if";
+  if (raw === "config-if-range") return "config-if-range";
+  if (raw === "config-subif") return "config-subif";
+  if (raw === "config-router") return "config-router";
+  if (raw === "config-line") return "config-line";
+  if (raw === "config-vlan") return "config-vlan";
   if (raw === "logout") return "logout";
 
   return raw || "unknown";
