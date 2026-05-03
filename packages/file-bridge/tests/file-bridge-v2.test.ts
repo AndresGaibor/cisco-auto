@@ -230,6 +230,18 @@ describe("FileBridgeV2", () => {
       });
       expect((result as any).timings).toBeDefined();
       expect((result as any).timings.waitMs).toBeGreaterThanOrEqual(0);
+      expect((result as any).timings.deferred).toEqual(
+        expect.objectContaining({
+          enabled: true,
+          resolved: true,
+          ticket: "ticket-123",
+          pollCount: 1,
+          tickets: ["ticket-123"],
+        }),
+      );
+      expect((result as any).timings.deferred.totalMs).toBeGreaterThanOrEqual(0);
+      expect((result as any).timings.deferred.firstPollAt).toEqual(expect.any(Number));
+      expect((result as any).timings.deferred.lastPollAt).toEqual(expect.any(Number));
     });
 
     it("should return deferred results without auto polling when resolveDeferred is false", async () => {
@@ -306,6 +318,7 @@ describe("FileBridgeV2", () => {
         job: { id: "ticket-456" },
       });
       expect((result as any).timings).toBeDefined();
+      expect((result as any).timings.deferred).toBeUndefined();
     });
 
     it("should timeout without noisy ENOENT logs", async () => {

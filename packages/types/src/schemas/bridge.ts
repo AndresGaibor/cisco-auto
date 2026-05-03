@@ -75,6 +75,21 @@ export interface BridgeResultEnvelope<T = unknown> {
 }
 
 /**
+ * Métricas de resolución diferida.
+ * Se usa cuando un comando retorna un ticket deferred y el bridge hace polling con __pollDeferred.
+ */
+export interface BridgeDeferredTimings {
+  enabled: true;
+  resolved: boolean;
+  ticket: string | null;
+  pollCount: number;
+  totalMs: number;
+  firstPollAt: number | null;
+  lastPollAt: number | null;
+  tickets: string[];
+}
+
+/**
  * Métricas de timing para un resultado del bridge.
  */
 export interface BridgeResultTimings {
@@ -85,6 +100,7 @@ export interface BridgeResultTimings {
   queueLatencyMs?: number;
   execLatencyMs?: number;
   completedAtMs?: number;
+  deferred?: BridgeDeferredTimings;
 }
 
 /**

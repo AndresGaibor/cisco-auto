@@ -13,6 +13,8 @@ export {
   type BridgeProtocolVersion,
   type BridgeEventInput,
   type BridgeResultEnvelope,
+  type BridgeResultTimings,
+  type BridgeDeferredTimings,
   type BridgeErrorDetail,
   type BridgeTimeoutDetails,
   type BridgeEvent,

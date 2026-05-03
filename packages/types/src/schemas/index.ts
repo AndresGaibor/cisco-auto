@@ -205,6 +205,7 @@ export {
   type BridgeCommandEnvelope,
   type BridgeResultEnvelope,
   type BridgeResultTimings,
+  type BridgeDeferredTimings,
   type BridgeErrorDetail,
   type BridgeTimeoutDetails,
   type BridgeEvent,

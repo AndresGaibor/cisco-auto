@@ -31,6 +31,8 @@ import { ensureDir, ensureFile, atomicWriteFile } from "./shared/fs-atomic.js";
 import type {
   BridgeCommandEnvelope,
   BridgeResultEnvelope,
+  BridgeDeferredTimings,
+  BridgeResultTimings,
   BridgeTimeoutDetails,
   BridgeEvent,
 } from "./shared/protocol.js";
@@ -84,8 +86,23 @@ export interface FileBridgeV2Options {
   autoGcIntervalMs?: number;
 }
 
+interface DeferredTimingAccumulator {
+  enabled: true;
+  startedAt: number;
+  firstPollAt: number | null;
+  lastPollAt: number | null;
+  pollCount: number;
+  tickets: string[];
+  lastTicket: string | null;
+}
+
 export interface SendCommandAndWaitOptions {
   resolveDeferred?: boolean;
+
+  /**
+   * Uso interno: conserva métricas mientras sendCommandAndWait resuelve deferred recursivamente.
+   */
+  deferredTiming?: DeferredTimingAccumulator;
 }
 
 /**
@@ -526,21 +543,34 @@ export class FileBridgeV2 extends EventEmitter {
     };
 
     if (options.resolveDeferred !== false && this.isDeferredBridgeValue(result.value)) {
+      const ticket = result.value.ticket;
+      const deferredTiming = this.recordDeferredPoll(options, ticket);
+
       const remainingTimeout = timeout - (Date.now() - started);
       if (remainingTimeout <= 0) {
+        const now = Date.now();
         throw new Error(
-          `Timeout waiting for deferred result for ${envelope.id} after ${timeout}ms`,
+          `Timeout waiting for deferred result for ${envelope.id} after ${timeout}ms` +
+            ` deferred=${JSON.stringify(this.buildDeferredTimingSummary(deferredTiming, false, now))}`,
         );
       }
 
       const followUp = await this.sendCommandAndWait(
         "__pollDeferred",
-        { ticket: result.value.ticket },
+        { ticket },
         remainingTimeout,
         options,
       );
-      const followUpTimings = (followUp as { timings?: typeof timings }).timings;
+
+      const followUpTimings = (followUp as {
+        timings?: BridgeResultTimings;
+      }).timings;
+
       const receivedAt = Date.now();
+      const deferredSummary =
+        followUpTimings?.deferred ??
+        this.buildDeferredTimingSummary(deferredTiming, followUp.ok !== false, receivedAt);
+
       return {
         ...result,
         ok: followUp.ok,
@@ -556,13 +586,23 @@ export class FileBridgeV2 extends EventEmitter {
           queueLatencyMs: followUpTimings?.queueLatencyMs ?? timings.queueLatencyMs,
           execLatencyMs: followUpTimings?.execLatencyMs ?? timings.execLatencyMs,
           completedAtMs: followUpTimings?.completedAtMs ?? followUp.completedAt,
+          deferred: deferredSummary,
         },
       };
     }
 
+    const deferredSummary = this.buildDeferredTimingSummary(
+      options.deferredTiming,
+      result.ok !== false,
+      Date.now(),
+    );
+
     return {
       ...result,
-      timings,
+      timings: {
+        ...timings,
+        ...(deferredSummary ? { deferred: deferredSummary } : {}),
+      },
     };
   }
 
@@ -573,6 +613,70 @@ export class FileBridgeV2 extends EventEmitter {
       (value as { deferred?: unknown }).deferred === true &&
       typeof (value as { ticket?: unknown }).ticket === "string"
     );
+  }
+
+  private getOrCreateDeferredTimingAccumulator(
+    options: SendCommandAndWaitOptions,
+  ): DeferredTimingAccumulator {
+    if (options.deferredTiming) {
+      return options.deferredTiming;
+    }
+
+    const accumulator: DeferredTimingAccumulator = {
+      enabled: true,
+      startedAt: Date.now(),
+      firstPollAt: null,
+      lastPollAt: null,
+      pollCount: 0,
+      tickets: [],
+      lastTicket: null,
+    };
+
+    options.deferredTiming = accumulator;
+    return accumulator;
+  }
+
+  private recordDeferredPoll(
+    options: SendCommandAndWaitOptions,
+    ticket: string,
+  ): DeferredTimingAccumulator {
+    const accumulator = this.getOrCreateDeferredTimingAccumulator(options);
+    const now = Date.now();
+
+    accumulator.pollCount += 1;
+    accumulator.lastPollAt = now;
+    accumulator.lastTicket = ticket;
+
+    if (accumulator.firstPollAt === null) {
+      accumulator.firstPollAt = now;
+    }
+
+    if (!accumulator.tickets.includes(ticket)) {
+      accumulator.tickets.push(ticket);
+    }
+
+    return accumulator;
+  }
+
+  private buildDeferredTimingSummary(
+    accumulator: DeferredTimingAccumulator | undefined,
+    resolved: boolean,
+    now: number,
+  ): BridgeDeferredTimings | undefined {
+    if (!accumulator) {
+      return undefined;
+    }
+
+    return {
+      enabled: true,
+      resolved,
+      ticket: accumulator.lastTicket,
+      pollCount: accumulator.pollCount,
+      totalMs: Math.max(0, now - accumulator.startedAt),
+      firstPollAt: accumulator.firstPollAt,
+      lastPollAt: accumulator.lastPollAt,
+      tickets: [...accumulator.tickets],
+    };
   }
 
   private findCommandArtifact(commandId: string): {
