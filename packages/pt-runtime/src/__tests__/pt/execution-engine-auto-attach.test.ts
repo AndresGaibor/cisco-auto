@@ -280,6 +280,72 @@ describe("ExecutionEngine auto attach", () => {
     }
   });
 
+  test("startJob propaga maxPagerAdvances desde policies del plan", async () => {
+    const terminal = {
+      attach: vi.fn(),
+      detach: vi.fn(),
+      getSession: vi.fn(),
+      getMode: vi.fn(),
+      isBusy: vi.fn(() => false),
+      isAnyBusy: vi.fn(() => false),
+      executeCommand: vi.fn().mockResolvedValue({
+        ok: true,
+        output: "show interfaces\n",
+        status: 0,
+        session: { mode: "privileged-exec", prompt: "R1#", paging: false, awaitingConfirm: false },
+        mode: "privileged-exec",
+      }),
+      continuePager: vi.fn(),
+      confirmPrompt: vi.fn(),
+    } as any;
+
+    const previousIpc = (globalThis as any).ipc;
+    const previousDprint = (globalThis as any).dprint;
+
+    (globalThis as any).ipc = {
+      network: () => ({
+        getDevice: () => ({
+          getCommandLine: () => ({
+            registerEvent: vi.fn(),
+            unregisterEvent: vi.fn(),
+            enterCommand: vi.fn(),
+            enterChar: vi.fn(),
+          }),
+        }),
+      }),
+    };
+    (globalThis as any).dprint = vi.fn();
+
+    try {
+      const engine = createExecutionEngine(terminal);
+      const plan = createDeferredJobPlan("R1", [commandStep("show interfaces")]);
+
+      (plan as any).payload = {
+        ...((plan as any).payload ?? {}),
+        policies: {
+          maxPagerAdvances: 120,
+        },
+      };
+
+      engine.startJob(plan);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(terminal.executeCommand).toHaveBeenCalledWith(
+        "R1",
+        "show interfaces",
+        expect.objectContaining({
+          allowPager: true,
+          autoAdvancePager: true,
+          maxPagerAdvances: 120,
+        }),
+      );
+    } finally {
+      (globalThis as any).ipc = previousIpc;
+      (globalThis as any).dprint = previousDprint;
+    }
+  });
+
   test("reapStaleJobs rescata un comando atascado desde el terminal nativo", async () => {
     let outputPhase = 0;
     const nativeTerminal = {
@@ -409,6 +475,81 @@ describe("ExecutionEngine auto attach", () => {
           expect.stringContaining("deltaLen="),
         ]),
       );
+    } finally {
+      (globalThis as any).ipc = previousIpc;
+      (globalThis as any).dprint = previousDprint;
+    }
+  });
+
+  test("native fallback completa shows largos aunque el eco del comando ya no esté en el buffer", async () => {
+    let outputPhase = 0;
+
+    const nativeTerminal = {
+      registerEvent: vi.fn(),
+      unregisterEvent: vi.fn(),
+      enterCommand: vi.fn(),
+      enterChar: vi.fn(),
+      getCommandInput: vi.fn(() => ""),
+      getAllOutput: vi.fn(() => {
+        outputPhase += 1;
+
+        if (outputPhase === 1) {
+          return "SW-SRV-DIST#";
+        }
+
+        return [
+          "FastEthernet0/24 is down, line protocol is down",
+          "  Hardware is Lance, address is 0060.5c93.4501",
+          "  MTU 1500 bytes, BW 100000 Kbit",
+          "  5 minute input rate 0 bits/sec, 0 packets/sec",
+          "GigabitEthernet0/1 is up, line protocol is up (connected)",
+          "  Hardware is Lance, address is 0060.5c93.4519",
+          "  MTU 1500 bytes, BW 1000000 Kbit",
+          "SW-SRV-DIST#",
+        ].join("\n");
+      }),
+      getPrompt: vi.fn(() => "SW-SRV-DIST#"),
+      getMode: vi.fn(() => "enable"),
+    } as any;
+
+    const terminal = {
+      attach: vi.fn(),
+      detach: vi.fn(),
+      getSession: vi.fn(),
+      getMode: vi.fn(),
+      isBusy: vi.fn(() => false),
+      isAnyBusy: vi.fn(() => false),
+      executeCommand: vi.fn().mockReturnValue(new Promise(() => {})),
+      continuePager: vi.fn(),
+      confirmPrompt: vi.fn(),
+    } as any;
+
+    const previousIpc = (globalThis as any).ipc;
+    const previousDprint = (globalThis as any).dprint;
+
+    (globalThis as any).ipc = {
+      network: () => ({
+        getDevice: () => ({
+          getCommandLine: () => nativeTerminal,
+        }),
+      }),
+    };
+    (globalThis as any).dprint = vi.fn();
+
+    try {
+      const engine = createExecutionEngine(terminal);
+      const plan = createDeferredJobPlan("SW-SRV-DIST", [commandStep("show interfaces")]);
+      const job = engine.startJob(plan);
+
+      job.context.updatedAt = Date.now() - 1000;
+
+      const refreshed = engine.getJob(job.id);
+
+      expect(refreshed?.context.finished).toBe(true);
+      expect(refreshed?.context.phase).toBe("completed");
+      expect(refreshed?.context.result?.ok).toBe(true);
+      expect(String(refreshed?.context.result?.output ?? "")).toContain("GigabitEthernet0/1");
+      expect(String(refreshed?.context.result?.output ?? "")).not.toContain("JOB_TIMEOUT");
     } finally {
       (globalThis as any).ipc = previousIpc;
       (globalThis as any).dprint = previousDprint;

@@ -131,6 +131,32 @@ describe("terminal-plan-builder", () => {
     });
   });
 
+  test("prepara show interfaces con budget largo sin terminal length 0", () => {
+    const plan = buildUniversalTerminalPlan({
+      id: "plan-show-interfaces",
+      device: "SW1",
+      command: "show interfaces",
+      deviceKind: "ios",
+      mode: "safe",
+    });
+
+    expect(plan.metadata?.autoConfig).toBe(false);
+    expect(plan.timeouts).toEqual({
+      commandTimeoutMs: 90000,
+      stallTimeoutMs: 25000,
+    });
+    expect(plan.policies?.maxPagerAdvances).toBe(120);
+    expect(plan.steps.map((step: TerminalPlanStep) => step.command ?? step.expectMode)).toEqual([
+      "show interfaces",
+    ]);
+    expect(plan.steps[0]).toMatchObject({
+      kind: "command",
+      command: "show interfaces",
+      timeout: 90000,
+      allowPager: true,
+    });
+  });
+
   test("createIosRunningConfigPlan solo contiene show running-config", () => {
     const plan = createIosRunningConfigPlan("R1", { id: "running-config", timeout: 9000 });
 
@@ -248,6 +274,20 @@ describe("terminal-plan-builder", () => {
         kind: "command",
         command,
       });
+
+      if (command === "show tech-support") {
+        expect(plan.timeouts).toEqual({
+          commandTimeoutMs: 90000,
+          stallTimeoutMs: 25000,
+        });
+        expect(plan.policies?.maxPagerAdvances).toBe(120);
+        expect(plan.steps[1]).toMatchObject({
+          kind: "command",
+          command,
+          timeout: 90000,
+          allowPager: true,
+        });
+      }
 
       const visibleCommands = plan.steps
         .map((step: TerminalPlanStep) => step.command)

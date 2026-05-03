@@ -976,6 +976,78 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
     return /--More--|More:|Press any key to continue/i.test(String(output || "").slice(-1000));
   }
 
+  function readPlanMaxPagerAdvances(ctx: JobContext): number {
+    const value = Number((ctx.plan.payload as any)?.policies?.maxPagerAdvances ?? 25);
+
+    if (!Number.isFinite(value) || value <= 0) {
+      return 25;
+    }
+
+    return Math.max(1, Math.min(Math.floor(value), 200));
+  }
+
+  function normalizeCommandForFallback(command: unknown): string {
+    return String(command ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+  }
+
+  function isLongOutputReadOnlyIosCommand(command: unknown): boolean {
+    const cmd = normalizeCommandForFallback(command);
+
+    return (
+      /^show\s+running-config\b/.test(cmd) ||
+      /^show\s+startup-config\b/.test(cmd) ||
+      /^show\s+interfaces?\b/.test(cmd) ||
+      /^show\s+tech-support\b/.test(cmd) ||
+      /^show\s+logging\b/.test(cmd) ||
+      /^show\s+controllers\b/.test(cmd) ||
+      /^show\s+processes\b/.test(cmd) ||
+      /^show\s+inventory\b/.test(cmd) ||
+      /^show\s+spanning-tree\b/.test(cmd) ||
+      /^show\s+mac\s+address-table\b/.test(cmd) ||
+      /^show\s+ip\s+route\b/.test(cmd)
+    );
+  }
+
+  function nativeLongOutputCanCompleteWithoutEcho(args: { block: string; command: string; prompt: string }): boolean {
+    if (!isLongOutputReadOnlyIosCommand(args.command)) {
+      return false;
+    }
+
+    const block = normalizeEol(args.block);
+    const prompt = String(args.prompt ?? "").trim();
+
+    if (!block.trim()) {
+      return false;
+    }
+
+    if (outputHasPager(block)) {
+      return false;
+    }
+
+    if (!isIosPrompt(prompt) && !isIosPrompt(lastNonEmptyLine(block))) {
+      return false;
+    }
+
+    if (detectIosSemanticErrorFromOutput(block)) {
+      return false;
+    }
+
+    const meaningfulLines = block
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => {
+        if (!line) return false;
+        if (isIosPrompt(line)) return false;
+        if (isPagerOnlyLine(line)) return false;
+        return true;
+      });
+
+    const cmd = normalizeCommandForFallback(args.command);
+    const minimumMeaningfulLines = /^show\s+startup-config\b/.test(cmd) ? 1 : 3;
+
+    return meaningfulLines.length >= minimumMeaningfulLines;
+  }
+
   function shouldTryNativeFallback(job: ActiveJob, now: number): boolean {
     const ctx = job.context as any;
 
@@ -1476,24 +1548,25 @@ function semanticErrorNeedsCleanupToPrivilegedExec(
 
     const fullOutput = readNativeTerminalOutput(job.device);
     const output = getNativeDeltaForCurrentStep(job, fullOutput, command);
+    const fallbackOutput = output || (isLongOutputReadOnlyIosCommand(command) ? fullOutput : "");
     jobDebug(
       job,
       "native-output-len=" +
         String(fullOutput.length) +
         " deltaLen=" +
-        String(output.length) +
+        String(fallbackOutput.length) +
         " baselineStep=" +
         String(ctx.nativeBaselineStep) +
         " currentStep=" +
         String(ctx.currentStep),
     );
 
-    if (!output.trim()) {
+    if (!fallbackOutput.trim()) {
       jobDebug(job, "native-no-output");
       return false;
     }
 
-    if (outputHasPager(output)) {
+    if (outputHasPager(fallbackOutput)) {
       const advanced = advanceNativePager(job.device);
       execLog(
         "JOB NATIVE PAGER id=" +
@@ -1508,7 +1581,7 @@ function semanticErrorNeedsCleanupToPrivilegedExec(
       return false;
     }
 
-    if (nativeOutputTailHasActivePager(output)) {
+    if (nativeOutputTailHasActivePager(fallbackOutput)) {
       const advanced = advanceNativePager(job.device);
 
       jobDebug(
@@ -1549,17 +1622,17 @@ function semanticErrorNeedsCleanupToPrivilegedExec(
       return completeEnsureModeFromNativeTerminal(job, step, prompt, mode);
     }
 
-    const strictBlock = extractCurrentCommandBlockStrict(output, command);
+    const strictBlock = extractCurrentCommandBlockStrict(fallbackOutput, command);
     const block = strictBlock.hasCommandEcho
       ? strictBlock.block
-      : extractLatestCommandBlock(output, command);
+      : extractLatestCommandBlock(fallbackOutput, command);
     const baselinePrompt = inferPromptFromTerminalText(ctx.nativeBaselineOutput || "");
     const baselineMode = inferModeFromPrompt(baselinePrompt);
 
     const semanticError = strictBlock.hasCommandEcho
       ? detectIosSemanticErrorFromOutput(strictBlock.block)
       : nativeSnapshotIsStillInConfigMode({ prompt: baselinePrompt, mode: baselineMode })
-        ? detectIosSemanticErrorFromOutput(output)
+        ? detectIosSemanticErrorFromOutput(fallbackOutput)
         : null;
 
     if (semanticError) {
@@ -1573,12 +1646,26 @@ function semanticErrorNeedsCleanupToPrivilegedExec(
           " code=" +
           semanticError.code,
       );
+
       return cleanupToPrivilegedExecBeforeSemanticError(job, semanticError, prompt, mode);
     }
 
-    const complete = nativeFallbackBlockLooksComplete(block, command, prompt);
+    const longOutputBlock = block || output;
 
-    if (!strictBlock.hasCommandEcho && !isEndCommand(command) && !isPromptOnlyTransitionCommand(command)) {
+    const echoLessLongOutputComplete = nativeLongOutputCanCompleteWithoutEcho({
+      block: longOutputBlock,
+      command,
+      prompt,
+    });
+
+    const complete = nativeFallbackBlockLooksComplete(block, command, prompt) || echoLessLongOutputComplete;
+
+    if (
+      !strictBlock.hasCommandEcho &&
+      !echoLessLongOutputComplete &&
+      !isEndCommand(command) &&
+      !isPromptOnlyTransitionCommand(command)
+    ) {
       execLog(
         "JOB NATIVE REFUSE STALE BLOCK id=" +
           job.id +
@@ -1589,10 +1676,22 @@ function semanticErrorNeedsCleanupToPrivilegedExec(
           " step=" +
           ctx.currentStep +
           " blockTail=" +
-          block.slice(-240),
+          longOutputBlock.slice(-240),
       );
 
       return false;
+    }
+
+    if (echoLessLongOutputComplete) {
+      jobDebug(
+        job,
+        "native-long-output-complete-without-echo command=" +
+          JSON.stringify(command) +
+          " prompt=" +
+          JSON.stringify(prompt) +
+          " blockLen=" +
+          String(longOutputBlock.length),
+      );
     }
 
     jobDebug(
@@ -2411,7 +2510,7 @@ function semanticErrorNeedsCleanupToPrivilegedExec(
           expectedPromptPattern: stepOptions.expectedPrompt,
           allowPager: true,
           autoAdvancePager: true,
-          maxPagerAdvances: 25,
+          maxPagerAdvances: readPlanMaxPagerAdvances(ctx),
           autoConfirm: false,
           autoDismissWizard: true,
         });

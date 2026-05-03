@@ -101,6 +101,84 @@ function isReadOnlyExecCommand(line: string): boolean {
   );
 }
 
+const LONG_OUTPUT_SHOW_COMMAND_TIMEOUT_MS = 90_000;
+const LONG_OUTPUT_SHOW_STALL_TIMEOUT_MS = 25_000;
+const LONG_OUTPUT_SHOW_MAX_PAGER_ADVANCES = 120;
+
+function isLongOutputIosShowCommand(line: string): boolean {
+  const cmd = normalizeIosCommand(line);
+
+  return (
+    /^show\s+interfaces?\b/.test(cmd) ||
+    /^show\s+tech-support\b/.test(cmd) ||
+    /^show\s+controllers\b/.test(cmd) ||
+    /^show\s+logging\b/.test(cmd) ||
+    /^show\s+processes\b/.test(cmd) ||
+    /^show\s+spanning-tree\b/.test(cmd) ||
+    /^show\s+mac\s+address-table\b/.test(cmd) ||
+    /^show\s+ip\s+route\b/.test(cmd)
+  );
+}
+
+function shouldPrepareLongOutputShow(
+  options: BuildUniversalTerminalPlanOptions,
+  lines: string[],
+): boolean {
+  if (options.deviceKind !== "ios") return false;
+  if (options.mode === "raw") return false;
+  if (lines.length !== 1) return false;
+
+  return isLongOutputIosShowCommand(lines[0] ?? "");
+}
+
+function buildTerminalTimeoutsForPlan(
+  options: BuildUniversalTerminalPlanOptions,
+  lines: string[],
+): TerminalPlanTimeouts {
+  if (shouldPrepareLongOutputShow(options, lines)) {
+    return {
+      commandTimeoutMs: Math.max(Number(options.timeoutMs ?? 0) || 0, LONG_OUTPUT_SHOW_COMMAND_TIMEOUT_MS),
+      stallTimeoutMs: LONG_OUTPUT_SHOW_STALL_TIMEOUT_MS,
+    };
+  }
+
+  return buildDefaultTerminalTimeouts(options.timeoutMs);
+}
+
+function buildTerminalPoliciesForPlan(
+  options: BuildUniversalTerminalPlanOptions,
+  lines: string[],
+): TerminalPlanPolicies {
+  const policies = buildDefaultTerminalPolicies(options);
+
+  if (shouldPrepareLongOutputShow(options, lines)) {
+    return {
+      ...policies,
+      maxPagerAdvances: LONG_OUTPUT_SHOW_MAX_PAGER_ADVANCES,
+    };
+  }
+
+  return policies;
+}
+
+function buildExecCommandSteps(
+  options: BuildUniversalTerminalPlanOptions,
+  lines: string[],
+  timeouts: TerminalPlanTimeouts,
+): TerminalPlanStep[] {
+  return lines.map((line) => {
+    const longOutputShow = shouldPrepareLongOutputShow(options, lines) && isLongOutputIosShowCommand(line);
+
+    return {
+      kind: "command" as const,
+      command: line,
+      timeout: longOutputShow ? timeouts.commandTimeoutMs : options.timeoutMs,
+      allowPager: /^show\s+/i.test(line),
+      allowConfirm: Boolean(options.allowConfirm),
+    };
+  });
+}
+
 function isPrivilegedExecCommand(line: string): boolean {
   const cmd = normalizeIosCommand(line);
 
@@ -290,14 +368,16 @@ export function buildUniversalTerminalPlan(
   options: BuildUniversalTerminalPlanOptions,
 ): TerminalPlan {
   const lines = splitCommandLines(options.command);
+  const planTimeouts = buildTerminalTimeoutsForPlan(options, lines);
+  const planPolicies = buildTerminalPoliciesForPlan(options, lines);
 
   if (lines.length === 0) {
     return {
       id: options.id,
       device: options.device,
       steps: [],
-      timeouts: buildDefaultTerminalTimeouts(options.timeoutMs),
-      policies: buildDefaultTerminalPolicies(options),
+      timeouts: planTimeouts,
+      policies: planPolicies,
       metadata: {
         deviceKind: options.deviceKind,
         source: "pt-control.terminal-plan-builder",
@@ -320,8 +400,8 @@ export function buildUniversalTerminalPlan(
       device: options.device,
       targetMode: "host-prompt",
       steps,
-      timeouts: buildDefaultTerminalTimeouts(options.timeoutMs),
-      policies: buildDefaultTerminalPolicies(options),
+      timeouts: planTimeouts,
+      policies: planPolicies,
       metadata: {
         deviceKind: "host",
         source: "pt-control.terminal-plan-builder",
@@ -344,8 +424,8 @@ export function buildUniversalTerminalPlan(
           },
         },
       ],
-      timeouts: buildDefaultTerminalTimeouts(options.timeoutMs),
-      policies: buildDefaultTerminalPolicies(options),
+      timeouts: planTimeouts,
+      policies: planPolicies,
       metadata: {
         deviceKind: "ios",
         source: "pt-control.terminal-plan-builder",
@@ -355,15 +435,7 @@ export function buildUniversalTerminalPlan(
   }
 
   const autoConfig = shouldAutoWrapIosConfig(options, lines);
-  const effectiveSteps = autoConfig
-    ? buildAutoConfigSteps(lines)
-    : lines.map((line) => ({
-        kind: "command" as const,
-        command: line,
-        timeout: options.timeoutMs,
-        allowPager: /^show\s+/i.test(line),
-        allowConfirm: Boolean(options.allowConfirm),
-      }));
+  const effectiveSteps = autoConfig ? buildAutoConfigSteps(lines) : buildExecCommandSteps(options, lines, planTimeouts);
   const steps: TerminalPlanStep[] = [];
 
   if (autoConfig || shouldPrependEnable(options, lines)) {
@@ -386,8 +458,8 @@ export function buildUniversalTerminalPlan(
     device: options.device,
     targetMode: inferIosTargetMode(lines, options),
     steps,
-    timeouts: buildDefaultTerminalTimeouts(options.timeoutMs),
-    policies: buildDefaultTerminalPolicies(options),
+    timeouts: planTimeouts,
+    policies: planPolicies,
     metadata: {
       deviceKind: "ios",
       source: "pt-control.terminal-plan-builder",
