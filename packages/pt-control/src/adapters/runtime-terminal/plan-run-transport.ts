@@ -47,6 +47,24 @@ export function computeDeferredPollIntervalMs(plan: TerminalPlan): number {
   return Math.max(75, Math.min(Math.trunc(parsed), 500));
 }
 
+export function computeRecommendedDeferredPollSleepMs(
+  pollValue: unknown,
+  fallbackMs: number,
+): number {
+  if (!pollValue || typeof pollValue !== "object") {
+    return fallbackMs;
+  }
+
+  const raw = (pollValue as { recommendedPollAfterMs?: unknown }).recommendedPollAfterMs;
+  const parsed = Number(raw);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallbackMs;
+  }
+
+  return Math.max(75, Math.min(Math.trunc(parsed), 1000));
+}
+
 export function computeTerminalPlanSubmitTimeoutMs(
   plan: TerminalPlan,
   requestedTimeoutMs: number,
@@ -57,6 +75,16 @@ export function computeTerminalPlanSubmitTimeoutMs(
     15000,
     Math.min(firstStepTimeoutMs, 30000),
   );
+}
+
+function buildDeferredFailureEvidence(
+  timings: AdapterTimingMap,
+  details: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    ...details,
+    ...buildTimingsEvidence(timings),
+  };
 }
 
 export function getTerminalPlanParseCommand(plan: TerminalPlan): string {
@@ -231,13 +259,14 @@ async function handleDeferredPoll(
       return buildTerminalDeferredFailure(
         "TERMINAL_DEFERRED_POLL_TIMEOUT",
         `__pollDeferred no respondió en ${pollTimeoutMs}ms para ticket ${ticket}: ${message}`,
-        {
+        buildDeferredFailureEvidence(timings, {
           phase: "terminal-plan-poll",
           ticket,
           pollTimeoutMs,
           elapsedMs,
           error: message,
-        },
+          pollValue,
+        }),
       );
     }
 
@@ -250,7 +279,17 @@ async function handleDeferredPoll(
       break;
     }
 
-    const sleepMs = Math.min(pollIntervalMs, remainingMs);
+    const recommendedSleepMs = computeRecommendedDeferredPollSleepMs(pollValue, pollIntervalMs);
+    const sleepMs = Math.min(recommendedSleepMs, remainingMs);
+
+    timings.terminalPlanPollLastSleepMs = sleepMs;
+
+    if (recommendedSleepMs !== pollIntervalMs) {
+      timings.terminalPlanPollRecommendedCount =
+        (timings.terminalPlanPollRecommendedCount ?? 0) + 1;
+      timings.terminalPlanPollLastRecommendedSleepMs = recommendedSleepMs;
+    }
+
     await measureAdapterAsync(timings, "terminalPlanPollSleepMs", () =>
       new Promise((resolve) => setTimeout(resolve, sleepMs)),
     );
@@ -261,13 +300,13 @@ async function handleDeferredPoll(
     return buildTerminalDeferredFailure(
       "TERMINAL_DEFERRED_STALLED",
       `terminal.plan.run creó el ticket ${ticket}, pero el job siguió pendiente después de ${pollTimeoutMs}ms.`,
-      {
+      buildDeferredFailureEvidence(timings, {
         phase: "terminal-plan-poll",
         ticket,
         pollTimeoutMs,
         elapsedMs,
         pollValue,
-      },
+      }),
     );
   }
 

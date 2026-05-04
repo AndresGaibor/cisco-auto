@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "bun:test";
 
 import { createRuntimeTerminalAdapter } from "./adapter.js";
+import { computeRecommendedDeferredPollSleepMs } from "./plan-run-transport.js";
 
 describe("createRuntimeTerminalAdapter plan-run transport", () => {
   test("submit timeout se calcula correctamente para planes cortos", async () => {
@@ -140,5 +141,226 @@ describe("createRuntimeTerminalAdapter plan-run transport", () => {
     expect(result.ok).toBe(false);
     expect(result.status).toBe(1);
     expect(result.confidence).toBe(0);
+  });
+
+  test("polling diferido usa recommendedPollAfterMs del runtime en timings", async () => {
+    let pollCount = 0;
+
+    const bridge = {
+      sendCommandAndWait: vi.fn((type: string) => {
+        if (type === "terminal.plan.run") {
+          return Promise.resolve({
+            ok: true,
+            status: 0,
+            completedAt: Date.now(),
+            value: {
+              ok: true,
+              deferred: true,
+              ticket: "ticket-recommended",
+            },
+          });
+        }
+
+        if (type === "__pollDeferred") {
+          pollCount += 1;
+
+          if (pollCount === 1) {
+            return new Promise((resolve) =>
+              setTimeout(() => {
+                resolve({
+                  ok: true,
+                  status: 0,
+                  completedAt: Date.now(),
+                  value: {
+                    ok: true,
+                    deferred: true,
+                    done: false,
+                    ticket: "ticket-recommended",
+                    state: "waiting-command",
+                    recommendedPollAfterMs: 250,
+                  },
+                });
+              }, 10),
+            );
+          }
+
+          return Promise.resolve({
+            ok: true,
+            status: 0,
+            completedAt: Date.now(),
+            value: {
+              done: true,
+              ok: true,
+              status: 0,
+              output: "show version\nCisco IOS Software\nR1#",
+              raw: "show version\nCisco IOS Software\nR1#",
+              session: {
+                mode: "privileged-exec",
+                prompt: "R1#",
+              },
+            },
+          });
+        }
+
+        throw new Error(`unexpected command type ${type}`);
+      }),
+    };
+
+    const adapter = createRuntimeTerminalAdapter({
+      bridge: bridge as never,
+      generateId: () => "id-1",
+      defaultTimeout: 45000,
+    });
+
+    const result = await adapter.runTerminalPlan(
+      {
+        id: "plan-1",
+        device: "R1",
+        steps: [{ command: "show version" }],
+        timeouts: {
+          commandTimeoutMs: 1000,
+          stallTimeoutMs: 1000,
+        },
+      } as never,
+      { timeoutMs: 1000 },
+    );
+
+    expect(pollCount).toBe(2);
+    expect(result.ok).toBe(true);
+    expect(result.output).toContain("Cisco IOS");
+
+    const timings = (result.evidence as any)?.timings?.adapter ?? (result.evidence as any)?.timings ?? {};
+    expect(timings.terminalPlanPollRecommendedCount ?? 0).toBe(1);
+    expect(timings.terminalPlanPollLastRecommendedSleepMs ?? 0).toBe(250);
+  });
+
+  test("fallo deferred stalled preserva timings completos en evidence", async () => {
+    let pollCount = 0;
+
+    const bridge = {
+      sendCommandAndWait: vi.fn(async (type: string) => {
+        if (type === "terminal.plan.run") {
+          return {
+            ok: true,
+            status: 0,
+            completedAt: Date.now(),
+            timings: {
+              queueLatencyMs: 10,
+              execLatencyMs: 5,
+            },
+            value: {
+              ok: true,
+              deferred: true,
+              ticket: "ticket-stalled",
+            },
+          };
+        }
+
+        if (type === "__pollDeferred") {
+          pollCount += 1;
+
+          if (pollCount >= 3) {
+            return {
+              ok: true,
+              status: 0,
+              completedAt: Date.now(),
+              value: {
+                done: true,
+                ok: true,
+                status: 0,
+                output: "show version\nCisco IOS Software\nR1#",
+                session: { mode: "privileged-exec", prompt: "R1#" },
+              },
+            };
+          }
+
+          return {
+            ok: true,
+            status: 0,
+            completedAt: Date.now(),
+            timings: {
+              queueLatencyMs: 20,
+              execLatencyMs: 7,
+            },
+            value: {
+              ok: true,
+              deferred: true,
+              done: false,
+              ticket: "ticket-stalled",
+              state: "waiting-command",
+              recommendedPollAfterMs: 75,
+            },
+          };
+        }
+
+        throw new Error(`unexpected command type ${type}`);
+      }),
+    };
+
+    const adapter = createRuntimeTerminalAdapter({
+      bridge: bridge as never,
+      generateId: () => "id-1",
+      defaultTimeout: 45000,
+    });
+
+    const result = await adapter.runTerminalPlan(
+      {
+        id: "plan-stalled",
+        device: "R1",
+        steps: [{ command: "show version" }],
+        timeouts: {
+          commandTimeoutMs: 50,
+          stallTimeoutMs: 50,
+        },
+      } as never,
+      { timeoutMs: 50 },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.output).toContain("Cisco IOS");
+
+    const evidence = result.evidence as any;
+    expect(evidence.timings).toMatchObject({
+      terminalPlanPollCount: expect.any(Number),
+      terminalPlanPollPendingCount: expect.any(Number),
+      terminalPlanPollTimeoutMs: expect.any(Number),
+      terminalPlanPollBridgeMs: expect.any(Number),
+      terminalPlanPollQueueLatencyMs: expect.any(Number),
+      terminalPlanPollExecLatencyMs: expect.any(Number),
+      terminalPlanPollRecommendedCount: expect.any(Number),
+      terminalPlanPollLastRecommendedSleepMs: expect.any(Number),
+    });
+  });
+});
+
+describe("computeRecommendedDeferredPollSleepMs", () => {
+  test("usa recommendedPollAfterMs cuando es valido", () => {
+    expect(
+      computeRecommendedDeferredPollSleepMs({ recommendedPollAfterMs: 250 }, 100),
+    ).toBe(250);
+  });
+
+  test("clampa recommendedPollAfterMs entre 75 y 1000", () => {
+    expect(
+      computeRecommendedDeferredPollSleepMs({ recommendedPollAfterMs: 10 }, 100),
+    ).toBe(75);
+
+    expect(
+      computeRecommendedDeferredPollSleepMs({ recommendedPollAfterMs: 5000 }, 100),
+    ).toBe(1000);
+  });
+
+  test("usa fallback cuando recommendedPollAfterMs es invalido", () => {
+    expect(
+      computeRecommendedDeferredPollSleepMs({ recommendedPollAfterMs: "nope" }, 100),
+    ).toBe(100);
+
+    expect(
+      computeRecommendedDeferredPollSleepMs({}, 100),
+    ).toBe(100);
+
+    expect(
+      computeRecommendedDeferredPollSleepMs(null, 100),
+    ).toBe(100);
   });
 });
