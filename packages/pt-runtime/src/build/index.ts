@@ -14,4 +14,6 @@ export * from "./runtime-generator";
 export { ModularRuntimeGenerator, type ModularGeneratorConfig, type ModularManifest } from "./render-runtime-modular.js";
 export * from "./catalog-generator";
 export * from "./generated-asset-checks";
+export * from "./syntax-assert";
+export * from "./top-level-symbols";
 export { computeChecksum, normalizeArtifactForChecksum } from "./checksum.js";

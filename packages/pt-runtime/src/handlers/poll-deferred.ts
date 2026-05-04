@@ -4,6 +4,24 @@ interface PollDeferredPayload {
   ticket?: string;
 }
 
+const DEFAULT_POLL_INTERVAL_MS = 100;
+
+const RECOMMENDED_POLL_BY_STATE: Record<string, number | undefined> = {
+  pending: 150,
+  "waiting-ensure-mode": 150,
+  "waiting-command": 250,
+  "waiting-confirm": 150,
+  "waiting-prompt": 150,
+  "waiting-save": 150,
+  "waiting-delay": 100,
+  cleanup: 150,
+  queued: 150,
+};
+
+function getRecommendedPollAfterMs(state: string): number | undefined {
+  return RECOMMENDED_POLL_BY_STATE[state];
+}
+
 export function handlePollDeferred(payload: PollDeferredPayload, api: RuntimeApi): RuntimeResult {
   const ticket = String(payload.ticket ?? "").trim();
 
@@ -25,6 +43,8 @@ export function handlePollDeferred(payload: PollDeferredPayload, api: RuntimeApi
   if (!finished) {
     const currentStep = jobState.currentStep ?? 0;
     const currentStepData = jobState.plan.plan[currentStep];
+    const recommendedPollAfterMs = getRecommendedPollAfterMs(jobState.state);
+
     return {
       ok: true,
       deferred: true,
@@ -44,6 +64,7 @@ export function handlePollDeferred(payload: PollDeferredPayload, api: RuntimeApi
       idleMs: Date.now() - jobState.updatedAt,
       debug: (jobState as any).debug || [],
       stepResults: (jobState as any).stepResults || [],
+      recommendedPollAfterMs,
     } as unknown as RuntimeResult;
   }
 

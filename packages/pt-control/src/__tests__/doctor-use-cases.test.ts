@@ -146,6 +146,37 @@ describe("doctor use cases", () => {
       expect(result.name).toBe("bridge-queues");
     });
 
+    test("ignores queue index and sidecar files", () => {
+      const bridgeDir = join(testDir, "bridge-queues-sidecars");
+      const commandsDir = join(bridgeDir, "commands");
+      const inFlightDir = join(bridgeDir, "in-flight");
+      const deadLetterDir = join(bridgeDir, "dead-letter");
+
+      mkdirSync(commandsDir, { recursive: true });
+      mkdirSync(inFlightDir, { recursive: true });
+      mkdirSync(deadLetterDir, { recursive: true });
+
+      writeFileSync(join(commandsDir, "_queue.json"), "[]");
+      writeFileSync(join(commandsDir, ".DS_Store"), "");
+      writeFileSync(join(commandsDir, "000000000001-terminal.plan.run.json.tmp"), "");
+      writeFileSync(join(commandsDir, "000000000001-terminal.plan.run.json.123.tmp.meta.json"), "{}");
+
+      writeFileSync(
+        join(
+          deadLetterDir,
+          "1777829508773-000000000001-terminal.plan.run.json.31559.1777829508772.2df84d04a9acb.tmp.meta.json",
+        ),
+        "{}",
+      );
+      writeFileSync(join(deadLetterDir, "1777829508773-000000000001-terminal.plan.run.json.error.json"), "{}");
+
+      const result = checkBridgeQueues(bridgeDir, false);
+
+      expect(result.ok).toBe(true);
+      expect(result.severity).toBe("info");
+      expect(result.message).toContain("0 queued / 0 in-flight / 0 dead-letter");
+    });
+
     test("returns critical when dead-letter has items", () => {
       const dlDir = join(testDir, "dead-letter");
       mkdirSync(dlDir, { recursive: true });
@@ -162,7 +193,7 @@ describe("doctor use cases", () => {
       const inFlightDir = join(testDir, "in-flight");
       mkdirSync(inFlightDir, { recursive: true });
       for (let i = 0; i < 6; i++) {
-        writeFileSync(join(inFlightDir, `cmd-${i}.json`), "{}");
+        writeFileSync(join(inFlightDir, `cmd_${i}.json`), "{}");
       }
 
       const result = checkBridgeQueues(testDir, false);
@@ -171,7 +202,7 @@ describe("doctor use cases", () => {
       expect(result.message).toContain("in-flight");
 
       for (let i = 0; i < 6; i++) {
-        rmSync(join(inFlightDir, `cmd-${i}.json`));
+        rmSync(join(inFlightDir, `cmd_${i}.json`));
       }
     });
   });

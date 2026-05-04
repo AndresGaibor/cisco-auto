@@ -41,8 +41,8 @@ describe('BackpressureManager', () => {
 
     test('should provide capacity status', () => {
       mkdirSync(paths.commandsDir(), { recursive: true });
-      writeFileSync(join(paths.commandsDir(), 'cmd-1.json'), '{}');
-      
+      writeFileSync(join(paths.commandsDir(), 'cmd_000000000001.json'), '{}');
+
       expect(() => manager.checkCapacity()).not.toThrow();
     });
   });
@@ -59,9 +59,9 @@ describe('BackpressureManager', () => {
     });
 
     test('should accept custom check interval', () => {
-      const custom = new BackpressureManager(paths, { 
+      const custom = new BackpressureManager(paths, {
         maxPending: 5,
-        checkIntervalMs: 50 
+        checkIntervalMs: 50
       });
       expect(custom).toBeDefined();
     });
@@ -77,7 +77,7 @@ describe('BackpressureManager', () => {
     test('should validate configuration values', () => {
       const manager1 = new BackpressureManager(paths, { maxPending: 1 });
       const manager2 = new BackpressureManager(paths, { maxPending: 1000 });
-      
+
       expect(manager1).toBeDefined();
       expect(manager2).toBeDefined();
     });
@@ -86,16 +86,60 @@ describe('BackpressureManager', () => {
   describe('capacity management', () => {
     test('should count commands from directory', () => {
       mkdirSync(paths.commandsDir(), { recursive: true });
-      writeFileSync(join(paths.commandsDir(), 'cmd-1.json'), '{}');
-      writeFileSync(join(paths.commandsDir(), 'cmd-2.json'), '{}');
+      writeFileSync(join(paths.commandsDir(), 'cmd_000000000001.json'), '{}');
+      writeFileSync(join(paths.commandsDir(), 'cmd_000000000002.json'), '{}');
 
       expect(() => manager.checkCapacity()).not.toThrow();
     });
 
     test('should handle empty commands directory', () => {
       mkdirSync(paths.commandsDir(), { recursive: true });
-      
+
       expect(() => manager.checkCapacity()).not.toThrow();
+    });
+
+    test('should NOT count _queue.json as pending command', () => {
+      mkdirSync(paths.commandsDir(), { recursive: true });
+      writeFileSync(join(paths.commandsDir(), '_queue.json'), JSON.stringify(['cmd_000000000001.json']));
+
+      expect(manager.getPendingCount()).toBe(0);
+    });
+
+    test('should NOT count .tmp files as pending command', () => {
+      mkdirSync(paths.commandsDir(), { recursive: true });
+      writeFileSync(join(paths.commandsDir(), '000000000001-configIos.json'), '{}');
+      writeFileSync(join(paths.commandsDir(), 'file.tmp'), 'temp');
+      writeFileSync(join(paths.commandsDir(), '000000000002-configIos.json'), '{}');
+
+      expect(manager.getPendingCount()).toBe(2);
+    });
+
+    test('should NOT count .meta.json and .error.json files as pending', () => {
+      mkdirSync(paths.commandsDir(), { recursive: true });
+      writeFileSync(join(paths.commandsDir(), '000000000001-configIos.json'), '{}');
+      writeFileSync(join(paths.commandsDir(), '000000000001.meta.json'), '{}');
+      writeFileSync(join(paths.commandsDir(), '000000000001.error.json'), '{}');
+
+      expect(manager.getPendingCount()).toBe(1);
+    });
+
+    test('should NOT count .dotfiles as pending command', () => {
+      mkdirSync(paths.commandsDir(), { recursive: true });
+      writeFileSync(join(paths.commandsDir(), '000000000001-configIos.json'), '{}');
+      writeFileSync(join(paths.commandsDir(), '.DS_Store'), 'hidden');
+
+      expect(manager.getPendingCount()).toBe(1);
+    });
+
+    test("getPendingCount ignora sidecars y cuenta solo comandos reales", () => {
+      mkdirSync(paths.commandsDir(), { recursive: true });
+      writeFileSync(join(paths.commandsDir(), "000000000001-configIos.json"), "{}");
+      writeFileSync(join(paths.commandsDir(), "file.tmp"), "temp");
+      writeFileSync(join(paths.commandsDir(), "000000000002-configIos.json"), "{}");
+      writeFileSync(join(paths.commandsDir(), "_queue.json"), "[]");
+      writeFileSync(join(paths.commandsDir(), "000000000003-configIos.json.tmp.meta.json"), "{}");
+
+      expect(manager.getPendingCount()).toBe(2);
     });
   });
 });

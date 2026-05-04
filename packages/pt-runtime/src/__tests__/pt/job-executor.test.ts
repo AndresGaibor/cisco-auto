@@ -120,13 +120,23 @@ describe("createExecutionEngine", () => {
     expect(executor.isJobFinished("unknown-id")).toBe(true);
   });
 
-  test.skip("marca como error un job activo que excede su timeout", () => {
-    // NOTE: This test is skipped because it tests a code path that doesn't work:
-    // Execution engine does NOT automatically mark jobs as finished when they exceed
-    // timeout - it requires advanceJob() to be called to detect stale jobs.
-    // getActiveJobs() returns the raw jobs map, not filtered by timeout.
-    // The test assertion on getActiveJobs().toHaveLength(0) is incorrect.
-    // Fixing this would require architectural changes to execution-engine.
-    // See: https://github.com/anomalyco/cisco-auto/issues/TODO
+  test("reapStaleJobs limpia jobs vencidos cuando se consultan", () => {
+    const terminal = createTerminalEngine({
+      commandTimeoutMs: 5000,
+      stallTimeoutMs: 10000,
+      pagerTimeoutMs: 30000,
+    });
+    terminal.attach("R1", mockTerm);
+
+    const executor = createExecutionEngine(terminal);
+    const plan = createDeferredJobPlan("R1", [
+      commandStep("show version"),
+    ]);
+
+    const job = executor.startJob(plan);
+    job.context.updatedAt = Date.now() - 60000;
+
+    expect(executor.isJobFinished(plan.id)).toBe(false);
+    expect(executor.getActiveJobs()).toHaveLength(0);
   });
 });

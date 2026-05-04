@@ -30,11 +30,16 @@ const ROOT = process.cwd();
 const IGNORED_DIRS = new Set([
   ".git",
   "node_modules",
+  ".audit",
+  ".audit-upload",
+  "tmp",
+  "temp",
   "dist",
   "build",
   "generated",
   ".turbo",
   "coverage",
+  "dist-qtscript",
 ]);
 
 const TEXT_EXTENSIONS = [
@@ -172,6 +177,7 @@ const rules: BoundaryRule[] = [
       "packages/pt-runtime/src/__tests__/architecture/runtime-handlers-boundary.test.ts",
       "packages/pt-runtime/src/__tests__/session.test.ts",
       "packages/pt-runtime/src/__tests__/queue-cleanup-ttl.test.ts",
+      "packages/pt-runtime/src/__tests__/pt-runtime-imports.test.ts",
     ],
     forbidden: [
       {
@@ -219,6 +225,35 @@ const rules: BoundaryRule[] = [
       {
         pattern: /from\s+["'](?:\.\.\/)+(?:packages|apps)\/[^"']+\/src\//g,
         message: "No importes src interno por ruta relativa cross-package. Usa exports públicos.",
+      },
+    ],
+  },
+  {
+    id: "no-legacy-yaml-from-public",
+    description: "Comandos públicos no pueden importar legacy-yaml",
+    include: ["apps/pt-cli/src"],
+    exclude: [
+      "apps/pt-cli/src/__tests__",
+      "apps/pt-cli/src/legacy-yaml",
+      "apps/pt-cli/tests",
+      "apps/pt-cli/tests",
+    ],
+    forbidden: [
+      {
+        pattern: /from\s+["'].*legacy-yaml/g,
+        message: "Código público no puede importar legacy-yaml.",
+      },
+      {
+        pattern: /from\s+["']\.\.\/legacy-yaml/g,
+        message: "Código público no puede importar legacy-yaml por ruta relativa.",
+      },
+      {
+        pattern: /require\(\s*["'].*legacy-yaml/g,
+        message: "Código público no puede hacer require de legacy-yaml.",
+      },
+      {
+        pattern: /import\(\s*["'].*legacy-yaml/g,
+        message: "Código público no puede hacer dynamic import de legacy-yaml.",
       },
     ],
   },

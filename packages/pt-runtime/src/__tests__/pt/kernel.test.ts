@@ -1,5 +1,10 @@
 // packages/pt-runtime/src/__tests__/pt/kernel.test.ts
-import { describe, test, expect, beforeEach, vi } from "bun:test";
+import { afterEach, describe, test, expect, beforeEach, vi } from "bun:test";
+
+const originalFm = (globalThis as typeof globalThis & { fm?: unknown }).fm;
+const originalDprint = (globalThis as typeof globalThis & { dprint?: unknown }).dprint;
+const originalIpc = (globalThis as typeof globalThis & { ipc?: unknown }).ipc;
+const originalScriptModule = (globalThis as typeof globalThis & { _ScriptModule?: unknown })._ScriptModule;
 
 const mockFm = {
   fileExists: vi.fn().mockReturnValue(false),
@@ -37,12 +42,22 @@ const mockScriptModule = {
   clearInterval: clearInterval,
 };
 
-(globalThis as typeof globalThis & { fm: typeof mockFm; dprint: typeof mockDprint }).fm = mockFm;
-(globalThis as typeof globalThis & { fm: typeof mockFm; dprint: typeof mockDprint }).dprint =
-  mockDprint;
-(globalThis as typeof globalThis & { ipc: typeof mockIpc }).ipc = mockIpc;
-(globalThis as typeof globalThis & { _ScriptModule: typeof mockScriptModule })._ScriptModule =
-  mockScriptModule;
+beforeEach(() => {
+  (globalThis as typeof globalThis & { fm: typeof mockFm; dprint: typeof mockDprint }).fm =
+    mockFm;
+  (globalThis as typeof globalThis & { fm: typeof mockFm; dprint: typeof mockDprint }).dprint =
+    mockDprint;
+  (globalThis as typeof globalThis & { ipc: typeof mockIpc }).ipc = mockIpc;
+  (globalThis as typeof globalThis & { _ScriptModule: typeof mockScriptModule })._ScriptModule =
+    mockScriptModule;
+});
+
+afterEach(() => {
+  (globalThis as typeof globalThis & { fm?: unknown }).fm = originalFm;
+  (globalThis as typeof globalThis & { dprint?: unknown }).dprint = originalDprint;
+  (globalThis as typeof globalThis & { ipc?: unknown }).ipc = originalIpc;
+  (globalThis as typeof globalThis & { _ScriptModule?: unknown })._ScriptModule = originalScriptModule;
+});
 
 import { createLeaseManager } from "../../pt/kernel/lease";
 import { createDirectoryManager } from "../../pt/kernel/directories";

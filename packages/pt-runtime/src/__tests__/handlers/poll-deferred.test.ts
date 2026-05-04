@@ -107,4 +107,122 @@ describe("__pollDeferred", () => {
     expect(String((result as any).raw || "")).toContain("% Invalid input detected");
     expect(String((result as any).output || "")).toContain("% Invalid input detected");
   });
+
+  test("devuelve recommendedPollAfterMs segun estado pending", () => {
+    const api = {
+      dprint: vi.fn(),
+      getJobState: vi.fn().mockReturnValue({
+        finished: false,
+        state: "waiting-command",
+        currentStep: 1,
+        plan: { plan: [{ type: "command" }] },
+        outputBuffer: "",
+        error: null,
+        errorCode: null,
+      }),
+    } as any;
+
+    const result = handlePollDeferred({ ticket: "ticket-1" }, api as any);
+
+    expect(result).toMatchObject({
+      done: false,
+      state: "waiting-command",
+      recommendedPollAfterMs: 250,
+    });
+  });
+
+  test("devuelve 150ms para state=pending", () => {
+    const api = {
+      dprint: vi.fn(),
+      getJobState: vi.fn().mockReturnValue({
+        finished: false,
+        state: "pending",
+        currentStep: 0,
+        plan: { plan: [{ type: "command" }] },
+        outputBuffer: "",
+        error: null,
+        errorCode: null,
+      }),
+    } as any;
+
+    const result = handlePollDeferred({ ticket: "ticket-1" }, api as any);
+
+    expect(result).toMatchObject({
+      done: false,
+      state: "pending",
+      recommendedPollAfterMs: 150,
+    });
+  });
+
+  test("devuelve 100ms para waiting-delay", () => {
+    const api = {
+      dprint: vi.fn(),
+      getJobState: vi.fn().mockReturnValue({
+        finished: false,
+        state: "waiting-delay",
+        currentStep: 0,
+        plan: { plan: [{ type: "delay", value: "1000" }] },
+        outputBuffer: "",
+        error: null,
+        errorCode: null,
+      }),
+    } as any;
+
+    const result = handlePollDeferred({ ticket: "ticket-1" }, api as any);
+
+    expect(result).toMatchObject({
+      done: false,
+      state: "waiting-delay",
+      recommendedPollAfterMs: 100,
+    });
+  });
+
+  test("no devuelve recommendedPollAfterMs cuando job esta completed", () => {
+    const api = {
+      dprint: vi.fn(),
+      getJobState: vi.fn().mockReturnValue({
+        finished: true,
+        state: "completed",
+        currentStep: 2,
+        plan: { plan: [{ type: "command" }, { type: "command" }] },
+        outputBuffer: "output",
+        error: null,
+        errorCode: null,
+        result: { ok: true, output: "output", status: 0 },
+        lastPrompt: "Router#",
+        lastMode: "privileged-exec",
+      }),
+    } as any;
+
+    const result = handlePollDeferred({ ticket: "ticket-1" }, api as any);
+
+    expect(result).toMatchObject({
+      done: true,
+      ok: true,
+    });
+    expect((result as any).recommendedPollAfterMs).toBeUndefined();
+  });
+
+  test("pending sin recommendedPollAfterMs conocido usa undefined", () => {
+    const api = {
+      dprint: vi.fn(),
+      getJobState: vi.fn().mockReturnValue({
+        finished: false,
+        state: "unknown-state" as any,
+        currentStep: 0,
+        plan: { plan: [{ type: "command" }] },
+        outputBuffer: "",
+        error: null,
+        errorCode: null,
+      }),
+    } as any;
+
+    const result = handlePollDeferred({ ticket: "ticket-1" }, api as any);
+
+    expect(result).toMatchObject({
+      done: false,
+      state: "unknown-state",
+      recommendedPollAfterMs: undefined,
+    });
+  });
 });

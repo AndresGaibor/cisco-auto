@@ -19,6 +19,10 @@
 import { existsSync, readdirSync, watch, type FSWatcher } from "node:fs";
 import { EventEmitter } from "node:events";
 import { join } from "node:path";
+import { isFsSidecarFile } from "./shared/bridge-file-classifier.js";
+import { ResultPathResolver } from "./shared/result-path-resolver.js";
+import { ResultSubscriptionRegistry } from "./shared/result-subscription-registry.js";
+import { ResultPollingFallback } from "./shared/result-polling-fallback.js";
 
 /**
  * Watcher compartido que multiplexa notificaciones de archivos de resultado.
@@ -28,17 +32,19 @@ import { join } from "node:path";
  */
 export class SharedResultWatcher extends EventEmitter {
   private watcher: FSWatcher | null = null;
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
-  private seenFiles = new Set<string>();
-  private callbacks = new Map<string, Set<() => void>>();
-  private refCount = 0;
+  private readonly registry: ResultSubscriptionRegistry;
+  private readonly pathResolver: ResultPathResolver;
+  private pollingFallback: ResultPollingFallback | null = null;
+  private readonly seenFiles = new Set<string>();
   private watching = false;
 
   /**
    * @param resultsDir - Directorio donde se escriben los resultados (results/)
    */
-  constructor(private readonly resultsDir: string) {
+  constructor(resultsDir: string) {
     super();
+    this.registry = new ResultSubscriptionRegistry();
+    this.pathResolver = new ResultPathResolver(resultsDir);
   }
 
   /**
@@ -49,17 +55,11 @@ export class SharedResultWatcher extends EventEmitter {
    * @param callback - Función a llamar cuando el archivo de resultado aparezca
    */
   watch(commandId: string, callback: () => void): void {
-    if (!this.callbacks.has(commandId)) {
-      this.callbacks.set(commandId, new Set());
-    } else {
-      const existing = this.callbacks.get(commandId)!;
-      if (existing.has(callback)) {
-        return;
-      }
-    }
+    this.registry.watch(commandId, callback);
 
-    this.callbacks.get(commandId)!.add(callback);
-    this.refCount++;
+    if (this.pollingFallback) {
+      this.refreshPollingSubscriptions();
+    }
 
     if (!this.watching) {
       this.startWatching();
@@ -74,20 +74,14 @@ export class SharedResultWatcher extends EventEmitter {
    * @param callback - Referencia exacta del callback a remover
    */
   unwatch(commandId: string, callback: () => void): void {
-    const cbs = this.callbacks.get(commandId);
-    if (!cbs) return;
+    this.registry.unwatch(commandId, callback);
 
-    if (cbs.delete(callback)) {
-      this.refCount--;
-    }
-
-    if (cbs.size === 0) {
-      this.callbacks.delete(commandId);
-    }
-
-    if (this.refCount === 0 && this.watching) {
+    if (this.registry.getListenerCount() === 0 && this.watching) {
       this.stopWatcher();
+      return;
     }
+
+    this.refreshPollingSubscriptions();
   }
 
   /**
@@ -98,21 +92,15 @@ export class SharedResultWatcher extends EventEmitter {
    * @param commandId - ID del comando cuyos listeners deben ser notificados
    */
   private notify(commandId: string): void {
-    const cbs = this.callbacks.get(commandId);
-    if (!cbs) return;
+    if (!this.registry.hasCallbacks(commandId)) return;
 
-    for (const callback of cbs) {
-      try {
-        callback();
-      } catch (err) {
-        this.emitCallbackError(err);
-      }
-    }
+    this.registry.notify(commandId, (err) => this.emitCallbackError(err));
   }
 
   /**
    * Inicia el fs.watch del directorio de resultados.
    * Filtra solo archivos .json y extrae el commandId del nombre.
+   * Ignora sidecars para evitar notificaciones espurias.
    */
   private startWatching(): void {
     if (this.watcher) return;
@@ -120,7 +108,7 @@ export class SharedResultWatcher extends EventEmitter {
     this.watching = true;
 
     try {
-      this.watcher = watch(this.resultsDir, (_eventType, filename) => {
+      this.watcher = watch(this.pathResolver["resultsDir"], (_eventType, filename) => {
         if (filename) {
           this.handleMaybeResult(String(filename));
         } else {
@@ -148,6 +136,7 @@ export class SharedResultWatcher extends EventEmitter {
     this.stopPollingFallback();
     this.watching = false;
     this.seenFiles.clear();
+    this.registry.clear();
   }
 
   private stopFsWatcherOnly(): void {
@@ -162,68 +151,100 @@ export class SharedResultWatcher extends EventEmitter {
   }
 
   private startPollingFallback(): void {
-    if (this.pollTimer) return;
+    if (this.pollingFallback) return;
 
-    this.pollTimer = setInterval(() => {
-      this.scanResultsDir();
-    }, 100);
+    const commandIds = this.registry.getRegisteredCommandIds();
 
-    if (typeof this.pollTimer.unref === "function") {
-      this.pollTimer.unref();
-    }
+    this.pollingFallback = new ResultPollingFallback(
+      this.pathResolver,
+      commandIds,
+      (commandId) => this.notify(commandId)
+    );
+
+    this.pollingFallback.start(100);
   }
 
   private stopPollingFallback(): void {
-    if (this.pollTimer) {
-      clearInterval(this.pollTimer);
-      this.pollTimer = null;
+    if (this.pollingFallback) {
+      this.pollingFallback.stop();
+      this.pollingFallback = null;
     }
   }
 
+  private refreshPollingSubscriptions(): void {
+    if (!this.pollingFallback) return;
+
+    this.pollingFallback.updateSubscribedCommandIds(this.registry.getRegisteredCommandIds());
+  }
+
+  /**
+   * scanResultsDir hace un scan enfocado: solo archivos de commandIds suscritos.
+   * No itera sobre todos los archivos del directorio.
+   */
   private scanResultsDir(): void {
-    if (!existsSync(this.resultsDir)) {
+    if (!existsSync(this.pathResolver["resultsDir"])) {
       return;
     }
+
+    const subscribedIds = this.registry.getRegisteredCommandIds();
+    if (subscribedIds.size === 0) return;
 
     let files: string[] = [];
 
     try {
-      files = readdirSync(this.resultsDir).filter((file) => file.endsWith(".json"));
+      files = readdirSync(this.pathResolver["resultsDir"]);
     } catch {
       return;
     }
 
-    for (const file of files) {
-      const fullPath = join(this.resultsDir, file);
+    const relevantFiles = this.pathResolver.filterResultsForCommands(files, subscribedIds);
+
+    for (const file of relevantFiles) {
+      const fullPath = join(this.pathResolver["resultsDir"], file);
 
       if (!existsSync(fullPath)) {
         continue;
       }
 
-      this.handleMaybeResult(file);
+      if (this.seenFiles.has(fullPath)) {
+        continue;
+      }
+
+      this.seenFiles.add(fullPath);
+
+      if (this.pollingFallback) {
+        this.pollingFallback.markSeen(fullPath);
+      }
+
+      const commandId = this.pathResolver.extractCommandId(file);
+      if (commandId) {
+        this.notify(commandId);
+      }
     }
   }
 
+  /**
+   * handleMaybeResult filtra sidecars y usa seenFiles para evitar duplicados.
+   */
   private handleMaybeResult(filename: string): void {
     if (!filename.endsWith(".json")) return;
+    if (isFsSidecarFile(filename)) return;
 
-    if (this.seenFiles.has(filename)) {
+    const fullPath = join(this.pathResolver["resultsDir"], filename);
+
+    if (this.seenFiles.has(fullPath)) {
       return;
     }
 
-    this.seenFiles.add(filename);
+    this.seenFiles.add(fullPath);
 
-    const commandId = filename.slice(0, -5);
-    const callbacks = this.callbacks.get(commandId);
+    if (this.pollingFallback) {
+      this.pollingFallback.markSeen(fullPath);
+    }
 
-    if (!callbacks || callbacks.size === 0) return;
-
-    for (const callback of [...callbacks]) {
-      try {
-        callback();
-      } catch (error) {
-        this.emitCallbackError(error);
-      }
+    const commandId = this.pathResolver.extractCommandId(filename);
+    if (commandId) {
+      this.notify(commandId);
     }
   }
 
@@ -241,8 +262,7 @@ export class SharedResultWatcher extends EventEmitter {
    */
   destroy(): void {
     this.stopWatcher();
-    this.callbacks.clear();
-    this.refCount = 0;
+    this.registry.clear();
     this.removeAllListeners();
   }
 
@@ -257,8 +277,8 @@ export class SharedResultWatcher extends EventEmitter {
   } {
     return {
       watching: this.watching,
-      listenersCount: this.refCount,
-      commandsWatched: this.callbacks.size,
+      listenersCount: this.registry.getListenerCount(),
+      commandsWatched: this.registry.getCommandCount(),
     };
   }
 }

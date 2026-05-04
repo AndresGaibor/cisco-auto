@@ -1,9 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "bun:test";
 
-vi.mock("../../pt/kernel/command-finalizer", () => ({
-  finishActiveCommand: vi.fn(),
-}));
-
 function createSubsystems(runtimeFn: () => unknown) {
   return {
     dirs: { ensureDirectories: vi.fn() },
@@ -55,11 +51,15 @@ function createSubsystems(runtimeFn: () => unknown) {
 describe("pollCommandQueue", () => {
   afterEach(() => {
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   test("espera resultados async del runtime antes de finalizar el comando", async () => {
+    const commandFinalizer = await import("../../pt/kernel/command-finalizer");
+    const finishActiveCommandSpy = vi
+      .spyOn(commandFinalizer, "finishActiveCommand")
+      .mockImplementation(vi.fn());
     const { pollCommandQueue } = await import("../../pt/kernel/queue-poller");
-    const { finishActiveCommand } = await import("../../pt/kernel/command-finalizer");
 
     const runtimeFn = vi.fn(
       () =>
@@ -97,12 +97,12 @@ describe("pollCommandQueue", () => {
 
     expect(state.activeCommand?.startedAt).toBeTypeOf("number");
     expect(state.activeCommand?.startedAt).toBeGreaterThan(0);
-    expect(finishActiveCommand).not.toHaveBeenCalled();
+    expect(finishActiveCommandSpy).not.toHaveBeenCalled();
 
     await new Promise((resolve) => setTimeout(resolve, 30));
 
-    expect(finishActiveCommand).toHaveBeenCalledTimes(1);
-    expect((finishActiveCommand as any).mock.calls[0][2]).toEqual({
+    expect(finishActiveCommandSpy).toHaveBeenCalledTimes(1);
+    expect((finishActiveCommandSpy as any).mock.calls[0][2]).toEqual({
       ok: true,
       raw: "captured-output",
     });

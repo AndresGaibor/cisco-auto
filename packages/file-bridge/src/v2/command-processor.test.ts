@@ -140,4 +140,35 @@ describe("CommandProcessor + CrashRecovery contract", () => {
     const parsed = JSON.parse(readFileSync(paths.resultFilePath(cmd.id), "utf8"));
     expect(parsed.type).toBe("terminal.plan.run");
   });
+
+  test("pickNextCommand ignora _queue.json y archivos sidecar", () => {
+    writeFileSync(join(paths.commandsDir(), "_queue.json"), JSON.stringify(["000000000001-listDevices.json"]));
+    writeFileSync(join(paths.commandsDir(), "000000000001-listDevices.json"), JSON.stringify(commandEnvelope(1, "listDevices"), null, 2));
+    writeFileSync(join(paths.commandsDir(), "000000000002-configIos.json"), JSON.stringify(commandEnvelope(2, "configIos", { device: "R1" }), null, 2));
+    writeFileSync(join(paths.commandsDir(), ".DS_Store"), "{}");
+    writeFileSync(join(paths.commandsDir(), "file.tmp"), "{}");
+    writeFileSync(join(paths.commandsDir(), "cmd_000000000003.meta.json"), "{}");
+    writeFileSync(join(paths.commandsDir(), "cmd_000000000003.error.json"), "{}");
+
+    const picked = processor.pickNextCommand();
+
+    expect(picked?.id).toBe("cmd_000000000001");
+    expect(picked?.seq).toBe(1);
+    expect(picked?.type).toBe("listDevices");
+  });
+
+  test("pickNextCommand ordena por seq y procesa en orden FIFO", () => {
+    writeFileSync(join(paths.commandsDir(), "000000000003-listDevices.json"), JSON.stringify(commandEnvelope(3, "listDevices"), null, 2));
+    writeFileSync(join(paths.commandsDir(), "000000000001-listDevices.json"), JSON.stringify(commandEnvelope(1, "listDevices"), null, 2));
+    writeFileSync(join(paths.commandsDir(), "000000000002-listDevices.json"), JSON.stringify(commandEnvelope(2, "listDevices"), null, 2));
+
+    const first = processor.pickNextCommand();
+    expect(first?.seq).toBe(1);
+
+    const second = processor.pickNextCommand();
+    expect(second?.seq).toBe(2);
+
+    const third = processor.pickNextCommand();
+    expect(third?.seq).toBe(3);
+  });
 });

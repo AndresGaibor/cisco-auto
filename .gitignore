@@ -131,3 +131,7 @@ skills-lock.json
 .pt-validation-reports/
 .pt-review/
 pbcopy
+.audit/
+.audit-upload/
+.reports/
+**/.reports/

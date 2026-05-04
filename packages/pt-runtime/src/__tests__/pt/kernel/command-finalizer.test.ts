@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "bun:test";
 
 import { buildCommandResultEnvelope } from "../../../pt/kernel/command-result-envelope";
-import { finishActiveCommand } from "../../../pt/kernel/command-finalizer";
 
 afterEach(() => {
   delete (globalThis as any).fm;
@@ -106,6 +105,7 @@ describe("buildCommandResultEnvelope", () => {
   });
 
   test("limpia el estado activeCommand aunque falle verificación de result file", () => {
+    const { finishActiveCommand } = require("../../../pt/kernel/command-finalizer");
     const fm = {
       writePlainTextToFile: vi.fn(),
       fileExists: vi.fn(() => false),

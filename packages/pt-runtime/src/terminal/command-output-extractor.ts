@@ -215,6 +215,12 @@ export function extractCommandOutput(input: ExtractOptions): ExtractResult {
     warnings.push(partialWarning);
   }
 
+  if (hasCommand && !outputHasCommandEvidence(finalOutput, input.command)) {
+    warnings.push(
+      `El output no contiene evidencia del comando actual ("${input.command}"). Output puede pertenecer a otra ejecución.`,
+    );
+  }
+
   return {
     output: finalOutput,
     raw: chosen.raw,
@@ -521,4 +527,53 @@ export function preferCommandSlice(
   }
 
   return { output: eventOutput, source: "event-default" };
+}
+
+function normalizeEolExtractor(value: unknown): string {
+  return String(value ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+export function outputHasCommandEvidence(output: string, command: string): boolean {
+  const text = normalizeEolExtractor(output);
+  const cmd = normalizeExtractorCommand(command);
+
+  if (/^show\s+version\b/.test(cmd)) {
+    return (
+      /Cisco IOS Software/i.test(text) ||
+      /System image file/i.test(text) ||
+      /Configuration register/i.test(text) ||
+      /\bVersion\s+\d+(?:\.\d+)?/i.test(text)
+    );
+  }
+
+  if (/^show\s+running-config\b/.test(cmd)) {
+    return (
+      /Building configuration/i.test(text) ||
+      /Current configuration\s*:/i.test(text) ||
+      /interface\s+Vlan/i.test(text) ||
+      /hostname\s+\S+/i.test(text) ||
+      /(?:^|\n)version\s+\S+/i.test(text) ||
+      /(?:^|\n)end\s*$/i.test(text)
+    );
+  }
+
+  if (/^show\s+startup-config\b/.test(cmd)) {
+    return (
+      /Using\s+\d+\s+bytes/i.test(text) ||
+      /startup-config/i.test(text) ||
+      /Current configuration\s*:/i.test(text) ||
+      /(?:^|\n)version\s+\S+/i.test(text)
+    );
+  }
+
+  if (/^show\s+ip\s+interface\s+brief\b/.test(cmd)) {
+    return /Interface\s+IP-Address\s+OK\?\s+Method\s+Status\s+Protocol/i.test(text);
+  }
+
+  if (/^show\s+interfaces?\b/.test(cmd)) {
+    const firstLine = firstMeaningfulOutputLine(text, command);
+    return lineLooksLikeInterfaceHeader(firstLine);
+  }
+
+  return true;
 }

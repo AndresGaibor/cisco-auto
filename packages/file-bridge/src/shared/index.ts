@@ -23,3 +23,14 @@ export {
 } from "./local-types";
 export { BridgePathLayout } from "./path-layout";
 export { SequenceStore } from "./sequence-store";
+export {
+  isQueueIndexFile,
+  isFsSidecarFile,
+  isLegacyCommandFile,
+  isBridgeCommandFile,
+  isBridgeResultFile,
+  isDeadLetterCommandFile,
+  filterBridgeCommandFiles,
+  filterBridgeResultFiles,
+  filterDeadLetterCommandFiles,
+} from "./bridge-file-classifier";

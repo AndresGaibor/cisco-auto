@@ -13,7 +13,13 @@
 
 import { join } from "node:path";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { BridgePathLayout } from "../shared/path-layout.js";
+import { BridgePathLayout, parseCommandFileName } from "../shared/path-layout.js";
+import {
+  isFsSidecarFile,
+  isBridgeCommandFile,
+  isBridgeResultFile,
+  isDeadLetterCommandFile,
+} from "../shared/bridge-file-classifier.js";
 import { SequenceStore } from "../shared/sequence-store.js";
 import type { BridgeLease } from "../shared/protocol.js";
 
@@ -88,14 +94,16 @@ export class BridgeDiagnostics {
       }
     }
 
-    const pendingCommands = this.countFilesInDir(this.paths.commandsDir());
-    const inFlight = this.countFilesInDir(this.paths.inFlightDir());
-    const results = this.countFilesInDir(this.paths.resultsDir());
-    const deadLetters = this.countFilesInDir(this.paths.deadLetterDir());
-    const rotatedLogs = this.countRotatedLogs();
-
     const queueIndex = this.readQueueIndex();
     const commandFiles = this.listCommandFiles();
+    const inFlightFiles = this.listCommandFilesInDir(this.paths.inFlightDir());
+
+    const pendingCommands = commandFiles.length;
+    const inFlight = inFlightFiles.length;
+    const results = this.countRegularJsonFiles(this.paths.resultsDir());
+    const deadLetters = this.countDeadLetterFiles(this.paths.deadLetterDir());
+    const rotatedLogs = this.countRotatedLogs();
+
     const queueIndexDrift = this.hasQueueIndexDrift(queueIndex, commandFiles);
     const queueIndexMissingEntries = this.countQueueIndexMissingEntries(queueIndex, commandFiles);
     const queueIndexExtraEntries = this.countQueueIndexExtraEntries(queueIndex, commandFiles);
@@ -162,22 +170,38 @@ export class BridgeDiagnostics {
     };
   }
 
-  private countFilesInDir(dir: string): number {
+  private countRegularJsonFiles(dir: string): number {
     try {
-      return readdirSync(dir).filter((f) => f.endsWith(".json") && f !== "_queue.json").length;
+      return readdirSync(dir)
+        .filter((f) => f.endsWith(".json") && !isFsSidecarFile(f))
+        .length;
     } catch {
       return 0;
     }
   }
 
-  private listCommandFiles(): string[] {
+  private countDeadLetterFiles(dir: string): number {
     try {
-      return readdirSync(this.paths.commandsDir())
-        .filter((f) => f.endsWith(".json") && f !== "_queue.json")
+      return readdirSync(dir)
+        .filter((f) => f.endsWith(".json") && !isFsSidecarFile(f))
+        .length;
+    } catch {
+      return 0;
+    }
+  }
+
+  private listCommandFilesInDir(dir: string): string[] {
+    try {
+      return readdirSync(dir)
+        .filter((f) => isBridgeCommandFile(f))
         .sort();
     } catch {
       return [];
     }
+  }
+
+  private listCommandFiles(): string[] {
+    return this.listCommandFilesInDir(this.paths.commandsDir());
   }
 
   private readQueueIndex(): string[] {
@@ -231,7 +255,7 @@ export class BridgeDiagnostics {
 
   private oldestFileAgeMs(dir: string): number {
     try {
-      const files = readdirSync(dir).filter((f) => f.endsWith(".json") && f !== "_queue.json");
+      const files = this.listCommandFilesInDir(dir);
       if (files.length === 0) return 0;
 
       let oldestMtime = Number.MAX_SAFE_INTEGER;

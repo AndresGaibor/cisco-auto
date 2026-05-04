@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { extractCommandOutput } from "./command-output-extractor.js";
+import { extractCommandOutput, outputHasCommandEvidence } from "./command-output-extractor.js";
 
 describe("extractCommandOutput", () => {
   test("elimina eco, syslog y prompt de la salida IOS limpia", () => {
@@ -185,6 +185,186 @@ describe("extractCommandOutput", () => {
     expect(result.output).toContain("FastEthernet0/1 is up");
     expect(result.warnings).not.toContain(
       "Output posiblemente parcial: el comando largo terminó sin eco ni encabezado inicial esperado.",
+    );
+  });
+});
+
+describe("outputHasCommandEvidence", () => {
+  test("show version con output genuino devuelve true", () => {
+    const output = [
+      "Cisco IOS Software, Version 15.2",
+      "System image file is \"flash:c2960-lanbasek9-mz.152-2.EA.bin\"",
+      "Configuration register is 0xF",
+    ].join("\n");
+    expect(outputHasCommandEvidence(output, "show version")).toBe(true);
+  });
+
+  test("show version con output de otro comando devuelve false", () => {
+    const output = [
+      "Interface IP-Address OK? Method Status Protocol",
+      "GigabitEthernet0/0 192.168.1.1 YES manual up up",
+    ].join("\n");
+    expect(outputHasCommandEvidence(output, "show version")).toBe(false);
+  });
+
+  test("show running-config con Building configuration devuelve true", () => {
+    const output = [
+      "Building configuration...",
+      "Current configuration: 123 bytes",
+      "version 15.2",
+      "hostname Router",
+      "end",
+    ].join("\n");
+    expect(outputHasCommandEvidence(output, "show running-config")).toBe(true);
+  });
+
+  test("show running-config sin evidencia de configuracion devuelve false", () => {
+    const output = [
+      "Cisco IOS Software, Version 15.2",
+      "System image file is \"flash:c2960-lanbasek9-mz.152-2.EA.bin\"",
+      "Configuration register is 0xF",
+    ].join("\n");
+    expect(outputHasCommandEvidence(output, "show running-config")).toBe(false);
+  });
+
+  test("show ip interface brief con header correcto devuelve true", () => {
+    const output = [
+      "Interface IP-Address OK? Method Status Protocol",
+      "GigabitEthernet0/0 192.168.1.1 YES manual up up",
+    ].join("\n");
+    expect(outputHasCommandEvidence(output, "show ip interface brief")).toBe(true);
+  });
+
+  test("show ip interface brief con output de show version devuelve false", () => {
+    const output = [
+      "Cisco IOS Software, Version 15.2",
+      "System image file",
+      "Configuration register is 0xF",
+    ].join("\n");
+    expect(outputHasCommandEvidence(output, "show ip interface brief")).toBe(false);
+  });
+
+  test("show interfaces con encabezado de interfaz valido devuelve true", () => {
+    const output = [
+      "FastEthernet0/1 is up, line protocol is up (connected)",
+      "  Hardware is Lance, address is 0060.5c93.4501",
+    ].join("\n");
+    expect(outputHasCommandEvidence(output, "show interfaces")).toBe(true);
+  });
+
+  test("show interfaces sin encabezado valido devuelve false", () => {
+    const output = [
+      "Interface IP-Address OK? Method Status Protocol",
+      "GigabitEthernet0/0 192.168.1.1 YES manual up up",
+    ].join("\n");
+    expect(outputHasCommandEvidence(output, "show interfaces")).toBe(false);
+  });
+
+  test("comando desconocido devuelve true por defecto", () => {
+    expect(outputHasCommandEvidence("some output", "show something-odd")).toBe(true);
+  });
+});
+
+describe("extractCommandOutput - blindaje de output contaminado", () => {
+  test("no completa running-config con historial viejo de show version", () => {
+    const staleOutput = [
+      "SW-SRV-DIST#show running-config",
+      "Cisco IOS Software, Version 15.2",
+      "System image file is \"flash:c2960-lanbasek9-mz.152-2.EA.bin\"",
+      "Configuration register is 0xF",
+      "SW-SRV-DIST#",
+    ].join("\n");
+
+    const result = extractCommandOutput({
+      command: "show running-config",
+      sessionKind: "ios",
+      promptBefore: "SW-SRV-DIST#",
+      promptAfter: "SW-SRV-DIST#",
+      eventOutput: staleOutput,
+      snapshotDelta: "",
+      commandEndedSeen: true,
+      outputEventsCount: 1,
+    });
+
+    expect(result.warnings).toContain(
+      'El output no contiene evidencia del comando actual ("show running-config"). Output puede pertenecer a otra ejecución.',
+    );
+  });
+
+  test("sí completa show running-config si contiene evidencia real", () => {
+    const genuineOutput = [
+      "SW-SRV-DIST#show running-config",
+      "Building configuration...",
+      "Current configuration: 123 bytes",
+      "version 15.2",
+      "hostname SW-SRV-DIST",
+      "end",
+      "SW-SRV-DIST#",
+    ].join("\n");
+
+    const result = extractCommandOutput({
+      command: "show running-config",
+      sessionKind: "ios",
+      promptBefore: "SW-SRV-DIST#",
+      promptAfter: "SW-SRV-DIST#",
+      eventOutput: genuineOutput,
+      snapshotDelta: "",
+      commandEndedSeen: true,
+      outputEventsCount: 1,
+    });
+
+    expect(result.output).toContain("Building configuration");
+    expect(result.warnings).not.toContain(
+      'El output no contiene evidencia del comando actual ("show running-config"). Output puede pertenecer a otra ejecución.',
+    );
+  });
+
+  test("no completa show version con output de ip interface brief", () => {
+    const wrongOutput = [
+      "SW-SRV-DIST#show version",
+      "Interface IP-Address OK? Method Status Protocol",
+      "GigabitEthernet0/0 192.168.1.1 YES manual up up",
+      "SW-SRV-DIST#",
+    ].join("\n");
+
+    const result = extractCommandOutput({
+      command: "show version",
+      sessionKind: "ios",
+      promptBefore: "SW-SRV-DIST#",
+      promptAfter: "SW-SRV-DIST#",
+      eventOutput: wrongOutput,
+      snapshotDelta: "",
+      commandEndedSeen: true,
+      outputEventsCount: 1,
+    });
+
+    expect(result.warnings).toContain(
+      'El output no contiene evidencia del comando actual ("show version"). Output puede pertenecer a otra ejecución.',
+    );
+  });
+
+  test("no completa ip interface brief con output de show version", () => {
+    const wrongOutput = [
+      "SW-SRV-DIST#show ip interface brief",
+      "Cisco IOS Software, Version 15.2",
+      "System image file is \"flash:c2960-lanbasek9-mz.152-2.EA.bin\"",
+      "Configuration register is 0xF",
+      "SW-SRV-DIST#",
+    ].join("\n");
+
+    const result = extractCommandOutput({
+      command: "show ip interface brief",
+      sessionKind: "ios",
+      promptBefore: "SW-SRV-DIST#",
+      promptAfter: "SW-SRV-DIST#",
+      eventOutput: wrongOutput,
+      snapshotDelta: "",
+      commandEndedSeen: true,
+      outputEventsCount: 1,
+    });
+
+    expect(result.warnings).toContain(
+      'El output no contiene evidencia del comando actual ("show ip interface brief"). Output puede pertenecer a otra ejecución.',
     );
   });
 });

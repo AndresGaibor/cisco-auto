@@ -54,7 +54,18 @@ export { LeaseManager } from "./v2/lease-manager.js";
 export { CrashRecovery } from "./v2/crash-recovery.js";
 export { atomicWriteFile, ensureDir, ensureFile, appendLine } from "./shared/fs-atomic.js";
 
-// Value Objects
+// File classifier — single source of truth for file type detection
+export {
+  isQueueIndexFile,
+  isFsSidecarFile,
+  isLegacyCommandFile,
+  isBridgeCommandFile,
+  isBridgeResultFile,
+  isDeadLetterCommandFile,
+  filterBridgeCommandFiles,
+  filterBridgeResultFiles,
+  filterDeadLetterCommandFiles,
+} from "./shared/bridge-file-classifier.js";
 export { CommandSeq, parseCommandSeq, isValidCommandSeq } from "./shared/command-seq.js";
 export {
   CommandId,

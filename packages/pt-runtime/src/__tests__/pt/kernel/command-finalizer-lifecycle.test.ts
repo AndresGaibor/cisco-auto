@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, test, vi } from "bun:test";
-import { finishActiveCommand } from "../../../pt/kernel/command-finalizer";
 
 function createState() {
   return {
@@ -43,6 +42,7 @@ afterEach(() => {
 
 describe("finishActiveCommand", () => {
   test("no limpia in-flight si no pudo verificar result file", () => {
+    const { finishActiveCommand } = require("../../../pt/kernel/command-finalizer");
     const state = createState();
     const subsystems = createSubsystems();
 
@@ -68,6 +68,7 @@ describe("finishActiveCommand", () => {
   });
 
   test("limpia in-flight solo después de escribir y verificar result file válido", () => {
+    const { finishActiveCommand } = require("../../../pt/kernel/command-finalizer");
     const state = createState();
     const subsystems = createSubsystems();
     const files = new Map<string, string>();
@@ -96,6 +97,7 @@ describe("finishActiveCommand", () => {
   });
 
   test("no limpia si el result file escrito queda corrupto", () => {
+    const { finishActiveCommand } = require("../../../pt/kernel/command-finalizer");
     const state = createState();
     const subsystems = createSubsystems();
 

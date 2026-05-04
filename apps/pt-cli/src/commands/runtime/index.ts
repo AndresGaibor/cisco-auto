@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { FileBridgeV2 } from "@cisco-auto/file-bridge";
 import { listRuntimeSnapshots, restoreRuntimeSnapshot } from "@cisco-auto/pt-runtime";
 import { getDefaultDevDir } from "../../system/paths.js";
+import { createRuntimeTraceCommand } from "./trace.js";
 
 function getDevDir(): string {
   return process.env.PT_DEV_DIR ?? getDefaultDevDir();
@@ -247,6 +248,8 @@ Si algo falla:
         process.exitCode = 1;
       }
     });
+
+  runtime.addCommand(createRuntimeTraceCommand());
 
   return runtime;
 }

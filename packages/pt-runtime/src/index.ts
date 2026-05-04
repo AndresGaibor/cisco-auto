@@ -152,6 +152,25 @@ export type {
 } from "./build/manifest.js";
 
 // --------------------------------------------------------------------
-// PT compatibility contract - público para pt-control
-// --------------------------------------------------------------------
-export * from "./contracts/pt-compatibility.js";
+  // PT compatibility contract - público para pt-control
+  // --------------------------------------------------------------------
+  export {
+    PT_MODEL_MAP,
+    PT_DEVICE_TYPE_MAP,
+    PT_NON_CREATABLE_MODELS,
+    getAllValidModels,
+    PT_DEVICE_TYPE_ID,
+    type PTDeviceTypeId,
+    PT_CABLE_TYPE_ID,
+    type PTCableTypeId,
+    getPTDeviceType,
+    validatePTModel,
+    validatePortExists,
+    validateModuleExists,
+    validateModuleSlotCompatible,
+    findFirstCompatibleSlot,
+    assertCatalogHealth,
+    assertCatalogLoaded,
+    getContractSummary,
+    type PTCatalogHealth,
+  } from "./contracts/pt-compatibility.js";

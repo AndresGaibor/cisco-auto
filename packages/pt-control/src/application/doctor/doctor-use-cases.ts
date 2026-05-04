@@ -6,6 +6,12 @@
 import { existsSync, readdirSync, statSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { DoctorCheckResult, DoctorPaths } from "./doctor-types.js";
+import {
+  isQueueIndexFile,
+  isFsSidecarFile,
+  isBridgeCommandFile,
+  isDeadLetterCommandFile,
+} from "@cisco-auto/file-bridge";
 
 /**
  * Check if the pt-dev directory exists and is accessible.
@@ -195,20 +201,20 @@ export function checkRuntimeFiles(ptDevDir: string, _verbose: boolean): DoctorCh
 /**
  * Check bridge queues (commands, in-flight, dead-letter).
  */
+function countMatchingFiles(dir: string, predicate: (name: string) => boolean): number {
+  if (!existsSync(dir)) return 0;
+
+  return readdirSync(dir).filter(predicate).length;
+}
+
 export function checkBridgeQueues(ptDevDir: string, _verbose: boolean): DoctorCheckResult {
   const commandsDir = join(ptDevDir, "commands");
   const inFlightDir = join(ptDevDir, "in-flight");
   const deadLetterDir = join(ptDevDir, "dead-letter");
 
-  const queued = existsSync(commandsDir)
-    ? readdirSync(commandsDir).filter((f) => f.endsWith(".json")).length
-    : 0;
-  const inFlight = existsSync(inFlightDir)
-    ? readdirSync(inFlightDir).filter((f) => f.endsWith(".json")).length
-    : 0;
-  const dead = existsSync(deadLetterDir)
-    ? readdirSync(deadLetterDir).filter((f) => f.endsWith(".json")).length
-    : 0;
+  const queued = countMatchingFiles(commandsDir, isBridgeCommandFile);
+  const inFlight = countMatchingFiles(inFlightDir, isBridgeCommandFile);
+  const dead = countMatchingFiles(deadLetterDir, isDeadLetterCommandFile);
 
   const ok = dead === 0 && inFlight < 10;
   const severity: DoctorCheckResult["severity"] =

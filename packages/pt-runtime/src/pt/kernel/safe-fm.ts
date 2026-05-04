@@ -21,9 +21,33 @@ export interface SafeFM {
   moveOrCopyDelete(src: string, dest: string, overwrite?: boolean): boolean;
 }
 
+function getGlobalScope(): any {
+  if (typeof globalThis !== "undefined") return globalThis as any;
+  try {
+    if (typeof self !== "undefined" && self) return self as any;
+  } catch {}
+
+  try {
+    return Function("return this")();
+  } catch {}
+
+  return {};
+}
+
+function getGlobalValue(name: string): any {
+  try {
+    const scope = getGlobalScope();
+    if (scope && typeof scope[name] !== "undefined" && scope[name] !== null) {
+      return scope[name];
+    }
+  } catch {}
+
+  return null;
+}
+
 function isDebugEnabled(): boolean {
   try {
-    const scope = (typeof self !== "undefined" ? self : Function("return this")()) as any;
+    const scope = getGlobalScope();
     return scope.PT_DEBUG === 1 || scope.PT_DEBUG === "1" || scope.PT_DEBUG === true;
   } catch {
     return false;
@@ -39,39 +63,48 @@ function debugLog(message: string): void {
 
 export function safeFM(): SafeFM {
   try {
+    const scope = getGlobalScope();
+    const globalFm = scope.fm ?? getGlobalValue("fm");
+    const globalIpc = scope.ipc ?? getGlobalValue("ipc");
+    const scriptModule = scope._ScriptModule ?? getGlobalValue("_ScriptModule");
+
     debugLog("[fm] safeFM enter");
     debugLog(
       "[fm] state fm=" +
-        String(typeof fm !== "undefined" && fm !== null) +
+        String(globalFm !== null) +
         " ipc=" +
-        String(typeof ipc !== "undefined" && ipc !== null) +
+        String(globalIpc !== null) +
         " _ScriptModule=" +
-        String(typeof _ScriptModule !== "undefined" && _ScriptModule !== null),
+        String(scriptModule !== null),
     );
-    if (typeof fm !== "undefined" && fm !== null) {
+
+    if (globalFm) {
       debugLog("[fm] backend: global fm (atomic-move)");
-      return makeSafeFM(fm, "atomic-move");
+      return makeSafeFM(globalFm, "atomic-move");
     }
-    if (typeof ipc !== "undefined" && ipc !== null && typeof ipc.systemFileManager === "function") {
+
+    if (globalIpc && typeof globalIpc.systemFileManager === "function") {
       debugLog("[fm] trying ipc.systemFileManager");
-      var _fm = ipc.systemFileManager();
+      var _fm = globalIpc.systemFileManager();
       if (_fm) {
         debugLog("[fm] backend: ipc.systemFileManager (atomic-move)");
         try {
-          (typeof self !== "undefined" ? self : Function("return this")()).fm = _fm;
+          getGlobalScope().fm = _fm;
         } catch {}
         return makeSafeFM(_fm, "atomic-move");
       } else {
         debugLog("[fm] ipc.systemFileManager returned null");
       }
     }
-    if (typeof _ScriptModule !== "undefined" && _ScriptModule !== null) {
+
+    if (scriptModule) {
       debugLog("[fm] backend: _ScriptModule shim (copy-delete)");
-      return makeSafeFM(buildScriptModuleShim(), "copy-delete");
+      return makeSafeFM(buildScriptModuleShim(scriptModule), "copy-delete");
     }
   } catch (e) {
     debugLog("[fm] safeFM error: " + String(e));
   }
+
   debugLog("[fm] UNAVAILABLE - no file manager found");
   return {
     available: false,
@@ -104,11 +137,11 @@ function makeSafeFM(fm: any, mode: ClaimMode): SafeFM {
   };
 }
 
-function buildScriptModuleShim(): any {
+function buildScriptModuleShim(scriptModule: any): any {
   return {
     fileExists: function (p: string) {
       try {
-        var sz = (_ScriptModule as any).getFileSize(p);
+        var sz = scriptModule.getFileSize(p);
         return sz >= 0;
       } catch (e) {
         return false;
@@ -116,27 +149,27 @@ function buildScriptModuleShim(): any {
     },
     directoryExists: function (p: string) {
       try {
-        return (_ScriptModule as any).getFileSize(p) >= 0;
+        return scriptModule.getFileSize(p) >= 0;
       } catch (e) {
         return false;
       }
     },
     getFileContents: function (p: string) {
-      return (_ScriptModule as any).getFileContents(p);
+      return scriptModule.getFileContents(p);
     },
     writePlainTextToFile: function (p: string, c: string) {
-      (_ScriptModule as any).writeTextToFile(p, c);
+      scriptModule.writeTextToFile(p, c);
     },
     makeDirectory: function (p: string) {
       try {
-        (_ScriptModule as any).writeTextToFile(p + "/.keep", "");
+        scriptModule.writeTextToFile(p + "/.keep", "");
       } catch (e) {}
       return true;
     },
     getFilesInDirectory: function (p: string) {
       try {
-        return (_ScriptModule as any).getFilesInDirectory
-          ? (_ScriptModule as any).getFilesInDirectory(p)
+        return scriptModule.getFilesInDirectory
+          ? scriptModule.getFilesInDirectory(p)
           : [];
       } catch (e) {
         return [];
@@ -144,7 +177,7 @@ function buildScriptModuleShim(): any {
     },
     removeFile: function (p: string) {
       try {
-        if ((_ScriptModule as any).removeFile) (_ScriptModule as any).removeFile(p);
+        if (scriptModule.removeFile) scriptModule.removeFile(p);
         return true;
       } catch (e) {
         return false;
@@ -152,8 +185,8 @@ function buildScriptModuleShim(): any {
     },
     moveSrcFileToDestFile: function (s: string, d: string) {
       try {
-        var c = (_ScriptModule as any).getFileContents(s);
-        (_ScriptModule as any).writeTextToFile(d, c);
+        var c = scriptModule.getFileContents(s);
+        scriptModule.writeTextToFile(d, c);
         return true;
       } catch (e) {
         return false;
@@ -161,14 +194,14 @@ function buildScriptModuleShim(): any {
     },
     getFileModificationTime: function (p: string) {
       try {
-        return (_ScriptModule as any).getFileModificationTime(p);
+        return scriptModule.getFileModificationTime(p);
       } catch (e) {
         return 0;
       }
     },
     getFileSize: function (p: string) {
       try {
-        return (_ScriptModule as any).getFileSize(p);
+        return scriptModule.getFileSize(p);
       } catch (e) {
         return -1;
       }

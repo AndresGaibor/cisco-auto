@@ -155,5 +155,5 @@ export type {
 } from "../../pt/diagnosis/diagnosis-types.js";
 
 // Terminal Command Service
-export { createTerminalCommandService } from "./terminal-command-service.js";
-export type { TerminalCommandServiceDeps } from "./terminal-command-service.js";
+export { createTerminalCommandService } from "./terminal/terminal-command-service.js";
+export type { TerminalCommandServiceDeps } from "./terminal/terminal-command-service.js";

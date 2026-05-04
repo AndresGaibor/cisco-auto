@@ -1,341 +1,370 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdirSync, rmSync, writeFileSync, mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { BridgePathLayout } from './shared/path-layout';
-import { join } from 'node:path';
-import { SharedResultWatcher } from './shared-result-watcher.js';
+import { describe, test, expect, beforeEach, afterEach, vi } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { SharedResultWatcher } from "./shared-result-watcher.js";
+import { ResultPathResolver } from "./shared/result-path-resolver.js";
+import { ResultSubscriptionRegistry } from "./shared/result-subscription-registry.js";
+import { ResultPollingFallback } from "./shared/result-polling-fallback.js";
+import { isFsSidecarFile } from "./shared/bridge-file-classifier.js";
 
 function makeTestRoot(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
 
-let TEST_ROOT: string;
-
-describe('SharedResultWatcher', () => {
-  let paths: BridgePathLayout;
+describe("ResultPathResolver", () => {
+  let root: string;
+  let resolver: ResultPathResolver;
 
   beforeEach(() => {
-    TEST_ROOT = makeTestRoot('file-bridge-watcher-');
-    mkdirSync(TEST_ROOT, { recursive: true });
-    paths = new BridgePathLayout(TEST_ROOT);
-    mkdirSync(paths.resultsDir(), { recursive: true });
+    root = makeTestRoot("path-resolver-test-");
+    mkdirSync(join(root, "results"), { recursive: true });
+    resolver = new ResultPathResolver(join(root, "results"));
   });
 
   afterEach(() => {
-    try {
-      rmSync(TEST_ROOT, { recursive: true, force: true });
-    } catch {}
+    rmSync(root, { recursive: true, force: true });
   });
 
-  describe('initialization', () => {
-    test('should initialize watcher', () => {
-      const watcher = {
-        enabled: true,
-        pattern: '*.json',
-        timeout: 30000
-      };
-
-      expect(watcher.enabled).toBe(true);
-      expect(watcher.pattern).toBe('*.json');
-    });
-
-    test('should set up results directory', () => {
-      mkdirSync(paths.resultsDir(), { recursive: true });
-
-      const dir = paths.resultsDir();
-      expect(dir).toBeDefined();
-      expect(dir.includes('results')).toBe(true);
-    });
-
-    test('should configure timeout', () => {
-      const timeout = 30000;
-      expect(timeout).toBeGreaterThan(0);
-      expect(timeout).toBeLessThanOrEqual(300000);
-    });
-
-    test('should initialize with config', () => {
-      const config = {
-        pollingIntervalMs: 500,
-        maxRetries: 3,
-        backoffMs: 1000
-      };
-
-      expect(config.pollingIntervalMs).toBe(500);
-      expect(config.maxRetries).toBe(3);
-    });
+  test("resolve returns correct path", () => {
+    expect(resolver.resolve("cmd_001")).toBe(join(root, "results", "cmd_001.json"));
   });
 
-  describe('watch registration', () => {
-    test('tracks listeners per command id and resets on destroy', () => {
-      const watcher = new SharedResultWatcher(paths.resultsDir());
-      const callbackA = () => undefined;
-      const callbackB = () => undefined;
-
-      watcher.watch('cmd_1', callbackA);
-      watcher.watch('cmd_2', callbackB);
-
-      expect(watcher.getStats()).toEqual({
-        watching: true,
-        listenersCount: 2,
-        commandsWatched: 2,
-      });
-
-      watcher.unwatch('cmd_1', callbackA);
-      expect(watcher.getStats()).toEqual({
-        watching: true,
-        listenersCount: 1,
-        commandsWatched: 1,
-      });
-
-      watcher.destroy();
-      expect(watcher.getStats()).toEqual({
-        watching: false,
-        listenersCount: 0,
-        commandsWatched: 0,
-      });
-    });
+  test("extractCommandId returns id without extension", () => {
+    expect(resolver.extractCommandId("cmd_001.json")).toBe("cmd_001");
   });
 
-  describe('file watching', () => {
-    test('should detect new result files', () => {
-      mkdirSync(paths.resultsDir(), { recursive: true });
-      const resultFile = join(paths.resultsDir(), 'result-1.json');
-      
-      writeFileSync(resultFile, JSON.stringify({ status: 'completed' }));
-
-      expect(resultFile).toBeDefined();
-    });
-
-    test('detects existing result files after registration', async () => {
-      const resultFile = join(paths.resultsDir(), 'cmd-1.json');
-      writeFileSync(resultFile, JSON.stringify({ status: 'completed' }));
-
-      const watcher = new SharedResultWatcher(paths.resultsDir());
-      let called = false;
-
-      watcher.watch('cmd-1', () => {
-        called = true;
-      });
-
-      const deadline = Date.now() + 1000;
-      while (!called && Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      }
-
-      watcher.destroy();
-      expect(called).toBe(true);
-    });
-
-    test('calls callback only once when watch and polling see same file', async () => {
-      const watcher = new SharedResultWatcher(paths.resultsDir());
-      let calls = 0;
-
-      watcher.watch('cmd-2', () => {
-        calls++;
-      });
-
-      writeFileSync(join(paths.resultsDir(), 'cmd-2.json'), JSON.stringify({ status: 'completed' }));
-
-      const deadline = Date.now() + 1000;
-      while (calls === 0 && Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      watcher.destroy();
-
-      expect(calls).toBe(1);
-    });
-
-    test('should match file patterns', () => {
-      const patterns = ['*.json', 'result-*.json', 'cmd-*.result'];
-
-      const filename = 'result-123.json';
-      const matches = patterns.filter(p => {
-        const regex = new RegExp('^' + p.replace('*', '.*') + '$');
-        return regex.test(filename);
-      });
-
-      expect(matches.length).toBeGreaterThan(0);
-    });
-
-    test('should ignore non-matching files', () => {
-      const pattern = '*.json';
-      const files = ['result.json', 'log.txt', 'config.yaml'];
-
-      const regex = new RegExp('^' + pattern.replace('*', '.*') + '$');
-      const matching = files.filter(f => regex.test(f));
-
-      expect(matching).toHaveLength(1);
-    });
-
-    test('should handle subdirectories', () => {
-      const paths_: any = {
-        resultsDir: () => '/path/results',
-        deadLetterDir: () => '/path/results/dead-letter'
-      };
-
-      expect(paths_.deadLetterDir()).toContain('dead-letter');
-    });
+  test("extractCommandId returns null for sidecars", () => {
+    expect(resolver.extractCommandId(".sidecar.json")).toBeNull();
+    expect(resolver.extractCommandId("cmd_001.tmp")).toBeNull();
+    expect(resolver.extractCommandId("cmd_001.meta.json")).toBeNull();
+    expect(resolver.extractCommandId("cmd_001.error.json")).toBeNull();
   });
 
-  describe('result parsing', () => {
-    test('should parse result JSON', () => {
-      const result = {
-        commandId: 'cmd-1',
-        status: 'completed',
-        output: 'success',
-        timestamp: Date.now()
-      };
+  test("filterResultsForCommands only returns matching commandIds", () => {
+    const files = ["cmd_001.json", "cmd_002.json", "cmd_003.json", ".hidden.json", "result.tmp"];
+    const subscribed = new Set(["cmd_001", "cmd_003"]);
 
-      const json = JSON.stringify(result);
-      const parsed = JSON.parse(json);
+    const filtered = resolver.filterResultsForCommands(files, subscribed);
 
-      expect(parsed.commandId).toBe('cmd-1');
-      expect(parsed.status).toBe('completed');
-    });
-
-    test('should validate result structure', () => {
-      const isValidResult = (obj: any) => {
-        return 'commandId' in obj && 'status' in obj;
-      };
-
-      const valid = { commandId: 'c1', status: 'ok', output: 'data' };
-      const invalid = { commandId: 'c1' };
-
-      expect(isValidResult(valid)).toBe(true);
-      expect(isValidResult(invalid)).toBe(false);
-    });
-
-    test('should handle parse errors', () => {
-      const invalidJson = '{not valid json}';
-      let parseError: any = null;
-
-      try {
-        JSON.parse(invalidJson);
-      } catch (e) {
-        parseError = e;
-      }
-
-      expect(parseError).not.toBeNull();
-    });
-
-    test('should extract command ID from result', () => {
-      const result = {
-        commandId: 'cmd-123',
-        status: 'completed'
-      };
-
-      expect(result.commandId).toBe('cmd-123');
-      const id = result.commandId.split('-')[1];
-      expect(id).toBe('123');
-    });
+    expect(filtered).toEqual(["cmd_001.json", "cmd_003.json"]);
   });
 
-  describe('result completion detection', () => {
-    test('should detect completed results', () => {
-      const result = {
-        commandId: 'cmd-1',
-        status: 'completed',
-        output: 'Success'
-      };
+  test("filterResultsForCommands ignores sidecars", () => {
+    const files = ["cmd_001.json", ".hidden.json", "cmd_002.tmp", "cmd_003.meta.json"];
+    const subscribed = new Set(["cmd_001", "cmd_002", "cmd_003"]);
 
-      const isCompleted = result.status === 'completed';
-      expect(isCompleted).toBe(true);
-    });
+    const filtered = resolver.filterResultsForCommands(files, subscribed);
 
-    test('should detect failed results', () => {
-      const result = {
-        commandId: 'cmd-1',
-        status: 'failed',
-        error: 'Error message'
-      };
+    expect(filtered).toEqual(["cmd_001.json"]);
+  });
+});
 
-      const isFailed = result.status === 'failed' || !!result.error;
-      expect(isFailed).toBe(true);
-    });
+describe("ResultSubscriptionRegistry", () => {
+  let registry: ResultSubscriptionRegistry;
 
-    test('should detect pending results', () => {
-      const result = {
-        commandId: 'cmd-1',
-        status: 'pending'
-      };
-
-      const isPending = result.status === 'pending';
-      expect(isPending).toBe(true);
-    });
-
-    test('should match results with commands', () => {
-      const commands = new Map([
-        ['cmd-1', { device: 'R1', cmd: 'show version' }],
-        ['cmd-2', { device: 'R2', cmd: 'show interfaces' }]
-      ]);
-
-      const result = { commandId: 'cmd-1' };
-      const command = commands.get(result.commandId);
-
-      expect(command?.device).toBe('R1');
-    });
-
-    test('should handle timeout for missing results', () => {
-      const timeout = 30000;
-      const elapsed = 30100;
-
-      const isTimedOut = elapsed > timeout;
-      expect(isTimedOut).toBe(true);
-    });
+  beforeEach(() => {
+    registry = new ResultSubscriptionRegistry();
   });
 
-  describe('callback management', () => {
-    test('should call onResult callback', () => {
-      const callbacks: any[] = [];
+  afterEach(() => {
+    registry.clear();
+  });
 
-      const onResult = (result: any) => {
-        callbacks.push(result);
-      };
+  test("watch increments refCount", () => {
+    registry.watch("cmd_001", () => {});
+    expect(registry.getListenerCount()).toBe(1);
+  });
 
-      const result = { commandId: 'cmd-1', status: 'completed' };
-      onResult(result);
+  test("watch same callback twice is idempotent", () => {
+    const cb = () => {};
+    registry.watch("cmd_001", cb);
+    registry.watch("cmd_001", cb);
+    expect(registry.getListenerCount()).toBe(1);
+  });
 
-      expect(callbacks).toHaveLength(1);
-      expect(callbacks[0].commandId).toBe('cmd-1');
+  test("unwatch decrements refCount", () => {
+    const cb = () => {};
+    registry.watch("cmd_001", cb);
+    registry.unwatch("cmd_001", cb);
+    expect(registry.getListenerCount()).toBe(0);
+  });
+
+  test("unwatch removes empty commandId entries", () => {
+    const cb = () => {};
+    registry.watch("cmd_001", cb);
+    registry.unwatch("cmd_001", cb);
+    expect(registry.getCommandCount()).toBe(0);
+  });
+
+  test("notify calls all callbacks for commandId", () => {
+    let count = 0;
+    const cb1 = () => count++;
+    const cb2 = () => count++;
+
+    registry.watch("cmd_001", cb1);
+    registry.watch("cmd_001", cb2);
+    registry.notify("cmd_001");
+
+    expect(count).toBe(2);
+  });
+
+  test("notify does nothing for unknown commandId", () => {
+    let called = false;
+    registry.watch("cmd_001", () => { called = true; });
+    registry.notify("cmd_002");
+    expect(called).toBe(false);
+  });
+
+  test("getRegisteredCommandIds returns all registered ids", () => {
+    registry.watch("cmd_001", () => {});
+    registry.watch("cmd_002", () => {});
+
+    const ids = registry.getRegisteredCommandIds();
+    expect(ids.has("cmd_001")).toBe(true);
+    expect(ids.has("cmd_002")).toBe(true);
+  });
+
+  test("clear resets everything", () => {
+    registry.watch("cmd_001", () => {});
+    registry.watch("cmd_002", () => {});
+    registry.clear();
+
+    expect(registry.getListenerCount()).toBe(0);
+    expect(registry.getCommandCount()).toBe(0);
+  });
+});
+
+describe("ResultPollingFallback", () => {
+  let root: string;
+  let resolver: ResultPathResolver;
+  let polling: ResultPollingFallback;
+  let notifiedCommandIds: string[];
+
+  beforeEach(() => {
+    root = makeTestRoot("polling-test-");
+    mkdirSync(join(root, "results"), { recursive: true });
+    resolver = new ResultPathResolver(join(root, "results"));
+    notifiedCommandIds = [];
+  });
+
+  afterEach(() => {
+    polling?.stop();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("polls only subscribed commandIds", async () => {
+    const subscribed = new Set(["cmd_001", "cmd_002"]);
+    polling = new ResultPollingFallback(resolver, subscribed, (id) => {
+      notifiedCommandIds.push(id);
     });
 
-    test('should call onTimeout callback', () => {
-      const callbacks: any[] = [];
+    writeFileSync(join(root, "results", "cmd_001.json"), "{}");
+    writeFileSync(join(root, "results", "cmd_003.json"), "{}");
 
-      const onTimeout = (commandId: string) => {
-        callbacks.push({ type: 'timeout', commandId });
-      };
+    polling.poll();
 
-      onTimeout('cmd-1');
-      expect(callbacks).toHaveLength(1);
-      expect(callbacks[0].type).toBe('timeout');
+    expect(notifiedCommandIds).toEqual(["cmd_001"]);
+  });
+
+  test("marks seen files to avoid duplicates", async () => {
+    const subscribed = new Set(["cmd_001"]);
+    polling = new ResultPollingFallback(resolver, subscribed, (id) => {
+      notifiedCommandIds.push(id);
     });
 
-    test('should call onError callback', () => {
-      const errors: any[] = [];
+    writeFileSync(join(root, "results", "cmd_001.json"), "{}");
 
-      const onError = (error: Error) => {
-        errors.push(error);
-      };
+    polling.poll();
+    polling.poll();
 
-      onError(new Error('Watch failed'));
-      expect(errors).toHaveLength(1);
-    });
+    expect(notifiedCommandIds).toEqual(["cmd_001"]);
+  });
 
-    test('should handle multiple callbacks', () => {
-      const allCallbacks: any[] = [];
+  test("hasSeen returns true after markSeen", () => {
+    const subscribed = new Set(["cmd_001"]);
+    polling = new ResultPollingFallback(resolver, subscribed, () => {});
 
-      const callbacks = {
-        onResult: (r: any) => allCallbacks.push({ type: 'result', data: r }),
-        onError: (e: any) => allCallbacks.push({ type: 'error', data: e })
-      };
+    const path = join(root, "results", "cmd_001.json");
+    polling.markSeen(path);
 
-      callbacks.onResult({ cmd: 'c1' });
-      callbacks.onError(new Error('test'));
+    expect(polling.hasSeen(path)).toBe(true);
+  });
 
-      expect(allCallbacks).toHaveLength(2);
-    });
+  test("resetSeen clears all seen files", () => {
+    const subscribed = new Set(["cmd_001"]);
+    polling = new ResultPollingFallback(resolver, subscribed, () => {});
+
+    const path = join(root, "results", "cmd_001.json");
+    polling.markSeen(path);
+    polling.resetSeen();
+
+    expect(polling.hasSeen(path)).toBe(false);
+  });
+});
+
+describe("SharedResultWatcher", () => {
+  let tempDir: string;
+  let resultsDir: string;
+  let watcher: SharedResultWatcher;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "watcher-test-"));
+    resultsDir = join(tempDir, "results");
+    mkdirSync(resultsDir, { recursive: true });
+    watcher = new SharedResultWatcher(resultsDir);
+  });
+
+  afterEach(() => {
+    watcher.destroy();
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  test("no escanea todos los results si conoce commandId", async () => {
+    watcher.watch("cmd_001", () => {});
+
+    for (let i = 0; i < 100; i++) {
+      writeFileSync(join(resultsDir, `cmd_${String(i).padStart(3, "0")}.json`), "{}");
+    }
+
+    writeFileSync(join(resultsDir, "cmd_001.json"), JSON.stringify({ ok: true }));
+
+    let called = false;
+    watcher.watch("cmd_001", () => { called = true; });
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    expect(called).toBe(true);
+  });
+
+  test("ignora sidecars", async () => {
+    const sidecarFiles = [
+      ".hidden.json",
+      "cmd_001.tmp",
+      "cmd_001.meta.json",
+      "cmd_001.error.json",
+      "cmd_001.json.tmp",
+    ];
+
+    for (const file of sidecarFiles) {
+      writeFileSync(join(resultsDir, file), "{}");
+    }
+
+    let called = false;
+    watcher.watch("cmd_001", () => { called = true; });
+
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    expect(called).toBe(false);
+  });
+
+  test("no duplica callback si fs.watch y polling ven el mismo resultado", async () => {
+    let calls = 0;
+    watcher.watch("cmd_001", () => { calls++; });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    writeFileSync(join(resultsDir, "cmd_001.json"), JSON.stringify({ ok: true }));
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    watcher.destroy();
+    expect(calls).toBe(1);
+  });
+
+  test("soporta múltiples listeners del mismo commandId", async () => {
+    let count = 0;
+    watcher.watch("cmd_001", () => count++);
+    watcher.watch("cmd_001", () => count++);
+    watcher.watch("cmd_001", () => count++);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    writeFileSync(join(resultsDir, "cmd_001.json"), JSON.stringify({ ok: true }));
+
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    expect(count).toBe(3);
+  });
+
+  test("destroy limpia intervalos y watchers", () => {
+    watcher.watch("cmd_001", () => {});
+    watcher.watch("cmd_002", () => {});
+
+    const statsBefore = watcher.getStats();
+    expect(statsBefore.watching).toBe(true);
+
+    watcher.destroy();
+
+    const statsAfter = watcher.getStats();
+    expect(statsAfter.watching).toBe(false);
+    expect(statsAfter.listenersCount).toBe(0);
+    expect(statsAfter.commandsWatched).toBe(0);
+  });
+
+  test("no llama callback para commandId no registrado", async () => {
+    writeFileSync(join(resultsDir, "cmd_999.json"), JSON.stringify({ ok: true }));
+
+    let called = false;
+    watcher.watch("cmd_001", () => { called = true; });
+
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    expect(called).toBe(false);
+  });
+
+  test("polling fallback observa commandIds agregados después de iniciar el watcher", async () => {
+    vi.useFakeTimers();
+
+    const watcher = new SharedResultWatcher(resultsDir);
+
+    const first = vi.fn();
+    const second = vi.fn();
+
+    watcher.watch("cmd_000000000001", first);
+    watcher.watch("cmd_000000000002", second);
+
+    writeFileSync(
+      join(resultsDir, "cmd_000000000002.json"),
+      JSON.stringify({
+        protocolVersion: 2,
+        id: "cmd_000000000002",
+        seq: 2,
+        status: "completed",
+        ok: true,
+        completedAt: Date.now(),
+        value: { ok: true },
+      }),
+    );
+
+    vi.advanceTimersByTime(150);
+    await Promise.resolve();
+
+    expect(second).toHaveBeenCalled();
+
+    watcher.destroy();
+    vi.useRealTimers();
+  });
+});
+
+describe("isFsSidecarFile", () => {
+  test("detects hidden files", () => {
+    expect(isFsSidecarFile(".hidden")).toBe(true);
+    expect(isFsSidecarFile(".gitkeep")).toBe(true);
+  });
+
+  test("detects tmp files", () => {
+    expect(isFsSidecarFile("file.tmp")).toBe(true);
+    expect(isFsSidecarFile("file.json.tmp")).toBe(true);
+  });
+
+  test("detects meta and error sidecars", () => {
+    expect(isFsSidecarFile("file.meta.json")).toBe(true);
+    expect(isFsSidecarFile("file.error.json")).toBe(true);
+  });
+
+  test("allows normal result files", () => {
+    expect(isFsSidecarFile("cmd_001.json")).toBe(false);
+    expect(isFsSidecarFile("result-123.json")).toBe(false);
   });
 });

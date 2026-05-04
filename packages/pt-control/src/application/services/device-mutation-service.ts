@@ -48,20 +48,26 @@ export class DeviceMutationService {
     const currentDevice = await this.query.inspect(device, false);
     const beforePorts = extractPorts(currentDevice);
     const slotsResult = await this.inspectModuleSlots(device);
+
+    const slots = (slotsResult.value as { slots?: Array<{ index: number; occupied?: boolean; compatibleModules?: string[] }> } | undefined)?.slots ?? [];
+
     const moduleValidation = validateModuleExists(module);
-    if (!moduleValidation.valid)
+    const moduleKnownFromSlots = slots.some((candidate) =>
+      (candidate.compatibleModules ?? []).includes(module),
+    );
+
+    if (!moduleValidation.valid && !moduleKnownFromSlots) {
       return { ok: false, error: moduleValidation.error ?? `Módulo '${module}' no encontrado en catálogo`, code: "MODULE_NOT_FOUND" };
+    }
 
     let resolvedSlot: number;
     if (slot === "auto") {
-      const slots = (slotsResult.value as { slots?: Array<{ index: number; occupied?: boolean; compatibleModules?: string[] }> } | undefined)?.slots ?? [];
       const autoSlot = slots.find((candidate) => !candidate.occupied && (candidate.compatibleModules ?? []).includes(module));
       if (!autoSlot) {
         return { ok: false, error: `No se encontró slot compatible para '${module}' en '${currentDevice.model}'`, code: "NO_COMPATIBLE_SLOT" };
       }
       resolvedSlot = autoSlot.index;
     } else {
-      const slots = (slotsResult.value as { slots?: Array<{ index: number; occupied?: boolean; compatibleModules?: string[] }> } | undefined)?.slots ?? [];
       const targetSlot = slots.find((candidate) => candidate.index === slot);
       if (!targetSlot) {
         return { ok: false, error: `Slot '${slot}' no existe en '${currentDevice.model}'`, code: "SLOT_NOT_FOUND" };

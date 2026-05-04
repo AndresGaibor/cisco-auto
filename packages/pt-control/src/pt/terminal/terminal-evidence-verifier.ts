@@ -63,20 +63,32 @@ export function verifyTerminalEvidence(
 
   switch (capabilityId) {
     case "terminal.show-version": {
-      const hasVersion = /version/i.test(text);
-      const hasCisco = /cisco/i.test(text);
+      const hasVersionText = /version/i.test(text) || Boolean(parsed?.facts.versionLine);
+      const hasCisco = /cisco/i.test(text) || Boolean(parsed?.facts.hasCiscoBanner);
+      const hasUptime = /uptime is/i.test(text) || Boolean(parsed?.facts.uptimeLine);
+      const hasSystemImage =
+        /system image file/i.test(text) || Boolean(parsed?.facts.systemImage);
+      const hasIosSoftware = /Cisco IOS Software/i.test(text);
 
-      if (!hasVersion) warnings.push("No se detectó texto de versión");
+      if (!hasVersionText) warnings.push("No se detectó texto literal de versión");
       if (!hasCisco) warnings.push("No se detectó banner Cisco");
+      if (!hasUptime && !hasSystemImage) {
+        warnings.push("No se detectó uptime ni system image");
+      }
 
-      const evidenceOk = hasVersion;
+      const evidenceOk = hasVersionText || hasIosSoftware || hasSystemImage || hasUptime;
       const ok = evidenceOk;
 
       return {
         ok,
-        reason: hasVersion ? undefined : "show version no produjo evidencia suficiente",
+        reason: evidenceOk ? undefined : "show version no produjo evidencia suficiente",
         warnings,
-        confidence: hasVersion && hasCisco ? 1 : 0.8,
+        confidence:
+          hasCisco && (hasVersionText || hasIosSoftware) && (hasSystemImage || hasUptime)
+            ? 1
+            : evidenceOk
+              ? 0.8
+              : 0.2,
         executionOk: true,
         evidenceOk,
       };

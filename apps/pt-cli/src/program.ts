@@ -60,6 +60,9 @@ const ROOT_COMMAND_NAMES = [
   "omniscience",
   "logs",
   "completion",
+  "bench",
+  "bridge",
+  "e2e",
 ];
 
 export function createProgram(): Command {

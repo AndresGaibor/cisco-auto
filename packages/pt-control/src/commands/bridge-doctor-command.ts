@@ -7,6 +7,12 @@
 import { existsSync, readdirSync, statSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { normalizeHostPath, resolvePtDevDir } from "../system/paths.js";
+import {
+  isQueueIndexFile,
+  isFsSidecarFile,
+  isBridgeCommandFile,
+  isDeadLetterCommandFile,
+} from "@cisco-auto/file-bridge";
 
 export interface BridgeDoctorReport {
   ok: boolean;
@@ -47,9 +53,10 @@ function checkDirectoryExists(path: string): { ok: boolean; message: string } {
   return { ok: true, message: `Exists: ${path}` };
 }
 
-function countJsonFiles(dir: string): number {
+function countMatchingFiles(dir: string, predicate: (name: string) => boolean): number {
   if (!existsSync(dir)) return 0;
-  return readdirSync(dir).filter((f) => /^cmd_\d+\.json$/.test(f)).length;
+
+  return readdirSync(dir).filter(predicate).length;
 }
 
 function getStaleInFlight(dir: string, maxAgeMs: number = 60000): string[] {
@@ -171,9 +178,9 @@ export function runBridgeDoctor(): BridgeDoctorReport {
     }
   }
 
-  report.queuedCount = countJsonFiles(commandsDir);
-  report.inFlightCount = countJsonFiles(inFlightDir);
-  report.deadLetterCount = countJsonFiles(deadLetterDir);
+  report.queuedCount = countMatchingFiles(commandsDir, isBridgeCommandFile);
+  report.inFlightCount = countMatchingFiles(inFlightDir, isBridgeCommandFile);
+  report.deadLetterCount = countMatchingFiles(deadLetterDir, isDeadLetterCommandFile);
 
   report.staleInFlight = getStaleInFlight(inFlightDir);
   if (report.staleInFlight.length > 0) {

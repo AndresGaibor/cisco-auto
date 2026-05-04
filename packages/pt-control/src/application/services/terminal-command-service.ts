@@ -331,6 +331,12 @@ function detectIosSemanticFailure(output: unknown): { code: string; message: str
   return null;
 }
 
+function detectIosSemanticFailureFromRuntimeResult(runtimeResult: any): { code: string; message: string } | null {
+  return detectIosSemanticFailure(
+    firstString(runtimeResult?.rawOutput, runtimeResult?.output, runtimeResult?.raw),
+  );
+}
+
 function isIosConfigModeText(value: unknown): boolean {
   const text = String(value ?? "").trim().toLowerCase();
 
@@ -888,9 +894,7 @@ async function executeIosCommand(
         });
       }
 
-      const semanticFailure = detectIosSemanticFailure(
-        firstString(runtimeResult.output, runtimeResult.rawOutput),
-      );
+      const semanticFailure = detectIosSemanticFailureFromRuntimeResult(runtimeResult);
 
       if (semanticFailure) {
         return buildCommandResult({
@@ -1148,7 +1152,12 @@ async function executeHostCommand(
       )) as any;
 
       if (!runtimeResult.ok) {
-        const hostOutput = String(runtimeResult.output ?? "");
+        const hostOutput = firstString(
+          runtimeResult.output,
+          runtimeResult.rawOutput,
+          runtimeResult.error?.message,
+          runtimeResult.parsed?.error?.message,
+        );
         const hostCode =
           hostOutput.toLowerCase().includes("invalid command") ||
           hostOutput.toLowerCase().includes("not recognized")
@@ -1197,7 +1206,9 @@ async function executeHostCommand(
     const hostOutput = firstString(
       execResult.raw,
       (execResult as any).output,
+      (execResult as any).rawOutput,
       execResult.verdict?.reason,
+      (execResult as any).error?.message,
     );
     const hostCode = isHostInvalidCommand(hostOutput) ? "HOST_INVALID_COMMAND" : "HOST_EXEC_FAILED";
 

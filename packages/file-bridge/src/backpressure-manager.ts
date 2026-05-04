@@ -15,6 +15,11 @@
  */
 import { readdirSync } from "node:fs";
 import type { BridgePathLayout } from "./shared/path-layout.js";
+import {
+  isQueueIndexFile,
+  isFsSidecarFile,
+  isBridgeCommandFile,
+} from "./shared/bridge-file-classifier.js";
 
 /**
  * Configuración para el BackpressureManager.
@@ -117,11 +122,17 @@ export class BackpressureManager {
       const inFlightDir = this.paths.inFlightDir();
 
       const commands = readdirSync(commandsDir).filter(
-        (f) => f.endsWith(".json") && f !== "_queue.json",
+        (f) => !isQueueIndexFile(f) && !isFsSidecarFile(f) && isBridgeCommandFile(f),
       ).length;
-      const inFlight = readdirSync(inFlightDir).filter(
-        (f) => f.endsWith(".json") && f !== "_queue.json",
-      ).length;
+
+      let inFlight = 0;
+      try {
+        inFlight = readdirSync(inFlightDir).filter(
+          (f) => !isQueueIndexFile(f) && !isFsSidecarFile(f) && isBridgeCommandFile(f),
+        ).length;
+      } catch {
+        // in-flight dir may not exist yet, that's ok
+      }
 
       return commands + inFlight;
     } catch {
@@ -172,10 +183,10 @@ export class BackpressureManager {
   } {
     try {
       const queuedCount = readdirSync(this.paths.commandsDir()).filter(
-        (f) => f.endsWith(".json") && f !== "_queue.json",
+        (f) => !isQueueIndexFile(f) && !isFsSidecarFile(f) && isBridgeCommandFile(f),
       ).length;
       const inFlightCount = readdirSync(this.paths.inFlightDir()).filter(
-        (f) => f.endsWith(".json") && f !== "_queue.json",
+        (f) => !isQueueIndexFile(f) && !isFsSidecarFile(f) && isBridgeCommandFile(f),
       ).length;
       const totalPending = queuedCount + inFlightCount;
 

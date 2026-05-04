@@ -12,14 +12,19 @@ function getSuspiciousSyntaxContext(code: string): string {
     return false;
   });
 
-  const index = suspiciousIndex >= 0
-    ? suspiciousIndex
-    : lines.findIndex((line) => line.includes("catch (error)"));
+  const index =
+    suspiciousIndex >= 0
+      ? suspiciousIndex
+      : lines.findIndex((line) => line.includes("catch (error)"));
 
-  if (index < 0) {
-    return "<no suspicious catch context found>";
+  if (index >= 0) {
+    return formatContext(lines, index);
   }
 
+  return findLikelySyntaxContext(lines);
+}
+
+function formatContext(lines: string[], index: number): string {
   const start = Math.max(0, index - 12);
   const end = Math.min(lines.length, index + 14);
 
@@ -31,6 +36,25 @@ function getSuspiciousSyntaxContext(code: string): string {
       return `${marker} ${String(lineNo).padStart(5, " ")} | ${line}`;
     })
     .join("\n");
+}
+
+function findLikelySyntaxContext(lines: string[]): string {
+  const likelyIndex = lines.findIndex((line) =>
+    /hasOwnProperty\.call\(.*\)\s+[a-zA-Z_$][\w$]*\[/.test(line) ||
+    /\bif\s*\([^)]*$/.test(line) ||
+    /\bfor\s*\([^)]*$/.test(line),
+  );
+
+  if (likelyIndex >= 0) {
+    return formatContext(lines, likelyIndex);
+  }
+
+  const nonEmpty = lines.findIndex((line) => line.trim().length > 0);
+  if (nonEmpty >= 0) {
+    return formatContext(lines, nonEmpty);
+  }
+
+  return "<no syntax context available>";
 }
 
 export function assertJavaScriptSyntaxOrThrow(label: string, code: string): void {

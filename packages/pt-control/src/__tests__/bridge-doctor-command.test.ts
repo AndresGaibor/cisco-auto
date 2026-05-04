@@ -29,6 +29,12 @@ describe("runBridgeDoctor", () => {
     writeFileSync(join(tempRoot, "commands", "_queue.json"), "[\"_queue.json\"]");
     writeFileSync(join(tempRoot, "commands", ".DS_Store"), "");
     writeFileSync(join(tempRoot, "commands", "tmp.json.tmp"), "");
+    writeFileSync(join(tempRoot, "commands", "000000000002-terminal.plan.run.json.tmp"), "");
+    writeFileSync(
+      join(tempRoot, "dead-letter", "1777829508773-000000000001-terminal.plan.run.json.31559.1777829508772.2df84d04a9acb.tmp.meta.json"),
+      "{}",
+    );
+    writeFileSync(join(tempRoot, "dead-letter", "1777829508773-000000000001-terminal.plan.run.json.error.json"), "{}");
     writeFileSync(join(tempRoot, "runtime.js"), "terminal-execution-result");
     writeFileSync(join(tempRoot, "heartbeat.json"), JSON.stringify({ timestamp: Date.now() }));
 
@@ -38,5 +44,7 @@ describe("runBridgeDoctor", () => {
     const report = runBridgeDoctor();
 
     expect(report.queuedCount).toBe(1);
+    expect(report.deadLetterCount).toBe(0);
+    expect(report.ok).toBe(true);
   });
 });

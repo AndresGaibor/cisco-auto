@@ -135,79 +135,87 @@ describe("createRuntimeTerminalAdapter native fast path", () => {
     expect(calls.map((call) => call.type)).toEqual(["terminal.native.exec"]);
   });
 
-  test.skip("reporta timeout si native deferred nunca termina", async () => {
+  test("reporta timeout si native deferred nunca termina", async () => {
     let pollCount = 0;
+    let now = 1_000_000;
+
+    const dateNowSpy = vi.spyOn(Date, "now").mockImplementation(() => now);
 
     const bridge = {
-      sendCommandAndWait: vi.fn(async (type: string, _payload: unknown, _timeoutMs?: number, _options?: unknown) => {
-        if (type === "terminal.native.exec") {
-          return {
-            ok: true,
-            status: 0,
-            completedAt: Date.now(),
-            value: {
+      sendCommandAndWait: vi.fn(
+        async (
+          type: string,
+          _payload: unknown,
+          _timeoutMs?: number,
+          _options?: unknown,
+        ) => {
+          if (type === "terminal.native.exec") {
+            return {
               ok: true,
-              deferred: true,
-              ticket: "native-ticket-stalled",
-            },
-          };
-        }
+              status: 0,
+              completedAt: Date.now(),
+              value: {
+                ok: true,
+                deferred: true,
+                ticket: "native-ticket-stalled",
+              },
+            };
+          }
 
-        if (type === "__pollDeferred") {
-          pollCount++;
-          return {
-            ok: true,
-            status: 0,
-            completedAt: Date.now(),
-            value: {
+          if (type === "__pollDeferred") {
+            pollCount++;
+            now += 30_000;
+
+            return {
               ok: true,
-              deferred: true,
-              done: false,
-              ticket: "native-ticket-stalled",
-              state: "waiting-command",
-            },
-          };
-        }
+              status: 0,
+              completedAt: Date.now(),
+              value: {
+                ok: true,
+                deferred: true,
+                done: false,
+                ticket: "native-ticket-stalled",
+                state: "waiting-command",
+              },
+            };
+          }
 
-        throw new Error(`unexpected ${type}`);
-      }),
+          throw new Error(`unexpected ${type}`);
+        },
+      ),
     };
 
-    vi.useFakeTimers();
+    try {
+      const adapter = createRuntimeTerminalAdapter({
+        bridge: bridge as never,
+        generateId: () => "id-native",
+        defaultTimeout: 60000,
+      });
 
-    const adapter = createRuntimeTerminalAdapter({
-      bridge: bridge as never,
-      generateId: () => "id-native",
-      defaultTimeout: 60000,
-    });
+      const result = await adapter.runTerminalPlan(
+        {
+          id: "plan-native-stalled",
+          device: "SW1",
+          targetMode: "privileged-exec",
+          metadata: { deviceKind: "ios", nativeExec: true },
+          steps: [{ command: "show version" }],
+          timeouts: {
+            commandTimeoutMs: 100,
+            stallTimeoutMs: 100,
+          },
+        } as never,
+        { timeoutMs: 100 },
+      );
 
-    const runPromise = adapter.runTerminalPlan(
-      {
-        id: "plan-native-stalled",
-        device: "SW1",
-        targetMode: "privileged-exec",
-        metadata: { deviceKind: "ios", nativeExec: true },
-        steps: [{ command: "show version" }],
-        timeouts: {
-          commandTimeoutMs: 100,
-          stallTimeoutMs: 100,
-        },
-      } as never,
-      { timeoutMs: 60000 },
-    );
-
-    vi.advanceTimersByTime(30000);
-
-    const result = await runPromise;
-
-    vi.useRealTimers();
-
-    expect(result.ok).toBe(false);
-    expect(result.status).toBe(1);
-    expect(result.parsed).toMatchObject({
-      code: "TERMINAL_NATIVE_DEFERRED_STALLED",
-    });
-    expect(pollCount).toBeGreaterThan(0);
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe(1);
+      expect(result.parsed).toMatchObject({
+        code: "TERMINAL_NATIVE_DEFERRED_STALLED",
+      });
+      expect(pollCount).toBe(1);
+    } finally {
+      dateNowSpy.mockRestore();
+    }
   });
 
   test("no usa terminal.native.exec por defecto para comandos IOS read-only", async () => {

@@ -16,12 +16,15 @@ import { createEtherchannelCommand } from "./etherchannel.js";
 import { createVerifyCommand } from "./verify/index.js";
 import { createOmniCommand } from "./omni/index.js";
 import { createBuildCommand } from "./build.js";
+import { createBenchCommand } from "./bench.js";
+import { createBridgeCommand } from "./bridge.js";
 import { createTopologyCommand } from "./topology/index.js";
 import { createAuditCommand } from "./lab/audit.js";
 import { createHistoryCommand } from "./history.js";
 import { createShowCommand } from "./show.js";
 import { createSetupCommand } from "./setup.js";
 import { createLogsCommand } from "./logs.js";
+import { createE2eCommand } from "./e2e.js";
 import { formatDevDirForDisplay } from "../system/paths.js";
 
 export type CommandFactory = () => Command;
@@ -345,6 +348,59 @@ export const PUBLIC_COMMAND_DEFINITIONS: PtCommandDefinition[] = [
       "No es necesario para agentes, pero mejora uso humano.",
     ],
     factory: createCompletionCommand,
+  },
+  {
+    id: "bench",
+    name: "bench",
+    group: "debug",
+    summary: "Benchmark de comandos IOS - mide latencia y throughput",
+    description: "Ejecuta comandos múltiples veces y mide latencia, errores y percentiles.",
+    examples: [
+      { command: 'pt bench SW-SRV-DIST --commands "show version,show ip interface brief" --runs 3 --json', description: "Benchmark de 3 runs en modo JSON" },
+      { command: 'pt bench R1 --commands "show version" --runs 5', description: "5 runs de show version" },
+    ],
+    related: ["pt cmd", "pt doctor", "pt bridge stats"],
+    agentHints: [
+      "Úsalo para detectar regresiones de latencia en comandos IOS.",
+      "El output JSON es estable y reproducible para CI.",
+    ],
+    factory: createBenchCommand,
+  },
+  {
+    id: "bridge",
+    name: "bridge",
+    group: "debug",
+    summary: "Estado, stats y limpieza del bridge CLI ↔ PT",
+    description: "Muestra estado del bridge, estadísticas de colas y limpieza de archivos stalled.",
+    examples: [
+      { command: "pt bridge stats --json", description: "Estadísticas del bridge en JSON" },
+      { command: "pt bridge clean --dry-run", description: "Ver qué se limpiaría" },
+      { command: "pt bridge doctor", description: "Diagnóstico profundo del bridge" },
+    ],
+    related: ["pt doctor", "pt runtime status", "pt bench"],
+    agentHints: [
+      "Úsalo para diagnosticar problemas del bridge.",
+      "bridge clean con --dry-run evita acciones destructivas accidentales.",
+    ],
+    factory: createBridgeCommand,
+  },
+  {
+    id: "e2e",
+    name: "e2e",
+    group: "core",
+    summary: "Suite E2E smoke tests contra Packet Tracer real",
+    description: "Ejecuta smoke tests E2E: doctor, device-list, show-version. Genera reportes en .reports/pt-e2e/.",
+    examples: [
+      { command: "pt e2e smoke", description: "Ejecutar smoke suite" },
+      { command: "pt e2e smoke --json", description: "Smoke suite con output JSON" },
+      { command: "pt e2e report", description: "Mostrar último reporte" },
+    ],
+    related: ["pt doctor", "pt device list", "pt runtime status"],
+    agentHints: [
+      "Úsalo para validar que PT está operativo antes de labs.",
+      "Genera reportes en .reports/pt-e2e/ con evidencia JSON y MD.",
+    ],
+    factory: createE2eCommand,
   },
 ];
 

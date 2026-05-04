@@ -6,15 +6,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { createRuntimeLoader } from "../runtime-loader";
 
 describe("runtime-loader status", () => {
-  const originalDprint = (globalThis as any).dprint;
-  const originalFm = (globalThis as any).fm;
-
-  afterEach(() => {
-    (globalThis as any).dprint = originalDprint;
-    (globalThis as any).fm = originalFm;
-  });
-
   test("conserva el runtime anterior si el nuevo falla", () => {
+    const originalDprint = (globalThis as any).dprint;
+    const originalFm = (globalThis as any).fm;
     const root = mkdtempSync(join(tmpdir(), "pt-runtime-loader-"));
     const runtimeFile = join(root, "runtime.js");
 
@@ -61,6 +55,8 @@ _global._ptDispatch = function(payload) {
       expect(typeof loader.getRuntimeFn()).toBe("function");
     } finally {
       rmSync(root, { recursive: true, force: true });
+      (globalThis as any).dprint = originalDprint;
+      (globalThis as any).fm = originalFm;
     }
   });
 });

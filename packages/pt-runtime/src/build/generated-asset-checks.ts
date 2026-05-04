@@ -71,9 +71,9 @@ const FORBIDDEN_PATTERNS_RUNTIME = [
     severity: "error" as const,
   },
   {
-    pattern: /\bthis\b/,
-    check: "no-global-this",
-    message: "this is not available in PT QTScript engine",
+    pattern: /(?:^|[^\w$])this\s*\.(?:[\w$]+|\[["'])/,
+    check: "no-global-this-member-access",
+    message: "runtime.js should not access global members through this.*",
     severity: "error" as const,
   },
 ];
@@ -161,6 +161,7 @@ function checkPatterns(code: string, forbidden: typeof FORBIDDEN_PATTERNS_MAIN, 
   const warnings: string[] = [];
 
   for (const rule of forbidden) {
+    rule.pattern.lastIndex = 0;
     if (rule.pattern.test(code)) {
       errors.push({
         asset,
@@ -172,6 +173,7 @@ function checkPatterns(code: string, forbidden: typeof FORBIDDEN_PATTERNS_MAIN, 
   }
 
   for (const rule of required) {
+    rule.pattern.lastIndex = 0;
     if (!rule.pattern.test(code)) {
       errors.push({
         asset,

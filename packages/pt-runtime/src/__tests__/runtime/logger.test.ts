@@ -53,16 +53,21 @@ describe("Logger robusto con fallback", () => {
   });
 
   test("el logger nunca lanza excepcion aunque el transport falle", () => {
+    let transportError = false;
     const badTransport = () => {
+      transportError = true;
       throw new Error("transport exploded");
     };
 
-    expect(() => {
-      const logger = initializeLogger({
-        transport: badTransport as any,
-      });
-      logger.info("this should not throw");
-    }).not.toThrow();
+    const logger = initializeLogger({
+      transport: badTransport as any,
+    });
+
+    // Should not throw even though transport fails
+    logger.info("this should not throw");
+
+    // Verify the logger actually caught the error (transport was called)
+    expect(transportError).toBe(true);
   });
 
   test("nivel debug filtra correctamente", () => {

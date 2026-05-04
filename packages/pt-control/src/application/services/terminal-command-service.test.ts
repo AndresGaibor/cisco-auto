@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "bun:test";
 
-import { createTerminalCommandService } from "./terminal-command-service.js";
+import { createTerminalCommandService } from "./terminal/terminal-command-service.js";
 
 describe("TerminalCommandService IOS semantic errors", () => {
   test("convierte % Invalid input detected en ok:false aunque runtimeResult.ok sea true", async () => {
@@ -119,6 +119,40 @@ describe("TerminalCommandService IOS semantic errors", () => {
     expect(result.error?.message).toContain("Invalid input detected");
     expect(result.error?.message).not.toContain("[cleanup]");
     expect(result.error?.message).not.toContain("%SYS-5-CONFIG_I");
+  });
+
+  test("usa rawOutput para detectar error semántico cuando output viene recortado", async () => {
+    const service = createTerminalCommandService({
+      generateId: () => "test-plan-raw-semantic",
+      controller: {
+        inspectDeviceFast: async () => ({ type: "switch", model: "2960" }),
+        inspectDevice: async () => ({ type: "switch", model: "2960" }),
+        execIos: async () => ({ ok: true }),
+        execHost: async () => ({ success: true }),
+      } as any,
+      runtimeTerminal: {
+        runTerminalPlan: async () => ({
+          ok: true,
+          output: "SW-SRV-DIST#",
+          rawOutput:
+            "SW-SRV-DIST(config-if-range)#channel-group 7 mode active\n                                             ^\n% Invalid input detected at '^' marker.",
+          status: 0,
+          warnings: [],
+          evidence: { test: true },
+        }),
+        ensureSession: async () => ({ ok: true } as any),
+        pollTerminalJob: async () => null,
+      } as any,
+    });
+
+    const result = await service.executeCommand("SW-SRV-DIST", "channel-group 7 mode active", {
+      timeoutMs: 12000,
+      mode: "safe",
+    } as any);
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("IOS_INVALID_INPUT");
+    expect(result.error?.message).toContain("channel-group 7 mode active");
   });
 
   test("auto-config falla si runtime termina en config-if", async () => {

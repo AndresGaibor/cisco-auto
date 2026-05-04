@@ -1,10 +1,4 @@
 import { afterEach, describe, expect, test, vi } from "bun:test";
-
-vi.mock("../command-finalizer", () => ({
-  finishActiveCommand: vi.fn(),
-}));
-
-import { finishActiveCommand } from "../command-finalizer";
 import { pollCommandQueue } from "../queue-poller";
 
 function createSubsystems(claimed: any) {
@@ -92,9 +86,14 @@ function createSubsystems(claimed: any) {
 describe("queue-poller control commands", () => {
   afterEach(() => {
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   test("__runtimeStatus no necesita runtimeFn", () => {
+    const commandFinalizer = require("../command-finalizer");
+    const finishActiveCommandSpy = vi
+      .spyOn(commandFinalizer, "finishActiveCommand")
+      .mockImplementation(vi.fn());
     const claimed = {
       id: "status-1",
       type: "__runtimeStatus",
@@ -131,10 +130,14 @@ describe("queue-poller control commands", () => {
 
     expect(subsystems.runtimeLoader.getRuntimeFn).not.toHaveBeenCalled();
     expect(subsystems.runtimeLoader.getStatus).toHaveBeenCalled();
-    expect(finishActiveCommand).toHaveBeenCalled();
+    expect(finishActiveCommandSpy).toHaveBeenCalled();
   });
 
   test("__reloadRuntime no necesita runtimeFn", () => {
+    const commandFinalizer = require("../command-finalizer");
+    const finishActiveCommandSpy = vi
+      .spyOn(commandFinalizer, "finishActiveCommand")
+      .mockImplementation(vi.fn());
     const claimed = {
       id: "reload-1",
       type: "__reloadRuntime",
@@ -171,6 +174,6 @@ describe("queue-poller control commands", () => {
 
     expect(subsystems.runtimeLoader.getRuntimeFn).not.toHaveBeenCalled();
     expect(subsystems.runtimeLoader.reloadNow).toHaveBeenCalled();
-    expect(finishActiveCommand).toHaveBeenCalled();
+    expect(finishActiveCommandSpy).toHaveBeenCalled();
   });
 });

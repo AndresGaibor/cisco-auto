@@ -21,6 +21,7 @@ import {
   listJsonFiles,
   safeUnlink,
 } from "../shared/fs-atomic.js";
+import { filterBridgeCommandFiles } from "../shared/bridge-file-classifier.js";
 
 export interface ClaimResult {
   ok: boolean;
@@ -69,7 +70,8 @@ export class CommandProcessor {
    * @returns El envelope del comando o null si cola vacía
    */
   pickNextCommand<T = unknown>(): BridgeCommandEnvelope<T> | null {
-    const files = listJsonFiles(this.paths.commandsDir());
+    const allFiles = listJsonFiles(this.paths.commandsDir());
+    const files = filterBridgeCommandFiles(allFiles);
 
     for (const file of files) {
       const parsed = parseCommandFileName(file);
