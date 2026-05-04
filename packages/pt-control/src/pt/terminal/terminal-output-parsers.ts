@@ -72,14 +72,30 @@ export function parseIosShowRunningConfig(raw: string): ParsedTerminalEvidence {
   const lines = linesOf(text);
 
   const hostnameLine = lines.find((line) => /^hostname\s+/i.test(line));
+  const versionLine = lines.find((line) => /^version\s+\S+/i.test(line));
   const interfaceLines = lines.filter((line) => /^interface\s+/i.test(line));
   const vlanLines = lines.filter((line) => /^vlan\s+\d+/i.test(line));
   const routerLines = lines.filter((line) => /^router\s+/i.test(line));
+  const hasBuildingConfiguration = /Building configuration/i.test(text);
+  const hasCurrentConfiguration = /Current configuration\s*:/i.test(text);
+  const hasConfigTerminator = lines.some((line) => /^end$/i.test(line));
+  const hasConfigBody = Boolean(
+    versionLine ||
+      hostnameLine ||
+      interfaceLines.length > 0 ||
+      vlanLines.length > 0 ||
+      routerLines.length > 0,
+  );
 
   return {
     parserId: "ios.show-running-config",
     facts: {
-      hasVersionHeader: /Building configuration/i.test(text),
+      hasVersionHeader: hasBuildingConfiguration,
+      hasBuildingConfiguration,
+      hasCurrentConfiguration,
+      hasConfigTerminator,
+      hasConfigBody,
+      versionLine: versionLine ?? null,
       hostnameLine: hostnameLine ?? null,
       interfaceCount: interfaceLines.length,
       vlanCount: vlanLines.length,

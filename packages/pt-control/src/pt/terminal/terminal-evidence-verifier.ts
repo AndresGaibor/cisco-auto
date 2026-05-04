@@ -95,20 +95,31 @@ export function verifyTerminalEvidence(
     }
 
     case "terminal.show-running-config": {
-      const hasHeader = /Building configuration/i.test(text) || /Current configuration/i.test(text);
+      const hasBuildingConfig = Boolean(parsed?.facts.hasBuildingConfiguration);
+      const hasCurrentConfig = Boolean(parsed?.facts.hasCurrentConfiguration);
+      const hasConfigTerminator = Boolean(parsed?.facts.hasConfigTerminator);
+      const hasConfigBody = Boolean(parsed?.facts.hasConfigBody);
       const lineCount = Number(parsed?.facts.lineCount ?? 0);
 
-      if (!hasHeader) warnings.push("No se detectó cabecera típica de running-config");
+      if (!hasBuildingConfig && !hasCurrentConfig) {
+        warnings.push("No se detectó cabecera típica de running-config (Building configuration o Current configuration)");
+      }
+      if (!hasConfigTerminator) {
+        warnings.push("No se detectó linea 'end' en running-config — posible contaminación de output");
+      }
+      if (!hasConfigBody) {
+        warnings.push("No se detectó cuerpo de configuración (sin hostname, interfaces, VLANs ni routers)");
+      }
       if (lineCount < 3) warnings.push("Salida demasiado corta para running-config");
 
-      const evidenceOk = hasHeader || lineCount >= 3;
+      const evidenceOk = (hasBuildingConfig || hasCurrentConfig) && hasConfigBody && hasConfigTerminator;
       const ok = evidenceOk;
 
       return {
         ok,
-        reason: evidenceOk ? undefined : "show running-config no produjo evidencia suficiente",
+        reason: evidenceOk ? undefined : "show running-config no produjo evidencia suficiente o está contaminado",
         warnings,
-        confidence: evidenceOk ? (hasHeader ? 1 : 0.75) : 0.3,
+        confidence: evidenceOk ? (hasBuildingConfig && hasConfigTerminator ? 1 : 0.85) : 0.2,
         executionOk: true,
         evidenceOk,
       };
