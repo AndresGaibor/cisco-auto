@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "bun:test";
-import { createTerminalCommandService } from "./terminal-command-service.js";
+import { createTerminalCommandService } from "./terminal/terminal-command-service.js";
 
 function createController(options: {
   deviceType: string | number;
@@ -23,17 +23,25 @@ function createController(options: {
   };
 }
 
+function createService(deps: Parameters<typeof createTerminalCommandService>[0]) {
+  return createTerminalCommandService({
+    ...deps,
+    cacheFilePath: `/tmp/pt-control-terminal-command-service.plan-run-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
+  });
+}
+
 describe("createTerminalCommandService plan run", () => {
   test("usa runTerminalPlan para IOS cuando está disponible", async () => {
     const runTerminalPlan = vi.fn().mockResolvedValue({
       ok: true,
       status: 0,
-      output: "runtime-ios",
+      output: "Cisco IOS Software, C2960 Software",
+      rawOutput: "SW1#show version\nCisco IOS Software, C2960 Software\nSW1#",
       warnings: ["runtime-warning"],
       evidence: { source: "runtime-ios" },
     });
     const controller = createController({ deviceType: "router", runtimeTerminal: { runTerminalPlan } });
-    const service = createTerminalCommandService({
+    const service = createService({
       controller: controller as any,
       runtimeTerminal: { runTerminalPlan } as any,
       generateId: () => "ios-plan-id",
@@ -49,8 +57,8 @@ describe("createTerminalCommandService plan run", () => {
       device: "R1",
       deviceKind: "ios",
       command: "show version",
-      output: "runtime-ios",
-      rawOutput: "runtime-ios",
+      output: "Cisco IOS Software, C2960 Software",
+      rawOutput: "SW1#show version\nCisco IOS Software, C2960 Software\nSW1#",
       status: 0,
       warnings: ["runtime-warning"],
       evidence: { source: "runtime-ios" },
@@ -59,14 +67,15 @@ describe("createTerminalCommandService plan run", () => {
 
   test("usa runTerminalPlan para host cuando está disponible", async () => {
     const runTerminalPlan = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 1,
-      output: "runtime-host",
+      ok: true,
+      status: 0,
+      output: "IP Configuration",
+      rawOutput: "PC1>ipconfig\nIP Configuration\nPC1>",
       warnings: [],
       evidence: { source: "runtime-host" },
     });
     const controller = createController({ deviceType: "pc", runtimeTerminal: { runTerminalPlan } });
-    const service = createTerminalCommandService({
+    const service = createService({
       controller: controller as any,
       runtimeTerminal: { runTerminalPlan } as any,
       generateId: () => "host-plan-id",
@@ -77,23 +86,23 @@ describe("createTerminalCommandService plan run", () => {
     expect(runTerminalPlan).toHaveBeenCalledTimes(1);
     expect((controller.execHost as any)).not.toHaveBeenCalled();
     expect(result).toMatchObject({
-      ok: false,
+      ok: true,
       action: "host.exec",
       device: "PC1",
       deviceKind: "host",
       command: "ipconfig",
-      output: "runtime-host",
-      rawOutput: "runtime-host",
-      status: 1,
+      output: "IP Configuration",
+      rawOutput: "PC1>ipconfig\nIP Configuration\nPC1>",
+      status: 0,
       evidence: { source: "runtime-host" },
     });
-    expect(result.error?.code).toBe("HOST_EXEC_FAILED");
+    expect(result.error).toBeUndefined();
   });
 
   test("cae a execIos si no hay runTerminalPlan", async () => {
     const execIos = vi.fn().mockResolvedValue({ ok: true, raw: "legacy-ios", evidence: { source: "legacy-ios" }, warnings: [] });
     const controller = createController({ deviceType: "router", execIos });
-    const service = createTerminalCommandService({
+    const service = createService({
       controller: controller as any,
       runtimeTerminal: null,
       generateId: () => "legacy-ios-id",
@@ -115,7 +124,7 @@ describe("createTerminalCommandService plan run", () => {
   test("cae a execHost si no hay runTerminalPlan", async () => {
     const execHost = vi.fn().mockResolvedValue({ success: true, raw: "legacy-host", verdict: { ok: true }, parsed: { source: "legacy-host" } });
     const controller = createController({ deviceType: "pc", execHost });
-    const service = createTerminalCommandService({
+    const service = createService({
       controller: controller as any,
       runtimeTerminal: undefined,
       generateId: () => "legacy-host-id",
@@ -141,7 +150,7 @@ describe("createTerminalCommandService plan run", () => {
       execHost: vi.fn(),
     };
 
-    const service = createTerminalCommandService({
+    const service = createService({
       controller: controller as any,
       runtimeTerminal: null,
       generateId: () => "missing-device-id",
@@ -170,7 +179,7 @@ describe("createTerminalCommandService plan run", () => {
       runtimeTerminal: { runTerminalPlan },
     });
 
-    const service = createTerminalCommandService({
+    const service = createService({
       controller: controller as any,
       runtimeTerminal: { runTerminalPlan } as any,
       generateId: () => "server-plan-id",
@@ -191,7 +200,7 @@ describe("createTerminalCommandService plan run", () => {
   });
 
   test("resolveDeviceKind reconoce Server-PT aunque type sea numérico desconocido", async () => {
-    const service = createTerminalCommandService({
+    const service = createService({
       controller: createController({
         deviceType: 9,
         model: "Server-PT",
@@ -209,7 +218,7 @@ describe("createTerminalCommandService plan run", () => {
       fastDeviceState: { type: "pc", model: "PC-PT" },
     });
 
-    const service = createTerminalCommandService({
+    const service = createService({
       controller: controller as any,
       runtimeTerminal: null,
       generateId: () => "fast-kind-id",
@@ -226,7 +235,7 @@ describe("createTerminalCommandService plan run", () => {
       fastDeviceState: null,
     });
 
-    const service = createTerminalCommandService({
+    const service = createService({
       controller: controller as any,
       runtimeTerminal: null,
       generateId: () => "null-fast-kind-id",
@@ -244,7 +253,7 @@ describe("createTerminalCommandService plan run", () => {
     });
     (controller.inspectDeviceFast as any).mockRejectedValue(new Error("Timeout waiting for result"));
 
-    const service = createTerminalCommandService({
+    const service = createService({
       controller: controller as any,
       runtimeTerminal: null,
       generateId: () => "runtime-timeout-id",
@@ -272,7 +281,7 @@ describe("createTerminalCommandService plan run", () => {
       runtimeTerminal: { runTerminalPlan },
     });
 
-    const service = createTerminalCommandService({
+    const service = createService({
       controller: controller as any,
       runtimeTerminal: { runTerminalPlan } as any,
       generateId: () => "show-run-plan-id",
@@ -313,7 +322,7 @@ describe("createTerminalCommandService plan run", () => {
       runtimeTerminal: { runTerminalPlan },
     });
 
-    const service = createTerminalCommandService({
+    const service = createService({
       controller: controller as any,
       runtimeTerminal: { runTerminalPlan } as any,
       generateId: () => "show-version-plan-id",

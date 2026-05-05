@@ -1,7 +1,7 @@
 import {
   createTerminalCommandService,
   type TerminalControllerPort,
-} from "../services/terminal-command-service.js";
+} from "../services/terminal/terminal-command-service.js";
 
 import {
   Ipv4Address,

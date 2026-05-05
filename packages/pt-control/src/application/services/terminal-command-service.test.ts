@@ -393,6 +393,7 @@ describe("TerminalCommandService IOS semantic errors", () => {
         execIos: async () => ({ ok: true }),
       } as any,
       runtimeTerminal: null,
+      cacheFilePath: `/tmp/pt-control-terminal-command-service.cache-test-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
     });
 
     const first = await service.executeCommand("PC1", "ipconfig");
