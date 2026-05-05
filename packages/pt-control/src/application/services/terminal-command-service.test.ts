@@ -71,6 +71,157 @@ describe("TerminalCommandService IOS semantic errors", () => {
     expect(result.error).toBeUndefined();
   });
 
+  test("reintenta una vez show version si falla con timeout vacío recuperable", async () => {
+    let attempts = 0;
+
+    const service = createTerminalCommandService({
+      generateId: () => `test-plan-retry-${attempts + 1}`,
+      controller: {
+        inspectDeviceFast: async () => ({ type: "switch", model: "2960" }),
+        inspectDevice: async () => ({ type: "switch", model: "2960" }),
+        execIos: async () => ({ ok: true }),
+        execHost: async () => ({ success: true }),
+        getHeartbeatHealth: () => ({ state: "ok", ageMs: 0 }),
+      } as any,
+      runtimeTerminal: {
+        runTerminalPlan: async () => {
+          attempts += 1;
+
+          if (attempts === 1) {
+            return {
+              ok: false,
+              output: "",
+              rawOutput: "",
+              status: 1,
+              error: {
+                code: "JOB_TIMEOUT",
+                message: "Job timed out while waiting for terminal command completion",
+              },
+              warnings: ["Job timed out while waiting for terminal command completion"],
+              evidence: {
+                phase: "terminal-plan-poll",
+                ticket: "cmd-first-timeout",
+                pollValue: {
+                  done: true,
+                  ok: false,
+                  status: 1,
+                  code: "JOB_TIMEOUT",
+                  output: "",
+                  raw: "",
+                  session: {
+                    mode: "unknown",
+                    prompt: "",
+                  },
+                },
+                timings: {
+                  adapter: {
+                    terminalPlanPollCount: 42,
+                    terminalPlanPollPendingCount: 41,
+                  },
+                },
+              },
+            };
+          }
+
+          return {
+            ok: true,
+            output: "Cisco IOS Software, C2960 Software",
+            rawOutput:
+              "SW-SRV-DIST#show version\nCisco IOS Software, C2960 Software\nSW-SRV-DIST#",
+            status: 0,
+            warnings: [],
+            evidence: {
+              timings: {
+                adapter: {
+                  terminalPlanPollCount: 2,
+                },
+              },
+            },
+          };
+        },
+        ensureSession: async () => ({ ok: true } as any),
+        pollTerminalJob: async () => null,
+      } as any,
+    });
+
+    const result = await service.executeCommand("SW-SRV-DIST", "show version", {
+      timeoutMs: 12000,
+      mode: "safe",
+    } as any);
+
+    expect(attempts).toBe(2);
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe(0);
+    expect(result.output).toContain("Cisco IOS Software");
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("Se reintentó el comando IOS por timeout recuperable"),
+      ]),
+    );
+    expect(result.evidence).toMatchObject({
+      retry: {
+        reason: "empty_show_version_timeout",
+        attempts: 2,
+        firstErrorCode: "JOB_TIMEOUT",
+        firstTicket: "cmd-first-timeout",
+      },
+    });
+  });
+
+  test("no reintenta comandos IOS no allowlist aunque fallen con timeout vacío", async () => {
+    let attempts = 0;
+
+    const service = createTerminalCommandService({
+      generateId: () => `test-plan-no-retry-${attempts + 1}`,
+      controller: {
+        inspectDeviceFast: async () => ({ type: "switch", model: "2960" }),
+        inspectDevice: async () => ({ type: "switch", model: "2960" }),
+        execIos: async () => ({ ok: true }),
+        execHost: async () => ({ success: true }),
+        getHeartbeatHealth: () => ({ state: "ok", ageMs: 0 }),
+      } as any,
+      runtimeTerminal: {
+        runTerminalPlan: async () => {
+          attempts += 1;
+
+          return {
+            ok: false,
+            output: "",
+            rawOutput: "",
+            status: 1,
+            error: {
+              code: "JOB_TIMEOUT",
+              message: "Job timed out while waiting for terminal command completion",
+            },
+            warnings: [],
+            evidence: {
+              phase: "terminal-plan-poll",
+              ticket: "cmd-no-retry",
+              pollValue: {
+                done: true,
+                ok: false,
+                code: "JOB_TIMEOUT",
+                output: "",
+                raw: "",
+              },
+            },
+          };
+        },
+        ensureSession: async () => ({ ok: true } as any),
+        pollTerminalJob: async () => null,
+      } as any,
+    });
+
+    const result = await service.executeCommand("SW-SRV-DIST", "show running-config", {
+      timeoutMs: 12000,
+      mode: "safe",
+    } as any);
+
+    expect(attempts).toBe(1);
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("JOB_TIMEOUT");
+  });
+
   test("preserva el error semántico aunque runtimeResult.output venga recortado", async () => {
     const service = createTerminalCommandService({
       generateId: () => "test-plan-3",
