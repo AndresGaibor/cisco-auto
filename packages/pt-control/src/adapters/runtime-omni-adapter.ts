@@ -234,7 +234,7 @@ export class RuntimeOmniAdapter {
   ): Promise<OmniPortResult> {
     return executeAndParse(
       this.bridge,
-      "siphonPhysicalTopology",
+      "omni.physical.siphon",
       buildTopologyPhysicalPayload(payload as {  }),
       timeoutMs
     );

@@ -17,6 +17,9 @@ export interface RunPtCliInput {
   stdin?: string | null;
   timeoutMs?: number;
   parseJson?: boolean;
+  outputMode?: "buffer" | "spool";
+  spoolDir?: string;
+  previewBytes?: number;
 }
 
 export interface RunPtCliResult {
@@ -32,6 +35,13 @@ export interface RunPtCliResult {
     stdout: boolean;
     stderr: boolean;
   };
+  stdoutBytes?: number;
+  stderrBytes?: number;
+  stdoutPath?: string;
+  stderrPath?: string;
+  jsonPath?: string;
+  jsonParsed?: boolean;
+  spoolDir?: string;
   error?: {
     code: string;
     message: string;

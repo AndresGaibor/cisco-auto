@@ -56,6 +56,7 @@ export function registerOmniRuntimeHandlers(): void {
   omniHandlersRegistered = true;
 
   registerHandler("omni.physical.siphon", handleSiphonPhysicalTopology as unknown as HandlerFn);
+  registerHandler("siphonPhysicalTopology", handleSiphonPhysicalTopology as unknown as HandlerFn);
   registerHandler("omni.logical.siphonConfigs", handleSiphonAllConfigs as unknown as HandlerFn);
 
   registerHandler("getDeviceHardwareInfo", handleGetDeviceHardwareInfo as unknown as HandlerFn);

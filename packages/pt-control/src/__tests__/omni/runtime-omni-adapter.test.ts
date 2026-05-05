@@ -26,4 +26,25 @@ describe("runtime omni adapter", () => {
     expect(result.ok).toBe(true);
     expect(result.value).toBe(123);
   });
+
+  test("topology physical capability usa omní.physical.siphon", async () => {
+    const bridge = {
+      sendCommandAndWait: vi.fn().mockResolvedValue({
+        ok: true,
+        value: { result: "{}" },
+        error: undefined,
+        completedAt: Date.now(),
+      }),
+    } as any;
+
+    const adapter = createOmniAdapter({ bridge });
+
+    await adapter.runOmniCapability("omni.topology.physical", {});
+
+    expect(bridge.sendCommandAndWait).toHaveBeenCalledWith(
+      "omni.physical.siphon",
+      {},
+      expect.any(Number),
+    );
+  });
 });
