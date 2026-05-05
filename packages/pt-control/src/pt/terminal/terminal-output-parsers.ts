@@ -72,7 +72,7 @@ export function parseIosShowRunningConfig(raw: string): ParsedTerminalEvidence {
   const lines = linesOf(text);
 
   const hostnameLine = lines.find((line) => /^hostname\s+/i.test(line));
-  const versionLine = lines.find((line) => /^version\s+\S+/i.test(line));
+  const versionLine = lines.find((line) => /^version\s+\d+(?:\.\d+)?(?:\S*)?$/i.test(line));
   const interfaceLines = lines.filter((line) => /^interface\s+/i.test(line));
   const vlanLines = lines.filter((line) => /^vlan\s+\d+/i.test(line));
   const routerLines = lines.filter((line) => /^router\s+/i.test(line));

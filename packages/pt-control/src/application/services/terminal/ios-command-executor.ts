@@ -1,5 +1,7 @@
 import type { TerminalDeviceKind, RunTerminalCommandOptions } from "@cisco-auto/terminal-contracts";
 import type { RuntimeTerminalPort } from "../../../ports/runtime-terminal-port.js";
+import { parseTerminalOutput } from "../../../pt/terminal/terminal-output-parsers.js";
+import { verifyTerminalEvidence } from "../../../pt/terminal/terminal-evidence-verifier.js";
 import { buildUniversalTerminalPlan, splitCommandLines } from "../terminal-plan-builder.js";
 import { measureServiceSync, type TerminalServiceTimingMap } from "./command-timing-recorder.js";
 import { createTerminalReadinessChecker, type HeartbeatHealth } from "./terminal-readiness-checker.js";
@@ -164,6 +166,46 @@ function isHighRiskIosCommand(command: string, plan: any): boolean {
   return splitCommandLines(command).some(isPrivilegedIosCommand);
 }
 
+function inferCapabilityId(command: string): string | null {
+  const normalized = String(command ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+
+  if (/^show\s+running-config$/i.test(normalized)) return "terminal.show-running-config";
+  if (/^show\s+startup-config$/i.test(normalized)) return "terminal.show-startup-config";
+  if (/^show\s+version$/i.test(normalized)) return "terminal.show-version";
+  if (/^show\s+ip\s+interface\s+brief$/i.test(normalized)) return "terminal.show-ip-interface-brief";
+  if (/^show\s+vlan(?:\s+brief)?$/i.test(normalized)) return "terminal.show-vlan-brief";
+  if (/^show\s+cdp\s+neighbors$/i.test(normalized)) return "terminal.show-cdp-neighbors";
+  if (/^show\s+ip\s+route$/i.test(normalized)) return "terminal.show-ip-route";
+  if (/^show\s+access-lists?$/i.test(normalized)) return "terminal.show-access-lists";
+
+  return null;
+}
+
+function applyEvidenceBarrier(params: {
+  capabilityId: string;
+  command: string;
+  rawOutput: string;
+  runtimeResult: any;
+}): { override: boolean; error?: { code: string; message: string; warnings: string[] } } {
+  const { capabilityId, rawOutput } = params;
+
+  const parsed = parseTerminalOutput(capabilityId, rawOutput);
+  const verdict = verifyTerminalEvidence(capabilityId, rawOutput, parsed, 0);
+
+  if (verdict.evidenceOk) {
+    return { override: false };
+  }
+
+  return {
+    override: true,
+    error: {
+      code: "IOS_OUTPUT_COMMAND_MISMATCH",
+      message: verdict.reason ?? "La salida no corresponde al comando ejecutado",
+      warnings: verdict.warnings,
+    },
+  };
+}
+
 export function createIosCommandExecutor(deps: IosCommandExecutorDeps) {
   const readinessChecker = createTerminalReadinessChecker({
     controller: deps.controller as any,
@@ -287,6 +329,38 @@ export function createIosCommandExecutor(deps: IosCommandExecutorDeps) {
         });
       }
 
+      const capabilityId = inferCapabilityId(command);
+      const rawOutput = firstString(runtimeResult.rawOutput, runtimeResult.output);
+
+      if (capabilityId) {
+        const barrier = applyEvidenceBarrier({
+          capabilityId,
+          command,
+          rawOutput,
+          runtimeResult,
+        });
+
+        if (barrier.override && barrier.error) {
+          return buildCommandResult({
+            ok: false,
+            action: "ios.exec",
+            device,
+            deviceKind: "ios",
+            command,
+            output: firstString(runtimeResult.output),
+            rawOutput,
+            status: 1,
+            warnings: barrier.error.warnings,
+            evidence: runtimeResult.evidence,
+            error: {
+              code: barrier.error.code,
+              message: barrier.error.message,
+              phase: "execution",
+            },
+          });
+        }
+      }
+
       return buildCommandResult({
         ok: true,
         action: "ios.exec",
@@ -294,7 +368,7 @@ export function createIosCommandExecutor(deps: IosCommandExecutorDeps) {
         deviceKind: "ios",
         command,
         output: firstString(runtimeResult.output),
-        rawOutput: firstString(runtimeResult.rawOutput, runtimeResult.output),
+        rawOutput,
         status: Number(runtimeResult.status ?? 0),
         warnings: runtimeResult.warnings,
         evidence: runtimeResult.evidence,

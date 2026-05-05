@@ -463,4 +463,54 @@ describe("TerminalCommandService IOS semantic errors", () => {
     expect(result.error?.phase).toBe("detection");
     expect(runTerminalPlanCalls).toBe(0);
   });
+
+  test("rechaza output contaminado de show version + show ip interface brief + enable como running-config", async () => {
+    const contaminatedOutput = [
+      "Motherboard assembly number     : 73-9832-06",
+      "Model number                    : WS-C2960-24TT",
+      "Configuration register is 0xF",
+      "",
+      "SW-SRV-DIST>  show version",
+      "Cisco IOS Software, C2960 Software (C2960-LANBASE-M), Version 12.2(25)FX, RELEASE SOFTWARE (fc1)",
+      "Configuration register is 0xF",
+      "",
+      "SW-SRV-DIST>show ip interface brief",
+      "Interface              IP-Address      OK? Method Status                Protocol",
+      "FastEthernet0/1        unassigned      YES manual up                    up",
+      "Vlan99                 192.168.99.6    YES manual up                    up",
+      "SW-SRV-DIST>",
+      "SW-SRV-DIST>enable",
+    ].join("\n");
+
+    const service = createTerminalCommandService({
+      generateId: () => "test-run-config-contaminated",
+      controller: {
+        inspectDeviceFast: async () => ({ type: "switch", model: "2960" }),
+        inspectDevice: async () => ({ type: "switch", model: "2960" }),
+        execIos: async () => ({ ok: true }),
+        execHost: async () => ({ success: true }),
+      } as any,
+      runtimeTerminal: {
+        runTerminalPlan: async () => ({
+          ok: true,
+          output: contaminatedOutput,
+          rawOutput: contaminatedOutput,
+          status: 0,
+          warnings: [],
+          evidence: { test: true },
+        }),
+        ensureSession: async () => ({ ok: true } as any),
+        pollTerminalJob: async () => null,
+      } as any,
+    });
+
+    const result = await service.executeCommand("SW-SRV-DIST", "show running-config", {
+      timeoutMs: 12000,
+      mode: "safe",
+    } as any);
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(1);
+    expect(result.error?.code).toBe("IOS_OUTPUT_COMMAND_MISMATCH");
+  });
 });

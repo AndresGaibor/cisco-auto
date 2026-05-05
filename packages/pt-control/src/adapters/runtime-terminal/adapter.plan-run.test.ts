@@ -1,7 +1,10 @@
 import { describe, expect, test, vi } from "bun:test";
 
 import { createRuntimeTerminalAdapter } from "./adapter.js";
-import { computeRecommendedDeferredPollSleepMs } from "./plan-run-transport.js";
+import {
+  computeInitialDeferredPollDelayMs,
+  computeRecommendedDeferredPollSleepMs,
+} from "./plan-run-transport.js";
 
 describe("createRuntimeTerminalAdapter plan-run transport", () => {
   test("submit timeout se calcula correctamente para planes cortos", async () => {
@@ -217,6 +220,9 @@ describe("createRuntimeTerminalAdapter plan-run transport", () => {
         id: "plan-1",
         device: "R1",
         steps: [{ command: "show version" }],
+        metadata: {
+          deferredInitialPollDelayMs: 0,
+        },
         timeouts: {
           commandTimeoutMs: 1000,
           stallTimeoutMs: 1000,
@@ -308,6 +314,9 @@ describe("createRuntimeTerminalAdapter plan-run transport", () => {
         id: "plan-stalled",
         device: "R1",
         steps: [{ command: "show version" }],
+        metadata: {
+          deferredInitialPollDelayMs: 0,
+        },
         timeouts: {
           commandTimeoutMs: 50,
           stallTimeoutMs: 50,
@@ -329,6 +338,105 @@ describe("createRuntimeTerminalAdapter plan-run transport", () => {
       terminalPlanPollExecLatencyMs: expect.any(Number),
       terminalPlanPollRecommendedCount: expect.any(Number),
       terminalPlanPollLastRecommendedSleepMs: expect.any(Number),
+    });
+  });
+});
+
+describe("createRuntimeTerminalAdapter plan-run transport", () => {
+  test("poll diferido finalizado en JOB_TIMEOUT preserva pollValue y timings", async () => {
+    const bridge = {
+      sendCommandAndWait: vi.fn(async (type: string) => {
+        if (type === "terminal.plan.run") {
+          return {
+            ok: true,
+            status: 0,
+            completedAt: Date.now(),
+            timings: {
+              queueLatencyMs: 10,
+              execLatencyMs: 5,
+            },
+            value: {
+              ok: true,
+              deferred: true,
+              ticket: "ticket-job-timeout",
+            },
+          };
+        }
+
+        if (type === "__pollDeferred") {
+          return {
+            ok: true,
+            status: 0,
+            completedAt: Date.now(),
+            timings: {
+              queueLatencyMs: 20,
+              execLatencyMs: 7,
+            },
+            value: {
+              done: true,
+              ok: false,
+              status: 1,
+              code: "JOB_TIMEOUT",
+              errorCode: "JOB_TIMEOUT",
+              error: "Job timed out while waiting for terminal command completion",
+              output: "",
+              raw: "",
+              session: {
+                mode: "unknown",
+                prompt: "",
+              },
+            },
+          };
+        }
+
+        throw new Error(`unexpected command type ${type}`);
+      }),
+    };
+
+    const adapter = createRuntimeTerminalAdapter({
+      bridge: bridge as never,
+      generateId: () => "id-1",
+      defaultTimeout: 45000,
+    });
+
+    const result = await adapter.runTerminalPlan(
+      {
+        id: "plan-job-timeout",
+        device: "R1",
+        steps: [{ command: "show version" }],
+        metadata: {
+          deferredInitialPollDelayMs: 0,
+        },
+        timeouts: {
+          commandTimeoutMs: 1000,
+          stallTimeoutMs: 1000,
+        },
+      } as never,
+      { timeoutMs: 1000 },
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(1);
+    expect(result.parsed).toMatchObject({
+      code: "JOB_TIMEOUT",
+    });
+
+    const evidence = result.evidence as any;
+
+    expect(evidence.phase).toBe("terminal-plan-poll");
+    expect(evidence.ticket).toBe("ticket-job-timeout");
+    expect(evidence.pollValue).toMatchObject({
+      done: true,
+      ok: false,
+      code: "JOB_TIMEOUT",
+    });
+
+    expect(evidence.timings).toMatchObject({
+      terminalPlanPollCount: expect.any(Number),
+      terminalPlanPollCompletedCount: expect.any(Number),
+      terminalPlanPollBridgeMs: expect.any(Number),
+      terminalPlanPollQueueLatencyMs: expect.any(Number),
+      terminalPlanPollExecLatencyMs: expect.any(Number),
     });
   });
 });
@@ -362,5 +470,94 @@ describe("computeRecommendedDeferredPollSleepMs", () => {
     expect(
       computeRecommendedDeferredPollSleepMs(null, 100),
     ).toBe(100);
+  });
+});
+
+describe("computeInitialDeferredPollDelayMs", () => {
+  test("usa metadata deferredInitialPollDelayMs cuando esta presente", () => {
+    expect(
+      computeInitialDeferredPollDelayMs(
+        {
+          id: "plan-1",
+          device: "R1",
+          steps: [{ command: "show version" }],
+          metadata: { deferredInitialPollDelayMs: 0 },
+        } as never,
+        "show version",
+      ),
+    ).toBe(0);
+
+    expect(
+      computeInitialDeferredPollDelayMs(
+        {
+          id: "plan-1",
+          device: "R1",
+          steps: [{ command: "show version" }],
+          metadata: { deferredInitialPollDelayMs: 9999 },
+        } as never,
+        "show version",
+      ),
+    ).toBe(1000);
+  });
+
+  test("no retrasa show version por defecto y retrasa otros show read-only pequenos", () => {
+    expect(
+      computeInitialDeferredPollDelayMs(
+        {
+          id: "plan-1",
+          device: "R1",
+          steps: [{ command: "show version" }],
+        } as never,
+        "show version",
+      ),
+    ).toBe(0);
+
+    expect(
+      computeInitialDeferredPollDelayMs(
+        {
+          id: "plan-1",
+          device: "R1",
+          steps: [{ command: "show ip interface brief" }],
+        } as never,
+        "show ip interface brief",
+      ),
+    ).toBe(150);
+  });
+
+  test("aplica delay inicial mayor para comandos show largos", () => {
+    expect(
+      computeInitialDeferredPollDelayMs(
+        {
+          id: "plan-1",
+          device: "R1",
+          steps: [{ command: "show running-config" }],
+        } as never,
+        "show running-config",
+      ),
+    ).toBe(250);
+
+    expect(
+      computeInitialDeferredPollDelayMs(
+        {
+          id: "plan-1",
+          device: "R1",
+          steps: [{ command: "show interfaces" }],
+        } as never,
+        "show interfaces",
+      ),
+    ).toBe(250);
+  });
+
+  test("no aplica delay inicial a comandos no reconocidos", () => {
+    expect(
+      computeInitialDeferredPollDelayMs(
+        {
+          id: "plan-1",
+          device: "R1",
+          steps: [{ command: "configure terminal" }],
+        } as never,
+        "configure terminal",
+      ),
+    ).toBe(0);
   });
 });

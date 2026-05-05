@@ -65,6 +65,51 @@ export function computeRecommendedDeferredPollSleepMs(
   return Math.max(75, Math.min(Math.trunc(parsed), 1000));
 }
 
+export function computeInitialDeferredPollDelayMs(
+  plan: TerminalPlan,
+  command: string,
+): number {
+  const metadata = plan.metadata as {
+    deferredInitialPollDelayMs?: unknown;
+    terminalPlanInitialPollDelayMs?: unknown;
+    initialPollDelayMs?: unknown;
+  } | undefined;
+
+  const configured = Number(
+    metadata?.deferredInitialPollDelayMs ??
+      metadata?.terminalPlanInitialPollDelayMs ??
+      metadata?.initialPollDelayMs,
+  );
+
+  if (Number.isFinite(configured) && configured >= 0) {
+    return Math.max(0, Math.min(Math.trunc(configured), 1000));
+  }
+
+  const normalized = String(command ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+
+  if (/^show\s+(running-config|startup-config|run|start)\b/.test(normalized)) {
+    return 250;
+  }
+
+  if (/^show\s+interfaces?\b/.test(normalized)) {
+    return 250;
+  }
+
+  if (/^show\s+version\b/.test(normalized)) {
+    return 0;
+  }
+
+  if (
+    /^show\s+ip\s+interface\s+brief\b/.test(normalized) ||
+    /^show\s+vlan(?:\s+brief)?\b/.test(normalized) ||
+    /^show\s+cdp\s+neighbors\b/.test(normalized)
+  ) {
+    return 150;
+  }
+
+  return 0;
+}
+
 export function computeTerminalPlanSubmitTimeoutMs(
   plan: TerminalPlan,
   requestedTimeoutMs: number,
@@ -232,6 +277,22 @@ async function handleDeferredPoll(
 
   let pollValue: unknown = null;
 
+  const initialPollDelayMs = computeInitialDeferredPollDelayMs(plan, parseCommand);
+  timings.terminalPlanPollInitialDelayMs = initialPollDelayMs;
+
+  if (initialPollDelayMs > 0) {
+    const remainingBeforeInitialPollMs = pollTimeoutMs - (nowMs() - startedAt);
+    const initialSleepMs = Math.min(initialPollDelayMs, Math.max(remainingBeforeInitialPollMs, 0));
+
+    if (initialSleepMs > 0) {
+      timings.terminalPlanPollInitialDelaySleepMs = initialSleepMs;
+
+      await measureAdapterAsync(timings, "terminalPlanPollSleepMs", () =>
+        new Promise((resolve) => setTimeout(resolve, initialSleepMs)),
+      );
+    }
+  }
+
   while (nowMs() - startedAt < pollTimeoutMs) {
     try {
       timings.terminalPlanPollCount += 1;
@@ -322,6 +383,17 @@ async function handleDeferredPoll(
   const mismatchWarning = responseParser.checkPromptMismatch(parsed, plan.steps[0] ?? {});
   if (mismatchWarning) warnings.push(mismatchWarning);
 
+  const parsedOk = parsed.ok && parsed.status === 0;
+  const finalEvidence = parsedOk
+    ? buildTimingsEvidence(timings)
+    : buildDeferredFailureEvidence(timings, {
+        phase: "terminal-plan-poll",
+        ticket,
+        pollTimeoutMs,
+        elapsedMs: nowMs() - startedAt,
+        pollValue,
+      });
+
   return {
     ok: parsed.ok,
     output: parsed.raw.trim(),
@@ -333,7 +405,7 @@ async function handleDeferredPoll(
     events: [responseParser.buildEventFromResponse(parsed, parseEventStep, 0)],
     warnings,
     parsed: parsed.parsed,
-    evidence: buildTimingsEvidence(timings),
-    confidence: !parsed.ok || parsed.status !== 0 ? 0 : warnings.length > 0 ? 0.8 : 1,
+    evidence: finalEvidence,
+    confidence: parsedOk ? (warnings.length > 0 ? 0.8 : 1) : 0,
   };
 }

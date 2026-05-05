@@ -94,32 +94,41 @@ export function verifyTerminalEvidence(
       };
     }
 
-    case "terminal.show-running-config": {
-      const hasBuildingConfig = Boolean(parsed?.facts.hasBuildingConfiguration);
-      const hasCurrentConfig = Boolean(parsed?.facts.hasCurrentConfiguration);
-      const hasConfigTerminator = Boolean(parsed?.facts.hasConfigTerminator);
+case "terminal.show-running-config": {
+      const hasCanonicalHeader =
+        /Building configuration/i.test(text) ||
+        /Current configuration\s*:/i.test(text) ||
+        Boolean(parsed?.facts.hasBuildingConfiguration) ||
+        Boolean(parsed?.facts.hasCurrentConfiguration);
+
+      const hasStandaloneEnd =
+        /(?:^|\n)\s*end\s*(?:\n|$)/i.test(text) ||
+        Boolean(parsed?.facts.hasConfigTerminator);
+
       const hasConfigBody = Boolean(parsed?.facts.hasConfigBody);
-      const lineCount = Number(parsed?.facts.lineCount ?? 0);
 
-      if (!hasBuildingConfig && !hasCurrentConfig) {
-        warnings.push("No se detectó cabecera típica de running-config (Building configuration o Current configuration)");
-      }
-      if (!hasConfigTerminator) {
-        warnings.push("No se detectó linea 'end' en running-config — posible contaminación de output");
-      }
-      if (!hasConfigBody) {
-        warnings.push("No se detectó cuerpo de configuración (sin hostname, interfaces, VLANs ni routers)");
-      }
-      if (lineCount < 3) warnings.push("Salida demasiado corta para running-config");
+      const hasForeignShowCommand =
+        /(?:^|\n)\s*[A-Za-z0-9._-]+[>#]?\s*show\s+(version|ip\s+interface\s+brief)\b/i.test(text);
 
-      const evidenceOk = (hasBuildingConfig || hasCurrentConfig) && hasConfigBody && hasConfigTerminator;
-      const ok = evidenceOk;
+      const hasEnableTail =
+        /(?:^|\n)\s*[A-Za-z0-9._-]+[>#]?\s*enable\s*$/i.test(text.trim());
+
+      if (!hasCanonicalHeader) warnings.push("No se detectó cabecera típica de running-config");
+      if (!hasConfigBody) warnings.push("No se detectó cuerpo típico de configuración IOS");
+      if (!hasStandaloneEnd) warnings.push("No se detectó terminador end de running-config");
+      if (hasForeignShowCommand) warnings.push("El output contiene eco de otro comando show");
+      if (hasEnableTail) warnings.push("El output termina con enable, no con running-config");
+
+      const evidenceOk =
+        !hasForeignShowCommand &&
+        !hasEnableTail &&
+        (hasCanonicalHeader || (hasConfigBody && hasStandaloneEnd));
 
       return {
-        ok,
-        reason: evidenceOk ? undefined : "show running-config no produjo evidencia suficiente o está contaminado",
+        ok: evidenceOk,
+        reason: evidenceOk ? undefined : "show running-config no produjo evidencia suficiente",
         warnings,
-        confidence: evidenceOk ? (hasBuildingConfig && hasConfigTerminator ? 1 : 0.85) : 0.2,
+        confidence: evidenceOk ? (hasCanonicalHeader ? 1 : 0.85) : 0.2,
         executionOk: true,
         evidenceOk,
       };

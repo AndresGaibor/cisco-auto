@@ -52,6 +52,9 @@ describe("createRuntimeTerminalAdapter deferred flow", () => {
       id: "plan-1",
       device: "R1",
       steps: [{ command: "show version" }],
+      metadata: {
+        deferredInitialPollDelayMs: 0,
+      },
     } as never);
 
     expect(result.ok).toBe(true);
