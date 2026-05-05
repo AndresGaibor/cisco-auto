@@ -13,8 +13,9 @@
  */
 
 import { FileBridgeV2 } from "@cisco-auto/file-bridge";
+import { resolvePtDevDir } from "../packages/pt-control/src/system/paths.ts";
 
-const DEV_DIR = process.env.PT_DEV_DIR || `${process.env.HOME}/pt-dev`;
+const DEV_DIR = resolvePtDevDir();
 
 interface TestResult {
   test: string;

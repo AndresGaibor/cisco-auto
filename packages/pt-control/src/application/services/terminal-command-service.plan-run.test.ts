@@ -1,4 +1,7 @@
 import { describe, expect, test, vi } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createTerminalCommandService } from "./terminal/terminal-command-service.js";
 
 function createController(options: {
@@ -26,7 +29,10 @@ function createController(options: {
 function createService(deps: Parameters<typeof createTerminalCommandService>[0]) {
   return createTerminalCommandService({
     ...deps,
-    cacheFilePath: `/tmp/pt-control-terminal-command-service.plan-run-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
+    cacheFilePath: join(
+      mkdtempSync(join(tmpdir(), "pt-control-terminal-command-service-plan-run-")),
+      "device-kind-cache.json",
+    ),
   });
 }
 

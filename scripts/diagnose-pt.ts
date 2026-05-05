@@ -5,8 +5,9 @@
  */
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
+import { resolvePtDevDir } from "../packages/pt-control/src/system/paths.ts";
 
-const DEV_DIR = `${process.env.HOME ?? "/Users/andresgaibor"}/pt-dev`;
+const DEV_DIR = resolvePtDevDir();
 
 console.log("🔍 PT Control Diagnostics\n");
 

@@ -5,6 +5,7 @@
 import { existsSync, readdirSync, statSync, unlinkSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BridgeStats, QueueStats, BridgeCleanResult } from "../bench-types.js";
+import { resolvePtDevDir } from "../../system/paths.js";
 import {
   isQueueIndexFile,
   isDeadLetterCommandFile,
@@ -106,8 +107,7 @@ export function cleanStaleInFlight(ptDevDir: string, maxAgeMs = 300_000): Bridge
 }
 
 export function getRuntimeTrace(lastN: number): { id: string; type: string; completedAt: number; ok?: boolean; ts?: number; status?: string; commandType?: string }[] {
-  const logsDir = process.env.PT_DEV_DIR ?? join(process.env.HOME ?? "", "pt-dev");
-  const logFile = join(logsDir, "..", "logs", "session.log");
+  const logFile = join(resolvePtDevDir(), "logs", "session.log");
 
   if (!existsSync(logFile)) {
     return [];

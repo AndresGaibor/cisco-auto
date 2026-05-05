@@ -1,4 +1,7 @@
 import { describe, expect, test, vi } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { createTerminalCommandService } from "./terminal/terminal-command-service.js";
 
@@ -393,7 +396,10 @@ describe("TerminalCommandService IOS semantic errors", () => {
         execIos: async () => ({ ok: true }),
       } as any,
       runtimeTerminal: null,
-      cacheFilePath: `/tmp/pt-control-terminal-command-service.cache-test-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
+      cacheFilePath: join(
+        mkdtempSync(join(tmpdir(), "pt-control-terminal-command-service-cache-test-")),
+        "device-kind-cache.json",
+      ),
     });
 
     const first = await service.executeCommand("PC1", "ipconfig");

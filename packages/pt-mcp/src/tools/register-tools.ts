@@ -35,10 +35,10 @@ function formatResult(result: RunPtCliResult): { content: Array<{ type: "text"; 
 }
 
 type OmniRawToolInput = {
-  op: "stage" | "append" | "execute" | "run_staged" | "dry_run" | "clear";
-  scriptId?: string;
-  code?: string;
-  chunk?: string;
+  op: "probe" | "part" | "read_result" | "result_status" | "clear" | "begin_script" | "append_script" | "script_status" | "execute_script" | "execute_code";
+  draftId?: string;
+  input?: string;
+  part?: string;
   wrap?: boolean;
   parseJson?: boolean;
   timeoutMs?: number;
@@ -49,7 +49,8 @@ type OmniRawScriptStore = Map<string, string>;
 
 type OmniRawSummary = {
   ok: boolean;
-  scriptId: string;
+  scriptId?: string;
+  draftId?: string;
   op: OmniRawToolInput["op"];
   codeBytes: number;
   codeSha256?: string;
@@ -83,7 +84,7 @@ function createCompactToolContent<T extends Record<string, unknown>>(structuredC
             ok: compact.ok,
             op: compact.op,
             resultId: compact.resultId,
-            scriptId: compact.scriptId,
+            draftId: compact.draftId ?? compact.scriptId,
             next: compact.next,
             error: compact.error,
           },
@@ -159,8 +160,8 @@ function summarizeRunResult(result: RunPtCliResult, maxOutputBytes: number): Omn
 
   return {
     ok: result.ok,
-    scriptId: "",
-    op: "execute",
+    draftId: "",
+    op: "probe",
     codeBytes: 0,
     argv: result.argv,
     durationMs: result.durationMs,
@@ -180,7 +181,7 @@ function summarizeRunResult(result: RunPtCliResult, maxOutputBytes: number): Omn
 function resolveExistingScript(store: OmniRawScriptStore, scriptId: string): string {
   const script = store.get(scriptId);
   if (script === undefined) {
-    throw new Error(`Script '${scriptId}' no existe. Usa op=stage primero.`);
+    throw new Error(`Draft '${scriptId}' no existe. Usa op=part primero.`);
   }
   return script;
 }
@@ -202,7 +203,7 @@ function formatLongScriptError(argv: string[]) {
     truncated: { stdout: false, stderr: false },
     error: {
       code: "USE_PT_OMNI_RAW_TOOL",
-      message: "No uses pt_cli para omni raw. Usa pt_omni_raw con op=execute_code para scripts cortos o begin_script/append_script/execute_script para scripts largos.",
+      message: "No uses pt_cli para omni raw. Usa pt_omni_raw con op=probe para pruebas cortas o op=part para construir pruebas grandes por partes.",
     },
   };
 }
@@ -283,7 +284,6 @@ export function registerTools(options: RegisterToolsOptions): void {
         "No usar para `pt omni raw` bajo ninguna circunstancia.",
         "`pt_cli` rechazará cualquier comando `omni raw`.",
         "Para Omni Raw usar exclusivamente `pt_omni_raw`.",
-        "Para scripts largos usar begin_script, append_script y execute_script.",
         "No intentes ejecutar `pt mcp` desde esta herramienta.",
       ].join(" "),
       inputSchema: z.object({
@@ -450,35 +450,28 @@ export function registerTools(options: RegisterToolsOptions): void {
     {
       title: "PT Omni raw",
       description: [
-        "Ejecuta JavaScript dentro del runtime local de Cisco Packet Tracer.",
+        "Prueba fragmentos dentro del runtime local de Cisco Packet Tracer.",
         "Cisco Packet Tracer es un simulador de red: los scripts operan únicamente sobre el laboratorio abierto.",
         "No toca la red real, Internet ni archivos del host.",
         "El laboratorio simulado puede modificarse o romperse; eso se considera aceptable dentro del simulador.",
-        "No pasar scripts largos por pt_cli argv. Para scripts largos usar begin_script, append_script y execute_script.",
-        "No devolver salidas grandes directamente. execute_script guarda la salida y devuelve un resultId; usar read_result para leer por chunks.",
-        "append_script es idempotente por scriptId+seq, útil para recuperarse de reintentos o cortes de red.",
-        "clear permite borrar scripts staged, resultados o caché expirada.",
-        "Preferir scripts que devuelvan JSON compacto o JSONL cuando el resultado sea grande.",
+        "Para pruebas grandes, usa op=part para construir un draft por partes y luego op=probe con draftId.",
+        "Devuelve un resultId y permite leer la salida por chunks.",
+        "clear permite borrar resultados o caché expirada.",
+        "Preferir respuestas JSON compactas o JSONL cuando el resultado sea grande.",
       ].join(" "),
       inputSchema: z.object({
         op: z.enum([
-          "begin_script",
-          "append_script",
-          "script_status",
-          "execute_script",
-          "execute_code",
+          "probe",
+          "part",
           "read_result",
           "result_status",
           "clear",
         ]).describe("Operación local de Omni Raw para Cisco Packet Tracer; no ejecuta comandos de shell del host."),
-        scriptId: z.string().regex(/^[a-zA-Z0-9_.-]{1,80}$/).optional(),
+        draftId: z.string().regex(/^[a-zA-Z0-9_.-]{1,80}$/).optional(),
         resultId: z.string().regex(/^[a-zA-Z0-9_.-]{1,80}$/).optional(),
-        description: z.string().max(2_000).optional().describe("Descripción del script staged dentro del laboratorio simulado."),
-        seq: z.number().int().nonnegative().optional(),
-        chunk: z.string().max(4_000).optional().describe("Fragmento de JavaScript para append_script dentro del simulador local."),
-        chunkSha256: z.string().regex(/^[a-fA-F0-9]{64}$/).optional(),
-        code: z.string().max(2_000).optional().describe("JavaScript corto para execute_code dentro del simulador local."),
-        returnMode: z.enum(["metadata", "preview"]).optional().describe("Modo de retorno para execute_code/execute_script. metadata devuelve solo metadatos."),
+        input: z.string().max(2_000).optional().describe("Fragmento corto para probar dentro del simulador local."),
+        part: z.string().max(2_000).optional().describe("Parte de un draft de prueba grande."),
+        returnMode: z.enum(["metadata", "preview"]).optional().describe("Modo de retorno; metadata devuelve solo metadatos."),
         previewBytes: z.number().int().nonnegative().max(1_000).optional().describe("Bytes máximos de preview cuando returnMode=preview."),
         guard: z.enum(["strict", "sim", "warn", "off"]).optional().describe("Modo de guard para Omni Raw. sim permite mutaciones del laboratorio simulado y bloquea host/filesystem."),
         parseJson: z.boolean().optional(),
@@ -497,6 +490,152 @@ export function registerTools(options: RegisterToolsOptions): void {
     async (input: any) =>
       await withLiveLogging(liveLogger, "pt_omni_raw", input, async (toolInput) => {
         await cleanupExpiredOmniCache();
+
+        if (toolInput.op === "probe") {
+          const draftId = toolInput.draftId;
+          const code = toolInput.input ?? "";
+          const resultId = `res_${randomUUID().replace(/-/g, "").slice(0, 6)}`;
+          const resultPaths = getOmniResultPaths(resultId);
+          const previewBytes = toolInput.returnMode === "preview"
+            ? Math.min(toolInput.previewBytes ?? 500, MAX_EXEC_PREVIEW_BYTES)
+            : DEFAULT_EXEC_PREVIEW_BYTES;
+
+          let run: RunPtCliResult;
+          if (draftId) {
+            const status = await getOmniScriptStatus(draftId);
+            if (!status.ok) {
+              return createToolContent(status as any);
+            }
+
+            run = await options.runPtCli({
+              repoRoot: options.repoRoot,
+              cliEntrypoint: options.cliEntrypoint,
+              argv: ["omni", "raw", "--file", status.scriptPath, "--yes", "--raw", "--guard", toolInput.guard ?? "sim"],
+              timeoutMs: toolInput.timeoutMs ?? options.defaultTimeoutMs,
+              parseJson: false,
+              outputMode: "spool",
+              spoolDir: resultPaths.resultDir,
+              previewBytes,
+              env: { PT_MCP_ALLOW_DIRECT_OMNI_RAW: "1" },
+            });
+          } else if (Buffer.byteLength(code, "utf8") <= INLINE_OMNI_CODE_MAX_BYTES) {
+            run = await options.runPtCli({
+              repoRoot: options.repoRoot,
+              cliEntrypoint: options.cliEntrypoint,
+              argv: ["omni", "raw", "--stdin", "--yes", "--raw", "--guard", toolInput.guard ?? "sim"],
+              stdin: code,
+              timeoutMs: toolInput.timeoutMs ?? options.defaultTimeoutMs,
+              parseJson: false,
+              outputMode: "spool",
+              spoolDir: resultPaths.resultDir,
+              previewBytes,
+              env: { PT_MCP_ALLOW_DIRECT_OMNI_RAW: "1" },
+            });
+          } else {
+            const scriptId = `probe_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+            const begin = await beginOmniScript({
+              scriptId,
+              description: "Probe interno de Omni Raw",
+            });
+
+            if (!begin.ok) {
+              return createToolContent(begin as any);
+            }
+
+            const append = await appendOmniScriptChunk({
+              scriptId,
+              seq: 0,
+              chunk: code,
+            });
+
+            if (!append.ok) {
+              return createToolContent(append as any);
+            }
+
+            const status = await getOmniScriptStatus(scriptId);
+            if (!status.ok) {
+              return createToolContent(status as any);
+            }
+
+            run = await options.runPtCli({
+              repoRoot: options.repoRoot,
+              cliEntrypoint: options.cliEntrypoint,
+              argv: ["omni", "raw", "--file", status.scriptPath, "--yes", "--raw", "--guard", toolInput.guard ?? "sim"],
+              timeoutMs: toolInput.timeoutMs ?? options.defaultTimeoutMs,
+              parseJson: false,
+              outputMode: "spool",
+              spoolDir: resultPaths.resultDir,
+              previewBytes,
+              env: { PT_MCP_ALLOW_DIRECT_OMNI_RAW: "1" },
+            });
+          }
+
+          await recordOmniResult({
+            resultId,
+            scriptId: draftId ?? "probe",
+            stdoutPath: run.stdoutPath,
+            stderrPath: run.stderrPath,
+            jsonPath: run.jsonPath,
+            stdout: run.stdout,
+            stderr: run.stderr,
+            json: run.json,
+            jsonParsed: Boolean(run.jsonParsed),
+            previewBytes,
+          });
+
+          const stdoutBytes = run.stdoutBytes ?? Buffer.byteLength(run.stdout, "utf8");
+          const stderrBytes = run.stderrBytes ?? Buffer.byteLength(run.stderr, "utf8");
+
+          return createCompactToolContent({
+            ok: run.ok,
+            op: "probe",
+            resultId,
+            draftId,
+            durationMs: run.durationMs,
+            streams: {
+              stdout: { bytes: stdoutBytes, available: true },
+              stderr: { bytes: stderrBytes, available: true },
+              json: { bytes: 0, available: false },
+            },
+            jsonParsed: Boolean(run.jsonParsed),
+            truncated: stdoutBytes > DEFAULT_READ_RESULT_LIMIT || stderrBytes > DEFAULT_READ_RESULT_LIMIT,
+            preview: previewBytes > 0 ? run.stdout.slice(0, previewBytes) : undefined,
+            next: run.ok
+              ? { op: "read_result", resultId, stream: "stdout", mode: "bytes", offset: 0, limit: DEFAULT_READ_RESULT_LIMIT }
+              : undefined,
+            error: run.error,
+          });
+        }
+
+        if (toolInput.op === "part") {
+          const draftId = toolInput.draftId ?? `draft_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+          const text = toolInput.part ?? "";
+          const begin = await beginOmniScript({
+            scriptId: draftId,
+            description: "Draft de prueba de Omni Raw",
+          });
+
+          if (!begin.ok) {
+            return createCompactToolContent(begin as any);
+          }
+
+          const status = await getOmniScriptStatus(draftId);
+          if (!status.ok) {
+            return createCompactToolContent(status as any);
+          }
+
+          const append = await appendOmniScriptChunk({
+            scriptId: draftId,
+            seq: status.nextSeq,
+            chunk: text,
+          });
+
+          return createCompactToolContent({
+            ...(append as any),
+            op: "part",
+            draftId,
+          });
+        }
 
         if (toolInput.op === "begin_script") {
           const result = await beginOmniScript({
@@ -547,17 +686,17 @@ export function registerTools(options: RegisterToolsOptions): void {
         }
 
         if (toolInput.op === "execute_code") {
-          const code = toolInput.code ?? "";
+          const code = toolInput.input ?? "";
           if (Buffer.byteLength(code, "utf8") > INLINE_OMNI_CODE_MAX_BYTES) {
             return createCompactToolContent({
               ok: false,
               error: {
                 code: "SCRIPT_TOO_LARGE_USE_STAGING",
-                message: "Usa begin_script + append_script + execute_script.",
+                message: "Usa op=part para construir el draft por partes y luego op=probe con draftId.",
               },
               next: {
-                op: "begin_script",
-                description: "Crear script staged para Omni Raw",
+                op: "part",
+                draftId: "draft_nuevo",
               },
             });
           }

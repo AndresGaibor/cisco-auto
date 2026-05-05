@@ -5,19 +5,13 @@
  * configuration options.
  */
 
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { FileBridgeV2 } from "@cisco-auto/file-bridge";
 import { createControlComposition, type ControlComposition, type ControlCompositionConfig } from "../application/bootstrap/control-composition.js";
+import { resolvePtDevDir } from "../system/paths.js";
 import { PTController } from "./pt-controller.js";
 
 function getDefaultDevDir(): string {
-  const home = homedir();
-  const isWindows = process.platform === "win32";
-  if (isWindows) {
-    return process.env.PT_DEV_DIR ?? join(home, "pt-dev");
-  }
-  return process.env.PT_DEV_DIR ?? join(home, "pt-dev");
+  return resolvePtDevDir();
 }
 
 export interface PTControllerConfig {

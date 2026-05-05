@@ -1,5 +1,7 @@
 import type { TerminalDeviceKind } from "@cisco-auto/terminal-contracts";
+import { join } from "node:path";
 import { measureServiceAsync, type TerminalServiceTimingMap } from "./command-timing-recorder.js";
+import { resolvePtDevDir } from "../../../system/paths.js";
 
 export interface DeviceKindResolverDeps {
   controller: {
@@ -212,7 +214,7 @@ async function savePersistentCache(
 export function createDeviceKindResolver(deps: DeviceKindResolverDeps) {
   const inMemoryCache = new Map<string, DeviceKindCacheEntry>();
   let persistentCache: Map<string, DeviceKindCacheEntry> | null = null;
-  let cacheFilePath = deps.cacheFilePath ?? `${process.env.PT_DEV_DIR ?? "/tmp/pt-dev"}/cache/device-kind-cache.json`;
+  let cacheFilePath = deps.cacheFilePath ?? join(resolvePtDevDir(), "cache", "device-kind-cache.json");
 
   async function ensurePersistentCache(): Promise<Map<string, DeviceKindCacheEntry>> {
     if (!persistentCache) {

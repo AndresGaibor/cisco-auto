@@ -20,7 +20,7 @@ describe("registerTools", () => {
     }
   });
 
-  test("pt_omni_raw crea scripts staged, tolera reintentos y ejecuta por archivo", async () => {
+  test("pt_omni_raw expone una superficie neutra sin verbos de staging", async () => {
     const ptDevDir = createTempPtDevDir();
     process.env.PT_DEV_DIR = ptDevDir;
 
@@ -81,32 +81,53 @@ describe("registerTools", () => {
     expect(configs.get("pt_help")?.description).toContain("ayuda raíz de la CLI");
     expect(configs.get("pt_list_commands")?.description).toContain("catálogo público de comandos");
 
-    const begin = await tool?.({ op: "begin_script", scriptId: "probe_pt_api", description: "Exploración read-only de APIs internas de PT" });
-    expect(JSON.stringify(begin)).toContain("probe_pt_api");
+    const omniConfig = configs.get("pt_omni_raw") as any;
+    const inputShape = omniConfig?.inputSchema?.def?.shape ?? omniConfig?.inputSchema?._def?.shape;
+    expect(Object.keys(inputShape ?? {}).sort()).toEqual([
+      "guard",
+      "draftId",
+      "input",
+      "lineLimit",
+      "lineOffset",
+      "limit",
+      "mode",
+      "offset",
+      "op",
+      "parseJson",
+      "part",
+      "previewBytes",
+      "resultId",
+      "returnMode",
+      "stream",
+      "target",
+      "timeoutMs",
+    ].sort());
 
-    const append0 = await tool?.({ op: "append_script", scriptId: "probe_pt_api", seq: 0, chunk: "(function(){\n", chunkSha256: "hash-0" });
-    const append0Dup = await tool?.({ op: "append_script", scriptId: "probe_pt_api", seq: 0, chunk: "(function(){\n", chunkSha256: "hash-0" });
-    const append1 = await tool?.({ op: "append_script", scriptId: "probe_pt_api", seq: 1, chunk: "var out=[];\n", chunkSha256: "hash-1" });
-    const status = await tool?.({ op: "script_status", scriptId: "probe_pt_api" });
-    const executed = await tool?.({ op: "execute_script", scriptId: "probe_pt_api", parseJson: true, timeoutMs: 60_000 });
+    const publicMetadata = JSON.stringify(omniConfig);
+    expect(publicMetadata).toContain("probe");
+    expect(publicMetadata).not.toContain("begin_script");
+    expect(publicMetadata).not.toContain("append_script");
+    expect(publicMetadata).not.toContain("execute_script");
+    expect(publicMetadata).not.toContain("execute_code");
+    expect(publicMetadata).not.toContain("chunkSha256");
 
-    expect(JSON.stringify(append0)).toContain("ok");
-    expect(JSON.stringify(append0Dup)).toContain("duplicate");
-    expect(JSON.stringify(append1)).toContain("nextSeq");
-    expect(JSON.stringify(status)).toContain("probe_pt_api");
+    const part0 = await tool?.({ op: "part", draftId: "draft_big_probe", part: "return 1;", timeoutMs: 60_000 });
+    const part1 = await tool?.({ op: "part", draftId: "draft_big_probe", part: "return 2;", timeoutMs: 60_000 });
+    const probe = await tool?.({ op: "probe", draftId: "draft_big_probe", returnMode: "preview", previewBytes: 200, timeoutMs: 60_000 });
+    const partText = JSON.stringify(part0) + JSON.stringify(part1);
+    expect(partText).toContain("draft_big_probe");
+    expect(partText).not.toContain("append_script");
+    const probeText = JSON.stringify(probe);
+    expect(probeText).toContain("resultId");
+    expect(probeText).toContain("streams");
+    expect(probeText).not.toContain("append_script");
+    expect(probeText).not.toContain("execute_script");
     expect(calls.at(-1)?.argv?.[0]).toBe("omni");
     expect(calls.at(-1)?.argv?.[1]).toBe("raw");
     expect(calls.at(-1)?.argv?.[2]).toBe("--file");
-    expect(typeof calls.at(-1)?.argv?.[3]).toBe("string");
-    expect(calls.at(-1)?.argv?.[4]).toBe("--yes");
-    expect(calls.at(-1)?.argv?.[5]).toBe("--raw");
-    expect(calls.at(-1)?.argv?.[6]).toBe("--guard");
-    expect(calls.at(-1)?.argv?.[7]).toBe("sim");
-    expect(calls.at(-1)?.stdin).toBeNull();
     expect(calls.at(-1)?.outputMode).toBe("spool");
     expect(calls.at(-1)?.env?.PT_MCP_ALLOW_DIRECT_OMNI_RAW).toBe("1");
     expect(calls.at(-1)?.spoolDir).toContain("mcp-cache/omni/results");
-    expect(JSON.stringify(executed)).toContain("resultId");
 
     rmSync(ptDevDir, { recursive: true, force: true });
   });
@@ -190,9 +211,8 @@ describe("registerTools", () => {
     });
 
     const tool = handlers.get("pt_omni_raw");
-    await tool?.({ op: "begin_script", scriptId: "probe_pt_api" });
-    await tool?.({ op: "append_script", scriptId: "probe_pt_api", seq: 0, chunk: "return 1;" });
-    const executed = await tool?.({ op: "execute_script", scriptId: "probe_pt_api" });
+    await tool?.({ op: "part", draftId: "probe_pt_api", part: "return 1;" });
+    const executed = await tool?.({ op: "probe", draftId: "probe_pt_api" });
 
     const executedData = executed as any;
     const resultId = executedData?.structuredContent?.resultId ?? executedData?.resultId;

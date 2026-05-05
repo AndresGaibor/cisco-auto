@@ -6,8 +6,9 @@
 
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
+import { resolvePtDevDir } from "../packages/pt-control/src/system/paths.ts";
 
-const DEV_DIR = `${process.env.HOME ?? "/Users/andresgaibor"}/pt-dev`;
+const DEV_DIR = resolvePtDevDir();
 const RUNTIME_SRC = resolve(import.meta.dir, "../packages/pt-control/generated/runtime.js");
 const RUNTIME_DEST = `${DEV_DIR}/runtime.js`;
 
