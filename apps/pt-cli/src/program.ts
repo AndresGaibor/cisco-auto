@@ -44,6 +44,10 @@ export function attachCommandTiming(
   return program;
 }
 
+export function shouldAttachCommandTiming(timingEnv = process.env.PT_CLI_TIMING): boolean {
+  return timingEnv !== "0";
+}
+
 const ROOT_COMMAND_NAMES = [
   "build",
   "doctor",
@@ -63,6 +67,7 @@ const ROOT_COMMAND_NAMES = [
   "bench",
   "bridge",
   "e2e",
+  "mcp",
 ];
 
 export function createProgram(): Command {
@@ -117,7 +122,9 @@ export function createProgram(): Command {
   });
 
   addGlobalFlags(program);
-  attachCommandTiming(program);
+  if (shouldAttachCommandTiming()) {
+    attachCommandTiming(program);
+  }
 
   const registered = new Set<string>();
 

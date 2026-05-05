@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { describe, expect, test } from "bun:test";
 
-import { attachCommandTiming } from "./program.js";
+import { attachCommandTiming, shouldAttachCommandTiming } from "./program.js";
 
 describe("attachCommandTiming", () => {
   test("imprime la ruta completa del comando", async () => {
@@ -28,5 +28,10 @@ describe("attachCommandTiming", () => {
     }
 
     expect(output.join("")).toContain("⏱ cisco-auto inspect topology · 1.2s");
+  });
+
+  test("desactiva timing cuando PT_CLI_TIMING=0", () => {
+    expect(shouldAttachCommandTiming("0")).toBe(false);
+    expect(shouldAttachCommandTiming(undefined)).toBe(true);
   });
 });

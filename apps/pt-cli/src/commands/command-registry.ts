@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { Command } from "commander";
+import { resolve } from "node:path";
 import type { PtCommandDefinition } from "../cli/command-definition.js";
 
 import { createDoctorCommand } from "./doctor.js";
@@ -25,7 +26,12 @@ import { createShowCommand } from "./show.js";
 import { createSetupCommand } from "./setup.js";
 import { createLogsCommand } from "./logs.js";
 import { createE2eCommand } from "./e2e.js";
+import { createMcpCommand } from "./mcp/index.js";
+import { toPtMcpCommandCatalog } from "./mcp/command-catalog-adapter.js";
 import { formatDevDirForDisplay } from "../system/paths.js";
+
+const repoRoot = resolve(import.meta.dirname, "../../../../");
+const cliEntrypoint = resolve(import.meta.dirname, "../index.ts");
 
 export type CommandFactory = () => Command;
 
@@ -348,6 +354,29 @@ export const PUBLIC_COMMAND_DEFINITIONS: PtCommandDefinition[] = [
       "No es necesario para agentes, pero mejora uso humano.",
     ],
     factory: createCompletionCommand,
+  },
+  {
+    id: "mcp",
+    name: "mcp",
+    group: "core",
+    summary: "Levanta servidor MCP para controlar Packet Tracer desde ChatGPT",
+    description: "Expone la CLI pt como servidor MCP remoto/local.",
+    examples: [
+      { command: "pt mcp", description: "Levantar MCP local y Tailscale Funnel automático" },
+      { command: "pt mcp --no-funnel", description: "Levantar solo local" },
+      { command: "pt mcp --port 3930", description: "Usar puerto alternativo" },
+    ],
+    related: ["pt doctor", "pt runtime status", "pt device list"],
+    agentHints: [
+      "Usa este comando para conectar Packet Tracer Control a ChatGPT vía MCP.",
+      "Mientras este proceso esté apagado, ChatGPT no podrá controlar Packet Tracer.",
+    ],
+    factory: () =>
+      createMcpCommand({
+        repoRoot,
+        cliEntrypoint,
+        commandCatalog: toPtMcpCommandCatalog(PUBLIC_COMMAND_DEFINITIONS),
+      }),
   },
   {
     id: "bench",

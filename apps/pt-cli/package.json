@@ -19,6 +19,7 @@
   "dependencies": {
     "@cisco-auto/file-bridge": "workspace:*",
     "@cisco-auto/kernel": "workspace:*",
+    "@cisco-auto/pt-mcp": "workspace:*",
     "@cisco-auto/network-intent": "workspace:*",
     "@cisco-auto/pt-control": "workspace:*",
     "@cisco-auto/pt-memory": "workspace:*",
