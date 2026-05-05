@@ -152,18 +152,14 @@ function formatLongScriptError(argv: string[]) {
     json: null,
     truncated: { stdout: false, stderr: false },
     error: {
-      code: "USE_PT_OMNI_RAW_STAGING",
-      message: "No envíes scripts Omni Raw largos por pt_cli. Usa pt_omni_raw begin_script/append_script/execute_script.",
+      code: "USE_PT_OMNI_RAW_TOOL",
+      message: "No uses pt_cli para omni raw. Usa pt_omni_raw con op=execute_code para scripts cortos o begin_script/append_script/execute_script para scripts largos.",
     },
   };
 }
 
-function isLongOmniRaw(argv: string[]): boolean {
-  if (argv[0] !== "omni" || argv[1] !== "raw") return false;
-  if (argv.includes("--file") || argv.includes("--stdin")) return false;
-
-  const directParts = argv.slice(2).filter((arg) => !arg.startsWith("-"));
-  return directParts.join(" ").length > 8_000;
+function isOmniRaw(argv: string[]): boolean {
+  return argv[0] === "omni" && argv[1] === "raw";
 }
 
 function createOmniErrorContent(code: string, message: string, details?: Record<string, unknown>) {
@@ -179,9 +175,7 @@ function createOmniErrorContent(code: string, message: string, details?: Record<
 
 function formatLivePayload(payload: unknown): string {
   try {
-    const json = JSON.stringify(payload, null, 2);
-    if (json.length <= 6_000) return json;
-    return `${json.slice(0, 6_000)}\n... [truncado]`;
+    return JSON.stringify(payload, null, 2);
   } catch {
     return String(payload);
   }
@@ -237,15 +231,15 @@ export function registerTools(options: RegisterToolsOptions): void {
       title: "PT CLI universal",
       description: [
         "Fallback genérico para ejecutar comandos de la CLI local `pt`.",
-        "Usar solo cuando no exista una herramienta MCP más específica.",
-        "Packet Tracer es un simulador de red; los comandos afectan el laboratorio abierto, no equipos físicos.",
-        "Esta herramienta puede modificar la simulación si se ejecutan comandos de configuración, topology, link, device, lab, set u omni.",
-        "No uses esta herramienta para scripts Omni Raw largos. Para `pt omni raw`, usa `pt_omni_raw`, que soporta stdin/staging/chunks y salida compacta.",
+        "No usar para `pt omni raw` bajo ninguna circunstancia.",
+        "`pt_cli` rechazará cualquier comando `omni raw`.",
+        "Para Omni Raw usar exclusivamente `pt_omni_raw`.",
+        "Para scripts largos usar begin_script, append_script y execute_script.",
         "No intentes ejecutar `pt mcp` desde esta herramienta.",
       ].join(" "),
       inputSchema: z.object({
         argv: z.array(z.string().min(1).max(2_000)).min(1).max(64).describe(
-          "Argumentos de la CLI pt, sin incluir `pt`. Para omni raw largo, no pongas el JS aquí; usa pt_omni_raw.",
+          "Argumentos de la CLI pt, sin incluir `pt`. No usar para `omni raw`; esa operación será rechazada. Usa pt_omni_raw.",
         ),
         stdin: z.string().max(64_000).optional().nullable().describe(
           "Entrada stdin opcional. Preferida sobre argv para contenido largo.",
@@ -257,8 +251,8 @@ export function registerTools(options: RegisterToolsOptions): void {
     },
     async (input: any) =>
       await withLiveLogging(liveLogger, "pt_cli", input, async (toolInput) => {
-        if (isLongOmniRaw(toolInput.argv ?? [])) {
-          return createToolContent(formatLongScriptError(toolInput.argv));
+        if (isOmniRaw(toolInput.argv ?? [])) {
+          return createToolContent(formatLongScriptError(toolInput.argv ?? []));
         }
 
         const result = await options.runPtCli({
@@ -590,4 +584,6 @@ export function registerTools(options: RegisterToolsOptions): void {
         });
       }),
   );
+
+  options.liveWriter?.("[mcp] registered tool: pt_omni_raw");
 }

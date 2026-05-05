@@ -169,6 +169,76 @@ describe("registerTools", () => {
       argv: ["omni", "raw", "x".repeat(8_001)],
     });
 
-    expect(JSON.stringify(result)).toContain("USE_PT_OMNI_RAW_STAGING");
+    expect(JSON.stringify(result)).toContain("USE_PT_OMNI_RAW_TOOL");
+  });
+
+  test("pt_cli rechaza cualquier omni raw", async () => {
+    const handlers = new Map<string, (input: unknown) => Promise<unknown>>();
+
+    registerTools({
+      server: {
+        registerTool(name: string, _config: unknown, handler: (input: unknown) => Promise<unknown>) {
+          handlers.set(name, handler);
+        },
+      },
+      runPtCli: async () => ({
+        ok: true,
+        exitCode: 0,
+        signal: null,
+        argv: [],
+        durationMs: 1,
+        stdout: "",
+        stderr: "",
+        json: null,
+        truncated: { stdout: false, stderr: false },
+        stdoutBytes: 0,
+        stderrBytes: 0,
+        jsonParsed: false,
+      }),
+      commandCatalog: [],
+      cliEntrypoint: "/repo/apps/pt-cli/src/index.ts",
+      repoRoot: "/repo",
+      defaultTimeoutMs: 120_000,
+    });
+
+    const handler = handlers.get("pt_cli");
+    const result = await handler?.({
+      argv: ["omni", "raw", "--stdin", "--yes", "--json"],
+      stdin: "return 1;",
+    });
+
+    expect(JSON.stringify(result)).toContain("USE_PT_OMNI_RAW_TOOL");
+  });
+
+  test("pt_omni_raw se anuncia al registrar", async () => {
+    const logs: string[] = [];
+
+    registerTools({
+      server: {
+        registerTool() {},
+      },
+      runPtCli: async () => ({
+        ok: true,
+        exitCode: 0,
+        signal: null,
+        argv: [],
+        durationMs: 1,
+        stdout: "",
+        stderr: "",
+        json: null,
+        truncated: { stdout: false, stderr: false },
+        stdoutBytes: 0,
+        stderrBytes: 0,
+        jsonParsed: false,
+      }),
+      commandCatalog: [],
+      cliEntrypoint: "/repo/apps/pt-cli/src/index.ts",
+      repoRoot: "/repo",
+      defaultTimeoutMs: 120_000,
+      live: true,
+      liveWriter: (line) => logs.push(line),
+    });
+
+    expect(logs.join("\n")).toContain("registered tool: pt_omni_raw");
   });
 });
