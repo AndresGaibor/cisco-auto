@@ -4,6 +4,7 @@ import {
   toSwitchportMode,
   toCableType,
   toLabSpec,
+  snapshotToLabSpec,
   validateLabSafe,
   analyzeTopology,
   generateMermaidDiagram,
@@ -102,6 +103,32 @@ describe("network-intent model", () => {
       expect(spec.metadata.name).toBe("Nested Lab");
       expect(spec.metadata.version).toBe("2.0");
       expect(spec.devices).toHaveLength(1);
+    });
+  });
+
+  describe("snapshotToLabSpec", () => {
+    test("converts topology snapshot to LabSpec", () => {
+      const snapshot = {
+        devices: {
+          R1: { id: "R1", name: "R1", type: "router" },
+          S1: { id: "S1", name: "S1", type: "switch" },
+        },
+        links: {
+          L1: {
+            sourceDeviceId: "R1",
+            sourcePort: "Gig0/0",
+            targetDeviceId: "S1",
+            targetPort: "Gig0/1",
+          },
+        },
+      };
+
+      const spec = snapshotToLabSpec(snapshot as any);
+
+      expect(spec.metadata.name).toBe("Canvas Topology");
+      expect(spec.devices).toHaveLength(2);
+      expect(spec.connections).toHaveLength(1);
+      expect(spec.devices[0]?.name).toBe("R1");
     });
   });
 

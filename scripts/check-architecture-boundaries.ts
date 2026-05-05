@@ -234,7 +234,6 @@ const rules: BoundaryRule[] = [
     include: ["apps/pt-cli/src"],
     exclude: [
       "apps/pt-cli/src/__tests__",
-      "apps/pt-cli/src/legacy-yaml",
       "apps/pt-cli/tests",
       "apps/pt-cli/tests",
     ],

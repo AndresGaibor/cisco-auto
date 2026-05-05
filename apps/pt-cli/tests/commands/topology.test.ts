@@ -1,5 +1,5 @@
 import { describe, test, expect, mock } from 'bun:test';
-import { toLabSpec, snapshotToLabSpec, type ParsedLabYaml } from '../../src/legacy-yaml/types/lab-spec.types';
+import { snapshotToLabSpec, toLabSpec, type ParsedLabYaml } from '@cisco-auto/network-intent/model';
 
 describe('topology command utilities', () => {
   describe('toLabSpec', () => {
@@ -18,7 +18,7 @@ describe('topology command utilities', () => {
       const labSpec = toLabSpec(parsedLab);
 
       expect(labSpec.devices).toHaveLength(2);
-      expect(labSpec.devices[0].name).toBe('R1');
+      expect(labSpec.devices[0]?.name).toBe('R1');
     });
 
     test('handles lab with connections', () => {

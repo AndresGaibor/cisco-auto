@@ -114,6 +114,22 @@ export interface ParsedLabYaml {
   };
 }
 
+export interface TopologySnapshotLike {
+  devices: Record<string, { id?: string; name?: string; type?: string; [key: string]: unknown }>;
+  links: Record<
+    string,
+    {
+      source?: string | { deviceId: string; port?: string };
+      target?: string | { deviceId: string; port?: string };
+      sourceDeviceId?: string;
+      targetDeviceId?: string;
+      sourcePort?: string;
+      targetPort?: string;
+      [key: string]: unknown;
+    }
+  >;
+}
+
 export interface LabValidationResult {
   success: boolean;
   errors?: string[];
@@ -274,6 +290,46 @@ export function toLabSpec(parsed: ParsedLabYaml): LabSpec {
         from: { deviceId: "", deviceName: fromDevice, port: fromPort },
         to: { deviceId: "", deviceName: toDevice, port: toPort },
         cableType: toCableType(c.cable ?? (c.type as string)),
+      };
+    }),
+  };
+}
+
+export function snapshotToLabSpec(snapshot: TopologySnapshotLike): LabSpec {
+  const devices = Object.values(snapshot.devices ?? {});
+  const links = Object.values(snapshot.links ?? {});
+
+  return {
+    metadata: {
+      name: "Canvas Topology",
+      version: "1.0",
+      author: "PT CLI",
+      createdAt: new Date(),
+    },
+    devices: devices.map((device) => {
+      const name = device.name || device.id || "";
+
+      return {
+        id: name,
+        name,
+        type: (device.type || "router") as DeviceType,
+        hostname: name,
+      };
+    }),
+    connections: links.map((link) => {
+      const from =
+        typeof link.source === "object"
+          ? link.source
+          : { deviceId: link.sourceDeviceId || "", port: link.sourcePort || "" };
+      const to =
+        typeof link.target === "object"
+          ? link.target
+          : { deviceId: link.targetDeviceId || "", port: link.targetPort || "" };
+
+      return {
+        id: `${from.deviceId}-${to.deviceId}`,
+        from: { deviceId: from.deviceId, deviceName: from.deviceId, port: from.port || "" },
+        to: { deviceId: to.deviceId, deviceName: to.deviceId, port: to.port || "" },
       };
     }),
   };
