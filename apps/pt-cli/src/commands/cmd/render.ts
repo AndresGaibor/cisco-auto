@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 import chalk from "chalk";
 import type { BridgeResultTimings } from "@cisco-auto/types";
 import type { TerminalCommandResult } from "@cisco-auto/terminal-contracts";
@@ -23,6 +22,58 @@ export interface CmdCliResult {
   nextSteps: string[];
   evidence?: unknown;
   timings?: BridgeResultTimings;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function extractTimingScopes(value: unknown): Record<string, unknown> | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  // Permite pasar wrapped.meta completo: { timings: { cli: ... } }
+  if (isRecord(value.timings)) {
+    return value.timings;
+  }
+
+  // Permite pasar timings directo: { cli: ... }
+  return value;
+}
+
+export function mergeCmdEvidenceTimings(
+  result: CmdCliResult,
+  metaOrTimings: unknown,
+): CmdCliResult {
+  const timingScopes = extractTimingScopes(metaOrTimings);
+
+  if (!timingScopes) {
+    return result;
+  }
+
+  const evidenceBase: Record<string, unknown> = isRecord(result.evidence)
+    ? { ...result.evidence }
+    : result.evidence == null
+      ? {}
+      : { value: result.evidence };
+
+  const evidenceTimings = isRecord(evidenceBase.timings)
+    ? { ...evidenceBase.timings }
+    : {};
+
+  const resultTimings = isRecord(result.timings) ? result.timings : undefined;
+
+  result.evidence = {
+    ...evidenceBase,
+    timings: {
+      ...evidenceTimings,
+      ...(resultTimings ? { bridge: resultTimings } : {}),
+      ...timingScopes,
+    },
+  };
+
+  return result;
 }
 
 function formatDuration(ms: number): string {
@@ -132,9 +183,9 @@ export function printCmdResult(result: CmdCliResult, options: { json?: boolean; 
 
     if (result.output.trim()) {
       process.stderr.write("\nSalida capturada:\n");
-      process.stderr.write("────────────────────────────────────────\n");
+      process.stderr.write("────────────────────────────────────────────────────────────────────────────\n");
       process.stderr.write(`${result.output}\n`);
-      process.stderr.write("────────────────────────────────────────\n");
+      process.stderr.write("────────────────────────────────────────────────────────────────────────────\n");
     }
 
     process.stderr.write("\nSiguientes pasos sugeridos:\n");
@@ -151,13 +202,13 @@ export function printCmdResult(result: CmdCliResult, options: { json?: boolean; 
   process.stdout.write(`${chalk.green("✓")} ${result.device} (${result.deviceKind}) ejecutó:\n`);
   process.stdout.write(`  ${chalk.bold(result.command)}\n`);
   process.stdout.write("\nSalida:\n");
-  process.stdout.write("────────────────────────────────────────\n");
+  process.stdout.write("────────────────────────────────────────────────────────────────────────────\n");
   if (result.output.trim()) {
     process.stdout.write(`${result.output.trimEnd()}\n`);
   } else {
     process.stdout.write(chalk.gray("(salida vacía)\n"));
   }
-  process.stdout.write("────────────────────────────────────────\n");
+  process.stdout.write("────────────────────────────────────────────────────────────────────────────\n");
 
   if (result.warnings.length > 0) {
     process.stdout.write("\nWarnings:\n");

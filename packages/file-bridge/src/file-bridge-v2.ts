@@ -23,9 +23,6 @@
  * enumerar directorios). La fuente de verdad es la existencia física de
  * los archivos en commands/.
  */
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { ensureDir, ensureFile } from "./shared/fs-atomic.js";
 import type {
@@ -45,6 +42,8 @@ import { GarbageCollector, type GCReport } from "./v2/garbage-collector.js";
 import { BridgeLifecycle } from "./v2/bridge-lifecycle.js";
 import { LeaseManager } from "./v2/lease-manager.js";
 import { CrashRecovery } from "./v2/crash-recovery.js";
+import { BridgeStatusService } from "./v2/bridge-status-service.js";
+import { ensureBridgeRuntimeDirectories } from "./v2/bridge-directory-setup.js";
 import { MonitoringService } from "./v2/monitoring-service.js";
 import {
   BridgeCommandClient,
@@ -96,6 +95,7 @@ export class FileBridgeV2 extends EventEmitter {
   private readonly cmdClient: BridgeCommandClient;
   private readonly resultResolver: BridgeResultResolver;
   private readonly runtimeAdmin: BridgeRuntimeAdmin;
+  private readonly statusService: BridgeStatusService;
 
   constructor(private readonly options: FileBridgeV2Options) {
     super();
@@ -186,6 +186,14 @@ export class FileBridgeV2 extends EventEmitter {
       () => this.monitoringService.getHeartbeat(),
       () => this.monitoringService.getHeartbeatHealth(),
     );
+
+    this.statusService = new BridgeStatusService({
+      lifecycle: this.lifecycle,
+      leaseManager: this.leaseManager,
+      backpressure: this.backpressure,
+      diagnostics: this._diagnostics,
+      isReady: () => this.isReady(),
+    });
   }
 
   private get role(): "owner" | "client" {
@@ -200,13 +208,7 @@ export class FileBridgeV2 extends EventEmitter {
     this.lifecycle.transition("starting");
 
     try {
-      ensureDir(this.paths.commandsDir());
-      ensureDir(this.paths.inFlightDir());
-      ensureDir(this.paths.resultsDir());
-      ensureDir(this.paths.logsDir());
-      ensureDir(this.paths.consumerStateDir());
-      ensureDir(this.paths.deadLetterDir());
-      ensureFile(this.paths.currentEventsFile(), "");
+      ensureBridgeRuntimeDirectories(this.paths);
 
       if (this.role === "client") {
         this.lifecycle.transition("client");
@@ -429,51 +431,6 @@ export class FileBridgeV2 extends EventEmitter {
     };
   }
 
-  private findCommandArtifact(commandId: string): {
-    commandId: string;
-    commandFile: string | null;
-    inFlightFile: string | null;
-    resultFile: string | null;
-    deadLetterFile: string | null;
-    queueIndexHasCommand: boolean;
-  } {
-    const findInDir = (dir: string): string | null => {
-      try {
-        const files = readdirSync(dir);
-        return files.find((file) => file.includes(commandId)) ?? null;
-      } catch {
-        return null;
-      }
-    };
-
-    const commandFile = findInDir(this.paths.commandsDir());
-    const inFlightFile = findInDir(this.paths.inFlightDir());
-    const resultFile = findInDir(this.paths.resultsDir());
-    const deadLetterFile = findInDir(this.paths.deadLetterDir());
-
-    let queueIndexHasCommand = false;
-    try {
-      const queuePath = join(this.paths.commandsDir(), "_queue.json");
-      if (existsSync(queuePath)) {
-        const parsed = JSON.parse(readFileSync(queuePath, "utf8"));
-        if (Array.isArray(parsed)) {
-          queueIndexHasCommand = parsed.some((entry) => String(entry).includes(commandId));
-        }
-      }
-    } catch {
-      queueIndexHasCommand = false;
-    }
-
-    return {
-      commandId,
-      commandFile,
-      inFlightFile,
-      resultFile,
-      deadLetterFile,
-      queueIndexHasCommand,
-    };
-  }
-
   async waitForCapacity(timeoutMs?: number): Promise<void> {
     return this.backpressure.waitForCapacity(timeoutMs);
   }
@@ -563,60 +520,8 @@ export class FileBridgeV2 extends EventEmitter {
     return this.monitoringService.getLastSnapshot<T>();
   }
 
-  getBridgeStatus(): {
-    ready: boolean;
-    state: string;
-    leaseValid?: boolean;
-    queuedCount?: number;
-    inFlightCount?: number;
-    queueIndexDrift?: boolean;
-    claimMode?: "atomic-move" | "copy-delete" | "unknown" | string;
-    warnings?: string[];
-  } {
-    const warnings: string[] = [];
-    const ready = this.isReady();
-
-    if (!this.leaseManager.hasValidLease()) {
-      warnings.push("No valid lease held");
-    }
-
-    if (this.lifecycle.state !== "running") {
-      warnings.push(`Lifecycle state is ${this.lifecycle.state}, not running`);
-    }
-
-    let queuedCount = 0;
-    let inFlightCount = 0;
-    try {
-      const stats = this.backpressure.getDetailedStats();
-      queuedCount = stats.queuedCount;
-      inFlightCount = stats.inFlightCount;
-    } catch {
-      warnings.push("No se pudo leer el estado de la cola");
-    }
-
-    let queueIndexDrift = false;
-    try {
-      const health = this._diagnostics.collectHealth();
-      queueIndexDrift = health.queues.queueIndexDrift;
-      if (queueIndexDrift) {
-        warnings.push(
-          `Queue index drift detected (missing=${health.queues.queueIndexMissingEntries}, extra=${health.queues.queueIndexExtraEntries})`,
-        );
-      }
-    } catch {
-      warnings.push("No se pudo leer el estado de cola index");
-    }
-
-    return {
-      ready,
-      state: this.lifecycle.state,
-      leaseValid: this.leaseManager.isLeaseValid(),
-      queuedCount,
-      inFlightCount,
-      queueIndexDrift,
-      claimMode: "unknown",
-      warnings,
-    };
+  getBridgeStatus() {
+    return this.statusService.getBridgeStatus();
   }
 
   getContext(): {
@@ -638,10 +543,6 @@ export class FileBridgeV2 extends EventEmitter {
   private handleEvent(event: BridgeEvent): void {
     this.emit(event.type, event);
     this.emit("*", event);
-  }
-
-  private checksumOf(input: unknown): string {
-    return `sha256:${createHash("sha256").update(JSON.stringify(input)).digest("hex")}`;
   }
 }
 

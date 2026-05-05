@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "bun:test";
 
-import { printCmdResult, toCmdCliResult } from "./render.js";
+import { printCmdResult, mergeCmdEvidenceTimings, toCmdCliResult, type CmdCliResult } from "./render.js";
 
 describe("toCmdCliResult", () => {
   test("copia timings desde evidence", () => {
@@ -171,5 +171,165 @@ describe("printCmdResult", () => {
     expect(output).toContain("salida cruda");
 
     stdoutSpy.mockRestore();
+  });
+});
+
+describe("mergeCmdEvidenceTimings", () => {
+  test("preserva evidence de fallo deferred y agrega timings cli", () => {
+    const result = {
+      schemaVersion: "1.0",
+      ok: false,
+      action: "cmd.exec",
+      device: "SW-SRV-DIST",
+      deviceKind: "ios",
+      command: "show version",
+      output: "",
+      rawOutput: "",
+      status: 1,
+      warnings: ["Job timed out while waiting for terminal command completion"],
+      error: {
+        code: "TERMINAL_DEFERRED_STALLED",
+        message: "terminal.plan.run creó el ticket cmd-test, pero el job siguió pendiente.",
+      },
+      nextSteps: ["pt doctor"],
+      evidence: {
+        phase: "terminal-plan-poll",
+        ticket: "cmd-test",
+        pollValue: {
+          state: "waiting-command",
+          outputTail: "",
+          waitingForCommandEnd: true,
+        },
+        timings: {
+          adapter: {
+            terminalPlanPollCount: 120,
+            terminalPlanPollQueueLatencyMs: 1000,
+          },
+        },
+      },
+    } satisfies CmdCliResult;
+
+    mergeCmdEvidenceTimings(result, {
+      cli: {
+        executeMs: 30000,
+        runCommandTotalMs: 30100,
+      },
+    });
+
+    expect(result.evidence).toMatchObject({
+      phase: "terminal-plan-poll",
+      ticket: "cmd-test",
+      pollValue: {
+        state: "waiting-command",
+        waitingForCommandEnd: true,
+      },
+      timings: {
+        adapter: {
+          terminalPlanPollCount: 120,
+          terminalPlanPollQueueLatencyMs: 1000,
+        },
+        cli: {
+          executeMs: 30000,
+          runCommandTotalMs: 30100,
+        },
+      },
+    });
+  });
+
+  test("preserva timings bridge existentes al agregar timings cli", () => {
+    const result = {
+      schemaVersion: "1.0",
+      ok: false,
+      action: "cmd.exec",
+      device: "SW-SRV-DIST",
+      deviceKind: "ios",
+      command: "show version",
+      output: "",
+      rawOutput: "",
+      status: 1,
+      warnings: [],
+      nextSteps: ["pt doctor"],
+      timings: {
+        sentAt: 1,
+        resultSeenAt: 2,
+        receivedAt: 3,
+        waitMs: 50,
+        queueLatencyMs: 10,
+        execLatencyMs: 20,
+      },
+      evidence: {
+        timings: {
+          adapter: {
+            terminalPlanPollCount: 1,
+          },
+        },
+      },
+    } satisfies CmdCliResult;
+
+    mergeCmdEvidenceTimings(result, {
+      cli: {
+        executeMs: 100,
+      },
+    });
+
+    expect(result.evidence).toMatchObject({
+      timings: {
+        bridge: {
+          waitMs: 50,
+          queueLatencyMs: 10,
+          execLatencyMs: 20,
+        },
+        adapter: {
+          terminalPlanPollCount: 1,
+        },
+        cli: {
+          executeMs: 100,
+        },
+      },
+    });
+  });
+
+  test("acepta wrapped.meta completo y agrega timings cli", () => {
+    const result = {
+      schemaVersion: "1.0",
+      ok: true,
+      action: "cmd.exec",
+      device: "SW-SRV-DIST",
+      deviceKind: "ios",
+      command: "show version",
+      output: "Cisco IOS Software",
+      rawOutput: "show version\nCisco IOS Software",
+      status: 0,
+      warnings: [],
+      nextSteps: [],
+      evidence: {
+        timings: {
+          adapter: {
+            terminalPlanPollCount: 2,
+          },
+        },
+      },
+    } satisfies CmdCliResult;
+
+    mergeCmdEvidenceTimings(result, {
+      timings: {
+        cli: {
+          executeMs: 1234,
+          runCommandTotalMs: 1300,
+        },
+      },
+    });
+
+    expect(result.evidence).toMatchObject({
+      timings: {
+        adapter: {
+          terminalPlanPollCount: 2,
+        },
+        cli: {
+          executeMs: 1234,
+          runCommandTotalMs: 1300,
+        },
+      },
+    });
   });
 });
