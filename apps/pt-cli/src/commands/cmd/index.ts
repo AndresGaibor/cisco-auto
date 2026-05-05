@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import { input, select } from "../../utils/inquirer.js";
 import { createTerminalCommandService } from "@cisco-auto/pt-control/services";
@@ -18,6 +17,12 @@ import {
   executeCompleteShowInterfaces,
   isCompleteShowInterfacesRequest,
 } from "./interfaces-complete.js";
+import {
+  buildConfigCommand,
+  looksLikeMultiCommandInput,
+  normalizeCommandLines,
+  readCommandsFromOptions,
+} from "./input.js";
 
 const DEFAULT_CMD_TIMEOUT_MS = 12_000;
 
@@ -27,94 +32,6 @@ function createRuntimeTerminalForCli(controller: any) {
     ensureSession: controller.ensureTerminalSession.bind(controller),
     pollTerminalJob: async () => null,
   };
-}
-
-function joinCommandParts(parts: string[]): string {
-  return parts.join(" ").trim();
-}
-
-function normalizeCommandLines(content: string): string[] {
-  return content
-    .split(/\r?\n/)
-    .map((line) => line.trimEnd())
-    .filter((line) => line.trim().length > 0)
-    .filter((line) => !line.trimStart().startsWith("#"));
-}
-
-function looksLikeMultiCommandInput(commandParts: string[]): boolean {
-  const parts = commandParts
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (parts.length <= 1) return false;
-
-  if (parts.some((part) => /\r?\n/.test(part))) {
-    return true;
-  }
-
-  const lower = parts.map((part) => part.toLowerCase());
-
-  const startsConfigContext = /^(interface|vlan|router|line|ip access-list|class-map|policy-map|ip dhcp pool)\b/.test(lower[0] ?? "");
-
-  const hasConfigChild = lower.slice(1).some((part) =>
-    /^(description|switchport|shutdown|no shutdown|ip address|ipv6 address|duplex|speed|name|network|default-router|dns-server|lease|login|password|transport input|exec-timeout|channel-group|spanning-tree)\b/.test(part),
-  );
-
-  if (startsConfigContext && hasConfigChild) {
-    return true;
-  }
-
-  const everyPartLooksLikeFullCommand = parts.every((part) => /\s+/.test(part));
-
-  if (everyPartLooksLikeFullCommand) {
-    return true;
-  }
-
-  return false;
-}
-
-function readCommandsFromOptions(
-  options: { file?: string; stdin?: boolean; config?: boolean },
-  commandParts: string[],
-): string[] {
-  if (options.file) {
-    return normalizeCommandLines(readFileSync(options.file, "utf-8"));
-  }
-
-  if (options.stdin) {
-    return normalizeCommandLines(readFileSync(0, "utf-8"));
-  }
-
-  if (options.config) {
-    return commandParts.flatMap((part) => normalizeCommandLines(part)).filter(Boolean);
-  }
-
-  if (looksLikeMultiCommandInput(commandParts)) {
-    return commandParts.flatMap((part) => normalizeCommandLines(part)).filter(Boolean);
-  }
-
-  const joined = joinCommandParts(commandParts);
-  return joined ? normalizeCommandLines(joined) : [];
-}
-
-function isEndCommand(command: string): boolean {
-  return /^(end|exit)$/i.test(command.trim());
-}
-
-function buildConfigCommand(commands: string[], save: boolean): string {
-  const lines: string[] = [];
-  const normalizedCommands = commands.filter((line) => line.trim().length > 0);
-
-  lines.push("configure terminal");
-  lines.push(...normalizedCommands);
-
-  const lastCommand = normalizedCommands.at(-1);
-  if (!lastCommand || !isEndCommand(lastCommand)) {
-    lines.push("end");
-  }
-
-  if (save) lines.push("write memory");
-  return lines.join("\n");
 }
 
 async function promptForCommand(): Promise<string> {
@@ -399,7 +316,7 @@ Reglas:
         .split(",")
         .map((item) => item.trim())
         .filter(Boolean);
-      const commandText = joinCommandParts(commandParts);
+      const commandText = commandParts.join(" ").trim();
 
       const results: CmdCliResult[] = [];
 
@@ -493,5 +410,4 @@ export const __test__ = {
   looksLikeMultiCommandInput,
   readCommandsFromOptions,
   buildConfigCommand,
-  isEndCommand,
 };

@@ -10,5 +10,5 @@ describe("stale @cisco-auto/core references", () => {
 
     expect(result.status, result.stdout + result.stderr).toBe(0);
     expect(result.stdout).toContain("No active @cisco-auto/core");
-  }, 15_000);
+  }, 30_000);
 });

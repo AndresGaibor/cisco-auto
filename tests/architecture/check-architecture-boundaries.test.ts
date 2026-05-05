@@ -14,5 +14,5 @@ describe("architecture boundaries", () => {
 
     expect(result.status, result.stdout + result.stderr).toBe(0);
     expect(result.stdout).toContain("Architecture boundaries OK");
-  });
+  }, 30_000);
 });

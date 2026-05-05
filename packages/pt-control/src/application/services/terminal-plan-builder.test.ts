@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
-  buildDefaultTerminalPolicies,
-  buildDefaultTerminalTimeouts,
   buildUniversalTerminalPlan,
   splitCommandLines,
 } from "./terminal-plan-builder.js";
+import {
+  buildDefaultTerminalPolicies,
+  buildDefaultTerminalTimeouts,
+} from "./terminal-plan-policies.js";
 import { createIosRunningConfigPlan } from "../../pt/terminal/standard-terminal-plans.js";
 import type { TerminalPlanStep } from "../../ports/runtime-terminal-port.js";
 

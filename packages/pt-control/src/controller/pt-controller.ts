@@ -54,6 +54,7 @@ import { SnapshotController } from "./snapshot-controller.js";
 import { RuntimeController } from "./runtime-controller.js";
 import { HostCommandService } from "./host-command-service.js";
 import type { ControlComposition } from "../application/bootstrap/control-composition.js";
+import { createLegacyControllerComposition } from "./legacy-controller-composition.js";
 import type { RuntimeTerminalPort } from "../ports/runtime-terminal-port.js";
 import type { TerminalEvidenceVerdict } from "../pt/terminal/terminal-evidence-verifier.js";
 import { parseTerminalOutput } from "../pt/terminal/terminal-output-parsers.js";
@@ -89,108 +90,16 @@ export class PTController {
     const isLegacyBridge = composition && 'sendCommandAndWait' in composition;
 
     if (isLegacyBridge) {
-      const bridge = composition as any;
+      const legacy = createLegacyControllerComposition(composition as any);
 
-      this._composition = {} as ControlComposition;
-      this._legacyBridge = bridge;
-      this._legacyIosService = {
-        execIos: async (device: string, cmd: string) => {
-          const result = await bridge.sendCommandAndWait('execIos', { device, command: cmd });
-          return { raw: result?.value?.raw || '' };
-        },
-        configIos: async (device: string, commands: string[]) => {
-          const result = await bridge.sendCommandAndWait('configIos', { device, commands });
-          return { executed: true, device, commands, raw: result?.value?.raw || '' };
-        },
-        execInteractive: async (device: string, cmd: string, opts?: any) => {
-          const result = await bridge.sendCommandAndWait('execInteractive', { device, command: cmd, ...opts });
-          return { raw: result?.value?.raw || '' };
-        },
-        execIosWithEvidence: async (device: string, cmd: string) => {
-          const result = await bridge.sendCommandAndWait('execIos', { device, command: cmd });
-          return { ok: true, raw: result?.value?.raw || '', evidence: { source: 'terminal' } };
-        },
-        configIosWithResult: async (device: string, commands: string[]) => {
-          const result = await bridge.sendCommandAndWait('configIos', { device, commands });
-          return { executed: true, device, commands };
-        },
-        showIpInterfaceBrief: async (device: string) => {
-          const result = await bridge.sendCommandAndWait('execInteractive', { device, command: 'show ip interface brief' });
-          return result?.value?.parsed || { entries: [] };
-        },
-        showVlan: async (device: string) => {
-          const result = await bridge.sendCommandAndWait('execInteractive', { device, command: 'show vlan brief' });
-          return result?.value?.parsed || { entries: [] };
-        },
-        showIpRoute: async (device: string) => {
-          const result = await bridge.sendCommandAndWait('execInteractive', { device, command: 'show ip route' });
-          return result?.value?.parsed || { entries: [] };
-        },
-      };
-
-      this._topologyController = {
-        addDevice: async (name: string, model: string, opts?: any) => ({ name, model, type: 'router' as const, power: true, ports: [] }),
-        removeDevice: async (name: string) => {},
-        renameDevice: async (oldName: string, newName: string) => {},
-        moveDevice: async (name: string, x: number, y: number) => ({ ok: true, name, x, y }),
-        listDevices: async (filter?: any) => [{ name: 'R1', model: '2911', type: 'router' as const, power: true, ports: [] }],
-        inspectDevice: async (name: string, includeXml = false) => ({ name, model: '2911', type: 'router' as const, power: true, ports: [] }),
-        addModule: async (device: string, slot: number, module: string) => {},
-        removeModule: async (device: string, slot: number) => {},
-        addLink: async (d1: any, p1: any, d2: any, p2: any, linkType: any) => ({ id: 'link1' }),
-        removeLink: async (device: string, port: string) => {},
-        clearTopology: async () => ({ removedDevices: 0, removedLinks: 0, remainingDevices: 0, remainingLinks: 0 }),
-      } as any;
-
-      this._iosController = {
-        configIos: async (device: string, commands: string[], opts?: any) => this._legacyIosService.configIos(device, commands),
-        execIos: async <T = any>(device: string, cmd: string) => this._legacyIosService.execIos(device, cmd) as T,
-        show: async (device: string, cmd: string) => this._legacyIosService.execInteractive(device, cmd),
-        showIpInterfaceBrief: async (device: string) => this._legacyIosService.showIpInterfaceBrief(device),
-        showVlan: async (device: string) => this._legacyIosService.showVlan(device),
-        showIpRoute: async (device: string) => this._legacyIosService.showIpRoute(device),
-        showRunningConfig: async (device: string) => this._legacyIosService.execInteractive(device, 'show running-config'),
-        showMacAddressTable: async (device: string) => this._legacyIosService.execInteractive(device, 'show mac address-table'),
-        showCdpNeighbors: async (device: string) => this._legacyIosService.execInteractive(device, 'show cdp neighbors'),
-        execInteractive: async (device: string, cmd: string, opts?: any) => this._legacyIosService.execInteractive(device, cmd, opts),
-        execIosWithEvidence: async <T = any>(device: string, cmd: string) => this._legacyIosService.execIosWithEvidence(device, cmd) as T,
-        configIosWithResult: async (device: string, commands: string[], opts?: any) => this._legacyIosService.configIosWithResult(device, commands),
-        showParsed: async <T = any>(device: string, cmd: string, opts?: any) => this._legacyIosService.execInteractive(device, cmd, opts),
-        getConfidence: async (device: string, evidence: any, check?: string) => ({ confidence: 1.0 }),
-        resolveCapabilities: async (device: string) => ({ model: '2911', family: 'router' }),
-        configureDhcpPool: async (device: string, pool: string, network: string, mask: string, router: string, dns?: string) => this._legacyIosService.execInteractive(device, 'show running-config'),
-        configureOspfNetwork: async (device: string, pid: number, net: string, wc: string, area: number) => this._legacyIosService.configIos(device, [`router ospf ${pid}`]),
-        configureSshAccess: async (device: string, domain: string, user: string, pass: string) => this._legacyIosService.configIos(device, ['ip domain-name ' + domain]),
-        configureAccessListStandard: async (device: string, acl: number, entries: string[]) => this._legacyIosService.configIos(device, [`access-list ${acl}`]),
-      } as any;
-
-      this._snapshotController = {
-        snapshot: async () => bridge.sendCommandAndWait('snapshot', {}).then((r: any) => r?.value || { devices: {}, links: {} }),
-        getCachedSnapshot: () => null,
-        loadRuntime: async (code: string) => {},
-        loadRuntimeFromFile: async (file: string) => {},
-        getTwin: () => null,
-      } as any;
-
-      this._runtimeController = {
-        getContextSummary: () => ({ bridgeReady: true, topologyMaterialized: false, deviceCount: 0, linkCount: 0 }),
-        getHealthSummary: async () => ({ bridgeReady: true, topologyHealth: 'unknown', heartbeatState: 'unknown' as const, warnings: [] }),
-        getBridgeStatus: () => ({ ready: true }),
-      } as any;
-
-      this._hostCommandService = {
-        getHostHistory: async (device: string) => ({ entries: [], count: 0, raw: '' }),
-        sendPing: async (device: string, target: string, timeout?: number) => ({ success: false, raw: '' }),
-        getHostIpconfig: async (device: string, timeout?: number) => ({ success: false, raw: '' }),
-        getHostArp: async (device: string, timeout?: number) => ({ success: false, raw: '' }),
-        getHostTracert: async (device: string, target: string, timeout?: number) => ({ success: false, raw: '' }),
-        getHostNslookup: async (device: string, target: string, timeout?: number) => ({ success: false, raw: '' }),
-        getHostNetstat: async (device: string, timeout?: number) => ({ success: false, raw: '' }),
-        getHostRoute: async (device: string, timeout?: number) => ({ success: false, raw: '' }),
-        getHostTelnet: async (device: string, target: string, timeout?: number) => ({ success: false, raw: '' }),
-        getHostSsh: async (device: string, user: string, target: string, timeout?: number) => ({ success: false, raw: '' }),
-        inspectHost: async (device: string) => ({ name: device, model: 'PC1', type: 'pc' as const, power: true, ports: [] }),
-      } as any;
+      this._composition = legacy.composition;
+      this._legacyBridge = legacy.legacyBridge;
+      this._legacyIosService = legacy.legacyIosService;
+      this._topologyController = legacy.topologyController;
+      this._iosController = legacy.iosController;
+      this._snapshotController = legacy.snapshotController;
+      this._runtimeController = legacy.runtimeController;
+      this._hostCommandService = legacy.hostCommandService;
 
       return;
     }
@@ -806,7 +715,7 @@ export class PTController {
   }
 
   getHeartbeat<T = unknown>(): T | null {
-    return this._composition.contextService.getHeartbeat<T>();
+    return this._composition.contextService.getHeartbeat() as T | null;
   }
 
   getHeartbeatHealth(): {
