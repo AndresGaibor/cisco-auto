@@ -20,6 +20,7 @@ export interface RunPtCliInput {
   outputMode?: "buffer" | "spool";
   spoolDir?: string;
   previewBytes?: number;
+  env?: Record<string, string | undefined>;
 }
 
 export interface RunPtCliResult {

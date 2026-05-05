@@ -25,17 +25,19 @@ describe("registerTools", () => {
     process.env.PT_DEV_DIR = ptDevDir;
 
     const handlers = new Map<string, (input: unknown) => Promise<unknown>>();
-    const calls: Array<{ argv: string[]; stdin: string | null; outputMode?: string; spoolDir?: string | null }> = [];
+    const configs = new Map<string, any>();
+    const calls: Array<{ argv: string[]; stdin: string | null; outputMode?: string; spoolDir?: string | null; env?: Record<string, string | undefined> }> = [];
 
     registerTools({
       server: {
-        registerTool(name: string, _config: unknown, handler: (input: unknown) => Promise<unknown>) {
+        registerTool(name: string, config: unknown, handler: (input: unknown) => Promise<unknown>) {
+          configs.set(name, config);
           handlers.set(name, handler);
         },
       },
       runPtCli: async (input) => {
         const runInput = input as any;
-        calls.push({ argv: runInput.argv, stdin: runInput.stdin ?? null, outputMode: runInput.outputMode, spoolDir: runInput.spoolDir ?? null });
+        calls.push({ argv: runInput.argv, stdin: runInput.stdin ?? null, outputMode: runInput.outputMode, spoolDir: runInput.spoolDir ?? null, env: runInput.env });
         return {
           ok: true,
           exitCode: 0,
@@ -60,6 +62,24 @@ describe("registerTools", () => {
     const tool = handlers.get("pt_omni_raw");
     expect(tool).toBeDefined();
     expect((handlers.size > 0) ? true : false).toBe(true);
+    expect(configs.get("pt_cli")?.annotations).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    });
+    expect(configs.get("pt_cli")?.description).toContain("No usar para `pt omni raw`");
+    expect(configs.get("pt_omni_raw")?.annotations).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    });
+    expect(configs.get("pt_doctor")?.description).toContain("diagnosticar instalación");
+    expect(configs.get("pt_runtime_status")?.description).toContain("inspeccionar el runtime desplegado");
+    expect(configs.get("pt_device_list")?.description).toContain("listar los dispositivos visibles");
+    expect(configs.get("pt_help")?.description).toContain("ayuda raíz de la CLI");
+    expect(configs.get("pt_list_commands")?.description).toContain("catálogo público de comandos");
 
     const begin = await tool?.({ op: "begin_script", scriptId: "probe_pt_api", description: "Exploración read-only de APIs internas de PT" });
     expect(JSON.stringify(begin)).toContain("probe_pt_api");
@@ -79,11 +99,60 @@ describe("registerTools", () => {
     expect(calls.at(-1)?.argv?.[2]).toBe("--file");
     expect(typeof calls.at(-1)?.argv?.[3]).toBe("string");
     expect(calls.at(-1)?.argv?.[4]).toBe("--yes");
-    expect(calls.at(-1)?.argv?.[5]).toBe("--json");
+    expect(calls.at(-1)?.argv?.[5]).toBe("--raw");
+    expect(calls.at(-1)?.argv?.[6]).toBe("--guard");
+    expect(calls.at(-1)?.argv?.[7]).toBe("sim");
     expect(calls.at(-1)?.stdin).toBeNull();
     expect(calls.at(-1)?.outputMode).toBe("spool");
+    expect(calls.at(-1)?.env?.PT_MCP_ALLOW_DIRECT_OMNI_RAW).toBe("1");
     expect(calls.at(-1)?.spoolDir).toContain("mcp-cache/omni/results");
     expect(JSON.stringify(executed)).toContain("resultId");
+
+    rmSync(ptDevDir, { recursive: true, force: true });
+  });
+
+  test("pt_omni_raw execute_script devuelve metadata compacta", async () => {
+    const ptDevDir = createTempPtDevDir();
+    process.env.PT_DEV_DIR = ptDevDir;
+
+    const handlers = new Map<string, (input: unknown) => Promise<unknown>>();
+
+    registerTools({
+      server: {
+        registerTool(name: string, _config: unknown, handler: (input: unknown) => Promise<unknown>) {
+          handlers.set(name, handler);
+        },
+      },
+      runPtCli: async (input) => ({
+        ok: true,
+        exitCode: 0,
+        signal: null,
+        argv: input.argv,
+        durationMs: 30,
+        stdout: "x".repeat(50_000),
+        stderr: "",
+        json: null,
+        truncated: { stdout: false, stderr: false },
+        stdoutBytes: 50_000,
+        stderrBytes: 0,
+        jsonParsed: false,
+      }),
+      commandCatalog: [],
+      cliEntrypoint: "/repo/apps/pt-cli/src/index.ts",
+      repoRoot: "/repo",
+      defaultTimeoutMs: 120_000,
+    });
+
+    const tool = handlers.get("pt_omni_raw");
+    await tool?.({ op: "begin_script", scriptId: "meta_probe" });
+    await tool?.({ op: "append_script", scriptId: "meta_probe", seq: 0, chunk: "return 1;" });
+    const result = await tool?.({ op: "execute_script", scriptId: "meta_probe", returnMode: "metadata" });
+
+    const text = JSON.stringify(result);
+    expect(text.length).toBeLessThan(5_000);
+    expect(text).toContain("resultId");
+    expect(text).toContain("streams");
+    expect(text).not.toContain("preview");
 
     rmSync(ptDevDir, { recursive: true, force: true });
   });
@@ -131,6 +200,7 @@ describe("registerTools", () => {
 
     expect(JSON.stringify(read)).toContain("line-1");
     expect(JSON.stringify(read)).toContain("eof");
+    expect(JSON.stringify(read)).toContain("nextOffset");
 
     rmSync(ptDevDir, { recursive: true, force: true });
   });
@@ -212,10 +282,13 @@ describe("registerTools", () => {
 
   test("pt_omni_raw se anuncia al registrar", async () => {
     const logs: string[] = [];
+    const configs = new Map<string, any>();
 
     registerTools({
       server: {
-        registerTool() {},
+        registerTool(name: string, config: unknown) {
+          configs.set(name, config);
+        },
       },
       runPtCli: async () => ({
         ok: true,
@@ -240,5 +313,13 @@ describe("registerTools", () => {
     });
 
     expect(logs.join("\n")).toContain("registered tool: pt_omni_raw");
+    expect(configs.get("pt_omni_raw")?.annotations).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    });
+    expect(configs.get("pt_omni_raw")?.description).toContain("simulador");
+    expect(configs.get("pt_omni_raw")?.description).toContain("No toca la red real");
   });
 });

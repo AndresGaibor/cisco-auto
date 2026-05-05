@@ -72,6 +72,43 @@ function createToolContent<T extends Record<string, unknown>>(structuredContent:
   };
 }
 
+function createCompactToolContent<T extends Record<string, unknown>>(structuredContent: T): { content: Array<{ type: "text"; text: string }>; structuredContent: T } {
+  const compact = structuredContent as Record<string, unknown>;
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(
+          {
+            ok: compact.ok,
+            op: compact.op,
+            resultId: compact.resultId,
+            scriptId: compact.scriptId,
+            next: compact.next,
+            error: compact.error,
+          },
+          null,
+          2,
+        ),
+      },
+    ],
+    structuredContent,
+  };
+}
+
+function createReadResultContent<T extends Record<string, unknown>>(structuredContent: T): { content: Array<{ type: "text"; text: string }>; structuredContent: T } {
+  const data = structuredContent as Record<string, unknown>;
+  return {
+    content: [
+      {
+        type: "text",
+        text: data.ok ? String(data.text ?? "") : JSON.stringify(structuredContent, null, 2),
+      },
+    ],
+    structuredContent,
+  };
+}
+
 const READ_ONLY_SIM = {
   readOnlyHint: true,
   destructiveHint: false,
@@ -79,11 +116,18 @@ const READ_ONLY_SIM = {
   openWorldHint: false,
 } as const;
 
-const DANGEROUS_FALLBACK = {
-  readOnlyHint: false,
-  destructiveHint: true,
+const SIMULATOR_OMNI_RAW = {
+  readOnlyHint: true,
+  destructiveHint: false,
   idempotentHint: false,
-  openWorldHint: true,
+  openWorldHint: false,
+} as const;
+
+const DANGEROUS_FALLBACK = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
 } as const;
 
 const DANGEROUS_LOCAL_RAW = {
@@ -92,6 +136,11 @@ const DANGEROUS_LOCAL_RAW = {
   idempotentHint: false,
   openWorldHint: false,
 } as const;
+
+const INLINE_OMNI_CODE_MAX_BYTES = 1_000;
+const DEFAULT_READ_RESULT_LIMIT = 6_000;
+const MAX_EXEC_PREVIEW_BYTES = 1_000;
+const DEFAULT_EXEC_PREVIEW_BYTES = 0;
 
 function normalizeScriptId(scriptId?: string): string {
   if (scriptId && /^[a-zA-Z0-9_.-]{1,80}$/.test(scriptId)) return scriptId;
@@ -251,7 +300,8 @@ export function registerTools(options: RegisterToolsOptions): void {
     },
     async (input: any) =>
       await withLiveLogging(liveLogger, "pt_cli", input, async (toolInput) => {
-        if (isOmniRaw(toolInput.argv ?? [])) {
+        const allowDirectOmniRaw = process.env.PT_MCP_ALLOW_DIRECT_OMNI_RAW === "1";
+        if (isOmniRaw(toolInput.argv ?? []) && !allowDirectOmniRaw) {
           return createToolContent(formatLongScriptError(toolInput.argv ?? []));
         }
 
@@ -272,8 +322,14 @@ export function registerTools(options: RegisterToolsOptions): void {
     "pt_doctor",
     {
       title: "PT doctor",
-      description: "Ejecuta pt doctor --json.",
-      inputSchema: z.object({ timeoutMs: z.number().int().positive().max(600_000).optional() }),
+      description: [
+        "Ejecuta `pt doctor --json` para diagnosticar instalación, bridge, runtime y estado base de Packet Tracer.",
+        "Útil para detectar problemas de entorno antes de intentar herramientas de control más específicas.",
+        "No modifica el laboratorio; solo inspecciona el estado del sistema y sugiere correcciones.",
+      ].join(" "),
+      inputSchema: z.object({
+        timeoutMs: z.number().int().positive().max(600_000).optional().describe("Timeout local para el diagnóstico."),
+      }).describe("Sincroniza diagnóstico del entorno local de Packet Tracer."),
       annotations: READ_ONLY_SIM,
     },
     async (input: any) =>
@@ -294,8 +350,14 @@ export function registerTools(options: RegisterToolsOptions): void {
     "pt_runtime_status",
     {
       title: "PT runtime status",
-      description: "Ejecuta pt runtime status --json.",
-      inputSchema: z.object({ timeoutMs: z.number().int().positive().max(600_000).optional() }),
+      description: [
+        "Ejecuta `pt runtime status --json` para inspeccionar el runtime desplegado en `PT_DEV_DIR`.",
+        "Reporta estado de `main.js`, `runtime.js`, bridge y señales de salud del runtime.",
+        "No modifica topología ni dispositivos; solo informa si el runtime está listo o degradado.",
+      ].join(" "),
+      inputSchema: z.object({
+        timeoutMs: z.number().int().positive().max(600_000).optional().describe("Timeout local para consultar el estado del runtime."),
+      }).describe("Consulta el estado operativo del runtime de Packet Tracer."),
       annotations: READ_ONLY_SIM,
     },
     async (input: any) =>
@@ -316,8 +378,14 @@ export function registerTools(options: RegisterToolsOptions): void {
     "pt_device_list",
     {
       title: "PT device list",
-      description: "Ejecuta pt device list --json.",
-      inputSchema: z.object({ timeoutMs: z.number().int().positive().max(600_000).optional() }),
+      description: [
+        "Ejecuta `pt device list --json` para listar los dispositivos visibles en el laboratorio actual.",
+        "Devuelve nombres, modelos y contexto útil para planear inspecciones o cambios posteriores.",
+        "No toca el laboratorio; solo lee la vista actual de dispositivos.",
+      ].join(" "),
+      inputSchema: z.object({
+        timeoutMs: z.number().int().positive().max(600_000).optional().describe("Timeout local para listar dispositivos."),
+      }).describe("Obtiene el inventario de dispositivos del laboratorio abierto."),
       annotations: READ_ONLY_SIM,
     },
     async (input: any) =>
@@ -338,8 +406,11 @@ export function registerTools(options: RegisterToolsOptions): void {
     "pt_help",
     {
       title: "PT help",
-      description: "Muestra la ayuda de la CLI pt.",
-      inputSchema: z.object({}),
+      description: [
+        "Muestra la ayuda raíz de la CLI `pt` con comandos públicos, flags y patrones de uso.",
+        "Sirve para descubrir capacidades sin ejecutar acciones sobre el laboratorio.",
+      ].join(" "),
+      inputSchema: z.object({}).describe("Sin argumentos."),
       annotations: READ_ONLY_SIM,
     },
     async () =>
@@ -360,8 +431,11 @@ export function registerTools(options: RegisterToolsOptions): void {
     "pt_list_commands",
     {
       title: "PT list commands",
-      description: "Lista los comandos públicos disponibles en la CLI pt.",
-      inputSchema: z.object({}),
+      description: [
+        "Lista el catálogo público de comandos de la CLI `pt` con grupos, ejemplos y pistas para agentes.",
+        "Es la vista estructurada ideal para descubrir qué subcomandos están disponibles sin usar `--help`.",
+      ].join(" "),
+      inputSchema: z.object({}).describe("Sin argumentos."),
       annotations: READ_ONLY_SIM,
     },
     async () =>
@@ -376,8 +450,10 @@ export function registerTools(options: RegisterToolsOptions): void {
     {
       title: "PT Omni raw",
       description: [
-        "Ejecuta JavaScript Omni Raw dentro del runtime JavaScript de Cisco Packet Tracer.",
-        "Cisco Packet Tracer es un simulador de red; los scripts operan sobre el laboratorio abierto.",
+        "Ejecuta JavaScript dentro del runtime local de Cisco Packet Tracer.",
+        "Cisco Packet Tracer es un simulador de red: los scripts operan únicamente sobre el laboratorio abierto.",
+        "No toca la red real, Internet ni archivos del host.",
+        "El laboratorio simulado puede modificarse o romperse; eso se considera aceptable dentro del simulador.",
         "No pasar scripts largos por pt_cli argv. Para scripts largos usar begin_script, append_script y execute_script.",
         "No devolver salidas grandes directamente. execute_script guarda la salida y devuelve un resultId; usar read_result para leer por chunks.",
         "append_script es idempotente por scriptId+seq, útil para recuperarse de reintentos o cortes de red.",
@@ -394,30 +470,28 @@ export function registerTools(options: RegisterToolsOptions): void {
           "read_result",
           "result_status",
           "clear",
-        ]),
+        ]).describe("Operación local de Omni Raw para Cisco Packet Tracer; no ejecuta comandos de shell del host."),
         scriptId: z.string().regex(/^[a-zA-Z0-9_.-]{1,80}$/).optional(),
         resultId: z.string().regex(/^[a-zA-Z0-9_.-]{1,80}$/).optional(),
-        description: z.string().max(2_000).optional(),
+        description: z.string().max(2_000).optional().describe("Descripción del script staged dentro del laboratorio simulado."),
         seq: z.number().int().nonnegative().optional(),
-        chunk: z.string().max(16_000).optional(),
+        chunk: z.string().max(4_000).optional().describe("Fragmento de JavaScript para append_script dentro del simulador local."),
         chunkSha256: z.string().regex(/^[a-fA-F0-9]{64}$/).optional(),
-        code: z.string().max(16_000).optional(),
+        code: z.string().max(2_000).optional().describe("JavaScript corto para execute_code dentro del simulador local."),
+        returnMode: z.enum(["metadata", "preview"]).optional().describe("Modo de retorno para execute_code/execute_script. metadata devuelve solo metadatos."),
+        previewBytes: z.number().int().nonnegative().max(1_000).optional().describe("Bytes máximos de preview cuando returnMode=preview."),
+        guard: z.enum(["strict", "sim", "warn", "off"]).optional().describe("Modo de guard para Omni Raw. sim permite mutaciones del laboratorio simulado y bloquea host/filesystem."),
         parseJson: z.boolean().optional(),
         timeoutMs: z.number().int().positive().max(120_000).optional(),
         stream: z.enum(["stdout", "stderr", "json"]).optional(),
         mode: z.enum(["bytes", "lines"]).optional(),
         offset: z.number().int().nonnegative().optional(),
-        limit: z.number().int().positive().max(128_000).optional(),
+        limit: z.number().int().positive().max(32_000).optional(),
         lineOffset: z.number().int().nonnegative().optional(),
         lineLimit: z.number().int().positive().max(1_000).optional(),
         target: z.enum(["script", "result", "all", "expired"]).optional(),
       }),
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: false,
-        openWorldHint: true,
-      },
+      annotations: SIMULATOR_OMNI_RAW,
       outputSchema: z.object({ ok: z.boolean() }).passthrough(),
     },
     async (input: any) =>
@@ -429,7 +503,7 @@ export function registerTools(options: RegisterToolsOptions): void {
             scriptId: toolInput.scriptId,
             description: toolInput.description,
           });
-          return createToolContent(result as any);
+          return createCompactToolContent(result as any);
         }
 
         if (toolInput.op === "append_script") {
@@ -439,17 +513,17 @@ export function registerTools(options: RegisterToolsOptions): void {
             chunk: toolInput.chunk ?? "",
             chunkSha256: toolInput.chunkSha256,
           });
-          return createToolContent(result as any);
+          return createCompactToolContent(result as any);
         }
 
         if (toolInput.op === "script_status") {
           const result = await getOmniScriptStatus(toolInput.scriptId);
-          return createToolContent(result as any);
+          return createCompactToolContent(result as any);
         }
 
         if (toolInput.op === "result_status") {
           const result = await getOmniResultStatus(toolInput.resultId);
-          return createToolContent(result as any);
+          return createCompactToolContent(result as any);
         }
 
         if (toolInput.op === "read_result") {
@@ -462,40 +536,48 @@ export function registerTools(options: RegisterToolsOptions): void {
             lineOffset: toolInput.lineOffset,
             lineLimit: toolInput.lineLimit,
           });
-          return createToolContent(result as any);
+          return createReadResultContent(result as any);
         }
 
         if (toolInput.op === "clear") {
           const target = toolInput.target ?? "expired";
           const refId = toolInput.scriptId ?? toolInput.resultId;
           const cleared = await clearOmniCache(target, refId);
-          return createToolContent({ ok: true, cleared, target, refId });
+          return createCompactToolContent({ ok: true, op: "clear", cleared, target, refId });
         }
 
         if (toolInput.op === "execute_code") {
           const code = toolInput.code ?? "";
-          if (Buffer.byteLength(code, "utf8") > 8_000) {
-            return createToolContent({
+          if (Buffer.byteLength(code, "utf8") > INLINE_OMNI_CODE_MAX_BYTES) {
+            return createCompactToolContent({
               ok: false,
               error: {
                 code: "SCRIPT_TOO_LARGE_USE_STAGING",
                 message: "Usa begin_script + append_script + execute_script.",
+              },
+              next: {
+                op: "begin_script",
+                description: "Crear script staged para Omni Raw",
               },
             });
           }
 
           const resultId = `res_${randomUUID().replace(/-/g, "").slice(0, 6)}`;
           const resultPaths = getOmniResultPaths(resultId);
+          const previewBytes = toolInput.returnMode === "preview"
+            ? Math.min(toolInput.previewBytes ?? 500, MAX_EXEC_PREVIEW_BYTES)
+            : DEFAULT_EXEC_PREVIEW_BYTES;
           const run = await options.runPtCli({
             repoRoot: options.repoRoot,
             cliEntrypoint: options.cliEntrypoint,
-            argv: ["omni", "raw", "--stdin", "--yes", "--json"],
+            argv: ["omni", "raw", "--stdin", "--yes", "--raw", "--guard", toolInput.guard ?? "sim"],
             stdin: code,
             timeoutMs: toolInput.timeoutMs ?? options.defaultTimeoutMs,
-            parseJson: Boolean(toolInput.parseJson),
+            parseJson: false,
             outputMode: "spool",
             spoolDir: resultPaths.resultDir,
-            previewBytes: 12_000,
+            previewBytes,
+            env: { PT_MCP_ALLOW_DIRECT_OMNI_RAW: "1" },
           });
 
           await recordOmniResult({
@@ -508,20 +590,27 @@ export function registerTools(options: RegisterToolsOptions): void {
             stderr: run.stderr,
             json: run.json,
             jsonParsed: Boolean(run.jsonParsed),
+            previewBytes,
           });
 
-          return createToolContent({
+          const stdoutBytes = run.stdoutBytes ?? Buffer.byteLength(run.stdout, "utf8");
+          const stderrBytes = run.stderrBytes ?? Buffer.byteLength(run.stderr, "utf8");
+
+          return createCompactToolContent({
             ok: run.ok,
             op: "execute_code",
             resultId,
             durationMs: run.durationMs,
-            stdoutBytes: run.stdoutBytes ?? Buffer.byteLength(run.stdout, "utf8"),
-            stderrBytes: run.stderrBytes ?? Buffer.byteLength(run.stderr, "utf8"),
+            streams: {
+              stdout: { bytes: stdoutBytes, available: true },
+              stderr: { bytes: stderrBytes, available: true },
+              json: { bytes: 0, available: false },
+            },
             jsonParsed: Boolean(run.jsonParsed),
-            truncated: Boolean(run.truncated.stdout || run.truncated.stderr),
-            preview: run.stdout.slice(0, 3_000),
+            truncated: stdoutBytes > DEFAULT_READ_RESULT_LIMIT || stderrBytes > DEFAULT_READ_RESULT_LIMIT,
+            preview: previewBytes > 0 ? run.stdout.slice(0, previewBytes) : undefined,
             next: run.ok
-              ? { op: "read_result", resultId, stream: "stdout", offset: 0, limit: 12_000 }
+              ? { op: "read_result", resultId, stream: "stdout", mode: "bytes", offset: 0, limit: DEFAULT_READ_RESULT_LIMIT }
               : undefined,
             error: run.error,
           });
@@ -535,15 +624,19 @@ export function registerTools(options: RegisterToolsOptions): void {
 
           const resultId = `res_${randomUUID().replace(/-/g, "").slice(0, 6)}`;
           const resultPaths = getOmniResultPaths(resultId);
+          const previewBytes = toolInput.returnMode === "preview"
+            ? Math.min(toolInput.previewBytes ?? 500, MAX_EXEC_PREVIEW_BYTES)
+            : DEFAULT_EXEC_PREVIEW_BYTES;
           const run = await options.runPtCli({
             repoRoot: options.repoRoot,
             cliEntrypoint: options.cliEntrypoint,
-            argv: ["omni", "raw", "--file", status.scriptPath, "--yes", "--json"],
+            argv: ["omni", "raw", "--file", status.scriptPath, "--yes", "--raw", "--guard", toolInput.guard ?? "sim"],
             timeoutMs: toolInput.timeoutMs ?? options.defaultTimeoutMs,
-            parseJson: Boolean(toolInput.parseJson),
+            parseJson: false,
             outputMode: "spool",
             spoolDir: resultPaths.resultDir,
-            previewBytes: 12_000,
+            previewBytes,
+            env: { PT_MCP_ALLOW_DIRECT_OMNI_RAW: "1" },
           });
 
           await recordOmniResult({
@@ -556,20 +649,27 @@ export function registerTools(options: RegisterToolsOptions): void {
             stderr: run.stderr,
             json: run.json,
             jsonParsed: Boolean(run.jsonParsed),
+            previewBytes,
           });
 
-          return createToolContent({
+          const stdoutBytes = run.stdoutBytes ?? Buffer.byteLength(run.stdout, "utf8");
+          const stderrBytes = run.stderrBytes ?? Buffer.byteLength(run.stderr, "utf8");
+
+          return createCompactToolContent({
             ok: run.ok,
             scriptId: status.scriptId,
             resultId,
             durationMs: run.durationMs,
-            stdoutBytes: run.stdoutBytes ?? Buffer.byteLength(run.stdout, "utf8"),
-            stderrBytes: run.stderrBytes ?? Buffer.byteLength(run.stderr, "utf8"),
+            streams: {
+              stdout: { bytes: stdoutBytes, available: true },
+              stderr: { bytes: stderrBytes, available: true },
+              json: { bytes: 0, available: false },
+            },
             jsonParsed: Boolean(run.jsonParsed),
-            truncated: Boolean(run.truncated.stdout || run.truncated.stderr),
-            preview: run.stdout.slice(0, 3_000),
+            truncated: stdoutBytes > DEFAULT_READ_RESULT_LIMIT || stderrBytes > DEFAULT_READ_RESULT_LIMIT,
+            preview: previewBytes > 0 ? run.stdout.slice(0, previewBytes) : undefined,
             next: run.ok
-              ? { op: "read_result", resultId, stream: "stdout", offset: 0, limit: 12_000 }
+              ? { op: "read_result", resultId, stream: "stdout", mode: "bytes", offset: 0, limit: DEFAULT_READ_RESULT_LIMIT }
               : undefined,
             error: run.error,
           });

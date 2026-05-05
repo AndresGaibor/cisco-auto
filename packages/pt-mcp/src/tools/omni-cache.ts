@@ -38,7 +38,7 @@ export interface OmniResultMeta {
   stdoutBytes: number;
   stderrBytes: number;
   jsonParsed: boolean;
-  preview: string;
+  preview?: string;
   status: "ready" | "expired";
   stdoutPath: string;
   stderrPath: string;
@@ -85,6 +85,14 @@ export interface OmniResultStatusResult {
     json: { bytes: number; available: boolean; reason?: string };
   };
   preview: string;
+  next: {
+    op: "read_result";
+    resultId: string;
+    stream: "stdout";
+    mode: "bytes";
+    offset: number;
+    limit: number;
+  };
 }
 
 export interface OmniReadResult {
@@ -101,6 +109,16 @@ export interface OmniReadResult {
   nextOffset: number;
   eof: boolean;
   text: string;
+  next?: {
+    op: "read_result";
+    resultId: string;
+    stream: OmniReadStream;
+    mode: OmniReadMode;
+    offset?: number;
+    limit?: number;
+    lineOffset?: number;
+    lineLimit?: number;
+  };
 }
 
 export interface OmniAppendResult {
@@ -180,10 +198,16 @@ export interface OmniResultRecordInput {
   stderr: string;
   json: unknown;
   jsonParsed: boolean;
+  previewBytes?: number;
 }
 
 function hashText(text: string): string {
   return createHash("sha256").update(text).digest("hex");
+}
+
+async function hashFile(filePath: string): Promise<string> {
+  const data = await readFile(filePath);
+  return createHash("sha256").update(data).digest("hex");
 }
 
 function nowIso(): string {
@@ -253,6 +277,20 @@ async function readJsonFile<T>(filePath: string): Promise<T | null> {
 async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+async function readFilePreview(filePath: string, maxBytes: number): Promise<string | undefined> {
+  if (maxBytes <= 0 || !existsSync(filePath)) return undefined;
+
+  const file = await open(filePath, "r");
+  try {
+    const stats = await file.stat();
+    const buffer = Buffer.alloc(Math.min(maxBytes, stats.size));
+    const { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
+    return TEXT_DECODER.decode(buffer.subarray(0, bytesRead));
+  } finally {
+    await file.close();
+  }
 }
 
 async function removePathWithSize(filePath: string): Promise<number> {
@@ -569,13 +607,13 @@ export async function recordOmniResult(input: OmniResultRecordInput): Promise<Om
     stdoutBytes,
     stderrBytes,
     jsonParsed: input.jsonParsed,
-    preview: input.stdout.slice(0, 12_000),
+    preview: input.previewBytes ? await readFilePreview(paths.stdoutPath, input.previewBytes) : undefined,
     status: "ready",
     stdoutPath: paths.stdoutPath,
     stderrPath: paths.stderrPath,
     jsonPath: input.jsonParsed ? paths.jsonPath : undefined,
-    stdoutSha256: hashText(input.stdout),
-    stderrSha256: hashText(input.stderr),
+    stdoutSha256: input.stdoutPath && existsSync(input.stdoutPath) ? await hashFile(paths.stdoutPath) : hashText(input.stdout),
+    stderrSha256: input.stderrPath && existsSync(input.stderrPath) ? await hashFile(paths.stderrPath) : hashText(input.stderr),
   };
 
   await writeResultMeta(meta);
@@ -601,7 +639,15 @@ export async function getOmniResultStatus(resultId: string): Promise<OmniResultS
     createdAt: meta.createdAt,
     updatedAt: meta.updatedAt,
     expiresAt: meta.expiresAt,
-    preview: meta.preview,
+    preview: meta.preview ?? "",
+    next: {
+      op: "read_result",
+      resultId: meta.resultId,
+      stream: "stdout",
+      mode: "bytes",
+      offset: 0,
+      limit: 6_000,
+    },
     streams: {
       stdout: { bytes: meta.stdoutBytes, available: existsSync(meta.stdoutPath) },
       stderr: { bytes: meta.stderrBytes, available: existsSync(meta.stderrPath) },
@@ -723,11 +769,21 @@ export async function readOmniResult(input: OmniReadInput): Promise<OmniReadResu
       nextOffset: window.nextOffset,
       eof: window.eof,
       text: window.text,
+      next: window.eof
+        ? undefined
+        : {
+            op: "read_result",
+            resultId: input.resultId,
+            stream: input.stream,
+            mode: "lines",
+            lineOffset: window.nextOffset,
+            lineLimit,
+          },
     };
   }
 
   const offset = input.offset ?? 0;
-  const limit = input.limit ?? 12_000;
+  const limit = input.limit ?? 6_000;
   const window = await readBytesWindow(streamPath, offset, limit);
   return {
     ok: true,
@@ -741,6 +797,16 @@ export async function readOmniResult(input: OmniReadInput): Promise<OmniReadResu
     nextOffset: window.nextOffset,
     eof: window.eof,
     text: window.text,
+    next: window.eof
+      ? undefined
+      : {
+          op: "read_result",
+          resultId: input.resultId,
+          stream: input.stream,
+          mode: "bytes",
+          offset: window.nextOffset,
+          limit,
+        },
   };
 }
 

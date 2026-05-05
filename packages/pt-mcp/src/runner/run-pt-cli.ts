@@ -50,6 +50,7 @@ export async function runPtCli(input: RunPtCliInput): Promise<RunPtCliResult> {
     cwd: input.repoRoot,
     env: {
       ...process.env,
+      ...(input.env ?? {}),
       PT_MCP: "1",
       NO_COLOR: "1",
       PT_CLI_TIMING: "0",

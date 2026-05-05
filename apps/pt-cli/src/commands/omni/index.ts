@@ -73,6 +73,11 @@ function makeOmniResult<T>(input: {
   };
 }
 
+function shouldTreatAsDangerous(flags: GlobalFlags, risk: OmniRisk): OmniRisk {
+  if (flags.examples || flags.schema) return risk;
+  return risk;
+}
+
 function parsePayloadJson(value?: string): Record<string, unknown> {
   if (!value) return {};
   try {
@@ -343,6 +348,8 @@ Variables disponibles en runtime:
         return;
       }
 
+      const runtimeRisk = policy.risk;
+
       const wrapped = await runCommand<OmniCliResult>({
         action: "omni.raw",
         meta: meta("omni.raw", "Ejecuta JavaScript raw dentro de Packet Tracer"),
@@ -358,7 +365,7 @@ Variables disponibles en runtime:
           const result = await ctx.controller.omniscience.runCapability(
             "omni.evaluate.raw",
             { code },
-            { timeoutMs, risk: "dangerous" },
+            { timeoutMs, risk: runtimeRisk },
           );
 
           const value = options.parseJson ? tryParseJsonValue(result.value) : result.value;
@@ -367,7 +374,7 @@ Variables disponibles en runtime:
             ok: result.ok,
             action: "omni.raw",
             capabilityId: "omni.evaluate.raw",
-            risk: "dangerous",
+            risk: runtimeRisk,
             payload: {
               codeBytes: Buffer.byteLength(code, "utf-8"),
               codePreview: code.slice(0, 500),
@@ -409,7 +416,7 @@ Variables disponibles en runtime:
         ok: false,
         action: "omni.raw",
         capabilityId: "omni.evaluate.raw",
-        risk: "dangerous",
+        risk: runtimeRisk,
         error: {
           code: wrapped.error?.code,
           message: wrapped.error?.message ?? "omni raw falló",
