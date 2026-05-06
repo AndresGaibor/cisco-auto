@@ -61,6 +61,14 @@ import {
   handleReadTerminal,
 } from "../ios/index.js";
 
+import {
+  handleProjectStatus,
+  handleProjectSave,
+  handleProjectSnapshotBegin,
+  handleProjectSnapshotRead,
+  handleProjectSnapshotClear,
+} from "../project.js";
+
 let stableHandlersRegistered = false;
 
 function handleRuntimePing(_payload: Record<string, unknown>, deps: any): any {
@@ -138,4 +146,10 @@ export function registerStableRuntimeHandlers(): void {
   registerHandler("hardwareInfo", handleHardwareInfo as unknown as HandlerFn);
   registerHandler("hardwareCatalog", handleHardwareCatalog as unknown as HandlerFn);
   registerHandler("commandLog", handleCommandLog as unknown as HandlerFn);
+
+  registerHandler("__projectStatus", handleProjectStatus as unknown as HandlerFn);
+  registerHandler("__projectSave", handleProjectSave as unknown as HandlerFn);
+  registerHandler("__projectSnapshotBegin", handleProjectSnapshotBegin as unknown as HandlerFn);
+  registerHandler("__projectSnapshotRead", handleProjectSnapshotRead as unknown as HandlerFn);
+  registerHandler("__projectSnapshotClear", handleProjectSnapshotClear as unknown as HandlerFn);
 }

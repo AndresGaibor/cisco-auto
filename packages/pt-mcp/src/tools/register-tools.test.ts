@@ -342,4 +342,110 @@ describe("registerTools", () => {
     expect(configs.get("pt_omni_raw")?.description).toContain("simulador");
     expect(configs.get("pt_omni_raw")?.description).toContain("No toca la red real");
   });
+
+  test("pt_project_status, pt_project_save, pt_project_autosave tienen annotations correctas", async () => {
+    const ptDevDir = createTempPtDevDir();
+    process.env.PT_DEV_DIR = ptDevDir;
+
+    const configs = new Map<string, any>();
+    const calls: Array<{ argv: string[] }> = [];
+
+    registerTools({
+      server: {
+        registerTool(name: string, config: unknown) {
+          configs.set(name, config);
+        },
+      },
+      runPtCli: async (input) => {
+        calls.push({ argv: (input as any).argv });
+        return {
+          ok: true,
+          exitCode: 0,
+          signal: null,
+          argv: (input as any).argv,
+          durationMs: 50,
+          stdout: "{}",
+          stderr: "",
+          json: {},
+          truncated: { stdout: false, stderr: false },
+          stdoutBytes: 2,
+          stderrBytes: 0,
+          jsonParsed: true,
+        };
+      },
+      commandCatalog: [],
+      cliEntrypoint: "/repo/apps/pt-cli/src/index.ts",
+      repoRoot: "/repo",
+      defaultTimeoutMs: 120_000,
+    });
+
+    expect(configs.get("pt_project_status")?.annotations).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
+    expect(configs.get("pt_project_save")?.annotations).toEqual({
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    });
+    expect(configs.get("pt_project_autosave")?.annotations).toEqual({
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    });
+
+    rmSync(ptDevDir, { recursive: true, force: true });
+  });
+
+  test("pt_project_status, pt_project_save, pt_project_autosave llaman al CLI correcto", async () => {
+    const ptDevDir = createTempPtDevDir();
+    process.env.PT_DEV_DIR = ptDevDir;
+
+    const handlers = new Map<string, (input: unknown) => Promise<unknown>>();
+    const calls: Array<{ argv: string[] }> = [];
+
+    registerTools({
+      server: {
+        registerTool(name: string, _config: unknown, handler: (input: unknown) => Promise<unknown>) {
+          handlers.set(name, handler);
+        },
+      },
+      runPtCli: async (input) => {
+        calls.push({ argv: (input as any).argv });
+        return {
+          ok: true,
+          exitCode: 0,
+          signal: null,
+          argv: (input as any).argv,
+          durationMs: 50,
+          stdout: "{}",
+          stderr: "",
+          json: {},
+          truncated: { stdout: false, stderr: false },
+          stdoutBytes: 2,
+          stderrBytes: 0,
+          jsonParsed: true,
+        };
+      },
+      commandCatalog: [],
+      cliEntrypoint: "/repo/apps/pt-cli/src/index.ts",
+      repoRoot: "/repo",
+      defaultTimeoutMs: 120_000,
+    });
+
+    await handlers.get("pt_project_status")?.({ timeoutMs: 10_000 });
+    expect(calls.at(-1)?.argv).toEqual(["project", "status", "--json"]);
+
+    await handlers.get("pt_project_save")?.({ timeoutMs: 10_000 });
+    expect(calls.at(-1)?.argv).toEqual(["project", "save", "--json"]);
+
+    await handlers.get("pt_project_autosave")?.({ outputDir: "/tmp/backups", keep: 3, timeoutMs: 10_000 });
+    expect(calls.at(-1)?.argv).toEqual(["project", "autosave", "--json", "--dir", "/tmp/backups", "--keep", "3"]);
+
+    rmSync(ptDevDir, { recursive: true, force: true });
+  });
 });

@@ -68,6 +68,8 @@ const ROOT_COMMAND_NAMES = [
   "bridge",
   "e2e",
   "mcp",
+  "project",
+  "app",
 ];
 
 export function createProgram(): Command {

@@ -138,6 +138,13 @@ const DANGEROUS_LOCAL_RAW = {
   openWorldHint: false,
 } as const;
 
+const LOCAL_PRESERVE_WRITE = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+} as const;
+
 const INLINE_OMNI_CODE_MAX_BYTES = 1_000;
 const DEFAULT_READ_RESULT_LIMIT = 6_000;
 const MAX_EXEC_PREVIEW_BYTES = 1_000;
@@ -821,6 +828,93 @@ export function registerTools(options: RegisterToolsOptions): void {
             message: `Operación no soportada: ${String(toolInput.op)}`,
           },
         });
+      }),
+  );
+
+  options.server.registerTool(
+    "pt_project_status",
+    {
+      title: "PT project status",
+      description: [
+        "Ejecuta `pt project status --json` para mostrar metadata del archivo .pkt abierto en Packet Tracer.",
+        "Devuelve activeFile, savedFilename, isSavedToDisk, isActivityFile, deviceCount, linkCount, defaultSaveLocation y tempFileLocation.",
+        "No modifica el laboratorio; solo lee el estado actual del proyecto.",
+      ].join(" "),
+      inputSchema: z.object({
+        timeoutMs: z.number().int().positive().max(600_000).optional().describe("Timeout local para consultar el estado del proyecto."),
+      }).describe("Consulta el estado del proyecto abierto en Packet Tracer."),
+      annotations: READ_ONLY_SIM,
+    },
+    async (input: any) =>
+      await withLiveLogging(liveLogger, "pt_project_status", input, async (toolInput) => {
+        const result = await options.runPtCli({
+          repoRoot: options.repoRoot,
+          cliEntrypoint: options.cliEntrypoint,
+          argv: ["project", "status", "--json"],
+          timeoutMs: toolInput.timeoutMs ?? options.defaultTimeoutMs,
+          parseJson: true,
+        });
+        return formatResult(result);
+      }),
+  );
+
+  options.server.registerTool(
+    "pt_project_save",
+    {
+      title: "PT project save",
+      description: [
+        "Ejecuta `pt project save --json` para guardar el archivo .pkt activo con `fileSave()` de Packet Tracer.",
+        "No abre diálogo de guardado ni cambia el nombre del archivo activo.",
+        "Útil para preservars estado del proyecto antes de operaciones riesgosas.",
+      ].join(" "),
+      inputSchema: z.object({
+        timeoutMs: z.number().int().positive().max(600_000).optional().describe("Timeout local para guardar el proyecto."),
+      }).describe("Guarda el archivo .pkt activo en Packet Tracer."),
+      annotations: LOCAL_PRESERVE_WRITE,
+    },
+    async (input: any) =>
+      await withLiveLogging(liveLogger, "pt_project_save", input, async (toolInput) => {
+        const result = await options.runPtCli({
+          repoRoot: options.repoRoot,
+          cliEntrypoint: options.cliEntrypoint,
+          argv: ["project", "save", "--json"],
+          timeoutMs: toolInput.timeoutMs ?? options.defaultTimeoutMs,
+          parseJson: true,
+        });
+        return formatResult(result);
+      }),
+  );
+
+  options.server.registerTool(
+    "pt_project_autosave",
+    {
+      title: "PT project autosave",
+      description: [
+        "Ejecuta `pt project autosave --json` para crear una copia local del .pkt abierto usando `fileSaveToBytes()`.",
+        "No modifica la topología ni el archivo activo de Packet Tracer; escribe un backup externo local.",
+        "El directorio por defecto es `~/.pt-cli/autosaves/`; se puede override con `outputDir`.",
+        "La opción `keep` especifica cuántos autosaves conservar por proyecto (default 20).",
+      ].join(" "),
+      inputSchema: z.object({
+        outputDir: z.string().optional().describe("Directorio donde escribir el autosave."),
+        keep: z.number().int().positive().max(100).optional().describe("Cantidad de autosaves a conservar por proyecto."),
+        timeoutMs: z.number().int().positive().max(600_000).optional().describe("Timeout local para crear el autosave."),
+      }).describe("Crea un backup externo del archivo .pkt abierto."),
+      annotations: LOCAL_PRESERVE_WRITE,
+    },
+    async (input: any) =>
+      await withLiveLogging(liveLogger, "pt_project_autosave", input, async (toolInput) => {
+        const argv = ["project", "autosave", "--json"];
+        if (toolInput.outputDir) argv.push("--dir", toolInput.outputDir);
+        if (toolInput.keep) argv.push("--keep", String(toolInput.keep));
+        const result = await options.runPtCli({
+          repoRoot: options.repoRoot,
+          cliEntrypoint: options.cliEntrypoint,
+          argv,
+          timeoutMs: toolInput.timeoutMs ?? options.defaultTimeoutMs,
+          parseJson: true,
+        });
+        return formatResult(result);
       }),
   );
 

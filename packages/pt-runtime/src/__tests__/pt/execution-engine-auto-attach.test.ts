@@ -64,6 +64,206 @@ describe("ExecutionEngine auto attach", () => {
     }
   });
 
+  test("startJob pasa sessionKind host a executeCommand cuando el plan es de host", async () => {
+    const terminal = {
+      attach: vi.fn(),
+      detach: vi.fn(),
+      getSession: vi.fn(),
+      getMode: vi.fn(),
+      isBusy: vi.fn(() => false),
+      isAnyBusy: vi.fn(() => false),
+      executeCommand: vi.fn().mockResolvedValue({
+        ok: true,
+        output: "PC>\n",
+        status: 0,
+        session: { mode: "host-prompt", prompt: "PC>", paging: false, awaitingConfirm: false },
+        mode: "host-prompt",
+      }),
+      continuePager: vi.fn(),
+      confirmPrompt: vi.fn(),
+    } as any;
+
+    const previousIpc = (globalThis as any).ipc;
+    const previousDprint = (globalThis as any).dprint;
+
+    (globalThis as any).ipc = {
+      network: () => ({
+        getDevice: (name: string) =>
+          name === "PC1"
+            ? {
+                getCommandLine: () => ({
+                  registerEvent: vi.fn(),
+                  unregisterEvent: vi.fn(),
+                  enterCommand: vi.fn(),
+                  enterChar: vi.fn(),
+                }),
+              }
+            : null,
+      }),
+    };
+    (globalThis as any).dprint = vi.fn();
+
+    try {
+      const engine = createExecutionEngine(terminal);
+      const plan = createDeferredJobPlan("PC1", [commandStep("ipconfig")]);
+      (plan as any).payload = { metadata: { deviceKind: "host" } };
+
+      engine.startJob(plan);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(terminal.executeCommand).toHaveBeenCalledWith(
+        "PC1",
+        "ipconfig",
+        expect.objectContaining({ sessionKind: "host" }),
+      );
+    } finally {
+      (globalThis as any).ipc = previousIpc;
+      (globalThis as any).dprint = previousDprint;
+    }
+  });
+
+  test("startJob completa output host nativo sin eco del comando", async () => {
+    let output = "Cisco Packet Tracer PC Command Line 1.0\n\nC:\\>";
+    const nativeTerminal = {
+      registerEvent: vi.fn(),
+      unregisterEvent: vi.fn(),
+      enterCommand: vi.fn(),
+      enterChar: vi.fn(),
+      getPrompt: vi.fn(() => "C:\\>"),
+      getMode: vi.fn(() => ""),
+      getAllOutput: vi.fn(() => output),
+      getOutput: vi.fn(() => output),
+      getBuffer: vi.fn(() => output),
+      getCommandInput: vi.fn(() => ""),
+    };
+    const terminal = {
+      attach: vi.fn(),
+      detach: vi.fn(),
+      getSession: vi.fn(),
+      getMode: vi.fn(),
+      isBusy: vi.fn(() => false),
+      isAnyBusy: vi.fn(() => false),
+      executeCommand: vi.fn().mockReturnValue(new Promise(() => {})),
+      continuePager: vi.fn(),
+      confirmPrompt: vi.fn(),
+    } as any;
+
+    const previousIpc = (globalThis as any).ipc;
+    const previousDprint = (globalThis as any).dprint;
+
+    (globalThis as any).ipc = {
+      network: () => ({
+        getDevice: (name: string) =>
+          name === "PC1"
+            ? {
+                getCommandLine: () => nativeTerminal,
+              }
+            : null,
+      }),
+    };
+    (globalThis as any).dprint = vi.fn();
+
+    try {
+      const engine = createExecutionEngine(terminal);
+      const plan = createDeferredJobPlan("PC1", [commandStep("ipconfig")]);
+      (plan as any).payload = { metadata: { deviceKind: "host" } };
+
+      const job = engine.startJob(plan);
+      output = [
+        "Cisco Packet Tracer PC Command Line 1.0",
+        "",
+        "C:\\>",
+        "",
+        "IPv4 Address....................: 0.0.0.0",
+        "Subnet Mask.....................: 0.0.0.0",
+        "Default Gateway.................: 0.0.0.0",
+        "",
+        "C:\\>",
+      ].join("\n");
+      job.context.updatedAt = Date.now() - 1000;
+
+      const state = engine.getJobState(job.id);
+
+      expect(state?.phase).toBe("completed");
+      expect(state?.finished).toBe(true);
+      expect(state?.errorCode).toBeNull();
+      expect(state?.lastMode).toBe("host-prompt");
+      expect(state?.outputBuffer).toContain("IPv4 Address");
+    } finally {
+      (globalThis as any).ipc = previousIpc;
+      (globalThis as any).dprint = previousDprint;
+    }
+  });
+
+  test("startJob no completa output host nativo hasta ver prompt final", async () => {
+    let output = "Cisco Packet Tracer PC Command Line 1.0\n\nC:\\>";
+    const nativeTerminal = {
+      registerEvent: vi.fn(),
+      unregisterEvent: vi.fn(),
+      enterCommand: vi.fn(),
+      enterChar: vi.fn(),
+      getPrompt: vi.fn(() => "C:\\>"),
+      getMode: vi.fn(() => ""),
+      getAllOutput: vi.fn(() => output),
+      getOutput: vi.fn(() => output),
+      getBuffer: vi.fn(() => output),
+      getCommandInput: vi.fn(() => ""),
+    };
+    const terminal = {
+      attach: vi.fn(),
+      detach: vi.fn(),
+      getSession: vi.fn(),
+      getMode: vi.fn(),
+      isBusy: vi.fn(() => false),
+      isAnyBusy: vi.fn(() => false),
+      executeCommand: vi.fn().mockReturnValue(new Promise(() => {})),
+      continuePager: vi.fn(),
+      confirmPrompt: vi.fn(),
+    } as any;
+
+    const previousIpc = (globalThis as any).ipc;
+    const previousDprint = (globalThis as any).dprint;
+
+    (globalThis as any).ipc = {
+      network: () => ({
+        getDevice: (name: string) =>
+          name === "PC1"
+            ? {
+                getCommandLine: () => nativeTerminal,
+              }
+            : null,
+      }),
+    };
+    (globalThis as any).dprint = vi.fn();
+
+    try {
+      const engine = createExecutionEngine(terminal);
+      const plan = createDeferredJobPlan("PC1", [commandStep("ping 192.168.65.1")]);
+      (plan as any).payload = { metadata: { deviceKind: "host" } };
+
+      const job = engine.startJob(plan);
+      output = [
+        "Cisco Packet Tracer PC Command Line 1.0",
+        "",
+        "C:\\>",
+        "ping 192.168.65.1",
+        "",
+        "Pinging 192.168.65.1 with 32 bytes of data:",
+      ].join("\n");
+      job.context.updatedAt = Date.now() - 1000;
+
+      const state = engine.getJobState(job.id);
+
+      expect(state?.phase).toBe("waiting-command");
+      expect(state?.finished).toBe(false);
+      expect(state?.outputBuffer).not.toContain("Pinging 192.168.65.1");
+    } finally {
+      (globalThis as any).ipc = previousIpc;
+      (globalThis as any).dprint = previousDprint;
+    }
+  });
+
   test("startJob falla explícitamente si no puede adjuntar terminal", () => {
     const terminal = {
       attach: vi.fn(),

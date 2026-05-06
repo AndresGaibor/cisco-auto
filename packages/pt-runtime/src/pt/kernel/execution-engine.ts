@@ -246,6 +246,8 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
   function inferIosModeFromPrompt(prompt: unknown): string | null {
     const value = String(prompt ?? "").trim();
 
+    if (isHostPrompt(value)) return "host-prompt";
+
     if (/\(config-if-range\)#\s*$/i.test(value)) return "config-if-range";
     if (/\(config-if\)#\s*$/i.test(value)) return "config-if";
     if (/\(config-subif\)#\s*$/i.test(value)) return "config-subif";
@@ -258,6 +260,12 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
     if (/>$/.test(value)) return "user-exec";
 
     return null;
+  }
+
+  function isHostPrompt(value: unknown): boolean {
+    const line = String(value ?? "").trim();
+
+    return /[A-Z]:\\>$/i.test(line) || /\b(?:pc|server|laptop|host|client|terminal)[A-Za-z0-9._-]*>$/i.test(line);
   }
 
   function normalizeIosMode(mode: unknown, prompt?: unknown): string {
@@ -768,6 +776,31 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
     }
 
     return nativeConfigCommandEchoAndPromptLooksComplete(lines, command, prompt);
+  }
+
+  function nativeHostFallbackBlockLooksComplete(block: string, command: string, prompt: string): boolean {
+    const text = normalizeEol(block);
+    const lines = text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    if (lines.length === 0) return false;
+
+    const promptLine = lastNonEmptyLine(text);
+    if (!isHostPrompt(promptLine)) return false;
+
+    const normalizedCommand = normalizeCommandForFallback(command);
+    const meaningfulLines = lines.filter((line) => {
+      const normalizedLine = line.trim().toLowerCase();
+      if (!normalizedLine) return false;
+      if (normalizedLine === normalizedCommand) return false;
+      if (isHostPrompt(line)) return false;
+      if (/^cisco packet tracer pc command line/i.test(line)) return false;
+      return true;
+    });
+
+    return meaningfulLines.length > 0;
   }
 
   function nativeOutputTailHasActivePager(output: string): boolean {
@@ -1707,12 +1740,15 @@ function semanticErrorNeedsCleanupToPrivilegedExec(
       command,
       prompt,
     });
+    const hostOutputComplete =
+      resolveJobSessionKind(job) === "host" && nativeHostFallbackBlockLooksComplete(longOutputBlock, command, prompt);
 
-    const complete = nativeFallbackBlockLooksComplete(block, command, prompt) || echoLessLongOutputComplete;
+    const complete = nativeFallbackBlockLooksComplete(block, command, prompt) || echoLessLongOutputComplete || hostOutputComplete;
 
     if (
       !strictBlock.hasCommandEcho &&
       !echoLessLongOutputComplete &&
+      !hostOutputComplete &&
       !isEndCommand(command) &&
       !isPromptOnlyTransitionCommand(command)
     ) {
@@ -1736,6 +1772,18 @@ function semanticErrorNeedsCleanupToPrivilegedExec(
       jobDebug(
         job,
         "native-long-output-complete-without-echo command=" +
+          JSON.stringify(command) +
+          " prompt=" +
+          JSON.stringify(prompt) +
+          " blockLen=" +
+          String(longOutputBlock.length),
+      );
+    }
+
+    if (hostOutputComplete) {
+      jobDebug(
+        job,
+        "native-host-output-complete-without-echo command=" +
           JSON.stringify(command) +
           " prompt=" +
           JSON.stringify(prompt) +
@@ -1885,6 +1933,8 @@ function semanticErrorNeedsCleanupToPrivilegedExec(
         statusCode: 0,
         completionReason: echoLessLongOutputComplete
           ? "native-long-output-without-echo"
+          : hostOutputComplete
+            ? "native-host-output-without-echo"
           : "native-fallback-complete",
         partialOutput: nativeWarnings.length > 0,
       },
@@ -2240,6 +2290,21 @@ function semanticErrorNeedsCleanupToPrivilegedExec(
     return targetMode === "privileged-exec";
   }
 
+  function resolveJobSessionKind(job: ActiveJob): "ios" | "host" {
+    const payload = job.context.plan.payload as any;
+    const sessionKind = String(payload?.metadata?.sessionKind ?? payload?.sessionKind ?? "").trim().toLowerCase();
+
+    if (sessionKind === "host") {
+      return "host";
+    }
+
+    if (String(payload?.metadata?.deviceKind ?? "").trim().toLowerCase() === "host") {
+      return "host";
+    }
+
+    return "ios";
+  }
+
   function nativeSnapshotIsStillInConfigMode(snapshot: { prompt?: unknown; mode?: unknown }): boolean {
     return isIosConfigPromptText(snapshot.prompt) || isIosConfigModeText(snapshot.mode);
   }
@@ -2370,6 +2435,7 @@ function semanticErrorNeedsCleanupToPrivilegedExec(
           autoDismissWizard: true,
           allowEmptyOutput: true,
           sendEnterFallback: false,
+          sessionKind: resolveJobSessionKind(job),
         });
 
         const runningCommand = job.pendingCommand;
@@ -2584,6 +2650,7 @@ function semanticErrorNeedsCleanupToPrivilegedExec(
           maxPagerAdvances: readPlanMaxPagerAdvances(ctx),
           autoConfirm: false,
           autoDismissWizard: true,
+          sessionKind: resolveJobSessionKind(job),
         });
 
         const runningCommand = job.pendingCommand;

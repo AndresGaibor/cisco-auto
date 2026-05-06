@@ -31,11 +31,26 @@ interface TerminalPlanRunPayload {
   };
 }
 
+function inferSessionKind(plan: NonNullable<TerminalPlanRunPayload["plan"]>): "ios" | "host" {
+  const deviceKind = String(((plan.metadata && (plan.metadata as { deviceKind?: unknown }).deviceKind) ?? "")).trim().toLowerCase();
+
+  if (deviceKind === "host") {
+    return "host";
+  }
+
+  const targetMode = String(plan.targetMode ?? "").trim().toLowerCase();
+  if (targetMode === "host-prompt" || targetMode === "host-busy") {
+    return "host";
+  }
+
+  return "ios";
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object";
 }
 
-function normalizeStep(step: any): any {
+function normalizeStep(step: any, sessionKind: "ios" | "host"): any {
   var kind = String(step.kind || "command");
 
   if (kind === "ensureMode") kind = "ensure-mode";
@@ -60,7 +75,10 @@ function normalizeStep(step: any): any {
       timeoutMs,
       expectedPrompt: step.expectPromptPattern ? String(step.expectPromptPattern) : undefined,
     },
-    metadata: isObject(step.metadata) ? step.metadata : {},
+    metadata: {
+      ...(isObject(step.metadata) ? step.metadata : {}),
+      sessionKind,
+    },
   };
 }
 
@@ -76,6 +94,8 @@ function buildDeferredPlan(payload: TerminalPlanRunPayload, api: RuntimeApi): De
     return null;
   }
 
+  var sessionKind = inferSessionKind(plan as NonNullable<TerminalPlanRunPayload["plan"]>);
+
   var id = String(plan.id || "");
   if (!id) {
     id = "terminal_plan_" + String(api.now()) + "_" + String(Math.floor(Math.random() * 100000));
@@ -86,7 +106,9 @@ function buildDeferredPlan(payload: TerminalPlanRunPayload, api: RuntimeApi): De
     kind: "ios-session",
     version: 1,
     device: String(plan.device),
-    plan: steps.map(normalizeStep),
+    plan: steps.map(function (step) {
+      return normalizeStep(step, sessionKind);
+    }),
     options: {
       stopOnError: true,
       commandTimeoutMs: Number(plan.timeouts?.commandTimeoutMs || payload.options?.timeoutMs || 30000),
@@ -94,7 +116,10 @@ function buildDeferredPlan(payload: TerminalPlanRunPayload, api: RuntimeApi): De
     },
     payload: {
       source: "terminal.plan.run",
-      metadata: isObject(plan.metadata) ? plan.metadata : {},
+      metadata: {
+        ...(isObject(plan.metadata) ? plan.metadata : {}),
+        sessionKind,
+      },
       policies: isObject(plan.policies) ? plan.policies : {},
     },
   } as unknown as DeferredJobPlan;

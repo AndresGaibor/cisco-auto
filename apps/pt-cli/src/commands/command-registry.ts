@@ -27,6 +27,8 @@ import { createSetupCommand } from "./setup.js";
 import { createLogsCommand } from "./logs.js";
 import { createE2eCommand } from "./e2e.js";
 import { createMcpCommand } from "./mcp/index.js";
+import { createProjectCommand } from "./project/index.js";
+import { createAppCommand } from "./app/index.js";
 import { toPtMcpCommandCatalog } from "./mcp/command-catalog-adapter.js";
 import { formatDevDirForDisplay } from "../system/paths.js";
 
@@ -103,6 +105,37 @@ export const PUBLIC_COMMAND_DEFINITIONS: PtCommandDefinition[] = [
       "Usar runtime logs si un comando se queda en timeout.",
     ],
     factory: createRuntimeCommand,
+  },
+  {
+    id: "project",
+    name: "project",
+    group: "runtime",
+    summary: "Gestiona archivo .pkt activo, guardado y autosaves",
+    description: "Lee metadata del archivo abierto, guarda con fileSave() y crea autosaves externos sin cambiar activeFile.",
+    examples: [
+      { command: "pt project status --json", description: "Ver archivo activo" },
+      { command: "pt project save --json", description: "Guardar archivo activo" },
+      { command: "pt project autosave --json", description: "Crear backup externo" },
+    ],
+    related: ["pt runtime status --live --json", "pt doctor"],
+    agentHints: ["Usar antes de cambios grandes para evitar pérdida de trabajo."],
+    factory: createProjectCommand,
+  },
+  {
+    id: "app",
+    name: "app",
+    group: "runtime",
+    summary: "Gestiona la aplicación Packet Tracer: abrir, cerrar, esperar",
+    description: "Controla el proceso de Packet Tracer: paths, estado, apertura, cierre y espera.",
+    examples: [
+      { command: "pt app paths --json", description: "Ver paths resueltos de Packet Tracer" },
+      { command: "pt app status --json", description: "Ver estado completo de PT" },
+      { command: "pt app open /path/to/lab.pkt --wait", description: "Abrir archivo y esperar runtime" },
+      { command: "pt app close --save --autosave", description: "Cerrar guardando proyecto" },
+    ],
+    related: ["pt project status", "pt runtime status", "pt doctor"],
+    agentHints: ["Útil para automation de apertura/cierre de Packet Tracer."],
+    factory: createAppCommand,
   },
   {
     id: "lab",

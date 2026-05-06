@@ -18,6 +18,8 @@ const endDevices = [
   "Printer-PT", "Printer", "printer",
   // Phones
   "IP-Phone-PT", "IP-Phone", "ip-phone", "7960", "7960G",
+  "Smartphone-PT", "smartphone",
+  "Analog-Phone-PT", "analog-phone", "analogPhone",
   // IoT
   "IoT-Device", "iot", "smart-device",
   // Cloud

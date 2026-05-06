@@ -66,6 +66,14 @@ export function getDeviceTypeCandidates(model: string): number[] {
     return [DEVICE_TYPES.wlc, DEVICE_TYPES.aironet, DEVICE_TYPES.wireless, DEVICE_TYPES.router];
   }
 
+  if (normalized.indexOf("smartphone") >= 0) {
+    return [20];
+  }
+
+  if (normalized.indexOf("tablet") >= 0) {
+    return [19];
+  }
+
   return [DEVICE_TYPES.router, DEVICE_TYPES.switch, DEVICE_TYPES.pc];
 }
 

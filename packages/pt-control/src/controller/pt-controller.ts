@@ -149,6 +149,35 @@ export class PTController {
     return this._composition.labService;
   }
 
+  public get project() {
+    return {
+      status: () => (this._composition as any).projectService?.status() ?? Promise.reject(new Error("projectService no disponible")),
+      save: () => (this._composition as any).projectService?.save() ?? Promise.reject(new Error("projectService no disponible")),
+      autosave: (options?: { dir?: string; keep?: number }) =>
+        (this._composition as any).autosaveService?.createAutosave(options) ?? Promise.reject(new Error("autosaveService no disponible")),
+      open: (path: string, options?: { wait?: boolean; waitTimeoutMs?: number }) =>
+        (this._composition as any).recoveryService?.openProject(path, options) ?? Promise.reject(new Error("recoveryService no disponible")),
+      recover: (projectPath?: string) =>
+        (this._composition as any).recoveryService?.recoverFromLast(projectPath) ?? Promise.reject(new Error("recoveryService no disponible")),
+      checkpoints: (projectPath?: string) =>
+        (this._composition as any).recoveryService?.listCheckpoints(projectPath) ?? Promise.reject(new Error("recoveryService no disponible")),
+    };
+  }
+
+  public get app() {
+    return {
+      paths: () => (this._composition as any).appPathResolver?.resolve() ?? Promise.reject(new Error("appPathResolver no disponible")),
+      status: (options?: { live?: boolean; timeoutMs?: number }) =>
+        (this._composition as any).packetTracerAppService?.status(options) ?? Promise.reject(new Error("packetTracerAppService no disponible")),
+      open: (path: string, options?: { wait?: boolean; waitTimeoutMs?: number; closeExisting?: boolean; saveExisting?: boolean; autosaveExisting?: boolean; force?: boolean; noRuntimeWait?: boolean }) =>
+        (this._composition as any).packetTracerAppService?.open(path, options) ?? Promise.reject(new Error("packetTracerAppService no disponible")),
+      close: (options?: { save?: boolean; autosave?: boolean; force?: boolean; timeoutMs?: number }) =>
+        (this._composition as any).packetTracerAppService?.close(options) ?? Promise.reject(new Error("packetTracerAppService no disponible")),
+      wait: (options?: { runtime?: boolean; activeFile?: string; timeoutMs?: number }) =>
+        (this._composition as any).packetTracerAppService?.wait(options) ?? Promise.reject(new Error("packetTracerAppService no disponible")),
+    };
+  }
+
   // -------------------------------------------------------------------------
   // Lifecycle
   // -------------------------------------------------------------------------

@@ -81,7 +81,11 @@ function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}s`;
 }
 
-function formatTimingsSummary(timings: BridgeResultTimings): string {
+function formatTimingsSummary(timings: BridgeResultTimings): string | null {
+  if (!Number.isFinite(timings.waitMs)) {
+    return null;
+  }
+
   const parts = [`total ${formatDuration(timings.waitMs)}`];
 
   if (typeof timings.queueLatencyMs === "number") {
@@ -172,7 +176,11 @@ export function printCmdResult(result: CmdCliResult, options: { json?: boolean; 
   }
 
   if (result.timings && !options.quiet) {
-    process.stdout.write(`${formatTimingsSummary(result.timings)}\n`);
+    const timingsSummary = formatTimingsSummary(result.timings);
+
+    if (timingsSummary) {
+      process.stdout.write(`${timingsSummary}\n`);
+    }
   }
 
   if (!result.ok) {

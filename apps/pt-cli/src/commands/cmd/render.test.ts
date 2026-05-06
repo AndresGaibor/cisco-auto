@@ -115,6 +115,37 @@ describe("printCmdResult", () => {
     stdoutSpy.mockRestore();
   });
 
+  test("omite resumen de timings cuando no hay duración plana", () => {
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true as never);
+
+    printCmdResult(
+      {
+        schemaVersion: "1.0",
+        ok: true,
+        action: "cmd.exec",
+        device: "PC1",
+        deviceKind: "host",
+        command: "ping 192.168.65.1",
+        output: "Reply from 192.168.65.1",
+        status: 0,
+        warnings: [],
+        nextSteps: [],
+        timings: {
+          adapter: {
+            terminalPlanRunMs: 5600,
+          },
+        } as never,
+      },
+      { json: false, raw: false, quiet: false },
+    );
+
+    const output = stdoutSpy.mock.calls.flat().join(" ");
+    expect(output).not.toContain("Timings:");
+    expect(output).not.toContain("NaN");
+
+    stdoutSpy.mockRestore();
+  });
+
   test("incluye timings en salida json", () => {
     const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true as never);
 

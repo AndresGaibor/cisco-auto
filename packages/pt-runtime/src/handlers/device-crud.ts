@@ -46,13 +46,18 @@ export interface RemoveDevicePayload {
  * // → { ok: true, name: "S1", model: "2960-24TT", type: "switch", power: true, ports: [...] }
  */
 export function handleAddDevice(payload: AddDevicePayload, deps: HandlerDeps): HandlerResult {
+  deps.dprint("[handleAddDevice] CALLED with payload=" + JSON.stringify({model: payload.model, name: payload.name, x: payload.x, y: payload.y}));
   var lw = deps.getLW();
   var net = deps.getNet();
   var model: string;
 
+  deps.dprint("[handleAddDevice] payload.model=" + payload.model);
+
   try {
     model = resolveModel(payload.model);
+    deps.dprint("[handleAddDevice] resolved model=" + model);
   } catch (error) {
+    deps.dprint("[handleAddDevice] resolveModel failed: " + (error instanceof Error ? error.message : String(error)));
     return {
       ok: false,
       error: error instanceof Error ? error.message : String(error),
@@ -65,7 +70,10 @@ export function handleAddDevice(payload: AddDevicePayload, deps: HandlerDeps): H
 
   var typeList =
     payload.deviceType !== undefined ? [payload.deviceType] : getDeviceTypeCandidates(model);
+  deps.dprint("[handleAddDevice] typeList=" + JSON.stringify(typeList));
+
   var created = createDeviceWithFallback(model, x, y, typeList, lw, net);
+  deps.dprint("[handleAddDevice] createDeviceWithFallback result=" + (created ? created.autoName : "null"));
 
   if (!created) return { ok: false, error: "Creation failed", code: "DEVICE_CREATION_FAILED" };
 

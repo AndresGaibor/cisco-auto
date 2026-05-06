@@ -42,6 +42,12 @@ import { ControllerCanvasService } from "../../controller/canvas-service";
 import { ControllerTopologyService } from "../../controller/topology-service";
 import { OmniscienceService } from "../../application/services/omniscience-service";
 import { LabService } from "../../application/services/lab-service";
+import { ProjectService, AutosaveService } from "../project/index.js";
+import { RecoveryService } from "../project/recovery-service.js";
+import { NodeHostProcessAdapter } from "../../infrastructure/host/node-host-process-adapter.js";
+import { PacketTracerPathResolver } from "../app/packet-tracer-path-resolver.js";
+import { PacketTracerProcessService } from "../app/packet-tracer-process-service.js";
+import { PacketTracerAppService } from "../app/packet-tracer-app-service.js";
 
 // ============================================================================
 // Configuration
@@ -87,6 +93,13 @@ export interface ControlComposition {
   controllerIosService: ControllerIosService;
   canvasFacade: ControllerCanvasService;
   topologyFacade: ControllerTopologyService;
+  projectService: ProjectService;
+  autosaveService: AutosaveService;
+  recoveryService: RecoveryService;
+  hostProcess: NodeHostProcessAdapter;
+  appPathResolver: PacketTracerPathResolver;
+  packetTracerProcessService: PacketTracerProcessService;
+  packetTracerAppService: PacketTracerAppService;
 }
 
 /**
@@ -164,6 +177,15 @@ export function createControlComposition(
     topologyService,
   );
 
+  const projectService = new ProjectService(bridge);
+  const autosaveService = new AutosaveService(projectService);
+
+  const hostProcess = new NodeHostProcessAdapter();
+  const appPathResolver = new PacketTracerPathResolver({ platform: process.platform, env: process.env as Record<string, string | undefined>, exists: (path) => { try { return require("node:fs").existsSync(path); } catch { return false; } } });
+  const packetTracerProcessService = new PacketTracerProcessService(hostProcess);
+  const packetTracerAppService = new PacketTracerAppService(appPathResolver, packetTracerProcessService, projectService, autosaveService, bridge);
+  const recoveryService = new RecoveryService(packetTracerAppService, projectService, autosaveService);
+
   return {
     primitivePort: primitiveAdapter,
     terminalPort: terminalAdapter,
@@ -184,6 +206,13 @@ export function createControlComposition(
     controllerIosService,
     canvasFacade,
     topologyFacade,
+    projectService,
+    autosaveService,
+    recoveryService,
+    hostProcess,
+    appPathResolver,
+    packetTracerProcessService,
+    packetTracerAppService,
   };
 }
 

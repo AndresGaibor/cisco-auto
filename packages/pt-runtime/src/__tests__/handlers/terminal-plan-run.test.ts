@@ -52,6 +52,39 @@ describe("handleTerminalPlanRun", () => {
     expect((result as any).job.plan).toHaveLength(1);
   });
 
+  test("preserva sessionKind host en planes de host", () => {
+    const createJob = vi.fn().mockReturnValue("plan-host");
+    const api = {
+      now: () => 1700000000000,
+      createJob,
+    } as any;
+
+    const result = handleTerminalPlanRun(
+      {
+        type: "terminal.plan.run",
+        plan: {
+          id: "plan-host",
+          device: "PC1",
+          targetMode: "host-prompt",
+          steps: [
+            { kind: "command", command: "ipconfig" },
+          ],
+          metadata: { deviceKind: "host" },
+        },
+      },
+      api,
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      deferred: true,
+      ticket: "plan-host",
+    });
+    expect((createJob.mock.calls[0]?.[0] as any).plan[0]).toMatchObject({
+      metadata: { sessionKind: "host" },
+    });
+  });
+
   test("rechaza terminal.plan.run si createJob no está disponible", () => {
     const api = {
       now: () => 1700000000000,

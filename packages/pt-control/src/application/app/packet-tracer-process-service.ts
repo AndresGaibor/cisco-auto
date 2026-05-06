@@ -1,0 +1,72 @@
+import type { HostProcessPort } from "../ports/host-process.port.js";
+
+export class PacketTracerProcessService {
+  constructor(private readonly port: HostProcessPort) {}
+
+  async launch(appPath: string, pktPath?: string): Promise<{ ok: boolean }> {
+    const platform = this.port.platform();
+    if (platform === "darwin") {
+      const argv = ["-a", appPath];
+      if (pktPath) argv.push(pktPath);
+      await this.port.spawn("open", argv);
+      return { ok: true };
+    }
+    if (platform === "win32") {
+      const args = pktPath
+        ? `-NoExit -Command "Start-Process '${appPath}' -ArgumentList '${pktPath}'"`
+        : `-NoExit -Command "Start-Process '${appPath}'"`;
+      await this.port.spawn("powershell", ["-Command", args]);
+      return { ok: true };
+    }
+    return { ok: false };
+  }
+
+  async closeGraceful(appName: string): Promise<{ ok: boolean }> {
+    const platform = this.port.platform();
+    if (platform === "darwin") {
+      const script = `tell application "${appName}" to close`;
+      await this.port.spawn("osascript", ["-e", script]);
+      return { ok: true };
+    }
+    if (platform === "win32") {
+      await this.port.spawn("powershell", [
+        "-Command",
+        `$p = Get-Process -Name "${appName}" -ErrorAction SilentlyContinue; if ($p) { $p.CloseMainWindow() }`,
+      ]);
+      return { ok: true };
+    }
+    return { ok: false };
+  }
+
+  async closeForce(appName: string): Promise<{ ok: boolean }> {
+    const platform = this.port.platform();
+    if (platform === "darwin") {
+      await this.port.spawn("pkill", ["-9", "-f", appName]);
+      return { ok: true };
+    }
+    if (platform === "win32") {
+      await this.port.spawn("powershell", [
+        "-Command",
+        `Stop-Process -Name "${appName}" -Force -ErrorAction SilentlyContinue`,
+      ]);
+      return { ok: true };
+    }
+    return { ok: false };
+  }
+
+  async isRunning(appName: string): Promise<boolean> {
+    const platform = this.port.platform();
+    if (platform === "darwin") {
+      const result = await this.port.spawn("pgrep", ["-f", appName]);
+      return result.exitCode === 0;
+    }
+    if (platform === "win32") {
+      const result = await this.port.spawn("powershell", [
+        "-Command",
+        `Get-Process -Name "${appName}" -ErrorAction SilentlyContinue | Measure-Object | Select-Object -ExpandProperty Count`,
+      ]);
+      return result.stdout.trim() !== "0";
+    }
+    return false;
+  }
+}

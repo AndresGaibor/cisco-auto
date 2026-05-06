@@ -123,6 +123,10 @@ var MODEL_ALIASES = {
   "ap": "AccessPoint-PT",
   "accesspoint": "AccessPoint-PT",
   "wrt300n": "Linksys-WRT300N",
+  "smartphone": "SMARTPHONE-PT",
+  "smartphone-pt": "SMARTPHONE-PT",
+  "tablet": "TabletPC-PT",
+  "tabletpc-pt": "TabletPC-PT",
 };
 
 // Validation helpers

@@ -117,6 +117,7 @@ utils: [
     "handlers/ios/read-terminal-handler.ts",
     "handlers/terminal-sanitizer.ts",
     "handlers/cable-recommender.ts",
+    "handlers/project.ts",
     // Main dispatcher - runtime default solo registra estables
     "handlers/runtime-handlers.ts",
     // Registration handlers - stable + raw/evaluate experimental aliases.
