@@ -9,6 +9,7 @@ import { isAllowedOrigin } from "./origin-guard.js";
 import { registerTools } from "../tools/register-tools.js";
 import { runPtCli } from "../runner/run-pt-cli.js";
 import { resolvePublicUrl } from "../tailscale/resolve-public-url.js";
+import { createMcpControlContext } from "../control/mcp-control-context.js";
 import type { PtMcpServerHandle, StartPtMcpServerOptions } from "../types.js";
 
 async function runProcess(command: string, args: string[], timeoutMs = 10_000): Promise<{ ok: boolean; stdout: string; stderr: string; exitCode: number | null }> {
@@ -40,15 +41,17 @@ export async function startPtMcpServer(options: StartPtMcpServerOptions): Promis
   const commandCatalog = options.commandCatalog ?? [];
   const server = new McpServer({ name: options.appName ?? "Packet Tracer Control MCP", version: options.appVersion ?? "0.1.0" });
 
+  const control = createMcpControlContext();
+  await control.start();
+
   registerTools({
     server,
+    control,
     runPtCli,
     commandCatalog,
     cliEntrypoint: options.cliEntrypoint,
     repoRoot: options.repoRoot,
     defaultTimeoutMs: 120_000,
-    live: options.live,
-    liveWriter: options.live ? (line) => (options.stderr ?? process.stderr).write(`${line}\n`) : undefined,
   });
 
   let funnelProcess: ReturnType<typeof spawn> | null = null;
@@ -139,6 +142,7 @@ export async function startPtMcpServer(options: StartPtMcpServerOptions): Promis
         funnelProcess = null;
       }
 
+      await control.stop();
       await new Promise<void>((resolve) => httpServer.close(() => resolve()));
     },
   };

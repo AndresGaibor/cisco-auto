@@ -1,4 +1,4 @@
-export type PlatformSource = "env" | "known-path" | "fallback";
+export type PlatformSource = "env" | "known-path" | "fallback" | "scan";
 
 export interface PacketTracerPathResolution {
   platform: NodeJS.Platform;

@@ -3,11 +3,16 @@ import { PacketTracerPathResolver } from "./packet-tracer-path-resolver.js";
 
 describe("PacketTracerPathResolver", () => {
   const DARWIN_CANDIDATES = [
+    "/Applications/Cisco Packet Tracer 9.0.0/Cisco Packet Tracer 9.0.app",
     "/Applications/Cisco Packet Tracer 9.0.0.app",
     "/Applications/Cisco Packet Tracer 8.2.0.app",
+    "/Applications/Cisco Packet Tracer 8.2.2/Cisco Packet Tracer 8.2.app",
+    "/Applications/Cisco Packet Tracer 8.2.2/Cisco Packet Tracer.app",
     "/Applications/Cisco Packet Tracer 8.1.0.app",
     "/Applications/Cisco Packet Tracer 8.0.app",
     "/Applications/Cisco Packet Tracer.app",
+    "/Applications/Cisco Packet Tracer 7.3.1.app",
+    "/Applications/Cisco Packet Tracer 7.3.0.app",
   ];
 
   const WINDOWS_CANDIDATES = [
@@ -19,6 +24,10 @@ describe("PacketTracerPathResolver", () => {
   ];
 
   function createDeps(platform: NodeJS.Platform, env: Record<string, string | undefined>, exists: (path: string) => boolean) {
+    return { platform, env, exists };
+  }
+
+  function createDepsNoScan(platform: NodeJS.Platform, env: Record<string, string | undefined>, exists: (path: string) => boolean) {
     return { platform, env, exists };
   }
 

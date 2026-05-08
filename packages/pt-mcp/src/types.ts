@@ -59,7 +59,6 @@ export interface StartPtMcpServerOptions {
   appVersion?: string;
   commandCatalog?: PtMcpCommandCatalogEntry[];
   autoFunnel?: boolean;
-  live?: boolean;
   allowOrigins?: string[];
   stdout?: NodeJS.WritableStream;
   stderr?: NodeJS.WritableStream;

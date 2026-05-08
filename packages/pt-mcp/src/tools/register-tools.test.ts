@@ -9,6 +9,51 @@ function createTempPtDevDir(): string {
   return mkdtempSync(join(tmpdir(), "cisco-auto-pt-mcp-"));
 }
 
+function createMockControl(projectMethods?: {
+  status?: () => any;
+  save?: () => any;
+  autosave?: (opts: any) => any;
+  open?: (path: string, opts?: any) => any;
+  recover?: (projectPath?: string) => any;
+  checkpoints?: (projectPath?: string) => any;
+}) {
+  return {
+    controller: {
+      getHealthSummary: () => Promise.resolve({ bridgeReady: true, runtimeLoaded: true }),
+      getHeartbeatHealth: () => ({ state: "ok", latencyMs: 10 }),
+      getBridgeStatus: () => ({ ready: true }),
+      getSystemContext: () => ({ platform: process.platform }),
+      app: {
+        paths: () => Promise.resolve({ platform: "mock", source: "test", selected: null, candidates: [] }),
+        status: () => Promise.resolve({
+          process: { level: "running", pid: 99999 },
+          runtime: { loaded: true },
+          project: { hasActiveFile: true, activeFile: "/tmp/test.pkt" },
+        }),
+        open: () => Promise.resolve({ ok: true }),
+        close: () => Promise.resolve({ ok: true }),
+        wait: () => Promise.resolve({ ok: true }),
+      },
+      project: projectMethods ?? {
+        status: () => Promise.resolve({ ok: true, activeFile: "test.pkt" }),
+        save: () => Promise.resolve({ ok: true }),
+        autosave: (opts: any) => Promise.resolve({ ok: true, dir: opts?.dir, keep: opts?.keep }),
+        open: () => Promise.resolve({ ok: true }),
+        recover: () => Promise.resolve({ ok: true }),
+        checkpoints: () => Promise.resolve([]),
+      },
+      device: { list: () => Promise.resolve([]) },
+      link: { list: () => Promise.resolve([]) },
+    } as any,
+    terminalCommandService: {
+      executeCommand: () => Promise.resolve({ ok: true, output: "" }),
+      resolveDeviceKind: () => Promise.resolve("router"),
+    } as any,
+    start: () => Promise.resolve(),
+    stop: () => Promise.resolve(),
+  };
+}
+
 describe("registerTools", () => {
   const originalPtDevDir = process.env.PT_DEV_DIR;
 
@@ -20,14 +65,9 @@ describe("registerTools", () => {
     }
   });
 
-  test("pt_omni_raw expone una superficie neutra sin verbos de staging", async () => {
-    const ptDevDir = createTempPtDevDir();
-    process.env.PT_DEV_DIR = ptDevDir;
-
-    const handlers = new Map<string, (input: unknown) => Promise<unknown>>();
+  function captureConfigs(): { configs: Map<string, any>; handlers: Map<string, (input: unknown) => Promise<unknown>> } {
     const configs = new Map<string, any>();
-    const calls: Array<{ argv: string[]; stdin: string | null; outputMode?: string; spoolDir?: string | null; env?: Record<string, string | undefined> }> = [];
-
+    const handlers = new Map<string, (input: unknown) => Promise<unknown>>();
     registerTools({
       server: {
         registerTool(name: string, config: unknown, handler: (input: unknown) => Promise<unknown>) {
@@ -35,400 +75,112 @@ describe("registerTools", () => {
           handlers.set(name, handler);
         },
       },
-      runPtCli: async (input) => {
-        const runInput = input as any;
-        calls.push({ argv: runInput.argv, stdin: runInput.stdin ?? null, outputMode: runInput.outputMode, spoolDir: runInput.spoolDir ?? null, env: runInput.env });
-        return {
-          ok: true,
-          exitCode: 0,
-          signal: null,
-          argv: input.argv,
-          durationMs: 15,
-          stdout: "[[0,\"R1\",\"2911\"]]",
-          stderr: "",
-          json: null,
-          truncated: { stdout: false, stderr: false },
-          stdoutBytes: 18,
-          stderrBytes: 0,
-          jsonParsed: false,
-        };
-      },
-      commandCatalog: [],
-      cliEntrypoint: "/repo/apps/pt-cli/src/index.ts",
-      repoRoot: "/repo",
-      defaultTimeoutMs: 120_000,
-    });
-
-    const tool = handlers.get("pt_omni_raw");
-    expect(tool).toBeDefined();
-    expect((handlers.size > 0) ? true : false).toBe(true);
-    expect(configs.get("pt_cli")?.annotations).toEqual({
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: false,
-      openWorldHint: false,
-    });
-    expect(configs.get("pt_cli")?.description).toContain("No usar para `pt omni raw`");
-    expect(configs.get("pt_omni_raw")?.annotations).toEqual({
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: false,
-      openWorldHint: false,
-    });
-    expect(configs.get("pt_doctor")?.description).toContain("diagnosticar instalación");
-    expect(configs.get("pt_runtime_status")?.description).toContain("inspeccionar el runtime desplegado");
-    expect(configs.get("pt_device_list")?.description).toContain("listar los dispositivos visibles");
-    expect(configs.get("pt_help")?.description).toContain("ayuda raíz de la CLI");
-    expect(configs.get("pt_list_commands")?.description).toContain("catálogo público de comandos");
-
-    const omniConfig = configs.get("pt_omni_raw") as any;
-    const inputShape = omniConfig?.inputSchema?.def?.shape ?? omniConfig?.inputSchema?._def?.shape;
-    expect(Object.keys(inputShape ?? {}).sort()).toEqual([
-      "guard",
-      "draftId",
-      "input",
-      "lineLimit",
-      "lineOffset",
-      "limit",
-      "mode",
-      "offset",
-      "op",
-      "parseJson",
-      "part",
-      "previewBytes",
-      "resultId",
-      "returnMode",
-      "stream",
-      "target",
-      "timeoutMs",
-    ].sort());
-
-    const publicMetadata = JSON.stringify(omniConfig);
-    expect(publicMetadata).toContain("probe");
-    expect(publicMetadata).not.toContain("begin_script");
-    expect(publicMetadata).not.toContain("append_script");
-    expect(publicMetadata).not.toContain("execute_script");
-    expect(publicMetadata).not.toContain("execute_code");
-    expect(publicMetadata).not.toContain("chunkSha256");
-
-    const part0 = await tool?.({ op: "part", draftId: "draft_big_probe", part: "return 1;", timeoutMs: 60_000 });
-    const part1 = await tool?.({ op: "part", draftId: "draft_big_probe", part: "return 2;", timeoutMs: 60_000 });
-    const probe = await tool?.({ op: "probe", draftId: "draft_big_probe", returnMode: "preview", previewBytes: 200, timeoutMs: 60_000 });
-    const partText = JSON.stringify(part0) + JSON.stringify(part1);
-    expect(partText).toContain("draft_big_probe");
-    expect(partText).not.toContain("append_script");
-    const probeText = JSON.stringify(probe);
-    expect(probeText).toContain("resultId");
-    expect(probeText).toContain("streams");
-    expect(probeText).not.toContain("append_script");
-    expect(probeText).not.toContain("execute_script");
-    expect(calls.at(-1)?.argv?.[0]).toBe("omni");
-    expect(calls.at(-1)?.argv?.[1]).toBe("raw");
-    expect(calls.at(-1)?.argv?.[2]).toBe("--file");
-    expect(calls.at(-1)?.outputMode).toBe("spool");
-    expect(calls.at(-1)?.env?.PT_MCP_ALLOW_DIRECT_OMNI_RAW).toBe("1");
-    expect(calls.at(-1)?.spoolDir).toContain("mcp-cache/omni/results");
-
-    rmSync(ptDevDir, { recursive: true, force: true });
-  });
-
-  test("pt_omni_raw execute_script devuelve metadata compacta", async () => {
-    const ptDevDir = createTempPtDevDir();
-    process.env.PT_DEV_DIR = ptDevDir;
-
-    const handlers = new Map<string, (input: unknown) => Promise<unknown>>();
-
-    registerTools({
-      server: {
-        registerTool(name: string, _config: unknown, handler: (input: unknown) => Promise<unknown>) {
-          handlers.set(name, handler);
-        },
-      },
-      runPtCli: async (input) => ({
-        ok: true,
-        exitCode: 0,
-        signal: null,
-        argv: input.argv,
-        durationMs: 30,
-        stdout: "x".repeat(50_000),
-        stderr: "",
-        json: null,
-        truncated: { stdout: false, stderr: false },
-        stdoutBytes: 50_000,
-        stderrBytes: 0,
-        jsonParsed: false,
-      }),
-      commandCatalog: [],
-      cliEntrypoint: "/repo/apps/pt-cli/src/index.ts",
-      repoRoot: "/repo",
-      defaultTimeoutMs: 120_000,
-    });
-
-    const tool = handlers.get("pt_omni_raw");
-    await tool?.({ op: "begin_script", scriptId: "meta_probe" });
-    await tool?.({ op: "append_script", scriptId: "meta_probe", seq: 0, chunk: "return 1;" });
-    const result = await tool?.({ op: "execute_script", scriptId: "meta_probe", returnMode: "metadata" });
-
-    const text = JSON.stringify(result);
-    expect(text.length).toBeLessThan(5_000);
-    expect(text).toContain("resultId");
-    expect(text).toContain("streams");
-    expect(text).not.toContain("preview");
-
-    rmSync(ptDevDir, { recursive: true, force: true });
-  });
-
-  test("pt_omni_raw lee resultados por chunks", async () => {
-    const ptDevDir = createTempPtDevDir();
-    process.env.PT_DEV_DIR = ptDevDir;
-
-    const handlers = new Map<string, (input: unknown) => Promise<unknown>>();
-
-    registerTools({
-      server: {
-        registerTool(name: string, _config: unknown, handler: (input: unknown) => Promise<unknown>) {
-          handlers.set(name, handler);
-        },
-      },
-      runPtCli: async (input) => ({
-        ok: true,
-        exitCode: 0,
-        signal: null,
-        argv: input.argv,
-        durationMs: 20,
-        stdout: "line-0\nline-1\nline-2\nline-3\n",
-        stderr: "",
-        json: null,
-        truncated: { stdout: false, stderr: false },
-        stdoutBytes: 28,
-        stderrBytes: 0,
-        jsonParsed: false,
-      }),
-      commandCatalog: [],
-      cliEntrypoint: "/repo/apps/pt-cli/src/index.ts",
-      repoRoot: "/repo",
-      defaultTimeoutMs: 120_000,
-    });
-
-    const tool = handlers.get("pt_omni_raw");
-    await tool?.({ op: "part", draftId: "probe_pt_api", part: "return 1;" });
-    const executed = await tool?.({ op: "probe", draftId: "probe_pt_api" });
-
-    const executedData = executed as any;
-    const resultId = executedData?.structuredContent?.resultId ?? executedData?.resultId;
-    const read = await tool?.({ op: "read_result", resultId, stream: "stdout", mode: "lines", lineOffset: 1, lineLimit: 2 });
-
-    expect(JSON.stringify(read)).toContain("line-1");
-    expect(JSON.stringify(read)).toContain("eof");
-    expect(JSON.stringify(read)).toContain("nextOffset");
-
-    rmSync(ptDevDir, { recursive: true, force: true });
-  });
-
-  test("pt_cli rechaza scripts Omni Raw largos", async () => {
-    const handlers = new Map<string, (input: unknown) => Promise<unknown>>();
-
-    registerTools({
-      server: {
-        registerTool(name: string, _config: unknown, handler: (input: unknown) => Promise<unknown>) {
-          handlers.set(name, handler);
-        },
-      },
+      control: createMockControl(),
       runPtCli: async () => ({
-        ok: true,
-        exitCode: 0,
-        signal: null,
-        argv: [],
-        durationMs: 1,
-        stdout: "",
-        stderr: "",
-        json: null,
+        ok: true, exitCode: 0, signal: null, argv: [],
+        durationMs: 10, stdout: "", stderr: "", json: null,
         truncated: { stdout: false, stderr: false },
-        stdoutBytes: 0,
-        stderrBytes: 0,
-        jsonParsed: false,
+        stdoutBytes: 0, stderrBytes: 0, jsonParsed: false,
       }),
       commandCatalog: [],
       cliEntrypoint: "/repo/apps/pt-cli/src/index.ts",
       repoRoot: "/repo",
       defaultTimeoutMs: 120_000,
     });
+    return { configs, handlers };
+  }
 
-    const handler = handlers.get("pt_cli");
-    const result = await handler?.({
-      argv: ["omni", "raw", "x".repeat(8_001)],
-    });
-
-    expect(JSON.stringify(result)).toContain("USE_PT_OMNI_RAW_TOOL");
+  test("registra todas las herramientas MCP esperadas", () => {
+    const { configs } = captureConfigs();
+    const expectedTools = [
+      "pt_status", "pt_app", "pt_project", "pt_device", "pt_link",
+      "pt_cmd_run", "pt_cmd_queue", "pt_omni", "pt_cli",
+    ];
+    for (const name of expectedTools) {
+      expect(configs.has(name)).toBe(true);
+    }
+    expect(configs.size).toBe(expectedTools.length);
   });
 
-  test("pt_cli rechaza cualquier omni raw", async () => {
-    const handlers = new Map<string, (input: unknown) => Promise<unknown>>();
-
-    registerTools({
-      server: {
-        registerTool(name: string, _config: unknown, handler: (input: unknown) => Promise<unknown>) {
-          handlers.set(name, handler);
-        },
-      },
-      runPtCli: async () => ({
-        ok: true,
-        exitCode: 0,
-        signal: null,
-        argv: [],
-        durationMs: 1,
-        stdout: "",
-        stderr: "",
-        json: null,
-        truncated: { stdout: false, stderr: false },
-        stdoutBytes: 0,
-        stderrBytes: 0,
-        jsonParsed: false,
-      }),
-      commandCatalog: [],
-      cliEntrypoint: "/repo/apps/pt-cli/src/index.ts",
-      repoRoot: "/repo",
-      defaultTimeoutMs: 120_000,
-    });
-
-    const handler = handlers.get("pt_cli");
-    const result = await handler?.({
-      argv: ["omni", "raw", "--stdin", "--yes", "--json"],
-      stdin: "return 1;",
-    });
-
-    expect(JSON.stringify(result)).toContain("USE_PT_OMNI_RAW_TOOL");
-  });
-
-  test("pt_omni_raw se anuncia al registrar", async () => {
-    const logs: string[] = [];
-    const configs = new Map<string, any>();
-
-    registerTools({
-      server: {
-        registerTool(name: string, config: unknown) {
-          configs.set(name, config);
-        },
-      },
-      runPtCli: async () => ({
-        ok: true,
-        exitCode: 0,
-        signal: null,
-        argv: [],
-        durationMs: 1,
-        stdout: "",
-        stderr: "",
-        json: null,
-        truncated: { stdout: false, stderr: false },
-        stdoutBytes: 0,
-        stderrBytes: 0,
-        jsonParsed: false,
-      }),
-      commandCatalog: [],
-      cliEntrypoint: "/repo/apps/pt-cli/src/index.ts",
-      repoRoot: "/repo",
-      defaultTimeoutMs: 120_000,
-      live: true,
-      liveWriter: (line) => logs.push(line),
-    });
-
-    expect(logs.join("\n")).toContain("registered tool: pt_omni_raw");
-    expect(configs.get("pt_omni_raw")?.annotations).toEqual({
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: false,
-      openWorldHint: false,
-    });
-    expect(configs.get("pt_omni_raw")?.description).toContain("simulador");
-    expect(configs.get("pt_omni_raw")?.description).toContain("No toca la red real");
-  });
-
-  test("pt_project_status, pt_project_save, pt_project_autosave tienen annotations correctas", async () => {
-    const ptDevDir = createTempPtDevDir();
-    process.env.PT_DEV_DIR = ptDevDir;
-
-    const configs = new Map<string, any>();
-    const calls: Array<{ argv: string[] }> = [];
-
-    registerTools({
-      server: {
-        registerTool(name: string, config: unknown) {
-          configs.set(name, config);
-        },
-      },
-      runPtCli: async (input) => {
-        calls.push({ argv: (input as any).argv });
-        return {
-          ok: true,
-          exitCode: 0,
-          signal: null,
-          argv: (input as any).argv,
-          durationMs: 50,
-          stdout: "{}",
-          stderr: "",
-          json: {},
-          truncated: { stdout: false, stderr: false },
-          stdoutBytes: 2,
-          stderrBytes: 0,
-          jsonParsed: true,
-        };
-      },
-      commandCatalog: [],
-      cliEntrypoint: "/repo/apps/pt-cli/src/index.ts",
-      repoRoot: "/repo",
-      defaultTimeoutMs: 120_000,
-    });
-
-    expect(configs.get("pt_project_status")?.annotations).toEqual({
+  test("pt_status tiene annotations correctas (readOnly)", () => {
+    const { configs } = captureConfigs();
+    expect(configs.get("pt_status")?.annotations).toEqual({
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
       openWorldHint: false,
     });
-    expect(configs.get("pt_project_save")?.annotations).toEqual({
-      readOnlyHint: false,
-      destructiveHint: false,
-      idempotentHint: false,
-      openWorldHint: false,
-    });
-    expect(configs.get("pt_project_autosave")?.annotations).toEqual({
-      readOnlyHint: false,
-      destructiveHint: false,
-      idempotentHint: false,
-      openWorldHint: false,
-    });
-
-    rmSync(ptDevDir, { recursive: true, force: true });
   });
 
-  test("pt_project_status, pt_project_save, pt_project_autosave llaman al CLI correcto", async () => {
+  test("pt_cli tiene annotations de fallback destructivo", () => {
+    const { configs } = captureConfigs();
+    expect(configs.get("pt_cli")?.annotations).toEqual({
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: false,
+    });
+    expect(configs.get("pt_cli")?.description).toContain("FALLBACK TEMPORAL");
+    expect(configs.get("pt_cli")?.description).toContain("No usar para");
+  });
+
+  test("pt_app soporta operaciones paths, status, open, close, restart, wait", () => {
+    const { configs } = captureConfigs();
+    const schema = configs.get("pt_app")?.inputSchema;
+    const schemaStr = JSON.stringify(schema);
+    expect(schemaStr).toContain("paths");
+    expect(schemaStr).toContain("status");
+    expect(schemaStr).toContain("open");
+    expect(schemaStr).toContain("close");
+    expect(schemaStr).toContain("restart");
+    expect(schemaStr).toContain("wait");
+  });
+
+  test("pt_project soporta status, save, autosave, open, recover, checkpoints", () => {
+    const { configs } = captureConfigs();
+    const schema = configs.get("pt_project")?.inputSchema;
+    const schemaStr = JSON.stringify(schema);
+    expect(schemaStr).toContain("status");
+    expect(schemaStr).toContain("save");
+    expect(schemaStr).toContain("autosave");
+    expect(schemaStr).toContain("open");
+    expect(schemaStr).toContain("recover");
+    expect(schemaStr).toContain("checkpoints");
+  });
+
+  test("pt_omni soporta status, capability, raw, result_status, read_result, clear", () => {
+    const { configs } = captureConfigs();
+    const schema = configs.get("pt_omni")?.inputSchema;
+    const schemaStr = JSON.stringify(schema);
+    expect(schemaStr).toContain("status");
+    expect(schemaStr).toContain("capability");
+    expect(schemaStr).toContain("raw");
+    expect(schemaStr).toContain("result_status");
+    expect(schemaStr).toContain("read_result");
+    expect(schemaStr).toContain("clear");
+  });
+
+  test("pt_cli pasa comandos a runPtCli y devuelve resultado estructurado", async () => {
     const ptDevDir = createTempPtDevDir();
     process.env.PT_DEV_DIR = ptDevDir;
 
     const handlers = new Map<string, (input: unknown) => Promise<unknown>>();
-    const calls: Array<{ argv: string[] }> = [];
+    let lastInput: any = null;
 
     registerTools({
       server: {
-        registerTool(name: string, _config: unknown, handler: (input: unknown) => Promise<unknown>) {
-          handlers.set(name, handler);
+        registerTool(_name: string, _config: unknown, handler: (input: unknown) => Promise<unknown>) {
+          handlers.set("pt_cli", handler);
         },
       },
+      control: createMockControl(),
       runPtCli: async (input) => {
-        calls.push({ argv: (input as any).argv });
+        lastInput = input;
         return {
-          ok: true,
-          exitCode: 0,
-          signal: null,
-          argv: (input as any).argv,
-          durationMs: 50,
-          stdout: "{}",
-          stderr: "",
-          json: {},
+          ok: true, exitCode: 0, signal: null, argv: input.argv,
+          durationMs: 5, stdout: "ok", stderr: "", json: null,
           truncated: { stdout: false, stderr: false },
-          stdoutBytes: 2,
-          stderrBytes: 0,
-          jsonParsed: true,
+          stdoutBytes: 2, stderrBytes: 0, jsonParsed: false,
         };
       },
       commandCatalog: [],
@@ -437,14 +189,62 @@ describe("registerTools", () => {
       defaultTimeoutMs: 120_000,
     });
 
-    await handlers.get("pt_project_status")?.({ timeoutMs: 10_000 });
-    expect(calls.at(-1)?.argv).toEqual(["project", "status", "--json"]);
+    const handler = handlers.get("pt_cli");
+    expect(handler).toBeDefined();
 
-    await handlers.get("pt_project_save")?.({ timeoutMs: 10_000 });
-    expect(calls.at(-1)?.argv).toEqual(["project", "save", "--json"]);
+    const result = await handler!({ argv: ["doctor", "--json"], timeoutMs: 10_000 });
+    const body = JSON.stringify(result);
+    expect(body).toContain("ok");
+    expect(lastInput?.argv).toEqual(["doctor", "--json"]);
 
-    await handlers.get("pt_project_autosave")?.({ outputDir: "/tmp/backups", keep: 3, timeoutMs: 10_000 });
-    expect(calls.at(-1)?.argv).toEqual(["project", "autosave", "--json", "--dir", "/tmp/backups", "--keep", "3"]);
+    rmSync(ptDevDir, { recursive: true, force: true });
+  });
+
+  test("pt_project status/save/autosave invocan controller.project y devuelven estructura", async () => {
+    const ptDevDir = createTempPtDevDir();
+    process.env.PT_DEV_DIR = ptDevDir;
+
+    const handlers = new Map<string, (input: unknown) => Promise<unknown>>();
+    const projectCalls: string[] = [];
+
+    registerTools({
+      server: {
+        registerTool(name: string, _config: unknown, handler: (input: unknown) => Promise<unknown>) {
+          handlers.set(name, handler);
+        },
+      },
+      control: createMockControl({
+        status: () => { projectCalls.push("status"); return Promise.resolve({ ok: true, activeFile: "proyecto.pkt" }); },
+        save: () => { projectCalls.push("save"); return Promise.resolve({ ok: true }); },
+        autosave: (opts: any) => { projectCalls.push("autosave"); return Promise.resolve({ ok: true, dir: opts?.dir, keep: opts?.keep }); },
+      }),
+      runPtCli: async () => ({
+        ok: true, exitCode: 0, signal: null, argv: [],
+        durationMs: 10, stdout: "", stderr: "", json: null,
+        truncated: { stdout: false, stderr: false },
+        stdoutBytes: 0, stderrBytes: 0, jsonParsed: false,
+      }),
+      commandCatalog: [],
+      cliEntrypoint: "/repo/apps/pt-cli/src/index.ts",
+      repoRoot: "/repo",
+      defaultTimeoutMs: 120_000,
+    });
+
+    const handler = handlers.get("pt_project")!;
+
+    const r1 = await handler({ op: "status" });
+    expect(JSON.stringify(r1)).toContain("project.status");
+    expect(JSON.stringify(r1)).toContain("proyecto.pkt");
+    expect(projectCalls).toContain("status");
+
+    const r2 = await handler({ op: "save" });
+    expect(JSON.stringify(r2)).toContain("project.save");
+    expect(projectCalls).toContain("save");
+
+    const r3 = await handler({ op: "autosave", dir: "/backups", keep: 5 });
+    expect(JSON.stringify(r3)).toContain("project.autosave");
+    expect(JSON.stringify(r3)).toContain("/backups");
+    expect(projectCalls).toContain("autosave");
 
     rmSync(ptDevDir, { recursive: true, force: true });
   });

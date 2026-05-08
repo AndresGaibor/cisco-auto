@@ -181,7 +181,7 @@ export function createControlComposition(
   const autosaveService = new AutosaveService(projectService);
 
   const hostProcess = new NodeHostProcessAdapter();
-  const appPathResolver = new PacketTracerPathResolver({ platform: process.platform, env: process.env as Record<string, string | undefined>, exists: (path) => { try { return require("node:fs").existsSync(path); } catch { return false; } } });
+  const appPathResolver = new PacketTracerPathResolver({ platform: process.platform, env: process.env as Record<string, string | undefined>, exists: (path) => { try { return require("node:fs").existsSync(path); } catch { return false; } }, scanDir: (dir) => { try { return require("node:fs").readdirSync(dir); } catch { return []; } } });
   const packetTracerProcessService = new PacketTracerProcessService(hostProcess);
   const packetTracerAppService = new PacketTracerAppService(appPathResolver, packetTracerProcessService, projectService, autosaveService, bridge);
   const recoveryService = new RecoveryService(packetTracerAppService, projectService, autosaveService);
