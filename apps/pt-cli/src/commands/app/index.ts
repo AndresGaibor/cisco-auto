@@ -57,7 +57,8 @@ export function createAppCommand(): Command {
 
   app.command("open")
     .description("Abre un archivo .pkt con Packet Tracer")
-    .argument("<path>", "Ruta al archivo .pkt a abrir")
+    .argument("[path]", "Ruta al archivo .pkt a abrir (opcional: reabre el último taller)")
+    .option("--clean", "Abrir Packet Tracer vacío sin último taller", false)
     .option("--wait", "Esperar a que el runtime esté disponible", false)
     .option("--timeout <ms>", "Timeout en ms para esperar", (value) => Number(value), 60000)
     .option("--close-existing", "Cerrar instancia existente antes de abrir", false)
@@ -67,18 +68,19 @@ export function createAppCommand(): Command {
     .option("--json", "Salida JSON")
     .action(async (path, options) => {
       const result = await withController(async (controller) => {
-        return await controller.app.open(path, {
+        return await controller.app.open(path || (options.clean ? undefined : undefined), {
           wait: options.wait,
           waitTimeoutMs: options.timeout,
           closeExisting: options.closeExisting,
           saveExisting: options.saveExisting,
           autosaveExisting: options.autosaveExisting,
           force: options.noRuntimeWait,
+          clean: options.clean,
         });
       });
       if (wantsJson(options)) return printJson(result);
       if (result.ok) {
-        process.stdout.write(`Packet Tracer abierto con ${path}\n`);
+        process.stdout.write(`Packet Tracer abierto ${path ? `con ${path}` : options.clean ? "vacío" : "(último taller)"}\n`);
       } else {
         process.stdout.write(`Error: ${result.error}\n`);
         process.exitCode = 1;
@@ -129,6 +131,22 @@ export function createAppCommand(): Command {
         process.stdout.write("Condición alcanzada\n");
       } else {
         process.stdout.write(`Timeout: ${result.error}\n`);
+        process.exitCode = 1;
+      }
+    });
+
+  app.command("track")
+    .description("Registra el proyecto activo actual como último taller")
+    .option("--json", "Salida JSON")
+    .action(async (options) => {
+      const result = await withController(async (controller) => {
+        return await controller.app.track();
+      });
+      if (wantsJson(options)) return printJson(result);
+      if (result.ok) {
+        process.stdout.write(`Proyecto registrado: ${result.activeFile}\n`);
+      } else {
+        process.stdout.write(`Error: ${result.error}\n`);
         process.exitCode = 1;
       }
     });

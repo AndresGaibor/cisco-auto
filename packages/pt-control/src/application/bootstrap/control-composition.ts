@@ -48,6 +48,9 @@ import { NodeHostProcessAdapter } from "../../infrastructure/host/node-host-proc
 import { PacketTracerPathResolver } from "../app/packet-tracer-path-resolver.js";
 import { PacketTracerProcessService } from "../app/packet-tracer-process-service.js";
 import { PacketTracerAppService } from "../app/packet-tracer-app-service.js";
+import { TrackService } from "../app/track-service.js";
+import { join } from "node:path";
+import { homedir } from "node:os";
 
 // ============================================================================
 // Configuration
@@ -58,6 +61,7 @@ export interface ControlCompositionConfig {
   defaultTimeout?: number;
   maxRetries?: number;
   enableFallback?: boolean;
+  devDir?: string;
 }
 
 // ============================================================================
@@ -123,6 +127,7 @@ export function createControlComposition(
     defaultTimeout = 30_000,
     maxRetries = 3,
     enableFallback = true,
+    devDir = join(homedir(), "pt-dev"),
   } = config;
 
   // Adapter de primitivas (device.add, link.remove, etc.)
@@ -183,7 +188,8 @@ export function createControlComposition(
   const hostProcess = new NodeHostProcessAdapter();
   const appPathResolver = new PacketTracerPathResolver({ platform: process.platform, env: process.env as Record<string, string | undefined>, exists: (path) => { try { return require("node:fs").existsSync(path); } catch { return false; } }, scanDir: (dir) => { try { return require("node:fs").readdirSync(dir); } catch { return []; } } });
   const packetTracerProcessService = new PacketTracerProcessService(hostProcess);
-  const packetTracerAppService = new PacketTracerAppService(appPathResolver, packetTracerProcessService, projectService, autosaveService, bridge);
+  const trackService = new TrackService(join(devDir, "last-path.txt"));
+  const packetTracerAppService = new PacketTracerAppService(appPathResolver, packetTracerProcessService, projectService, autosaveService, bridge, trackService);
   const recoveryService = new RecoveryService(packetTracerAppService, projectService, autosaveService);
 
   return {

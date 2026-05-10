@@ -21,34 +21,34 @@ export class PacketTracerProcessService {
     return { ok: false };
   }
 
-  async closeGraceful(appName: string): Promise<{ ok: boolean }> {
+  async closeGraceful(appName: string, timeoutMs?: number): Promise<{ ok: boolean }> {
     const platform = this.port.platform();
     if (platform === "darwin") {
       const script = `tell application "${appName}" to close`;
-      await this.port.spawn("osascript", ["-e", script]);
+      await this.port.spawn("osascript", ["-e", script], { timeoutMs });
       return { ok: true };
     }
     if (platform === "win32") {
       await this.port.spawn("powershell", [
         "-Command",
         `$p = Get-Process -Name "${appName}" -ErrorAction SilentlyContinue; if ($p) { $p.CloseMainWindow() }`,
-      ]);
+      ], { timeoutMs });
       return { ok: true };
     }
     return { ok: false };
   }
 
-  async closeForce(appName: string): Promise<{ ok: boolean }> {
+  async closeForce(appName: string, timeoutMs?: number): Promise<{ ok: boolean }> {
     const platform = this.port.platform();
     if (platform === "darwin") {
-      await this.port.spawn("pkill", ["-9", "-f", appName]);
+      await this.port.spawn("pkill", ["-9", "-f", appName], { timeoutMs });
       return { ok: true };
     }
     if (platform === "win32") {
       await this.port.spawn("powershell", [
         "-Command",
         `Stop-Process -Name "${appName}" -Force -ErrorAction SilentlyContinue`,
-      ]);
+      ], { timeoutMs });
       return { ok: true };
     }
     return { ok: false };

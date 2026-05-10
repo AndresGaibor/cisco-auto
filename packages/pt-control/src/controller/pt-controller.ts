@@ -169,12 +169,14 @@ export class PTController {
       paths: () => (this._composition as any).appPathResolver?.resolve() ?? Promise.reject(new Error("appPathResolver no disponible")),
       status: (options?: { live?: boolean; timeoutMs?: number }) =>
         (this._composition as any).packetTracerAppService?.status(options) ?? Promise.reject(new Error("packetTracerAppService no disponible")),
-      open: (path: string, options?: { wait?: boolean; waitTimeoutMs?: number; closeExisting?: boolean; saveExisting?: boolean; autosaveExisting?: boolean; force?: boolean; noRuntimeWait?: boolean }) =>
+      open: (path?: string, options?: { wait?: boolean; waitTimeoutMs?: number; closeExisting?: boolean; saveExisting?: boolean; autosaveExisting?: boolean; force?: boolean; noRuntimeWait?: boolean; clean?: boolean }) =>
         (this._composition as any).packetTracerAppService?.open(path, options) ?? Promise.reject(new Error("packetTracerAppService no disponible")),
       close: (options?: { save?: boolean; autosave?: boolean; force?: boolean; timeoutMs?: number }) =>
         (this._composition as any).packetTracerAppService?.close(options) ?? Promise.reject(new Error("packetTracerAppService no disponible")),
       wait: (options?: { runtime?: boolean; activeFile?: string; timeoutMs?: number }) =>
         (this._composition as any).packetTracerAppService?.wait(options) ?? Promise.reject(new Error("packetTracerAppService no disponible")),
+      track: (options?: { clean?: boolean }) =>
+        (this._composition as any).packetTracerAppService?.track(options) ?? Promise.reject(new Error("packetTracerAppService no disponible")),
     };
   }
 

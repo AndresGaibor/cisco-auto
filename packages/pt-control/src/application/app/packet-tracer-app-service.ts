@@ -1,9 +1,10 @@
-import type { AppCloseOptions, AppOpenOptions, AppStatus, AppWaitOptions } from "./app-types.js";
+import type { AppCloseOptions, AppOpenOptions, AppStatus, AppTrackOptions, AppWaitOptions } from "./app-types.js";
 import type { PacketTracerPathResolver } from "./packet-tracer-path-resolver.js";
 import type { PacketTracerProcessService } from "./packet-tracer-process-service.js";
 import type { ProjectService } from "../project/project-service.js";
 import type { AutosaveService } from "../project/autosave-service.js";
 import type { FileBridgePort } from "../ports/file-bridge.port.js";
+import type { TrackService } from "./track-service.js";
 
 export class PacketTracerAppService {
   constructor(
@@ -12,6 +13,7 @@ export class PacketTracerAppService {
     private readonly projectService: ProjectService,
     private readonly autosaveService: AutosaveService,
     private readonly bridge: FileBridgePort,
+    private readonly trackService?: TrackService,
   ) {}
 
   async paths() {
@@ -49,10 +51,18 @@ export class PacketTracerAppService {
     };
   }
 
-  async open(path: string, options: AppOpenOptions = {}): Promise<{ ok: boolean; error?: string }> {
+  async open(path?: string, options: AppOpenOptions = {}): Promise<{ ok: boolean; error?: string }> {
     const resolved = this.pathResolver.resolve();
     if (!resolved.selected) {
       return { ok: false, error: "Packet Tracer no encontrado" };
+    }
+
+    if (!path && !options.clean) {
+      const status = await this.projectService.status().catch(() => null);
+      path = status?.activeFile || this.trackService?.read() || undefined;
+      if (!path) {
+        return { ok: false, error: "No hay taller previo. Usa --clean para abrir PT vacío o pasa una ruta." };
+      }
     }
 
     if (options.closeExisting) {
@@ -69,6 +79,10 @@ export class PacketTracerAppService {
     }
 
     await this.processService.launch(resolved.selected, path);
+
+    if (path && !options.clean) {
+      this.trackService?.write(path);
+    }
 
     if (options.wait) {
       const timeout = options.waitTimeoutMs ?? 60_000;
@@ -89,24 +103,36 @@ export class PacketTracerAppService {
     return { ok: true };
   }
 
+  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error(`${label} timeout after ${timeoutMs}ms`)), timeoutMs),
+      ),
+    ]);
+  }
+
   async close(options: AppCloseOptions = {}): Promise<{ ok: boolean; error?: string }> {
     if (options.save || options.autosave) {
       if (options.save) {
-        await this.projectService.save().catch(() => {});
+        const result = await this.withTimeout(this.projectService.save(), 15_000, "project.save").catch(() => null);
+        if (result?.activeFile) {
+          this.trackService?.write(result.activeFile);
+        }
       }
       if (options.autosave) {
-        await this.autosaveService.createAutosave({ keep: 20 }).catch(() => {});
+        await this.withTimeout(this.autosaveService.createAutosave({ keep: 20 }), 15_000, "autosave").catch(() => {});
       }
     }
 
     if (options.force) {
-      await this.processService.closeForce("Cisco Packet Tracer");
+      await this.processService.closeForce("Cisco Packet Tracer", options.timeoutMs ?? 15_000);
       return { ok: true };
     }
 
-    const result = await this.processService.closeGraceful("Cisco Packet Tracer");
-    if (!result.ok) {
-      return { ok: false, error: "No se pudo cerrar Packet Tracer" };
+    const gracefulResult = await this.processService.closeGraceful("Cisco Packet Tracer", 15_000);
+    if (!gracefulResult.ok) {
+      return { ok: false, error: "No se pudo cerrar Packet Tracer graceful" };
     }
 
     if (options.timeoutMs) {
@@ -120,6 +146,15 @@ export class PacketTracerAppService {
     }
 
     return { ok: true };
+  }
+
+  async track(options: AppTrackOptions = {}): Promise<{ ok: boolean; activeFile?: string; error?: string }> {
+    const status = await this.projectService.status().catch(() => null);
+    if (!status?.activeFile) {
+      return { ok: false, error: "No hay proyecto activo en Packet Tracer" };
+    }
+    this.trackService?.write(status.activeFile);
+    return { ok: true, activeFile: status.activeFile };
   }
 
   async wait(options: AppWaitOptions = {}): Promise<{ ok: boolean; error?: string }> {

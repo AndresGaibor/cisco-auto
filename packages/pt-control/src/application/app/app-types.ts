@@ -40,6 +40,11 @@ export interface AppOpenOptions {
   autosaveExisting?: boolean;
   force?: boolean;
   noRuntimeWait?: boolean;
+  clean?: boolean;
+}
+
+export interface AppTrackOptions {
+  clean?: boolean;
 }
 
 export interface AppCloseOptions {
