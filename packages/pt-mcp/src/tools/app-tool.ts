@@ -1,6 +1,7 @@
 import * as z from "zod/v4";
 import type { RegisterToolContext } from "./tool-types.js";
 import { ok, errorToFail } from "./mcp-response.js";
+import { AppOutputSchema } from "./output-schemas.js";
 
 export function registerAppTool(ctx: RegisterToolContext): void {
   const { controller } = ctx.control;
@@ -8,43 +9,47 @@ export function registerAppTool(ctx: RegisterToolContext): void {
   ctx.server.registerTool(
     "pt_app",
     {
-      title: "Packet Tracer application control",
+      title: "Packet Tracer Application Control",
       description: [
-        "Controla la aplicación Packet Tracer: rutas, estado, abrir, cerrar, reiniciar y esperar.",
+        "Controls or inspects the Packet Tracer desktop application.",
+        "Use op='status' or op='paths' before opening projects or running IOS commands.",
+        "Use op='open' only when you have an explicit .pkt path. Use op='close' carefully because it can close the active Packet Tracer session.",
+        "op='restart' and op='close' modify the application state; paths, status, and wait are read-only.",
       ].join(" "),
       inputSchema: z.discriminatedUnion("op", [
-        z.object({ op: z.literal("paths") }).describe("Rutas de instalación de Packet Tracer."),
-        z.object({ op: z.literal("status") }).describe("Estado del proceso de Packet Tracer."),
+        z.object({ op: z.literal("paths") }).describe("Lista rutas de instalación de Packet Tracer disponibles en el sistema."),
+        z.object({ op: z.literal("status") }).describe("Estado del proceso y runtime de Packet Tracer."),
         z.object({
           op: z.literal("open"),
-          path: z.string().min(1).describe("Ruta al archivo .pkt"),
-          wait: z.boolean().default(false),
-          waitTimeoutMs: z.number().int().positive().max(300_000).optional(),
-          closeExisting: z.boolean().default(false),
-          saveExisting: z.boolean().default(false),
-        }).describe("Abrir un archivo .pkt en Packet Tracer."),
+          path: z.string().min(1).describe("Ruta absoluta al archivo .pkt que se abrirá en Packet Tracer."),
+          wait: z.boolean().default(false).describe("Si es true, espera a que el runtime esté listo antes de responder."),
+          waitTimeoutMs: z.number().int().positive().max(300_000).optional().describe("Tiempo máximo de espera en milisegundos si wait=true."),
+          closeExisting: z.boolean().default(false).describe("Cierra el proyecto activo antes de abrir el nuevo."),
+          saveExisting: z.boolean().default(false).describe("Guarda el proyecto activo antes de cerrarlo."),
+        }).describe("Abre un archivo .pkt en Packet Tracer. Modifica el estado de la aplicación."),
         z.object({
           op: z.literal("close"),
-          save: z.boolean().default(false),
-          autosave: z.boolean().default(false),
-          force: z.boolean().default(false),
-          timeoutMs: z.number().int().positive().max(120_000).optional(),
-        }).describe("Cerrar Packet Tracer."),
+          save: z.boolean().default(false).describe("Guarda el proyecto activo antes de cerrar."),
+          autosave: z.boolean().default(false).describe("Crea un autosave antes de cerrar."),
+          force: z.boolean().default(false).describe("Fuerza el cierre incluso si hay cambios sin guardar."),
+          timeoutMs: z.number().int().positive().max(120_000).optional().describe("Tiempo máximo de espera para el cierre."),
+        }).describe("Cierra Packet Tracer. Modifica el estado de la aplicación — usar con cuidado."),
         z.object({
           op: z.literal("restart"),
-          save: z.boolean().default(false).describe("Guardar antes de cerrar."),
+          save: z.boolean().default(false).describe("Guarda antes de cerrar."),
           autosave: z.boolean().default(false).describe("Autosave antes de cerrar."),
-          path: z.string().optional().describe("Ruta a abrir tras reiniciar (defecto: app de PT)."),
-          wait: z.boolean().default(false).describe("Esperar a que el runtime esté disponible."),
-          waitTimeoutMs: z.number().int().positive().max(300_000).optional(),
-        }).describe("Reinicia Packet Tracer (close + open)."),
+          path: z.string().optional().describe("Ruta .pkt a abrir tras reiniciar. Si se omite, abre la app de PT sin proyecto."),
+          wait: z.boolean().default(false).describe("Esperar a que el runtime esté disponible tras el reinicio."),
+          waitTimeoutMs: z.number().int().positive().max(300_000).optional().describe("Timeout de espera si wait=true."),
+        }).describe("Reinicia Packet Tracer (close + open). Modifica el estado de la aplicación."),
         z.object({
           op: z.literal("wait"),
-          runtime: z.boolean().default(false),
-          activeFile: z.string().optional(),
-          timeoutMs: z.number().int().positive().max(300_000).optional(),
-        }).describe("Esperar a que Packet Tracer alcance un estado."),
+          runtime: z.boolean().default(false).describe("Espera a que el runtime JS esté cargado."),
+          activeFile: z.string().optional().describe("Espera a que un archivo .pkt específico esté activo."),
+          timeoutMs: z.number().int().positive().max(300_000).optional().describe("Tiempo máximo de espera."),
+        }).describe("Espera a que Packet Tracer alcance un estado deseado. Read-only."),
       ]),
+      outputSchema: AppOutputSchema,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,

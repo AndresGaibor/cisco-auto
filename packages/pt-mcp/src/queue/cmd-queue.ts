@@ -10,7 +10,7 @@ export interface CmdQueueJob<T> {
   createdAt: string;
   startedAt?: string;
   finishedAt?: string;
-  status: "pending" | "running" | "done" | "failed";
+  status: "pending" | "running" | "done" | "done_with_errors" | "failed";
   run: () => Promise<T>;
   result?: T;
   error?: {
@@ -23,6 +23,7 @@ export interface CmdQueueSnapshot {
   pending: Array<Record<string, unknown>>;
   running: Array<Record<string, unknown>>;
   done: Array<Record<string, unknown>>;
+  done_with_errors: Array<Record<string, unknown>>;
   failed: Array<Record<string, unknown>>;
 }
 
@@ -35,7 +36,7 @@ export class CmdQueue {
     key: string;
     label: string;
     run: () => Promise<T>;
-  }): Promise<T> {
+  }): { id: string; promise: Promise<T> } {
     const id = `cmdq-${randomUUID().slice(0, 8)}`;
 
     const job: CmdQueueJob<T> = {
@@ -78,7 +79,7 @@ export class CmdQueue {
       });
 
     this.chains.set(chainKey, next);
-    return next as Promise<T>;
+    return { id, promise: next as Promise<T> };
   }
 
   snapshot(): CmdQueueSnapshot {
@@ -98,6 +99,7 @@ export class CmdQueue {
       pending: rows.filter((x) => x.status === "pending"),
       running: rows.filter((x) => x.status === "running"),
       done: rows.filter((x) => x.status === "done").slice(-50),
+      done_with_errors: rows.filter((x) => x.status === "done_with_errors").slice(-50),
       failed: rows.filter((x) => x.status === "failed").slice(-50),
     };
   }
@@ -106,13 +108,20 @@ export class CmdQueue {
     let count = 0;
 
     for (const [id, job] of this.jobs.entries()) {
-      if (job.status === "done" || job.status === "failed") {
+      if (job.status === "done" || job.status === "done_with_errors" || job.status === "failed") {
         this.jobs.delete(id);
         count++;
       }
     }
 
     return count;
+  }
+
+  setJobResultStatus(id: string, status: "done_with_errors" | "failed"): boolean {
+    const job = this.jobs.get(id);
+    if (!job) return false;
+    job.status = status;
+    return true;
   }
 }
 

@@ -12,10 +12,23 @@ function normalizeRetryCommand(command: string): string {
 }
 
 export function isRetryableReadOnlyIosCommand(command: string): boolean {
-  const normalized = normalizeRetryCommand(command);
+  const normalizedLines = String(command ?? "")
+    .split(/\r?\n/)
+    .map(normalizeRetryCommand)
+    .filter((line) => line.length > 0);
 
-  // Allowlist inicial conservadora. No ampliarla sin evidencia real.
-  return /^show\s+version\b/.test(normalized);
+  if (normalizedLines.length === 0) {
+    return false;
+  }
+
+  // Retry solo para comandos IOS de solo lectura. No incluir write/copy/clear/debug/config.
+  return normalizedLines.every((line) =>
+    /^show\s+/.test(line) ||
+    /^ping\s+/.test(line) ||
+    /^traceroute\s+/.test(line) ||
+    /^trace\s+/.test(line) ||
+    /^dir\b/.test(line)
+  );
 }
 
 export function getRuntimeErrorCode(runtimeResult: any): string {
@@ -137,7 +150,7 @@ export function attachRuntimeRetryEvidence(
     },
     warnings: [
       ...normalizeWarnings(runtimeResult?.warnings),
-      `Se reintentó el comando IOS por timeout recuperable (${retry.firstErrorCode}).`,
+      `IOS_EMPTY_TIMEOUT_RETRY: se reintentó el comando IOS de solo lectura por timeout vacío recuperable (${retry.firstErrorCode}).`,
     ],
   };
 }

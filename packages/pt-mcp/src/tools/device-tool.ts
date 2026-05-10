@@ -1,6 +1,7 @@
 import * as z from "zod/v4";
 import type { RegisterToolContext } from "./tool-types.js";
 import { ok, errorToFail } from "./mcp-response.js";
+import { DeviceOutputSchema } from "./output-schemas.js";
 
 export function registerDeviceTool(ctx: RegisterToolContext): void {
   const { controller } = ctx.control;
@@ -8,64 +9,66 @@ export function registerDeviceTool(ctx: RegisterToolContext): void {
   ctx.server.registerTool(
     "pt_device",
     {
-      title: "Packet Tracer device management",
+      title: "Packet Tracer Device Management",
       description: [
-        "Gestiona dispositivos en el laboratorio de Packet Tracer.",
-        "Soporta listar, inspeccionar, crear, mover, eliminar y gestionar módulos.",
+        "Lists, inspects, creates, moves, removes, and manages modules for Packet Tracer devices.",
+        "Use op='list' before pt_cmd_run whenever exact device names are uncertain.",
+        "Creation, removal, movement, and module operations modify the lab; inspect/list/ports/module_slots are read-only.",
       ].join(" "),
       inputSchema: z.discriminatedUnion("op", [
         z.object({
           op: z.literal("list"),
-          type: z.string().optional(),
-          includePorts: z.boolean().default(false),
-          includeLinks: z.boolean().default(false),
-          deep: z.boolean().default(false),
-        }),
+          type: z.string().optional().describe("Filtrar por tipo de dispositivo: 'router', 'switch', 'pc', 'server', 'wlc', etc. Si se omite, lista todos."),
+          includePorts: z.boolean().default(false).describe("Incluir puertos de cada dispositivo en la respuesta."),
+          includeLinks: z.boolean().default(false).describe("Incluir enlaces de cada puerto en la respuesta."),
+          deep: z.boolean().default(false).describe("Escaneo profundo: datos detallados de cada dispositivo (más lento)."),
+        }).describe("Lista dispositivos del laboratorio. Usar siempre antes de pt_cmd_run si no sabes el nombre exacto del dispositivo. Read-only."),
         z.object({
           op: z.literal("get"),
-          device: z.string().min(1),
-          includeXml: z.boolean().default(false),
-        }),
+          device: z.string().min(1).describe("Nombre exacto del dispositivo, ej: 'MLS-CORE-1', 'Switch0', 'PC1'."),
+          includeXml: z.boolean().default(false).describe("Incluir representación XML nativa de Packet Tracer."),
+        }).describe("Inspecciona un dispositivo específico con todos sus detalles. Read-only."),
         z.object({
           op: z.literal("add"),
-          name: z.string().min(1),
-          model: z.string().min(1),
-          x: z.number().int().optional(),
-          y: z.number().int().optional(),
-          verify: z.boolean().default(true),
-        }),
+          name: z.string().min(1).describe("Nombre único para el nuevo dispositivo en el laboratorio."),
+          model: z.string().min(1).describe("Modelo del dispositivo, ej: '2960', '4331', 'PC-PT', 'Server-PT'."),
+          x: z.number().int().optional().describe("Posición X en el plano del laboratorio."),
+          y: z.number().int().optional().describe("Posición Y en el plano del laboratorio."),
+          verify: z.boolean().default(true).describe("Verificar que el dispositivo se haya creado correctamente."),
+        }).describe("Agrega un nuevo dispositivo al laboratorio. Modifica el laboratorio."),
         z.object({
           op: z.literal("remove"),
-          device: z.string().min(1),
-          ifExists: z.boolean().default(false),
-        }),
+          device: z.string().min(1).describe("Nombre exacto del dispositivo a eliminar."),
+          ifExists: z.boolean().default(false).describe("Si es true, no falla si el dispositivo no existe."),
+        }).describe("Elimina un dispositivo del laboratorio. Modifica el laboratorio — destructivo."),
         z.object({
           op: z.literal("move"),
-          device: z.string().min(1),
-          x: z.number().int(),
-          y: z.number().int(),
-        }),
+          device: z.string().min(1).describe("Nombre exacto del dispositivo a mover."),
+          x: z.number().int().describe("Nueva posición X."),
+          y: z.number().int().describe("Nueva posición Y."),
+        }).describe("Mueve un dispositivo a nuevas coordenadas. Modifica el laboratorio."),
         z.object({
           op: z.literal("ports"),
-          device: z.string().min(1),
-          refresh: z.boolean().default(false),
-        }),
+          device: z.string().min(1).describe("Nombre exacto del dispositivo."),
+          refresh: z.boolean().default(false).describe("Forzar refresco desde Packet Tracer en lugar de usar caché."),
+        }).describe("Lista los puertos disponibles de un dispositivo. Read-only."),
         z.object({
           op: z.literal("module_slots"),
-          device: z.string().min(1),
-        }),
+          device: z.string().min(1).describe("Nombre exacto del dispositivo."),
+        }).describe("Lista los slots de módulo disponibles en un dispositivo. Read-only."),
         z.object({
           op: z.literal("module_add"),
-          device: z.string().min(1),
-          module: z.string().min(1),
-          slot: z.union([z.literal("auto"), z.number().int().min(0)]).default("auto"),
-        }),
+          device: z.string().min(1).describe("Nombre exacto del dispositivo."),
+          module: z.string().min(1).describe("Nombre del módulo a insertar, ej: 'HWIC-4ESW', 'NIM-2T'."),
+          slot: z.union([z.literal("auto"), z.number().int().min(0)]).default("auto").describe("Número de slot o 'auto' para el primer slot disponible."),
+        }).describe("Agrega un módulo a un slot del dispositivo. Modifica el laboratorio."),
         z.object({
           op: z.literal("module_remove"),
-          device: z.string().min(1),
-          slot: z.number().int().min(0),
-        }),
+          device: z.string().min(1).describe("Nombre exacto del dispositivo."),
+          slot: z.number().int().min(0).describe("Número de slot del que remover el módulo."),
+        }).describe("Remueve un módulo de un slot. Modifica el laboratorio."),
       ]),
+      outputSchema: DeviceOutputSchema,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,

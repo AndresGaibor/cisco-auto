@@ -8,14 +8,24 @@ import {
 } from "./ios-retry-policy.js";
 
 describe("ios-retry-policy", () => {
-  test("isRetryableReadOnlyIosCommand solo permite show version por ahora", () => {
+  test("isRetryableReadOnlyIosCommand acepta comandos show/ping/traceroute/dir", () => {
     expect(isRetryableReadOnlyIosCommand("show version")).toBe(true);
     expect(isRetryableReadOnlyIosCommand("  SHOW   VERSION  ")).toBe(true);
+    expect(isRetryableReadOnlyIosCommand("show clock")).toBe(true);
+    expect(isRetryableReadOnlyIosCommand("show vlan brief")).toBe(true);
+    expect(isRetryableReadOnlyIosCommand("show ip interface brief")).toBe(true);
+    expect(isRetryableReadOnlyIosCommand("show running-config")).toBe(true);
+    expect(isRetryableReadOnlyIosCommand("ping 192.168.1.1")).toBe(true);
+    expect(isRetryableReadOnlyIosCommand("traceroute 192.168.1.1")).toBe(true);
+    expect(isRetryableReadOnlyIosCommand("dir flash:")).toBe(true);
 
-    expect(isRetryableReadOnlyIosCommand("show ip interface brief")).toBe(false);
-    expect(isRetryableReadOnlyIosCommand("show running-config")).toBe(false);
     expect(isRetryableReadOnlyIosCommand("configure terminal")).toBe(false);
     expect(isRetryableReadOnlyIosCommand("interface f0/1")).toBe(false);
+    expect(isRetryableReadOnlyIosCommand("write memory")).toBe(false);
+    expect(isRetryableReadOnlyIosCommand("copy running-config startup-config")).toBe(false);
+    expect(isRetryableReadOnlyIosCommand("clear counters")).toBe(false);
+    expect(isRetryableReadOnlyIosCommand("debug ip packet")).toBe(false);
+    expect(isRetryableReadOnlyIosCommand("")).toBe(false);
   });
 
   test("getRuntimeErrorCode lee error code desde error directo", () => {
@@ -122,7 +132,7 @@ describe("ios-retry-policy", () => {
           output: "",
           rawOutput: "",
         },
-        "show running-config",
+        "reload",
       ),
     ).toBe(false);
   });
@@ -144,7 +154,7 @@ describe("ios-retry-policy", () => {
         },
       },
       {
-        reason: "empty_show_version_timeout",
+        reason: "empty_terminal_timeout",
         attempts: 2,
         retryDelayMs: 350,
         firstRuntimeResult: {
@@ -182,7 +192,7 @@ describe("ios-retry-policy", () => {
         },
       },
       retry: {
-        reason: "empty_show_version_timeout",
+        reason: "empty_terminal_timeout",
         attempts: 2,
         retryDelayMs: 350,
         firstErrorCode: "JOB_TIMEOUT",
@@ -207,8 +217,82 @@ describe("ios-retry-policy", () => {
     expect(result.warnings).toEqual(
       expect.arrayContaining([
         "Se filtró el eco del comando (1 línea/s).",
-        "Se reintentó el comando IOS por timeout recuperable (JOB_TIMEOUT).",
+        "IOS_EMPTY_TIMEOUT_RETRY: se reintentó el comando IOS de solo lectura por timeout vacío recuperable (JOB_TIMEOUT).",
       ]),
     );
+  });
+
+  test("isRecoverableEmptyTerminalTimeout acepta JOB_TIMEOUT vacío para show clock", () => {
+    expect(
+      isRecoverableEmptyTerminalTimeout(
+        {
+          ok: false,
+          error: { code: "JOB_TIMEOUT" },
+          output: "",
+          rawOutput: "",
+        },
+        "show clock",
+      ),
+    ).toBe(true);
+  });
+
+  test("isRecoverableEmptyTerminalTimeout acepta JOB_TIMEOUT vacío para show vlan brief", () => {
+    expect(
+      isRecoverableEmptyTerminalTimeout(
+        {
+          ok: false,
+          error: { code: "JOB_TIMEOUT" },
+          evidence: {
+            pollValue: {
+              code: "JOB_TIMEOUT",
+              output: "",
+              raw: "",
+            },
+          },
+        },
+        "show vlan brief",
+      ),
+    ).toBe(true);
+  });
+
+  test("isRecoverableEmptyTerminalTimeout rechaza comandos IOS de configuración", () => {
+    expect(
+      isRecoverableEmptyTerminalTimeout(
+        {
+          ok: false,
+          error: { code: "JOB_TIMEOUT" },
+          output: "",
+          rawOutput: "",
+        },
+        "configure terminal\nhostname SW1",
+      ),
+    ).toBe(false);
+  });
+
+  test("isRecoverableEmptyTerminalTimeout rechaza comandos destructivos", () => {
+    expect(
+      isRecoverableEmptyTerminalTimeout(
+        {
+          ok: false,
+          error: { code: "JOB_TIMEOUT" },
+          output: "",
+          rawOutput: "",
+        },
+        "write memory",
+      ),
+    ).toBe(false);
+  });
+
+  test("isRecoverableEmptyTerminalTimeout rechaza output útil de show clock", () => {
+    expect(
+      isRecoverableEmptyTerminalTimeout(
+        {
+          ok: false,
+          error: { code: "JOB_TIMEOUT" },
+          output: "Router>show clock\n*1:00:00 UTC",
+        },
+        "show clock",
+      ),
+    ).toBe(false);
   });
 });

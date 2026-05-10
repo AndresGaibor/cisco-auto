@@ -85,7 +85,7 @@ describe("terminal-plan-builder", () => {
     expect(plan.targetMode).toBe("privileged-exec");
   });
 
-  test("buildUniversalTerminalPlan inserta enable para show IOS sin desactivar pager", () => {
+  test("buildUniversalTerminalPlan inserta enable y pager suppression para show IOS", () => {
     const plan = buildUniversalTerminalPlan({
       id: "ios-privileged",
       device: "R1",
@@ -98,6 +98,8 @@ describe("terminal-plan-builder", () => {
     expect(plan.steps.map((step: TerminalPlanStep) => step.kind)).toEqual([
       "ensureMode",
       "command",
+      "command",
+      "command",
     ]);
     expect(plan.steps[0]).toMatchObject({
       kind: "ensureMode",
@@ -105,11 +107,21 @@ describe("terminal-plan-builder", () => {
     });
     expect(plan.steps[1]).toMatchObject({
       kind: "command",
+      command: "terminal length 0",
+      optional: true,
+    });
+    expect(plan.steps[2]).toMatchObject({
+      kind: "command",
+      command: "terminal width 512",
+      optional: true,
+    });
+    expect(plan.steps[3]).toMatchObject({
+      kind: "command",
       command: "show running-config",
     });
   });
 
-  test("buildUniversalTerminalPlan no inserta terminal length 0 para show IOS", () => {
+  test("buildUniversalTerminalPlan inserta terminal length 0 para show running-config", () => {
     const plan = buildUniversalTerminalPlan({
       id: "ios-show",
       device: "R1",
@@ -121,6 +133,8 @@ describe("terminal-plan-builder", () => {
     expect(plan.steps.map((step: TerminalPlanStep) => step.kind)).toEqual([
       "ensureMode",
       "command",
+      "command",
+      "command",
     ]);
     expect(plan.steps[0]).toMatchObject({
       kind: "ensureMode",
@@ -128,12 +142,21 @@ describe("terminal-plan-builder", () => {
     });
     expect(plan.steps[1]).toMatchObject({
       kind: "command",
+      command: "terminal length 0",
+      optional: true,
+    });
+    expect(plan.steps[2]).toMatchObject({
+      kind: "command",
+      command: "terminal width 512",
+      optional: true,
+    });
+    expect(plan.steps[3]).toMatchObject({
+      kind: "command",
       command: "show running-config",
-      allowPager: true,
     });
   });
 
-  test("prepara show interfaces con budget largo sin terminal length 0", () => {
+  test("prepara show interfaces con budget largo y pager suppression", () => {
     const plan = buildUniversalTerminalPlan({
       id: "plan-show-interfaces",
       device: "SW1",
@@ -149,13 +172,14 @@ describe("terminal-plan-builder", () => {
     });
     expect(plan.policies?.maxPagerAdvances).toBe(120);
     expect(plan.steps.map((step: TerminalPlanStep) => step.command ?? step.expectMode)).toEqual([
+      "terminal length 0",
+      "terminal width 512",
       "show interfaces",
     ]);
-    expect(plan.steps[0]).toMatchObject({
+    expect(plan.steps[2]).toMatchObject({
       kind: "command",
       command: "show interfaces",
       timeout: 90000,
-      allowPager: true,
     });
   });
 
@@ -238,9 +262,13 @@ describe("terminal-plan-builder", () => {
     expect(plan.metadata?.autoConfig).toBe(false);
     expect(plan.steps.map((step: TerminalPlanStep) => step.command ?? step.expectMode)).toEqual([
       "privileged-exec",
+      "terminal length 0",
+      "terminal width 512",
       "show running-config",
     ]);
   });
+
+  const longShowCommands = ["show startup-config", "show tech-support"];
 
   for (const command of [
     "show startup-config",
@@ -263,6 +291,9 @@ describe("terminal-plan-builder", () => {
         timeoutMs: 12000,
       });
 
+      const isLongShow = longShowCommands.includes(command);
+      const commandStepIndex = isLongShow ? 3 : 1;
+
       expect(plan.metadata?.autoConfig).toBe(false);
       expect(plan.targetMode).toBe("privileged-exec");
       expect(plan.steps[0]).toMatchObject({
@@ -272,7 +303,21 @@ describe("terminal-plan-builder", () => {
           reason: "auto-enable-for-privileged-ios-command",
         },
       });
-      expect(plan.steps[1]).toMatchObject({
+
+      if (isLongShow) {
+        expect(plan.steps[1]).toMatchObject({
+          kind: "command",
+          command: "terminal length 0",
+          optional: true,
+        });
+        expect(plan.steps[2]).toMatchObject({
+          kind: "command",
+          command: "terminal width 512",
+          optional: true,
+        });
+      }
+
+      expect(plan.steps[commandStepIndex]).toMatchObject({
         kind: "command",
         command,
       });
@@ -283,11 +328,10 @@ describe("terminal-plan-builder", () => {
           stallTimeoutMs: 25000,
         });
         expect(plan.policies?.maxPagerAdvances).toBe(120);
-        expect(plan.steps[1]).toMatchObject({
+        expect(plan.steps[commandStepIndex]).toMatchObject({
           kind: "command",
           command,
           timeout: 90000,
-          allowPager: true,
         });
       }
 
@@ -311,10 +355,28 @@ describe("terminal-plan-builder", () => {
     });
 
     expect(plan.metadata?.autoConfig).toBe(false);
-    expect(plan.targetMode).toBeUndefined();
     expect(plan.steps.map((step: TerminalPlanStep) => step.command ?? step.expectMode)).toEqual([
       "show running-config",
     ]);
+  });
+
+  test("raw mode no inyecta pager suppression para show vlan brief", () => {
+    const plan = buildUniversalTerminalPlan({
+      id: "test-raw-show-vlan",
+      device: "MLS-CORE-1",
+      deviceKind: "ios",
+      command: "show vlan brief",
+      mode: "raw",
+      timeoutMs: 12000,
+    });
+
+    const rendered = JSON.stringify(plan);
+
+    expect(rendered).toContain("show vlan brief");
+    expect(rendered).not.toContain("terminal length 0");
+    expect(rendered).not.toContain("terminal width 512");
+    expect(plan.targetMode).toBeUndefined();
+    expect(plan.metadata?.autoConfig).toBe(false);
   });
 
   test("show version permanece como comando exec normal sin auto-enable", () => {

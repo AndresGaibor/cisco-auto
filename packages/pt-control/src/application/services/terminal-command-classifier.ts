@@ -101,6 +101,123 @@ export function classifyIosCommand(command: string): CommandProfile {
     return profile;
   }
 
+  if (/^interface range\s+/i.test(cmd)) {
+    profile.intent = "config-submode";
+    profile.expectedMode = "config-if-range";
+    profile.preserveCurrentMode = true;
+    profile.ensurePrivileged = false;
+    profile.risk = "changes-state";
+    return profile;
+  }
+
+  if (cmd === "telephony-service") {
+    profile.intent = "config-submode";
+    profile.expectedMode = "config-telephony";
+    profile.preserveCurrentMode = true;
+    profile.ensurePrivileged = false;
+    profile.risk = "changes-state";
+    return profile;
+  }
+
+  if (/^ephone-dn\s+\d+/i.test(cmd)) {
+    profile.intent = "config-submode";
+    profile.expectedMode = "config-ephone-dn";
+    profile.preserveCurrentMode = true;
+    profile.ensurePrivileged = false;
+    profile.risk = "changes-state";
+    return profile;
+  }
+
+  if (/^ephone\s+\d+/i.test(cmd)) {
+    profile.intent = "config-submode";
+    profile.expectedMode = "config-ephone";
+    profile.preserveCurrentMode = true;
+    profile.ensurePrivileged = false;
+    profile.risk = "changes-state";
+    return profile;
+  }
+
+  if (/^ip\s+dhcp\s+pool\s+\S+/i.test(cmd)) {
+    profile.intent = "config-submode";
+    profile.expectedMode = "dhcp-pool";
+    profile.preserveCurrentMode = true;
+    profile.ensurePrivileged = false;
+    profile.risk = "changes-state";
+    return profile;
+  }
+
+  if (/^ip\s+dhcp\s+(excluded-address|relay|server)/i.test(cmd)) {
+    profile.intent = "config-command";
+    profile.expectedMode = "global-config";
+    profile.preserveCurrentMode = true;
+    profile.ensurePrivileged = false;
+    profile.risk = "changes-state";
+    return profile;
+  }
+
+  if (/^standby\s+/i.test(cmd)) {
+    profile.intent = "config-command";
+    profile.expectedMode = "config-if";
+    profile.preserveCurrentMode = true;
+    profile.ensurePrivileged = false;
+    profile.risk = "changes-state";
+    return profile;
+  }
+
+  if (/^ipv6\s+unicast-routing$/i.test(cmd)) {
+    profile.intent = "config-command";
+    profile.expectedMode = "global-config";
+    profile.preserveCurrentMode = true;
+    profile.ensurePrivileged = false;
+    profile.risk = "changes-state";
+    return profile;
+  }
+
+  if (/^ip\s+helper-address\s+/i.test(cmd)) {
+    profile.intent = "config-command";
+    profile.expectedMode = "config-if";
+    profile.preserveCurrentMode = true;
+    profile.ensurePrivileged = false;
+    profile.risk = "changes-state";
+    return profile;
+  }
+
+  if (/^switchport\s+voice\s+vlan\s+/i.test(cmd)) {
+    profile.intent = "config-command";
+    profile.expectedMode = "config-if";
+    profile.preserveCurrentMode = true;
+    profile.ensurePrivileged = false;
+    profile.risk = "changes-state";
+    return profile;
+  }
+
+  if (/^channel-group\s+\d+\s+mode\s+(active|passive|auto|desirable)/i.test(cmd)) {
+    profile.intent = "config-command";
+    profile.expectedMode = "config-if";
+    profile.preserveCurrentMode = true;
+    profile.ensurePrivileged = false;
+    profile.risk = "changes-state";
+    return profile;
+  }
+
+  if (/^spanning-tree\s+vlan\s+\d+\s+priority\s+/i.test(cmd)) {
+    profile.intent = "config-command";
+    profile.expectedMode = "global-config";
+    profile.preserveCurrentMode = true;
+    profile.ensurePrivileged = false;
+    profile.risk = "changes-state";
+    return profile;
+  }
+
+  if (/^sdm\s+prefer\s+/i.test(cmd)) {
+    profile.intent = "config-command";
+    profile.expectedMode = "global-config";
+    profile.preserveCurrentMode = true;
+    profile.ensurePrivileged = false;
+    profile.risk = "changes-state";
+    return profile;
+  }
+
   if (cmd === "exit") {
     profile.intent = "config-exit";
     profile.preserveCurrentMode = true;

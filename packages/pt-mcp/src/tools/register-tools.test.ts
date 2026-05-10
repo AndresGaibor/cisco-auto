@@ -102,6 +102,63 @@ describe("registerTools", () => {
     expect(configs.size).toBe(expectedTools.length);
   });
 
+  test("todas las tools declaran outputSchema", () => {
+    const { configs } = captureConfigs();
+    const expectedTools = [
+      "pt_status", "pt_app", "pt_project", "pt_device", "pt_link",
+      "pt_cmd_run", "pt_cmd_queue", "pt_omni", "pt_cli",
+    ];
+    for (const name of expectedTools) {
+      const cfg = configs.get(name);
+      expect(cfg).toBeDefined();
+      expect(cfg.outputSchema).toBeDefined();
+    }
+  });
+
+  test("registerTools no elimina outputSchema (no dropOutputSchema)", () => {
+    const { configs } = captureConfigs();
+    for (const name of [
+      "pt_status", "pt_app", "pt_project", "pt_device", "pt_link",
+      "pt_cmd_run", "pt_cmd_queue", "pt_omni", "pt_cli",
+    ]) {
+      const cfg = configs.get(name);
+      expect(cfg).toBeDefined();
+      expect(cfg.outputSchema).toBeDefined();
+    }
+  });
+
+  test("todas las tools tienen metadata intuitiva para agentes", () => {
+    const { configs } = captureConfigs();
+
+    for (const [name, cfg] of configs.entries()) {
+      expect(cfg.title, `${name} debe tener title`).toBeString();
+      expect(cfg.title!.length, `${name} title muy corto`).toBeGreaterThanOrEqual(8);
+
+      expect(cfg.description, `${name} debe tener description`).toBeString();
+      expect(cfg.description!.length, `${name} description muy corta`).toBeGreaterThanOrEqual(120);
+
+      expect(
+        /use|usar|utiliza|diagnostica|ejecuta|gestiona|inspecciona/i.test(cfg.description),
+        `${name} debe decir cuándo usar la tool`,
+      ).toBe(true);
+
+      expect(
+        /read-only|solo lectura|modifica|destructiv|segur|riesgo|fallback|experimental/i.test(cfg.description),
+        `${name} debe declarar seguridad/riesgo`,
+      ).toBe(true);
+
+      expect(cfg.inputSchema, `${name} debe tener inputSchema`).toBeDefined();
+      expect(cfg.outputSchema, `${name} debe tener outputSchema`).toBeDefined();
+    }
+  });
+
+  test("pt_status outputSchema valida respuesta summary", async () => {
+    const { handlers, configs } = captureConfigs();
+    const handler = handlers.get("pt_status")!;
+    const result = await handler({ op: "summary" }) as any;
+    configs.get("pt_status").outputSchema.parse(result.structuredContent);
+  });
+
   test("pt_status tiene annotations correctas (readOnly)", () => {
     const { configs } = captureConfigs();
     expect(configs.get("pt_status")?.annotations).toEqual({
@@ -120,8 +177,8 @@ describe("registerTools", () => {
       idempotentHint: false,
       openWorldHint: false,
     });
-    expect(configs.get("pt_cli")?.description).toContain("FALLBACK TEMPORAL");
-    expect(configs.get("pt_cli")?.description).toContain("No usar para");
+    expect(configs.get("pt_cli")?.description).toContain("Temporary fallback");
+    expect(configs.get("pt_cli")?.description).toContain("Do not use this for");
   });
 
   test("pt_app soporta operaciones paths, status, open, close, restart, wait", () => {

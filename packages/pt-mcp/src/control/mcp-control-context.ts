@@ -13,8 +13,35 @@ import type { RuntimeTerminalPort } from "@cisco-auto/pt-control/ports";
 export interface McpControlContext {
   controller: ReturnType<typeof createDefaultPTController>;
   terminalCommandService: ReturnType<typeof createTerminalCommandService>;
+  deviceKindCache: {
+    get(device: string): string | undefined;
+    set(device: string, kind: string): void;
+    clear(): void;
+  };
   start(): Promise<void>;
   stop(): Promise<void>;
+}
+
+function createDeviceKindCache(ttlMs = 300_000) {
+  const cache = new Map<string, { kind: string; expiresAt: number }>();
+
+  return {
+    get(device: string): string | undefined {
+      const entry = cache.get(device);
+      if (!entry) return undefined;
+      if (Date.now() > entry.expiresAt) {
+        cache.delete(device);
+        return undefined;
+      }
+      return entry.kind;
+    },
+    set(device: string, kind: string): void {
+      cache.set(device, { kind, expiresAt: Date.now() + ttlMs });
+    },
+    clear(): void {
+      cache.clear();
+    },
+  };
 }
 
 function createRuntimeTerminalForMcp(controller: ReturnType<typeof createDefaultPTController>): RuntimeTerminalPort {
@@ -34,9 +61,12 @@ export function createMcpControlContext(): McpControlContext {
     generateId: () => `mcp-cmd-${randomUUID().slice(0, 8)}`,
   });
 
+  const deviceKindCache = createDeviceKindCache();
+
   return {
     controller,
     terminalCommandService,
+    deviceKindCache,
     async start() {
       await controller.start();
     },

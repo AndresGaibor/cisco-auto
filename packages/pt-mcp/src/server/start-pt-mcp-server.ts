@@ -7,6 +7,7 @@ import { NodeStreamableHTTPServerTransport } from "@modelcontextprotocol/node";
 import { createHealthPayload } from "./health.js";
 import { isAllowedOrigin } from "./origin-guard.js";
 import { registerTools } from "../tools/register-tools.js";
+
 import { runPtCli } from "../runner/run-pt-cli.js";
 import { resolvePublicUrl } from "../tailscale/resolve-public-url.js";
 import { createMcpControlContext } from "../control/mcp-control-context.js";
@@ -44,6 +45,10 @@ export async function startPtMcpServer(options: StartPtMcpServerOptions): Promis
   const control = createMcpControlContext();
   await control.start();
 
+  const liveWriter = options.live && options.stderr
+    ? (line: string) => { options.stderr!.write(`${line}\n`); }
+    : undefined;
+
   registerTools({
     server,
     control,
@@ -52,6 +57,8 @@ export async function startPtMcpServer(options: StartPtMcpServerOptions): Promis
     cliEntrypoint: options.cliEntrypoint,
     repoRoot: options.repoRoot,
     defaultTimeoutMs: 120_000,
+    live: options.live,
+    liveWriter,
   });
 
   let funnelProcess: ReturnType<typeof spawn> | null = null;
@@ -77,6 +84,11 @@ export async function startPtMcpServer(options: StartPtMcpServerOptions): Promis
       res.writeHead(403, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: false, error: "origin_denied" }));
       return;
+    }
+
+    const accept = req.headers.accept ?? "";
+    if (!accept.includes("text/event-stream")) {
+      req.headers.accept = accept ? `${accept}, text/event-stream` : "application/json, text/event-stream";
     }
 
     const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });

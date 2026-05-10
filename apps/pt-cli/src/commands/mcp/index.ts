@@ -30,6 +30,9 @@ export function createMcpCommand(options: CreateMcpCommandOptions): Command {
       const host = typeof opts.host === "string" ? opts.host : "127.0.0.1";
       const path = typeof opts.path === "string" ? opts.path : "/mcp";
       const live = opts.live === true;
+      const allowOrigins = Array.isArray(opts.allowOrigin)
+        ? opts.allowOrigin.map(String)
+        : undefined;
 
       const handle = await startPtMcpServer({
         repoRoot: options.repoRoot,
@@ -39,6 +42,7 @@ export function createMcpCommand(options: CreateMcpCommandOptions): Command {
         path,
         commandCatalog: options.commandCatalog,
         autoFunnel: funnel,
+        allowOrigins,
         live,
         stderr: process.stderr,
       });

@@ -1,6 +1,7 @@
 import type { TerminalDeviceKind, RunTerminalCommandOptions } from "@cisco-auto/terminal-contracts";
 import type { RuntimeTerminalPort } from "../../../ports/runtime-terminal-port.js";
 import { buildUniversalTerminalPlan, splitCommandLines } from "../terminal-plan-builder.js";
+import { hasPagerSuppressionSteps, recordTerminalLengthZeroResult, stripPagerSuppressionSteps } from "../terminal-plan-policies.js";
 import { measureServiceAsync, measureServiceSync, type TerminalServiceTimingMap } from "./command-timing-recorder.js";
 import { applyTerminalEvidenceBarrier } from "./terminal-evidence-barrier.js";
 import { createTerminalReadinessChecker, type HeartbeatHealth } from "./terminal-readiness-checker.js";
@@ -126,6 +127,16 @@ export function createIosCommandExecutor(deps: IosCommandExecutorDeps) {
         serviceTimings.runtimeTerminalRetryCount =
           (serviceTimings.runtimeTerminalRetryCount ?? 0) + 1;
 
+        if (typeof runtimeTerminal.ensureSession === "function") {
+          await measureServiceAsync(serviceTimings, "runtimeTerminalRetryEnsureSessionMs", async () => {
+            try {
+              await runtimeTerminal.ensureSession(device);
+            } catch {
+              // Best-effort recovery: retry still proceeds because some PT sessions recover lazily.
+            }
+          });
+        }
+
         await measureServiceAsync(serviceTimings, "runtimeTerminalRetryDelayMs", () =>
           sleep(retryDelayMs),
         );
@@ -134,11 +145,80 @@ export function createIosCommandExecutor(deps: IosCommandExecutorDeps) {
         const retryResult = (await runPlan(retryPlan, "runtimeTerminalRetryRunPlanMs")) as any;
 
         runtimeResult = attachRuntimeRetryEvidence(retryResult, {
-          reason: "empty_show_version_timeout",
+          reason: "empty_terminal_timeout",
           attempts: 2,
           firstRuntimeResult: runtimeResult,
           retryDelayMs,
         });
+      }
+
+      if (!runtimeResult.ok && hasPagerSuppressionSteps(plan.steps)) {
+        recordTerminalLengthZeroResult(device, false);
+
+        const retryPlan = measureServiceSync(serviceTimings, "buildIosPlanNoPagerMs", () =>
+          buildUniversalTerminalPlan({
+            id: deps.generateId(),
+            device,
+            command,
+            deviceKind: "ios",
+            mode: options?.mode,
+            allowConfirm: options?.allowConfirm,
+            allowDestructive: options?.allowDestructive,
+            timeoutMs: executionTimeout,
+          }),
+        );
+        retryPlan.steps = stripPagerSuppressionSteps(retryPlan.steps);
+
+        const retryResult = (await runPlan(retryPlan, "runtimeTerminalRetryRunPlanMs")) as any;
+
+        if (retryResult.ok) {
+          const warnings = [
+            ...(retryResult.warnings ?? []),
+            {
+              code: "IOS_PAGING_PRELUDE_UNSUPPORTED",
+              message: `Device '${device}' rejected 'terminal length 0'; continuing without pager prelude.`,
+              retryable: false,
+            },
+          ];
+
+          const rawOutput = firstString(retryResult.rawOutput, retryResult.output);
+          const barrier = applyTerminalEvidenceBarrier({ command, rawOutput });
+
+          if (barrier.override && barrier.error) {
+            return buildCommandResult({
+              ok: false,
+              action: "ios.exec",
+              device,
+              deviceKind: "ios",
+              command,
+              output: firstString(retryResult.output),
+              rawOutput,
+              status: 1,
+              warnings: [...warnings, ...barrier.error.warnings],
+              evidence: retryResult.evidence,
+              error: {
+                code: barrier.error.code,
+                message: barrier.error.message,
+                phase: "execution",
+              },
+            });
+          }
+
+          return buildCommandResult({
+            ok: true,
+            action: "ios.exec",
+            device,
+            deviceKind: "ios",
+            command,
+            output: firstString(retryResult.output),
+            rawOutput,
+            status: Number(retryResult.status ?? 0),
+            warnings,
+            evidence: retryResult.evidence,
+          });
+        }
+
+        runtimeResult = retryResult;
       }
 
       if (!runtimeResult.ok) {

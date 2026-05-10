@@ -19,6 +19,28 @@ const LONG_OUTPUT_SHOW_COMMAND_TIMEOUT_MS = 90_000;
 const LONG_OUTPUT_SHOW_STALL_TIMEOUT_MS = 25_000;
 const LONG_OUTPUT_SHOW_MAX_PAGER_ADVANCES = 120;
 
+// Cache de capacidades por dispositivo (TTL 10 min)
+const CAPABILITY_CACHE_TTL_MS = 600_000;
+const terminalLengthZeroCache = new Map<string, { supported: boolean; checkedAt: number }>();
+
+export function recordTerminalLengthZeroResult(device: string, supported: boolean): void {
+  terminalLengthZeroCache.set(device, { supported, checkedAt: Date.now() });
+}
+
+export function clearCapabilityCache(): void {
+  terminalLengthZeroCache.clear();
+}
+
+function checkTerminalLengthZeroCache(device: string): boolean | null {
+  const entry = terminalLengthZeroCache.get(device);
+  if (!entry) return null;
+  if (Date.now() - entry.checkedAt > CAPABILITY_CACHE_TTL_MS) {
+    terminalLengthZeroCache.delete(device);
+    return null;
+  }
+  return entry.supported;
+}
+
 export function buildDefaultTerminalTimeouts(timeoutMs?: number): TerminalPlanTimeouts {
   return {
     commandTimeoutMs: timeoutMs ?? 30000,
@@ -102,7 +124,13 @@ export function isLongOutputIosShowCommand(line: string): boolean {
     /^show\s+processes\b/.test(cmd) ||
     /^show\s+spanning-tree\b/.test(cmd) ||
     /^show\s+mac\s+address-table\b/.test(cmd) ||
-    /^show\s+ip\s+route\b/.test(cmd)
+    /^show\s+ip\s+route\b/.test(cmd) ||
+    /^show\s+running-config\b/.test(cmd) ||
+    /^show\s+startup-config\b/.test(cmd) ||
+    /^show\s+vlan\b/.test(cmd) ||
+    /^show\s+standby\b/.test(cmd) ||
+    /^show\s+etherchannel\b/.test(cmd) ||
+    /^show\s+ipv6\s+interface\b/.test(cmd)
   );
 }
 
@@ -147,20 +175,68 @@ export function buildTerminalPoliciesForPlan(
   return policies;
 }
 
+function needsPagerSuppression(line: string): boolean {
+  const cmd = normalizeIosCommand(line);
+  return /^show\s+/i.test(cmd) && isLongOutputIosShowCommand(line);
+}
+
+export function hasPagerSuppressionSteps(steps: TerminalPlanStep[]): boolean {
+  return steps.some((s) => s.metadata?.reason === "suppress-pager");
+}
+
+export function stripPagerSuppressionSteps(steps: TerminalPlanStep[]): TerminalPlanStep[] {
+  return steps.filter((s) => s.metadata?.reason !== "suppress-pager" && s.metadata?.reason !== "set-width");
+}
+
 export function buildExecCommandSteps(
   options: BuildUniversalTerminalPlanOptions,
   lines: string[],
   timeouts: TerminalPlanTimeouts,
 ): TerminalPlanStep[] {
-  return lines.map((line) => {
+  const steps: TerminalPlanStep[] = [];
+
+  for (const line of lines) {
+    if (needsPagerSuppression(line) && options.deviceKind === "ios" && options.mode !== "raw") {
+      const cached = checkTerminalLengthZeroCache(options.device);
+
+      if (cached !== false) {
+        steps.push({
+          kind: "command",
+          command: "terminal length 0",
+          timeout: 10_000,
+          allowPager: false,
+          allowConfirm: false,
+          optional: true,
+          metadata: {
+            internal: true,
+            reason: "suppress-pager",
+          },
+        });
+        steps.push({
+          kind: "command",
+          command: "terminal width 512",
+          timeout: 10_000,
+          allowPager: false,
+          allowConfirm: false,
+          optional: true,
+          metadata: {
+            internal: true,
+            reason: "set-width",
+          },
+        });
+      }
+    }
+
     const longOutputShow = shouldPrepareLongOutputShow(options, lines) && isLongOutputIosShowCommand(line);
 
-    return {
+    steps.push({
       kind: "command" as const,
       command: line,
       timeout: longOutputShow ? timeouts.commandTimeoutMs : options.timeoutMs,
-      allowPager: /^show\s+/i.test(line),
+      allowPager: /^show\s+/i.test(line) && !needsPagerSuppression(line),
       allowConfirm: Boolean(options.allowConfirm),
-    };
-  });
+    });
+  }
+
+  return steps;
 }

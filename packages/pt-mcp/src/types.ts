@@ -62,6 +62,7 @@ export interface StartPtMcpServerOptions {
   allowOrigins?: string[];
   stdout?: NodeJS.WritableStream;
   stderr?: NodeJS.WritableStream;
+  live?: boolean;
 }
 
 export interface PtMcpServerHandle {

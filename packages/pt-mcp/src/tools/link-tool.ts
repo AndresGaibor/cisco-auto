@@ -1,10 +1,11 @@
 import * as z from "zod/v4";
 import type { RegisterToolContext } from "./tool-types.js";
 import { ok, errorToFail } from "./mcp-response.js";
+import { LinkOutputSchema } from "./output-schemas.js";
 
 const endpointSchema = z.object({
-  device: z.string().min(1),
-  port: z.string().min(1),
+  device: z.string().min(1).describe("Nombre del dispositivo, ej: 'Switch0', 'Router1', 'PC0'."),
+  port: z.string().min(1).describe("Nombre del puerto, ej: 'FastEthernet0/1', 'GigabitEthernet0/0'."),
 });
 
 export function registerLinkTool(ctx: RegisterToolContext): void {
@@ -13,50 +14,53 @@ export function registerLinkTool(ctx: RegisterToolContext): void {
   ctx.server.registerTool(
     "pt_link",
     {
-      title: "Packet Tracer link management",
+      title: "Packet Tracer Link/Cable Management",
       description: [
-        "Gestiona cables/enlaces entre dispositivos en Packet Tracer.",
-        "Soporta listar, agregar, remover, verificar y diagnosticar enlaces.",
+        "Lists, verifies, diagnoses, adds, or removes Packet Tracer cables and links.",
+        "Use list/verify/diagnose for topology validation before changing cabling.",
+        "Add/remove operations modify the lab and can break connectivity, so use them only when explicitly requested.",
+        "list, verify, and doctor are read-only; add and remove modify the lab.",
       ].join(" "),
       inputSchema: z.discriminatedUnion("op", [
         z.object({
           op: z.literal("list"),
-          deep: z.boolean().default(false),
-          device: z.string().optional(),
-        }),
+          deep: z.boolean().default(false).describe("Escaneo profundo: datos detallados de cada enlace."),
+          device: z.string().optional().describe("Filtrar enlaces por dispositivo. Si se omite, lista todos."),
+        }).describe("Lista todos los enlaces/cables del laboratorio. Read-only."),
         z.object({
           op: z.literal("suggest"),
-          sourceDevice: z.string().min(1),
-          targetDevice: z.string().min(1),
-        }),
+          sourceDevice: z.string().min(1).describe("Dispositivo origen."),
+          targetDevice: z.string().min(1).describe("Dispositivo destino."),
+        }).describe("Sugiere puertos disponibles para conectar dos dispositivos."),
         z.object({
           op: z.literal("add"),
-          a: endpointSchema,
-          b: endpointSchema,
+          a: endpointSchema.describe("Extremo A del cable."),
+          b: endpointSchema.describe("Extremo B del cable."),
           cableType: z.enum([
             "auto", "straight", "cross", "serial", "console",
             "fiber", "phone", "coaxial", "cable", "usb", "wireless", "roll",
-          ]).default("auto"),
-          verify: z.boolean().default(true),
-        }),
+          ]).default("auto").describe("Tipo de cable. 'auto' elige el tipo adecuado según los puertos."),
+          verify: z.boolean().default(true).describe("Verificar que el enlace se haya creado correctamente."),
+        }).describe("Agrega un cable/enlace entre dos puertos. Modifica el laboratorio."),
         z.object({
           op: z.literal("remove"),
-          a: endpointSchema,
-          b: endpointSchema.optional(),
-          ifExists: z.boolean().default(false),
-          verify: z.boolean().default(true),
-        }),
+          a: endpointSchema.describe("Extremo A del cable a remover."),
+          b: endpointSchema.optional().describe("Extremo B (opcional — si se omite, remueve todos los cables de A)."),
+          ifExists: z.boolean().default(false).describe("Si es true, no falla si el enlace no existe."),
+          verify: z.boolean().default(true).describe("Verificar que el enlace se haya eliminado."),
+        }).describe("Remueve un cable/enlace entre dos puertos. Modifica el laboratorio — destructivo."),
         z.object({
           op: z.literal("verify"),
-          a: endpointSchema,
-          b: endpointSchema,
-        }),
+          a: endpointSchema.describe("Extremo A."),
+          b: endpointSchema.describe("Extremo B."),
+        }).describe("Verifica si existe un enlace entre dos extremos. Read-only."),
         z.object({
           op: z.literal("doctor"),
-          a: endpointSchema,
-          b: endpointSchema.optional(),
-        }),
+          a: endpointSchema.describe("Extremo A."),
+          b: endpointSchema.optional().describe("Extremo B (opcional — si se omite, diagnóstica todos los enlaces de A)."),
+        }).describe("Diagnóstico de conectividad entre extremos. Read-only."),
       ]),
+      outputSchema: LinkOutputSchema,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,

@@ -9,4 +9,6 @@ export interface RegisterToolContext {
   cliEntrypoint: string;
   repoRoot: string;
   defaultTimeoutMs: number;
+  live?: boolean;
+  liveWriter?: (line: string) => void;
 }
