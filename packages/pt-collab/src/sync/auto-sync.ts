@@ -144,6 +144,19 @@ export class AutoSyncService {
       this.captureBaseHashes(this.lastSnapshot);
       // Si ya había configs pre-sesión pendientes, inyectarlas ahora
       this._mergeInitialConfigs();
+
+      // Sembrar el iosLedger con manualCommands del snapshot inicial
+      if (this.lastSnapshot && this.lastSnapshot.manualCommands && this.lastSnapshot.manualCommands.length > 0) {
+        for (const cmd of this.lastSnapshot.manualCommands) {
+          this.accumulatedCommands.push(cmd);
+          this.iosLedger.push({
+            device: cmd.device,
+            command: cmd.command,
+            seq: this.seqCounter++,
+            timestamp: Date.now(),
+          });
+        }
+      }
     } catch {
       // primera poll puede fallar si PT no está listo
     }
@@ -208,6 +221,17 @@ export class AutoSyncService {
 
       if (!this.lastSnapshot) {
         this.lastSnapshot = current;
+        if (current.manualCommands && current.manualCommands.length > 0) {
+          for (const cmd of current.manualCommands) {
+            this.accumulatedCommands.push(cmd);
+            this.iosLedger.push({
+              device: cmd.device,
+              command: cmd.command,
+              seq: this.seqCounter++,
+              timestamp: Date.now(),
+            });
+          }
+        }
         return;
       }
 

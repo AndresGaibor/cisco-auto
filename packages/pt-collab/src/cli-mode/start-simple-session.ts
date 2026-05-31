@@ -30,10 +30,6 @@ export interface StartSimpleSessionOptions {
     addLink(device1: string, port1: string, device2: string, port2: string, linkType?: string): Promise<unknown>;
     removeLink(device: string, port: string): Promise<void>;
     configIos(device: string, commands: string[], options?: { save?: boolean }): Promise<void>;
-    /** Retorna la lista de dispositivos actuales. Disponible en PTController. */
-    listDevices?(): Promise<Array<{ name: string }>>;
-    /** Lee el running-config de un dispositivo. Disponible en PTController. */
-    showRunningConfig?(device: string): Promise<{ raw?: string } | unknown>;
   };
   noOpen?: boolean;
   noClipboard?: boolean;
@@ -110,37 +106,6 @@ export async function startSimpleSession(
       })
     : null;
 
-  // Capturar running configs pre-sesión de todos los dispositivos
-  // para sincronizarlos al primer peer que conecte.
-  let initialDeviceConfigs: Record<string, { runningConfig?: string }> | undefined;
-  if (opts.controller?.listDevices && opts.controller?.showRunningConfig) {
-    try {
-      const devices = await opts.controller.listDevices();
-      const configs: Record<string, { runningConfig?: string }> = {};
-      await Promise.all(
-        devices.map(async (dev) => {
-          try {
-            const result = await opts.controller!.showRunningConfig!(dev.name);
-            const raw =
-              result && typeof result === "object" && "raw" in result
-                ? String((result as { raw?: unknown }).raw ?? "")
-                : "";
-            if (raw.trim().length > 0) {
-              configs[dev.name] = { runningConfig: raw };
-            }
-          } catch {
-            // Si falla un dispositivo, omitirlo silenciosamente
-          }
-        }),
-      );
-      if (Object.keys(configs).length > 0) {
-        initialDeviceConfigs = configs;
-      }
-    } catch {
-      // Captura opcional: si falla, la sesión sigue sin state sync inicial
-    }
-  }
-
   const coordinator = opts.controller && hostClient
     ? new PTSyncCoordinator({
         controller: opts.controller as never,
@@ -151,7 +116,6 @@ export async function startSimpleSession(
         pollIntervalMs: 1500,
         pullInitialCheckpoint: false,
         skipBootstrap: true,
-        initialDeviceConfigs,
       })
     : null;
 

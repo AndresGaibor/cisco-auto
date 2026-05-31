@@ -616,5 +616,70 @@ describe("AutoSyncService", () => {
 
       svc.stop();
     });
+
+    it("peer nuevo recibe manualCommands iniciales (pre-sesión) del host", async () => {
+      const client = createMockClient();
+
+      const initialSnapshot: TopologySnapshot = {
+        timestamp: Date.now(),
+        devices: { R1: { name: "R1", model: "2911" } },
+        links: {},
+        deviceConfigs: {
+          R1: { runningConfig: "hostname R1\n", startupConfig: "" },
+        },
+        manualCommands: [
+          { device: "R1", command: "enable" },
+          { device: "R1", command: "configure terminal" },
+        ],
+      };
+
+      const opts: AutoSyncOptions = {
+        client,
+        fetchSnapshot: async () => initialSnapshot,
+        applyDelta: async () => ({ ok: true, deltaId: "x" } as DeltaApplyResult),
+        roomId: "default",
+        peerId: "host_abc",
+        pollIntervalMs: 10000,
+      };
+
+      const svc = new AutoSyncService(opts);
+      await svc.start();
+      await new Promise((r) => setTimeout(r, 50));
+
+      client._emit("peer.joined", {
+        peer: {
+          peerId: "peer_joined_late",
+          displayName: "Late Peer",
+          role: "peer" as any,
+          connectedAt: new Date().toISOString(),
+          lastSeenAt: new Date().toISOString(),
+          capabilities: [],
+          vector: {},
+          hashes: { deviceHashes: {} },
+        },
+        timestamp: new Date().toISOString(),
+      });
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      const submitMessages = client._sentMessages.filter(
+        (m: unknown) => (m as { type?: string }).type === "delta.submit",
+      );
+
+      // Debe haber enviado el delta de base runningConfig de R1 y otro delta con los manualCommands ("enable", "configure terminal")
+      expect(submitMessages.length).toBeGreaterThanOrEqual(2);
+
+      const r1CmdsDelta = submitMessages.find(
+        (m: unknown) =>
+          (m as { delta?: { payload?: { device?: string; configLines?: string[] } } }).delta?.payload?.device === "R1" &&
+          (m as { delta?: { payload?: { configLines?: string[] } } }).delta?.payload?.configLines?.includes("enable"),
+      ) as { delta?: { payload?: { configLines?: string[] } } } | undefined;
+
+      expect(r1CmdsDelta).toBeDefined();
+      expect(r1CmdsDelta?.delta?.payload?.configLines).toContain("enable");
+      expect(r1CmdsDelta?.delta?.payload?.configLines).toContain("configure terminal");
+
+      svc.stop();
+    });
   });
 });
