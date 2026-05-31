@@ -93,29 +93,33 @@ export async function applyDelta(
               else if (cleanPrompt.endsWith(">")) targetMode = "user-exec";
             }
 
-            await (controller as any).runTerminalPlan({
-              id: "sync_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
-              device: p.device,
-              targetMode: targetMode,
-              steps: p.configLines.map((cmd) => ({
-                kind: "command",
-                command: cmd,
-                allowPager: true,
-                allowConfirm: true,
-              })),
-              timeouts: {
-                commandTimeoutMs: 15000,
-                stallTimeoutMs: 30000,
-              },
-              policies: {
-                autoBreakWizard: true,
-                autoAdvancePager: true,
-                maxPagerAdvances: 50,
-                maxConfirmations: 3,
-                abortOnPromptMismatch: false,
-                abortOnModeMismatch: false,
-              },
-            });
+            let stepIndex = 0;
+            for (const cmd of p.configLines) {
+              await (controller as any).runTerminalPlan({
+                id: "sync_" + Date.now() + "_" + stepIndex + "_" + Math.random().toString(36).slice(2, 7),
+                device: p.device,
+                targetMode: targetMode,
+                steps: [{
+                  kind: "command",
+                  command: cmd,
+                  allowPager: true,
+                  allowConfirm: true,
+                }],
+                timeouts: {
+                  commandTimeoutMs: 15000,
+                  stallTimeoutMs: 30000,
+                },
+                policies: {
+                  autoBreakWizard: true,
+                  autoAdvancePager: true,
+                  maxPagerAdvances: 50,
+                  maxConfirmations: 3,
+                  abortOnPromptMismatch: false,
+                  abortOnModeMismatch: false,
+                },
+              });
+              stepIndex++;
+            }
           } else {
             await controller.configIos(p.device, p.configLines);
           }

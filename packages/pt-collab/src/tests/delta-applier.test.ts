@@ -118,7 +118,7 @@ describe("applyDelta", () => {
     expect(ctrl.calls[0]!.method).toBe("configIos");
   });
 
-  test("device.cli.runningConfig.changed ejecuta cada comando sin ensureMode", async () => {
+  test("device.cli.runningConfig.changed reproduce cada comando manual como plan visible independiente", async () => {
     const receivedPlans: any[] = [];
     const ctrl = new SpyController() as any;
     ctrl.runTerminalPlan = async (plan: any) => {
@@ -126,13 +126,19 @@ describe("applyDelta", () => {
     };
     const delta = makeDelta({
       kind: "device.cli.runningConfig.changed",
-      payload: { device: "R1", configLines: ["hostname R2", "ip routing"] },
+      payload: { device: "R1", configLines: ["enable", "configure terminal", "hostname R2"] },
     });
     await applyDelta(delta, ctrl);
-    expect(receivedPlans).toHaveLength(1);
-    expect(receivedPlans[0]!.steps).toHaveLength(2);
-    expect(receivedPlans[0]!.steps[0]!).toMatchObject({ kind: "command", command: "hostname R2" });
-    expect(receivedPlans[0]!.steps[1]!).toMatchObject({ kind: "command", command: "ip routing" });
+    expect(receivedPlans).toHaveLength(3);
+    expect(receivedPlans.map((plan) => plan.steps[0]?.command)).toEqual([
+      "enable",
+      "configure terminal",
+      "hostname R2",
+    ]);
+    for (const plan of receivedPlans) {
+      expect(plan.steps).toHaveLength(1);
+      expect(plan.steps[0]).toMatchObject({ kind: "command" });
+    }
   });
 
   test("delta desconocido es ok (no-op)", async () => {
