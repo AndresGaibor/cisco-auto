@@ -401,6 +401,7 @@ export function getSourceContext(
 }
 
 function stripModuleSyntax(source: string): string {
+  source = source.replace(/\r\n?/g, "\n"); // Normalize CRLF/CR → LF
   const lines = source.split("\n");
   const result: string[] = [];
   let inImportMultiLine = false;
