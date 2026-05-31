@@ -33,6 +33,7 @@ export interface DiffResult {
   devicesAdded: DiffDevice[];
   devicesRemoved: string[];
   devicesMoved: Array<{ name: string; fromX?: number; fromY?: number; toX?: number; toY?: number }>;
+  devicesRenamed?: Array<{ oldName: string; newName: string; device: DiffDevice }>;
   linksAdded: DiffLink[];
   linksRemoved: string[];
   configsChanged: Array<{ device: string; section: "runningConfig" | "startupConfig" | "xml" }>;
@@ -43,6 +44,7 @@ export function diffSnapshots(before: TopologySnapshot, after: TopologySnapshot)
     devicesAdded: [],
     devicesRemoved: [],
     devicesMoved: [],
+    devicesRenamed: [],
     linksAdded: [],
     linksRemoved: [],
     configsChanged: [],
@@ -51,16 +53,71 @@ export function diffSnapshots(before: TopologySnapshot, after: TopologySnapshot)
   const beforeDeviceNames = new Set(Object.keys(before.devices));
   const afterDeviceNames = new Set(Object.keys(after.devices));
 
-  // dispositivos añadidos
+  // 1. Detect renames first
+  // A device is renamed if:
+  // - It is in before but not in after (would be removed)
+  // - There is another device in after but not in before (would be added)
+  // - They have the SAME model and the SAME coordinates (x, y)
+  const matchedRemoved = new Set<string>();
+  const matchedAdded = new Set<string>();
+  const removedNames = Array.from(beforeDeviceNames).filter(name => !afterDeviceNames.has(name));
+  const addedNames = Array.from(afterDeviceNames).filter(name => !beforeDeviceNames.has(name));
+
+  for (const oldName of removedNames) {
+    const oldDev = before.devices[oldName]!;
+    for (const newName of addedNames) {
+      if (matchedAdded.has(newName)) continue;
+      const newDev = after.devices[newName]!;
+
+      // Check same model and position
+      if (
+        oldDev.model === newDev.model &&
+        oldDev.x !== undefined && newDev.x !== undefined &&
+        oldDev.y !== undefined && newDev.y !== undefined &&
+        Math.abs(oldDev.x - newDev.x) < 0.1 &&
+        Math.abs(oldDev.y - newDev.y) < 0.1
+      ) {
+        result.devicesRenamed!.push({ oldName, newName, device: newDev });
+        matchedRemoved.add(oldName);
+        matchedAdded.add(newName);
+        break;
+      }
+    }
+  }
+
+  // 2. Track links that are just renamed due to device renames to avoid deleting/re-creating them
+  const ignoredLinksRemoved = new Set<string>();
+  const ignoredLinksAdded = new Set<string>();
+
+  if (result.devicesRenamed && result.devicesRenamed.length > 0) {
+    for (const rn of result.devicesRenamed) {
+      // Find links connected to oldName in before
+      for (const [beforeLinkId, beforeLnk] of Object.entries(before.links)) {
+        if (beforeLnk.device1 === rn.oldName || beforeLnk.device2 === rn.oldName) {
+          const d1 = beforeLnk.device1 === rn.oldName ? rn.newName : beforeLnk.device1;
+          const d2 = beforeLnk.device2 === rn.oldName ? rn.newName : beforeLnk.device2;
+          const [endpointA, endpointB] = [`${d1}:${beforeLnk.port1}`, `${d2}:${beforeLnk.port2}`].sort();
+          const expectedAfterId = `${endpointA}--${endpointB}`;
+
+          if (after.links[expectedAfterId]) {
+            ignoredLinksRemoved.add(beforeLinkId);
+            ignoredLinksAdded.add(expectedAfterId);
+          }
+        }
+      }
+    }
+  }
+
+  // dispositivos añadidos (excluding renamed)
   for (const name of afterDeviceNames) {
-    if (!beforeDeviceNames.has(name)) {
+    if (!beforeDeviceNames.has(name) && !matchedAdded.has(name)) {
       result.devicesAdded.push(after.devices[name]!);
     }
   }
 
-  // dispositivos removidos
+  // dispositivos removidos (excluding renamed)
   for (const name of beforeDeviceNames) {
-    if (!afterDeviceNames.has(name)) {
+    if (!afterDeviceNames.has(name) && !matchedRemoved.has(name)) {
       result.devicesRemoved.push(name);
     }
   }
@@ -71,7 +128,6 @@ export function diffSnapshots(before: TopologySnapshot, after: TopologySnapshot)
     const beforeDev = before.devices[name];
     if (beforeDev) {
       if (beforeDev.x !== afterDev.x || beforeDev.y !== afterDev.y) {
-        console.log(`[Sync Debug] MOVEMENT DETECTED for ${name}: before = (${beforeDev.x}, ${beforeDev.y}), after = (${afterDev.x}, ${afterDev.y})`);
         result.devicesMoved.push({
           name,
           fromX: beforeDev.x,
@@ -83,16 +139,16 @@ export function diffSnapshots(before: TopologySnapshot, after: TopologySnapshot)
     }
   }
 
-  // enlaces añadidos
+  // enlaces añadidos (excluding renamed links)
   for (const id of Object.keys(after.links)) {
-    if (!before.links[id]) {
+    if (!before.links[id] && !ignoredLinksAdded.has(id)) {
       result.linksAdded.push(after.links[id]!);
     }
   }
 
-  // enlaces removidos
+  // enlaces removidos (excluding renamed links)
   for (const id of Object.keys(before.links)) {
-    if (!after.links[id]) {
+    if (!after.links[id] && !ignoredLinksRemoved.has(id)) {
       result.linksRemoved.push(id);
     }
   }
@@ -142,6 +198,21 @@ export function diffToDeltas(
       scope: `device:${device.name}` as CollabScope,
       payload: { name: device.name, model: device.model, displayName: device.displayName, x: device.x, y: device.y },
     }));
+  }
+
+  if (diff.devicesRenamed) {
+    for (const rn of diff.devicesRenamed) {
+      deltas.push(makeDelta({
+        seq: seq++,
+        lamport,
+        baseVector: { ...baseVector },
+        roomId,
+        peerId,
+        kind: "topology.device.renamed",
+        scope: `device:${rn.oldName}` as CollabScope,
+        payload: { oldName: rn.oldName, newName: rn.newName },
+      }));
+    }
   }
 
   for (const name of diff.devicesRemoved) {

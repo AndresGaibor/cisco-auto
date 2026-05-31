@@ -52,8 +52,16 @@ export class WebSocketHub {
           delta: msg.delta,
           committedAt: new Date().toISOString(),
         } as CollabWireMessage, ws);
+        // Acknowledge the submit immediately back to the sender
+        this.sendTo(ws, {
+          type: "delta.ack",
+          deltaId: msg.delta.id,
+          peerId: "server",
+          accepted: true,
+        });
         return;
       case "delta.commit":
+      case "delta.ack":
         this.broadcastToRoom(roomId, msg, ws);
         return;
       case "checkpoint.offer":
