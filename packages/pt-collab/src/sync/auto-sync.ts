@@ -110,9 +110,9 @@ export class AutoSyncService {
       });
     });
 
-    this.offPeerLeft = this.opts.client.on("peer.left", (msg) => {
-      this.knownPeerIds.delete(msg.peerId);
-    });
+    // Nota: NO limpiar knownPeerIds en peer.left.
+    // Si el peer reconecta, sigue siendo "conocido" y no necesita state sync.
+    // Si es un peer nuevo, tendrá un peerId diferente y recibirá state sync.
 
     try {
       this.lastSnapshot = await this.opts.fetchSnapshot();
@@ -152,7 +152,6 @@ export class AutoSyncService {
       }
 
       const diff = diffSnapshots(this.lastSnapshot, current);
-      console.log("[Collab Debug] poll diff:", JSON.stringify({ devicesAdded: diff.devicesAdded.length, devicesRemoved: diff.devicesRemoved.length, devicesMoved: diff.devicesMoved.length, linksAdded: diff.linksAdded.length, linksRemoved: diff.linksRemoved.length, configsChanged: diff.configsChanged.length, manualCommands: diff.manualCommands ?? '(empty)' }));
 
       if (diff.manualCommands && diff.manualCommands.length > 0) {
         for (const cmd of diff.manualCommands) {
@@ -173,7 +172,6 @@ export class AutoSyncService {
         { ...this.vector },
       );
 
-      console.log("[Collab Debug] poll deltas generados:", deltas.length, deltas.map(d => ({ kind: d.kind, device: d.payload && typeof d.payload === 'object' ? (d.payload as any).device : '?', hasConfigLines: d.payload && typeof d.payload === 'object' ? Array.isArray((d.payload as any).configLines) : false })));
       if (deltas.length > 0) {
         // Si no estamos conectados, bufferear en lugar de enviar
         if (this.opts.client.getStatus() !== "connected") {

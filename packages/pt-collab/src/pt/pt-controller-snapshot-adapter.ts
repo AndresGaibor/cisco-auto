@@ -98,7 +98,6 @@ export function toCollabSnapshot(raw: unknown): TopologySnapshot {
 
   const manualCommands: Array<{ device: string; command: string }> = [];
   const rawCmds = r.manualCommands;
-  console.log("[Collab Debug] toCollabSnapshot rawCmds:", rawCmds, "type:", typeof rawCmds, "isArray:", Array.isArray(rawCmds), "len:", Array.isArray(rawCmds) ? rawCmds.length : 'N/A');
   if (Array.isArray(rawCmds)) {
     for (const cmd of rawCmds) {
       if (cmd && typeof cmd === "object") {

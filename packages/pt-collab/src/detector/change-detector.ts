@@ -52,8 +52,7 @@ export function diffSnapshots(before: TopologySnapshot, after: TopologySnapshot)
     configsChanged: [],
     manualCommands: after.manualCommands ? [...after.manualCommands] : undefined,
   };
-  console.log("[Collab Debug] diffSnapshots after.manualCommands:", after.manualCommands, "result.manualCommands:", result.manualCommands);
-
+ 
   const beforeDeviceNames = new Set(Object.keys(before.devices));
   const afterDeviceNames = new Set(Object.keys(after.devices));
 
