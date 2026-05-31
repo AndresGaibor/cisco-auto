@@ -42,4 +42,9 @@ export class ProjectService {
   async snapshotClear(snapshotId: string): Promise<void> {
     await this.bridge.sendCommandAndWait("__projectSnapshotClear", { snapshotId }, this.timeoutMs);
   }
+
+  async open(path: string): Promise<{ ok: boolean; before: string; after: string; requestedPath: string }> {
+    const result = await this.bridge.sendCommandAndWait("__projectOpen", { path }, this.timeoutMs);
+    return unwrapParsed(result);
+  }
 }

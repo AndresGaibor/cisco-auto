@@ -1,10 +1,10 @@
 import { CollabClient } from "../client/collab-client.js";
 import { AutoSyncService } from "../sync/auto-sync.js";
 import { PTSyncCoordinator } from "../sync/pt-sync-coordinator.js";
+import { bootstrapLatestCheckpoint, type BootstrapResult } from "../checkpoint/bootstrap-checkpoint.js";
 import { readClientConfig, updateClientUrl, resetClientUrl } from "../storage/client-config-store.js";
 import { writeSessionFile, deleteSessionFile } from "../storage/session-store.js";
 import type { CollabClientOptions, CollabClientStatus } from "../client/collab-client.js";
-import type { TopologySnapshot } from "../detector/change-detector.js";
 
 export interface ConnectSimpleSessionOptions {
   url?: string;
@@ -31,6 +31,7 @@ export interface ConnectSimpleSessionResult {
   client: CollabClient;
   sync?: AutoSyncService;
   coordinator?: PTSyncCoordinator;
+  bootstrap?: BootstrapResult;
   peerId: string;
   url: string;
   close(): Promise<void>;
@@ -68,6 +69,29 @@ export async function connectSimpleSession(
     );
   }
 
+  let bootstrap: BootstrapResult | undefined;
+
+  if (opts.controller) {
+    await opts.controller.start();
+
+    if (opts.controller.project?.open) {
+      bootstrap = await bootstrapLatestCheckpoint({
+        checkpointBaseUrl: url,
+        controller: opts.controller as { project?: { open(path: string, options?: { wait?: boolean; waitTimeoutMs?: number }): Promise<unknown> } },
+      });
+
+      if (!bootstrap.opened) {
+        await opts.controller.stop().catch(() => {});
+        const detail = bootstrap.error ?? "unknown";
+        const tempInfo = bootstrap.tempPath ? `\nArchivo temporal: ${bootstrap.tempPath}` : "";
+        throw new Error(
+          `No se pudo abrir el checkpoint inicial.\n` +
+          `Detalle: ${detail}${tempInfo}`,
+        );
+      }
+    }
+  }
+
   const client = await connectWithTimeout({
     url,
     peerId,
@@ -85,6 +109,9 @@ export async function connectSimpleSession(
         roomId: "default",
         checkpointBaseUrl: url,
         pollIntervalMs: opts.pollIntervalMs,
+        pullInitialCheckpoint: false,
+        skipBootstrap: true,
+        bootstrapResult: bootstrap,
       })
     : null;
 
@@ -102,6 +129,7 @@ export async function connectSimpleSession(
   return {
     client,
     coordinator: coordinator ?? undefined,
+    bootstrap,
     peerId: client.peerId,
     url,
     async close() {

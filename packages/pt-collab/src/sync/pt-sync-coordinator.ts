@@ -2,20 +2,10 @@ import type { CollabClient } from "../client/collab-client.js";
 import { AutoSyncService, type SnapshotFetcher } from "./auto-sync.js";
 import type { PTControllerPort, DeltaApplyResult } from "../applier/delta-applier.js";
 import { applyDelta } from "../applier/delta-applier.js";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { toCollabSnapshot } from "../pt/pt-controller-snapshot-adapter.js";
+import { bootstrapLatestCheckpoint, type BootstrapResult } from "../checkpoint/bootstrap-checkpoint.js";
 
-export interface BootstrapResult {
-  checked: boolean;
-  checkpointId?: string;
-  downloaded?: boolean;
-  opened?: boolean;
-  tempPath?: string;
-  sha256?: string;
-  error?: string;
-}
+export { type BootstrapResult };
 
 export interface PTSyncCoordinatorOptions {
   controller: PTControllerPort & {
@@ -35,6 +25,7 @@ export interface PTSyncCoordinatorOptions {
   onError?: (error: Error) => void;
   pullInitialCheckpoint?: boolean;
   skipBootstrap?: boolean;
+  bootstrapResult?: BootstrapResult;
 }
 
 export interface PTSyncCoordinatorStatus {
@@ -47,9 +38,11 @@ export interface PTSyncCoordinatorStatus {
 export class PTSyncCoordinator {
   private sync: AutoSyncService | null = null;
   private started = false;
-  private _bootstrap: BootstrapResult = { checked: false };
+  private _bootstrap: BootstrapResult;
 
-  constructor(private readonly opts: PTSyncCoordinatorOptions) {}
+  constructor(private readonly opts: PTSyncCoordinatorOptions) {
+    this._bootstrap = opts.bootstrapResult ?? { checked: false };
+  }
 
   async start(): Promise<void> {
     if (this.started) return;
@@ -58,10 +51,14 @@ export class PTSyncCoordinator {
     await this.opts.controller.start();
 
     if (!this.opts.skipBootstrap && this.opts.checkpointBaseUrl && this.opts.controller.project?.open) {
-      if (this.opts.pullInitialCheckpoint !== false) {
-        await this.bootstrapLatestCheckpoint().catch((error) => {
-          this.opts.onError?.(error instanceof Error ? error : new Error(String(error)));
-        });
+      if (this.opts.pullInitialCheckpoint !== false && !this.opts.bootstrapResult) {
+        this._bootstrap = await bootstrapLatestCheckpoint({
+          checkpointBaseUrl: this.opts.checkpointBaseUrl,
+          controller: this.opts.controller as { project?: { open(path: string, options?: { wait?: boolean; waitTimeoutMs?: number }): Promise<unknown> } },
+        }).catch((error) => ({
+          checked: true,
+          error: error instanceof Error ? error.message : String(error),
+        } as BootstrapResult));
       }
     }
 
@@ -99,54 +96,5 @@ export class PTSyncCoordinator {
 
   getBootstrapResult(): BootstrapResult {
     return { ...this._bootstrap };
-  }
-
-  private async bootstrapLatestCheckpoint(): Promise<void> {
-    if (!this.opts.checkpointBaseUrl || !this.opts.controller.project?.open) return;
-
-    const latestUrl = `${this.opts.checkpointBaseUrl.replace(/\/?$/, "")}/checkpoint/latest`;
-    let res: Response;
-    try {
-      res = await fetch(latestUrl);
-    } catch {
-      this._bootstrap = { checked: true, error: `No se pudo acceder a ${latestUrl}` };
-      return;
-    }
-    if (!res.ok) {
-      this._bootstrap = { checked: true, error: `HTTP ${res.status} al consultar checkpoint/latest` };
-      return;
-    }
-
-    const body = await res.json() as { ok?: boolean; checkpointId?: string | null; sha256?: string; byteSize?: number };
-    if (!body.ok || !body.checkpointId) {
-      this._bootstrap = { checked: true, error: "No hay checkpoint disponible en el servidor" };
-      return;
-    }
-
-    this._bootstrap = { checked: true, checkpointId: body.checkpointId, sha256: body.sha256 ?? undefined };
-
-    const pktRes = await fetch(`${this.opts.checkpointBaseUrl.replace(/\/?$/, "")}/checkpoint/${body.checkpointId}`);
-    if (!pktRes.ok) {
-      this._bootstrap.downloaded = false;
-      this._bootstrap.error = `No se pudo descargar checkpoint ${body.checkpointId}: HTTP ${pktRes.status}`;
-      return;
-    }
-
-    this._bootstrap.downloaded = true;
-    const bytes = new Uint8Array(await pktRes.arrayBuffer());
-    const tempDir = join(tmpdir(), "pt-collab-bootstrap");
-    mkdirSync(tempDir, { recursive: true });
-    const tempPath = join(tempDir, `${body.checkpointId}.pkt`);
-    writeFileSync(tempPath, bytes);
-    this._bootstrap.tempPath = tempPath;
-
-    const openResult = await this.opts.controller.project.open(tempPath, { wait: true, waitTimeoutMs: 60_000 }) as { ok?: boolean; error?: string } | undefined;
-    if (!openResult?.ok) {
-      this._bootstrap.opened = false;
-      this._bootstrap.error = `No se pudo abrir checkpoint ${body.checkpointId}: ${openResult?.error ?? "unknown"}`;
-      return;
-    }
-
-    this._bootstrap.opened = true;
   }
 }

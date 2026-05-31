@@ -170,7 +170,9 @@ export class PacketTracerAppService {
       }
       if (options.activeFile) {
         const status = await this.projectService.status().catch(() => null);
-        if (status?.activeFile === options.activeFile) {
+        const normActual = (status?.activeFile ?? "").replace(/\\/g, "/").replace(/\/+/g, "/").toLowerCase();
+        const normExpected = options.activeFile.replace(/\\/g, "/").replace(/\/+/g, "/").toLowerCase();
+        if (normActual === normExpected) {
           return { ok: true };
         }
       }

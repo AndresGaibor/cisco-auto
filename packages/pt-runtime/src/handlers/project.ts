@@ -123,3 +123,34 @@ export function handleProjectSnapshotClear(payload: Record<string, unknown>, api
   }
   return okResult("", { parsed: { ok: true, snapshotId } });
 }
+
+export function handleProjectOpen(payload: Record<string, unknown>, api: any): RuntimeResult {
+  try {
+    const aw = getAppWindow(api);
+    if (!aw || typeof aw.fileOpen !== "function") {
+      return errorResult("fileOpen no disponible", { code: "PROJECT_OPEN_UNAVAILABLE" });
+    }
+
+    const path = String(payload.path || "");
+    if (!path || !path.toLowerCase().endsWith(".pkt")) {
+      return errorResult("Ruta .pkt inválida", { code: "PROJECT_OPEN_INVALID_PATH" });
+    }
+
+    const before = getSavedFilename(getActiveFile(aw));
+    aw.fileOpen(path);
+    const after = getSavedFilename(getActiveFile(aw));
+
+    return okResult("", {
+      parsed: {
+        ok: true,
+        before,
+        after,
+        requestedPath: path,
+      },
+    });
+  } catch (error) {
+    return errorResult(String(error instanceof Error ? error.message : error), {
+      code: "PROJECT_OPEN_FAILED",
+    });
+  }
+}

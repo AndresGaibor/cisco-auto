@@ -12,10 +12,13 @@ export class PacketTracerProcessService {
       return { ok: true };
     }
     if (platform === "win32") {
-      const args = pktPath
-        ? `-NoExit -Command "Start-Process '${appPath}' -ArgumentList '${pktPath}'"`
-        : `-NoExit -Command "Start-Process '${appPath}'"`;
-      await this.port.spawn("powershell", ["-Command", args]);
+      function psQuote(value: string): string {
+        return `'${value.replace(/'/g, "''")}'`;
+      }
+      const script = pktPath
+        ? `Start-Process -FilePath ${psQuote(appPath)} -ArgumentList ${psQuote(pktPath)}`
+        : `Start-Process -FilePath ${psQuote(appPath)}`;
+      await this.port.spawn("powershell", ["-NoProfile", "-Command", script]);
       return { ok: true };
     }
     return { ok: false };
@@ -61,10 +64,19 @@ export class PacketTracerProcessService {
       return result.exitCode === 0;
     }
     if (platform === "win32") {
-      const result = await this.port.spawn("powershell", [
-        "-Command",
-        `Get-Process -Name "${appName}" -ErrorAction SilentlyContinue | Measure-Object | Select-Object -ExpandProperty Count`,
-      ]);
+      const names = [
+        appName,
+        "PacketTracer",
+        "Cisco Packet Tracer",
+        "CiscoPacketTracer",
+      ];
+      const psNames = names.map((n) => `'${n}'`).join(",");
+      const script =
+        `$names=@(${psNames}); ` +
+        `$count=0; foreach($n in $names){ ` +
+        `$count += (Get-Process -Name $n -ErrorAction SilentlyContinue | Measure-Object).Count ` +
+        `}; $count`;
+      const result = await this.port.spawn("powershell", ["-NoProfile", "-Command", script]);
       return result.stdout.trim() !== "0";
     }
     return false;

@@ -9,6 +9,7 @@ describe("RecoveryService", () => {
     let appOpenCalled = false;
     let appOpenPath = "";
     const mockAppService = {
+      status: async () => ({ process: { level: "stopped", pid: null, pidFile: null, lastHeartbeat: null, lastStatus: "unknown" }, runtime: { loaded: false, mainJs: null, mainJsExists: false, runtimeJs: null, runtimeJsExists: false }, project: { hasActiveFile: false, activeFile: null } }),
       open: async (path: string) => { appOpenCalled = true; appOpenPath = path; return { ok: true }; },
       paths: async () => ({ platform: "darwin", candidates: [], selected: "/Applications/PT.app", source: "known-path" as const }),
     };

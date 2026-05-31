@@ -1,4 +1,4 @@
-import type { DiffDevice, DiffLink, DeviceConfigSnapshot, TopologySnapshot } from "./change-detector.js";
+import type { DiffDevice, DiffLink, TopologySnapshot } from "../detector/change-detector.js";
 
 export function toCollabSnapshot(raw: unknown): TopologySnapshot {
   if (!raw || typeof raw !== "object") {

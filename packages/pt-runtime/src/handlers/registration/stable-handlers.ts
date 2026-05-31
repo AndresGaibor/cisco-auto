@@ -67,6 +67,7 @@ import {
   handleProjectSnapshotBegin,
   handleProjectSnapshotRead,
   handleProjectSnapshotClear,
+  handleProjectOpen,
 } from "../project.js";
 
 let stableHandlersRegistered = false;
@@ -152,4 +153,5 @@ export function registerStableRuntimeHandlers(): void {
   registerHandler("__projectSnapshotBegin", handleProjectSnapshotBegin as unknown as HandlerFn);
   registerHandler("__projectSnapshotRead", handleProjectSnapshotRead as unknown as HandlerFn);
   registerHandler("__projectSnapshotClear", handleProjectSnapshotClear as unknown as HandlerFn);
+  registerHandler("__projectOpen", handleProjectOpen as unknown as HandlerFn);
 }

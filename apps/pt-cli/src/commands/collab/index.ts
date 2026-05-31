@@ -202,16 +202,28 @@ function createConnectCommand(): Command {
           syncLine += " pendientes";
         }
 
+        function formatBootstrapLine(b: typeof bootstrap): string {
+          if (!b?.checked) return "Checkpoint inicial: pendiente";
+          if (!b.checkpointId) return `Checkpoint inicial: no disponible${b.error ? ` (${b.error})` : ""}`;
+          if (b.opened) return `Checkpoint inicial: abierto ${b.checkpointId}`;
+          if (b.downloaded) return `Checkpoint inicial: descargado pero NO abierto ${b.checkpointId}`;
+          return `Checkpoint inicial: error ${b.checkpointId}: ${b.error ?? "unknown"}`;
+        }
+
         process.stdout.write(
           `Conectado a PT Collab.\n` +
-          `Checkpoint inicial: ${bootstrap?.checkpointId ? `abierto ${bootstrap.checkpointId}` : bootstrap?.error ? `error: ${bootstrap.error}` : "no disponible"}\n` +
+          `${formatBootstrapLine(bootstrap)}\n` +
           `Peers: ${client.peers.length}\n` +
           `${syncLine}\n` +
           `Conflictos: 0\n`,
         );
 
         if (bootstrap?.error && !bootstrap.opened) {
-          process.stderr.write(`Advertencia: no se pudo abrir el checkpoint inicial. La sincronización puede no funcionar correctamente.\n`);
+          process.stderr.write(
+            `Advertencia: no se pudo abrir el checkpoint inicial.\n` +
+            `Detalle: ${bootstrap.error}\n` +
+            (bootstrap.tempPath ? `Temp: ${bootstrap.tempPath}\n` : ""),
+          );
         }
 
         process.on("SIGINT", () => {
