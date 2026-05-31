@@ -5,6 +5,7 @@ export interface TailscaleStatus {
   loggedIn: boolean;
   selfIp?: string;
   hostname?: string;
+  dnsName?: string;
   error?: string;
 }
 
@@ -23,6 +24,7 @@ export async function checkTailscaleStatus(): Promise<TailscaleStatus> {
       loggedIn: !!self,
       selfIp: self?.TailscaleIPs?.[0],
       hostname: self?.HostName,
+      dnsName: self?.DNSName,
     };
   } catch {
     return { available: false, loggedIn: false, error: "tailscale no instalado" };
