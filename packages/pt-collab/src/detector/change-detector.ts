@@ -96,12 +96,30 @@ export function diffSnapshots(before: TopologySnapshot, after: TopologySnapshot)
         if (beforeLnk.device1 === rn.oldName || beforeLnk.device2 === rn.oldName) {
           const d1 = beforeLnk.device1 === rn.oldName ? rn.newName : beforeLnk.device1;
           const d2 = beforeLnk.device2 === rn.oldName ? rn.newName : beforeLnk.device2;
-          const [endpointA, endpointB] = [`${d1}:${beforeLnk.port1}`, `${d2}:${beforeLnk.port2}`].sort();
-          const expectedAfterId = `${endpointA}--${endpointB}`;
 
-          if (after.links[expectedAfterId]) {
+          // Find matching link in after by comparing endpoints
+          let foundAfterLinkId: string | null = null;
+          for (const [afterLinkId, afterLnk] of Object.entries(after.links)) {
+            const matchNormal =
+              afterLnk.device1 === d1 &&
+              afterLnk.port1 === beforeLnk.port1 &&
+              afterLnk.device2 === d2 &&
+              afterLnk.port2 === beforeLnk.port2;
+            const matchSwapped =
+              afterLnk.device1 === d2 &&
+              afterLnk.port1 === beforeLnk.port2 &&
+              afterLnk.device2 === d1 &&
+              afterLnk.port2 === beforeLnk.port1;
+
+            if (matchNormal || matchSwapped) {
+              foundAfterLinkId = afterLinkId;
+              break;
+            }
+          }
+
+          if (foundAfterLinkId) {
             ignoredLinksRemoved.add(beforeLinkId);
-            ignoredLinksAdded.add(expectedAfterId);
+            ignoredLinksAdded.add(foundAfterLinkId);
           }
         }
       }

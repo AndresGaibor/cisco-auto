@@ -159,4 +159,30 @@ describe("diffToDeltas", () => {
     const diff = diffSnapshots(before, after);
     expect(diff.devicesMoved).toHaveLength(0);
   });
+
+  test("detecta renombrado de dispositivo y preserva sus enlaces", () => {
+    const before = snapshotFromTopology(
+      { PC1: { name: "PC1", model: "PC-PT", x: 120, y: 230 } },
+      { l1: { id: "PC1:FastEthernet0--SW1:FastEthernet0/1", device1: "PC1", port1: "FastEthernet0", device2: "SW1", port2: "FastEthernet0/1" } },
+    );
+    const after = snapshotFromTopology(
+      { PC10: { name: "PC10", model: "PC-PT", x: 120, y: 230 } },
+      { l2: { id: "PC10:FastEthernet0--SW1:FastEthernet0/1", device1: "PC10", port1: "FastEthernet0", device2: "SW1", port2: "FastEthernet0/1" } },
+    );
+
+    const diff = diffSnapshots(before, after);
+    
+    // Debería detectar el renombrado
+    expect(diff.devicesRenamed).toHaveLength(1);
+    expect(diff.devicesRenamed![0]!.oldName).toBe("PC1");
+    expect(diff.devicesRenamed![0]!.newName).toBe("PC10");
+
+    // No debería reportar como agregado o eliminado el dispositivo
+    expect(diff.devicesAdded).toHaveLength(0);
+    expect(diff.devicesRemoved).toHaveLength(0);
+
+    // No debería reportar como agregados o eliminados los enlaces (porque se renombraron implícitamente)
+    expect(diff.linksAdded).toHaveLength(0);
+    expect(diff.linksRemoved).toHaveLength(0);
+  });
 });
