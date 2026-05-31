@@ -25,6 +25,7 @@ import {
 } from "@cisco-auto/pt-collab";
 import { createDefaultPTController } from "@cisco-auto/pt-control/controller";
 import { ExitCodes } from "../../errors/index.js";
+import { getGlobalFlags } from "../../flags.js";
 
 export function createCollabCommand(): Command {
   const collab = new Command("collab")
@@ -66,8 +67,8 @@ function createStartCommand(): Command {
     .option("--public-port <port>", "Puerto público del funnel (443|8443|10000)", (v: string) => Number(v), 8443)
     .option("--no-open", "No abrir navegador", false)
     .option("--json", "Salida en JSON", false)
-    .action(async function (opts: Record<string, unknown>) {
-      const json = opts.json === true;
+    .action(async function (opts: Record<string, unknown>, command: Command) {
+      const json = opts.json === true || getGlobalFlags(command).json;
       const port = typeof opts.port === "number" ? opts.port : 3937;
       const publicPort = typeof opts.publicPort === "number" ? (opts.publicPort as 443 | 8443 | 10000) : 8443;
 
@@ -131,8 +132,8 @@ function createConnectCommand(): Command {
     .option("--name <name>", "Nombre visible en la sesión")
     .option("--reset-url", "Borrar URL guardada y pedir una nueva", false)
     .option("--json", "Salida en JSON", false)
-    .action(async function (url: string | undefined, opts: Record<string, unknown>) {
-      const json = opts.json === true;
+    .action(async function (url: string | undefined, opts: Record<string, unknown>, command: Command) {
+      const json = opts.json === true || getGlobalFlags(command).json;
       const reset = opts.resetUrl === true;
       const name = opts.name ? String(opts.name) : undefined;
 
@@ -262,8 +263,8 @@ function createStopCommand(): Command {
   return new Command("stop")
     .description("Detiene la sesión activa de PT Collab")
     .option("--json", "Salida en JSON", false)
-    .action(async function (opts: Record<string, unknown>) {
-      const json = opts.json === true;
+    .action(async function (opts: Record<string, unknown>, command: Command) {
+      const json = opts.json === true || getGlobalFlags(command).json;
 
       try {
         const result = await stopSimpleSession();
@@ -298,8 +299,8 @@ function createStatusCommand(): Command {
   return new Command("status")
     .description("Muestra el estado de PT Collab")
     .option("--json", "Salida en JSON", false)
-    .action(async function (opts: Record<string, unknown>) {
-      const json = opts.json === true;
+    .action(async function (opts: Record<string, unknown>, command: Command) {
+      const json = opts.json === true || getGlobalFlags(command).json;
       const session = readSessionFile();
       const hostConfig = readHostConfig();
 
@@ -342,8 +343,8 @@ function createDoctorCommand(): Command {
   return new Command("doctor")
     .description("Diagnóstico del estado de PT Collab y Tailscale Funnel")
     .option("--json", "Salida en JSON", false)
-    .action(async function (opts: Record<string, unknown>) {
-      const json = opts.json === true;
+    .action(async function (opts: Record<string, unknown>, command: Command) {
+      const json = opts.json === true || getGlobalFlags(command).json;
       const session = readSessionFile();
       const clientConfig = readClientConfig();
       const hostConfig = readHostConfig();
@@ -400,9 +401,10 @@ function createResetUrlCommand(): Command {
   return new Command("reset-url")
     .description("Borra la URL guardada de la sesión anterior")
     .option("--json", "Salida en JSON", false)
-    .action(async function (opts: Record<string, unknown>) {
+    .action(async function (opts: Record<string, unknown>, command: Command) {
       resetClientUrl();
-      if (opts.json === true) {
+      const json = opts.json === true || getGlobalFlags(command).json;
+      if (json) {
         process.stdout.write(JSON.stringify({ ok: true, action: "url_reset" }) + "\n");
       } else {
         process.stdout.write("URL guardada eliminada.\n");
@@ -451,8 +453,8 @@ function createCheckpointCommand(): Command {
     .option("--show <id>", "Muestra un checkpoint por ID")
     .option("--path <file>", "Ruta al archivo .pkt para importar")
     .option("--id <id>", "ID del checkpoint (auto si no se especifica)")
-    .action(async function (opts: Record<string, unknown>) {
-      const json = opts.json === true;
+    .action(async function (opts: Record<string, unknown>, command: Command) {
+      const json = opts.json === true || getGlobalFlags(command).json;
       const roomId = String(opts.room ?? "default");
       const store = new CheckpointStore(roomId);
 
@@ -546,8 +548,8 @@ function createConflictsCommand(): Command {
     .option("--url <url>", "URL del servidor collab")
     .option("--room <id>", "Sala", "default")
     .option("--json", "Salida en JSON", false)
-    .action(async function (opts: Record<string, unknown>) {
-      const json = opts.json === true;
+    .action(async function (opts: Record<string, unknown>, command: Command) {
+      const json = opts.json === true || getGlobalFlags(command).json;
       const url = opts.url ? String(opts.url) : null;
       const roomId = String(opts.room ?? "default");
 
@@ -586,8 +588,8 @@ function createResolveCommand(): Command {
     .option("--take <local|remote|checkpoint>", "Resolución", "local")
     .option("--checkpoint <id>", "Checkpoint a usar si --take checkpoint")
     .option("--json", "Salida en JSON", false)
-    .action(async function (conflictId: string, opts: Record<string, unknown>) {
-      const json = opts.json === true;
+    .action(async function (conflictId: string, opts: Record<string, unknown>, command: Command) {
+      const json = opts.json === true || getGlobalFlags(command).json;
       process.stdout.write(JSON.stringify({
         ok: true,
         conflictId,
@@ -604,8 +606,8 @@ function createResyncCommand(): Command {
     .option("--room <id>", "Sala", "default")
     .option("--json", "Salida en JSON", false)
     .option("--path <dir>", "Directorio de salida para el .pkt")
-    .action(async function (opts: Record<string, unknown>) {
-      const json = opts.json === true;
+    .action(async function (opts: Record<string, unknown>, command: Command) {
+      const json = opts.json === true || getGlobalFlags(command).json;
       const roomId = String(opts.room ?? "default");
       const cpId = String(opts.checkpoint ?? "latest");
       const store = new CheckpointStore(roomId);
@@ -660,10 +662,19 @@ function createPeersCommand(): Command {
     .option("--url <url>", "URL del servidor collab")
     .option("--room <id>", "Sala", "default")
     .option("--json", "Salida en JSON", false)
-    .action(async function (opts: Record<string, unknown>) {
-      const json = opts.json === true;
-      const url = opts.url ? String(opts.url) : null;
+    .action(async function (opts: Record<string, unknown>, command: Command) {
+      const json = opts.json === true || getGlobalFlags(command).json;
+      let url = opts.url ? String(opts.url) : null;
       const roomId = String(opts.room ?? "default");
+
+      if (!url) {
+        const session = readSessionFile();
+        if (session?.publicUrl) {
+          url = session.publicUrl;
+        } else {
+          url = getSavedUrl() || readHostConfig()?.lastPublicUrl || null;
+        }
+      }
 
       if (!url) {
         const msg = { ok: false, error: "Se requiere --url para consultar peers del servidor" };
@@ -676,13 +687,17 @@ function createPeersCommand(): Command {
       }
 
       try {
-        const res = await fetch(`${url}/rooms/${roomId}/peers`);
+        const isSessionBased = url.includes("/collab/s/");
+        const targetUrl = isSessionBased ? `${url}/peers` : `${url}/rooms/${roomId}/peers`;
+
+        const res = await fetch(targetUrl);
         const body = await res.json() as { ok: boolean; peers: unknown[]; count: number };
 
         if (json) {
           process.stdout.write(JSON.stringify(body, null, 2) + "\n");
         } else {
-          process.stdout.write(`Peers en sala '${roomId}': ${body.count ?? 0}\n`);
+          const displayRoom = isSessionBased ? "session" : roomId;
+          process.stdout.write(`Peers en sala '${displayRoom}': ${body.count ?? 0}\n`);
           if (body.peers?.length) {
             for (const peer of body.peers) {
               const p = peer as { peerId: string; displayName?: string };
@@ -709,8 +724,8 @@ function createMultiuserCommand(): Command {
     new Command("status")
       .description("Estado de Multiuser")
       .option("--json", "Salida en JSON", false)
-      .action(async function (opts: Record<string, unknown>) {
-        const json = opts.json === true;
+      .action(async function (opts: Record<string, unknown>, command: Command) {
+        const json = opts.json === true || getGlobalFlags(command).json;
         try {
           const controller = createDefaultPTController();
           await controller.start();
@@ -759,8 +774,8 @@ function createMultiuserCommand(): Command {
       .option("--password <pass>", "Contraseña", "cisco")
       .option("--accept <mode>", "Modo accept (always/never/manual)", "always")
       .option("--json", "Salida en JSON", false)
-      .action(async function (opts: Record<string, unknown>) {
-        const json = opts.json === true;
+      .action(async function (opts: Record<string, unknown>, command: Command) {
+        const json = opts.json === true || getGlobalFlags(command).json;
         try {
           const controller = createDefaultPTController();
           await controller.start();
@@ -797,8 +812,8 @@ function createMultiuserCommand(): Command {
     new Command("stop")
       .description("Detiene servidor Multiuser")
       .option("--json", "Salida en JSON", false)
-      .action(async function (opts: Record<string, unknown>) {
-        const json = opts.json === true;
+      .action(async function (opts: Record<string, unknown>, command: Command) {
+        const json = opts.json === true || getGlobalFlags(command).json;
         try {
           const controller = createDefaultPTController();
           await controller.start();
@@ -832,8 +847,8 @@ function createMultiuserCommand(): Command {
       .option("--password <pass>", "Contraseña", "cisco")
       .option("--name <name>", "Nombre de conexión")
       .option("--json", "Salida en JSON", false)
-      .action(async function (opts: Record<string, unknown>) {
-        const json = opts.json === true;
+      .action(async function (opts: Record<string, unknown>, command: Command) {
+        const json = opts.json === true || getGlobalFlags(command).json;
         const host = opts.host ? String(opts.host) : null;
         if (!host) {
           if (json) {

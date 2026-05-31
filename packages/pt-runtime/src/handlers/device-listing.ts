@@ -24,13 +24,13 @@ export function readDeviceCoordinates(device: unknown): {
   var x, y, centerX, centerY;
 
   try {
-    if (typeof dev.getGlobalXPhysicalWS === "function") x = dev.getGlobalXPhysicalWS();
-    else if (typeof dev.getXCoordinate === "function") x = dev.getXCoordinate();
+    if (typeof dev.getXCoordinate === "function") x = dev.getXCoordinate();
+    else if (typeof dev.getGlobalXPhysicalWS === "function") x = dev.getGlobalXPhysicalWS();
   } catch (_e) {}
 
   try {
-    if (typeof dev.getGlobalYPhysicalWS === "function") y = dev.getGlobalYPhysicalWS();
-    else if (typeof dev.getYCoordinate === "function") y = dev.getYCoordinate();
+    if (typeof dev.getYCoordinate === "function") y = dev.getYCoordinate();
+    else if (typeof dev.getGlobalYPhysicalWS === "function") y = dev.getGlobalYPhysicalWS();
   } catch (_e) {}
 
   try {

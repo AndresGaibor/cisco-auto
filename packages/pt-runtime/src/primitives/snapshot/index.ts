@@ -57,13 +57,13 @@ export function topologySnapshot(net: any): SnapshotPrimitiveResult {
       const device = net.getDeviceAt(i);
       if (device) {
         let x = 0;
-        if (typeof device.getGlobalXPhysicalWS === "function") x = device.getGlobalXPhysicalWS();
-        else if (typeof device.getXCoordinate === "function") x = device.getXCoordinate();
+        if (typeof device.getXCoordinate === "function") x = device.getXCoordinate();
+        else if (typeof device.getGlobalXPhysicalWS === "function") x = device.getGlobalXPhysicalWS();
         else if (typeof device.getX === "function") x = device.getX();
 
         let y = 0;
-        if (typeof device.getGlobalYPhysicalWS === "function") y = device.getGlobalYPhysicalWS();
-        else if (typeof device.getYCoordinate === "function") y = device.getYCoordinate();
+        if (typeof device.getYCoordinate === "function") y = device.getYCoordinate();
+        else if (typeof device.getGlobalYPhysicalWS === "function") y = device.getGlobalYPhysicalWS();
         else if (typeof device.getY === "function") y = device.getY();
 
         devices.push({
