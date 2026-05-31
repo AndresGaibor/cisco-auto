@@ -66,6 +66,7 @@ export function registerProjectTool(ctx: RegisterToolContext): void {
           }
 
           case "open": {
+            ctx.control.deviceKindCache.clear();
             const result = await controller.project.open(input.path, {
               wait: input.wait,
               waitTimeoutMs: input.waitTimeoutMs,
@@ -74,6 +75,7 @@ export function registerProjectTool(ctx: RegisterToolContext): void {
           }
 
           case "recover": {
+            ctx.control.deviceKindCache.clear();
             const result = await controller.project.recover(input.projectPath);
             return ok({ action: "project.recover", projectPath: input.projectPath, result });
           }

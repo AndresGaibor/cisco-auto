@@ -108,6 +108,21 @@ export interface SessionResult {
   error?: string;
 }
 
+export interface TerminalPortStepResult {
+  stepIndex: number;
+  kind?: string;
+  command: string;
+  ok: boolean;
+  output: string;
+  rawOutput?: string;
+  status: number;
+  durationMs?: number;
+  warnings: string[];
+  parsed?: unknown;
+  evidence?: unknown;
+  error?: string;
+}
+
 export interface TerminalPortResult {
   ok: boolean;
   output: string;
@@ -121,9 +136,13 @@ export interface TerminalPortResult {
   confidence: number;
   parsed?: unknown;
   evidence?: unknown;
+  stepResults?: TerminalPortStepResult[];
+  rawOutput?: string;
 }
 
 export interface TerminalPortOptions {
   timeoutMs?: number;
   stallTimeoutMs?: number;
+  waitForCompletion?: boolean;
+  inlineTimeoutMs?: number;
 }

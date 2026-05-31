@@ -29,6 +29,9 @@ interface TerminalPlanRunPayload {
     timeoutMs?: number;
     stallTimeoutMs?: number;
   };
+  resolveDeferred?: boolean;
+  waitForCompletion?: boolean;
+  inlineTimeoutMs?: number;
 }
 
 function inferSessionKind(plan: NonNullable<TerminalPlanRunPayload["plan"]>): "ios" | "host" {
@@ -148,5 +151,131 @@ export function handleTerminalPlanRun(
   var ticket = String(api.createJob(deferredPlan) || deferredPlan.id || payload.plan?.id || "terminal_plan");
   deferredPlan.id = ticket;
 
+  var inlineResult = tryInlineDrainJob(ticket, payload, api);
+  if (inlineResult) {
+    return inlineResult;
+  }
+
   return createDeferredResult(ticket, deferredPlan);
+}
+
+function isCompletedState(state: any): boolean {
+  if (!state) return false;
+  return (
+    state.state === "completed" ||
+    state.status === "completed" ||
+    state.phase === "completed" ||
+    state.finished === true
+  );
+}
+
+function isFailedState(state: any): boolean {
+  if (!state) return false;
+  return (
+    state.state === "error" ||
+    state.status === "error" ||
+    state.phase === "error" ||
+    !!state.error ||
+    !!state.errorCode
+  );
+}
+
+function clampInlineTimeoutMs(value: unknown): number {
+  var parsed = Number(value);
+  if (!isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.min(Math.trunc(parsed), 1_200));
+}
+
+function getInlineMaxAdvances(value: unknown): number {
+  var parsed = Number(value);
+  if (!isFinite(parsed) || parsed <= 0) {
+    return 6;
+  }
+  return Math.max(1, Math.min(Math.trunc(parsed), 10));
+}
+
+function nowSafe(api: RuntimeApi): number {
+  try {
+    if (api && typeof api.now === "function") {
+      return Number(api.now()) || Date.now();
+    }
+  } catch {}
+  return Date.now();
+}
+
+function tryInlineDrainJob(
+  ticket: string,
+  payload: TerminalPlanRunPayload,
+  api: RuntimeApi,
+): RuntimeResult | null {
+  if (payload.waitForCompletion !== true) {
+    return null;
+  }
+  if (typeof api.getJobState !== "function") {
+    return null;
+  }
+
+  var budgetMs = clampInlineTimeoutMs(payload.inlineTimeoutMs ?? 1_200);
+  var maxAdvances = getInlineMaxAdvances((payload as any).inlineMaxAdvances);
+  var startedAt = nowSafe(api);
+
+  for (var index = 0; index < maxAdvances; index += 1) {
+    if (typeof api.advanceJob === "function") {
+      api.advanceJob(ticket);
+    }
+
+    var state = api.getJobState(ticket);
+
+    if (state && (isCompletedState(state) || isFailedState(state))) {
+      return mapJobStateToInlineResult(state, ticket);
+    }
+
+    if (budgetMs <= 0) {
+      break;
+    }
+
+    if (nowSafe(api) - startedAt >= budgetMs) {
+      break;
+    }
+  }
+
+  return null;
+}
+
+function mapJobStateToInlineResult(state: any, ticket: string): RuntimeResult {
+  var ok = !state.error && !state.errorCode;
+  var output = state.output || state.outputBuffer || state.raw || "";
+  var status = 0;
+
+  if (state.result) {
+    if (typeof state.result.status === "number") status = state.result.status;
+    if (typeof state.result.ok === "boolean") ok = state.result.ok;
+    if (state.result.raw) output = state.result.raw;
+  }
+
+  if (state.state === "error" || state.status === "error" || state.phase === "error") {
+    ok = false;
+    status = 1;
+  }
+
+  return {
+    ok: ok,
+    status: ok ? "completed" : "failed",
+    inlineCompleted: true,
+    ticket: ticket,
+    jobId: ticket,
+    output: String(output),
+    raw: String(output),
+    error: state.error || state.result?.error || undefined,
+    code: state.errorCode || state.result?.code || state.result?.errorCode || undefined,
+    errorCode: state.errorCode || state.result?.code || state.result?.errorCode || undefined,
+    session: {
+      mode: String(state.lastMode ?? state.lastSession?.mode ?? ""),
+      prompt: String(state.lastPrompt ?? state.lastSession?.prompt ?? ""),
+      paging: state.paged === true,
+      awaitingConfirm: false,
+    },
+  } as any;
 }

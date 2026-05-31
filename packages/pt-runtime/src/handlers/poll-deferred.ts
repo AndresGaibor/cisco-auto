@@ -90,6 +90,15 @@ export function handlePollDeferred(payload: PollDeferredPayload, api: RuntimeApi
     raw: output,
     output,
     source: "terminal",
+    stepResults: Array.isArray((jobState as any).stepResults)
+      ? (jobState as any).stepResults
+      : [],
+    totalSteps: Array.isArray((jobState as any).plan?.plan)
+      ? (jobState as any).plan.plan.length
+      : undefined,
+    currentStep: typeof (jobState as any).currentStep === "number"
+      ? (jobState as any).currentStep
+      : undefined,
     session: {
       mode: String(jobState.lastMode ?? ""),
       prompt: String(jobState.lastPrompt ?? ""),

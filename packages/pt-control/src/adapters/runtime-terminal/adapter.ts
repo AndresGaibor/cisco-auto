@@ -119,7 +119,7 @@ export function createRuntimeTerminalAdapter(
     }
 
     const deferredResult = await measureAdapterAsync(timings, "terminalPlanRunMs", () =>
-      executeTerminalPlanRun(bridge, normalizedPlan, timeoutMs, timings, responseParser),
+      executeTerminalPlanRun(bridge, normalizedPlan, timeoutMs, timings, responseParser, options),
     );
     if (deferredResult) {
       return finalizeAdapterResult(deferredResult, timings, adapterStartedAt);

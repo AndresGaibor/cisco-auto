@@ -6,6 +6,8 @@ import { NodeStreamableHTTPServerTransport } from "@modelcontextprotocol/node";
 
 import { createHealthPayload } from "./health.js";
 import { isAllowedOrigin } from "./origin-guard.js";
+import { registerPrompts } from "../prompts/register-prompts.js";
+import { registerResources } from "../resources/register-resources.js";
 import { registerTools } from "../tools/register-tools.js";
 
 import { runPtCli } from "../runner/run-pt-cli.js";
@@ -60,6 +62,8 @@ export async function startPtMcpServer(options: StartPtMcpServerOptions): Promis
     live: options.live,
     liveWriter,
   });
+  registerPrompts({ server });
+  registerResources({ server });
 
   let funnelProcess: ReturnType<typeof spawn> | null = null;
   let publicUrl: string | null = null;

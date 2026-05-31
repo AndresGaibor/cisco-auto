@@ -55,13 +55,14 @@ function createRuntimeTerminalForMcp(controller: ReturnType<typeof createDefault
 export function createMcpControlContext(): McpControlContext {
   const controller = createDefaultPTController();
 
+  const deviceKindCache = createDeviceKindCache();
+
   const terminalCommandService = createTerminalCommandService({
     controller: controller as any,
     runtimeTerminal: createRuntimeTerminalForMcp(controller),
     generateId: () => `mcp-cmd-${randomUUID().slice(0, 8)}`,
+    deviceKindCache,
   });
-
-  const deviceKindCache = createDeviceKindCache();
 
   return {
     controller,

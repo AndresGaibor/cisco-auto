@@ -60,3 +60,20 @@ describe("startPtMcpServer", () => {
     }
   });
 });
+
+
+test("McpServer registra prompts y resources nativos", async () => {
+  const { McpServer } = await import("@modelcontextprotocol/server");
+  const { registerPrompts } = await import("../prompts/register-prompts.js");
+  const { registerResources } = await import("../resources/register-resources.js");
+
+  const server = new McpServer({ name: "test", version: "0.0.0" }) as any;
+
+  registerPrompts({ server });
+  registerResources({ server });
+
+  expect(Object.keys(server._registeredPrompts)).toContain("pt.safe_show_batch");
+  expect(Object.keys(server._registeredPrompts)).toContain("pt.partial_batch_recovery");
+  expect(Object.keys(server._registeredResources)).toContain("pt://guide/agent-usage");
+  expect(Object.keys(server._registeredResources)).toContain("pt://recipes/safe-batch-show");
+});

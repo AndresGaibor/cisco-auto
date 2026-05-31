@@ -5,7 +5,7 @@ import type {
 } from "@cisco-auto/terminal-contracts";
 import type { RuntimeTerminalPort } from "../../../ports/runtime-terminal-port.js";
 import { measureServiceAsync, measureServiceSync, type TerminalServiceTimingMap } from "./command-timing-recorder.js";
-import { createDeviceKindResolver } from "./device-kind-resolver.js";
+import { createDeviceKindResolver, type DeviceKindCachePort } from "./device-kind-resolver.js";
 import { createIosCommandExecutor } from "./ios-command-executor.js";
 import { createHostCommandExecutor } from "./host-command-executor.js";
 import { createTerminalReadinessChecker } from "./terminal-readiness-checker.js";
@@ -62,6 +62,7 @@ export interface TerminalCommandServiceDeps {
   controller: TerminalControllerPort;
   generateId: () => string;
   cacheFilePath?: string;
+  deviceKindCache?: DeviceKindCachePort;
 }
 
 function serviceNowMs(): number {
@@ -106,6 +107,7 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
   const deviceKindResolver = createDeviceKindResolver({
     controller: deps.controller,
     cacheFilePath: deps.cacheFilePath,
+    deviceKindCache: deps.deviceKindCache,
   });
 
   const iosExecutor = createIosCommandExecutor({
@@ -255,6 +257,82 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
     );
   }
 
+
+  async function executeCommandBatchOptimized(
+    device: string,
+    commands: string[],
+    options?: RunTerminalCommandOptions,
+  ): Promise<TerminalCommandResult | null> {
+    const serviceStartedAt = serviceNowMs();
+    const serviceTimings: TerminalServiceTimingMap = {};
+
+    const normalizedCommands = commands
+      .map((command) => String(command ?? "").trim())
+      .filter((command) => command.length > 0);
+
+    if (normalizedCommands.length <= 1) {
+      return null;
+    }
+
+    const heartbeat = measureServiceSync(serviceTimings, "executeBatchHeartbeatMs", () =>
+      readinessChecker.getHeartbeatHealth(),
+    );
+    const heartbeatAgeMs = measureServiceSync(serviceTimings, "executeBatchHeartbeatAgeMs", () =>
+      readinessChecker.getHeartbeatAgeMs(heartbeat),
+    );
+
+    if (heartbeatAgeMs !== null && heartbeatAgeMs > 20_000) {
+      return attachTerminalServiceTimings(
+        buildCommandResult({
+          ok: false,
+          action: "ios.exec.batch",
+          device,
+          deviceKind: "unknown",
+          command: normalizedCommands.join("\n"),
+          output: "",
+          rawOutput: "",
+          status: 1,
+          error: {
+            code: "PT_RUNTIME_UNAVAILABLE",
+            message: "PT_RUNTIME_UNAVAILABLE: el heartbeat del runtime supera 20s.",
+            phase: "detection",
+          },
+          warnings: [],
+          evidence: {
+            heartbeat,
+            reason: "PT_RUNTIME_UNAVAILABLE: el heartbeat del runtime supera 20s.",
+          },
+        } as any),
+        serviceTimings,
+        serviceStartedAt,
+      );
+    }
+
+    let deviceKind: TerminalDeviceKind = "unknown";
+
+    try {
+      deviceKind = await measureServiceAsync(serviceTimings, "resolveBatchDeviceKindMs", () =>
+        deviceKindResolver.resolveDeviceKind(device, serviceTimings),
+      );
+    } catch {
+      return null;
+    }
+
+    if (deviceKind !== "ios") {
+      return null;
+    }
+
+    const result = await measureServiceAsync(serviceTimings, "executeIosCommandBatchOptimizedMs", () =>
+      iosExecutor.executeIosCommandBatchOptimized(device, normalizedCommands, options, serviceTimings),
+    );
+
+    if (!result) {
+      return null;
+    }
+
+    return attachTerminalServiceTimings(result as TerminalCommandResult, serviceTimings, serviceStartedAt);
+  }
+
   async function resolveDeviceKind(
     device: string,
     timings?: TerminalServiceTimingMap,
@@ -264,6 +342,7 @@ export function createTerminalCommandService(deps: TerminalCommandServiceDeps) {
 
   return {
     executeCommand,
+    executeCommandBatchOptimized,
     resolveDeviceKind,
   };
 }

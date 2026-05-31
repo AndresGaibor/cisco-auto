@@ -6,6 +6,21 @@ export interface TerminalPortOptions {
   stallTimeoutMs?: number;
 }
 
+export interface TerminalPortStepResult {
+  stepIndex: number;
+  kind?: string;
+  command: string;
+  ok: boolean;
+  output: string;
+  rawOutput?: string;
+  status: number;
+  durationMs?: number;
+  warnings: string[];
+  parsed?: unknown;
+  evidence?: unknown;
+  error?: string;
+}
+
 export interface TerminalPortResult {
   ok: boolean;
   output: string;
@@ -19,6 +34,10 @@ export interface TerminalPortResult {
   confidence: number;
   parsed?: unknown;
   evidence?: unknown;
+  stepResults?: TerminalPortStepResult[];
+  totalSteps?: number;
+  currentStep?: number;
+  rawOutput?: string;
 }
 
 export interface RuntimeTerminalPort {

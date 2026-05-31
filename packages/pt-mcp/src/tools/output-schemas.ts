@@ -130,6 +130,35 @@ export const DeviceOutputSchema = GenericToolOutputSchema;
 // Link tool schemas
 export const LinkOutputSchema = GenericToolOutputSchema;
 
+// Cmd performance schemas
+export const CommandPerformanceSchema = z.object({
+  durationMs: z.number().nonnegative().optional(),
+  slow: z.boolean(),
+  thresholdMs: z.number().nonnegative(),
+  dominantTiming: z.string().nullable().optional(),
+  dominantTimingMs: z.number().nonnegative().optional(),
+  slowestSubcommand: z.object({
+    index: z.number().int().nonnegative(),
+    command: z.string(),
+    durationMs: z.number().nonnegative(),
+  }).optional(),
+  executionStrategy: z.string().optional(),
+  category: z.enum([
+    "bridge_wait",
+    "queue_latency",
+    "execution_latency",
+    "sequential_batch",
+    "adaptive_batch",
+    "poll_sleep",
+    "parse",
+    "device_resolution",
+    "planner_or_submit",
+    "retry_or_recovery",
+    "pager_fallback",
+    "unknown",
+  ]),
+});
+
 // Cmd run tool schemas
 export const CmdRunJobResultSchema = z.object({
   index: z.number().int(),
@@ -137,6 +166,65 @@ export const CmdRunJobResultSchema = z.object({
   commandCount: z.number().int(),
   commands: z.array(z.string()),
   result: z.unknown(),
+  performance: CommandPerformanceSchema.optional(),
+  warnings: z.array(McpWarningSchema).optional(),
+});
+
+export const CmdRunSubResultSchema = z.object({
+  index: z.number().int(),
+  command: z.string(),
+  ok: z.boolean(),
+  status: z.number().optional(),
+  durationMs: z.number().nonnegative().optional(),
+  result: z.unknown(),
+  warnings: z.array(McpWarningSchema).optional(),
+});
+
+export const CmdRunBatchResultSchema = CmdRunJobResultSchema.extend({
+  action: z.literal("ios.exec.batch"),
+  executionStrategy: z.enum([
+    "sequential-subcommands",
+    "optimized-runtime-multistep",
+    "optimized-runtime-partial-plus-sequential",
+    "adaptive-optimized-chunks",
+    "adaptive-optimized-chunks-plus-sequential-recovery",
+  ]),
+  adaptiveBatchStrategy: z.enum(["auto", "optimized", "sequential"]).optional(),
+  adaptiveBatchChunkCount: z.number().int().nonnegative().optional(),
+  adaptiveBatchChunks: z.array(z.object({
+    index: z.number().int().nonnegative(),
+    commandCount: z.number().int().nonnegative(),
+    commands: z.array(z.string()).optional(),
+    executionStrategy: z.string().optional(),
+    ok: z.boolean().optional(),
+    durationMs: z.number().nonnegative().optional(),
+  })).optional(),
+  adaptiveBatchRecoveryAttempted: z.boolean().optional(),
+  adaptiveBatchRecoveredCommandCount: z.number().int().nonnegative().optional(),
+  adaptiveBatchRecoveryIndexes: z.array(z.number().int().nonnegative()).optional(),
+  optimizedRuntimeBatchAttempted: z.boolean().optional(),
+  optimizedRuntimeBatchAvailable: z.boolean().optional(),
+  optimizedRuntimeBatchPartial: z.boolean().optional(),
+  optimizedRuntimeBatchMatchedCommandCount: z.number().int().nonnegative().optional(),
+  optimizedRuntimeBatchNextCommandIndex: z.number().int().nonnegative().optional(),
+  optimizedRuntimeBatchFallbackReason: z.enum([
+    "method_missing",
+    "returned_null",
+    "incomplete_subResults",
+    "no_runtime_terminal",
+    "unsafe_command",
+    "runtime_exception",
+    "missing_stepResults",
+    "stepResults_length_mismatch",
+    "command_mismatch",
+    "partial_stepResults",
+  ]).optional(),
+  optimizedRuntimeBatchDiagnostics: z.unknown().optional(),
+  failedSubcommandCount: z.number().int().nonnegative(),
+  subResults: z.array(CmdRunSubResultSchema),
+  stoppedEarly: z.boolean().optional(),
+  stopReason: z.string().optional(),
+  evidence: z.unknown().optional(),
 });
 
 export const CmdRunSkippedResultSchema = z.object({
@@ -153,6 +241,7 @@ export const CmdRunOutputSchema = z.discriminatedUnion("ok", [
     failedCount: z.number().int(),
     results: z.array(z.union([
       CmdRunJobResultSchema,
+      CmdRunBatchResultSchema,
       CmdRunSkippedResultSchema,
       z.unknown(),
     ])),

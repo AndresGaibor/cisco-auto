@@ -223,41 +223,115 @@ describe("TerminalCommandService IOS semantic errors", () => {
     expect(result.status).toBe(0);
   });
 
-  test("cachea resolveDeviceKind para host y registra miss/hit en timings", async () => {
-    const inspectDeviceFast = vi.fn().mockResolvedValue({ type: "pc", model: "PC-PT" });
-    const execHost = vi.fn().mockResolvedValue({
-      success: true,
-      raw: "IP Configuration",
-      verdict: { ok: true },
-      parsed: { source: "host" },
+  test("usa deviceKindCache externa entre ejecuciones y evita inspectDeviceFast", async () => {
+    const inspectDeviceFast = vi.fn().mockImplementation(async (device: string) => {
+      console.log("inspectDeviceFast CALLED with", device);
+      return { type: "switch", model: "3650" };
     });
+
+    const cache = new Map<string, string>();
+
+    const deviceKindCache = {
+      get(device: string): string | null {
+        const result = cache.get(device.trim().toLowerCase()) ?? null;
+        console.log("deviceKindCache.get(", device, ") =", result, "cache.size=", cache.size);
+        return result;
+      },
+      set(device: string, kind: string): void {
+        console.log("deviceKindCache.set(", device, ",", kind, ")");
+        cache.set(device.trim().toLowerCase(), kind);
+      },
+      clear() {
+        cache.clear();
+      },
+    };
 
     const service = createTerminalCommandService({
-      generateId: () => "host-cache-id",
+      generateId: () => `test-${Date.now()}`,
       controller: {
+        getHeartbeatHealth: () => ({ state: "ok", ageMs: 0 }),
         inspectDeviceFast,
-        inspectDevice: async () => ({ type: "pc", model: "PC-PT" }),
-        execHost,
-        execIos: async () => ({ ok: true }),
+        inspectDevice: vi.fn(),
       } as any,
-      runtimeTerminal: null,
+      runtimeTerminal: {
+        ensureSession: async () => ({ ok: true }),
+        runTerminalPlan: async () => ({
+          ok: true,
+          output: "SW1>show clock\nSW1>",
+          status: 0,
+          evidence: { timings: {} },
+        }),
+      } as any,
+      deviceKindCache,
     });
 
-    const uniqueDevice = "PC_UNIQUE_" + Date.now();
-    const first = await service.executeCommand(uniqueDevice, "ipconfig");
-    const second = await service.executeCommand(uniqueDevice, "ipconfig");
+    console.log("=== First executeCommand ===");
+    const first = await service.executeCommand("SW1", "show clock");
+    console.log("First ok:", first.ok, "timings:", JSON.stringify((first.evidence as any)?.timings?.terminalCommandService, null, 2));
+    console.log("Cache after first:", [...cache.entries()]);
 
-    expect(first.ok).toBe(true);
-    expect(second.ok).toBe(true);
+    console.log("=== Second executeCommand ===");
+    const second = await service.executeCommand("SW1", "show clock");
+    console.log("Second ok:", second.ok, "timings:", JSON.stringify((second.evidence as any)?.timings?.terminalCommandService, null, 2));
+    console.log("Cache after second:", [...cache.entries()]);
+
+    console.log("inspectDeviceFast.callCount:", inspectDeviceFast.mock.calls.length);
+
     expect(inspectDeviceFast).toHaveBeenCalledTimes(1);
 
     const firstTimings = (first.evidence as any)?.timings?.terminalCommandService;
     const secondTimings = (second.evidence as any)?.timings?.terminalCommandService;
 
     expect(firstTimings.resolveDeviceKindCacheMiss).toBe(1);
-    expect(firstTimings.inspectDeviceFastMs).toBeGreaterThanOrEqual(0);
     expect(secondTimings.resolveDeviceKindCacheHit).toBe(1);
-    expect(secondTimings.resolveDeviceKindMs).toBeGreaterThanOrEqual(0);
+    expect(secondTimings.inspectDeviceFastMs).toBeUndefined();
+  });
+
+  test("deviceKindCache normaliza nombres de dispositivo", async () => {
+    const cache = new Map<string, "ios" | "host" | "unknown">();
+
+    const deviceKindCache = {
+      get(device: string) {
+        return cache.get(device.trim().toLowerCase()) ?? null;
+      },
+      set(device: string, kind: "ios" | "host" | "unknown") {
+        cache.set(device.trim().toLowerCase(), kind);
+      },
+      clear() {
+        cache.clear();
+      },
+    };
+
+    let callCount = 0;
+    const inspectDeviceFast = vi.fn().mockImplementation(async () => {
+      callCount++;
+      return { type: "switch", model: "2960" };
+    });
+
+    const service = createTerminalCommandService({
+      generateId: () => `test-norm-${Date.now()}`,
+      controller: {
+        getHeartbeatHealth: () => ({ state: "ok", ageMs: 0 }),
+        inspectDeviceFast,
+        inspectDevice: vi.fn(),
+      } as any,
+      runtimeTerminal: {
+        ensureSession: async () => ({ ok: true }),
+        runTerminalPlan: async () => ({
+          ok: true,
+          output: "SW1#",
+          status: 0,
+          evidence: {},
+        }),
+      } as any,
+      deviceKindCache,
+    });
+
+    await service.executeCommand("MLS-CORE-1", "show version");
+    await service.executeCommand(" mls-core-1 ", "show version");
+    await service.executeCommand("MLS-core-1", "show version");
+
+    expect(inspectDeviceFast).toHaveBeenCalledTimes(1);
   });
 
   test("auto-config acepta rawOutput con prompt privilegiado aunque promptAfter venga stale en config-if", async () => {

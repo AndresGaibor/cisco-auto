@@ -1,6 +1,7 @@
 export { createTerminalCommandService } from "./terminal-command-service.js";
 export type { TerminalControllerPort, TerminalCommandServiceDeps } from "./terminal-command-service.js";
 export { createDeviceKindResolver } from "./device-kind-resolver.js";
+export type { DeviceKindCachePort, DeviceKindResolverDeps } from "./device-kind-resolver.js";
 export { createTerminalReadinessChecker } from "./terminal-readiness-checker.js";
 export type { HeartbeatHealth } from "./terminal-readiness-checker.js";
 export { createIosCommandExecutor } from "./ios-command-executor.js";

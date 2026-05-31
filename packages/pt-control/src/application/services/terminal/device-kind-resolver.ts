@@ -3,6 +3,12 @@ import { join } from "node:path";
 import { measureServiceAsync, type TerminalServiceTimingMap } from "./command-timing-recorder.js";
 import { resolvePtDevDir } from "../../../system/paths.js";
 
+export interface DeviceKindCachePort {
+  get(device: string): string | null | undefined;
+  set(device: string, kind: string): void;
+  clear?(): void;
+}
+
 export interface DeviceKindResolverDeps {
   controller: {
     inspectDeviceFast?(device: string): Promise<{
@@ -21,6 +27,7 @@ export interface DeviceKindResolverDeps {
     } | null | undefined>;
   };
   cacheFilePath?: string;
+  deviceKindCache?: DeviceKindCachePort;
 }
 
 const DEVICE_TYPE_MAP: Record<number, string> = {
@@ -260,6 +267,11 @@ export function createDeviceKindResolver(deps: DeviceKindResolverDeps) {
     const cacheKey = getDeviceKindCacheKey(device);
     if (!cacheKey) return;
 
+    // Escribir en cache externa si está disponible
+    if (deps.deviceKindCache) {
+      deps.deviceKindCache.set(cacheKey, kind);
+    }
+
     const entry: DeviceKindCacheEntry = {
       kind,
       expiresAtMs: Date.now() + DEVICE_KIND_CACHE_TTL_MS,
@@ -280,6 +292,20 @@ export function createDeviceKindResolver(deps: DeviceKindResolverDeps) {
     timings?: TerminalServiceTimingMap,
   ): Promise<TerminalDeviceKind> {
     const serviceTimings = timings ?? {};
+
+    // Verificar cache externa primero (compartida entre MCP ejecuciones)
+    if (deps.deviceKindCache) {
+      const cacheKey = getDeviceKindCacheKey(device);
+      if (cacheKey) {
+        const externalKind = deps.deviceKindCache.get(cacheKey) as TerminalDeviceKind | null | undefined;
+        if (externalKind) {
+          serviceTimings.resolveDeviceKindCacheHit = 1;
+          (serviceTimings as Record<string, unknown>).resolveDeviceKindCacheSource = "external";
+          return externalKind;
+        }
+      }
+    }
+
     const cachedKind = await readCachedDeviceKind(device);
 
     if (cachedKind) {

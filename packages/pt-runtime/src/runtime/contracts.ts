@@ -136,6 +136,9 @@ export interface RuntimeApi {
   /** Create a deferred job and start execution */
   createJob(plan: DeferredJobPlan): string;
 
+  /** Advance a job to its next step */
+  advanceJob?(ticket: string): void;
+
   /** Get state of a job by ticket */
   getJobState(ticket: string): KernelJobState | null;
 
@@ -164,11 +167,16 @@ export interface RuntimeErrorResult {
 export interface RuntimeSuccessResult {
   ok: true;
   raw?: string;
+  output?: string;
   status?: number;
+  done?: boolean;
   source?: "terminal" | "synthetic";
   parsed?: Record<string, unknown>;
   parseError?: string;
   session?: SessionStateSnapshot;
+  stepResults?: JobStepResult[];
+  totalSteps?: number;
+  currentStep?: number;
 }
 
 /** Result that indicates deferred work */
