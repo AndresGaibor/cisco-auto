@@ -91,4 +91,36 @@ describe("toCollabSnapshot", () => {
     const result = toCollabSnapshot(raw);
     expect(result.devices["R1"]?.model).toBe("unknown");
   });
+
+  it("parsea coordenadas string como números", () => {
+    const raw = {
+      devices: {
+        R1: { name: "R1", model: "2911", x: "479", y: "55" },
+        SW1: { name: "Switch1", model: "2960", x: "300", y: "400" },
+      },
+      links: {},
+    };
+
+    const result = toCollabSnapshot(raw);
+    expect(result.devices["R1"]?.x).toBe(479);
+    expect(result.devices["R1"]?.y).toBe(55);
+    expect(result.devices["SW1"]?.x).toBe(300);
+  });
+
+  it("preserva coordenadas x/y para detectar movimiento", () => {
+    const raw = {
+      timestamp: 1,
+      devices: {
+        Router0: { name: "Router0", model: "ISR4321", x: 479, y: 55 },
+        PC0: { name: "PC0", model: "PC-PT", x: 597, y: 39 },
+      },
+      links: {},
+    };
+
+    const result = toCollabSnapshot(raw);
+    expect(result.devices["Router0"]?.x).toBe(479);
+    expect(result.devices["Router0"]?.y).toBe(55);
+    expect(result.devices["PC0"]?.x).toBe(597);
+    expect(result.devices["PC0"]?.y).toBe(39);
+  });
 });

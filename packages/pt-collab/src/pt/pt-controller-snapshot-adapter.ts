@@ -1,5 +1,14 @@
 import type { DiffDevice, DiffLink, TopologySnapshot } from "../detector/change-detector.js";
 
+function numberOrUndefined(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
 export function toCollabSnapshot(raw: unknown): TopologySnapshot {
   if (!raw || typeof raw !== "object") {
     return emptySnapshot();
@@ -17,8 +26,8 @@ export function toCollabSnapshot(raw: unknown): TopologySnapshot {
           name: String(d.name ?? key),
           displayName: d.displayName ? String(d.displayName) : undefined,
           model: String(d.model ?? "unknown"),
-          x: typeof d.x === "number" ? d.x : undefined,
-          y: typeof d.y === "number" ? d.y : undefined,
+          x: numberOrUndefined(d.x),
+          y: numberOrUndefined(d.y),
         };
       }
     }

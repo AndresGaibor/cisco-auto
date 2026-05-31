@@ -128,4 +128,35 @@ describe("diffToDeltas", () => {
     expect(kinds).toContain("topology.link.deleted");
     expect(kinds).toContain("device.cli.runningConfig.changed");
   });
+
+  test("genera topology.device.moved cuando cambian x/y", () => {
+    const before = snapshotFromTopology(
+      { Router0: { name: "Router0", model: "ISR4321", x: 100, y: 200 } },
+      {},
+    );
+    const after = snapshotFromTopology(
+      { Router0: { name: "Router0", model: "ISR4321", x: 150, y: 220 } },
+      {},
+    );
+    const diff = diffSnapshots(before, after);
+    expect(diff.devicesMoved.some((m) => m.name === "Router0")).toBe(true);
+    const move = diff.devicesMoved.find((m) => m.name === "Router0");
+    expect(move?.fromX).toBe(100);
+    expect(move?.fromY).toBe(200);
+    expect(move?.toX).toBe(150);
+    expect(move?.toY).toBe(220);
+  });
+
+  test("no genera movimiento si x/y no cambian", () => {
+    const before = snapshotFromTopology(
+      { Router0: { name: "Router0", model: "ISR4321", x: 100, y: 200 } },
+      {},
+    );
+    const after = snapshotFromTopology(
+      { Router0: { name: "Router0", model: "ISR4321", x: 100, y: 200 } },
+      {},
+    );
+    const diff = diffSnapshots(before, after);
+    expect(diff.devicesMoved).toHaveLength(0);
+  });
 });

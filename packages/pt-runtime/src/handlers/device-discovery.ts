@@ -6,7 +6,7 @@ import {
 } from "../domain";
 import type { ConnectionInfo } from "../domain";
 import { collectLiveLinks } from "../domain/live-link";
-import { composeDeviceListing } from "./device-listing";
+import { composeDeviceListing, type ListedDevice } from "./device-listing";
 
 function bool(value: unknown): boolean {
   return value === true || value === "true" || value === 1 || value === "1";
@@ -46,7 +46,7 @@ export interface ListDevicesPayload {
  * Resultado de listDevices con dispositivos, conexiones, y debug info.
  */
 export type ListDevicesResult = HandlerResult & {
-  devices: Array<{ name: string; model: string; type: string; power: boolean; ports: any[] }>;
+  devices: ListedDevice[];
   count: number;
   connectionsByDevice: Record<string, ConnectionInfo[]>;
   unresolvedLinks: Array<{

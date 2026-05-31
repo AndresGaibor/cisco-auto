@@ -10,12 +10,55 @@ export interface DeviceListingInput {
   includePorts?: boolean;
 }
 
+function safeNum(value: unknown): number | undefined {
+  return typeof value === "number" && isFinite(value) ? value : undefined;
+}
+
+export function readDeviceCoordinates(device: unknown): {
+  x?: number;
+  y?: number;
+  centerX?: number;
+  centerY?: number;
+} {
+  var dev = device as Record<string, any>;
+  var x, y, centerX, centerY;
+
+  try {
+    if (typeof dev.getGlobalXPhysicalWS === "function") x = dev.getGlobalXPhysicalWS();
+    else if (typeof dev.getXCoordinate === "function") x = dev.getXCoordinate();
+  } catch (_e) {}
+
+  try {
+    if (typeof dev.getGlobalYPhysicalWS === "function") y = dev.getGlobalYPhysicalWS();
+    else if (typeof dev.getYCoordinate === "function") y = dev.getYCoordinate();
+  } catch (_e) {}
+
+  try {
+    if (typeof dev.getCenterXCoordinate === "function") centerX = dev.getCenterXCoordinate();
+  } catch (_e) {}
+
+  try {
+    if (typeof dev.getCenterYCoordinate === "function") centerY = dev.getCenterYCoordinate();
+  } catch (_e) {}
+
+  return {
+    x: safeNum(x),
+    y: safeNum(y),
+    centerX: safeNum(centerX),
+    centerY: safeNum(centerY),
+  };
+}
+
 export interface ListedDevice {
   name: string;
   model: string;
   type: string;
   power: boolean;
   ports: any[];
+  x?: number;
+  y?: number;
+  centerX?: number;
+  centerY?: number;
 }
 
 export interface PortLinkResult {
@@ -64,6 +107,8 @@ export function composeDeviceListing(input: DeviceListingInput): ListedDevice[] 
         attachConnectionsToPorts(devicePorts, connections, portIndex, name);
       }
 
+      const coords = readDeviceCoordinates(device);
+
       devices.push({
         name,
         model: typeof device.getModel === "function" ? String(device.getModel()) : "unknown",
@@ -71,6 +116,10 @@ export function composeDeviceListing(input: DeviceListingInput): ListedDevice[] 
           typeof device.getType === "function" ? getDeviceTypeString(device.getType()) : "unknown",
         power: typeof device.getPower === "function" ? Boolean(device.getPower()) : false,
         ports: includePorts ? devicePorts : [],
+        x: coords.x,
+        y: coords.y,
+        centerX: coords.centerX,
+        centerY: coords.centerY,
       });
     } catch {
       continue;

@@ -6,6 +6,7 @@ import type { HandlerDeps, HandlerResult } from "../utils/helpers";
 import { parseDeviceXml } from "../utils/device-xml-parser";
 import type { ParsedDeviceXml } from "../utils/device-xml-parser";
 import { collectLiveLinks } from "../domain/live-link";
+import { readDeviceCoordinates } from "./device-listing";
 
 // ============================================================================
 // Payload Types
@@ -293,12 +294,18 @@ export function handleSnapshot(_payload: SnapshotPayload, deps: HandlerDeps): Ha
       }
     }
 
+    var coords = readDeviceCoordinates(device);
+
     devices[name] = {
       name: name,
       model: device.getModel(),
       type: device.getType(),
       power: device.getPower(),
       ports: ports,
+      x: coords.x,
+      y: coords.y,
+      centerX: coords.centerX,
+      centerY: coords.centerY,
     };
   }
 
