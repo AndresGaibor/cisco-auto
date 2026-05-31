@@ -47,6 +47,15 @@ export class WebSocketHub {
         this.handleHeartbeat(ws, msg);
         return;
       case "delta.submit":
+        this.broadcastToRoom(roomId, {
+          type: "delta.commit",
+          delta: msg.delta,
+          committedAt: new Date().toISOString(),
+        } as CollabWireMessage, ws);
+        return;
+      case "delta.commit":
+        this.broadcastToRoom(roomId, msg, ws);
+        return;
       case "checkpoint.offer":
       case "checkpoint.request":
       case "checkpoint.chunk":

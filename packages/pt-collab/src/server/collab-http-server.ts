@@ -2,6 +2,7 @@ import type { ServerWebSocket } from "bun";
 import { RoomRegistry } from "./room-registry.js";
 import { PeerRegistry } from "./peer-registry.js";
 import { WebSocketHub } from "./websocket-hub.js";
+import { CheckpointStore } from "../storage/checkpoint-store.js";
 
 export interface CollabHttpServerConfig {
   host: string;
@@ -10,6 +11,7 @@ export interface CollabHttpServerConfig {
   roomRegistry: RoomRegistry;
   peerRegistry: PeerRegistry;
   websocketHub: WebSocketHub;
+  checkpointStore: CheckpointStore;
   sessionSecrets?: string[];
   checkoutpointLatestUrl?: string;
 }
@@ -20,7 +22,7 @@ export interface CollabHttpServerHandle {
 }
 
 export async function startCollabHttpServer(config: CollabHttpServerConfig): Promise<CollabHttpServerHandle> {
-  const { host, port, path, roomRegistry, peerRegistry, websocketHub, sessionSecrets = [] } = config;
+  const { host, port, path, roomRegistry, peerRegistry, websocketHub, checkpointStore, sessionSecrets = [] } = config;
 
   return await new Promise<CollabHttpServerHandle>((resolve) => {
     const server = Bun.serve<{ sessionSecret?: string; roomId?: string }>({
@@ -76,7 +78,16 @@ export async function startCollabHttpServer(config: CollabHttpServerConfig): Pro
           }
 
           if (action === "checkpoint/latest") {
-            return Response.json({ ok: true, checkpointId: roomRegistry.get("default")?.latestCheckpointId ?? null });
+            const latest = checkpointStore.latest();
+            return Response.json({ ok: true, checkpointId: latest?.checkpointId ?? null, sha256: latest?.sha256 ?? null, byteSize: latest?.byteSize ?? null });
+          }
+
+          const checkpointMatch = action.match(/^checkpoint\/([^/]+)$/);
+          if (checkpointMatch) {
+            const checkpointId = checkpointMatch[1]!;
+            const bytes = checkpointStore.readPktData(checkpointId);
+            if (!bytes) return Response.json({ ok: false, error: "checkpoint_not_found" }, { status: 404 });
+            return new Response(bytes, { headers: { "content-type": "application/octet-stream" } });
           }
 
           return Response.json({ ok: false, error: "not_found" }, { status: 404 });

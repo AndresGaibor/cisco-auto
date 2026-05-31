@@ -1,5 +1,6 @@
 import { CollabClient } from "../client/collab-client.js";
 import { AutoSyncService } from "../sync/auto-sync.js";
+import { PTSyncCoordinator } from "../sync/pt-sync-coordinator.js";
 import { readClientConfig, updateClientUrl, resetClientUrl } from "../storage/client-config-store.js";
 import { writeSessionFile, deleteSessionFile } from "../storage/session-store.js";
 import type { CollabClientOptions, CollabClientStatus } from "../client/collab-client.js";
@@ -8,6 +9,18 @@ import type { TopologySnapshot } from "../detector/change-detector.js";
 export interface ConnectSimpleSessionOptions {
   url?: string;
   name?: string;
+  controller?: {
+    start(): Promise<void>;
+    stop(): Promise<void>;
+    snapshot(): Promise<unknown>;
+    addDevice(name: string, model: string, options?: { x?: number; y?: number }): Promise<unknown>;
+    removeDevice(name: string): Promise<void>;
+    renameDevice(oldName: string, newName: string): Promise<void>;
+    moveDevice(name: string, x: number, y: number): Promise<unknown>;
+    addLink(device1: string, port1: string, device2: string, port2: string, linkType?: string): Promise<unknown>;
+    removeLink(device: string, port: string): Promise<void>;
+    configIos(device: string, commands: string[], options?: { save?: boolean }): Promise<void>;
+  };
   resetUrl?: boolean;
   json?: boolean;
   pollIntervalMs?: number;
@@ -17,9 +30,10 @@ export interface ConnectSimpleSessionOptions {
 export interface ConnectSimpleSessionResult {
   client: CollabClient;
   sync?: AutoSyncService;
+  coordinator?: PTSyncCoordinator;
   peerId: string;
   url: string;
-  close(): void;
+  close(): Promise<void>;
 }
 
 export async function connectSimpleSession(
@@ -63,6 +77,21 @@ export async function connectSimpleSession(
     rejectUnauthorized: diagnosis.tlsWarning ? false : undefined,
   });
 
+  const coordinator = opts.controller
+    ? new PTSyncCoordinator({
+        controller: opts.controller as never,
+        client,
+        peerId,
+        roomId: "default",
+        checkpointBaseUrl: url,
+        pollIntervalMs: opts.pollIntervalMs,
+      })
+    : null;
+
+  if (coordinator) {
+    await coordinator.start();
+  }
+
   writeSessionFile({
     mode: "client",
     publicUrl: url,
@@ -72,9 +101,11 @@ export async function connectSimpleSession(
 
   return {
     client,
+    coordinator: coordinator ?? undefined,
     peerId: client.peerId,
     url,
-    close() {
+    async close() {
+      await coordinator?.stop().catch(() => undefined);
       client.disconnect();
       deleteSessionFile();
     },

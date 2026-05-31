@@ -21,6 +21,21 @@ import type {
 
 export type CollabClientStatus = "disconnected" | "connecting" | "connected" | "reconnecting";
 
+type CollabClientEventMap = {
+  welcome: WelcomeMessage;
+  "peer.joined": PeerJoinedMessage;
+  "peer.left": PeerLeftMessage;
+  "delta.submit": DeltaSubmitMessage;
+  "delta.commit": DeltaCommitMessage;
+  "delta.ack": DeltaAckMessage;
+  "checkpoint.offer": CheckpointOfferMessage;
+  "checkpoint.request": CheckpointRequestMessage;
+  "conflict.created": ConflictCreatedMessage;
+  "conflict.resolved": ConflictResolvedMessage;
+  "drift.detected": DriftDetectedMessage;
+  error: ErrorMessage;
+};
+
 export interface CollabClientOptions {
   url: string;
   roomId?: string;
@@ -56,6 +71,7 @@ export class CollabClient {
   private reconnectAttempts = 0;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private listeners = new Map<string, Set<(msg: unknown) => void>>();
 
   peerId: string = "";
   roomId: string;
@@ -136,6 +152,16 @@ export class CollabClient {
     return this.lastCloseEvent;
   }
 
+  on<K extends keyof CollabClientEventMap>(event: K, handler: (msg: CollabClientEventMap[K]) => void): () => void {
+    const key = String(event);
+    const set = this.listeners.get(key) ?? new Set<(msg: unknown) => void>();
+    set.add(handler as (msg: unknown) => void);
+    this.listeners.set(key, set);
+    return () => {
+      this.listeners.get(key)?.delete(handler as (msg: unknown) => void);
+    };
+  }
+
   private doConnect(): void {
     try {
       if (this.opts.rejectUnauthorized === false) {
@@ -188,42 +214,54 @@ export class CollabClient {
         this.serverTime = msg.serverTime;
         this.currentVector = msg.currentVector;
         this.peers = msg.peers;
+        this.emit("welcome", msg);
         this.opts.onWelcome?.(msg);
         break;
       case "peer.joined":
         this.peers = this.peers.filter((p) => p.peerId !== msg.peer.peerId);
         this.peers.push(msg.peer);
+        this.emit("peer.joined", msg);
         this.opts.onPeerJoined?.(msg);
         break;
       case "peer.left":
         this.peers = this.peers.filter((p) => p.peerId !== msg.peerId);
+        this.emit("peer.left", msg);
         this.opts.onPeerLeft?.(msg);
         break;
       case "delta.submit":
+        this.emit("delta.submit", msg);
         this.opts.onDeltaSubmit?.(msg);
         break;
       case "delta.commit":
+        this.emit("delta.commit", msg);
         this.opts.onDeltaCommit?.(msg);
         break;
       case "delta.ack":
+        this.emit("delta.ack", msg);
         this.opts.onDeltaAck?.(msg);
         break;
       case "checkpoint.offer":
+        this.emit("checkpoint.offer", msg);
         this.opts.onCheckpointOffer?.(msg);
         break;
       case "checkpoint.request":
+        this.emit("checkpoint.request", msg);
         this.opts.onCheckpointRequest?.(msg);
         break;
       case "conflict.created":
+        this.emit("conflict.created", msg);
         this.opts.onConflictCreated?.(msg);
         break;
       case "conflict.resolved":
+        this.emit("conflict.resolved", msg);
         this.opts.onConflictResolved?.(msg);
         break;
       case "drift.detected":
+        this.emit("drift.detected", msg);
         this.opts.onDriftDetected?.(msg);
         break;
       case "error":
+        this.emit("error", msg);
         this.opts.onError?.(msg);
         break;
       case "heartbeat":
@@ -288,5 +326,11 @@ export class CollabClient {
   private setStatus(status: CollabClientStatus): void {
     this.status = status;
     this.opts.onStatusChange?.(status);
+  }
+
+  private emit<K extends keyof CollabClientEventMap>(event: K, msg: CollabClientEventMap[K]): void {
+    for (const handler of this.listeners.get(String(event)) ?? []) {
+      handler(msg);
+    }
   }
 }

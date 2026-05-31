@@ -70,7 +70,9 @@ function createStartCommand(): Command {
       const port = typeof opts.port === "number" ? opts.port : 3937;
 
       try {
-        const session = await startSimpleSession({ port });
+        const controller = createDefaultPTController();
+        await controller.start();
+        const session = await startSimpleSession({ port, controller });
 
         if (json) {
           process.stdout.write(JSON.stringify({
@@ -101,6 +103,7 @@ function createStartCommand(): Command {
             process.off("SIGTERM", shutdown);
             process.stdout.write("\nDeteniendo PT Collab...\n");
             await session.close();
+            await controller.stop().catch(() => {});
             resolve();
           };
           process.once("SIGINT", shutdown);
@@ -159,7 +162,7 @@ function createConnectCommand(): Command {
         const controller = createDefaultPTController();
         await controller.start();
 
-        const result = await connectSimpleSession({ url, name });
+        const result = await connectSimpleSession({ url, name, controller });
         const client = result.client;
 
         if (json) {
@@ -183,9 +186,7 @@ function createConnectCommand(): Command {
         );
 
         process.on("SIGINT", () => {
-          client.disconnect();
-          controller.stop().catch(() => {});
-          process.exit(0);
+          result.close().finally(() => process.exit(0));
         });
 
         await new Promise(() => {});

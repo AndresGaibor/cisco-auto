@@ -11,15 +11,14 @@ describe("extractPublicUrl", () => {
     };
 
     const funnelStatus = {
-      Foreground: {
-        abc123: {
-          Web: {
-            "andress-macbook-air.tail4a8b59.ts.net:443": {
-              Handlers: {
-                "/": {
-                  Proxy: "http://127.0.0.1:3927",
-                },
-              },
+      TCP: {
+        "443": { HTTPS: true },
+      },
+      Web: {
+        "andress-macbook-air.tail4a8b59.ts.net:443": {
+          Handlers: {
+            "/": {
+              Proxy: "http://127.0.0.1:3927",
             },
           },
         },

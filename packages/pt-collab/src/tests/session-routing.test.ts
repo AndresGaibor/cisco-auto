@@ -1,5 +1,6 @@
 import { describe, expect, test, afterAll } from "bun:test";
 import { createCollabServer, type CollabServerHandle } from "../server/start-collab-server.js";
+import { CheckpointStore } from "../storage/checkpoint-store.js";
 
 const ROOM_ID = "default";
 const TOKEN = "ptc_testsecretrouting01";
@@ -52,7 +53,28 @@ describe("session-based routing /collab/s/:secret/*", () => {
     expect(res.status).toBe(200);
     const body = await res.json() as Record<string, unknown>;
     expect(body.ok).toBe(true);
-    expect(body.checkpointId).toBeNull();
+    expect(body.checkpointId).toBeDefined();
+  });
+
+  test("GET /collab/s/:secret/checkpoint/:id retorna bytes", async () => {
+    const store = new CheckpointStore(ROOM_ID);
+    const checkpointId = "cp-routing-test";
+    const data = new Uint8Array([1, 2, 3, 4]);
+    store.writePktData(checkpointId, data);
+    store.save({
+      checkpointId,
+      roomId: ROOM_ID,
+      peerId: "peer-1",
+      sha256: "abcd",
+      byteSize: data.length,
+      chunkCount: 1,
+      createdAt: new Date().toISOString(),
+    });
+
+    const res = await fetch(`${server.localUrl}/s/${SESSION_SECRET}/checkpoint/${checkpointId}`);
+    expect(res.status).toBe(200);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    expect(Array.from(bytes)).toEqual([1, 2, 3, 4]);
   });
 
   test("GET /collab/s/:secret/invalid retorna 404", async () => {

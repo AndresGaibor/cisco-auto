@@ -37,6 +37,19 @@ async function runProcess(command: string, args: string[], timeoutMs = 10_000): 
   });
 }
 
+async function detectFunnelPort(): Promise<number> {
+  try {
+    const existing = await runProcess("tailscale", ["funnel", "status", "--json"], 5_000);
+    if (existing.ok) {
+      const parsed = JSON.parse(existing.stdout) as { TCP?: Record<string, { HTTPS?: boolean }> };
+      if (parsed.TCP?.["443"]?.HTTPS) {
+        return 8443;
+      }
+    }
+  } catch {}
+  return 443;
+}
+
 export async function startPtMcpServer(options: StartPtMcpServerOptions): Promise<PtMcpServerHandle> {
   const host = options.host ?? "127.0.0.1";
   const port = options.port ?? 3927;
@@ -66,6 +79,7 @@ export async function startPtMcpServer(options: StartPtMcpServerOptions): Promis
   registerResources({ server });
 
   let funnelProcess: ReturnType<typeof spawn> | null = null;
+  let funnelHttpsPort: number | null = null;
   let publicUrl: string | null = null;
 
   const httpServer = createServer(async (req, res) => {
@@ -133,17 +147,21 @@ export async function startPtMcpServer(options: StartPtMcpServerOptions): Promis
   const localUrl = `http://${host}:${listenPort}`;
 
   if (options.autoFunnel !== false) {
-    const status = await runProcess("tailscale", ["status", "--json"], 10_000);
-    if (status.ok) {
-      funnelProcess = spawn("tailscale", ["funnel", "--yes", String(listenPort)], { stdio: ["ignore", "pipe", "pipe"] });
+    const tailscaleCheck = await runProcess("tailscale", ["status", "--json"], 10_000);
+    if (tailscaleCheck.ok) {
+      funnelHttpsPort = await detectFunnelPort();
+      funnelProcess = spawn("tailscale", ["funnel", "--yes", `--https=${funnelHttpsPort}`, String(listenPort)], { stdio: ["ignore", "pipe", "pipe"] });
       publicUrl = await resolvePublicUrl({
         path,
-        timeoutMs: 12_000,
+        timeoutMs: 15_000,
         intervalMs: 500,
-        readTailscaleStatus: async () => status.stdout,
+        readTailscaleStatus: async () => {
+          const s = await runProcess("tailscale", ["status", "--json"], 5_000);
+          return s.ok ? s.stdout : "{}";
+        },
         readFunnelStatus: async () => {
-          const funnelStatus = await runProcess("tailscale", ["funnel", "status", "--json"], 4_000);
-          return funnelStatus.ok ? funnelStatus.stdout : "{}";
+          const s = await runProcess("tailscale", ["funnel", "status", "--json"], 5_000);
+          return s.ok ? s.stdout : "{}";
         },
       });
     }
@@ -156,6 +174,8 @@ export async function startPtMcpServer(options: StartPtMcpServerOptions): Promis
       if (funnelProcess) {
         funnelProcess.kill("SIGTERM");
         funnelProcess = null;
+      } else if (funnelHttpsPort && funnelHttpsPort !== 443) {
+        await runProcess("tailscale", ["funnel", "off", `--https=${funnelHttpsPort}`]).catch(() => {});
       }
 
       await control.stop();

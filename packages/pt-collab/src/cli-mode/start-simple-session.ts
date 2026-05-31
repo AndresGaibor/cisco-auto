@@ -1,13 +1,36 @@
 import { createCollabServer } from "../server/start-collab-server.js";
+import { CollabClient } from "../client/collab-client.js";
 import { getOrCreateHostConfig } from "../storage/host-config-store.js";
 import { writeSessionFile, writePidFile, deleteSessionFile, deletePidFile } from "../storage/session-store.js";
 import { startFunnelSession } from "../tailscale/funnel-session.js";
 import { resolvePublicUrl } from "../tailscale/resolve-public-url.js";
+import { PTSyncCoordinator } from "../sync/pt-sync-coordinator.js";
+import { readFileSync } from "node:fs";
 
 export interface StartSimpleSessionOptions {
   port?: number;
   host?: string;
   path?: string;
+  controller?: {
+    start(): Promise<void>;
+    stop(): Promise<void>;
+    snapshot(): Promise<unknown>;
+    project?: {
+      autosave(options?: { dir?: string; keep?: number; chunkSize?: number }): Promise<{
+        ok: boolean;
+        autosavePath: string;
+        bytes: number;
+        sha256: string;
+      }>;
+    };
+    addDevice(name: string, model: string, options?: { x?: number; y?: number }): Promise<unknown>;
+    removeDevice(name: string): Promise<void>;
+    renameDevice(oldName: string, newName: string): Promise<void>;
+    moveDevice(name: string, x: number, y: number): Promise<unknown>;
+    addLink(device1: string, port1: string, device2: string, port2: string, linkType?: string): Promise<unknown>;
+    removeLink(device: string, port: string): Promise<void>;
+    configIos(device: string, commands: string[], options?: { save?: boolean }): Promise<void>;
+  };
   noOpen?: boolean;
   noClipboard?: boolean;
   noCheckpoint?: boolean;
@@ -19,6 +42,7 @@ export interface StartSimpleSessionResult {
   publicUrl: string;
   localUrl: string;
   sessionSecret: string;
+  coordinator?: PTSyncCoordinator;
   close(): Promise<void>;
 }
 
@@ -51,6 +75,51 @@ export async function startSimpleSession(
     autoTailscale: "off",
     sessionSecret,
   });
+
+  if (opts.controller?.project?.autosave) {
+    try {
+      const autosave = await opts.controller.project.autosave({ keep: 5 });
+      if (autosave.ok) {
+        const bytes = readFileSync(autosave.autosavePath);
+        handle.checkpointStore.save({
+          checkpointId: `cp_${Date.now()}`,
+          roomId: "default",
+          peerId: "host",
+          sha256: autosave.sha256,
+          byteSize: autosave.bytes,
+          chunkCount: 1,
+          createdAt: new Date().toISOString(),
+        });
+        handle.checkpointStore.writePktData(handle.checkpointStore.latest()!.checkpointId, new Uint8Array(bytes));
+      }
+    } catch {
+      // Bootstrap opcional: si falla, la sesión sigue viva.
+    }
+  }
+
+  const hostClient = opts.controller
+    ? new CollabClient({
+        url: `${handle.localUrl}/s/${sessionSecret}`,
+        peerId: `host_${sessionSecret}`,
+        displayName: "Host",
+        capabilities: ["project.snapshot", "topology.events", "topology.apply", "ios.readConfig", "ios.applyConfig", "xml.read"],
+      })
+    : null;
+
+  const coordinator = opts.controller && hostClient
+    ? new PTSyncCoordinator({
+        controller: opts.controller as never,
+        client: hostClient,
+        peerId: hostClient.peerId,
+        roomId: "default",
+        checkpointBaseUrl: `${handle.localUrl}/s/${sessionSecret}`,
+        pollIntervalMs: 1500,
+      })
+    : null;
+
+  if (coordinator) {
+    await coordinator.start();
+  }
 
   let funnel;
   try {
@@ -88,7 +157,9 @@ export async function startSimpleSession(
     publicUrl,
     localUrl: handle.localUrl,
     sessionSecret,
+    coordinator: coordinator ?? undefined,
     async close() {
+      await coordinator?.stop().catch(() => undefined);
       cleanup();
       await funnel.close().catch(() => {});
       await handle.close().catch(() => {});

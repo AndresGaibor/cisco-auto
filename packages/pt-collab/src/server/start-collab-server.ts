@@ -4,6 +4,7 @@ import { InMemoryAuthStore } from "./auth.js";
 import { WebSocketHub } from "./websocket-hub.js";
 import { startCollabHttpServer } from "./collab-http-server.js";
 import { startServeOrFunnel } from "../tailscale/start-serve-or-funnel.js";
+import { CheckpointStore } from "../storage/checkpoint-store.js";
 
 export interface StartCollabServerOptions {
   host?: string;
@@ -22,6 +23,7 @@ export interface CollabServerHandle {
   publicUrl: string | null;
   roomId: string;
   token: string;
+  checkpointStore: CheckpointStore;
   close(): Promise<void>;
   sessionSecret?: string;
 }
@@ -38,6 +40,7 @@ export async function createCollabServer(options: StartCollabServerOptions): Pro
   const roomRegistry = new RoomRegistry();
   const peerRegistry = new PeerRegistry();
   const authStore = new InMemoryAuthStore();
+  const checkpointStore = new CheckpointStore(roomId);
   const websocketHub = new WebSocketHub(roomRegistry, peerRegistry, authStore);
 
   roomRegistry.getOrCreate(roomId, token);
@@ -49,9 +52,10 @@ export async function createCollabServer(options: StartCollabServerOptions): Pro
     path,
     roomRegistry,
     peerRegistry,
-    websocketHub,
-    sessionSecrets: sessionSecret ? [sessionSecret] : undefined,
-  });
+      websocketHub,
+      checkpointStore,
+      sessionSecrets: sessionSecret ? [sessionSecret] : undefined,
+    });
 
   let publicUrl: string | null = null;
 
@@ -70,6 +74,7 @@ export async function createCollabServer(options: StartCollabServerOptions): Pro
     publicUrl: fullPublicUrl,
     roomId,
     token,
+    checkpointStore,
     sessionSecret,
     async close() {
       await success.stop();
