@@ -81,12 +81,23 @@ export async function applyDelta(
         if (p.configLines?.length) {
           if (typeof (controller as any).runTerminalPlan === "function") {
             console.log("[Sync Debug:Apply] Usando runTerminalPlan con comandos:", JSON.stringify(p.configLines));
-            const steps = p.configLines.map(cmd => ({
-              kind: "command" as const,
-              command: cmd,
-              allowPager: true,
-              allowConfirm: true,
-            }));
+            const steps: Array<{
+              kind: string;
+              command?: string;
+              expectMode?: string;
+              optional?: boolean;
+              allowPager?: boolean;
+              allowConfirm?: boolean;
+            }> = [
+              { kind: "ensureMode", expectMode: "privileged-exec", optional: true },
+              { kind: "ensureMode", expectMode: "global-config", optional: true },
+              ...p.configLines.map(cmd => ({
+                kind: "command" as const,
+                command: cmd,
+                allowPager: true,
+                allowConfirm: true,
+              })),
+            ];
             const plan = {
               id: "sync_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
               device: p.device,
