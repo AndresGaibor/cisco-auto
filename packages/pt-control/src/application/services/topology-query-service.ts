@@ -65,7 +65,7 @@ export class TopologyQueryService {
       );
 
       if (!result.ok) {
-        console.warn("[Sync Debug:Query] topology.snapshot primitive failed:", result.error?.message ?? "unknown error");
+        console.warn("[Sync Debug:Query] topology.snapshot primitive failed:", result.error ?? "unknown error", "code:", result.code);
       }
 
       const value = result.value;

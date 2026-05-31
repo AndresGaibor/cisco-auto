@@ -111,6 +111,7 @@ export class AutoSyncService {
       }
 
       const diff = diffSnapshots(this.lastSnapshot, current);
+      console.log("[Collab Debug] poll diff:", JSON.stringify({ devicesAdded: diff.devicesAdded.length, devicesRemoved: diff.devicesRemoved.length, devicesMoved: diff.devicesMoved.length, linksAdded: diff.linksAdded.length, linksRemoved: diff.linksRemoved.length, configsChanged: diff.configsChanged.length, manualCommands: diff.manualCommands ?? '(empty)' }));
       const deltas = diffToDeltas(
         diff,
         this.opts.roomId,
@@ -120,6 +121,7 @@ export class AutoSyncService {
         { ...this.vector },
       );
 
+      console.log("[Collab Debug] poll deltas generados:", deltas.length, deltas.map(d => ({ kind: d.kind, device: d.payload && typeof d.payload === 'object' ? (d.payload as any).device : '?', hasConfigLines: d.payload && typeof d.payload === 'object' ? Array.isArray((d.payload as any).configLines) : false })));
       if (deltas.length > 0) {
         for (const delta of deltas) {
           this.opts.client.sendMessage({ type: "delta.submit", delta, timestamp: new Date().toISOString() });
@@ -143,11 +145,15 @@ export class AutoSyncService {
     if (delta.peerId === this.opts.peerId) return;
     if (this.seenDeltaIds.has(delta.id)) return;
 
+    const payload = (delta.payload ?? {}) as Record<string, unknown>;
+    console.log("[Sync Debug:Apply] Recibido delta remoto:", JSON.stringify({ id: delta.id.slice(0,8), kind: delta.kind, device: payload.device ?? '(ninguno)', configLines: Array.isArray(payload.configLines) ? payload.configLines.length : 0, scope: delta.scope }));
+
     this.seenDeltaIds.add(delta.id);
     this.applyingRemote = true;
 
     try {
       const result = await this.opts.applyDelta(delta);
+      console.log("[Sync Debug:Apply] Resultado applyDelta:", JSON.stringify({ ok: result.ok, deltaId: result.deltaId.slice(0,8), error: result.error ?? '(ninguno)' }));
 
       if (result.ok) {
         this._deltasApplied++;
