@@ -46,6 +46,17 @@ export async function connectSimpleSession(
 
   updateClientUrl(url, displayName);
 
+  try {
+    await diagnoseUrl(url);
+  } catch (err) {
+    throw new Error(
+      `No se puede alcanzar el servidor: ${err instanceof Error ? err.message : String(err)}\n` +
+      `Verifica que: 1) el host tenga PT Collab corriendo (bun run pt collab start)\n` +
+      `              2) Tailscale Funnel esté activo\n` +
+      `              3) la URL sea correcta`,
+    );
+  }
+
   const client = await connectWithTimeout({
     url,
     peerId,
@@ -77,6 +88,29 @@ export function getSavedUrl(): string | undefined {
   return cfg?.lastUrl ?? undefined;
 }
 
+async function diagnoseUrl(url: string): Promise<void> {
+  const healthUrl = url.replace(/\/?$/, "/health");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch(healthUrl, { signal: controller.signal });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const body = await res.json() as { ok?: boolean; service?: string };
+    if (!body.ok || body.service !== "pt-collab") {
+      throw new Error(`respuesta inesperada: ${JSON.stringify(body)}`);
+    }
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("Server timeout (5s)");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function connectWithTimeout(
   opts: CollabClientOptions & { timeoutMs?: number },
 ): Promise<CollabClient> {
@@ -91,7 +125,11 @@ function connectWithTimeout(
         }
         if (status === "disconnected" && client.getStatus() !== "connecting") {
           clearTimeout(timer);
-          reject(new Error("Connection rejected"));
+          const closeEvent = client.getLastCloseEvent();
+          const detail = closeEvent
+            ? `código=${closeEvent.code}, razón="${closeEvent.reason}"`
+            : "sin detalle";
+          reject(new Error(`Connection rejected (${detail})`));
         }
       },
       onError(msg) {

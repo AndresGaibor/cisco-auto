@@ -131,6 +131,10 @@ export class CollabClient {
     return this.status;
   }
 
+  getLastCloseEvent(): { code: number; reason: string } | null {
+    return this.lastCloseEvent;
+  }
+
   private doConnect(): void {
     try {
       this.ws = new WebSocket(this.wsUrl);
@@ -222,9 +226,12 @@ export class CollabClient {
     }
   }
 
+  private lastCloseEvent: { code: number; reason: string } | null = null;
+
   private handleClose(event: CloseEvent): void {
     this.stopHeartbeat();
     this.ws = null;
+    this.lastCloseEvent = { code: event.code, reason: event.reason || "no_reason" };
 
     if (event.code === 1000 || event.code === 1001) {
       this.setStatus("disconnected");
