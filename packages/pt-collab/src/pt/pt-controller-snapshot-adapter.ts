@@ -96,11 +96,25 @@ export function toCollabSnapshot(raw: unknown): TopologySnapshot {
     }
   }
 
+  const manualCommands: Array<{ device: string; command: string }> = [];
+  const rawCmds = r.manualCommands;
+  if (Array.isArray(rawCmds)) {
+    for (const cmd of rawCmds) {
+      if (cmd && typeof cmd === "object") {
+        manualCommands.push({
+          device: String((cmd as any).device ?? ""),
+          command: String((cmd as any).command ?? ""),
+        });
+      }
+    }
+  }
+
   return {
     timestamp: typeof r.timestamp === "number" ? r.timestamp : Date.now(),
     devices,
     links,
     deviceConfigs: {},
+    manualCommands,
   };
 }
 
@@ -110,5 +124,6 @@ function emptySnapshot(): TopologySnapshot {
     devices: {},
     links: {},
     deviceConfigs: {},
+    manualCommands: [],
   };
 }

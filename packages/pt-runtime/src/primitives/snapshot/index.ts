@@ -47,8 +47,76 @@ export interface ProcessInfoResult {
   uptime: number;
 }
 
+const pendingManualCommands: Array<{ device: string; command: string }> = [];
+const registeredDeviceNames = new Set<string>();
+
+function ensureConsoleListeners(net: any): void {
+  try {
+    const deviceCount = net.getDeviceCount();
+    for (let i = 0; i < deviceCount; i++) {
+      const device = net.getDeviceAt(i);
+      if (!device) continue;
+      const name = device.getName();
+
+      const term = device.getCommandLine?.();
+      if (!term) continue;
+
+      let alreadyRegistered = false;
+      try {
+        if ((term as any).__hasCollabListener) {
+          alreadyRegistered = true;
+        } else {
+          (term as any).__hasCollabListener = true;
+        }
+      } catch (e) {
+        if (registeredDeviceNames.has(name)) {
+          alreadyRegistered = true;
+        } else {
+          registeredDeviceNames.add(name);
+        }
+      }
+
+      if (alreadyRegistered) continue;
+
+      term.registerEvent("commandStarted", null, (source: any, args: any) => {
+        try {
+          const currentName = device.getName();
+
+          // Check if there is an active programmatic command in progress for this device
+          const globalScope = (typeof self !== "undefined" ? self : Function("return this")()) as any;
+          const kernelState = globalScope.__ptKernelState;
+          if (kernelState && kernelState.activeCommand) {
+            const payload = kernelState.activeCommand.payload;
+            if (payload && payload.device === currentName) {
+              return;
+            }
+          }
+
+          const cmd = args.inputCommand;
+          if (cmd && cmd.trim()) {
+            pendingManualCommands.push({
+              device: currentName,
+              command: cmd.trim()
+            });
+          }
+        } catch (err) {
+          // ignore
+        }
+      });
+    }
+  } catch (e) {
+    // ignore
+  }
+}
+
 export function topologySnapshot(net: any): SnapshotPrimitiveResult {
   try {
+    try {
+      ensureConsoleListeners(net);
+    } catch (e) {
+      // ignore
+    }
+
     const deviceCount = net.getDeviceCount();
     const devices: TopologySnapshotResult["devices"] = [];
     const links: TopologySnapshotResult["links"] = [];
@@ -90,10 +158,12 @@ export function topologySnapshot(net: any): SnapshotPrimitiveResult {
       }
     }
 
+    const commandsToReturn = pendingManualCommands.splice(0, pendingManualCommands.length);
+
     return {
       ok: true,
-      value: { devices, links },
-      evidence: { devices, links, timestamp: Date.now() },
+      value: { devices, links, manualCommands: commandsToReturn },
+      evidence: { devices, links, manualCommands: commandsToReturn, timestamp: Date.now() },
       confidence: 1,
     };
   } catch (e) {

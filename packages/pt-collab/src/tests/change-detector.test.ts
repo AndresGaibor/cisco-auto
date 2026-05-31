@@ -185,4 +185,39 @@ describe("diffToDeltas", () => {
     expect(diff.linksAdded).toHaveLength(0);
     expect(diff.linksRemoved).toHaveLength(0);
   });
+
+  test("detecta comandos manuales de CLI y genera deltas correctos", () => {
+    const before = emptySnapshot();
+    const after = emptySnapshot(1001);
+    after.manualCommands = [
+      { device: "Router0", command: "configure terminal" },
+      { device: "Router0", command: "interface Loopback0" },
+      { device: "Router0", command: "ip address 1.1.1.1 255.255.255.255" },
+      { device: "SW1", command: "vlan 10" },
+    ];
+
+    const diff = diffSnapshots(before, after);
+    expect(diff.manualCommands).toHaveLength(4);
+    expect(diff.manualCommands![0]!.device).toBe("Router0");
+    expect(diff.manualCommands![3]!.device).toBe("SW1");
+
+    const deltas = diffToDeltas(diff, "room1", "peer1", 0, 1, {});
+    
+    // Debería generar deltas agrupados por dispositivo
+    expect(deltas).toHaveLength(2);
+    
+    const routerDelta = deltas.find(d => d.scope === "device:Router0:running-config");
+    expect(routerDelta).toBeDefined();
+    expect(routerDelta!.kind).toBe("device.cli.runningConfig.changed");
+    expect((routerDelta!.payload as any).configLines).toEqual([
+      "configure terminal",
+      "interface Loopback0",
+      "ip address 1.1.1.1 255.255.255.255"
+    ]);
+
+    const switchDelta = deltas.find(d => d.scope === "device:SW1:running-config");
+    expect(switchDelta).toBeDefined();
+    expect(switchDelta!.kind).toBe("device.cli.runningConfig.changed");
+    expect((switchDelta!.payload as any).configLines).toEqual(["vlan 10"]);
+  });
 });

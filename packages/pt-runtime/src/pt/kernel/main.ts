@@ -59,6 +59,10 @@ function isDebugEnabled(): boolean {
 
 export function createKernel(config: KernelConfig) {
   const state = createKernelState();
+  try {
+    const globalScope = (typeof self !== "undefined" ? self : Function("return this")()) as any;
+    globalScope.__ptKernelState = state;
+  } catch (e) {}
 
   const dirs = createDirectoryManager(config);
   initDebugLog(config.logsDir);

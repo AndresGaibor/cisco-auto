@@ -27,6 +27,7 @@ export interface TopologySnapshot {
   devices: Record<string, DiffDevice>;
   links: Record<string, DiffLink>;
   deviceConfigs: Record<string, DeviceConfigSnapshot>;
+  manualCommands?: Array<{ device: string; command: string }>;
 }
 
 export interface DiffResult {
@@ -37,6 +38,7 @@ export interface DiffResult {
   linksAdded: DiffLink[];
   linksRemoved: string[];
   configsChanged: Array<{ device: string; section: "runningConfig" | "startupConfig" | "xml" }>;
+  manualCommands?: Array<{ device: string; command: string }>;
 }
 
 export function diffSnapshots(before: TopologySnapshot, after: TopologySnapshot): DiffResult {
@@ -48,6 +50,7 @@ export function diffSnapshots(before: TopologySnapshot, after: TopologySnapshot)
     linksAdded: [],
     linksRemoved: [],
     configsChanged: [],
+    manualCommands: after.manualCommands ? [...after.manualCommands] : undefined,
   };
 
   const beforeDeviceNames = new Set(Object.keys(before.devices));
@@ -299,6 +302,29 @@ export function diffToDeltas(
       scope: `device:${cc.device}:${cc.section === "xml" ? "xml" : "running-config"}` as CollabScope,
       payload: { device: cc.device, section: cc.section },
     }));
+  }
+
+  if (diff.manualCommands && diff.manualCommands.length > 0) {
+    const commandsByDevice: Record<string, string[]> = {};
+    for (const item of diff.manualCommands) {
+      if (!commandsByDevice[item.device]) {
+        commandsByDevice[item.device] = [];
+      }
+      commandsByDevice[item.device].push(item.command);
+    }
+
+    for (const [deviceName, configLines] of Object.entries(commandsByDevice)) {
+      deltas.push(makeDelta({
+        seq: seq++,
+        lamport,
+        baseVector: { ...baseVector },
+        roomId,
+        peerId,
+        kind: "device.cli.runningConfig.changed",
+        scope: `device:${deviceName}:running-config` as CollabScope,
+        payload: { device: deviceName, configLines },
+      }));
+    }
   }
 
   return deltas;
