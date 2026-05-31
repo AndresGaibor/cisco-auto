@@ -137,11 +137,25 @@ export function handleProjectOpen(payload: Record<string, unknown>, api: any): R
     }
 
     const before = getSavedFilename(getActiveFile(aw));
+
+    // Si la ruta solicitada ya es el archivo activo, no reabrir nada.
+    // Esto hace que reconnect al mismo lab sea idempotente y no dispare fileNew().
+    if (before === path) {
+      return okResult("", {
+        parsed: {
+          ok: true,
+          before,
+          after: before,
+          requestedPath: path,
+        },
+      });
+    }
+
     aw.fileOpen(path);
     var after = getSavedFilename(getActiveFile(aw));
 
-    // Si PT ya tenia un archivo cargado, fileOpen puede no cambiar el
-    // archivo activo (PT muestra dialogo nativo que bloquea en modo script).
+    // Si PT ya tenía un archivo cargado, fileOpen puede no cambiar el
+    // archivo activo (PT muestra diálogo nativo que bloquea en modo script).
     // En ese caso, cerramos el proyecto actual con fileNew() y reintentamos.
     if (after === before && before) {
       if (typeof aw.fileNew === "function") {

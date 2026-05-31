@@ -185,6 +185,27 @@ describe("project handlers", () => {
     expect(result.parsed.ok).toBe(true);
   });
 
+  test("__projectOpen no llama fileNew si la ruta solicitada es la misma que ya esta abierta (idempotente)", () => {
+    const checkpointPath = "/tmp/cp_1780266155743.pkt";
+    var newCalled = false;
+    const deps = createDeps({
+      ipc: {
+        appWindow: () => ({
+          getActiveFile: () => ({ getSavedFilename: () => checkpointPath }),
+          fileOpen: (_p: string) => {
+            // fileOpen se llama pero NO cambia el archivo activo
+          },
+          fileNew: () => { newCalled = true; },
+        }),
+      },
+    });
+    const result = handleProjectOpen({ path: checkpointPath }, deps) as any;
+    expect(result.parsed.ok).toBe(true);
+    expect(result.parsed.before).toBe(checkpointPath);
+    expect(result.parsed.after).toBe(checkpointPath);
+    expect(newCalled).toBe(false);
+  });
+
   test("snapshot clear sin snapshotId limpia todo el store", () => {
     const scope: any = { __ptProjectSnapshots: { snap_1: { id: "snap_1", bytes: [1, 2] } } };
     const deps = createDeps({ global: scope });
