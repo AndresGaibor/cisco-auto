@@ -238,6 +238,7 @@ function createConnectCommand(): Command {
               checkpointId: bootstrap?.checkpointId ?? null,
               downloaded: bootstrap?.downloaded ?? false,
               opened: bootstrap?.opened ?? false,
+              skippedExistingProject: bootstrap?.skippedExistingProject ?? false,
               tempPath: bootstrap?.tempPath ?? null,
               error: bootstrap?.error ?? null,
             },
@@ -247,7 +248,9 @@ function createConnectCommand(): Command {
 
         let syncLine = "Sincronización:";
         if (bootstrap?.checked) {
-          if (bootstrap.error) {
+          if (bootstrap.skippedExistingProject) {
+            syncLine += " activa";
+          } else if (bootstrap.error) {
             syncLine += " error";
           } else if (bootstrap.opened) {
             syncLine += " activa";
@@ -260,6 +263,7 @@ function createConnectCommand(): Command {
 
         function formatBootstrapLine(b: typeof bootstrap): string {
           if (!b?.checked) return "Checkpoint inicial: pendiente";
+          if (b.skippedExistingProject) return "Checkpoint inicial: omitido (lab ya abierto)";
           if (!b.checkpointId) return `Checkpoint inicial: no disponible${b.error ? ` (${b.error})` : ""}`;
           if (b.opened) return `Checkpoint inicial: abierto ${b.checkpointId}`;
           if (b.downloaded) return `Checkpoint inicial: descargado pero NO abierto ${b.checkpointId}`;
@@ -274,7 +278,7 @@ function createConnectCommand(): Command {
           `Conflictos: 0\n`,
         );
 
-        if (bootstrap?.error && !bootstrap.opened) {
+        if (bootstrap?.error && !bootstrap.opened && !bootstrap.skippedExistingProject) {
           process.stderr.write(
             `Advertencia: no se pudo abrir el checkpoint inicial.\n` +
             `Detalle: ${bootstrap.error}\n` +

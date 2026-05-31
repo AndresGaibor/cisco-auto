@@ -3,7 +3,7 @@ import { AutoSyncService } from "../sync/auto-sync.js";
 import { PTSyncCoordinator } from "../sync/pt-sync-coordinator.js";
 import { bootstrapLatestCheckpoint, type BootstrapResult } from "../checkpoint/bootstrap-checkpoint.js";
 import { readClientConfig, updateClientUrl, updatePeerId, resetClientUrl } from "../storage/client-config-store.js";
-import { writeSessionFile, deleteSessionFile } from "../storage/session-store.js";
+import { readSessionFile, writeSessionFile, deleteSessionFile } from "../storage/session-store.js";
 import type { CollabClientOptions, CollabClientStatus } from "../client/collab-client.js";
 
 export interface ConnectSimpleSessionOptions {
@@ -13,6 +13,16 @@ export interface ConnectSimpleSessionOptions {
     start(): Promise<void>;
     stop(): Promise<void>;
     snapshot(): Promise<unknown>;
+    project?: {
+      status(): Promise<{
+        ok?: boolean;
+        project?: {
+          hasActiveFile?: boolean;
+          activeFile?: string | null;
+        };
+      }>;
+      open(path: string, options?: { wait?: boolean; waitTimeoutMs?: number }): Promise<unknown>;
+    };
     addDevice(name: string, model: string, options?: { x?: number; y?: number }): Promise<unknown>;
     removeDevice(name: string): Promise<void>;
     renameDevice(oldName: string, newName: string): Promise<void>;
@@ -20,9 +30,6 @@ export interface ConnectSimpleSessionOptions {
     addLink(device1: string, port1: string, device2: string, port2: string, linkType?: string): Promise<unknown>;
     removeLink(device: string, port: string): Promise<void>;
     configIos(device: string, commands: string[], options?: { save?: boolean }): Promise<void>;
-    project?: {
-      open(path: string, options?: { wait?: boolean; waitTimeoutMs?: number }): Promise<unknown>;
-    };
   };
   resetUrl?: boolean;
   json?: boolean;
@@ -78,19 +85,37 @@ export async function connectSimpleSession(
     await opts.controller.start();
 
     if (opts.controller.project?.open) {
-      bootstrap = await bootstrapLatestCheckpoint({
-        checkpointBaseUrl: url,
-        controller: opts.controller as { project?: { open(path: string, options?: { wait?: boolean; waitTimeoutMs?: number }): Promise<unknown> } },
+      const clientConfig = readClientConfig();
+      const sessionInfo = readSessionFile();
+      const skipBootstrap = await shouldSkipCheckpointBootstrap({
+        controller: opts.controller,
+        url,
+        clientConfig,
+        sessionInfo,
       });
 
-      if (!bootstrap.opened) {
-        await opts.controller.stop().catch(() => {});
-        const detail = bootstrap.error ?? "unknown";
-        const tempInfo = bootstrap.tempPath ? `\nArchivo temporal: ${bootstrap.tempPath}` : "";
-        throw new Error(
-          `No se pudo abrir el checkpoint inicial.\n` +
-          `Detalle: ${detail}${tempInfo}`,
-        );
+      if (skipBootstrap) {
+        bootstrap = {
+          checked: true,
+          opened: false,
+          downloaded: false,
+          skippedExistingProject: true,
+        };
+      } else {
+        bootstrap = await bootstrapLatestCheckpoint({
+          checkpointBaseUrl: url,
+          controller: opts.controller as { project?: { open(path: string, options?: { wait?: boolean; waitTimeoutMs?: number }): Promise<unknown> } },
+        });
+
+        if (!bootstrap.opened) {
+          await opts.controller.stop().catch(() => {});
+          const detail = bootstrap.error ?? "unknown";
+          const tempInfo = bootstrap.tempPath ? `\nArchivo temporal: ${bootstrap.tempPath}` : "";
+          throw new Error(
+            `No se pudo abrir el checkpoint inicial.\n` +
+            `Detalle: ${detail}${tempInfo}`,
+          );
+        }
       }
     }
   }
@@ -151,6 +176,24 @@ export async function connectSimpleSession(
 export function getSavedUrl(): string | undefined {
   const cfg = readClientConfig();
   return cfg?.lastUrl ?? undefined;
+}
+
+export async function shouldSkipCheckpointBootstrap(opts: {
+  controller: ConnectSimpleSessionOptions["controller"];
+  url: string;
+  clientConfig?: ReturnType<typeof readClientConfig>;
+  sessionInfo?: ReturnType<typeof readSessionFile>;
+}): Promise<boolean> {
+  if (!opts.controller?.project?.status) return false;
+
+  const status = await opts.controller.project.status().catch(() => null);
+  const hasActiveFile = status?.project?.hasActiveFile === true;
+  const activeFile = status?.project?.activeFile ?? null;
+
+  if (!hasActiveFile || !activeFile) return false;
+
+  const sameSession = opts.clientConfig?.lastUrl === opts.url || opts.sessionInfo?.publicUrl === opts.url;
+  return sameSession;
 }
 
 async function diagnoseUrl(url: string): Promise<{ tlsWarning?: string }> {

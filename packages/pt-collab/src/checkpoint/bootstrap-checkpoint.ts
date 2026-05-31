@@ -17,6 +17,7 @@ export interface BootstrapResult {
   checkpointId?: string;
   downloaded?: boolean;
   opened?: boolean;
+  skippedExistingProject?: boolean;
   tempPath?: string;
   sha256?: string;
   error?: string;
