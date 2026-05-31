@@ -2,9 +2,12 @@ import type { CollabDelta } from "../protocol/messages.js";
 
 export interface PTControllerPort {
   addDevice(name: string, model: string, options?: { x?: number; y?: number }): Promise<unknown>;
+  addDeviceUnchecked?(name: string, model: string, options?: { x?: number; y?: number }): Promise<unknown>;
   removeDevice(name: string): Promise<void>;
+  removeDeviceUnchecked?(name: string): Promise<void>;
   renameDevice(oldName: string, newName: string): Promise<void>;
   moveDevice(name: string, x: number, y: number): Promise<unknown>;
+  moveDeviceUnchecked?(name: string, x: number, y: number): Promise<unknown>;
   addLink(device1: string, port1: string, device2: string, port2: string, linkType?: string): Promise<unknown>;
   removeLink(device: string, port: string): Promise<void>;
   configIos(device: string, commands: string[], options?: { save?: boolean }): Promise<void>;
@@ -24,20 +27,23 @@ export async function applyDelta(
     switch (delta.kind) {
       case "topology.device.added": {
         const p = delta.payload as { name: string; model: string; x?: number; y?: number };
-        await controller.addDevice(p.name, p.model, { x: p.x, y: p.y });
+        const addFn = controller.addDeviceUnchecked ?? controller.addDevice;
+        await addFn.call(controller, p.name, p.model, { x: p.x, y: p.y });
         return { ok: true, deltaId: delta.id };
       }
 
       case "topology.device.removed": {
         const p = delta.payload as { name: string };
-        await controller.removeDevice(p.name);
+        const removeFn = controller.removeDeviceUnchecked ?? controller.removeDevice;
+        await removeFn.call(controller, p.name);
         return { ok: true, deltaId: delta.id };
       }
 
       case "topology.device.moved": {
         const p = delta.payload as { name: string; toX?: number; toY?: number };
         if (p.toX !== undefined && p.toY !== undefined) {
-          await controller.moveDevice(p.name, p.toX, p.toY);
+          const moveFn = controller.moveDeviceUnchecked ?? controller.moveDevice;
+          await moveFn.call(controller, p.name, p.toX, p.toY);
         }
         return { ok: true, deltaId: delta.id };
       }
