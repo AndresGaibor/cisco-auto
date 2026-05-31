@@ -70,6 +70,7 @@ const ROOT_COMMAND_NAMES = [
   "mcp",
   "project",
   "app",
+  "collab",
 ];
 
 export function createProgram(): Command {

@@ -10,6 +10,7 @@ describe("registry público", () => {
       "bridge",
       "build",
       "cmd",
+      "collab",
       "completion",
       "device",
       "doctor",

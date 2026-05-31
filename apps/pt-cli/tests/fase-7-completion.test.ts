@@ -6,17 +6,21 @@ describe('Fase 7 - Completion registry', () => {
     const commands = getRegisteredCommandIds();
 
     expect(commands).toEqual([
+      "app",
       "bench",
       "bridge",
       "build",
       "cmd",
+      "collab",
       "completion",
       "device",
       "doctor",
       "e2e",
       "link",
       "logs",
+      "mcp",
       "omni",
+      "project",
       "runtime",
       "set",
       "verify",

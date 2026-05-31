@@ -29,6 +29,7 @@ import { createE2eCommand } from "./e2e.js";
 import { createMcpCommand } from "./mcp/index.js";
 import { createProjectCommand } from "./project/index.js";
 import { createAppCommand } from "./app/index.js";
+import { createCollabCommand } from "./collab/index.js";
 import { toPtMcpCommandCatalog } from "./mcp/command-catalog-adapter.js";
 import { formatDevDirForDisplay } from "../system/paths.js";
 
@@ -410,6 +411,28 @@ export const PUBLIC_COMMAND_DEFINITIONS: PtCommandDefinition[] = [
         cliEntrypoint,
         commandCatalog: toPtMcpCommandCatalog(PUBLIC_COMMAND_DEFINITIONS),
       }),
+  },
+  {
+    id: "collab",
+    name: "collab",
+    group: "core",
+    summary: "PT Collab — colaboración en tiempo real sobre Packet Tracer",
+    description: "Colaboración y sincronización entre múltiples instancias de Packet Tracer. Incluye servidor local, WebSocket, Multiuser nativo y detección de conflictos.",
+    examples: [
+      { command: "pt collab serve --room lab1", description: "Iniciar servidor de colaboración" },
+      { command: "pt collab serve --room lab1 --funnel", description: "Iniciar servidor con Tailscale Funnel" },
+      { command: "pt collab join --url http://host:3937 --room lab1 --name peer1", description: "Conectarse a sala remota" },
+      { command: "pt collab status --json", description: "Estado de la colaboración" },
+      { command: "pt collab conflicts --json", description: "Listar conflictos" },
+      { command: "pt collab multiuser listen --port 38000", description: "Iniciar Multiuser nativo" },
+    ],
+    related: ["pt runtime", "pt project", "pt mcp"],
+    agentHints: [
+      "Usar pt collab serve para iniciar sesión de colaboración.",
+      "Usar pt collab join para unirse a una sala existente.",
+      "Multiuser integra tráfico simulado entre instancias PT.",
+    ],
+    factory: createCollabCommand,
   },
   {
     id: "bench",

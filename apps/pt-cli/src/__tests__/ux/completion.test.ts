@@ -15,6 +15,7 @@ describe("completion registry", () => {
       "bridge",
       "build",
       "cmd",
+      "collab",
       "completion",
       "device",
       "doctor",
