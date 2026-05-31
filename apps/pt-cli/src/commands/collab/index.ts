@@ -28,6 +28,52 @@ import { ExitCodes } from "../../errors/index.js";
 import { getGlobalFlags } from "../../flags.js";
 import chalk from "chalk";
 
+const GIT_UPDATE_EXIT_CODE = 31;
+
+async function checkForGitUpdates(json: boolean): Promise<boolean> {
+  try {
+    const { execSync } = await import("node:child_process");
+
+    execSync("git fetch --tags", { stdio: "pipe" });
+
+    const localSha = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+    const remoteSha = execSync("git rev-parse origin/main", { encoding: "utf8" }).trim();
+
+    if (localSha === remoteSha) {
+      return false;
+    }
+
+    const ahead = Number(
+      execSync(`git rev-list --left-right --count ${localSha}...${remoteSha}`, { encoding: "utf8" }).trim().split("\t")[1] ?? "0",
+    );
+
+    if (ahead > 0) {
+      if (json) {
+        process.stdout.write(
+          JSON.stringify({
+            ok: false,
+            error: "git_updates_available",
+            message: `Hay ${ahead} actualización${ahead === 1 ? "" : "es"} disponible${ahead === 1 ? "" : "s"} en origin/main. Ejecuta 'git pull' antes de continuar.`,
+            localSha,
+            remoteSha,
+          }) + "\n",
+        );
+      } else {
+        process.stderr.write(
+          `${chalk.yellow("⚠  Hay actualizaciones disponibles en origin/main.")}\n` +
+            `   Ejecuta: ${chalk.cyan("git pull")}\n` +
+            `   Luego vuelve a ejecutar este comando.\n`,
+        );
+      }
+      process.exit(GIT_UPDATE_EXIT_CODE);
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export function createCollabCommand(): Command {
   const collab = new Command("collab")
     .description("PT Collab — colaboración sobre Packet Tracer")
@@ -72,6 +118,8 @@ function createStartCommand(): Command {
       const json = opts.json === true || getGlobalFlags(command).json;
       const port = typeof opts.port === "number" ? opts.port : 3937;
       const publicPort = typeof opts.publicPort === "number" ? (opts.publicPort as 443 | 8443 | 10000) : 8443;
+
+      await checkForGitUpdates(json);
 
       try {
         const controller = createDefaultPTController();
@@ -141,6 +189,8 @@ function createConnectCommand(): Command {
       const json = opts.json === true || getGlobalFlags(command).json;
       const reset = opts.resetUrl === true;
       const name = opts.name ? String(opts.name) : undefined;
+
+      await checkForGitUpdates(json);
 
       try {
         if (reset) {
