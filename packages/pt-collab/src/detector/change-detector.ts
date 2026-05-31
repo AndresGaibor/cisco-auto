@@ -50,17 +50,21 @@ export function diffSnapshots(before: TopologySnapshot, after: TopologySnapshot)
     linksAdded: [],
     linksRemoved: [],
     configsChanged: [],
-    manualCommands: after.manualCommands ? [...after.manualCommands] : undefined,
+    manualCommands: undefined,
   };
- 
+
+  if (after.manualCommands && after.manualCommands.length > 0) {
+    const beforeCmds = before.manualCommands ?? [];
+    const beforeSet = new Set(beforeCmds.map(c => c.device + ":" + c.command));
+    const newCommands = after.manualCommands.filter(c => !beforeSet.has(c.device + ":" + c.command));
+    if (newCommands.length > 0) {
+      result.manualCommands = newCommands;
+    }
+  }
+
   const beforeDeviceNames = new Set(Object.keys(before.devices));
   const afterDeviceNames = new Set(Object.keys(after.devices));
 
-  // 1. Detect renames first
-  // A device is renamed if:
-  // - It is in before but not in after (would be removed)
-  // - There is another device in after but not in before (would be added)
-  // - They have the SAME model and the SAME coordinates (x, y)
   const matchedRemoved = new Set<string>();
   const matchedAdded = new Set<string>();
   const removedNames = Array.from(beforeDeviceNames).filter(name => !afterDeviceNames.has(name));
@@ -72,7 +76,6 @@ export function diffSnapshots(before: TopologySnapshot, after: TopologySnapshot)
       if (matchedAdded.has(newName)) continue;
       const newDev = after.devices[newName]!;
 
-      // Check same model and position
       if (
         oldDev.model === newDev.model &&
         oldDev.x !== undefined && newDev.x !== undefined &&
@@ -88,19 +91,16 @@ export function diffSnapshots(before: TopologySnapshot, after: TopologySnapshot)
     }
   }
 
-  // 2. Track links that are just renamed due to device renames to avoid deleting/re-creating them
   const ignoredLinksRemoved = new Set<string>();
   const ignoredLinksAdded = new Set<string>();
 
   if (result.devicesRenamed && result.devicesRenamed.length > 0) {
     for (const rn of result.devicesRenamed) {
-      // Find links connected to oldName in before
       for (const [beforeLinkId, beforeLnk] of Object.entries(before.links)) {
         if (beforeLnk.device1 === rn.oldName || beforeLnk.device2 === rn.oldName) {
           const d1 = beforeLnk.device1 === rn.oldName ? rn.newName : beforeLnk.device1;
           const d2 = beforeLnk.device2 === rn.oldName ? rn.newName : beforeLnk.device2;
 
-          // Find matching link in after by comparing endpoints
           let foundAfterLinkId: string | null = null;
           for (const [afterLinkId, afterLnk] of Object.entries(after.links)) {
             const matchNormal =
@@ -129,21 +129,18 @@ export function diffSnapshots(before: TopologySnapshot, after: TopologySnapshot)
     }
   }
 
-  // dispositivos añadidos (excluding renamed)
   for (const name of afterDeviceNames) {
     if (!beforeDeviceNames.has(name) && !matchedAdded.has(name)) {
       result.devicesAdded.push(after.devices[name]!);
     }
   }
 
-  // dispositivos removidos (excluding renamed)
   for (const name of beforeDeviceNames) {
     if (!afterDeviceNames.has(name) && !matchedRemoved.has(name)) {
       result.devicesRemoved.push(name);
     }
   }
 
-  // dispositivos que cambiaron de posición
   for (const name of afterDeviceNames) {
     const afterDev = after.devices[name]!;
     const beforeDev = before.devices[name];
@@ -160,21 +157,18 @@ export function diffSnapshots(before: TopologySnapshot, after: TopologySnapshot)
     }
   }
 
-  // enlaces añadidos (excluding renamed links)
   for (const id of Object.keys(after.links)) {
     if (!before.links[id] && !ignoredLinksAdded.has(id)) {
       result.linksAdded.push(after.links[id]!);
     }
   }
 
-  // enlaces removidos (excluding renamed links)
   for (const id of Object.keys(before.links)) {
     if (!after.links[id] && !ignoredLinksRemoved.has(id)) {
       result.linksRemoved.push(id);
     }
   }
 
-  // cambios de configuración
   const afterDeviceConfigs = after.deviceConfigs ?? {};
   const beforeDeviceConfigs = before.deviceConfigs ?? {};
   for (const name of afterDeviceNames) {
