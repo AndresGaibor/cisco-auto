@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdirSync, rmdirSync, readFileSync, existsSync } from "node:fs";
+import { mkdirSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -13,7 +13,7 @@ beforeEach(() => {
 
 afterEach(() => {
   delete process.env.PT_COLLAB_DIR;
-  rmdirSync(TEST_DIR, { recursive: true, force: true });
+  rmSync(TEST_DIR, { recursive: true, force: true });
 });
 
 describe("host-config-store", () => {

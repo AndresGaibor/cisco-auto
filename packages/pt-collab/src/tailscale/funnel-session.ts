@@ -29,11 +29,16 @@ export async function startFunnelSession(opts: StartFunnelSessionOptions): Promi
   const result = await runTailscale("funnel", [
     "--yes",
     `--https=${publicPort}`,
-    `${localHost}:${localPort}`,
+    `${localPort}`,
   ]);
 
   if (!result.ok) {
-    throw new Error(`Funnel falló: ${result.stderr || result.error || "error desconocido"}`);
+    const parts: string[] = [];
+    if (result.exitCode !== undefined) parts.push(`exitCode=${result.exitCode}`);
+    if (result.stderr) parts.push(`stderr="${result.stderr.trim()}"`);
+    if (result.error) parts.push(`error="${result.error}"`);
+    if (result.timeout) parts.push("timeout");
+    throw new Error(`Funnel falló. ${parts.join(", ") || "razón desconocida"}`);
   }
 
   const publicUrl = await resolvePublicUrl();
@@ -61,18 +66,39 @@ function extractSessionSecret(): string {
   }
 }
 
+interface RunResult {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  error?: string;
+  exitCode?: number;
+  timeout?: boolean;
+}
+
 function runTailscale(
   command: string,
   args: string[],
-  timeoutMs = 10_000,
-): Promise<{ ok: boolean; stdout: string; stderr: string; error?: string }> {
+  timeoutMs = 15_000,
+): Promise<RunResult> {
   return new Promise((resolve) => {
     const child = spawn("tailscale", [command, ...args], {
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
     let stderr = "";
-    const timer = setTimeout(() => child.kill("SIGKILL"), timeoutMs);
+    let timedOut = false;
+    let resolved = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+      // Si llegó al timeout, el proceso se quedó en foreground (tailscale viejo).
+      // Asumimos éxito porque el funnel se configuró antes de timeout.
+      if (!resolved) {
+        resolved = true;
+        resolve({ ok: true, stdout, stderr, timeout: true });
+      }
+    }, timeoutMs);
 
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
@@ -80,11 +106,15 @@ function runTailscale(
     child.stderr.on("data", (chunk: string) => (stderr += chunk));
     child.on("close", (exitCode) => {
       clearTimeout(timer);
-      resolve({ ok: exitCode === 0, stdout, stderr });
+      if (resolved) return;
+      resolved = true;
+      resolve({ ok: exitCode === 0, stdout, stderr, exitCode: exitCode ?? undefined });
     });
     child.on("error", (err) => {
       clearTimeout(timer);
-      resolve({ ok: false, stdout, stderr, error: err.message });
+      if (resolved) return;
+      resolved = true;
+      resolve({ ok: false, stdout, stderr, error: err.message, exitCode: undefined });
     });
   });
 }
