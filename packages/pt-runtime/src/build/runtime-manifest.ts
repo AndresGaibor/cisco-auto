@@ -135,6 +135,10 @@ utils: [
     "primitives/primitive-registry.ts",
     "templates/generated-module-map.ts",
     "primitives/module/index.ts",
+    "primitives/snapshot/index.ts",
+    "primitives/device/index.ts",
+    "primitives/link/index.ts",
+    "primitives/host/index.ts",
   ],
 
   

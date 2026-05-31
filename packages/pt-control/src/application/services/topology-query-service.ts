@@ -64,6 +64,10 @@ export class TopologyQueryService {
         { timeoutMs },
       );
 
+      if (!result.ok) {
+        console.warn("[Sync Debug:Query] topology.snapshot primitive failed:", result.error?.message ?? "unknown error");
+      }
+
       const value = result.value;
       if (
         result.ok &&
@@ -75,8 +79,8 @@ export class TopologyQueryService {
         this.cache.applySnapshot(value as TopologySnapshot);
         return value as TopologySnapshot;
       }
-    } catch {
-      // no-op
+    } catch (e: any) {
+      console.error("[Sync Debug:Query] Error in snapshot query:", e.message ?? String(e));
     }
 
     return this.cache.isMaterialized() ? this.cache.getSnapshot() : null;
