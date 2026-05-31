@@ -13,7 +13,6 @@ export interface CollabHttpServerConfig {
   websocketHub: WebSocketHub;
   checkpointStore: CheckpointStore;
   sessionSecrets?: string[];
-  checkoutpointLatestUrl?: string;
 }
 
 export interface CollabHttpServerHandle {

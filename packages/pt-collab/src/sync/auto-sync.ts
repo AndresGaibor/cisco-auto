@@ -42,7 +42,6 @@ export class AutoSyncService {
   private offDeltaCommit?: () => void;
   private offDeltaAck?: () => void;
   private offPeerJoined?: () => void;
-  private offPeerLeft?: () => void;
   private offWelcome?: () => void;
   private applyingRemote = false;
   private seenDeltaIds = new Set<string>();
@@ -133,7 +132,6 @@ export class AutoSyncService {
     this.offDeltaCommit?.();
     this.offDeltaAck?.();
     this.offPeerJoined?.();
-    this.offPeerLeft?.();
     this.offWelcome?.();
   }
 
@@ -180,7 +178,7 @@ export class AutoSyncService {
             this.seqCounter++;
             this.lamportClock++;
           }
-          console.log("[Collab Debug] Deltas encolados (desconectado):", deltas.length, "total pendientes:", this.pendingDeltas.length);
+
         } else {
           for (const delta of deltas) {
             this.opts.client.sendMessage({ type: "delta.submit", delta, timestamp: new Date().toISOString() });
@@ -212,14 +210,12 @@ export class AutoSyncService {
     }
 
     const payload = (delta.payload ?? {}) as Record<string, unknown>;
-    console.log("[Sync Debug:Apply] Recibido delta remoto:", JSON.stringify({ id: delta.id.slice(0,8), kind: delta.kind, device: payload.device ?? '(ninguno)', configLines: Array.isArray(payload.configLines) ? payload.configLines.length : 0, scope: delta.scope }));
 
     this.seenDeltaIds.add(delta.id);
     this.applyingRemote = true;
 
     try {
       const result = await this.opts.applyDelta(delta);
-      console.log("[Sync Debug:Apply] Resultado applyDelta:", JSON.stringify({ ok: result.ok, deltaId: result.deltaId.slice(0,8), error: result.error ?? '(ninguno)' }));
 
       if (result.ok) {
         this._deltasApplied++;
@@ -289,7 +285,6 @@ export class AutoSyncService {
     if (this.pendingDeltas.length === 0) return;
 
     const count = this.pendingDeltas.length;
-    console.log("[Sync] Enviando", count, "deltas pendientes de la desconexión");
     for (const delta of this.pendingDeltas) {
       this.opts.client.sendMessage({ type: "delta.submit", delta, timestamp: new Date().toISOString() });
       this._deltasSubmitted++;

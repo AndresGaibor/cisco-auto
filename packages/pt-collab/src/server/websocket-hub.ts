@@ -47,12 +47,12 @@ export class WebSocketHub {
         this.handleHeartbeat(ws, msg);
         return;
       case "delta.submit":
+        this.roomRegistry.incrementVector(roomId, msg.delta.peerId);
         this.broadcastToRoom(roomId, {
           type: "delta.commit",
           delta: msg.delta,
           committedAt: new Date().toISOString(),
         } as CollabWireMessage, ws);
-        // Acknowledge the submit immediately back to the sender
         this.sendTo(ws, {
           type: "delta.ack",
           deltaId: msg.delta.id,
@@ -149,8 +149,11 @@ export class WebSocketHub {
   }
 
   private handleHeartbeat(ws: ServerWebSocket<unknown>, msg: CollabWireMessage & { type: "heartbeat" }): void {
-    this.peerRegistry.updateLastSeen(msg.peerId, msg.peerId);
-    this.peerRegistry.updateVector(msg.peerId, msg.peerId, msg.vector);
+    const entry = this.findEntryByWs(ws);
+    if (!entry) return;
+    const { peerId, roomId } = entry.info;
+    this.peerRegistry.updateLastSeen(roomId, peerId);
+    this.peerRegistry.updateVector(roomId, peerId, msg.vector);
   }
 
   private sendTo(ws: ServerWebSocket<unknown>, msg: CollabWireMessage): void {

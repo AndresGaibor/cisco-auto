@@ -77,10 +77,8 @@ export async function applyDelta(
 
       case "device.cli.runningConfig.changed": {
         const p = delta.payload as { device: string; configLines?: string[] };
-        console.log("[Sync Debug:Apply] Running config changed:", JSON.stringify({ device: p.device, configLinesCt: p.configLines?.length, hasRunTerminalPlan: typeof (controller as any).runTerminalPlan === "function" }));
         if (p.configLines?.length) {
           if (typeof (controller as any).runTerminalPlan === "function") {
-            console.log("[Sync Debug:Apply] Ejecutando comando directo:", JSON.stringify(p.configLines));
             for (const cmd of p.configLines) {
               await (controller as any).runTerminalPlan({
                 id: "sync_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
