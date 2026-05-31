@@ -43,6 +43,7 @@ export interface StartSimpleSessionResult {
   localUrl: string;
   sessionSecret: string;
   coordinator?: PTSyncCoordinator;
+  client?: CollabClient;
   close(): Promise<void>;
 }
 
@@ -159,6 +160,7 @@ export async function startSimpleSession(
     localUrl: handle.localUrl,
     sessionSecret,
     coordinator: coordinator ?? undefined,
+    client: hostClient ?? undefined,
     async close() {
       await coordinator?.stop().catch(() => undefined);
       cleanup();

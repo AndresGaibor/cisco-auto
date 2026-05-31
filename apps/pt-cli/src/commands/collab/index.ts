@@ -26,6 +26,7 @@ import {
 import { createDefaultPTController } from "@cisco-auto/pt-control/controller";
 import { ExitCodes } from "../../errors/index.js";
 import { getGlobalFlags } from "../../flags.js";
+import chalk from "chalk";
 
 export function createCollabCommand(): Command {
   const collab = new Command("collab")
@@ -99,6 +100,10 @@ function createStartCommand(): Command {
           "Cuando terminen, cierra esta terminal con Ctrl+C.\n" +
           "\n",
         );
+
+        if (session.client) {
+          setupRealtimeLogging(session.client);
+        }
 
         await new Promise<void>((resolve) => {
           const shutdown = async () => {
@@ -226,6 +231,8 @@ function createConnectCommand(): Command {
             (bootstrap.tempPath ? `Temp: ${bootstrap.tempPath}\n` : ""),
           );
         }
+
+        setupRealtimeLogging(client);
 
         process.on("SIGINT", () => {
           result.close().finally(() => process.exit(0));
@@ -890,4 +897,60 @@ function createMultiuserCommand(): Command {
   );
 
   return multiuser;
+}
+
+function setupRealtimeLogging(client: any) {
+  if (!client) return;
+
+  const prefix = chalk.blue("[Sync]");
+
+  // 1. Connection events
+  client.on("welcome", (msg: any) => {
+    process.stdout.write(`${prefix} Conexión establecida. Sala: ${chalk.green(msg.roomId)} · Tu ID: ${chalk.green(client.peerId)}\n`);
+  });
+
+  client.on("peer.joined", (msg: any) => {
+    process.stdout.write(`${prefix} Colaborador conectado: ${chalk.cyan(msg.peer.displayName ?? msg.peer.peerId)} (${msg.peer.peerId})\n`);
+  });
+
+  client.on("peer.left", (msg: any) => {
+    process.stdout.write(`${prefix} Colaborador desconectado: ${chalk.yellow(msg.peerId)}\n`);
+  });
+
+  // 2. Delta (change) events
+  client.on("delta.commit", (msg: any) => {
+    const delta = msg.delta;
+    process.stdout.write(`${prefix} Recibido cambio remoto de ${chalk.cyan(delta.peerId)}: ${chalk.magenta(delta.kind)} en ${chalk.gray(delta.scope)}\n`);
+  });
+
+  client.on("delta.ack", (msg: any) => {
+    if (msg.accepted) {
+      process.stdout.write(`${prefix} Cambio local aceptado y guardado en servidor\n`);
+    } else {
+      process.stdout.write(`${prefix} Cambio local rechazado por el servidor. Razón: ${chalk.red(msg.reason ?? "desconocida")}\n`);
+    }
+  });
+
+  // 3. Error and Conflict events
+  client.on("error", (msg: any) => {
+    process.stderr.write(`${prefix} ${chalk.red("Error")}: [${msg.code}] ${msg.message}\n`);
+  });
+
+  client.on("conflict.created", (msg: any) => {
+    process.stdout.write(`${prefix} ${chalk.yellow("Conflicto detectado")} en ${msg.conflict.scope}. ID: ${msg.conflict.id}\n`);
+  });
+
+  client.on("conflict.resolved", (msg: any) => {
+    process.stdout.write(`${prefix} Conflicto ${msg.conflictId} resuelto mediante resolución: ${chalk.green(msg.resolution)}\n`);
+  });
+
+  // 4. Wrap outgoing sendMessage to track outgoing submits
+  const originalSend = client.sendMessage.bind(client);
+  client.sendMessage = (msg: any) => {
+    if (msg.type === "delta.submit") {
+      const delta = msg.delta;
+      process.stdout.write(`${prefix} Enviando cambio local: ${chalk.magenta(delta.kind)} en ${chalk.gray(delta.scope)}\n`);
+    }
+    originalSend(msg);
+  };
 }
