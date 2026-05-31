@@ -91,7 +91,10 @@ async function diagnoseUrl(url: string): Promise<{ tlsWarning?: string }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
   try {
-    const res = await fetch(healthUrl, { signal: controller.signal });
+    const res = await fetch(healthUrl, {
+      signal: controller.signal,
+      tls: { rejectUnauthorized: false },
+    });
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}`);
     }
@@ -133,7 +136,19 @@ function connectWithTimeout(
           const detail = closeEvent
             ? `código=${closeEvent.code}, razón="${closeEvent.reason}"`
             : "sin detalle";
-          reject(new Error(`Connection rejected (${detail})`));
+          if (closeEvent?.code === 1015) {
+            reject(new Error(
+              "Fallo TLS al conectar por WebSocket.\n" +
+              "  Causa: el certificado HTTPS no es confiable en este sistema.\n" +
+              "  Soluciones:\n" +
+              "  1) Visita la URL en tu navegador y acepta el certificado:\n" +
+              `     ${opts.url.replace(/\/?$/, "/health")}\n` +
+              "  2) O configura Tailscale para usar HTTPS confiable.\n" +
+              "  3) O usa un túnel alternativo (ngrok, cloudflared).",
+            ));
+          } else {
+            reject(new Error(`Connection rejected (${detail})`));
+          }
         }
       },
       onError(msg) {

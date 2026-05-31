@@ -138,12 +138,10 @@ export class CollabClient {
 
   private doConnect(): void {
     try {
-      const tlsOpts = this.opts.rejectUnauthorized === false
-        ? { tls: { rejectUnauthorized: false } }
-        : undefined;
-      this.ws = tlsOpts
-        ? new (WebSocket as any)(this.wsUrl, [], tlsOpts)
-        : new WebSocket(this.wsUrl);
+      if (this.opts.rejectUnauthorized === false) {
+        process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+      }
+      this.ws = new WebSocket(this.wsUrl);
       const w = this.ws!;
       w.onopen = () => this.handleOpen();
       w.onmessage = (event: MessageEvent) => this.handleMessage(event.data as string);
