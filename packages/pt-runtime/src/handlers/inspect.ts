@@ -217,12 +217,104 @@ export function handleInspectDeviceFast(
   return result as HandlerResult;
 }
 
+const handlerPendingManualCommands: Array<{ device: string; command: string }> = [];
+
+function ensureHandlerConsoleListeners(net: any): void {
+  try {
+    var deviceCount = net.getDeviceCount();
+    for (var i = 0; i < deviceCount; i++) {
+      var device = net.getDeviceAt(i);
+      if (!device) continue;
+      var name = device.getName();
+
+      var term = null;
+      if (device && typeof (device as any).getCommandLine === "function") {
+        term = (device as any).getCommandLine();
+      }
+      if (!term) continue;
+
+      var globalScope = (typeof self !== "undefined" ? self : Function("return this")()) as any;
+      globalScope.__collabListeners = globalScope.__collabListeners || {};
+
+      var oldFn = globalScope.__collabListeners[name];
+      if (oldFn) {
+        try {
+          term.unregisterEvent("commandStarted", null, oldFn);
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      var newFn = (function(devName: string, devObj: any, termObj: any) {
+        return function(source: any, args: any) {
+          try {
+            var cmd = args.inputCommand;
+
+            if (typeof dprint === "function") {
+              dprint("[Collab CLI] Event fired on " + devName + ": " + cmd);
+            }
+
+            // Check if there is an active programmatic command in progress for this device
+            var kernelState = globalScope.__ptKernelState;
+            if (kernelState && kernelState.activeCommand) {
+              var payload = kernelState.activeCommand.payload;
+              if (payload && payload.device === devName) {
+                if (typeof dprint === "function") {
+                  dprint("[Collab CLI] Ignoring programmatic command: " + cmd);
+                }
+                return;
+              }
+            }
+
+            if (cmd && cmd.trim()) {
+              handlerPendingManualCommands.push({
+                device: devName,
+                command: cmd.trim()
+              });
+              if (typeof dprint === "function") {
+                dprint("[Collab CLI] Queued command: " + cmd.trim() + " (queue size: " + handlerPendingManualCommands.length + ")");
+              }
+            }
+          } catch (err) {
+            if (typeof dprint === "function") {
+              dprint("[Collab CLI] Event error: " + String(err));
+            }
+          }
+        };
+      })(name, device, term);
+
+      try {
+        term.registerEvent("commandStarted", null, newFn);
+        globalScope.__collabListeners[name] = newFn;
+        if (typeof dprint === "function") {
+          dprint("[Collab CLI] Registered listener for device: " + name);
+        }
+      } catch (e) {
+        if (typeof dprint === "function") {
+          dprint("[Collab CLI] Registration failed for device: " + name + " error: " + String(e));
+        }
+      }
+    }
+  } catch (e) {
+    if (typeof dprint === "function") {
+      dprint("[Collab CLI] ensureListeners error: " + String(e));
+    }
+  }
+}
+
 /**
  * Get a complete snapshot of the network topology
  * Includes devices and links
  */
 export function handleSnapshot(_payload: SnapshotPayload, deps: HandlerDeps): HandlerResult {
   var net = typeof deps.getNet === "function" ? deps.getNet() : deps.ipc.network();
+
+  try {
+    ensureHandlerConsoleListeners(net);
+  } catch (e) {
+    // ignore
+  }
+
   var count = net.getDeviceCount();
   var devices: Record<string, any> = {};
   var links: Record<string, any> = {};
@@ -309,12 +401,15 @@ export function handleSnapshot(_payload: SnapshotPayload, deps: HandlerDeps): Ha
     };
   }
 
+  const commandsToReturn = handlerPendingManualCommands.splice(0, handlerPendingManualCommands.length);
+
   return {
     ok: true,
     version: "1.0",
     timestamp: Date.now(),
     devices: devices,
     links: links,
+    manualCommands: commandsToReturn,
     metadata: {
       deviceCount: count,
       linkCount: Object.keys(links).length,

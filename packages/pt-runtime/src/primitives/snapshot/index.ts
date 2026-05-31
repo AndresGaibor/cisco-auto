@@ -48,61 +48,64 @@ export interface ProcessInfoResult {
 }
 
 const pendingManualCommands: Array<{ device: string; command: string }> = [];
-const registeredDeviceNames = new Set<string>();
 
 function ensureConsoleListeners(net: any): void {
   try {
-    const deviceCount = net.getDeviceCount();
-    for (let i = 0; i < deviceCount; i++) {
-      const device = net.getDeviceAt(i);
+    var deviceCount = net.getDeviceCount();
+    for (var i = 0; i < deviceCount; i++) {
+      var device = net.getDeviceAt(i);
       if (!device) continue;
-      const name = device.getName();
+      var name = device.getName();
 
-      const term = device.getCommandLine?.();
+      var term = null;
+      if (device && typeof device.getCommandLine === "function") {
+        term = device.getCommandLine();
+      }
       if (!term) continue;
 
-      let alreadyRegistered = false;
-      try {
-        if ((term as any).__hasCollabListener) {
-          alreadyRegistered = true;
-        } else {
-          (term as any).__hasCollabListener = true;
-        }
-      } catch (e) {
-        if (registeredDeviceNames.has(name)) {
-          alreadyRegistered = true;
-        } else {
-          registeredDeviceNames.add(name);
+      var globalScope = (typeof self !== "undefined" ? self : Function("return this")()) as any;
+      globalScope.__collabListenersPrimitive = globalScope.__collabListenersPrimitive || {};
+
+      var oldFn = globalScope.__collabListenersPrimitive[name];
+      if (oldFn) {
+        try {
+          term.unregisterEvent("commandStarted", null, oldFn);
+        } catch (e) {
+          // ignore
         }
       }
 
-      if (alreadyRegistered) continue;
-
-      term.registerEvent("commandStarted", null, (source: any, args: any) => {
-        try {
-          const currentName = device.getName();
-
-          // Check if there is an active programmatic command in progress for this device
-          const globalScope = (typeof self !== "undefined" ? self : Function("return this")()) as any;
-          const kernelState = globalScope.__ptKernelState;
-          if (kernelState && kernelState.activeCommand) {
-            const payload = kernelState.activeCommand.payload;
-            if (payload && payload.device === currentName) {
-              return;
+      var newFn = (function(devName: string, devObj: any, termObj: any) {
+        return function(source: any, args: any) {
+          try {
+            // Check if there is an active programmatic command in progress for this device
+            var kernelState = globalScope.__ptKernelState;
+            if (kernelState && kernelState.activeCommand) {
+              var payload = kernelState.activeCommand.payload;
+              if (payload && payload.device === devName) {
+                return;
+              }
             }
-          }
 
-          const cmd = args.inputCommand;
-          if (cmd && cmd.trim()) {
-            pendingManualCommands.push({
-              device: currentName,
-              command: cmd.trim()
-            });
+            var cmd = args.inputCommand;
+            if (cmd && cmd.trim()) {
+              pendingManualCommands.push({
+                device: devName,
+                command: cmd.trim()
+              });
+            }
+          } catch (err) {
+            // ignore
           }
-        } catch (err) {
-          // ignore
-        }
-      });
+        };
+      })(name, device, term);
+
+      try {
+        term.registerEvent("commandStarted", null, newFn);
+        globalScope.__collabListenersPrimitive[name] = newFn;
+      } catch (e) {
+        // ignore
+      }
     }
   } catch (e) {
     // ignore

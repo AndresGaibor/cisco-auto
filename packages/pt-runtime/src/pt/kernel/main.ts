@@ -62,6 +62,7 @@ export function createKernel(config: KernelConfig) {
   try {
     const globalScope = (typeof self !== "undefined" ? self : Function("return this")()) as any;
     globalScope.__ptKernelState = state;
+    globalScope.__writeKernelDebugLog = writeDebugLog;
   } catch (e) {}
 
   const dirs = createDirectoryManager(config);

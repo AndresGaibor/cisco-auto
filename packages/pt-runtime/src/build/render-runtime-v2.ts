@@ -97,6 +97,14 @@ var __ptDebugEvents = [];
 var __ptDebugSeq = 0;
 function __writeDebugLog(scope, message, level) {
   try {
+    var gs = (typeof self !== "undefined") ? self : (typeof _global !== "undefined") ? _global : (function() { return this; })();
+    if (gs && typeof gs.__writeKernelDebugLog === "function") {
+      gs.__writeKernelDebugLog(scope, message, level);
+      return;
+    }
+  } catch (e) {}
+
+  try {
     if (!fm || !fm.writePlainTextToFile) return;
     __ptDebugSeq += 1;
     __ptDebugEvents.push(JSON.stringify({
