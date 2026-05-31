@@ -71,6 +71,7 @@ export function diffSnapshots(before: TopologySnapshot, after: TopologySnapshot)
     const beforeDev = before.devices[name];
     if (beforeDev) {
       if (beforeDev.x !== afterDev.x || beforeDev.y !== afterDev.y) {
+        console.log(`[Sync Debug] MOVEMENT DETECTED for ${name}: before = (${beforeDev.x}, ${beforeDev.y}), after = (${afterDev.x}, ${afterDev.y})`);
         result.devicesMoved.push({
           name,
           fromX: beforeDev.x,

@@ -72,7 +72,9 @@ export class PTSyncCoordinator {
       roomId: this.opts.roomId,
       peerId: this.opts.peerId,
       pollIntervalMs: this.opts.pollIntervalMs,
-      onError: this.opts.onError,
+      onError: this.opts.onError ?? ((err) => {
+        console.error("[Sync Error]", err.message ?? String(err));
+      }),
     });
 
     await this.sync.start();

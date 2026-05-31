@@ -103,6 +103,13 @@ export class AutoSyncService {
       const current = await this.opts.fetchSnapshot();
       this._lastPollAt = Date.now();
 
+      // DEBUG: Print coordinates of first device
+      const firstDevName = Object.keys(current.devices)[0];
+      if (firstDevName) {
+        const dev = current.devices[firstDevName];
+        console.log(`[Sync Debug] Device ${firstDevName} coordinates: (${dev.x}, ${dev.y})`);
+      }
+
       if (!this.lastSnapshot) {
         this.lastSnapshot = current;
         return;
