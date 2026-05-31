@@ -89,7 +89,7 @@ export async function applyDelta(
             }));
             const plan = {
               id: "sync_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
-              deviceName: p.device,
+              device: p.device,
               targetMode: undefined as any,
               steps,
               timeouts: {
