@@ -6,6 +6,8 @@ import { buildCommandResultEnvelope } from "./command-result-envelope";
 import type { KernelSubsystems } from "./kernel-lifecycle";
 import type { KernelState } from "./kernel-state";
 
+const RESULTS_RETENTION_KEEP = 500;
+
 function commandResultOk(result: any): boolean {
   return (result?.ok) !== false;
 }
@@ -53,6 +55,63 @@ function clearActiveCommand(subsystems: KernelSubsystems, state: KernelState): v
   try {
     subsystems.heartbeat.setQueuedCount(subsystems.queue.count());
   } catch {}
+}
+
+function pruneOldResultFiles(subsystems: KernelSubsystems): void {
+  const fm = safeFM().fm;
+  if (!fm || typeof fm.getFilesInDirectory !== "function") return;
+  if (typeof fm.removeFile !== "function") return;
+
+  let files: string[] = [];
+  try {
+    files = fm.getFilesInDirectory(subsystems.config.resultsDir) || [];
+  } catch {
+    return;
+  }
+
+  const seen: Record<string, boolean> = {};
+  const entries: Array<{ filename: string; path: string; mtime: number }> = [];
+
+  for (const file of files) {
+    const filename = String(file || "");
+    if (!filename) continue;
+    if (!filename.endsWith(".json")) continue;
+    if (seen[filename]) continue;
+    seen[filename] = true;
+
+    const path = subsystems.config.resultsDir + "/" + filename;
+    let mtime = 0;
+    try {
+      if (typeof fm.getFileModificationTime === "function") {
+        mtime = Number(fm.getFileModificationTime(path) || 0);
+      }
+    } catch {
+      mtime = 0;
+    }
+
+    entries.push({ filename, path, mtime });
+  }
+
+  if (entries.length <= RESULTS_RETENTION_KEEP) return;
+
+  entries.sort((a, b) => a.mtime - b.mtime || a.filename.localeCompare(b.filename));
+
+  const removeCount = entries.length - RESULTS_RETENTION_KEEP;
+  for (let i = 0; i < removeCount; i += 1) {
+    const entry = entries[i];
+    if (!entry) continue;
+
+    try {
+      if (typeof fm.fileExists === "function" && !fm.fileExists(entry.path)) continue;
+      fm.removeFile(entry.path);
+      subsystems.kernelLogSubsystem("queue", "Pruned old result file: " + entry.filename);
+    } catch (error) {
+      subsystems.kernelLog(
+        "RESULT PRUNE FAILED path=" + entry.path + " error=" + String(error),
+        "error",
+      );
+    }
+  }
 }
 
 export function finishActiveCommand(
@@ -129,6 +188,12 @@ export function finishActiveCommand(
         "error",
       );
     }
+  }
+
+  try {
+    pruneOldResultFiles(subsystems);
+  } catch (error) {
+    subsystems.kernelLog("RESULT PRUNE FAILED error=" + String(error), "error");
   }
 
   clearActiveCommand(subsystems, state);

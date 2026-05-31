@@ -71,6 +71,9 @@ export class AutoSyncService {
   // Ledger ordenado de cambios IOS por dispositivo
   private iosLedger: IOSHistoryEntry[] = [];
 
+  // Configs pre-sesión inyectadas desde el host antes del primer poll
+  private _pendingInitialConfigs: Record<string, { runningConfig?: string }> | null = null;
+
   // Cursor por peer: último seq del ledger que el peer ya recibió
   private peerCursors: Record<string, number> = {};
 
@@ -139,12 +142,48 @@ export class AutoSyncService {
       this.lastSnapshot = await this.opts.fetchSnapshot();
       this._lastPollAt = Date.now();
       this.captureBaseHashes(this.lastSnapshot);
+      // Si ya había configs pre-sesión pendientes, inyectarlas ahora
+      this._mergeInitialConfigs();
     } catch {
       // primera poll puede fallar si PT no está listo
     }
 
     const interval = this.opts.pollIntervalMs ?? 2000;
     this.timer = setInterval(() => this.poll(), interval);
+  }
+
+  /**
+   * Inyecta running-configs de dispositivos capturadas antes de que iniciara
+   * la sesión collab. El host llama esto con los configs del momento de
+   * `collab start`, para que el primer peer que conecte los reciba.
+   *
+   * Puede llamarse antes o después de start():
+   * - Antes: las configs quedan pendientes y se aplican en la primera poll exitosa.
+   * - Después: se aplican inmediatamente si lastSnapshot ya existe.
+   */
+  setInitialDeviceConfigs(configs: Record<string, { runningConfig?: string }>): void {
+    this._pendingInitialConfigs = configs;
+    if (this.lastSnapshot) {
+      this._mergeInitialConfigs();
+    }
+  }
+
+  private _mergeInitialConfigs(): void {
+    if (!this._pendingInitialConfigs || !this.lastSnapshot) return;
+
+    const merged: typeof this.lastSnapshot.deviceConfigs = { ...this.lastSnapshot.deviceConfigs };
+    for (const [deviceName, cfg] of Object.entries(this._pendingInitialConfigs)) {
+      if (!merged[deviceName]) {
+        merged[deviceName] = {};
+      }
+      // Sólo inyectar si el snapshot aún no tiene running config propio
+      if (!merged[deviceName]!.runningConfig && cfg.runningConfig) {
+        merged[deviceName]!.runningConfig = cfg.runningConfig;
+      }
+    }
+    this.lastSnapshot = { ...this.lastSnapshot, deviceConfigs: merged };
+    this.captureBaseHashes(this.lastSnapshot);
+    this._pendingInitialConfigs = null;
   }
 
   stop(): void {

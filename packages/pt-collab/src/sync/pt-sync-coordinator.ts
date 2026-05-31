@@ -26,6 +26,10 @@ export interface PTSyncCoordinatorOptions {
   pullInitialCheckpoint?: boolean;
   skipBootstrap?: boolean;
   bootstrapResult?: BootstrapResult;
+  /** Configs de dispositivos capturadas antes de iniciar la sesión collab.
+   *  Se inyectan en el snapshot base para que el primer peer que conecte
+   *  los reciba via state sync. */
+  initialDeviceConfigs?: Record<string, { runningConfig?: string }>;
 }
 
 export interface PTSyncCoordinatorStatus {
@@ -78,6 +82,11 @@ export class PTSyncCoordinator {
     });
 
     await this.sync.start();
+
+    // Inyectar configs pre-sesión si el host las proveyó
+    if (this.opts.initialDeviceConfigs && Object.keys(this.opts.initialDeviceConfigs).length > 0) {
+      this.sync.setInitialDeviceConfigs(this.opts.initialDeviceConfigs);
+    }
   }
 
   async stop(): Promise<void> {

@@ -22,6 +22,13 @@ export interface ConnectSimpleSessionOptions {
         };
       }>;
       open(path: string, options?: { wait?: boolean; waitTimeoutMs?: number }): Promise<unknown>;
+      /** Disponible en PTController. Permite obtener el SHA256 del proyecto actual. */
+      autosave?(options?: { dir?: string; keep?: number }): Promise<{
+        ok: boolean;
+        autosavePath: string;
+        bytes: number;
+        sha256: string;
+      }>;
     };
     addDevice(name: string, model: string, options?: { x?: number; y?: number }): Promise<unknown>;
     removeDevice(name: string): Promise<void>;
@@ -192,8 +199,38 @@ export async function shouldSkipCheckpointBootstrap(opts: {
 
   if (!hasActiveFile || !activeFile) return false;
 
+  // Criterio 1 (rápido): misma URL de sesión ya conectada anteriormente
   const sameSession = opts.clientConfig?.lastUrl === opts.url || opts.sessionInfo?.publicUrl === opts.url;
-  return sameSession;
+  if (sameSession) return true;
+
+  // Criterio 2: comparar SHA256 del checkpoint del servidor con el del proyecto actual
+  // Esto evita recargar el .pkt aunque sea la primera vez con esta URL,
+  // siempre que el archivo sea idéntico.
+  if (opts.controller.project?.autosave) {
+    try {
+      // Consultar qué checkpoint tiene el servidor
+      const latestUrl = opts.url.replace(/\/?$/, "") + "/checkpoint/latest";
+      const serverRes = await fetch(latestUrl, { signal: AbortSignal.timeout(5000) }).catch(() => null);
+      if (serverRes?.ok) {
+        const serverBody = await serverRes.json() as { ok?: boolean; sha256?: string | null };
+        const serverSha256 = serverBody?.ok ? (serverBody.sha256 ?? null) : null;
+
+        if (serverSha256) {
+          // Hacer autosave temporal para obtener el SHA256 del proyecto actual
+          const localAutosave = await opts.controller.project.autosave({ keep: 1 }).catch(() => null);
+          const localSha256 = localAutosave?.ok ? (localAutosave.sha256 ?? null) : null;
+
+          if (localSha256 && localSha256 === serverSha256) {
+            return true;
+          }
+        }
+      }
+    } catch {
+      // Si falla la comparación, continuar con el bootstrap normal
+    }
+  }
+
+  return false;
 }
 
 async function diagnoseUrl(url: string): Promise<{ tlsWarning?: string }> {
