@@ -129,11 +129,10 @@ describe("applyDelta", () => {
       payload: { device: "R1", configLines: ["hostname R2", "ip routing"] },
     });
     await applyDelta(delta, ctrl);
-    expect(receivedPlans).toHaveLength(2);
-    expect(receivedPlans[0]!.steps).toHaveLength(1);
+    expect(receivedPlans).toHaveLength(1);
+    expect(receivedPlans[0]!.steps).toHaveLength(2);
     expect(receivedPlans[0]!.steps[0]!).toMatchObject({ kind: "command", command: "hostname R2" });
-    expect(receivedPlans[1]!.steps).toHaveLength(1);
-    expect(receivedPlans[1]!.steps[0]!).toMatchObject({ kind: "command", command: "ip routing" });
+    expect(receivedPlans[0]!.steps[1]!).toMatchObject({ kind: "command", command: "ip routing" });
   });
 
   test("delta desconocido es ok (no-op)", async () => {

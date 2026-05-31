@@ -127,19 +127,13 @@ export async function connectSimpleSession(
     }
   }
 
-  const client = await connectWithTimeout({
+  const client = new CollabClient({
     url,
     peerId,
     displayName,
     capabilities: ["topology.events", "topology.apply", "ios.readConfig"],
-    timeoutMs: 15000,
     rejectUnauthorized: diagnosis.tlsWarning ? false : undefined,
   });
-
-  // Persistir peerId para identidad consistente en reconexiones
-  if (client.peerId) {
-    updatePeerId(client.peerId);
-  }
 
   const coordinator = opts.controller
     ? new PTSyncCoordinator({
@@ -149,7 +143,6 @@ export async function connectSimpleSession(
         roomId: "default",
         checkpointBaseUrl: url,
         pollIntervalMs: opts.pollIntervalMs,
-        pullInitialCheckpoint: false,
         skipBootstrap: true,
         bootstrapResult: bootstrap,
       })
@@ -157,6 +150,58 @@ export async function connectSimpleSession(
 
   if (coordinator) {
     await coordinator.start();
+  }
+
+  // Esperar a que el cliente se conecte
+  await new Promise<void>((resolve, reject) => {
+    const timeoutMs = 15000;
+    const timer = setTimeout(() => {
+      client.disconnect();
+      reject(new Error("Connection timeout"));
+    }, timeoutMs);
+
+    const offStatus = client.on("status.change", (status) => {
+      if (status === "connected") {
+        clearTimeout(timer);
+        offStatus();
+        resolve();
+      }
+      if (status === "disconnected" && client.getStatus() !== "connecting") {
+        clearTimeout(timer);
+        offStatus();
+        const closeEvent = client.getLastCloseEvent();
+        const detail = closeEvent
+          ? `código=${closeEvent.code}, razón="${closeEvent.reason}"`
+          : "sin detalle";
+        if (closeEvent?.code === 1015) {
+          reject(new Error(
+            "Fallo TLS al conectar por WebSocket.\n" +
+            "  Causa: el certificado HTTPS no es confiable en este sistema.\n" +
+            "  Soluciones:\n" +
+            "  1) Visita la URL en tu navegador y acepta el certificado:\n" +
+            `     ${url!.replace(/\/?$/, "/health")}\n` +
+            "  2) O configura Tailscale para usar HTTPS confiable.\n" +
+            "  3) O usa un túnel alternativo (ngrok, cloudflared).",
+          ));
+        } else {
+          reject(new Error(`Connection rejected (${detail})`));
+        }
+      }
+    });
+
+    const offError = client.on("error", (msg) => {
+      clearTimeout(timer);
+      offStatus();
+      offError();
+      reject(new Error(`${msg.code}: ${msg.message}`));
+    });
+
+    client.connect();
+  });
+
+  // Persistir peerId para identidad consistente en reconexiones
+  if (client.peerId) {
+    updatePeerId(client.peerId);
   }
 
   writeSessionFile({

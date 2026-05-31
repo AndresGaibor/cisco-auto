@@ -79,33 +79,29 @@ export async function applyDelta(
         const p = delta.payload as { device: string; configLines?: string[] };
         if (p.configLines?.length) {
           if (typeof (controller as any).runTerminalPlan === "function") {
-            for (const cmd of p.configLines) {
-              await (controller as any).runTerminalPlan({
-                id: "sync_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
-                device: p.device,
-                targetMode: undefined as any,
-                steps: [
-                  {
-                    kind: "command",
-                    command: cmd,
-                    allowPager: true,
-                    allowConfirm: true,
-                  },
-                ],
-                timeouts: {
-                  commandTimeoutMs: 15000,
-                  stallTimeoutMs: 30000,
-                },
-                policies: {
-                  autoBreakWizard: true,
-                  autoAdvancePager: true,
-                  maxPagerAdvances: 50,
-                  maxConfirmations: 3,
-                  abortOnPromptMismatch: false,
-                  abortOnModeMismatch: false,
-                },
-              });
-            }
+            await (controller as any).runTerminalPlan({
+              id: "sync_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+              device: p.device,
+              targetMode: undefined as any,
+              steps: p.configLines.map((cmd) => ({
+                kind: "command",
+                command: cmd,
+                allowPager: true,
+                allowConfirm: true,
+              })),
+              timeouts: {
+                commandTimeoutMs: 15000,
+                stallTimeoutMs: 30000,
+              },
+              policies: {
+                autoBreakWizard: true,
+                autoAdvancePager: true,
+                maxPagerAdvances: 50,
+                maxConfirmations: 3,
+                abortOnPromptMismatch: false,
+                abortOnModeMismatch: false,
+              },
+            });
           } else {
             await controller.configIos(p.device, p.configLines);
           }

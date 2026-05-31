@@ -42,7 +42,12 @@ export function atomicWriteFile(path: string, content: string): void {
   }
 
   try {
-    retrySync(() => renameSync(tmp, path), {
+    retrySync(() => {
+      if (!existsSync(tmp) && existsSync(path)) {
+        return;
+      }
+      renameSync(tmp, path);
+    }, {
       attempts: 8,
       baseDelayMs: 10,
       maxDelayMs: 250,
@@ -118,7 +123,12 @@ export type SafeRenameResult =
 export function safeRenameDetailed(src: string, dst: string): SafeRenameResult {
   try {
     ensureDir(dirname(dst));
-    retrySync(() => renameSync(src, dst), {
+    retrySync(() => {
+      if (!existsSync(src) && existsSync(dst)) {
+        return;
+      }
+      renameSync(src, dst);
+    }, {
       attempts: 6,
       baseDelayMs: 10,
       maxDelayMs: 200,
