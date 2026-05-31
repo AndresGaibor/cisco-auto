@@ -20,6 +20,13 @@ export interface DeltaApplyResult {
   error?: string;
 }
 
+function normalizeCommand(cmd: string): string {
+  if (cmd === "en") return "ena";
+  if (cmd === "conf t") return "configure terminal";
+  if (cmd === "int") return "interface";
+  return cmd;
+}
+
 export async function applyDelta(
   delta: CollabDelta,
   controller: PTControllerPort,
@@ -79,8 +86,9 @@ export async function applyDelta(
         const p = delta.payload as { device: string; configLines?: string[] };
         console.log("[Sync Debug:Apply] Running config changed:", JSON.stringify({ device: p.device, configLinesCt: p.configLines?.length, hasRunTerminalPlan: typeof (controller as any).runTerminalPlan === "function" }));
         if (p.configLines?.length) {
+          const normalizedCommands = p.configLines.map(normalizeCommand);
           if (typeof (controller as any).runTerminalPlan === "function") {
-            console.log("[Sync Debug:Apply] Usando runTerminalPlan con comandos:", JSON.stringify(p.configLines));
+            console.log("[Sync Debug:Apply] Usando runTerminalPlan con comandos:", JSON.stringify(normalizedCommands));
             const steps: Array<{
               kind: string;
               command?: string;
@@ -91,7 +99,7 @@ export async function applyDelta(
             }> = [
               { kind: "ensureMode", expectMode: "privileged-exec", optional: true },
               { kind: "ensureMode", expectMode: "global-config", optional: true },
-              ...p.configLines.map(cmd => ({
+              ...normalizedCommands.map(cmd => ({
                 kind: "command" as const,
                 command: cmd,
                 allowPager: true,
@@ -118,7 +126,7 @@ export async function applyDelta(
             };
             await (controller as any).runTerminalPlan(plan);
           } else {
-            await controller.configIos(p.device, p.configLines);
+            await controller.configIos(p.device, normalizedCommands);
           }
         }
         return { ok: true, deltaId: delta.id };
