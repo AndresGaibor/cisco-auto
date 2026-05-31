@@ -120,13 +120,22 @@ export function moveDevice(payload: MoveDevicePayload, net: any): DevicePrimitiv
     if (!device) {
       return { ok: false, error: "Device not found", code: "DEVICE_NOT_FOUND" };
     }
-    const result = device.moveToLocation(payload.x, payload.y);
-    if (!result) {
-      return { ok: false, error: "Move failed", code: "DEVICE_MOVE_FAILED" };
+    const x = Math.round(payload.x);
+    const y = Math.round(payload.y);
+    if (device.moveToLocation) {
+      if (device.moveToLocation(x, y) === false) {
+        return { ok: false, error: "Move failed/rejected", code: "DEVICE_MOVE_FAILED" };
+      }
+    } else if (device.moveToLocationCentered) {
+      if (device.moveToLocationCentered(x, y) === false) {
+        return { ok: false, error: "Move failed/rejected", code: "DEVICE_MOVE_FAILED" };
+      }
+    } else {
+      return { ok: false, error: "Device does not support move operation", code: "UNSUPPORTED_OPERATION" };
     }
     return {
       ok: true,
-      value: { name: payload.name, x: payload.x, y: payload.y },
+      value: { name: payload.name, x, y },
       confidence: 1,
     };
   } catch (e) {
