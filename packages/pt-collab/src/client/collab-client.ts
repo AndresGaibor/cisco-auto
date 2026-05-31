@@ -34,6 +34,7 @@ export interface CollabClientOptions {
   heartbeatIntervalMs?: number;
   reconnectDelayMs?: number;
   maxReconnects?: number;
+  rejectUnauthorized?: boolean;
   onWelcome?: (msg: WelcomeMessage) => void;
   onPeerJoined?: (msg: PeerJoinedMessage) => void;
   onPeerLeft?: (msg: PeerLeftMessage) => void;
@@ -137,11 +138,17 @@ export class CollabClient {
 
   private doConnect(): void {
     try {
-      this.ws = new WebSocket(this.wsUrl);
-      this.ws.onopen = () => this.handleOpen();
-      this.ws.onmessage = (event: MessageEvent) => this.handleMessage(event.data as string);
-      this.ws.onerror = () => {};
-      this.ws.onclose = (event: CloseEvent) => this.handleClose(event);
+      const tlsOpts = this.opts.rejectUnauthorized === false
+        ? { tls: { rejectUnauthorized: false } }
+        : undefined;
+      this.ws = tlsOpts
+        ? new (WebSocket as any)(this.wsUrl, [], tlsOpts)
+        : new WebSocket(this.wsUrl);
+      const w = this.ws!;
+      w.onopen = () => this.handleOpen();
+      w.onmessage = (event: MessageEvent) => this.handleMessage(event.data as string);
+      w.onerror = () => {};
+      w.onclose = (event: CloseEvent) => this.handleClose(event);
     } catch {
       this.scheduleReconnect();
     }

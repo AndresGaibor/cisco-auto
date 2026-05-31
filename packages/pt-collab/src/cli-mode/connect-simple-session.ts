@@ -46,14 +46,11 @@ export async function connectSimpleSession(
 
   updateClientUrl(url, displayName);
 
-  try {
-    await diagnoseUrl(url);
-  } catch (err) {
-    throw new Error(
-      `No se puede alcanzar el servidor: ${err instanceof Error ? err.message : String(err)}\n` +
-      `Verifica que: 1) el host tenga PT Collab corriendo (bun run pt collab start)\n` +
-      `              2) Tailscale Funnel esté activo\n` +
-      `              3) la URL sea correcta`,
+  const diagnosis = await diagnoseUrl(url);
+  if (diagnosis.tlsWarning) {
+    process.stderr.write(
+      `Advertencia TLS: ${diagnosis.tlsWarning}\n` +
+      `  Intentando conectar de todas formas...\n`,
     );
   }
 
@@ -63,6 +60,7 @@ export async function connectSimpleSession(
     displayName,
     capabilities: ["topology.events", "topology.apply", "ios.readConfig"],
     timeoutMs: 15000,
+    rejectUnauthorized: diagnosis.tlsWarning ? false : undefined,
   });
 
   writeSessionFile({
@@ -88,7 +86,7 @@ export function getSavedUrl(): string | undefined {
   return cfg?.lastUrl ?? undefined;
 }
 
-async function diagnoseUrl(url: string): Promise<void> {
+async function diagnoseUrl(url: string): Promise<{ tlsWarning?: string }> {
   const healthUrl = url.replace(/\/?$/, "/health");
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
@@ -101,9 +99,15 @@ async function diagnoseUrl(url: string): Promise<void> {
     if (!body.ok || body.service !== "pt-collab") {
       throw new Error(`respuesta inesperada: ${JSON.stringify(body)}`);
     }
+    return {};
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
       throw new Error("Server timeout (5s)");
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    const isTls = /certificate|TLS|SSL|cert/i.test(msg);
+    if (isTls) {
+      return { tlsWarning: msg };
     }
     throw err;
   } finally {
