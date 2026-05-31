@@ -26,6 +26,19 @@ export interface AutoSyncStatus {
   errors: number;
 }
 
+export interface IOSHistoryEntry {
+  device: string;
+  command: string;
+  seq: number;
+  timestamp: number;
+}
+
+export interface SyncDeviceState {
+  baseRunningConfig?: string;
+  baseStartupConfig?: string;
+  hash: string;
+}
+
 export class AutoSyncService {
   private timer: ReturnType<typeof setInterval> | null = null;
   private lastSnapshot: TopologySnapshot | null = null;
@@ -54,6 +67,15 @@ export class AutoSyncService {
 
   // Peers que ya conocemos (para evitar state sync en reconexiones)
   private knownPeerIds = new Set<string>();
+
+  // Ledger ordenado de cambios IOS por dispositivo
+  private iosLedger: IOSHistoryEntry[] = [];
+
+  // Cursor por peer: último seq del ledger que el peer ya recibió
+  private peerCursors: Record<string, number> = {};
+
+  // Hash base por dispositivo capturado al iniciar la sesión
+  private baseDeviceHashes: Record<string, string> = {};
 
   constructor(private readonly opts: AutoSyncOptions) {}
 
@@ -116,6 +138,7 @@ export class AutoSyncService {
     try {
       this.lastSnapshot = await this.opts.fetchSnapshot();
       this._lastPollAt = Date.now();
+      this.captureBaseHashes(this.lastSnapshot);
     } catch {
       // primera poll puede fallar si PT no está listo
     }
@@ -154,8 +177,16 @@ export class AutoSyncService {
       if (diff.manualCommands && diff.manualCommands.length > 0) {
         for (const cmd of diff.manualCommands) {
           this.accumulatedCommands.push(cmd);
+          this.iosLedger.push({
+            device: cmd.device,
+            command: cmd.command,
+            seq: this.seqCounter,
+            timestamp: Date.now(),
+          });
         }
-        // Mantener máximo 50 comandos por sesión
+        if (this.iosLedger.length > 200) {
+          this.iosLedger = this.iosLedger.slice(-200);
+        }
         if (this.accumulatedCommands.length > 50) {
           this.accumulatedCommands = this.accumulatedCommands.slice(-50);
         }
@@ -249,18 +280,48 @@ export class AutoSyncService {
     }
   }
 
-  private async syncStateToPeer(_peerId: string): Promise<void> {
-    if (this.accumulatedCommands.length === 0) return;
+  private async syncStateToPeer(peerId: string): Promise<void> {
+    if (!this.lastSnapshot) return;
 
-    // Enviar comandos acumulados como deltas para el nuevo peer
-    const deviceToCommands = new Map<string, string[]>();
-    for (const cmd of this.accumulatedCommands) {
-      const cmds = deviceToCommands.get(cmd.device) ?? [];
-      cmds.push(cmd.command);
-      deviceToCommands.set(cmd.device, cmds);
+    const peerCursor = this.peerCursors[peerId] ?? -1;
+    const incremental = this.ledgerEntriesSince(peerCursor);
+
+    // Enviar estado base de cada dispositivo: la config actual del snapshot
+    for (const [deviceName, config] of Object.entries(this.lastSnapshot.deviceConfigs ?? {})) {
+      const runningConfig = config.runningConfig ?? "";
+      if (runningConfig.length === 0) continue;
+
+      const lines = runningConfig.split("\n").filter(l => l.trim().length > 0);
+      if (lines.length === 0) continue;
+
+      const delta: CollabDelta = {
+        id: cryptoRandomUUID(),
+        roomId: this.opts.roomId,
+        peerId: this.opts.peerId,
+        seq: this.seqCounter++,
+        lamport: this.lamportClock++,
+        createdAt: new Date().toISOString(),
+        baseVector: { ...this.vector },
+        scope: `device:${deviceName}:running-config` as any,
+        kind: "device.cli.runningConfig.changed",
+        beforeHash: this.baseDeviceHashes[deviceName],
+        afterHash: simpleHash(runningConfig),
+        payload: { device: deviceName, configLines: lines },
+      };
+      this.vector[this.opts.peerId] = this.seqCounter;
+      this.opts.client.sendMessage({ type: "delta.submit", delta, timestamp: new Date().toISOString() });
+      this._deltasSubmitted++;
     }
 
-    for (const [device, commands] of deviceToCommands) {
+    // Replay de comandos incrementales del ledger que el peer aún no ha recibido
+    const deviceIncrementalCmds = new Map<string, string[]>();
+    for (const entry of incremental) {
+      const cmds = deviceIncrementalCmds.get(entry.device) ?? [];
+      cmds.push(entry.command);
+      deviceIncrementalCmds.set(entry.device, cmds);
+    }
+
+    for (const [device, commands] of deviceIncrementalCmds) {
       const delta: CollabDelta = {
         id: cryptoRandomUUID(),
         roomId: this.opts.roomId,
@@ -278,7 +339,8 @@ export class AutoSyncService {
       this._deltasSubmitted++;
     }
 
-    console.log("[Sync] State sync enviado:", deviceToCommands.size, "dispositivos");
+    this.peerCursors[peerId] = this.seqCounter;
+    console.log("[Sync] State sync para peer", peerId, ":", Object.keys(this.lastSnapshot.deviceConfigs ?? {}).length, "bases,", incremental.length, "incremental");
   }
 
   private flushPendingDeltas(): void {
@@ -297,6 +359,19 @@ export class AutoSyncService {
   private syncVector(): void {
     this.vector[this.opts.peerId] = this.seqCounter;
   }
+
+  private captureBaseHashes(snapshot: TopologySnapshot): void {
+    this.baseDeviceHashes = {};
+    for (const [deviceName, config] of Object.entries(snapshot.deviceConfigs ?? {})) {
+      const running = config.runningConfig ?? "";
+      const startup = config.startupConfig ?? "";
+      this.baseDeviceHashes[deviceName] = simpleHash(running + "|" + startup);
+    }
+  }
+
+  private ledgerEntriesSince(cursor: number): IOSHistoryEntry[] {
+    return this.iosLedger.filter(e => e.seq > cursor);
+  }
 }
 
 function cryptoRandomUUID(): string {
@@ -304,4 +379,12 @@ function cryptoRandomUUID(): string {
     return crypto.randomUUID();
   }
   return Math.random().toString(36).slice(2, 10);
+}
+
+function simpleHash(input: string): string {
+  let h = 0;
+  for (let i = 0; i < input.length; i++) {
+    h = (Math.imul(31, h) + input.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0).toString(36);
 }
