@@ -88,43 +88,34 @@ export async function applyDelta(
         if (p.configLines?.length) {
           const normalizedCommands = p.configLines.map(normalizeCommand);
           if (typeof (controller as any).runTerminalPlan === "function") {
-            console.log("[Sync Debug:Apply] Usando runTerminalPlan con comandos:", JSON.stringify(normalizedCommands));
-            const steps: Array<{
-              kind: string;
-              command?: string;
-              expectMode?: string;
-              optional?: boolean;
-              allowPager?: boolean;
-              allowConfirm?: boolean;
-            }> = [
-              { kind: "ensureMode", expectMode: "privileged-exec", optional: true },
-              { kind: "ensureMode", expectMode: "global-config", optional: true },
-              ...normalizedCommands.map(cmd => ({
-                kind: "command" as const,
-                command: cmd,
-                allowPager: true,
-                allowConfirm: true,
-              })),
-            ];
-            const plan = {
-              id: "sync_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
-              device: p.device,
-              targetMode: undefined as any,
-              steps,
-              timeouts: {
-                commandTimeoutMs: 15000,
-                stallTimeoutMs: 30000,
-              },
-              policies: {
-                autoBreakWizard: true,
-                autoAdvancePager: true,
-                maxPagerAdvances: 50,
-                maxConfirmations: 3,
-                abortOnPromptMismatch: false,
-                abortOnModeMismatch: false,
-              }
-            };
-            await (controller as any).runTerminalPlan(plan);
+            console.log("[Sync Debug:Apply] Ejecutando comando directo:", JSON.stringify(normalizedCommands));
+            for (const cmd of normalizedCommands) {
+              await (controller as any).runTerminalPlan({
+                id: "sync_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+                device: p.device,
+                targetMode: undefined as any,
+                steps: [
+                  {
+                    kind: "command",
+                    command: cmd,
+                    allowPager: true,
+                    allowConfirm: true,
+                  },
+                ],
+                timeouts: {
+                  commandTimeoutMs: 15000,
+                  stallTimeoutMs: 30000,
+                },
+                policies: {
+                  autoBreakWizard: true,
+                  autoAdvancePager: true,
+                  maxPagerAdvances: 50,
+                  maxConfirmations: 3,
+                  abortOnPromptMismatch: false,
+                  abortOnModeMismatch: false,
+                },
+              });
+            }
           } else {
             await controller.configIos(p.device, normalizedCommands);
           }
