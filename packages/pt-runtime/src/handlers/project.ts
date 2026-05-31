@@ -138,7 +138,18 @@ export function handleProjectOpen(payload: Record<string, unknown>, api: any): R
 
     const before = getSavedFilename(getActiveFile(aw));
     aw.fileOpen(path);
-    const after = getSavedFilename(getActiveFile(aw));
+    var after = getSavedFilename(getActiveFile(aw));
+
+    // Si PT ya tenia un archivo cargado, fileOpen puede no cambiar el
+    // archivo activo (PT muestra dialogo nativo que bloquea en modo script).
+    // En ese caso, cerramos el proyecto actual con fileNew() y reintentamos.
+    if (after === before && before) {
+      if (typeof aw.fileNew === "function") {
+        aw.fileNew();
+        aw.fileOpen(path);
+        after = getSavedFilename(getActiveFile(aw));
+      }
+    }
 
     return okResult("", {
       parsed: {

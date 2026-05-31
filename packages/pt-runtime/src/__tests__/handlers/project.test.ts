@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { handleProjectStatus, handleProjectSave, handleProjectSnapshotBegin, handleProjectSnapshotRead, handleProjectSnapshotClear } from "../../handlers/project.js";
+import { handleProjectOpen, handleProjectStatus, handleProjectSave, handleProjectSnapshotBegin, handleProjectSnapshotRead, handleProjectSnapshotClear } from "../../handlers/project.js";
 
 function createDeps(overrides: Record<string, unknown> = {}) {
   const archivoActivo = {
@@ -10,6 +10,8 @@ function createDeps(overrides: Record<string, unknown> = {}) {
   };
   const appWindow = {
     getActiveFile: () => archivoActivo,
+    fileOpen: (p: string) => {},
+    fileNew: () => {},
     getDefaultFileSaveLocation: () => "/Users/me/Cisco Packet Tracer 9.0.0/saves",
     getTempFileLocation: () => "/tmp/pt",
   };
@@ -127,6 +129,60 @@ describe("project handlers", () => {
     const result = handleProjectSnapshotRead({ snapshotId: "no-existe" }, deps) as any;
     expect(result.ok).toBe(false);
     expect(result.code).toBe("PROJECT_SNAPSHOT_NOT_FOUND");
+  });
+
+  test("__projectOpen llama fileOpen con la ruta y registra cambio de archivo", () => {
+    var activeFile = "/Users/me/labs/taller.pkt";
+    const deps = createDeps({
+      ipc: {
+        appWindow: () => ({
+          getActiveFile: () => ({ getSavedFilename: () => activeFile }),
+          fileOpen: (p: string) => { activeFile = p; },
+        }),
+      },
+    });
+    const result = handleProjectOpen({ path: "/tmp/checkpoint.pkt" }, deps) as any;
+    expect(result.parsed.ok).toBe(true);
+    expect(result.parsed.before).toBe("/Users/me/labs/taller.pkt");
+    expect(result.parsed.after).toBe("/tmp/checkpoint.pkt");
+    expect(result.parsed.requestedPath).toBe("/tmp/checkpoint.pkt");
+  });
+
+  test("__projectOpen sin ruta devuelve error", () => {
+    const result = handleProjectOpen({ path: "" }, createDeps()) as any;
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe("PROJECT_OPEN_INVALID_PATH");
+  });
+
+  test("__projectOpen sin appWindow devuelve error", () => {
+    const deps = createDeps({ ipc: { appWindow: () => null } });
+    const result = handleProjectOpen({ path: "/tmp/checkpoint.pkt" }, deps) as any;
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe("PROJECT_OPEN_UNAVAILABLE");
+  });
+
+  test("__projectOpen usa fileNew como fallback si fileOpen no cambia activeFile", () => {
+    var activeFile = "/Users/me/labs/taller.pkt";
+    var newCalled = false;
+    const deps = createDeps({
+      ipc: {
+        appWindow: () => ({
+          getActiveFile: () => ({ getSavedFilename: () => activeFile }),
+          fileOpen: (p: string) => {
+            if (!newCalled) {
+              // primera vez — fileOpen no cambia el archivo
+            } else {
+              activeFile = p;
+            }
+          },
+          fileNew: () => { newCalled = true; },
+        }),
+      },
+    });
+    const result = handleProjectOpen({ path: "/tmp/checkpoint.pkt" }, deps) as any;
+    expect(newCalled).toBe(true);
+    expect(result.parsed.after).toBe("/tmp/checkpoint.pkt");
+    expect(result.parsed.ok).toBe(true);
   });
 
   test("snapshot clear sin snapshotId limpia todo el store", () => {
