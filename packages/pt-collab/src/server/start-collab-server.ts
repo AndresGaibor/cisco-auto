@@ -26,6 +26,7 @@ export interface CollabServerHandle {
   checkpointStore: CheckpointStore;
   close(): Promise<void>;
   sessionSecret?: string;
+  publishCheckpoint(record: { checkpointId: string; roomId: string; peerId: string; sha256: string; byteSize: number; chunkCount: number; createdAt: string }, bytes: Uint8Array): void;
 }
 
 export async function createCollabServer(options: StartCollabServerOptions): Promise<CollabServerHandle> {
@@ -76,6 +77,11 @@ export async function createCollabServer(options: StartCollabServerOptions): Pro
     token,
     checkpointStore,
     sessionSecret,
+    publishCheckpoint(record, bytes) {
+      checkpointStore.save(record);
+      checkpointStore.writePktData(record.checkpointId, bytes);
+      roomRegistry.setLatestCheckpoint(roomId, record.checkpointId);
+    },
     async close() {
       await success.stop();
     },

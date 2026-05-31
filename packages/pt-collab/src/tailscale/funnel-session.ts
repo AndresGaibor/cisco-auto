@@ -42,7 +42,7 @@ export async function startFunnelSession(opts: StartFunnelSessionOptions): Promi
     throw new Error(`Funnel falló. ${parts.join(", ") || "razón desconocida"}`);
   }
 
-  const publicUrl = await resolvePublicUrl();
+  const publicUrl = await resolvePublicUrl(publicPort);
   if (!publicUrl) {
     throw new Error("No se pudo determinar la URL pública de Tailscale");
   }

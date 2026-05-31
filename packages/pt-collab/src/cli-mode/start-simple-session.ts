@@ -56,7 +56,7 @@ export async function startSimpleSession(
   const hostConfig = getOrCreateHostConfig(port);
   const sessionSecret = hostConfig.sessionSecret;
 
-  const publicUrlBase = await resolvePublicUrl();
+  const publicUrlBase = await resolvePublicUrl(opts.publicPort);
   if (!publicUrlBase) {
     throw new Error(
       "No se pudo determinar la URL pública de Tailscale.\n" +
@@ -80,8 +80,8 @@ export async function startSimpleSession(
     try {
       const autosave = await opts.controller.project.autosave({ keep: 5 });
       if (autosave.ok) {
-        const bytes = readFileSync(autosave.autosavePath);
-        handle.checkpointStore.save({
+        const bytes = new Uint8Array(readFileSync(autosave.autosavePath));
+        handle.publishCheckpoint({
           checkpointId: `cp_${Date.now()}`,
           roomId: "default",
           peerId: "host",
@@ -89,8 +89,7 @@ export async function startSimpleSession(
           byteSize: autosave.bytes,
           chunkCount: 1,
           createdAt: new Date().toISOString(),
-        });
-        handle.checkpointStore.writePktData(handle.checkpointStore.latest()!.checkpointId, new Uint8Array(bytes));
+        }, bytes);
       }
     } catch {
       // Bootstrap opcional: si falla, la sesión sigue viva.
@@ -114,6 +113,8 @@ export async function startSimpleSession(
         roomId: "default",
         checkpointBaseUrl: `${handle.localUrl}/s/${sessionSecret}`,
         pollIntervalMs: 1500,
+        pullInitialCheckpoint: false,
+        skipBootstrap: true,
       })
     : null;
 
@@ -126,7 +127,7 @@ export async function startSimpleSession(
     funnel = await startFunnelSession({
       localPort: port,
       localHost: host,
-      publicPort: opts.publicPort ?? 443,
+      publicPort: opts.publicPort ?? 8443,
       pathPrefix: path,
     });
   } catch (error) {

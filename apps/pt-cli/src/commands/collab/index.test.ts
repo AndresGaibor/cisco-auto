@@ -32,12 +32,15 @@ describe("createCollabCommand", () => {
     expect(hiddenCommands).toContain("reset-url");
   });
 
-  test("start expone opciones esperadas", () => {
+  test("start expone opciones esperadas y default public-port es 8443", () => {
     const command = createCollabCommand();
     const cmd = command.commands.find((c) => c.name() === "start")!;
     const options = cmd.options.map((o) => o.long);
     expect(options).toContain("--port");
+    expect(options).toContain("--public-port");
     expect(options).toContain("--json");
+    const pubPort = cmd.options.find((o) => o.long === "--public-port");
+    expect(pubPort?.defaultValue).toBe(8443);
   });
 
   test("connect acepta URL opcional", () => {

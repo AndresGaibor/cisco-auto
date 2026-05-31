@@ -97,9 +97,11 @@ export function diffSnapshots(before: TopologySnapshot, after: TopologySnapshot)
   }
 
   // cambios de configuración
+  const afterDeviceConfigs = after.deviceConfigs ?? {};
+  const beforeDeviceConfigs = before.deviceConfigs ?? {};
   for (const name of afterDeviceNames) {
-    const afterCfg = after.deviceConfigs[name];
-    const beforeCfg = before.deviceConfigs[name];
+    const afterCfg = afterDeviceConfigs[name];
+    const beforeCfg = beforeDeviceConfigs[name];
     if (afterCfg && beforeCfg) {
       const sections: Array<"runningConfig" | "startupConfig" | "xml"> = [
         "runningConfig", "startupConfig", "xml",

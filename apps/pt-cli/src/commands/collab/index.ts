@@ -63,16 +63,18 @@ function createStartCommand(): Command {
   return new Command("start")
     .description("Inicia PT Collab como host y publica vía Tailscale Funnel")
     .option("--port <port>", "Puerto local", (v: string) => Number(v), 3937)
+    .option("--public-port <port>", "Puerto público del funnel (443|8443|10000)", (v: string) => Number(v), 8443)
     .option("--no-open", "No abrir navegador", false)
     .option("--json", "Salida en JSON", false)
     .action(async function (opts: Record<string, unknown>) {
       const json = opts.json === true;
       const port = typeof opts.port === "number" ? opts.port : 3937;
+      const publicPort = typeof opts.publicPort === "number" ? (opts.publicPort as 443 | 8443 | 10000) : 8443;
 
       try {
         const controller = createDefaultPTController();
         await controller.start();
-        const session = await startSimpleSession({ port, controller });
+        const session = await startSimpleSession({ port, publicPort, controller });
 
         if (json) {
           process.stdout.write(JSON.stringify({
@@ -164,6 +166,7 @@ function createConnectCommand(): Command {
 
         const result = await connectSimpleSession({ url, name, controller });
         const client = result.client;
+        const bootstrap = result.coordinator?.getBootstrapResult();
 
         if (json) {
           process.stdout.write(JSON.stringify({
@@ -174,16 +177,42 @@ function createConnectCommand(): Command {
             peerId: client.peerId,
             peers: client.peers.length,
             url,
+            bootstrap: {
+              checked: bootstrap?.checked ?? false,
+              checkpointId: bootstrap?.checkpointId ?? null,
+              downloaded: bootstrap?.downloaded ?? false,
+              opened: bootstrap?.opened ?? false,
+              tempPath: bootstrap?.tempPath ?? null,
+              error: bootstrap?.error ?? null,
+            },
           }, null, 2) + "\n");
           return;
         }
 
+        let syncLine = "Sincronización:";
+        if (bootstrap?.checked) {
+          if (bootstrap.error) {
+            syncLine += " error";
+          } else if (bootstrap.opened) {
+            syncLine += " activa";
+          } else {
+            syncLine += " incubando";
+          }
+        } else {
+          syncLine += " pendientes";
+        }
+
         process.stdout.write(
           `Conectado a PT Collab.\n` +
+          `Checkpoint inicial: ${bootstrap?.checkpointId ? `abierto ${bootstrap.checkpointId}` : bootstrap?.error ? `error: ${bootstrap.error}` : "no disponible"}\n` +
           `Peers: ${client.peers.length}\n` +
-          `Sincronización: activa\n` +
+          `${syncLine}\n` +
           `Conflictos: 0\n`,
         );
+
+        if (bootstrap?.error && !bootstrap.opened) {
+          process.stderr.write(`Advertencia: no se pudo abrir el checkpoint inicial. La sincronización puede no funcionar correctamente.\n`);
+        }
 
         process.on("SIGINT", () => {
           result.close().finally(() => process.exit(0));

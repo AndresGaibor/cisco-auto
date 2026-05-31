@@ -1,18 +1,15 @@
 import { checkTailscaleStatus } from "./tailscale-status.js";
 
-export async function resolvePublicUrl(): Promise<string | null> {
+export async function resolvePublicUrl(publicPort?: number): Promise<string | null> {
   try {
     const status = await checkTailscaleStatus();
     if (!status.selfIp) return null;
-    // DNSName viene como "hostname.tailnet-name.ts.net." (con trailing dot)
-    if (status.dnsName) {
-      return `https://${status.dnsName.replace(/\.$/, "")}`;
+    const dnsName = status.dnsName?.replace(/\.$/, "") ?? (status.hostname ? `${status.hostname}.ts.net` : null);
+    if (!dnsName) return null;
+    if (publicPort && publicPort !== 443) {
+      return `https://${dnsName}:${publicPort}`;
     }
-    // fallback: hostname + .ts.net
-    if (status.hostname) {
-      return `https://${status.hostname}.ts.net`;
-    }
-    return null;
+    return `https://${dnsName}`;
   } catch {
     return null;
   }

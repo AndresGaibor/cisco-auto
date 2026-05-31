@@ -59,6 +59,25 @@ describe("startPtMcpServer", () => {
       await new Promise<void>((resolve) => occupiedServer.close(() => resolve()));
     }
   });
+
+  test("responde OK a GET /mcp sin Accept para validación", async () => {
+    const handle = await startPtMcpServer({
+      repoRoot: "/repo",
+      cliEntrypoint: "/repo/apps/pt-cli/src/index.ts",
+      port: 0,
+      autoFunnel: false,
+      commandCatalog: [],
+    });
+
+    try {
+      const response = await fetch(`${handle.localUrl}/mcp`);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toContain("application/json");
+      await expect(response.json()).resolves.toMatchObject({ ok: true, service: "pt-mcp" });
+    } finally {
+      await handle.close();
+    }
+  });
 });
 
 

@@ -39,6 +39,11 @@ export class AutoSyncService {
   private _lastPollAt: number | null = null;
   private _lastSyncAt: number | null = null;
 
+  private offDeltaCommit?: () => void;
+  private offDeltaAck?: () => void;
+  private applyingRemote = false;
+  private seenDeltaIds = new Set<string>();
+
   constructor(private readonly opts: AutoSyncOptions) {}
 
   get status(): AutoSyncStatus {
@@ -58,23 +63,18 @@ export class AutoSyncService {
 
     this.syncVector();
 
-    const opts = this.opts.client as unknown as {
-      onDeltaCommit?: (msg: { delta: CollabDelta }) => void;
-      onDeltaAck?: (msg: { deltaId: string; peerId: string; accepted: boolean }) => void;
-    };
-    const origOnDeltaCommit = opts.onDeltaCommit;
-    opts.onDeltaCommit = (msg) => {
-      origOnDeltaCommit?.(msg);
+    this.offDeltaCommit = this.opts.client.on("delta.commit", (msg) => {
       this.handleIncomingDelta(msg.delta).catch((e) => {
         this._errors++;
         this.opts.onError?.(e);
       });
-    };
-    const origOnDeltaAck = opts.onDeltaAck;
-    opts.onDeltaAck = (msg) => {
-      origOnDeltaAck?.(msg);
-      if (msg.accepted) this.vector[msg.peerId] = (this.vector[msg.peerId] ?? 0) + 1;
-    };
+    });
+
+    this.offDeltaAck = this.opts.client.on("delta.ack", (msg) => {
+      if (msg.accepted) {
+        this.vector[msg.peerId] = (this.vector[msg.peerId] ?? 0) + 1;
+      }
+    });
 
     try {
       this.lastSnapshot = await this.opts.fetchSnapshot();
@@ -92,9 +92,13 @@ export class AutoSyncService {
       clearInterval(this.timer);
       this.timer = null;
     }
+    this.offDeltaCommit?.();
+    this.offDeltaAck?.();
   }
 
   private async poll(): Promise<void> {
+    if (this.applyingRemote) return;
+
     try {
       const current = await this.opts.fetchSnapshot();
       this._lastPollAt = Date.now();
@@ -134,11 +138,38 @@ export class AutoSyncService {
   }
 
   private async handleIncomingDelta(delta: CollabDelta): Promise<void> {
-    const result = await this.opts.applyDelta(delta);
-    if (result.ok) {
-      this._deltasApplied++;
-      this.lamportClock = Math.max(this.lamportClock, delta.lamport) + 1;
-      this.vector[delta.peerId] = (this.vector[delta.peerId] ?? 0) + 1;
+    if (delta.peerId === this.opts.peerId) return;
+    if (this.seenDeltaIds.has(delta.id)) return;
+
+    this.seenDeltaIds.add(delta.id);
+    this.applyingRemote = true;
+
+    try {
+      const result = await this.opts.applyDelta(delta);
+
+      if (result.ok) {
+        this._deltasApplied++;
+        this.lamportClock = Math.max(this.lamportClock, delta.lamport) + 1;
+        this.vector[delta.peerId] = (this.vector[delta.peerId] ?? 0) + 1;
+        this.lastSnapshot = await this.opts.fetchSnapshot();
+
+        this.opts.client.sendMessage({
+          type: "delta.ack",
+          deltaId: delta.id,
+          peerId: this.opts.peerId,
+          accepted: true,
+        });
+      } else {
+        this.opts.client.sendMessage({
+          type: "delta.ack",
+          deltaId: delta.id,
+          peerId: this.opts.peerId,
+          accepted: false,
+          reason: result.error,
+        });
+      }
+    } finally {
+      this.applyingRemote = false;
     }
   }
 
