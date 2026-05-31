@@ -28,6 +28,7 @@ export async function startFunnelSession(opts: StartFunnelSessionOptions): Promi
 
   const result = await runTailscale("funnel", [
     "--yes",
+    "--bg",
     `--https=${publicPort}`,
     `${localPort}`,
   ]);
@@ -51,7 +52,7 @@ export async function startFunnelSession(opts: StartFunnelSessionOptions): Promi
   return {
     publicUrl: fullUrl,
     async close() {
-      await runTailscale("funnel", ["off", `--https=${publicPort}`]);
+      await runTailscale("funnel", ["off", `--https=${publicPort}`]).catch(() => {});
     },
   };
 }
