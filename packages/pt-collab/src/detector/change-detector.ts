@@ -368,7 +368,7 @@ function makeDelta(opts: {
   payload: unknown;
 }): CollabDelta {
   return {
-    id: `${opts.peerId}_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
+    id: `${opts.peerId}_${opts.seq}_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
     roomId: opts.roomId,
     peerId: opts.peerId,
     seq: opts.seq,
