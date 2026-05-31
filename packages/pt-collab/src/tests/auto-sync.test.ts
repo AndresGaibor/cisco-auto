@@ -249,6 +249,34 @@ describe("AutoSyncService", () => {
 
       svc.stop();
     });
+
+    it("no solapa polls cuando fetchSnapshot sigue pendiente", async () => {
+      const client = createMockClient();
+      let fetchCount = 0;
+
+      const opts: AutoSyncOptions = {
+        client,
+        fetchSnapshot: async () => {
+          fetchCount++;
+          if (fetchCount === 1) return makeSnapshot();
+          await new Promise((r) => setTimeout(r, 100));
+          return makeSnapshot({ R1: { name: "R1", model: "2911" } });
+        },
+        applyDelta: async () => ({ ok: true, deltaId: "x" } as DeltaApplyResult),
+        roomId: "default",
+        peerId: "peer_b",
+        pollIntervalMs: 10,
+      };
+
+      const svc = new AutoSyncService(opts);
+      await svc.start();
+
+      await new Promise((r) => setTimeout(r, 45));
+
+      expect(fetchCount).toBe(2);
+
+      svc.stop();
+    });
   });
 
   describe("stop cleanup", () => {

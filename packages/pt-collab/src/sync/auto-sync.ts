@@ -58,6 +58,7 @@ export class AutoSyncService {
   private offPeerJoined?: () => void;
   private offWelcome?: () => void;
   private applyingRemote = false;
+  private polling = false;
   private seenDeltaIds = new Set<string>();
 
   // Comandos acumulados para state sync de nuevos peers
@@ -214,6 +215,9 @@ export class AutoSyncService {
 
   private async poll(): Promise<void> {
     if (this.applyingRemote) return;
+    if (this.polling) return;
+
+    this.polling = true;
 
     try {
       const current = await this.opts.fetchSnapshot();
@@ -294,6 +298,8 @@ export class AutoSyncService {
     } catch (error) {
       this._errors++;
       this.opts.onError?.(error instanceof Error ? error : new Error(String(error)));
+    } finally {
+      this.polling = false;
     }
   }
 

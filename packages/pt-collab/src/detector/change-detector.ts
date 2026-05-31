@@ -54,7 +54,7 @@ export function diffSnapshots(before: TopologySnapshot, after: TopologySnapshot)
   };
 
   if (after.manualCommands && after.manualCommands.length > 0) {
-    result.manualCommands = after.manualCommands;
+    result.manualCommands = diffManualCommands(before.manualCommands, after.manualCommands);
   }
 
   const beforeDeviceNames = new Set(Object.keys(before.devices));
@@ -184,6 +184,25 @@ export function diffSnapshots(before: TopologySnapshot, after: TopologySnapshot)
   }
 
   return result;
+}
+
+function diffManualCommands(
+  before: Array<{ device: string; command: string }> | undefined,
+  after: Array<{ device: string; command: string }>,
+): Array<{ device: string; command: string }> | undefined {
+  if (!before || before.length === 0) return after;
+
+  const hasSamePrefix =
+    before.length <= after.length &&
+    before.every((cmd, index) => {
+      const current = after[index];
+      return current?.device === cmd.device && current.command === cmd.command;
+    });
+
+  if (!hasSamePrefix) return after;
+
+  const nuevosComandos = after.slice(before.length);
+  return nuevosComandos.length > 0 ? nuevosComandos : undefined;
 }
 
 export function diffToDeltas(

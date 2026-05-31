@@ -220,4 +220,23 @@ describe("diffToDeltas", () => {
     expect(switchDelta!.kind).toBe("device.cli.runningConfig.changed");
     expect((switchDelta!.payload as any).configLines).toEqual(["vlan 10"]);
   });
+
+  test("no duplica comandos manuales ya vistos en snapshots acumulativos", () => {
+    const before = emptySnapshot();
+    before.manualCommands = [
+      { device: "Router0", command: "exit" },
+    ];
+
+    const after = emptySnapshot(1001);
+    after.manualCommands = [
+      { device: "Router0", command: "exit" },
+      { device: "Router0", command: "en" },
+    ];
+
+    const diff = diffSnapshots(before, after);
+
+    expect(diff.manualCommands).toEqual([
+      { device: "Router0", command: "en" },
+    ]);
+  });
 });
