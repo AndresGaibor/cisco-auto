@@ -355,7 +355,7 @@ describe("AutoSyncService", () => {
         client,
         fetchSnapshot: async () => {
           fetchCount++;
-          const cmds = fetchCount > 1
+          const cmds = fetchCount === 2
             ? [{ device: "R1", command: "vlan 20" }]
             : [];
           return {

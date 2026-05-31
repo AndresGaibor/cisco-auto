@@ -89,9 +89,18 @@ function ensureConsoleListeners(net: any): void {
 
             var cmd = args.inputCommand;
             if (cmd && cmd.trim()) {
+              var prompt = "";
+              try {
+                if (termObj && typeof termObj.getPrompt === "function") {
+                  prompt = termObj.getPrompt();
+                }
+              } catch (pe) {
+                // ignore
+              }
               pendingManualCommands.push({
                 device: devName,
-                command: cmd.trim()
+                command: cmd.trim(),
+                prompt: prompt
               });
             }
           } catch (err) {

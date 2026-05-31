@@ -76,13 +76,27 @@ export async function applyDelta(
       }
 
       case "device.cli.runningConfig.changed": {
-        const p = delta.payload as { device: string; configLines?: string[] };
+        const p = delta.payload as { device: string; configLines?: string[]; prompt?: string };
         if (p.configLines?.length) {
           if (typeof (controller as any).runTerminalPlan === "function") {
+            // Detectar el modo destino correcto basado en el prompt del host
+            let targetMode: any = undefined;
+            if (p.prompt) {
+              const cleanPrompt = String(p.prompt).trim();
+              if (cleanPrompt.includes("(config-if)#")) targetMode = "config-if";
+              else if (cleanPrompt.includes("(config-line)#")) targetMode = "config-line";
+              else if (cleanPrompt.includes("(config-router)#")) targetMode = "config-router";
+              else if (cleanPrompt.includes("(config-vlan)#")) targetMode = "config-vlan";
+              else if (cleanPrompt.includes("(config-subif)#")) targetMode = "config-subif";
+              else if (cleanPrompt.includes("(config)#")) targetMode = "global-config";
+              else if (cleanPrompt.endsWith("#")) targetMode = "privileged-exec";
+              else if (cleanPrompt.endsWith(">")) targetMode = "user-exec";
+            }
+
             await (controller as any).runTerminalPlan({
               id: "sync_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
               device: p.device,
-              targetMode: undefined as any,
+              targetMode: targetMode,
               steps: p.configLines.map((cmd) => ({
                 kind: "command",
                 command: cmd,

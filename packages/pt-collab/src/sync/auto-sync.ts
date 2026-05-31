@@ -31,6 +31,7 @@ export interface IOSHistoryEntry {
   command: string;
   seq: number;
   timestamp: number;
+  prompt?: string;
 }
 
 export interface SyncDeviceState {
@@ -154,6 +155,7 @@ export class AutoSyncService {
             command: cmd.command,
             seq: this.seqCounter++,
             timestamp: Date.now(),
+            prompt: (cmd as any).prompt,
           });
         }
       }
@@ -229,6 +231,7 @@ export class AutoSyncService {
               command: cmd.command,
               seq: this.seqCounter++,
               timestamp: Date.now(),
+              prompt: (cmd as any).prompt,
             });
           }
         }
@@ -245,6 +248,7 @@ export class AutoSyncService {
             command: cmd.command,
             seq: this.seqCounter,
             timestamp: Date.now(),
+            prompt: (cmd as any).prompt,
           });
         }
         if (this.iosLedger.length > 200) {
@@ -378,10 +382,14 @@ export class AutoSyncService {
 
     // Replay de comandos incrementales del ledger que el peer aún no ha recibido
     const deviceIncrementalCmds = new Map<string, string[]>();
+    const devicePrompt = new Map<string, string | undefined>();
     for (const entry of incremental) {
       const cmds = deviceIncrementalCmds.get(entry.device) ?? [];
       cmds.push(entry.command);
       deviceIncrementalCmds.set(entry.device, cmds);
+      if (!devicePrompt.has(entry.device)) {
+        devicePrompt.set(entry.device, entry.prompt);
+      }
     }
 
     for (const [device, commands] of deviceIncrementalCmds) {
@@ -395,7 +403,7 @@ export class AutoSyncService {
         baseVector: { ...this.vector },
         scope: `device:${device}:running-config` as any,
         kind: "device.cli.runningConfig.changed",
-        payload: { device, configLines: commands },
+        payload: { device, configLines: commands, prompt: devicePrompt.get(device) },
       };
       this.vector[this.opts.peerId] = this.seqCounter;
       this.opts.client.sendMessage({ type: "delta.submit", delta, timestamp: new Date().toISOString() });

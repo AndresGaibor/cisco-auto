@@ -54,12 +54,7 @@ export function diffSnapshots(before: TopologySnapshot, after: TopologySnapshot)
   };
 
   if (after.manualCommands && after.manualCommands.length > 0) {
-    const beforeCmds = before.manualCommands ?? [];
-    const beforeSet = new Set(beforeCmds.map(c => c.device + ":" + c.command));
-    const newCommands = after.manualCommands.filter(c => !beforeSet.has(c.device + ":" + c.command));
-    if (newCommands.length > 0) {
-      result.manualCommands = newCommands;
-    }
+    result.manualCommands = after.manualCommands;
   }
 
   const beforeDeviceNames = new Set(Object.keys(before.devices));
@@ -300,12 +295,14 @@ export function diffToDeltas(
 
   if (diff.manualCommands && diff.manualCommands.length > 0) {
     const commandsByDevice: Record<string, string[]> = {};
+    const promptsByDevice: Record<string, string | undefined> = {};
     for (const item of diff.manualCommands) {
       const existing = commandsByDevice[item.device];
       if (existing) {
         existing.push(item.command);
       } else {
         commandsByDevice[item.device] = [item.command];
+        promptsByDevice[item.device] = (item as any).prompt;
       }
     }
 
@@ -318,7 +315,7 @@ export function diffToDeltas(
         peerId,
         kind: "device.cli.runningConfig.changed",
         scope: `device:${deviceName}:running-config` as CollabScope,
-        payload: { device: deviceName, configLines },
+        payload: { device: deviceName, configLines, prompt: promptsByDevice[deviceName] },
       }));
     }
   }
