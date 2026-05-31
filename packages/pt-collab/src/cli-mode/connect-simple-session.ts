@@ -20,6 +20,9 @@ export interface ConnectSimpleSessionOptions {
     addLink(device1: string, port1: string, device2: string, port2: string, linkType?: string): Promise<unknown>;
     removeLink(device: string, port: string): Promise<void>;
     configIos(device: string, commands: string[], options?: { save?: boolean }): Promise<void>;
+    project?: {
+      open(path: string, options?: { wait?: boolean; waitTimeoutMs?: number }): Promise<unknown>;
+    };
   };
   resetUrl?: boolean;
   json?: boolean;

@@ -301,10 +301,12 @@ export function diffToDeltas(
   if (diff.manualCommands && diff.manualCommands.length > 0) {
     const commandsByDevice: Record<string, string[]> = {};
     for (const item of diff.manualCommands) {
-      if (!commandsByDevice[item.device]) {
-        commandsByDevice[item.device] = [];
+      const existing = commandsByDevice[item.device];
+      if (existing) {
+        existing.push(item.command);
+      } else {
+        commandsByDevice[item.device] = [item.command];
       }
-      commandsByDevice[item.device].push(item.command);
     }
 
     for (const [deviceName, configLines] of Object.entries(commandsByDevice)) {

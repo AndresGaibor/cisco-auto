@@ -32,10 +32,15 @@ function makeSnapshot(devices: Record<string, { name: string; model: string }> =
   };
 }
 
-function createMockClient() {
+interface MockCollabClient extends CollabClient {
+  _sentMessages: unknown[];
+  _emit(event: string, msg: unknown): void;
+}
+
+function createMockClient(): MockCollabClient {
   const listeners = new Map<string, Set<(msg: unknown) => void>>();
 
-  return {
+  const mock = {
     listeners,
     _sentMessages: [] as unknown[],
     _status: "connected" as const,
@@ -46,15 +51,17 @@ function createMockClient() {
       return () => set.delete(handler);
     },
     sendMessage(msg: unknown) {
-      this._sentMessages.push(msg);
+      mock._sentMessages.push(msg);
     },
     getStatus() {
-      return this._status;
+      return mock._status;
     },
     _emit(event: string, msg: unknown) {
       for (const h of listeners.get(event) ?? []) h(msg);
     },
-  } as unknown as CollabClient;
+  };
+
+  return mock as any;
 }
 
 describe("AutoSyncService", () => {
@@ -110,7 +117,7 @@ describe("AutoSyncService", () => {
       await new Promise((r) => setTimeout(r, 50));
 
       expect(applyCalled).toBe(true);
-      expect(applyDeltaArg?.id).toBe(delta.id);
+      expect((applyDeltaArg as CollabDelta | null)?.id).toBe(delta.id);
 
       svc.stop();
     });
