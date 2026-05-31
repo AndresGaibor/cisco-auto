@@ -41,8 +41,12 @@ export class AutoSyncService {
 
   private offDeltaCommit?: () => void;
   private offDeltaAck?: () => void;
+  private offPeerJoined?: () => void;
   private applyingRemote = false;
   private seenDeltaIds = new Set<string>();
+
+  // Comandos acumulados para state sync de nuevos peers
+  private accumulatedCommands: { device: string; command: string }[] = [];
 
   constructor(private readonly opts: AutoSyncOptions) {}
 
@@ -76,6 +80,12 @@ export class AutoSyncService {
       }
     });
 
+    this.offPeerJoined = this.opts.client.on("peer.joined", (msg) => {
+      this.syncStateToPeer(msg.peer.peerId).catch((e: unknown) => {
+        console.warn("[Sync] Error en state sync para peer", msg.peer.peerId, e);
+      });
+    });
+
     try {
       this.lastSnapshot = await this.opts.fetchSnapshot();
       this._lastPollAt = Date.now();
@@ -94,6 +104,7 @@ export class AutoSyncService {
     }
     this.offDeltaCommit?.();
     this.offDeltaAck?.();
+    this.offPeerJoined?.();
   }
 
   private async poll(): Promise<void> {
@@ -112,6 +123,17 @@ export class AutoSyncService {
 
       const diff = diffSnapshots(this.lastSnapshot, current);
       console.log("[Collab Debug] poll diff:", JSON.stringify({ devicesAdded: diff.devicesAdded.length, devicesRemoved: diff.devicesRemoved.length, devicesMoved: diff.devicesMoved.length, linksAdded: diff.linksAdded.length, linksRemoved: diff.linksRemoved.length, configsChanged: diff.configsChanged.length, manualCommands: diff.manualCommands ?? '(empty)' }));
+
+      if (diff.manualCommands && diff.manualCommands.length > 0) {
+        for (const cmd of diff.manualCommands) {
+          this.accumulatedCommands.push(cmd);
+        }
+        // Mantener máximo 50 comandos por sesión
+        if (this.accumulatedCommands.length > 50) {
+          this.accumulatedCommands = this.accumulatedCommands.slice(-50);
+        }
+      }
+
       const deltas = diffToDeltas(
         diff,
         this.opts.roomId,
@@ -159,7 +181,13 @@ export class AutoSyncService {
         this._deltasApplied++;
         this.lamportClock = Math.max(this.lamportClock, delta.lamport) + 1;
         this.vector[delta.peerId] = (this.vector[delta.peerId] ?? 0) + 1;
-        this.lastSnapshot = await this.opts.fetchSnapshot();
+
+        try {
+          const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 4000));
+          this.lastSnapshot = await Promise.race([this.opts.fetchSnapshot(), timeout]);
+        } catch {
+          console.warn("[Sync] Snapshot post-delta timeout, manteniendo snapshot anterior");
+        }
 
         this.opts.client.sendMessage({
           type: "delta.ack",
@@ -179,6 +207,38 @@ export class AutoSyncService {
     } finally {
       this.applyingRemote = false;
     }
+  }
+
+  private async syncStateToPeer(_peerId: string): Promise<void> {
+    if (this.accumulatedCommands.length === 0) return;
+
+    // Enviar comandos acumulados como deltas para el nuevo peer
+    const deviceToCommands = new Map<string, string[]>();
+    for (const cmd of this.accumulatedCommands) {
+      const cmds = deviceToCommands.get(cmd.device) ?? [];
+      cmds.push(cmd.command);
+      deviceToCommands.set(cmd.device, cmds);
+    }
+
+    for (const [device, commands] of deviceToCommands) {
+      const delta: CollabDelta = {
+        id: cryptoRandomUUID(),
+        roomId: this.opts.roomId,
+        peerId: this.opts.peerId,
+        seq: this.seqCounter++,
+        lamport: this.lamportClock++,
+        createdAt: new Date().toISOString(),
+        baseVector: { ...this.vector },
+        scope: `device:${device}:running-config` as any,
+        kind: "device.cli.runningConfig.changed",
+        payload: { device, configLines: commands },
+      };
+      this.vector[this.opts.peerId] = this.seqCounter;
+      this.opts.client.sendMessage({ type: "delta.submit", delta, timestamp: new Date().toISOString() });
+      this._deltasSubmitted++;
+    }
+
+    console.log("[Sync] State sync enviado:", deviceToCommands.size, "dispositivos");
   }
 
   private syncVector(): void {
