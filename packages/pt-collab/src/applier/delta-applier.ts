@@ -11,6 +11,7 @@ export interface PTControllerPort {
   addLink(device1: string, port1: string, device2: string, port2: string, linkType?: string): Promise<unknown>;
   removeLink(device: string, port: string): Promise<void>;
   configIos(device: string, commands: string[], options?: { save?: boolean }): Promise<void>;
+  runTerminalPlan?(plan: any, options?: any): Promise<any>;
 }
 
 export interface DeltaApplyResult {
@@ -77,7 +78,35 @@ export async function applyDelta(
       case "device.cli.runningConfig.changed": {
         const p = delta.payload as { device: string; configLines?: string[] };
         if (p.configLines?.length) {
-          await controller.configIos(p.device, p.configLines);
+          if (typeof (controller as any).runTerminalPlan === "function") {
+            const steps = p.configLines.map(cmd => ({
+              kind: "command" as const,
+              command: cmd,
+              allowPager: true,
+              allowConfirm: true,
+            }));
+            const plan = {
+              id: "sync_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+              deviceName: p.device,
+              targetMode: undefined as any,
+              steps,
+              timeouts: {
+                commandTimeoutMs: 15000,
+                stallTimeoutMs: 30000,
+              },
+              policies: {
+                autoBreakWizard: true,
+                autoAdvancePager: true,
+                maxPagerAdvances: 50,
+                maxConfirmations: 3,
+                abortOnPromptMismatch: false,
+                abortOnModeMismatch: false,
+              }
+            };
+            await (controller as any).runTerminalPlan(plan);
+          } else {
+            await controller.configIos(p.device, p.configLines);
+          }
         }
         return { ok: true, deltaId: delta.id };
       }
