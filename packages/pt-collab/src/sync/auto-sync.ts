@@ -42,11 +42,19 @@ export class AutoSyncService {
   private offDeltaCommit?: () => void;
   private offDeltaAck?: () => void;
   private offPeerJoined?: () => void;
+  private offPeerLeft?: () => void;
+  private offWelcome?: () => void;
   private applyingRemote = false;
   private seenDeltaIds = new Set<string>();
 
   // Comandos acumulados para state sync de nuevos peers
   private accumulatedCommands: { device: string; command: string }[] = [];
+
+  // Deltas no enviados por desconexión
+  private pendingDeltas: CollabDelta[] = [];
+
+  // Peers que ya conocemos (para evitar state sync en reconexiones)
+  private knownPeerIds = new Set<string>();
 
   constructor(private readonly opts: AutoSyncOptions) {}
 
@@ -80,10 +88,30 @@ export class AutoSyncService {
       }
     });
 
+    // Poblar knownPeerIds con peers actuales al conectar/reconectar
+    this.offWelcome = this.opts.client.on("welcome", () => {
+      this.knownPeerIds.clear();
+      for (const peer of this.opts.client.peers) {
+        if (peer.peerId !== this.opts.peerId) {
+          this.knownPeerIds.add(peer.peerId);
+        }
+      }
+      // Enviar deltas que quedaron pendientes durante desconexión
+      this.flushPendingDeltas();
+    });
+
     this.offPeerJoined = this.opts.client.on("peer.joined", (msg) => {
-      this.syncStateToPeer(msg.peer.peerId).catch((e: unknown) => {
-        console.warn("[Sync] Error en state sync para peer", msg.peer.peerId, e);
+      const peerId = msg.peer.peerId;
+      // Si ya conocemos al peer, es una reconexión → no hacer state sync
+      if (this.knownPeerIds.has(peerId)) return;
+      this.knownPeerIds.add(peerId);
+      this.syncStateToPeer(peerId).catch((e: unknown) => {
+        console.warn("[Sync] Error en state sync para peer", peerId, e);
       });
+    });
+
+    this.offPeerLeft = this.opts.client.on("peer.left", (msg) => {
+      this.knownPeerIds.delete(msg.peerId);
     });
 
     try {
@@ -105,6 +133,8 @@ export class AutoSyncService {
     this.offDeltaCommit?.();
     this.offDeltaAck?.();
     this.offPeerJoined?.();
+    this.offPeerLeft?.();
+    this.offWelcome?.();
   }
 
   private async poll(): Promise<void> {
@@ -145,14 +175,24 @@ export class AutoSyncService {
 
       console.log("[Collab Debug] poll deltas generados:", deltas.length, deltas.map(d => ({ kind: d.kind, device: d.payload && typeof d.payload === 'object' ? (d.payload as any).device : '?', hasConfigLines: d.payload && typeof d.payload === 'object' ? Array.isArray((d.payload as any).configLines) : false })));
       if (deltas.length > 0) {
-        for (const delta of deltas) {
-          this.opts.client.sendMessage({ type: "delta.submit", delta, timestamp: new Date().toISOString() });
-          this.seqCounter++;
-          this.lamportClock++;
-          this._deltasSubmitted++;
+        // Si no estamos conectados, bufferear en lugar de enviar
+        if (this.opts.client.getStatus() !== "connected") {
+          for (const delta of deltas) {
+            this.pendingDeltas.push(delta);
+            this.seqCounter++;
+            this.lamportClock++;
+          }
+          console.log("[Collab Debug] Deltas encolados (desconectado):", deltas.length, "total pendientes:", this.pendingDeltas.length);
+        } else {
+          for (const delta of deltas) {
+            this.opts.client.sendMessage({ type: "delta.submit", delta, timestamp: new Date().toISOString() });
+            this.seqCounter++;
+            this.lamportClock++;
+            this._deltasSubmitted++;
+          }
+          this._lastSyncAt = Date.now();
+          this.opts.onSync?.(deltas.length);
         }
-        this._lastSyncAt = Date.now();
-        this.opts.onSync?.(deltas.length);
       }
 
       this.lastSnapshot = current;
@@ -166,6 +206,12 @@ export class AutoSyncService {
   private async handleIncomingDelta(delta: CollabDelta): Promise<void> {
     if (delta.peerId === this.opts.peerId) return;
     if (this.seenDeltaIds.has(delta.id)) return;
+
+    // No consumir deltas si estamos desconectados o reconectando
+    if (this.opts.client.getStatus() !== "connected") {
+      console.warn("[Sync] Ignorando delta remoto — no conectado:", delta.id.slice(0, 8));
+      return;
+    }
 
     const payload = (delta.payload ?? {}) as Record<string, unknown>;
     console.log("[Sync Debug:Apply] Recibido delta remoto:", JSON.stringify({ id: delta.id.slice(0,8), kind: delta.kind, device: payload.device ?? '(ninguno)', configLines: Array.isArray(payload.configLines) ? payload.configLines.length : 0, scope: delta.scope }));
@@ -239,6 +285,20 @@ export class AutoSyncService {
     }
 
     console.log("[Sync] State sync enviado:", deviceToCommands.size, "dispositivos");
+  }
+
+  private flushPendingDeltas(): void {
+    if (this.pendingDeltas.length === 0) return;
+
+    const count = this.pendingDeltas.length;
+    console.log("[Sync] Enviando", count, "deltas pendientes de la desconexión");
+    for (const delta of this.pendingDeltas) {
+      this.opts.client.sendMessage({ type: "delta.submit", delta, timestamp: new Date().toISOString() });
+      this._deltasSubmitted++;
+    }
+    this.pendingDeltas = [];
+    this._lastSyncAt = Date.now();
+    this.opts.onSync?.(count);
   }
 
   private syncVector(): void {

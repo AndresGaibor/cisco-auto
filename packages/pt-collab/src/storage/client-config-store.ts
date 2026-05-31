@@ -39,6 +39,16 @@ export function updateClientUrl(url: string, displayName?: string): ClientConfig
   return existing;
 }
 
+export function updatePeerId(peerId: string): void {
+  const existing = readClientConfig() ?? {
+    schemaVersion: 1,
+    autoReconnect: true,
+  };
+  existing.peerId = peerId;
+  existing.lastConnectedAt = new Date().toISOString();
+  writeClientConfig(existing);
+}
+
 export function resetClientUrl(): void {
   const existing = readClientConfig();
   if (existing) {

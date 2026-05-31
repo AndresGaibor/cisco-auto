@@ -9,6 +9,7 @@ export {
   readClientConfig,
   writeClientConfig,
   updateClientUrl,
+  updatePeerId,
   resetClientUrl,
 } from "./storage/client-config-store.js";
 export type { ClientConfig } from "./storage/client-config-store.js";

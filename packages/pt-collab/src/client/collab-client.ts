@@ -25,6 +25,7 @@ type CollabClientEventMap = {
   welcome: WelcomeMessage;
   "peer.joined": PeerJoinedMessage;
   "peer.left": PeerLeftMessage;
+  "status.change": CollabClientStatus;
   "delta.submit": DeltaSubmitMessage;
   "delta.commit": DeltaCommitMessage;
   "delta.ack": DeltaAckMessage;
@@ -326,6 +327,7 @@ export class CollabClient {
   private setStatus(status: CollabClientStatus): void {
     this.status = status;
     this.opts.onStatusChange?.(status);
+    this.emit("status.change", status);
   }
 
   private emit<K extends keyof CollabClientEventMap>(event: K, msg: CollabClientEventMap[K]): void {

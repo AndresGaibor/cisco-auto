@@ -2,7 +2,7 @@ import { CollabClient } from "../client/collab-client.js";
 import { AutoSyncService } from "../sync/auto-sync.js";
 import { PTSyncCoordinator } from "../sync/pt-sync-coordinator.js";
 import { bootstrapLatestCheckpoint, type BootstrapResult } from "../checkpoint/bootstrap-checkpoint.js";
-import { readClientConfig, updateClientUrl, resetClientUrl } from "../storage/client-config-store.js";
+import { readClientConfig, updateClientUrl, updatePeerId, resetClientUrl } from "../storage/client-config-store.js";
 import { writeSessionFile, deleteSessionFile } from "../storage/session-store.js";
 import type { CollabClientOptions, CollabClientStatus } from "../client/collab-client.js";
 
@@ -100,6 +100,11 @@ export async function connectSimpleSession(
     timeoutMs: 15000,
     rejectUnauthorized: diagnosis.tlsWarning ? false : undefined,
   });
+
+  // Persistir peerId para identidad consistente en reconexiones
+  if (client.peerId) {
+    updatePeerId(client.peerId);
+  }
 
   const coordinator = opts.controller
     ? new PTSyncCoordinator({

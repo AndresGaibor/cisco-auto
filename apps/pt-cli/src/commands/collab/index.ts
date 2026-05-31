@@ -904,9 +904,19 @@ function setupRealtimeLogging(client: any) {
 
   const prefix = chalk.blue("[Sync]");
 
-  // 1. Connection events
+  // 1. Connection / status events
   client.on("welcome", (msg: any) => {
     process.stdout.write(`${prefix} Conexión establecida. Sala: ${chalk.green(msg.roomId)} · Tu ID: ${chalk.green(client.peerId)}\n`);
+  });
+
+  client.on("status.change", (status: string) => {
+    if (status === "reconnecting") {
+      process.stdout.write(`${prefix} ${chalk.yellow("Conexión perdida, reconectando...")}\n`);
+    } else if (status === "connected") {
+      process.stdout.write(`${prefix} ${chalk.green("Reconectado exitosamente")}\n`);
+    } else if (status === "disconnected") {
+      process.stdout.write(`${prefix} ${chalk.red("Desconectado")}\n`);
+    }
   });
 
   client.on("peer.joined", (msg: any) => {
