@@ -2,25 +2,12 @@
 // Manifiesto completo de archivos para el runtime
 // Usado por render-runtime-v2.ts para generar runtime.js
 
-import * as path from "path";
-import * as ts from "typescript";
+import { findMissingTransitiveDeps } from "./build-utils.js";
 
 export const RUNTIME_MANIFEST = {
   version: 3,
   description: "Lista completa de archivos TypeScript para generar los módulos PT via AST pipeline V2",
 
-// runtime.js default contiene solo:
-// - contratos/runtime helpers mínimos
-// - handlers PT-native estables
-// - wrappers deferred sync
-// - dispatcher/registry simple
-//
-// NO contiene:
-// - terminal engine
-// - parsers IOS
-// - parser-generator
-// - async session helpers
-// - omni/evaluate en fase slim fuerte
   catalog: [
     "pt-api/pt-constants.ts",
   ],
@@ -42,7 +29,6 @@ ptApi: [
     "runtime/constants.ts",
     "runtime/types.ts",
     "runtime/helpers.ts",
-    // NOTE: runtime/index.ts excluded — only TS re-exports + has this reference
   ],
 
   domain: [
@@ -76,7 +62,6 @@ utils: [
   ],
 
   handlers: [
-    // Handler implementations
     "handlers/handler-registry.ts",
     "handlers/dispatcher.ts",
     "handlers/evaluate.ts",
@@ -118,17 +103,10 @@ utils: [
     "handlers/terminal-sanitizer.ts",
     "handlers/cable-recommender.ts",
     "handlers/project.ts",
-    // Main dispatcher - runtime default solo registra estables
     "handlers/runtime-handlers.ts",
-    // Registration handlers - stable + raw/evaluate experimental aliases.
-    // Full omni sigue fuera del runtime default.
     "handlers/registration/stable-handlers.ts",
     "handlers/registration/experimental-handlers.ts",
     "handlers/registration/runtime-registration.ts",
-    // NOTE: ios-engine.ts removed — IosSessionEngine duplicated terminal-engine.ts + job-executor.ts
-    // NOTE: ios-session.ts removed — inferModeFromPrompt duplicated prompt-parser.ts
-    // NOTE: deep-inspect.ts y omniscience* siguen fuera.
-    // evaluate.ts se incluye solo para __evaluate / omni.evaluate.raw / omni.raw.
   ],
 
   primitives: [
@@ -141,16 +119,10 @@ utils: [
     "primitives/host/index.ts",
   ],
 
-  
-
   ptApiRegistry: [
     "pt-api/registry/index.ts",
     "pt-api/registry/all-types.ts",
   ],
-
-  // NOTE: kernel and terminal are NOT included in runtime.js.
-  // They belong exclusively to main.js (MAIN_MANIFEST).
-  // runtime.js only contains: ptApi, runtime contracts, utils, core, and handlers.
 } as const;
 
 export type RuntimeManifestSection = keyof typeof RUNTIME_MANIFEST;
@@ -175,74 +147,7 @@ export function getRuntimeManifestSize(): number {
 }
 
 export function validateRuntimeManifestDependencies(sourceFiles: Map<string, string>): string[] {
-  const manifestFiles = new Set(getAllRuntimeFiles());
-  const missing = new Set<string>();
-
-  for (const [filePath, content] of sourceFiles) {
-    const sf = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-
-    sf.forEachChild((node) => {
-      if (ts.isImportDeclaration(node)) {
-        const specifier = node.moduleSpecifier;
-        if (!specifier || !ts.isStringLiteral(specifier) || isTypeOnlyImport(node)) return;
-        const resolved = resolveManifestImport(filePath, specifier.text, manifestFiles);
-        if (resolved && !manifestFiles.has(resolved)) missing.add(resolved);
-      }
-
-      if (ts.isExportDeclaration(node)) {
-        const specifier = node.moduleSpecifier;
-        if (!specifier || !ts.isStringLiteral(specifier) || node.isTypeOnly) return;
-        const resolved = resolveManifestImport(filePath, specifier.text, manifestFiles);
-        if (resolved && !manifestFiles.has(resolved)) missing.add(resolved);
-      }
-    });
-  }
-
-  return Array.from(missing).sort();
-}
-
-function isTypeOnlyImport(node: ts.ImportDeclaration): boolean {
-  const clause = node.importClause;
-  if (!clause) return false;
-  if (clause.isTypeOnly) return true;
-  const bindings = clause.namedBindings;
-  if (bindings && ts.isNamedImports(bindings)) {
-    return bindings.elements.length > 0 && bindings.elements.every((element) => element.isTypeOnly);
-  }
-  return false;
-}
-
-function resolveManifestImport(
-  fromFile: string,
-  specifier: string,
-  knownFiles: Set<string>,
-): string | null {
-  if (!specifier.startsWith(".")) return null;
-
-  const fromDir = path.posix.dirname(fromFile);
-  const normalized = path.posix.normalize(path.posix.join(fromDir, specifier));
-  const candidates = new Set<string>([
-    normalized,
-    normalized.replace(/\.js$/, ".ts"),
-    normalized.replace(/\.js$/, ".tsx"),
-    normalized + ".ts",
-    normalized + ".tsx",
-    path.posix.join(normalized, "index.ts"),
-    path.posix.join(normalized, "index.tsx"),
-  ]);
-
-  let fallback: string | null = null;
-
-  for (const candidate of candidates) {
-    if (!fallback && (candidate.endsWith(".ts") || candidate.endsWith(".tsx"))) {
-      fallback = candidate;
-    }
-    if (knownFiles.has(candidate)) {
-      return candidate;
-    }
-  }
-
-  return fallback;
+  return findMissingTransitiveDeps(sourceFiles, new Set(getAllRuntimeFiles()));
 }
 
 // ============================================================================

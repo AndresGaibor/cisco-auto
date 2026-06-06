@@ -49,69 +49,64 @@ export class RuntimeGenerator {
     });
   }
 
-  async generate(): Promise<{ main: string; catalog: string; runtime: string }> {
-    const catalog = this.generateCatalog();
-    const runtime = this.generateRuntime();
-    const main = this.generateMain();
+  async generateAll(): Promise<{ main: string; catalog: string; runtime: string }> {
+    const [main, catalog, runtime] = await Promise.all([
+      Promise.resolve().then(() => this.generateMain()),
+      Promise.resolve().then(() => this.generateCatalog()),
+      Promise.resolve().then(() => this.generateRuntime()),
+    ]);
 
     assertJavaScriptSyntaxOrThrow("main.js", main);
     assertJavaScriptSyntaxOrThrow("runtime.js", runtime);
     assertJavaScriptSyntaxOrThrow("catalog.js", catalog);
-
-    const outDir = this.resolveOutputDir();
-    await fs.promises.mkdir(outDir, { recursive: true });
-    await fs.promises.writeFile(path.join(outDir, "main.js"), main, "utf-8");
-    await fs.promises.writeFile(path.join(outDir, "catalog.js"), catalog, "utf-8");
-    await fs.promises.writeFile(path.join(outDir, "runtime.js"), runtime, "utf-8");
 
     validateGeneratedArtifacts(main, catalog, runtime);
 
     return { main, catalog, runtime };
   }
 
+  async generate(): Promise<{ main: string; catalog: string; runtime: string }> {
+    const result = await this.generateAll();
+    const outDir = this.resolveOutputDir();
+    await fs.promises.mkdir(outDir, { recursive: true });
+    await Promise.all([
+      fs.promises.writeFile(path.join(outDir, "main.js"), result.main, "utf-8"),
+      fs.promises.writeFile(path.join(outDir, "catalog.js"), result.catalog, "utf-8"),
+      fs.promises.writeFile(path.join(outDir, "runtime.js"), result.runtime, "utf-8"),
+    ]);
+    return result;
+  }
+
   async validateGenerated(): Promise<void> {
-    const { main, catalog, runtime } = await this.generate();
-    validateGeneratedArtifacts(main, catalog, runtime);
+    const result = await this.generateAll();
+    validateGeneratedArtifacts(result.main, result.catalog, result.runtime);
   }
 
   async deploy(): Promise<void> {
-    const catalog = this.generateCatalog();
-    const runtime = this.generateRuntime();
-    const main = this.generateMain();
-
-    assertJavaScriptSyntaxOrThrow("main.js", main);
-    assertJavaScriptSyntaxOrThrow("runtime.js", runtime);
-    assertJavaScriptSyntaxOrThrow("catalog.js", catalog);
-
-    validateGeneratedArtifacts(main, catalog, runtime);
+    const result = await this.generateAll();
 
     await fs.promises.mkdir(this.config.devDir, { recursive: true });
-    await fs.promises.writeFile(path.join(this.config.devDir, "main.js"), main, "utf-8");
-    await fs.promises.writeFile(path.join(this.config.devDir, "catalog.js"), catalog, "utf-8");
-    await fs.promises.writeFile(path.join(this.config.devDir, "runtime.js"), runtime, "utf-8");
-    await writeRuntimeManifest(main, catalog, runtime, this.config.devDir);
+    await Promise.all([
+      fs.promises.writeFile(path.join(this.config.devDir, "main.js"), result.main, "utf-8"),
+      fs.promises.writeFile(path.join(this.config.devDir, "catalog.js"), result.catalog, "utf-8"),
+      fs.promises.writeFile(path.join(this.config.devDir, "runtime.js"), result.runtime, "utf-8"),
+    ]);
+    await writeRuntimeManifest(result.main, result.catalog, result.runtime, this.config.devDir);
   }
 
   async build(): Promise<RuntimeBuildReport> {
     const outDir = this.resolveOutputDir();
     const previousManifest = readExistingManifest(outDir);
-
-    const catalog = this.generateCatalog();
-    const runtime = this.generateRuntime();
-    const main = this.generateMain();
-
-    assertJavaScriptSyntaxOrThrow("main.js", main);
-    assertJavaScriptSyntaxOrThrow("runtime.js", runtime);
-    assertJavaScriptSyntaxOrThrow("catalog.js", catalog);
-
-    validateGeneratedArtifacts(main, catalog, runtime);
+    const result = await this.generateAll();
 
     await fs.promises.mkdir(outDir, { recursive: true });
-    await fs.promises.writeFile(path.join(outDir, "main.js"), main, "utf-8");
-    await fs.promises.writeFile(path.join(outDir, "catalog.js"), catalog, "utf-8");
-    await fs.promises.writeFile(path.join(outDir, "runtime.js"), runtime, "utf-8");
+    await Promise.all([
+      fs.promises.writeFile(path.join(outDir, "main.js"), result.main, "utf-8"),
+      fs.promises.writeFile(path.join(outDir, "catalog.js"), result.catalog, "utf-8"),
+      fs.promises.writeFile(path.join(outDir, "runtime.js"), result.runtime, "utf-8"),
+    ]);
 
-    const manifest = await writeRuntimeManifest(main, catalog, runtime, outDir);
+    const manifest = await writeRuntimeManifest(result.main, result.catalog, result.runtime, outDir);
     return {
       manifest,
       changes: {
