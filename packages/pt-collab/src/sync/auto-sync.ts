@@ -12,6 +12,7 @@ export interface AutoSyncOptions {
   roomId: string;
   peerId: string;
   pollIntervalMs?: number;
+  skipInitialSnapshot?: boolean;
   onError?: (error: Error) => void;
   onSync?: (deltaCount: number) => void;
 }
@@ -140,28 +141,30 @@ export class AutoSyncService {
     // Si el peer reconecta, sigue siendo "conocido" y no necesita state sync.
     // Si es un peer nuevo, tendrá un peerId diferente y recibirá state sync.
 
-    try {
-      this.lastSnapshot = await this.opts.fetchSnapshot();
-      this._lastPollAt = Date.now();
-      this.captureBaseHashes(this.lastSnapshot);
-      // Si ya había configs pre-sesión pendientes, inyectarlas ahora
-      this._mergeInitialConfigs();
+    if (!this.opts.skipInitialSnapshot) {
+      try {
+        this.lastSnapshot = await this.opts.fetchSnapshot();
+        this._lastPollAt = Date.now();
+        this.captureBaseHashes(this.lastSnapshot);
+        // Si ya había configs pre-sesión pendientes, inyectarlas ahora
+        this._mergeInitialConfigs();
 
-      // Sembrar el iosLedger con manualCommands del snapshot inicial
-      if (this.lastSnapshot && this.lastSnapshot.manualCommands && this.lastSnapshot.manualCommands.length > 0) {
-        for (const cmd of this.lastSnapshot.manualCommands) {
-          this.accumulatedCommands.push(cmd);
-          this.iosLedger.push({
-            device: cmd.device,
-            command: cmd.command,
-            seq: this.seqCounter++,
-            timestamp: Date.now(),
-            prompt: (cmd as any).prompt,
-          });
+        // Sembrar el iosLedger con manualCommands del snapshot inicial
+        if (this.lastSnapshot && this.lastSnapshot.manualCommands && this.lastSnapshot.manualCommands.length > 0) {
+          for (const cmd of this.lastSnapshot.manualCommands) {
+            this.accumulatedCommands.push(cmd);
+            this.iosLedger.push({
+              device: cmd.device,
+              command: cmd.command,
+              seq: this.seqCounter++,
+              timestamp: Date.now(),
+              prompt: (cmd as any).prompt,
+            });
+          }
         }
+      } catch {
+        // primera poll puede fallar si PT no está listo
       }
-    } catch {
-      // primera poll puede fallar si PT no está listo
     }
 
     const interval = this.opts.pollIntervalMs ?? 2000;
@@ -326,12 +329,7 @@ export class AutoSyncService {
         this.lamportClock = Math.max(this.lamportClock, delta.lamport) + 1;
         this.vector[delta.peerId] = (this.vector[delta.peerId] ?? 0) + 1;
 
-        try {
-          const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 4000));
-          this.lastSnapshot = await Promise.race([this.opts.fetchSnapshot(), timeout]);
-        } catch {
-          console.warn("[Sync] Snapshot post-delta timeout, manteniendo snapshot anterior");
-        }
+        this.mergeRemoteDeltaIntoSnapshot(delta);
 
         this.opts.client.sendMessage({
           type: "delta.ack",
@@ -351,6 +349,28 @@ export class AutoSyncService {
     } finally {
       this.applyingRemote = false;
     }
+  }
+
+  private mergeRemoteDeltaIntoSnapshot(delta: CollabDelta): void {
+    if (!this.lastSnapshot || delta.kind !== "device.cli.runningConfig.changed") return;
+
+    const payload = (delta.payload ?? {}) as { device?: unknown; configLines?: unknown };
+    const device = typeof payload.device === "string" ? payload.device : "";
+    const configLines = Array.isArray(payload.configLines)
+      ? payload.configLines.filter((line): line is string => typeof line === "string")
+      : [];
+
+    if (!device || configLines.length === 0) return;
+
+    const manualCommands = [...(this.lastSnapshot.manualCommands ?? [])];
+    for (const command of configLines) {
+      manualCommands.push({ device, command });
+    }
+
+    this.lastSnapshot = {
+      ...this.lastSnapshot,
+      manualCommands,
+    };
   }
 
   private async syncStateToPeer(peerId: string): Promise<void> {

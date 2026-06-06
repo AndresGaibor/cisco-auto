@@ -957,55 +957,56 @@ function setupRealtimeLogging(client: any) {
   if (!client) return;
 
   const prefix = chalk.blue("[Sync]");
+  const timestamp = () => chalk.gray(new Date().toISOString());
 
   // 1. Connection / status events
   client.on("welcome", (msg: any) => {
-    process.stdout.write(`${prefix} Conexión establecida. Sala: ${chalk.green(msg.roomId)} · Tu ID: ${chalk.green(client.peerId)}\n`);
+    process.stdout.write(`${timestamp()} ${prefix} Conexión establecida. Sala: ${chalk.green(msg.roomId)} · Tu ID: ${chalk.green(client.peerId)}\n`);
   });
 
   client.on("status.change", (status: string) => {
     if (status === "reconnecting") {
-      process.stdout.write(`${prefix} ${chalk.yellow("Conexión perdida, reconectando...")}\n`);
+      process.stdout.write(`${timestamp()} ${prefix} ${chalk.yellow("Conexión perdida, reconectando...")}\n`);
     } else if (status === "connected") {
-      process.stdout.write(`${prefix} ${chalk.green("Reconectado exitosamente")}\n`);
+      process.stdout.write(`${timestamp()} ${prefix} ${chalk.green("Reconectado exitosamente")}\n`);
     } else if (status === "disconnected") {
-      process.stdout.write(`${prefix} ${chalk.red("Desconectado")}\n`);
+      process.stdout.write(`${timestamp()} ${prefix} ${chalk.red("Desconectado")}\n`);
     }
   });
 
   client.on("peer.joined", (msg: any) => {
-    process.stdout.write(`${prefix} Colaborador conectado: ${chalk.cyan(msg.peer.displayName ?? msg.peer.peerId)} (${msg.peer.peerId})\n`);
+    process.stdout.write(`${timestamp()} ${prefix} Colaborador conectado: ${chalk.cyan(msg.peer.displayName ?? msg.peer.peerId)} (${msg.peer.peerId})\n`);
   });
 
   client.on("peer.left", (msg: any) => {
-    process.stdout.write(`${prefix} Colaborador desconectado: ${chalk.yellow(msg.peerId)}\n`);
+    process.stdout.write(`${timestamp()} ${prefix} Colaborador desconectado: ${chalk.yellow(msg.peerId)}\n`);
   });
 
   // 2. Delta (change) events
   client.on("delta.commit", (msg: any) => {
     const delta = msg.delta;
-    process.stdout.write(`${prefix} Recibido cambio remoto de ${chalk.cyan(delta.peerId)}: ${chalk.magenta(delta.kind)} en ${chalk.gray(delta.scope)}\n`);
+    process.stdout.write(`${timestamp()} ${prefix} Recibido cambio remoto de ${chalk.cyan(delta.peerId)}: ${chalk.magenta(delta.kind)} en ${chalk.gray(delta.scope)}${formatDeltaCommands(delta)}\n`);
   });
 
   client.on("delta.ack", (msg: any) => {
     if (msg.accepted) {
-      process.stdout.write(`${prefix} Cambio local aceptado y guardado en servidor\n`);
+      process.stdout.write(`${timestamp()} ${prefix} Cambio local aceptado y guardado en servidor\n`);
     } else {
-      process.stdout.write(`${prefix} Cambio local rechazado por el servidor. Razón: ${chalk.red(msg.reason ?? "desconocida")}\n`);
+      process.stdout.write(`${timestamp()} ${prefix} Cambio local rechazado por el servidor. Razón: ${chalk.red(msg.reason ?? "desconocida")}\n`);
     }
   });
 
   // 3. Error and Conflict events
   client.on("error", (msg: any) => {
-    process.stderr.write(`${prefix} ${chalk.red("Error")}: [${msg.code}] ${msg.message}\n`);
+    process.stderr.write(`${timestamp()} ${prefix} ${chalk.red("Error")}: [${msg.code}] ${msg.message}\n`);
   });
 
   client.on("conflict.created", (msg: any) => {
-    process.stdout.write(`${prefix} ${chalk.yellow("Conflicto detectado")} en ${msg.conflict.scope}. ID: ${msg.conflict.id}\n`);
+    process.stdout.write(`${timestamp()} ${prefix} ${chalk.yellow("Conflicto detectado")} en ${msg.conflict.scope}. ID: ${msg.conflict.id}\n`);
   });
 
   client.on("conflict.resolved", (msg: any) => {
-    process.stdout.write(`${prefix} Conflicto ${msg.conflictId} resuelto mediante resolución: ${chalk.green(msg.resolution)}\n`);
+    process.stdout.write(`${timestamp()} ${prefix} Conflicto ${msg.conflictId} resuelto mediante resolución: ${chalk.green(msg.resolution)}\n`);
   });
 
   // 4. Wrap outgoing sendMessage to track outgoing submits
@@ -1013,8 +1014,18 @@ function setupRealtimeLogging(client: any) {
   client.sendMessage = (msg: any) => {
     if (msg.type === "delta.submit") {
       const delta = msg.delta;
-      process.stdout.write(`${prefix} Enviando cambio local: ${chalk.magenta(delta.kind)} en ${chalk.gray(delta.scope)}\n`);
+      process.stdout.write(`${timestamp()} ${prefix} Enviando cambio local: ${chalk.magenta(delta.kind)} en ${chalk.gray(delta.scope)}${formatDeltaCommands(delta)}\n`);
     }
     originalSend(msg);
   };
+}
+
+function formatDeltaCommands(delta: any): string {
+  const payload = delta?.payload;
+  const configLines = Array.isArray(payload?.configLines)
+    ? payload.configLines.filter((line: unknown) => typeof line === "string")
+    : [];
+
+  if (configLines.length === 0) return "";
+  return ` comandos=${chalk.cyan(JSON.stringify(configLines))}`;
 }

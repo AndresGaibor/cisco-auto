@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect, vi } from "bun:test";
 import { applyDelta, type PTControllerPort } from "../applier/delta-applier.js";
 import type { CollabDelta } from "../protocol/messages.js";
 
@@ -138,6 +138,29 @@ describe("applyDelta", () => {
     for (const plan of receivedPlans) {
       expect(plan.steps).toHaveLength(1);
       expect(plan.steps[0]).toMatchObject({ kind: "command" });
+    }
+  });
+
+  test("registra tiempo y comando ejecutado para cada plan IOS remoto", async () => {
+    const logs: string[] = [];
+    const logSpy = vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      logs.push(args.map(String).join(" "));
+    });
+
+    try {
+      const ctrl = new SpyController() as any;
+      ctrl.runTerminalPlan = async () => undefined;
+      const delta = makeDelta({
+        kind: "device.cli.runningConfig.changed",
+        payload: { device: "Router0", configLines: ["enable"] },
+      });
+
+      await applyDelta(delta, ctrl);
+
+      expect(logs.some((line) => line.includes("command=\"enable\""))).toBe(true);
+      expect(logs.some((line) => line.includes("durationMs="))).toBe(true);
+    } finally {
+      logSpy.mockRestore();
     }
   });
 

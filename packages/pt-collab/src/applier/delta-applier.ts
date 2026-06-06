@@ -95,7 +95,8 @@ export async function applyDelta(
 
             let stepIndex = 0;
             for (const cmd of p.configLines) {
-              await (controller as any).runTerminalPlan({
+              const startedAt = Date.now();
+              const plan = {
                 id: "sync_" + Date.now() + "_" + stepIndex + "_" + Math.random().toString(36).slice(2, 7),
                 device: p.device,
                 targetMode: targetMode,
@@ -117,11 +118,23 @@ export async function applyDelta(
                   abortOnPromptMismatch: false,
                   abortOnModeMismatch: false,
                 },
-              });
+              };
+
+              logSyncExec("start", p.device, cmd, startedAt);
+              try {
+                await (controller as any).runTerminalPlan(plan);
+                logSyncExec("done", p.device, cmd, startedAt);
+              } catch (error) {
+                logSyncExec("error", p.device, cmd, startedAt, error);
+                throw error;
+              }
               stepIndex++;
             }
           } else {
+            const startedAt = Date.now();
+            console.log(`${formatSyncTimestamp()} [Sync Exec] start device=${p.device} batch=${p.configLines.length} commands=${formatCommands(p.configLines)}`);
             await controller.configIos(p.device, p.configLines);
+            console.log(`${formatSyncTimestamp()} [Sync Exec] done device=${p.device} batch=${p.configLines.length} durationMs=${Date.now() - startedAt}`);
           }
         }
         return { ok: true, deltaId: delta.id };
@@ -134,4 +147,18 @@ export async function applyDelta(
     const msg = error instanceof Error ? error.message : String(error);
     return { ok: false, deltaId: delta.id, error: msg };
   }
+}
+
+function logSyncExec(status: "start" | "done" | "error", device: string, command: string, startedAt: number, error?: unknown): void {
+  const duration = status === "start" ? "" : ` durationMs=${Date.now() - startedAt}`;
+  const errorText = error ? ` error=${JSON.stringify(error instanceof Error ? error.message : String(error))}` : "";
+  console.log(`${formatSyncTimestamp()} [Sync Exec] ${status} device=${device} command=${JSON.stringify(command)}${duration}${errorText}`);
+}
+
+function formatSyncTimestamp(): string {
+  return new Date().toISOString();
+}
+
+function formatCommands(commands: string[]): string {
+  return JSON.stringify(commands);
 }

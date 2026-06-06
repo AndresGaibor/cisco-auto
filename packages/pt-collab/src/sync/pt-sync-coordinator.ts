@@ -22,6 +22,7 @@ export interface PTSyncCoordinatorOptions {
   checkpointBaseUrl?: string;
   pollIntervalMs?: number;
   fetchSnapshot?: SnapshotFetcher;
+  skipInitialSnapshot?: boolean;
   onError?: (error: Error) => void;
   pullInitialCheckpoint?: boolean;
   skipBootstrap?: boolean;
@@ -76,6 +77,7 @@ export class PTSyncCoordinator {
       roomId: this.opts.roomId,
       peerId: this.opts.peerId,
       pollIntervalMs: this.opts.pollIntervalMs,
+      skipInitialSnapshot: this.opts.skipInitialSnapshot,
       onError: this.opts.onError ?? ((err) => {
         console.error("[Sync Error]", err.message ?? String(err));
       }),

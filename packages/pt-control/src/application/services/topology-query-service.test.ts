@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, vi } from "bun:test";
 import { TopologyQueryService } from "./topology-query-service.js";
 
 function createBridge() {
@@ -84,5 +84,31 @@ describe("TopologyQueryService", () => {
     const result = await service.listDevices();
 
     expect(result.devices[0]?.type).toBe("switch_layer3");
+  });
+
+  test("snapshot registra duración cuando falla la primitive", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const warnings: string[] = [];
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
+      warnings.push(args.map(String).join(" "));
+    });
+
+    try {
+      const primitivePort = createBridge();
+      primitivePort.runPrimitive = (async () => ({
+        ok: false,
+        error: "Timeout esperando resultado del bridge",
+        code: "BRIDGE_TIMEOUT",
+      })) as any;
+
+      const service = new TopologyQueryService(createCache(), primitivePort, () => "id-timeout");
+      await service.snapshot();
+
+      expect(warnings.some((line) => line.includes("durationMs="))).toBe(true);
+      expect(warnings.some((line) => line.includes("BRIDGE_TIMEOUT"))).toBe(true);
+    } finally {
+      logSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
   });
 });

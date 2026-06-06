@@ -142,7 +142,8 @@ export async function connectSimpleSession(
         peerId,
         roomId: "default",
         checkpointBaseUrl: url,
-        pollIntervalMs: opts.pollIntervalMs,
+        pollIntervalMs: opts.pollIntervalMs ?? 10000,
+        skipInitialSnapshot: true,
         skipBootstrap: true,
         bootstrapResult: bootstrap,
       })

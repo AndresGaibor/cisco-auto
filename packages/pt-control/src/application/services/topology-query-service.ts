@@ -9,6 +9,10 @@ import type {
 import type { LinkStats } from "../../contracts/device-types.js";
 import { PT_NON_CREATABLE_MODELS } from "@cisco-auto/pt-runtime";
 
+function formatSyncTimestamp(): string {
+  return new Date().toISOString();
+}
+
 function ptDeviceTypeToString(typeId: number): DeviceState["type"] {
   const map: Record<number, DeviceState["type"]> = {
     0: "router",
@@ -56,16 +60,20 @@ export class TopologyQueryService {
 
   async snapshot(): Promise<TopologySnapshot | null> {
     const timeoutMs = this.cache.isMaterialized() ? 3000 : 30000;
+    const startedAt = Date.now();
+    const requestId = this.generateId();
+
+    console.log(`${formatSyncTimestamp()} [Sync Debug:Query] topology.snapshot start id=${requestId} timeoutMs=${timeoutMs}`);
 
     try {
       const result = await this.primitivePort.runPrimitive(
         "topology.snapshot",
-        { id: this.generateId() },
+        { id: requestId },
         { timeoutMs },
       );
 
       if (!result.ok) {
-        console.warn("[Sync Debug:Query] topology.snapshot primitive failed:", result.error ?? "unknown error", "code:", result.code);
+        console.warn(`${formatSyncTimestamp()} [Sync Debug:Query] topology.snapshot failed id=${requestId} durationMs=${Date.now() - startedAt} error=${result.error ?? "unknown error"} code=${result.code}`);
       }
 
       const value = result.value;
@@ -77,10 +85,11 @@ export class TopologyQueryService {
         "links" in value
       ) {
         this.cache.applySnapshot(value as TopologySnapshot);
+        console.log(`${formatSyncTimestamp()} [Sync Debug:Query] topology.snapshot done id=${requestId} durationMs=${Date.now() - startedAt}`);
         return value as TopologySnapshot;
       }
     } catch (e: any) {
-      console.error("[Sync Debug:Query] Error in snapshot query:", e.message ?? String(e));
+      console.error(`${formatSyncTimestamp()} [Sync Debug:Query] topology.snapshot error id=${requestId} durationMs=${Date.now() - startedAt} error=${e.message ?? String(e)}`);
     }
 
     return this.cache.isMaterialized() ? this.cache.getSnapshot() : null;

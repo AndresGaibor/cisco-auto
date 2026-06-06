@@ -149,6 +149,42 @@ describe("AutoSyncService", () => {
       svc.stop();
     });
 
+    it("no pide snapshot post-delta remoto para no saturar el bridge", async () => {
+      const client = createMockClient();
+      let fetchCount = 0;
+
+      const opts: AutoSyncOptions = {
+        client,
+        fetchSnapshot: async () => {
+          fetchCount++;
+          return makeSnapshot();
+        },
+        applyDelta: async (delta) => ({ ok: true, deltaId: delta.id } as DeltaApplyResult),
+        roomId: "default",
+        peerId: "peer_b",
+        pollIntervalMs: 10000,
+      };
+
+      const svc = new AutoSyncService(opts);
+      await svc.start();
+
+      client._emit("delta.commit", {
+        delta: makeTestDelta({
+          id: "delta_remote_ios",
+          peerId: "peer_a",
+          kind: "device.cli.runningConfig.changed",
+          scope: "device:Router0:running-config",
+          payload: { device: "Router0", configLines: ["enable", "configure terminal", "hostname R0"] },
+        }),
+      });
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(fetchCount).toBe(1);
+
+      svc.stop();
+    });
+
     it("ignora delta.commit propio (no re-aplica sus propios cambios)", async () => {
       const client = createMockClient();
       let applyCallCount = 0;
@@ -210,6 +246,31 @@ describe("AutoSyncService", () => {
   });
 
   describe("echo loop prevention", () => {
+    it("puede omitir snapshot inicial para no bloquear deltas remotos al conectar", async () => {
+      const client = createMockClient();
+      let fetchCount = 0;
+
+      const opts: AutoSyncOptions = {
+        client,
+        fetchSnapshot: async () => {
+          fetchCount++;
+          return makeSnapshot();
+        },
+        applyDelta: async () => ({ ok: true, deltaId: "x" } as DeltaApplyResult),
+        roomId: "default",
+        peerId: "peer_b",
+        pollIntervalMs: 10000,
+        skipInitialSnapshot: true,
+      };
+
+      const svc = new AutoSyncService(opts);
+      await svc.start();
+
+      expect(fetchCount).toBe(0);
+
+      svc.stop();
+    });
+
     it("poll no envía deltas mientras applyRemote está activo", async () => {
       const client = createMockClient();
       let fetchCount = 0;
