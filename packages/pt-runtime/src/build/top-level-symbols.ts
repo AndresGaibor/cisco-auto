@@ -162,61 +162,6 @@ export function findDuplicateTopLevelSymbols(
   return duplicates.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function assertNoDuplicateTopLevelSymbols(
-  sourceText: string,
-  options: DuplicateTopLevelSymbolOptions = {},
-): void {
-  const fileName = options.fileName ?? "generated.js";
-  const label = options.label ?? fileName;
-
-  const duplicates = findDuplicateTopLevelSymbols(sourceText, options);
-  const fatalDuplicates = duplicates.filter((duplicate) => duplicate.fatal);
-
-  if (fatalDuplicates.length === 0) {
-    return;
-  }
-
-  const details = fatalDuplicates
-    .map((duplicate) => {
-      const locations = duplicate.locations
-        .map((location) => {
-          const variableSuffix = location.variableKind ? `/${location.variableKind}` : "";
-          return `${location.kind}${variableSuffix}@${location.line}:${location.column}`;
-        })
-        .join(", ");
-
-      return `  - ${duplicate.name}: ${locations}\n    reason: ${duplicate.reason}`;
-    })
-    .join("\n");
-
-  throw new Error(`${label} has fatal duplicate top-level symbols:\n${details}`);
-}
-
-export function formatDuplicateTopLevelSymbolWarnings(
-  sourceText: string,
-  options: DuplicateTopLevelSymbolOptions = {},
-): string {
-  const duplicates = findDuplicateTopLevelSymbols(sourceText, {
-    ...options,
-    allowDuplicateVarDeclarations: true,
-  });
-
-  const warnings = duplicates.filter((duplicate) => !duplicate.fatal);
-
-  if (warnings.length === 0) {
-    return "";
-  }
-
-  return warnings
-    .map((duplicate) => {
-      const locations = duplicate.locations
-        .map((location) => {
-          const variableSuffix = location.variableKind ? `/${location.variableKind}` : "";
-          return `${location.kind}${variableSuffix}@${location.line}:${location.column}`;
-        })
-        .join(", ");
-
-      return `  - ${duplicate.name}: ${locations}`;
-    })
-    .join("\n");
-}
+// Nota: assertNoDuplicateTopLevelSymbols y formatDuplicateTopLevelSymbolWarnings
+// fueron eliminados en refactor del pipeline de build al ser dead code.
+// Conservamos findDuplicateTopLevelSymbols como utilidad para debugging.

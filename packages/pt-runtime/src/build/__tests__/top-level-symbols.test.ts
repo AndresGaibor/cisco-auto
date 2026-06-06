@@ -1,10 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import {
-  assertNoDuplicateTopLevelSymbols,
-  findDuplicateTopLevelSymbols,
-} from "../top-level-symbols";
+import { findDuplicateTopLevelSymbols } from "../top-level-symbols";
 
-describe("top-level-symbols", () => {
+describe("findDuplicateTopLevelSymbols", () => {
   test("detects duplicate function and const declarations as fatal", () => {
     const source = `
 function errorResult() {}
@@ -19,14 +16,6 @@ const errorResult = function() {};
     expect(duplicates).toHaveLength(1);
     expect(duplicates[0]?.name).toBe("errorResult");
     expect(duplicates[0]?.fatal).toBe(true);
-
-    expect(() =>
-      assertNoDuplicateTopLevelSymbols(source, {
-        fileName: "runtime.js",
-        label: "runtime.js",
-        allowDuplicateVarDeclarations: true,
-      }),
-    ).toThrow(/fatal duplicate top-level symbols/);
   });
 
   test("allows duplicate var declarations when explicitly enabled", () => {
@@ -43,28 +32,6 @@ var CABLE_TYPES = {};
     expect(duplicates).toHaveLength(1);
     expect(duplicates[0]?.name).toBe("CABLE_TYPES");
     expect(duplicates[0]?.fatal).toBe(false);
-
-    expect(() =>
-      assertNoDuplicateTopLevelSymbols(source, {
-        fileName: "runtime.js",
-        label: "runtime.js",
-        allowDuplicateVarDeclarations: true,
-      }),
-    ).not.toThrow();
-  });
-
-  test("blocks duplicate var declarations by default", () => {
-    const source = `
-var CABLE_TYPES = {};
-var CABLE_TYPES = {};
-`;
-
-    expect(() =>
-      assertNoDuplicateTopLevelSymbols(source, {
-        fileName: "runtime.js",
-        label: "runtime.js",
-      }),
-    ).toThrow(/fatal duplicate top-level symbols/);
   });
 
   test("allows unique top-level symbols", () => {
