@@ -1,11 +1,11 @@
 // packages/pt-runtime/src/build/render-catalog.ts
 // Genera catalog.js — módulo estático con constantes de PT (device types, cable types, etc.)
-// Este archivo cambia raramente (solo cuando se actualiza el catálogo de hardware Cisco).
-// main.js lo carga primero antes de cargar runtime.js.
+// Usa un pipeline ligero (sin TypeScript transpilation costosa) porque
+// pt-constants.ts solo contiene export const/interface — sin imports ni lógica compleja.
 
 import * as fs from "fs";
 import * as path from "path";
-import { transformToPtSafeAst } from "./ast-transform.js";
+import { validatePtSafe } from "./validate-pt-safe.js";
 import { reportPtSafeValidation } from "./build-utils.js";
 
 export interface RenderCatalogOptions {
@@ -13,11 +13,7 @@ export interface RenderCatalogOptions {
   outputPath?: string;
 }
 
-// Archivos que contienen SOLO constantes estáticas de PT.
-// Estas definiciones son estables y no necesitan regenerarse con cada cambio de lógica.
-const CATALOG_SOURCE_FILES = [
-  "pt-api/pt-constants.ts",
-];
+const CATALOG_SOURCE_FILES = ["pt-api/pt-constants.ts"];
 
 function assembleCatalogOutput(code: string): string {
   return `(function() {
@@ -36,6 +32,62 @@ ${code}
 `;
 }
 
+function transpileConstants(source: string): string {
+  let result = source;
+
+  result = result.replace(/\r\n?/g, "\n");
+
+  const lines = result.split("\n");
+  const kept: string[] = [];
+  let inJSDoc = false;
+  let skipBraces = 0;
+
+  for (const raw of lines) {
+    const trimmed = raw.trimStart();
+
+    if (inJSDoc) {
+      kept.push(raw);
+      if (trimmed.includes("*/")) inJSDoc = false;
+      continue;
+    }
+    if (trimmed.startsWith("/**")) {
+      kept.push(raw);
+      inJSDoc = !trimmed.includes("*/");
+      continue;
+    }
+
+    // Saltar cuerpos de export interface/type (multi-línea)
+    if (skipBraces > 0) {
+      skipBraces += (trimmed.match(/\{/g) || []).length;
+      skipBraces -= (trimmed.match(/\}/g) || []).length;
+      if (skipBraces <= 0) skipBraces = 0;
+      continue;
+    }
+    if (/^export\s+(interface|type)\s/.test(trimmed)) {
+      if (!trimmed.endsWith(";")) {
+        skipBraces = (trimmed.match(/\{/g) || []).length;
+        skipBraces -= (trimmed.match(/\}/g) || []).length;
+        if (skipBraces < 0) skipBraces = 0;
+      }
+      continue;
+    }
+    if (/^import\s/.test(trimmed)) continue;
+
+    // Strip 'export', reemplazar const/let por var, limpiar anotaciones TS
+    let line = trimmed.startsWith("export ") ? raw.replace(/^\s*export\s+/, "  ") : raw;
+    line = line.replace(/\bconst\s+/g, "var ");
+    line = line.replace(/\blet\s+/g, "var ");
+
+    // Limpiar anotaciones de tipo TS (": Tipo" después de nombre de var/param)
+    line = line.replace(/([\w\]\)])+\s*:\s*(?:string|number|boolean|Record\s*<[^>]+>|Array\s*<[^>]+>|PtHelperMaps|unknown|any)(\s*[={,;])/g, "$1$2");
+    line = line.replace(/\[\w+\]\s*:\s*(?:string|number|unknown|boolean)\s*[;,]?/g, "");
+
+    kept.push(line);
+  }
+
+  return kept.join("\n");
+}
+
 export function renderCatalog(options: RenderCatalogOptions): string {
   const sourceFiles = new Map<string, string>();
 
@@ -49,7 +101,6 @@ export function renderCatalog(options: RenderCatalogOptions): string {
   }
 
   if (sourceFiles.size === 0) {
-    // Si no hay archivos fuente, generar un catalog vacío pero válido
     const fallback = `(function() {
   // catalog.js — empty fallback (no source files found)
   var _g = typeof self !== "undefined" ? self : this;
@@ -65,23 +116,18 @@ export function renderCatalog(options: RenderCatalogOptions): string {
     return fallback;
   }
 
-  const { code, validation } = transformToPtSafeAst(sourceFiles, {
-    target: undefined,
-    replaceConsoleWithDprint: true,
-    wrapIIFE: false,
-    inlineConstants: {},
-    treeShake: false, // treeShake disabled: catalog contains only static constants, no dead code elimination needed
-  });
+  const source = sourceFiles.get("pt-api/pt-constants.ts") ?? "";
+  const code = transpileConstants(source);
 
+  const validation = validatePtSafe(code);
   reportPtSafeValidation("render-catalog", validation);
   if (!validation.valid) {
     throw new Error("catalog.js generation failed PT-safe validation");
   }
 
-  const header = `// PT Catalog - Generated from TypeScript via AST pipeline
+  const header = `// PT Catalog — Generated from pt-constants.ts via lightweight transpiler
 // Do not edit directly — regenerate with: bun run build:catalog
 `;
-
   const output = header + assembleCatalogOutput(code);
 
   if (options.outputPath) {
