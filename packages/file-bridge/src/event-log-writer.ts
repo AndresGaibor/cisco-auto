@@ -18,6 +18,11 @@ import type { BridgeEvent } from "./shared/protocol.js";
 import type { RotationEntry, RotationManifest } from "./shared/local-types.js";
 import { BridgePathLayout } from "./shared/path-layout.js";
 import { appendLine, atomicWriteFile, ensureDir, ensureFile } from "./shared/fs-atomic.js";
+import {
+  appendLineAsync,
+  readJsonFileAsync,
+  fileSize,
+} from "./shared/fs-atomic-async.js";
 
 export interface EventLogWriterOptions {
   /** Max size in bytes before rotating (default: 32MB) */
@@ -66,6 +71,22 @@ export class EventLogWriter {
   }
 
   /**
+   * Versión async (non-blocking) de append(). Misma semántica pero no
+   * bloquea el event loop en escrituras largas.
+   *
+   * La rotación sigue usando renameSync (atómico, no async) para preservar
+   * la garantía de atomicidad en la rotación.
+   */
+  async appendAsync(event: BridgeEvent): Promise<void> {
+    await this.rotateIfNeededAsync();
+    await appendLineAsync(this.currentFile, JSON.stringify(event));
+
+    if (event.seq !== undefined && event.seq > this.lastSeqWritten) {
+      this.lastSeqWritten = event.seq;
+    }
+  }
+
+  /**
    * @returns Path absoluto del archivo de eventos actual
    */
   getCurrentFile(): string {
@@ -107,6 +128,38 @@ export class EventLogWriter {
     ensureFile(this.currentFile, "");
   }
 
+  private async rotateIfNeededAsync(): Promise<void> {
+    const size = await fileSize(this.currentFile);
+
+    if (size < this.rotateAtBytes) return;
+
+    const timestamp = Date.now();
+    const counter = this.rotationCounter++;
+    const rotatedFileName = `events.${timestamp}-${counter}.ndjson`;
+    const rotated = join(this.logsDir, rotatedFileName);
+
+    const sizeAtRotation = size;
+    const seqAtRotation = this.lastSeqWritten;
+
+    try {
+      // rename atómico — sync dentro de async es OK, la atomicidad
+      // del rename es lo que importa.
+      renameSync(this.currentFile, rotated);
+    } catch {
+      return;
+    }
+
+    await this.appendToManifestAsync({
+      file: rotatedFileName,
+      rotatedAt: timestamp,
+      previousFile: "events.current.ndjson",
+      bytesSizeAtRotation: sizeAtRotation,
+      lastSeqInFile: seqAtRotation,
+    });
+
+    ensureFile(this.currentFile, "");
+  }
+
   private appendToManifest(entry: RotationEntry): void {
     const manifestFile = this.paths.rotationManifestFile();
     let manifest: RotationManifest = { rotations: [] };
@@ -126,6 +179,27 @@ export class EventLogWriter {
       manifest.rotations = manifest.rotations.slice(-100);
     }
 
+    atomicWriteFile(manifestFile, JSON.stringify(manifest, null, 2));
+  }
+
+  private async appendToManifestAsync(entry: RotationEntry): Promise<void> {
+    const manifestFile = this.paths.rotationManifestFile();
+    let manifest: RotationManifest = { rotations: [] };
+
+    const existing = await readJsonFileAsync<RotationManifest>(manifestFile);
+    if (existing) {
+      manifest = existing;
+    }
+
+    manifest.rotations.push(entry);
+
+    if (manifest.rotations.length > 100) {
+      manifest.rotations = manifest.rotations.slice(-100);
+    }
+
+    // El manifest se reconstruye desde el log rotado si se pierde, así
+    // que atomicWriteFile (atómico) sigue siendo lo correcto aquí. La
+    // lectura async evita bloquear el event loop durante la reconstrucción.
     atomicWriteFile(manifestFile, JSON.stringify(manifest, null, 2));
   }
 }

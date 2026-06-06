@@ -47,6 +47,13 @@ export interface BridgeHealth {
     rotatedFiles: number;
     lastSeq: number;
   };
+  performance?: {
+    averageClaimMs: number;
+    averageReaddirMs: number;
+    averageJsonParseMs: number;
+    averageQueueAppendMs: number;
+    readdirCacheHitRate: number;
+  };
   consumers: Array<{
     consumerId: string;
     lastSeq: number;
@@ -206,6 +213,25 @@ export class BridgeDiagnostics {
 
   private readQueueIndex(): string[] {
     try {
+      const ndjsonFile = join(this.paths.commandsDir(), "_queue.ndjson");
+      if (existsSync(ndjsonFile)) {
+        const raw = readFileSync(ndjsonFile, "utf8");
+        return raw
+          .split("\n")
+          .filter((line) => line.trim() !== "")
+          .map((line) => {
+            try {
+              return JSON.parse(line);
+            } catch {
+              return null;
+            }
+          })
+          .filter((entry): entry is string => typeof entry === "string")
+          .map((entry) => entry.trim())
+          .filter((entry) => entry !== "" && entry !== "_queue.ndjson" && entry.endsWith(".json"))
+          .sort();
+      }
+
       const queueFile = join(this.paths.commandsDir(), "_queue.json");
       if (!existsSync(queueFile)) return [];
       const raw = JSON.parse(readFileSync(queueFile, "utf8"));

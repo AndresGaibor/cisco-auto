@@ -26,6 +26,15 @@ export { FileResolver } from "./consumer-file-resolver.js";
 
 // Event writer
 export { EventLogWriter } from "./event-log-writer.js";
+export {
+  FileBridgeMetrics,
+  formatMetricsForHumans,
+  type FileBridgeMetricsSnapshot,
+} from "./file-bridge-metrics.js";
+export {
+  FileBridgeMetricsHistory,
+  getSnapshotAndPersist,
+} from "./file-bridge-metrics-history.js";
 
 // Protocol types — canonical source is @cisco-auto/types
 export type {

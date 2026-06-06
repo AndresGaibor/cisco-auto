@@ -1,6 +1,6 @@
 import * as z from "zod/v4";
 import type { RegisterToolContext } from "./tool-types.js";
-import { ok, errorToFail } from "./mcp-response.js";
+import { ok, errorToFail, instructivo } from "./mcp-response.js";
 import { LinkOutputSchema } from "./output-schemas.js";
 
 const endpointSchema = z.object({
@@ -88,17 +88,39 @@ export function registerLinkTool(ctx: RegisterToolContext): void {
                 }
               }
             }
-            return ok({ action: "link.list", links, count: links.length });
+            const count = links.length;
+
+            return instructivo("pt_link op=list", { action: "link.list", links, count }, {
+              resumen: count > 0
+                ? `Se encontraron ${count} enlace(s) en el laboratorio.`
+                : "No hay enlaces en el laboratorio.",
+              paso: count > 0
+                ? `Usa \`pt_link op=verify a.device="${(links[0] as any)?.device}" a.port="${(links[0] as any)?.port}" ...\` para verificar un enlace específico.`
+                : "Usa `pt_link op=add` para conectar dispositivos.",
+              siguientes: [
+                `pt_link op=verify a.device="<dev>" a.port="<port>" b.device="<dev>" b.port="<port>" — verificar enlace`,
+                `pt_link op=doctor a.device="<dev>" a.port="<port>" — diagnosticar conectividad`,
+                `pt_device op=list — inventario de dispositivos`,
+              ],
+            });
           }
 
           case "suggest": {
             const snapshot = await controller.snapshot();
-            return ok({
+
+            return instructivo("pt_link op=suggest", {
               action: "link.suggest",
               source: input.sourceDevice,
               target: input.targetDevice,
               availablePorts: [],
-              hint: "Usa pt_device ports para ver puertos disponibles en cada dispositivo.",
+            }, {
+              resumen: `Buscando puertos disponibles entre "${input.sourceDevice}" y "${input.targetDevice}".`,
+              paso: `Usa \`pt_device op=ports device="${input.sourceDevice}"\` para ver puertos disponibles.`,
+              siguientes: [
+                `pt_device op=ports device="${input.sourceDevice}" — puertos de origen`,
+                `pt_device op=ports device="${input.targetDevice}" — puertos de destino`,
+                `pt_link op=add a.device="${input.sourceDevice}" ... b.device="${input.targetDevice}" ... — conectar`,
+              ],
             });
           }
 
@@ -108,7 +130,16 @@ export function registerLinkTool(ctx: RegisterToolContext): void {
               input.b.device, input.b.port,
               input.cableType,
             );
-            return ok({ action: "link.add", a: input.a, b: input.b, cableType: input.cableType, result });
+
+            return instructivo("pt_link op=add", { action: "link.add", a: input.a, b: input.b, cableType: input.cableType, result }, {
+              resumen: `Enlace creado entre ${input.a.device}:${input.a.port} y ${input.b.device}:${input.b.port} (${input.cableType}).`,
+              paso: `Verifica con \`pt_link op=verify a.device="${input.a.device}" a.port="${input.a.port}" b.device="${input.b.device}" b.port="${input.b.port}"\`.`,
+              siguientes: [
+                `pt_link op=verify — verificar enlace`,
+                `pt_link op=list — listar todos los enlaces`,
+                `pt_cmd_run — ver conectividad con comandos show`,
+              ],
+            });
           }
 
           case "remove": {
@@ -121,19 +152,37 @@ export function registerLinkTool(ctx: RegisterToolContext): void {
             } else {
               await controller.removeLink(input.a.device, input.a.port);
             }
-            return ok({ action: "link.remove", a: input.a });
+
+            return instructivo("pt_link op=remove", { action: "link.remove", a: input.a }, {
+              resumen: `Enlace removido de ${input.a.device}:${input.a.port}.`,
+              paso: "Verifica con `pt_link op=list` que el enlace ya no aparece.",
+            });
           }
 
           case "verify": {
             const link = await (controller as any).getTopologyCache?.()?.findLinkBetween?.(
               input.a.device, input.b.device,
             );
-            return ok({
+            const connected = Boolean(link);
+
+            return instructivo("pt_link op=verify", {
               action: "link.verify",
               a: input.a,
               b: input.b,
-              connected: Boolean(link),
+              connected,
               link,
+            }, {
+              resumen: connected
+                ? `Enlace CONFIRMADO entre ${input.a.device}:${input.a.port} y ${input.b.device}:${input.b.port}.`
+                : `NO hay enlace directo entre ${input.a.device}:${input.a.port} y ${input.b.device}:${input.b.port}.`,
+              paso: connected
+                ? `Usa \`pt_cmd_run\` para verificar conectividad IP con comandos show.`
+                : `Usa \`pt_link op=add\` para crear el enlace.`,
+              siguientes: [
+                `pt_link op=doctor — diagnóstico de conectividad`,
+                `pt_cmd_run device="${input.a.device}" commands="show ip interface brief" profile="fast"`,
+                `pt_link op=list — todos los enlaces`,
+              ],
             });
           }
 
@@ -143,13 +192,27 @@ export function registerLinkTool(ctx: RegisterToolContext): void {
             );
             const issues: string[] = [];
             if (!link) issues.push("No hay enlace directo entre los dispositivos.");
-            return ok({
+            const healthy = issues.length === 0;
+
+            return instructivo("pt_link op=doctor", {
               action: "link.doctor",
               a: input.a,
               b: input.b,
               connected: Boolean(link),
               issues,
-              healthy: issues.length === 0,
+              healthy,
+            }, {
+              resumen: healthy
+                ? `Conectividad OK entre ${input.a.device} y ${input.b.device}.`
+                : `Problemas detectados: ${issues.join("; ")}`,
+              paso: healthy
+                ? `Usa \`pt_cmd_run\` para verificar conectividad IP.`
+                : `Usa \`pt_link op=add\` o revisa los nombres de puertos con \`pt_device op=ports\`.`,
+              siguientes: [
+                `pt_link op=verify — verificar enlace específico`,
+                `pt_cmd_run device="${input.a.device}" commands="show ip interface brief" profile="fast"`,
+                `pt_device op=ports — ver puertos disponibles`,
+              ],
             });
           }
 

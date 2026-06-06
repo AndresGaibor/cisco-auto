@@ -39,6 +39,37 @@ describe("FileBridgeV2", () => {
       expect(existsSync(join(testDir, "dead-letter"))).toBe(true);
     });
 
+    it("should persist a metrics snapshot when diagnostics are queried", () => {
+      bridge.start();
+
+      const health = bridge.diagnostics();
+
+      const metricsFile = join(testDir, "metrics-history", "metrics.ndjson");
+      expect(existsSync(metricsFile)).toBe(true);
+      expect(readFileSync(metricsFile, "utf8").trim().length).toBeGreaterThan(0);
+      expect(health.performance).toMatchObject({
+        averageClaimMs: expect.any(Number),
+        averageReaddirMs: expect.any(Number),
+        averageJsonParseMs: expect.any(Number),
+        averageQueueAppendMs: expect.any(Number),
+        readdirCacheHitRate: expect.any(Number),
+      });
+    });
+
+    it("should expose a performance summary in bridge status", () => {
+      bridge.start();
+
+      const status = bridge.getBridgeStatus();
+
+      expect(status.performance).toMatchObject({
+        averageClaimMs: expect.any(Number),
+        averageReaddirMs: expect.any(Number),
+        averageJsonParseMs: expect.any(Number),
+        averageQueueAppendMs: expect.any(Number),
+        readdirCacheHitRate: expect.any(Number),
+      });
+    });
+
     it("should not throw on double start", () => {
       bridge.start();
       expect(() => bridge.start()).not.toThrow();

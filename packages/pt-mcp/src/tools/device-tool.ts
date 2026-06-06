@@ -1,6 +1,6 @@
 import * as z from "zod/v4";
 import type { RegisterToolContext } from "./tool-types.js";
-import { ok, errorToFail } from "./mcp-response.js";
+import { ok, errorToFail, instructivo } from "./mcp-response.js";
 import { DeviceOutputSchema } from "./output-schemas.js";
 
 export function registerDeviceTool(ctx: RegisterToolContext): void {
@@ -85,12 +85,36 @@ export function registerDeviceTool(ctx: RegisterToolContext): void {
               includeLinks: input.includeLinks,
               deep: input.deep,
             });
-            return ok({ action: "device.list", devices, count: Array.isArray(devices) ? devices.length : 0 });
+            const count = Array.isArray(devices) ? devices.length : 0;
+            const deviceNames = Array.isArray(devices) ? devices.map((d: any) => d.name).filter(Boolean) : [];
+
+            return instructivo("pt_device op=list", { action: "device.list", devices, count }, {
+              resumen: count > 0 ? `Se encontraron ${count} dispositivo(s) en el laboratorio.` : "No se encontraron dispositivos.",
+              paso: count > 0
+                ? `Usa \`pt_device op=get device="${deviceNames[0]}"\` para inspeccionar un dispositivo, o \`pt_cmd_run\` con device="${deviceNames[0]}" commands="show version" profile="fast" mode="safe".`
+                : "Agrega dispositivos con `pt_device op=add name=\"Switch0\" model=\"2960\"`.",
+              siguientes: [
+                `pt_device op=get device="<nombre>" — detalles de un dispositivo`,
+                `pt_cmd_run con device="<nombre>" commands="show version" profile="fast" — comandos IOS`,
+                `pt_link op=list — revisar cableado`,
+                `pt_status op=summary — estado general`,
+              ],
+            });
           }
 
           case "get": {
             const device = await controller.inspectDevice(input.device, input.includeXml);
-            return ok({ action: "device.get", device: input.device, state: device });
+            const ports = (device as any)?.ports ?? [];
+
+            return instructivo("pt_device op=get", { action: "device.get", device: input.device, state: device }, {
+              resumen: `Dispositivo "${input.device}" inspeccionado. ${ports.length} puerto(s) disponible(s).`,
+              paso: `Usa \`pt_cmd_run device="${input.device}" commands="show ip interface brief" profile="fast"\` para ver estado IP.`,
+              siguientes: [
+                `pt_device op=ports device="${input.device}" — ver puertos disponibles`,
+                `pt_link op=list device="${input.device}" — ver enlaces de este dispositivo`,
+                `pt_cmd_run device="${input.device}" commands="show running-config" profile="audit" — ver configuración`,
+              ],
+            });
           }
 
           case "add": {
@@ -98,7 +122,16 @@ export function registerDeviceTool(ctx: RegisterToolContext): void {
               x: input.x,
               y: input.y,
             });
-            return ok({ action: "device.add", device: input.name, model: input.model, result });
+
+            return instructivo("pt_device op=add", { action: "device.add", device: input.name, model: input.model, result }, {
+              resumen: `Dispositivo "${input.name}" (${input.model}) agregado al laboratorio.`,
+              paso: `Verifica con \`pt_device op=list\` o \`pt_device op=get device="${input.name}"\`. Luego conecta cables con \`pt_link op=add\`.`,
+              siguientes: [
+                `pt_device op=get device="${input.name}" — verificar creación`,
+                `pt_device op=ports device="${input.name}" — ver puertos disponibles`,
+                `pt_link op=add a.device="${input.name}" a.port="<puerto>" b.device="<otro>" b.port="<puerto>" — conectar`,
+              ],
+            });
           }
 
           case "remove": {
@@ -111,34 +144,70 @@ export function registerDeviceTool(ctx: RegisterToolContext): void {
             } else {
               await controller.removeDevice(input.device);
             }
-            return ok({ action: "device.remove", device: input.device });
+
+            return instructivo("pt_device op=remove", { action: "device.remove", device: input.device }, {
+              resumen: `Dispositivo "${input.device}" eliminado del laboratorio.`,
+              paso: "Verifica con `pt_device op=list` que ya no aparece en el inventario.",
+              siguientes: [
+                `pt_device op=list — verificar eliminación`,
+                `pt_link op=list — revisar enlaces restantes`,
+              ],
+            });
           }
 
           case "move": {
             const result = await controller.moveDevice(input.device, input.x, input.y);
-            return ok({ action: "device.move", device: input.device, x: input.x, y: input.y, result });
+
+            return instructivo("pt_device op=move", { action: "device.move", device: input.device, x: input.x, y: input.y, result }, {
+              resumen: `Dispositivo "${input.device}" movido a (${input.x}, ${input.y}).`,
+              paso: `Verifica con \`pt_device op=get device="${input.device}"\`.`,
+            });
           }
 
           case "ports": {
             const device = await controller.inspectDevice(input.device, false);
             const ports = (device as any)?.ports ?? [];
-            return ok({ action: "device.ports", device: input.device, ports });
+
+            return instructivo("pt_device op=ports", { action: "device.ports", device: input.device, ports }, {
+              resumen: `${ports.length} puerto(s) disponible(s) en "${input.device}".`,
+              paso: ports.length > 0
+                ? `Usa \`pt_link op=add a.device="${input.device}" a.port="${(ports[0] as any)?.name}" b.device="<otro>" b.port="<puerto>"\` para conectar.`
+                : "El dispositivo no tiene puertos disponibles para conectar.",
+              siguientes: [
+                `pt_link op=suggest sourceDevice="${input.device}" targetDevice="<otro>" — sugerir conexión`,
+                `pt_device op=get device="${input.device}" — ver detalles completos`,
+              ],
+            });
           }
 
           case "module_slots": {
             const slots = await (controller as any).inspectModuleSlots(input.device);
-            return ok({ action: "device.module_slots", device: input.device, slots });
+
+            return instructivo("pt_device op=module_slots", { action: "device.module_slots", device: input.device, slots }, {
+              resumen: `${Array.isArray(slots) ? slots.length : 0} slot(s) de módulo disponible(s) en "${input.device}".`,
+              paso: Array.isArray(slots) && slots.length > 0
+                ? `Usa \`pt_device op=module_add device="${input.device}" module="HWIC-4ESW"\` para instalar un módulo.`
+                : "No hay slots disponibles para módulos adicionales.",
+            });
           }
 
           case "module_add": {
             const slot = input.slot === "auto" ? "auto" : input.slot;
             const result = await controller.addModule(input.device, slot, input.module);
-            return ok({ action: "device.module_add", device: input.device, module: input.module, slot, result });
+
+            return instructivo("pt_device op=module_add", { action: "device.module_add", device: input.device, module: input.module, slot, result }, {
+              resumen: `Módulo "${input.module}" instalado en ${input.device} (slot: ${slot}).`,
+              paso: `Verifica con \`pt_device op=get device="${input.device}"\` que el módulo aparezca. Luego conecta cables a los nuevos puertos.`,
+            });
           }
 
           case "module_remove": {
             const result = await controller.removeModule(input.device, input.slot);
-            return ok({ action: "device.module_remove", device: input.device, slot: input.slot, result });
+
+            return instructivo("pt_device op=module_remove", { action: "device.module_remove", device: input.device, slot: input.slot, result }, {
+              resumen: `Módulo removido del slot ${input.slot} en "${input.device}".`,
+              paso: `Verifica con \`pt_device op=get device="${input.device}"\`.`,
+            });
           }
 
           default:

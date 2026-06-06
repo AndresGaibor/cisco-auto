@@ -104,3 +104,75 @@ export function assertStructuredContent<T>(
   schema.parse(response.structuredContent);
   return response;
 }
+
+export interface InstructivoOptions {
+  paso?: string;
+  siguientes?: string[];
+  tips?: string[];
+  resumen?: string;
+  startTime?: number;
+}
+
+function formatearJSON(datos: Record<string, unknown>): string {
+  return JSON.stringify(datos, null, 2);
+}
+
+function construirTexto(
+  titulo: string,
+  datos: Record<string, unknown>,
+  opts: InstructivoOptions,
+): string {
+  const lineas: string[] = [];
+
+  lineas.push(`## ${titulo}`);
+  lineas.push("");
+
+  if (opts.resumen) {
+    lineas.push(opts.resumen);
+    lineas.push("");
+  }
+
+  lineas.push("```json");
+  lineas.push(formatearJSON(datos));
+  lineas.push("```");
+  lineas.push("");
+
+  if (opts.paso) {
+    lineas.push("### Siguiente paso");
+    lineas.push(opts.paso);
+    lineas.push("");
+  }
+
+  if (opts.siguientes && opts.siguientes.length > 0) {
+    lineas.push("### Opciones");
+    opts.siguientes.forEach((s, i) => {
+      lineas.push(`${i + 1}. ${s}`);
+    });
+    lineas.push("");
+  }
+
+  if (opts.tips && opts.tips.length > 0) {
+    lineas.push("> 💡 " + opts.tips.join("\n> 💡 "));
+  }
+
+  return lineas.join("\n");
+}
+
+export function instructivo<T extends Record<string, unknown>>(
+  toolName: string,
+  structuredContent: T,
+  opts: InstructivoOptions = {},
+): McpToolResponse<T & { ok: true; schemaVersion: "1.0"; timestamp: string; requestId: string; durationMs?: number }> {
+  const payload = {
+    ok: true as const,
+    ...baseMeta(opts.startTime),
+    ...structuredContent,
+  };
+
+  const texto = construirTexto(toolName, payload, opts);
+
+  return {
+    content: [{ type: "text", text: texto }],
+    structuredContent: payload,
+  };
+}

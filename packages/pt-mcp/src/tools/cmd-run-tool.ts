@@ -1,6 +1,6 @@
 import * as z from "zod/v4";
 import type { RegisterToolContext } from "./tool-types.js";
-import { ok, errorToFail } from "./mcp-response.js";
+import { ok, errorToFail, instructivo } from "./mcp-response.js";
 import { CmdRunOutputSchema } from "./output-schemas.js";
 import { globalCmdQueue } from "../queue/cmd-queue.js";
 import {
@@ -8,280 +8,26 @@ import {
   enrichCmdRunJobResultWithPerformance,
 } from "./cmd-performance.js";
 import { buildAdaptiveCommandChunks, classifyIosShowCommand } from "./cmd-batch-strategy.js";
-
-function normalizeCommands(value: string | string[]): string[] {
-  if (Array.isArray(value)) {
-    return value
-      .flatMap((line) => String(line).split(/\r?\n/))
-      .map((line) => line.trimEnd())
-      .filter((line) => line.trim().length > 0)
-      .filter((line) => !line.trimStart().startsWith("#"));
-  }
-
-  return String(value)
-    .split(/\r?\n/)
-    .map((line) => line.trimEnd())
-    .filter((line) => line.trim().length > 0)
-    .filter((line) => !line.trimStart().startsWith("#"));
-}
-
-interface SequentialSubCommandResult {
-  index: number;
-  command: string;
-  ok: boolean;
-  status?: number;
-  durationMs?: number;
-  result: unknown;
-  warnings?: unknown[];
-}
-
-function buildSequentialSubResult(
-  index: number,
-  command: string,
-  executed: unknown,
-  durationMs: number,
-  effectiveRaw: boolean,
-): SequentialSubCommandResult {
-  const warnings = Array.isArray((executed as any)?.warnings)
-    ? ((executed as any).warnings as unknown[])
-    : undefined;
-
-  return {
-    index,
-    command,
-    ok: getExecutionOk(executed),
-    status: getExecutionStatus(executed),
-    durationMs,
-    result: {
-      ...(executed as Record<string, unknown>),
-      ...(effectiveRaw ? {} : { rawOutput: undefined }),
-    },
-    ...(warnings ? { warnings } : {}),
-  };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function getBestOutput(result: unknown): string {
-  if (!isRecord(result)) return "";
-
-  const output = result.output;
-  if (typeof output === "string" && output.trim().length > 0) return output;
-
-  const rawOutput = result.rawOutput;
-  if (typeof rawOutput === "string" && rawOutput.trim().length > 0) return rawOutput;
-
-  const raw = result.raw;
-  if (typeof raw === "string" && raw.trim().length > 0) return raw;
-
-  return "";
-}
-
-function getExecutionOk(result: unknown): boolean {
-  if (!isRecord(result)) return false;
-
-  if (typeof result.ok === "boolean") return result.ok;
-  return Number(result.status ?? 1) === 0;
-}
-
-function getExecutionStatus(result: unknown): number {
-  if (!isRecord(result)) return 1;
-
-  const status = Number(result.status ?? 1);
-  return Number.isFinite(status) ? status : 1;
-}
-
-function buildBatchEvidence(baseEvidence: unknown, subResults: SequentialSubCommandResult[]): unknown {
-  const timings = isRecord(baseEvidence) && isRecord(baseEvidence.timings) ? baseEvidence.timings : {};
-  const sequentialTotalSubcommandMs = subResults.reduce((sum, item) => sum + (item.durationMs ?? 0), 0);
-
-  return {
-    ...(isRecord(baseEvidence) ? baseEvidence : {}),
-    timings: {
-      ...(isRecord(timings) ? timings : {}),
-      sequentialTotalSubcommandMs,
-    },
-  };
-}
-
-function buildBatchResult(
-  job: { device: string; commands: string[]; mode: string },
-  subResults: SequentialSubCommandResult[],
-  baseResult: unknown,
-  effectiveRaw: boolean,
-  telemetry?: {
-    optimizedRuntimeBatchAttempted?: boolean;
-    optimizedRuntimeBatchAvailable?: boolean;
-    optimizedRuntimeBatchFallbackReason?: string;
-    optimizedRuntimeBatchDiagnostics?: unknown;
-    optimizedRuntimeBatchPartial?: boolean;
-    optimizedRuntimeBatchMatchedCommandCount?: number;
-    optimizedRuntimeBatchNextCommandIndex?: number;
-  },
-): Record<string, unknown> {
-  const failedSubcommandCount = subResults.filter((item) => item.ok === false).length;
-  const stoppedEarly = subResults.length < job.commands.length;
-  const combinedOutput = subResults
-    .map((item) => getBestOutput(item.result))
-    .filter((line) => line.trim().length > 0)
-    .join("\n");
-
-  const baseRecord = isRecord(baseResult) ? baseResult : {};
-  const evidence = buildBatchEvidence(baseRecord.evidence, subResults);
-  const evidenceWithDiagnostics = telemetry?.optimizedRuntimeBatchDiagnostics !== undefined
-    ? { ...(isRecord(evidence) ? evidence : {}), optimizedBatchDiagnostics: telemetry.optimizedRuntimeBatchDiagnostics }
-    : evidence;
-
-  return {
-    ...baseRecord,
-    action: "ios.exec.batch",
-    device: job.device,
-    deviceKind: isRecord(baseRecord) && typeof baseRecord.deviceKind === "string" ? baseRecord.deviceKind : "ios",
-    command: job.commands.join("\n"),
-    commandCount: job.commands.length,
-    commands: job.commands,
-    output: combinedOutput,
-    rawOutput: effectiveRaw ? combinedOutput : undefined,
-    status: failedSubcommandCount === 0 ? 0 : 1,
-    ok: failedSubcommandCount === 0,
-    executionStrategy: "sequential-subcommands",
-    ...(telemetry?.optimizedRuntimeBatchAttempted === true ? { optimizedRuntimeBatchAttempted: true } : {}),
-    ...(telemetry?.optimizedRuntimeBatchAvailable !== undefined
-      ? { optimizedRuntimeBatchAvailable: telemetry.optimizedRuntimeBatchAvailable }
-      : {}),
-    ...(telemetry?.optimizedRuntimeBatchFallbackReason
-      ? { optimizedRuntimeBatchFallbackReason: telemetry.optimizedRuntimeBatchFallbackReason }
-      : {}),
-    ...(telemetry?.optimizedRuntimeBatchDiagnostics !== undefined
-      ? { optimizedRuntimeBatchDiagnostics: telemetry.optimizedRuntimeBatchDiagnostics }
-      : {}),
-    ...(telemetry?.optimizedRuntimeBatchPartial === true
-      ? {
-          optimizedRuntimeBatchPartial: true,
-          optimizedRuntimeBatchMatchedCommandCount: telemetry.optimizedRuntimeBatchMatchedCommandCount,
-          optimizedRuntimeBatchNextCommandIndex: telemetry.optimizedRuntimeBatchNextCommandIndex,
-        }
-      : {}),
-    failedSubcommandCount,
-    subResults,
-    ...(stoppedEarly ? { stoppedEarly: true, stopReason: "subcommand_failed" } : {}),
-    ...(isRecord(baseRecord) && Array.isArray(baseRecord.warnings) ? { warnings: baseRecord.warnings } : {}),
-    evidence: evidenceWithDiagnostics,
-  };
-}
-
-function buildAdaptiveBatchIncompleteWarning(actualCount: number, expectedCount: number, missingIndexes: number[]): { code: string; severity: "warning"; message: string; actionable: boolean } {
-  return {
-    code: "CMD_ADAPTIVE_BATCH_INCOMPLETE",
-    severity: "warning",
-    message: `Adaptive batch returned only ${actualCount}/${expectedCount} subResults. Missing command indexes: ${missingIndexes.join(", ")}.`,
-    actionable: true,
-  };
-}
-
-function evaluateAdaptiveBatchIntegrity(
-  commands: string[],
-  subResults: SequentialSubCommandResult[],
-  adaptiveBatchChunks: Array<{ ok?: boolean }>,
-): {
-  missingSubResultIndexes: number[];
-  failedChunkCount: number;
-  failedSubcommandCount: number;
-  integrityOk: boolean;
-} {
-  const expectedIndexes = commands.map((_command, index) => index);
-  const seenIndexes = new Set(
-    subResults
-      .map((item) => item?.index)
-      .filter((index: unknown): index is number => Number.isInteger(index)),
-  );
-
-  const missingSubResultIndexes = expectedIndexes.filter((index) => !seenIndexes.has(index));
-  const failedChunkCount = adaptiveBatchChunks.filter((chunk) => chunk?.ok === false).length;
-  const failedSubcommandCount = subResults.filter((item) => item.ok === false).length;
-  const integrityOk =
-    missingSubResultIndexes.length === 0 &&
-    failedChunkCount === 0 &&
-    failedSubcommandCount === 0;
-
-  return {
-    missingSubResultIndexes,
-    failedChunkCount,
-    failedSubcommandCount,
-    integrityOk,
-  };
-}
-
-function findMissingSubResultIndexes(commands: string[], subResults: Array<{ index?: number }>): number[] {
-  const seen = new Set(
-    subResults
-      .map((item) => item?.index)
-      .filter((index: unknown): index is number => Number.isInteger(index)),
-  );
-
-  return commands
-    .map((_command, index) => index)
-    .filter((index) => !seen.has(index));
-}
-
-function findRecoverableFailedSubResultIndexes(subResults: Array<{ index?: number; ok?: boolean; result?: any }>): number[] {
-  return subResults
-    .filter((item) => {
-      const code = item?.result?.error?.code;
-      return (
-        item?.ok === false &&
-        (code === "ADAPTIVE_BATCH_CHUNK_FAILED" ||
-          code === "ADAPTIVE_BATCH_INCOMPLETE" ||
-          code === "IOS_EXEC_FAILED")
-      );
-    })
-    .map((item) => item.index)
-    .filter((index: unknown): index is number => Number.isInteger(index));
-}
-
-function mergeRecoveredSubResults(original: SequentialSubCommandResult[], recovered: SequentialSubCommandResult[]): SequentialSubCommandResult[] {
-  const byIndex = new Map<number, SequentialSubCommandResult>();
-
-  for (const item of original) {
-    if (Number.isInteger(item?.index)) {
-      byIndex.set(item.index, item);
-    }
-  }
-
-  for (const item of recovered) {
-    if (Number.isInteger(item?.index)) {
-      byIndex.set(item.index, item);
-    }
-  }
-
-  return [...byIndex.values()].sort((a, b) => a.index - b.index);
-}
-
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorFactory: () => Error): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(errorFactory()), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
-function buildRecoveryTimeoutWarning(index: number, command: string): { code: string; severity: "warning"; message: string; actionable: boolean } {
-  return {
-    code: "CMD_ADAPTIVE_BATCH_RECOVERY_TIMEOUT",
-    severity: "warning",
-    message: `Adaptive batch sequential recovery timed out for command index ${index}: ${command}.`,
-    actionable: true,
-  };
-}
+import {
+  normalizeCommands,
+  isRecord,
+  getBestOutput,
+  getExecutionOk,
+  getExecutionStatus,
+  buildSequentialSubResult,
+  buildBatchResult,
+  buildBatchEvidence,
+} from "./cmd-run-helpers.js";
+import type { SequentialSubCommandResult } from "./cmd-run-helpers.js";
+import {
+  evaluateAdaptiveBatchIntegrity,
+  findMissingSubResultIndexes,
+  findRecoverableFailedSubResultIndexes,
+  mergeRecoveredSubResults,
+  withTimeout,
+  buildRecoveryTimeoutWarning,
+  buildAdaptiveBatchIncompleteWarning,
+} from "./cmd-run-adaptive.js";
 
 const DEFAULT_TERMINAL_CONCURRENCY = 1;
 const MAX_TERMINAL_CONCURRENCY = 4;
@@ -494,7 +240,6 @@ export function registerCmdRunTool(ctx: RegisterToolContext): void {
               if (adaptiveChunksEnabled && lines.length > 5 && mode !== "raw") {
                 const weights = lines.map((command) => classifyIosShowCommand(command));
                 if (weights.every((weight) => weight === "short")) {
-                  // Para comandos homogéneos y cortos, el optimized actual sigue siendo más seguro y rápido.
                 } else {
                 const chunks = buildAdaptiveCommandChunks(lines);
                 const chunkSubResults: SequentialSubCommandResult[] = [];
@@ -738,7 +483,7 @@ export function registerCmdRunTool(ctx: RegisterToolContext): void {
                                 message: "Adaptive batch completed but one or more commands failed.",
                               },
                             }
-                        : {}),
+                          : {}),
                     },
                   },
                   effectiveSlowThresholdMs,
@@ -863,7 +608,7 @@ export function registerCmdRunTool(ctx: RegisterToolContext): void {
                     .filter((line) => line.trim().length > 0)
                     .join("\n");
                   const baseRecord = isRecord(baseResult) ? baseResult : {};
-                  const evidence = buildBatchEvidence(baseRecord.evidence, totalSubResults);
+                  const evidence = buildBatchResult(job, totalSubResults, baseResult, effectiveRaw);
 
                   return enrichCmdRunJobResultWithPerformance(
                     {
@@ -1060,14 +805,43 @@ export function registerCmdRunTool(ctx: RegisterToolContext): void {
         }
 
         const failedCount = results.filter((entry: any) => entry?.result?.ok === false).length;
+        const firstDevice = input.jobs[0]?.device;
+        const allOk = failedCount === 0;
+        const jobCount = input.jobs.length;
 
-        return ok({
+        const siguientes: string[] = [];
+        if (firstDevice) {
+          if (allOk) {
+            siguientes.push(`pt_cmd_run device="${firstDevice}" commands="show running-config | section vlan" — más comandos show`);
+            siguientes.push(`pt_link op=list — revisar cableado`);
+            siguientes.push(`pt_device op=list — inventario completo`);
+          } else {
+            siguientes.push(`pt_cmd_run device="${firstDevice}" commands="show interfaces" profile="debug" — diagnosticar`);
+            siguientes.push(`pt_status op=summary — verificar estado general`);
+          }
+        } else {
+          siguientes.push(`pt_device op=list — listar dispositivos disponibles`);
+          siguientes.push(`pt_status op=summary — estado del laboratorio`);
+        }
+
+        return instructivo("pt_cmd_run", {
           action: "cmd.run",
-          jobCount: input.jobs.length,
+          jobCount,
           failedCount,
           results,
           ...(topLevelWarnings.length > 0 ? { warnings: topLevelWarnings } : {}),
           queue: globalCmdQueue.snapshot(),
+        }, {
+          resumen: allOk
+            ? `${jobCount} job(s) ejecutado(s) exitosamente.`
+            : `${failedCount} de ${jobCount} job(s) fallaron. Revisa failedSubcommandCount y warnings en cada resultado.`,
+          paso: allOk
+            ? firstDevice
+              ? `Resultados correctos. Puedes ejecutar más comandos con \`pt_cmd_run device="${firstDevice}"\` o revisar configuraciones específicas.`
+              : "Comandos ejecutados. Usa `pt_device op=list` para explorar el laboratorio."
+            : `Revisa failedSubcommandCount y subResults[].ok en los resultados. Usa profile="debug" para más detalle en el próximo intento.`,
+          siguientes,
+          tips: !allOk ? ["Usa profile=debug para más detalle en errores.", "Usa continueOnError=true para jobs batch con fallos tolerados."] : undefined,
         });
       } catch (error) {
         return errorToFail(error, "PT_CMD_RUN_FAILED", "Error ejecutando comandos MCP.");

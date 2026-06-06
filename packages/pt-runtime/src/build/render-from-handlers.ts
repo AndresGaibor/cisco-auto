@@ -60,7 +60,6 @@ export function renderRuntimeFromHandlers(options: RenderFromHandlersOptions): s
   }
 
   const { code, validation } = transformToPtSafeAst(sourceFiles, {
-    target: undefined,
     replaceConsoleWithDprint: true,
     wrapIIFE: false,
     minify: options.minify ?? false,

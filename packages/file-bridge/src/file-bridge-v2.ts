@@ -45,6 +45,8 @@ import { CrashRecovery } from "./v2/crash-recovery.js";
 import { BridgeStatusService } from "./v2/bridge-status-service.js";
 import { ensureBridgeRuntimeDirectories } from "./v2/bridge-directory-setup.js";
 import { MonitoringService } from "./v2/monitoring-service.js";
+import { FileBridgeMetrics } from "./file-bridge-metrics.js";
+import { FileBridgeMetricsHistory, getSnapshotAndPersist } from "./file-bridge-metrics-history.js";
 import {
   BridgeCommandClient,
   BridgeResultResolver,
@@ -82,6 +84,8 @@ export class FileBridgeV2 extends EventEmitter {
   private readonly paths: BridgePathLayout;
   private readonly seq: SequenceStore;
   private readonly eventWriter: EventLogWriter;
+  private readonly metrics: FileBridgeMetrics;
+  private readonly metricsHistory: FileBridgeMetricsHistory;
   private readonly consumer: DurableNdjsonConsumer;
   private readonly resultWatcher: SharedResultWatcher;
   private readonly backpressure: BackpressureManager;
@@ -103,12 +107,14 @@ export class FileBridgeV2 extends EventEmitter {
     this.paths = new BridgePathLayout(options.root);
     this.seq = new SequenceStore(options.root);
     this.eventWriter = new EventLogWriter(this.paths);
+    this.metrics = new FileBridgeMetrics();
+    this.metricsHistory = new FileBridgeMetricsHistory(options.root);
     this.resultWatcher = new SharedResultWatcher(this.paths.resultsDir());
     this.backpressure = new BackpressureManager(this.paths, {
       maxPending: options.maxPendingCommands ?? 100,
     });
 
-    this.commandProcessor = new CommandProcessor(this.paths, this.eventWriter, this.seq);
+    this.commandProcessor = new CommandProcessor(this.paths, this.eventWriter, this.seq, 100, this.metrics);
 
     this.leaseManager = new LeaseManager(this.paths.leaseFile(), options.leaseTtlMs ?? 30_000);
 
@@ -192,6 +198,16 @@ export class FileBridgeV2 extends EventEmitter {
       leaseManager: this.leaseManager,
       backpressure: this.backpressure,
       diagnostics: this._diagnostics,
+      getPerformanceSnapshot: () => {
+        const snap = this.metrics.getSnapshot();
+        return {
+          averageClaimMs: snap.averageClaimMs,
+          averageReaddirMs: snap.averageReaddirMs,
+          averageJsonParseMs: snap.averageJsonParseMs,
+          averageQueueAppendMs: snap.averageQueueAppendMs,
+          readdirCacheHitRate: snap.readdirCacheHitRate,
+        };
+      },
       isReady: () => this.isReady(),
     });
   }
@@ -231,6 +247,10 @@ export class FileBridgeV2 extends EventEmitter {
       this.crashRecovery.recover();
       this.lifecycle.transition("running");
 
+      this.metricsHistory.startAutoSnapshot(
+        this.metrics,
+        this.options.autoSnapshotIntervalMs ?? 5_000,
+      );
       this.consumer.start();
       this.startAutoGc();
     } catch (err) {
@@ -266,6 +286,7 @@ export class FileBridgeV2 extends EventEmitter {
         this.consumer.stop();
         this.leaseManager.releaseLease();
       }
+      this.metricsHistory.stopAutoSnapshot();
       this.resultWatcher.destroy();
     } catch (err) {
       this.eventWriter.append({
@@ -481,7 +502,23 @@ export class FileBridgeV2 extends EventEmitter {
   }
 
   diagnostics(): BridgeHealth {
-    return this._diagnostics.collectHealth();
+    try {
+      getSnapshotAndPersist(this.metrics, this.metricsHistory);
+    } catch {
+      // El historial es auxiliar; no bloqueamos un health check por esto.
+    }
+    const health = this._diagnostics.collectHealth();
+    const snap = this.metrics.getSnapshot();
+    return {
+      ...health,
+      performance: {
+        averageClaimMs: snap.averageClaimMs,
+        averageReaddirMs: snap.averageReaddirMs,
+        averageJsonParseMs: snap.averageJsonParseMs,
+        averageQueueAppendMs: snap.averageQueueAppendMs,
+        readdirCacheHitRate: snap.readdirCacheHitRate,
+      },
+    };
   }
 
   gc(options: { resultTtlMs?: number; logTtlMs?: number } = {}): GCReport {
@@ -502,6 +539,7 @@ export class FileBridgeV2 extends EventEmitter {
 
   stopMonitoring(): void {
     this.monitoringService.stopMonitoring();
+    this.metricsHistory.stopAutoSnapshot();
   }
 
   getHeartbeat<T = unknown>(): T | null {

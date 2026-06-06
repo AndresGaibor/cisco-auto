@@ -66,7 +66,6 @@ function compileFilesToModule(
   }
 
   const { code, validation } = transformToPtSafeAst(sourceFiles, {
-    target: undefined,
     replaceConsoleWithDprint: true,
     wrapIIFE: false,
     minify: options?.minify ?? false,
@@ -181,7 +180,6 @@ export class ModularRuntimeGenerator {
     }
 
     const { code, validation } = transformToPtSafeAst(sourceFiles, {
-      target: undefined,
       replaceConsoleWithDprint: true,
       wrapIIFE: false,
     });

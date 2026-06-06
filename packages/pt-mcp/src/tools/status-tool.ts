@@ -1,6 +1,6 @@
 import * as z from "zod/v4";
 import type { RegisterToolContext } from "./tool-types.js";
-import { ok, errorToFail } from "./mcp-response.js";
+import { ok, errorToFail, instructivo } from "./mcp-response.js";
 import { StatusOutputSchema } from "./output-schemas.js";
 import { buildReconciledStatusFromParts } from "./status-reconciler.js";
 import { globalCmdQueue } from "../queue/cmd-queue.js";
@@ -104,7 +104,12 @@ export function registerStatusTool(ctx: RegisterToolContext): void {
               queue,
             });
 
-            return ok({
+            const commandReady = reconciled.reconciled?.commandReady;
+            const deviceCount = reconciled.reconciled?.inventoryDeviceCount ?? 0;
+            const warnings = Array.isArray(reconciled.warnings) ? reconciled.warnings : [];
+            const warningCount = warnings.length;
+
+            return instructivo("pt_status op=summary", {
               action: "status.summary",
               health: reconciled.health,
               heartbeat,
@@ -113,6 +118,20 @@ export function registerStatusTool(ctx: RegisterToolContext): void {
               reconciled: reconciled.reconciled,
               warnings: reconciled.warnings,
               nextActions: reconciled.nextActions,
+            }, {
+              resumen: commandReady
+                ? `Sistema listo. ${deviceCount} dispositivo(s) en inventario.${warningCount > 0 ? ` ${warningCount} advertencia(s).` : ""}`
+                : `Sistema no listo. ${warningCount} problema(s) detectado(s) — revisa las advertencias.`,
+              paso: commandReady
+                ? `Usa \`pt_device op=list\` para ver dispositivos, o \`pt_cmd_run device="<nombre>" commands="show version" profile="fast"\` para comandos IOS.`
+                : "Revisa las advertencias. Usa `pt_status op=doctor` para diagnóstico completo.",
+              siguientes: [
+                `pt_device op=list — inventario de dispositivos`,
+                `pt_link op=list — enlaces del laboratorio`,
+                `pt_project op=status — estado del proyecto activo`,
+                `pt_status op=doctor — diagnóstico completo`,
+              ],
+              tips: warningCount > 0 ? ["Revisa las advertencias antes de ejecutar comandos.", "Usa pt_status op=doctor para más detalles."] : undefined,
             });
           }
 
@@ -120,35 +139,72 @@ export function registerStatusTool(ctx: RegisterToolContext): void {
             const health = await controller.getHealthSummary();
             const heartbeat = controller.getHeartbeatHealth();
             const bridge = controller.getBridgeStatus();
+            const healthy = health.bridgeReady && heartbeat.state === "ok";
 
-            return ok({
+            return instructivo("pt_status op=doctor", {
               action: "status.doctor",
               health,
               heartbeat,
               bridge,
-              healthy: health.bridgeReady && heartbeat.state === "ok",
+              healthy,
+            }, {
+              resumen: healthy
+                ? "Diagnóstico: sistema saludable."
+                : `Diagnóstico: problemas detectados. bridgeReady=${health.bridgeReady}, heartbeat=${heartbeat.state}.`,
+              paso: healthy
+                ? "Usa `pt_device op=list` o `pt_cmd_run` para trabajar con el laboratorio."
+                : "Usa `pt_status op=summary` para más detalles o revisa `~/pt-dev/logs/`.",
+              siguientes: [
+                `pt_status op=summary — resumen reconciliado`,
+                `pt_device op=list — inventario`,
+                `pt_runtime status --json — estado del runtime`,
+              ],
             });
           }
 
           case "runtime": {
             const health = await controller.getHealthSummary();
             const heartbeat = controller.getHeartbeatHealth();
+            const runtimeOk = heartbeat.state === "ok";
 
-            return ok({
+            return instructivo("pt_status op=runtime", {
               action: "status.runtime",
               health,
               heartbeat,
+            }, {
+              resumen: runtimeOk
+                ? "Runtime de Packet Tracer operativo."
+                : "Runtime no responde. Heartbeat: " + (heartbeat.state ?? "desconocido"),
+              paso: runtimeOk
+                ? "Procede con `pt_device op=list` o `pt_cmd_run`."
+                : "Asegúrate de que Packet Tracer esté abierto y el script main.js esté cargado.",
+              siguientes: [
+                `pt_status op=summary — resumen completo`,
+                `pt_status op=doctor — diagnóstico`,
+              ],
             });
           }
 
           case "bridge": {
             const bridge = controller.getBridgeStatus();
             const heartbeat = controller.getHeartbeatHealth();
+            const bridgeOk = Boolean(bridge?.ready) && heartbeat.state === "ok";
 
-            return ok({
+            return instructivo("pt_status op=bridge", {
               action: "status.bridge",
               bridge,
               heartbeat,
+            }, {
+              resumen: bridgeOk
+                ? "Bridge de comunicación operativo."
+                : "Bridge no listo. Revisa heartbeat y filesystem.",
+              paso: bridgeOk
+                ? "Usa `pt_device op=list` para continuar."
+                : "Usa `pt_status op=doctor` para diagnóstico más profundo.",
+              siguientes: [
+                `pt_status op=summary — resumen reconciliado`,
+                `pt_status op=runtime — estado del runtime`,
+              ],
             });
           }
 

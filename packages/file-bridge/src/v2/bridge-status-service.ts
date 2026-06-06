@@ -10,6 +10,13 @@ export interface BridgeStatusSnapshot {
   queuedCount?: number;
   inFlightCount?: number;
   queueIndexDrift?: boolean;
+  performance?: {
+    averageClaimMs: number;
+    averageReaddirMs: number;
+    averageJsonParseMs: number;
+    averageQueueAppendMs: number;
+    readdirCacheHitRate: number;
+  };
   claimMode?: "atomic-move" | "copy-delete" | "unknown" | string;
   warnings?: string[];
 }
@@ -19,6 +26,7 @@ export interface BridgeStatusServiceDeps {
   leaseManager: LeaseManager;
   backpressure: BackpressureManager;
   diagnostics: BridgeDiagnostics;
+  getPerformanceSnapshot?: () => BridgeStatusSnapshot["performance"];
   isReady: () => boolean;
 }
 
@@ -49,6 +57,7 @@ export class BridgeStatusService {
     }
 
     let queueIndexDrift = false;
+    const performance = this.deps.getPerformanceSnapshot?.();
 
     try {
       const health = this.deps.diagnostics.collectHealth();
@@ -63,6 +72,15 @@ export class BridgeStatusService {
       warnings.push("No se pudo leer el estado de cola index");
     }
 
+    if (performance) {
+      if (performance.averageClaimMs > 10) {
+        warnings.push(`Average claim latency is ${performance.averageClaimMs}ms`);
+      }
+      if (performance.readdirCacheHitRate < 0.5) {
+        warnings.push(`Readdir cache hit rate is ${(performance.readdirCacheHitRate * 100).toFixed(0)}%`);
+      }
+    }
+
     return {
       ready,
       state: this.deps.lifecycle.state,
@@ -70,6 +88,7 @@ export class BridgeStatusService {
       queuedCount,
       inFlightCount,
       queueIndexDrift,
+      performance,
       claimMode: "unknown",
       warnings,
     };
