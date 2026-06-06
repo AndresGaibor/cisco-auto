@@ -9,7 +9,6 @@ import { formatValidationResult, validatePtSafe, type ValidationResult } from ".
 import { sanitizeTypeScriptHelperGlobalThis } from "./sanitize-typescript-helpers.js";
 
 export interface AstTransformOptions {
-  target?: ts.ScriptTarget;
   replaceConsoleWithDprint?: boolean;
   wrapIIFE?: boolean;
   inlineConstants?: Record<string, unknown>;
@@ -57,7 +56,6 @@ interface DependencyGraph {
 }
 
 const DEFAULT_OPTIONS: Required<AstTransformOptions> = {
-  target: ts.ScriptTarget.ES5,
   replaceConsoleWithDprint: true,
   wrapIIFE: false,
   inlineConstants: {},
@@ -117,7 +115,7 @@ export function transformToPtSafeAst(
 
   const transpiled = ts.transpileModule(combined, {
     compilerOptions: {
-      target: opts.target ?? ts.ScriptTarget.ES5,
+      target: ts.ScriptTarget.ES5,
       module: ts.ModuleKind.None,
       strict: false,
       noEmitHelpers: true,
@@ -133,14 +131,15 @@ export function transformToPtSafeAst(
       isolatedModules: true,
       verbatimModuleSyntax: false,
     },
-    transformers: {
-      before: opts.replaceConsoleWithDprint ? [createConsoleReplacementTransformer()] : [],
-    },
   });
 
   let output = transpiled.outputText;
 
   output = postProcessES5(output);
+
+  if (opts.replaceConsoleWithDprint) {
+    output = replaceConsoleWithDprint(output);
+  }
 
   assertNoCommonJsArtifacts("AST transform output after postProcessES5", output);
 
@@ -677,34 +676,8 @@ function replaceOptionalChaining(code: string): string {
   return result;
 }
 
-function createConsoleReplacementTransformer(): ts.TransformerFactory<ts.SourceFile> {
-  return (context) => {
-    return (sourceFile) => {
-      function visitor(node: ts.Node): ts.Node {
-        if (ts.isCallExpression(node)) {
-          const expression = node.expression;
-          if (ts.isPropertyAccessExpression(expression)) {
-            const target = expression.expression;
-            const property = expression.name.text;
-            if (
-              ts.isIdentifier(target) &&
-              target.text === "console" &&
-              ["log", "error", "warn", "info", "debug"].includes(property)
-            ) {
-              return ts.factory.updateCallExpression(
-                node,
-                ts.factory.createIdentifier("dprint"),
-                undefined,
-                node.arguments,
-              );
-            }
-          }
-        }
-        return ts.visitEachChild(node, visitor, context);
-      }
-      return ts.visitNode(sourceFile, visitor) as ts.SourceFile;
-    };
-  };
+function replaceConsoleWithDprint(code: string): string {
+  return code.replace(/console\.(log|error|warn|info|debug)\(/g, "dprint(");
 }
 
 export { validatePtSafe, formatValidationResult };
