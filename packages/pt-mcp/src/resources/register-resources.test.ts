@@ -29,6 +29,7 @@ describe("registerResources", () => {
     expect(resources.has("pt://guide/agent-usage")).toBe(true);
     expect(resources.has("pt://recipes/safe-batch-show")).toBe(true);
     expect(resources.has("pt://recipes/partial-batch-recovery")).toBe(true);
+    expect(resources.has("ui://pt/status-dashboard/control-panel.html")).toBe(true);
   });
 
   test("read_resource devuelve contenido markdown", async () => {
@@ -43,5 +44,19 @@ describe("registerResources", () => {
     expect(result.contents[0].mimeType).toBe("text/markdown");
     expect(result.contents[0].text).toContain("PT Control Agent Usage Guide");
     expect(result.contents[0].text).toContain("pt_status");
+  });
+
+  test("read_resource del UI devuelve HTML MCP Apps", async () => {
+    const resources = capture();
+    const resource = resources.get("ui://pt/status-dashboard/control-panel.html");
+    expect(resource).toBeDefined();
+
+    const result = await resource!.handler();
+
+    expect(result.contents).toHaveLength(1);
+    expect(result.contents[0].uri).toBe("ui://pt/status-dashboard/control-panel.html");
+    expect(result.contents[0].mimeType).toBe("text/html;profile=mcp-app");
+    expect(result.contents[0].text).toContain("Packet Tracer Status Dashboard");
+    expect(result.contents[0].text).toContain("@modelcontextprotocol/ext-apps");
   });
 });

@@ -1,6 +1,6 @@
 import * as z from "zod/v4";
 import type { RegisterToolContext } from "./tool-types.js";
-import { ok, errorToFail } from "./mcp-response.js";
+import { errorToFail, instructivo } from "./mcp-response.js";
 import { AppOutputSchema } from "./output-schemas.js";
 
 export function registerAppTool(ctx: RegisterToolContext): void {
@@ -62,12 +62,12 @@ export function registerAppTool(ctx: RegisterToolContext): void {
         switch (input.op) {
           case "paths": {
             const paths = await controller.app.paths();
-            return ok({ action: "app.paths", paths });
+            return instructivo("pt_app", { action: "app.paths", paths });
           }
 
           case "status": {
             const status = await controller.app.status();
-            return ok({ action: "app.status", status });
+            return instructivo("pt_app", { action: "app.status", status });
           }
 
           case "open": {
@@ -77,7 +77,7 @@ export function registerAppTool(ctx: RegisterToolContext): void {
               closeExisting: input.closeExisting,
               saveExisting: input.saveExisting,
             });
-            return ok({ action: "app.open", path: input.path, result });
+            return instructivo("pt_app", { action: "app.open", path: input.path, result });
           }
 
           case "close": {
@@ -87,7 +87,7 @@ export function registerAppTool(ctx: RegisterToolContext): void {
               force: input.force,
               timeoutMs: input.timeoutMs,
             });
-            return ok({ action: "app.close", result });
+            return instructivo("pt_app", { action: "app.close", result });
           }
 
           case "restart": {
@@ -97,25 +97,25 @@ export function registerAppTool(ctx: RegisterToolContext): void {
               force: false,
             });
             if (!closeResult.ok) {
-              return ok({ action: "app.restart", closeResult, openResult: null, error: "close_failed" });
+              return instructivo("pt_app", { action: "app.restart", closeResult, openResult: null, error: "close_failed" });
             }
             const targetPath = input.path;
             if (!targetPath) {
               const pathsResult = await controller.app.paths();
               if (!pathsResult.selected) {
-                return ok({ action: "app.restart", closeResult, openResult: null, error: "pt_not_found", paths: pathsResult });
+                return instructivo("pt_app", { action: "app.restart", closeResult, openResult: null, error: "pt_not_found", paths: pathsResult });
               }
               const openResult = await controller.app.open(pathsResult.selected, {
                 wait: input.wait,
                 waitTimeoutMs: input.waitTimeoutMs ?? 60_000,
               });
-              return ok({ action: "app.restart", closeResult, openResult, targetPath: pathsResult.selected });
+              return instructivo("pt_app", { action: "app.restart", closeResult, openResult, targetPath: pathsResult.selected });
             }
             const openResult = await controller.app.open(targetPath, {
               wait: input.wait,
               waitTimeoutMs: input.waitTimeoutMs ?? 60_000,
             });
-            return ok({ action: "app.restart", closeResult, openResult, targetPath });
+            return instructivo("pt_app", { action: "app.restart", closeResult, openResult, targetPath });
           }
 
           case "wait": {
@@ -124,7 +124,7 @@ export function registerAppTool(ctx: RegisterToolContext): void {
               activeFile: input.activeFile,
               timeoutMs: input.timeoutMs,
             });
-            return ok({ action: "app.wait", result });
+            return instructivo("pt_app", { action: "app.wait", result });
           }
 
           default:

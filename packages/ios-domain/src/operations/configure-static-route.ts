@@ -38,6 +38,7 @@ export function planConfigureStaticRoute(
   const builder = new CommandPlanBuilder()
     .operation("configure-static-route")
     .target(`${network.value}/${mask.cidr}`)
+    .recovery({ retryable: true, fallbackMode: "privileged-exec" })
     .config(
       distance ? `ip route ${network.value} ${mask.value} ${nextHop.value} ${distance}` : `ip route ${network.value} ${mask.value} ${nextHop.value}`,
       description ?? `Static route to ${network.value}/${mask.cidr} via ${nextHop.value}`

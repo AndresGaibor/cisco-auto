@@ -2,6 +2,7 @@ import * as z from "zod/v4";
 import type { RegisterToolContext } from "./tool-types.js";
 import { ok, errorToFail, instructivo } from "./mcp-response.js";
 import { StatusOutputSchema } from "./output-schemas.js";
+import { PT_STATUS_DASHBOARD_RESOURCE_URI } from "../resources/mcp-app-ui.js";
 import { buildReconciledStatusFromParts } from "./status-reconciler.js";
 import { globalCmdQueue } from "../queue/cmd-queue.js";
 
@@ -67,6 +68,11 @@ export function registerStatusTool(ctx: RegisterToolContext): void {
         "Reports Packet Tracer runtime health, bridge heartbeat, lease state, project readiness, topology usability, queue status, and actionable warnings.",
         "This tool is read-only and safe to call repeatedly before using device, project, link, or command tools.",
       ].join(" "),
+      _meta: {
+        ui: {
+          resourceUri: PT_STATUS_DASHBOARD_RESOURCE_URI,
+        },
+      },
       inputSchema: z.discriminatedUnion("op", [
         z.object({ op: z.literal("summary") }).describe("Resumen reconciliado de salud del sistema: health, heartbeat, bridge, proyecto, inventario, cola y acciones sugeridas."),
         z.object({ op: z.literal("doctor") }).describe("Diagnóstico completo del entorno: valida que bridge, runtime y proyecto estén operativos."),

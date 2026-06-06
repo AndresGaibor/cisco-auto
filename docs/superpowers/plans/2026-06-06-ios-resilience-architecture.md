@@ -148,7 +148,7 @@ git commit -m "feat: make ios plans recovery aware"
 
 ```ts
 test("show ip route parser returns partial confidence on truncated output", () => {
-  const result = parseShowIpRoute("Gateway of last resort is 10.0.0.1\nS 10.0.0.0/24 via 10.0.0.1\n...");
+  const result = parseShowIpRoute("Gateway of last resort is 10.0.0.1\nS 10.0.0.0/24 via 10.0.0.1\n");
   expect(result.confidence).toBeLessThan(1);
   expect(result.warnings.length).toBeGreaterThan(0);
 });
@@ -244,8 +244,7 @@ git commit -m "feat: add ios session recovery"
 
 ```ts
 test("router-on-stick scenario uses the real runner contract", async () => {
-  const runner = new LabScenarioRunner(ctx);
-  const result = await runner.runScenario(routerOnStickBasicScenario);
+  const result = await labService.runScenario(routerOnStickBasicScenario);
 
   expect(result.scenarioId).toBe("router-on-stick-basic");
   expect(result.ok).toBe(true);
@@ -294,8 +293,7 @@ git commit -m "feat: wire ios recovery into pt-control"
 
 ```ts
 test("ios session recovery scenario survives prompt loss and resumes execution", async () => {
-  const runner = new LabScenarioRunner(ctx);
-  const result = await runner.runScenario(iosSessionRecoveryScenario);
+  const result = await labService.runScenario(iosSessionRecoveryScenario);
 
   expect(result.scenarioId).toBe("ios-session-recovery");
   expect(result.ok).toBe(true);
@@ -310,7 +308,7 @@ Expected: FAIL until the new recovery and parser semantics are wired end-to-end.
 - [ ] **Step 3: Write minimal implementation**
 
 ```ts
-if (!result.ok && result.error?.retryable) {
+if (!result.ok && result.errors.length > 0) {
   await retryWithRecovery(result);
 }
 ```

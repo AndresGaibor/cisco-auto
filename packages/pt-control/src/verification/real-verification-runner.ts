@@ -19,8 +19,9 @@ import { getRealRunStore } from "./real-run-store.js";
 import { RealLabHarness } from "./real-lab-harness.js";
 import { getScenariosForProfile } from "./real-scenario-registry.js";
 import { checkEnvironmentHealth } from "./recovery/environment-health.js";
+import type { FailureContext } from "./recovery/recovery-policy.js";
 import { shouldContinueAfterStepFailure, shouldAttemptRecovery } from "./recovery/recovery-policy.js";
-import { attemptStepRecovery } from "./recovery/recovery-engine.js";
+import { attemptScenarioRecovery, attemptStepRecovery } from "./recovery/recovery-engine.js";
 import { captureFingerprint } from "../omni/environment-fingerprint.js";
 
 // ============================================================================
@@ -335,6 +336,43 @@ export async function executeScenario(
       result.outcome = execResult.value.outcome;
       result.warnings.push(...execResult.value.warnings);
       if (execResult.value.error) result.error = execResult.value.error;
+
+      if (result.outcome === "failed" && state.attemptRecovery) {
+        const failureContext: FailureContext = {
+          stepId: scenario.id,
+          scenarioId: scenario.id,
+          error: result.error ?? `Scenario ${scenario.id} failed during execute`,
+          recoverable: true,
+          isDependencyFailure: false,
+          isEnvironmentFailure: false,
+        };
+
+        if (shouldAttemptRecovery(failureContext, state.maxRecoveryAttempts, result.recoveryAttempts.length)) {
+          const recovery = await attemptScenarioRecovery(
+            scenario.id,
+            async () => {
+              await scenario.setup({
+                controller: harness.getController(),
+                runId: state.runId,
+                runStore: store,
+              } as any);
+            },
+            state.maxRecoveryAttempts,
+          );
+
+          result.recoveryAttempts.push(...recovery.attempts);
+          result.warnings.push(...recovery.notes);
+          state.recoveryCounts.attempted += recovery.attempts.length;
+
+          if (recovery.ok) {
+            state.recoveryCounts.succeeded += 1;
+            result.outcome = "recovered";
+            result.error = undefined;
+          } else {
+            state.recoveryCounts.failed += 1;
+          }
+        }
+      }
     }
 
     // Verify con timeout

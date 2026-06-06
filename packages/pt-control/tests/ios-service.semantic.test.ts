@@ -190,6 +190,26 @@ describe('configureOspfNetwork()', () => {
   });
 });
 
+describe('configureStaticRoute()', () => {
+  test('rechaza un switch L2 sin soporte de routing', async () => {
+    const bridge = makeBridge({});
+    const svc = new IosService(
+      bridge,
+      generateId,
+      async (device: string) => ({
+        model: '2960-24TC-L',
+        name: device,
+        type: 'switch',
+      } as any),
+      createTerminalPortFromBridge(bridge),
+    );
+
+    await expect(
+      svc.configureStaticRoute('SW1', '10.10.10.0', '255.255.255.0', '10.10.10.1'),
+    ).rejects.toThrow('SW1 does not support static routes');
+  });
+});
+
 describe('configureSshAccess()', () => {
   test('aplica SSH y verifica transporte y login', async () => {
     const bridge = makeBridge({

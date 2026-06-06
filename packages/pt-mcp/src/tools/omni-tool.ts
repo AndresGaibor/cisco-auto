@@ -1,6 +1,6 @@
 import * as z from "zod/v4";
 import type { RegisterToolContext } from "./tool-types.js";
-import { ok, errorToFail } from "./mcp-response.js";
+import { errorToFail, instructivo } from "./mcp-response.js";
 import { OmniOutputSchema } from "./output-schemas.js";
 
 export function registerOmniTool(ctx: RegisterToolContext): void {
@@ -52,7 +52,7 @@ export function registerOmniTool(ctx: RegisterToolContext): void {
       try {
         switch (input.op) {
           case "status": {
-            return ok({ action: "omni.status", available: true });
+            return instructivo("pt_omni", { action: "omni.status", available: true });
           }
 
           case "capability": {
@@ -62,7 +62,7 @@ export function registerOmniTool(ctx: RegisterToolContext): void {
               if (omni?.runCapability) caps.push("run_capability");
               if (omni?.evaluate) caps.push("evaluate");
             } catch {}
-            return ok({ action: "omni.capability", capabilities: caps });
+            return instructivo("pt_omni", { action: "omni.capability", capabilities: caps });
           }
 
           case "raw": {
@@ -74,7 +74,7 @@ export function registerOmniTool(ctx: RegisterToolContext): void {
               };
             }
             const result = await omni.evaluate(input.code);
-            return ok({ action: "omni.raw", result });
+            return instructivo("pt_omni", { action: "omni.raw", result });
           }
 
           default:

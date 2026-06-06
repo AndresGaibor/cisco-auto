@@ -1,6 +1,6 @@
 import * as z from "zod/v4";
 import type { RegisterToolContext } from "./tool-types.js";
-import { ok, errorToFail } from "./mcp-response.js";
+import { errorToFail, instructivo } from "./mcp-response.js";
 import { ProjectOutputSchema } from "./output-schemas.js";
 
 export function registerProjectTool(ctx: RegisterToolContext): void {
@@ -52,17 +52,17 @@ export function registerProjectTool(ctx: RegisterToolContext): void {
         switch (input.op) {
           case "status": {
             const status = await controller.project.status();
-            return ok({ action: "project.status", status });
+            return instructivo("pt_project", { action: "project.status", status });
           }
 
           case "save": {
             const result = await controller.project.save();
-            return ok({ action: "project.save", result });
+            return instructivo("pt_project", { action: "project.save", result });
           }
 
           case "autosave": {
             const result = await controller.project.autosave({ dir: input.dir, keep: input.keep });
-            return ok({ action: "project.autosave", result });
+            return instructivo("pt_project", { action: "project.autosave", result });
           }
 
           case "open": {
@@ -71,18 +71,18 @@ export function registerProjectTool(ctx: RegisterToolContext): void {
               wait: input.wait,
               waitTimeoutMs: input.waitTimeoutMs,
             });
-            return ok({ action: "project.open", path: input.path, result });
+            return instructivo("pt_project", { action: "project.open", path: input.path, result });
           }
 
           case "recover": {
             ctx.control.deviceKindCache.clear();
             const result = await controller.project.recover(input.projectPath);
-            return ok({ action: "project.recover", projectPath: input.projectPath, result });
+            return instructivo("pt_project", { action: "project.recover", projectPath: input.projectPath, result });
           }
 
           case "checkpoints": {
             const result = await controller.project.checkpoints(input.projectPath);
-            return ok({ action: "project.checkpoints", projectPath: input.projectPath, checkpoints: result });
+            return instructivo("pt_project", { action: "project.checkpoints", projectPath: input.projectPath, checkpoints: result });
           }
 
           default:

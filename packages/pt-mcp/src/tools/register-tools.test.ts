@@ -48,7 +48,13 @@ function createMockControl(projectMethods?: {
     terminalCommandService: {
       executeCommand: () => Promise.resolve({ ok: true, output: "" }),
       resolveDeviceKind: () => Promise.resolve("router"),
+      executeCommandBatchOptimized: () => Promise.resolve({ ok: true, output: "" } as any),
     } as any,
+    deviceKindCache: {
+      get: () => undefined,
+      set: () => undefined,
+      clear: () => undefined,
+    },
     start: () => Promise.resolve(),
     stop: () => Promise.resolve(),
   };
@@ -161,12 +167,14 @@ describe("registerTools", () => {
 
   test("pt_status tiene annotations correctas (readOnly)", () => {
     const { configs } = captureConfigs();
-    expect(configs.get("pt_status")?.annotations).toEqual({
+    const cfg = configs.get("pt_status");
+    expect(cfg?.annotations).toEqual({
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
       openWorldHint: false,
     });
+    expect(cfg?._meta?.ui?.resourceUri).toBe("ui://pt/status-dashboard/control-panel.html");
   });
 
   test("pt_cli tiene annotations de fallback destructivo", () => {

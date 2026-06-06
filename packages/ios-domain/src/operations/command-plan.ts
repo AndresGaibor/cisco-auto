@@ -44,6 +44,11 @@ export interface CommandPlan {
   requiresPrivilege: boolean;
   /** Si se requiere modo config */
   requiresConfig: boolean;
+  /** Metadata de recuperación para orquestadores */
+  recovery?: {
+    retryable: boolean;
+    fallbackMode?: IosMode;
+  };
 }
 
 /**
@@ -55,6 +60,7 @@ export class CommandPlanBuilder {
   private _target: string = "";
   private _steps: CommandStep[] = [];
   private _rollback: RollbackStep[] = [];
+  private _recovery?: CommandPlan["recovery"];
 
   /**
    * Establece el nombre de la operación (e.g., "configure-vlan", "setup-trunk")
@@ -140,6 +146,16 @@ export class CommandPlanBuilder {
   }
 
   /**
+   * Define metadata de recuperación para el plan.
+   * @param recovery - Política de recuperación del plan
+   * @returns this para encadenamiento fluido
+   */
+  recovery(recovery: NonNullable<CommandPlan["recovery"]>): this {
+    this._recovery = recovery;
+    return this;
+  }
+
+  /**
    * Construye el CommandPlan final.
    * Auto-agrega un "exit" al final si el último paso es un submodo.
    * Calcula automáticamente requiresPrivilege y requiresConfig.
@@ -168,6 +184,7 @@ export class CommandPlanBuilder {
       requiresConfig: this._steps.some((s) =>
         s.mode.startsWith("config")
       ),
+      recovery: this._recovery,
     };
   }
 }

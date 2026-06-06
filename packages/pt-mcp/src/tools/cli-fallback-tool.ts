@@ -1,14 +1,7 @@
 import * as z from "zod/v4";
 import type { RegisterToolContext } from "./tool-types.js";
-import { ok, errorToFail } from "./mcp-response.js";
+import { errorToFail, instructivo } from "./mcp-response.js";
 import { GenericToolOutputSchema } from "./output-schemas.js";
-
-function formatResult(result: any) {
-  return {
-    content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    structuredContent: result,
-  };
-}
 
 export function registerCliFallbackTool(ctx: RegisterToolContext): void {
   ctx.server.registerTool(
@@ -47,7 +40,7 @@ export function registerCliFallbackTool(ctx: RegisterToolContext): void {
           parseJson: input.parseJson ?? true,
         });
 
-        return formatResult(result);
+        return instructivo("pt_cli", { ...result, action: "legacy.cli" });
       } catch (error) {
         return errorToFail(error, "PT_CLI_FALLBACK_FAILED", "Error ejecutando fallback CLI.");
       }

@@ -1,4 +1,10 @@
 
+import {
+  PT_STATUS_DASHBOARD_MIME_TYPE,
+  PT_STATUS_DASHBOARD_RESOURCE_URI,
+  createPtStatusDashboardHtml,
+} from "./mcp-app-ui.js";
+
 export interface RegisterResourceContext {
   server: {
     registerResource: (...args: any[]) => void;
@@ -141,6 +147,16 @@ After change:
   },
 ];
 
+const appResources: GuideResource[] = [
+  {
+    name: "pt.app.status_dashboard",
+    uri: PT_STATUS_DASHBOARD_RESOURCE_URI,
+    title: "PT Status Dashboard",
+    description: "Interactive MCP Apps dashboard for Packet Tracer status, inventory, and quick actions.",
+    text: createPtStatusDashboardHtml(),
+  },
+];
+
 export function registerResources(ctx: RegisterResourceContext): void {
   for (const resource of resources) {
     ctx.server.registerResource(
@@ -156,6 +172,27 @@ export function registerResources(ctx: RegisterResourceContext): void {
           {
             uri: resource.uri,
             mimeType: "text/markdown",
+            text: resource.text,
+          },
+        ],
+      }),
+    );
+  }
+
+  for (const resource of appResources) {
+    ctx.server.registerResource(
+      resource.name,
+      resource.uri,
+      {
+        title: resource.title,
+        description: resource.description,
+        mimeType: PT_STATUS_DASHBOARD_MIME_TYPE,
+      },
+      async () => ({
+        contents: [
+          {
+            uri: resource.uri,
+            mimeType: PT_STATUS_DASHBOARD_MIME_TYPE,
             text: resource.text,
           },
         ],

@@ -1,5 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import { parseShowIpRoute } from "./show-route";
+import { parseWithSanitization } from "./parse-with-sanitization.js";
 
 describe("parseShowIpRoute", () => {
   test("parses basic route output", () => {
@@ -106,5 +107,21 @@ describe("parseShowIpRoute", () => {
       nextHop: "192.168.1.1",
       interface: "Serial0/0/0"
     });
+  });
+
+  test("reduce confidence when output is truncated", () => {
+    const output = `
+      Codes: C - connected, S - static, R - RIP, M - mobile, B - BGP
+
+      Gateway of last resort is 10.0.0.1 to network 0.0.0.0
+
+      S    10.10.10.0/24 [1/0] via 10.0.0.1
+    `;
+
+    const result = parseWithSanitization<any>("show ip route", output);
+
+    expect(result.confidence).toBeLessThan(1);
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.parsed.routes[0]?.network).toBe("10.10.10.0/24");
   });
 });

@@ -1,6 +1,6 @@
 import * as z from "zod/v4";
 import type { RegisterToolContext } from "./tool-types.js";
-import { ok } from "./mcp-response.js";
+import { instructivo } from "./mcp-response.js";
 import { CmdQueueOutputSchema } from "./output-schemas.js";
 import { globalCmdQueue } from "../queue/cmd-queue.js";
 
@@ -30,14 +30,14 @@ export function registerCmdQueueTool(ctx: RegisterToolContext): void {
     async (input: any) => {
       if (input.op === "clear_finished") {
         const cleared = globalCmdQueue.clearFinished();
-        return ok({
+        return instructivo("pt_cmd_queue", {
           action: "cmd.queue.clear_finished",
           cleared,
           queue: globalCmdQueue.snapshot(),
         });
       }
 
-      return ok({
+      return instructivo("pt_cmd_queue", {
         action: "cmd.queue.status",
         queue: globalCmdQueue.snapshot(),
       });
