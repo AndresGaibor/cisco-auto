@@ -10,6 +10,7 @@
   "scripts": {
     "start": "bun run src/index.ts",
     "dev": "bun run --watch src/index.ts",
+    "test": "bun test",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/ tests/ --max-warnings 0",
     "format": "prettier --write 'src/**/*.ts' 'tests/**/*.ts'",

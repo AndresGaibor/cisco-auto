@@ -16,8 +16,16 @@
     "./scenarios/*": "./src/scenarios/*.ts",
     "./examples/*": "./src/examples/*"
   },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "build": "echo no build needed"
+  },
   "dependencies": {
     "zod": "^4.3.6"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  }
 }
