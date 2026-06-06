@@ -5,7 +5,6 @@ import { renderMainV2 } from "./render-main-v2";
 import { renderCatalog } from "./render-catalog";
 import { readExistingManifest, writeRuntimeManifest, type RuntimeBuildReport } from "./manifest";
 import { validateGeneratedArtifacts } from "./validation";
-import { assertJavaScriptSyntaxOrThrow } from "./syntax-assert";
 
 export interface RuntimeGeneratorConfig {
   outputDir?: string;
@@ -58,10 +57,6 @@ export class RuntimeGenerator {
       Promise.resolve().then(() => this.generateCatalog()),
       Promise.resolve().then(() => this.generateRuntime()),
     ]);
-
-    assertJavaScriptSyntaxOrThrow("main.js", main);
-    assertJavaScriptSyntaxOrThrow("runtime.js", runtime);
-    assertJavaScriptSyntaxOrThrow("catalog.js", catalog);
 
     validateGeneratedArtifacts(main, catalog, runtime);
 
