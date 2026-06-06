@@ -74,7 +74,21 @@ export class RuntimeGenerator {
       fs.promises.writeFile(path.join(outDir, "catalog.js"), result.catalog, "utf-8"),
       fs.promises.writeFile(path.join(outDir, "runtime.js"), result.runtime, "utf-8"),
     ]);
+    this.logBundleSizes(result.main, result.catalog, result.runtime);
     return result;
+  }
+
+  private logBundleSizes(main: string, catalog: string, runtime: string): void {
+    const fmt = (bytes: number) => {
+      if (bytes > 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+      if (bytes > 1024) return (bytes / 1024).toFixed(1) + " KB";
+      return bytes + " B";
+    };
+    console.log(
+      `  main.js    ${fmt(main.length)}  ` +
+      `catalog.js  ${fmt(catalog.length)}  ` +
+      `runtime.js  ${fmt(runtime.length)}`,
+    );
   }
 
   async validateGenerated(): Promise<void> {
