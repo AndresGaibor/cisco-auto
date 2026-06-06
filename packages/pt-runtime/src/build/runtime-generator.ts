@@ -10,6 +10,7 @@ import { assertJavaScriptSyntaxOrThrow } from "./syntax-assert";
 export interface RuntimeGeneratorConfig {
   outputDir?: string;
   devDir: string;
+  minify?: boolean;
 }
 
 export class RuntimeGenerator {
@@ -32,6 +33,7 @@ export class RuntimeGenerator {
       srcDir: this.resolveSourceDir(),
       outputPath: "",
       injectDevDir: this.config.devDir,
+      minify: this.config.minify,
     });
   }
 
@@ -46,6 +48,7 @@ export class RuntimeGenerator {
       srcDir: this.resolveSourceDir(),
       outputPath: "",
       injectDevDir: this.config.devDir,
+      minify: this.config.minify,
     });
   }
 

@@ -6,7 +6,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { transformToPtSafeAst } from "./ast-transform.js";
-import { validatePtSafe, formatValidationResult, type ValidationResult } from "./validate-pt-safe.js";
+import { reportPtSafeValidation } from "./build-utils.js";
 
 export interface RenderCatalogOptions {
   srcDir: string;
@@ -73,12 +73,8 @@ export function renderCatalog(options: RenderCatalogOptions): string {
     treeShake: false, // treeShake disabled: catalog contains only static constants, no dead code elimination needed
   });
 
+  reportPtSafeValidation("render-catalog", validation);
   if (!validation.valid) {
-    console.error("[render-catalog] Validation FAILED:");
-    for (const issue of validation.errors) {
-      console.error(`  ${issue.line}:${issue.column}: ${issue.message}`);
-    }
-    console.error(formatValidationResult(validation));
     throw new Error("catalog.js generation failed PT-safe validation");
   }
 

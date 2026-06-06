@@ -29,6 +29,7 @@ export interface RenderMainV2Options {
   srcDir: string;
   outputPath: string;
   injectDevDir?: string;
+  minify?: boolean;
 }
 
 const KERNEL_SOURCE_FILES = getAllMainFiles();
@@ -62,6 +63,7 @@ export function renderMainV2(options: RenderMainV2Options): string {
 
   const { code, validation } = transformToPtSafeAst(sourceFiles, {
     replaceConsoleWithDprint: true,
+    minify: options.minify ?? false,
     treeShake: false,
   });
 
