@@ -1,6 +1,7 @@
 import type { HandlerDeps, HandlerResult } from "../utils/helpers";
 import { collectLiveLinks, findLiveLink, findLiveLinkByEndpoint } from "../domain/live-link";
 import type { VerifyLinkPayload } from "./link-types";
+import { validatePayload } from "./payload-schemas.js";
 
 function buildAdvice(errors: string[], exact: any, endpoint1Link: any, endpoint2Link: any): string[] {
   if (errors.length > 0) {
@@ -42,6 +43,11 @@ function buildAdvice(errors: string[], exact: any, endpoint1Link: any, endpoint2
 }
 
 export function handleVerifyLink(payload: VerifyLinkPayload, deps: HandlerDeps): HandlerResult {
+  const validation = validatePayload("verifyLink", payload);
+  if (!validation.ok) {
+    return { ok: false, code: validation.code, error: validation.error };
+  }
+
   const net = deps.getNet();
 
   const device1 = net.getDevice(payload.device1);

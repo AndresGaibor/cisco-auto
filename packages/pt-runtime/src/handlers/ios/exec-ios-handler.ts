@@ -10,8 +10,14 @@ import {
   buildDeferredCommandPlan,
   startDeferredJobOrError,
 } from "../deferred-job-factory.js";
+import { validatePayload } from "../payload-schemas.js";
 
 export function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi): PtResult {
+  const validation = validatePayload("execIos", payload);
+  if (!validation.ok) {
+    return createErrorResult(validation.error, validation.code);
+  }
+
   const deviceName = payload.device;
   const device = api.getDeviceByName(deviceName);
   if (!device) return createErrorResult(`Device not found: ${deviceName}`, "DEVICE_NOT_FOUND");

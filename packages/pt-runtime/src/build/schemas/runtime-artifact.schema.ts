@@ -22,20 +22,20 @@ export const ManifestModulesSchema = z
   })
   .describe("Nombre de archivo por módulo");
 
-export const RuntimeArtifactManifestSchema = z
-  .object({
-    schemaVersion: z.string().min(1),
-    cliVersion: z.string().min(1),
-    protocolVersion: z.number().int().nonnegative(),
-    mainChecksum: ChecksumSchema,
-    catalogChecksum: ChecksumSchema,
-    runtimeChecksum: ChecksumSchema,
-    modules: ManifestModulesSchema,
-    reload: ManifestReloadSchema,
-  })
-  .describe("Manifest del runtime desplegado en PT_DEV_DIR");
+export const RuntimeArtifactManifestSchema = z.object({
+  schemaVersion: z.string().min(1),
+  cliVersion: z.string().min(1),
+  protocolVersion: z.number().int().nonnegative(),
+  mainChecksum: ChecksumSchema,
+  catalogChecksum: ChecksumSchema,
+  runtimeChecksum: ChecksumSchema,
+  modules: ManifestModulesSchema,
+  reload: ManifestReloadSchema,
+});
 
-export type RuntimeArtifactManifestInput = z.infer<typeof RuntimeArtifactManifestSchema>;
+export const RuntimeArtifactManifestSchemaInput = RuntimeArtifactManifestSchema.describe(
+  "Manifest del runtime desplegado en PT_DEV_DIR (schemaVersion, cliVersion, protocolVersion, checksums, módulos y política de recarga).",
+);
 
 export const BuildChangeReportSchema = z
   .object({
@@ -43,6 +43,4 @@ export const BuildChangeReportSchema = z
     catalogChanged: z.boolean(),
     runtimeChanged: z.boolean(),
   })
-  .describe("Reporte de cambios detectado entre manifests");
-
-export type BuildChangeReportInput = z.infer<typeof BuildChangeReportSchema>;
+  .describe("Reporte de cambios detectado entre manifests: qué artefactos cambiaron desde el build anterior.");

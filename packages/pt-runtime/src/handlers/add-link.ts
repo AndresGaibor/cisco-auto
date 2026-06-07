@@ -3,6 +3,7 @@ import { getCableTypeId, getCableTypeName } from "../utils/constants";
 import { resolveDevicePortName, getDevicePortNames } from "../utils/helpers";
 import { collectLiveLinks, findLiveLink, findLiveLinkByEndpoint } from "../domain/live-link";
 import type { AddLinkPayload } from "./link-types";
+import { validatePayload } from "./payload-schemas.js";
 
 export type { AddLinkPayload } from "./link-types";
 
@@ -60,6 +61,11 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
   const lw = deps.getLW();
   const { dprint } = deps;
 
+  const validation = validatePayload("addLink", payload);
+  if (!validation.ok) {
+    return { ok: false, code: validation.code, error: validation.error };
+  }
+
   const device1 = net.getDevice(payload.device1);
   const device2 = net.getDevice(payload.device2);
 
@@ -92,7 +98,7 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
   }
 
   const cableTypeName = normalizeCableTypeName(payload.linkType ?? payload.cableType ?? "auto");
-  const cableType = getCableTypeId(cableTypeName);
+  var cableType = getCableTypeId(cableTypeName);
 
   const liveBefore = collectLiveLinks(net);
   const busy1 = findLiveLinkByEndpoint(liveBefore, payload.device1, resolvedPort1);
@@ -123,7 +129,7 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
   }
 
   try {
-    const created = lw.createLink(payload.device1, resolvedPort1, payload.device2, resolvedPort2, cableType);
+    const created = lw.createLink(payload.device1, resolvedPort1, payload.device2, resolvedPort2, cableType as any);
     if (!created && payload.allowAutoFallback === true && typeof lw.autoConnectDevices === "function") {
       lw.autoConnectDevices(payload.device1, payload.device2);
     }
@@ -131,8 +137,12 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
     dprint(`[handler:addLink] createLink failed: ${String(error)}`);
   }
 
-  const liveAfter = collectLiveLinks(net);
-  const exact = findLiveLink(liveAfter, payload.device1, resolvedPort1, payload.device2, resolvedPort2);
+  // Pequeña pausa para que PT registre el link en su API interna
+  var waitStart = Date.now();
+  while (Date.now() - waitStart < 50) {}
+
+  var liveAfter = collectLiveLinks(net);
+  var exact = findLiveLink(liveAfter, payload.device1, resolvedPort1, payload.device2, resolvedPort2);
 
   if (!exact) {
     return {
@@ -146,13 +156,14 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
           device2: payload.device2,
           port2: resolvedPort2,
         },
+        linkCount: typeof net.getLinkCount === "function" ? net.getLinkCount() : "N/A",
         liveLinks: liveAfter,
         hint: "Do not use auto fallback for strict port creation.",
       },
     };
   }
 
-  const linkTypeName = getCableTypeName(cableType);
+  const linkTypeName = getCableTypeName(cableType as any);
   const result = {
     ok: true,
     id: exact.id,

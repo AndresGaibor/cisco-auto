@@ -1,26 +1,18 @@
 import * as fs from "fs";
 import * as path from "path";
 import { computeChecksum, normalizeArtifactForChecksum } from "./checksum";
-import { RuntimeArtifactManifestSchema } from "./schemas/runtime-artifact.schema.js";
+import {
+  BuildChangeReportSchema,
+  RuntimeArtifactManifestSchema,
+} from "./schemas/runtime-artifact.schema.js";
+import {
+  RUNTIME_MANIFEST_DEFAULTS,
+  RUNTIME_RELOAD_DEFAULTS,
+  type BuildChangeReport,
+  type RuntimeArtifactManifest,
+} from "./schemas/derived-types.js";
 
-export interface RuntimeArtifactManifest {
-  schemaVersion: string;
-  cliVersion: string;
-  protocolVersion: number;
-  mainChecksum: string;
-  runtimeChecksum: string;
-  catalogChecksum: string;
-  modules: {
-    main: string;
-    catalog: string;
-    runtime: string;
-  };
-  reload: {
-    mainManualReloadRequiredWhenChanged: boolean;
-    runtimeHotReloadable: boolean;
-    catalogHotReloadable: boolean;
-  };
-}
+export type { RuntimeArtifactManifest, BuildChangeReport } from "./schemas/derived-types.js";
 
 export interface RuntimeBuildChangeReport {
   mainChanged: boolean;
@@ -59,9 +51,7 @@ export async function writeRuntimeManifest(
   outputDir: string,
 ): Promise<RuntimeArtifactManifest> {
   const manifest: RuntimeArtifactManifest = {
-    schemaVersion: "1.0",
-    cliVersion: RUNTIME_CLI_VERSION,
-    protocolVersion: RUNTIME_PROTOCOL_VERSION,
+    ...RUNTIME_MANIFEST_DEFAULTS,
     mainChecksum: computeChecksum(normalizeArtifactForChecksum(main)),
     catalogChecksum: computeChecksum(normalizeArtifactForChecksum(catalog)),
     runtimeChecksum: computeChecksum(normalizeArtifactForChecksum(runtime)),
@@ -70,11 +60,7 @@ export async function writeRuntimeManifest(
       catalog: "catalog.js",
       runtime: "runtime.js",
     },
-    reload: {
-      mainManualReloadRequiredWhenChanged: true,
-      runtimeHotReloadable: true,
-      catalogHotReloadable: false,
-    },
+    reload: RUNTIME_RELOAD_DEFAULTS,
   };
 
   // Validar el manifest con el schema antes de escribirlo a disco
@@ -89,4 +75,27 @@ export async function writeRuntimeManifest(
   const manifestPath = path.join(outputDir, "manifest.json");
   await fs.promises.writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf-8");
   return manifest;
+}
+
+export function validateChangeReport(report: unknown): BuildChangeReport {
+  return BuildChangeReportSchema.parse(report);
+}
+
+export function compareManifests(
+  prev: RuntimeArtifactManifest | null,
+  next: RuntimeArtifactManifest,
+): RuntimeBuildChangeReport {
+  if (prev === null) {
+    return {
+      mainChanged: true,
+      runtimeChanged: true,
+      catalogChanged: true,
+    };
+  }
+
+  return {
+    mainChanged: prev.mainChecksum !== next.mainChecksum,
+    runtimeChanged: prev.runtimeChecksum !== next.runtimeChecksum,
+    catalogChanged: prev.catalogChecksum !== next.catalogChecksum,
+  };
 }
