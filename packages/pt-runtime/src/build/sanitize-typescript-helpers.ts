@@ -33,3 +33,32 @@ export function sanitizeTypeScriptHelperGlobalThis(code: string): string {
       "var __rest = function (s, e) {",
     );
 }
+
+export const REQUIRED_TSLIB_HELPERS: readonly string[] = [
+  "__assign",
+  "__values",
+  "__read",
+  "__spreadArray",
+  "__awaiter",
+  "__generator",
+  "__rest",
+];
+
+export function hasAllTslibHelpers(code: string): { ok: boolean; missing: string[] } {
+  const missing: string[] = [];
+  for (const helper of REQUIRED_TSLIB_HELPERS) {
+    if (!code.includes(`var ${helper} = function`)) {
+      missing.push(helper);
+    }
+  }
+  return { ok: missing.length === 0, missing };
+}
+
+export function assertTslibHelpersOrThrow(label: string, code: string): void {
+  const { ok, missing } = hasAllTslibHelpers(code);
+  if (!ok) {
+    throw new Error(
+      `[${label}] missing tslib helper definitions: ${missing.join(", ")}`,
+    );
+  }
+}

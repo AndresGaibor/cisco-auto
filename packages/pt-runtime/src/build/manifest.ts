@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { computeChecksum, normalizeArtifactForChecksum } from "./checksum";
+import { RuntimeArtifactManifestSchema } from "./schemas/runtime-artifact.schema.js";
 
 export interface RuntimeArtifactManifest {
   schemaVersion: string;
@@ -43,8 +44,9 @@ export function readExistingManifest(outputDir: string): RuntimeArtifactManifest
     }
 
     const raw = fs.readFileSync(manifestPath, "utf-8");
-    const manifest = JSON.parse(raw) as RuntimeArtifactManifest;
-    return manifest && typeof manifest === "object" ? manifest : null;
+    const parsed = JSON.parse(raw);
+    const manifest = RuntimeArtifactManifestSchema.parse(parsed);
+    return manifest;
   } catch {
     return null;
   }
@@ -74,6 +76,14 @@ export async function writeRuntimeManifest(
       catalogHotReloadable: false,
     },
   };
+
+  // Validar el manifest con el schema antes de escribirlo a disco
+  try {
+    RuntimeArtifactManifestSchema.parse(manifest);
+  } catch (error) {
+    const detalle = error instanceof Error ? error.message : String(error);
+    throw new Error(`Manifest inválido: ${detalle}`);
+  }
 
   await fs.promises.mkdir(outputDir, { recursive: true });
   const manifestPath = path.join(outputDir, "manifest.json");

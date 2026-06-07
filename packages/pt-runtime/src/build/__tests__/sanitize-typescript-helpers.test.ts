@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { sanitizeTypeScriptHelperGlobalThis } from "../sanitize-typescript-helpers";
+import {
+  REQUIRED_TSLIB_HELPERS,
+  assertTslibHelpersOrThrow,
+  hasAllTslibHelpers,
+  sanitizeTypeScriptHelperGlobalThis,
+} from "../sanitize-typescript-helpers";
 import { renderRuntimeV2Sync } from "../render-runtime-v2";
 
 describe("sanitizeTypeScriptHelperGlobalThis", () => {
@@ -80,6 +85,16 @@ describe("sanitizeTypeScriptHelperGlobalThis ownership", () => {
 });
 
 describe("renderRuntimeV2Sync", () => {
+  test("incluye el helper __values en runtime.js", () => {
+    const code = renderRuntimeV2Sync({
+      srcDir: join(process.cwd(), "src"),
+      outputPath: "",
+      injectDevDir: "/tmp/pt-dev-test",
+    });
+
+    expect(code).toContain("var __values = function(");
+  });
+
   test("genera JavaScript válido sin catch huérfano", () => {
     const code = renderRuntimeV2Sync({
       srcDir: join(process.cwd(), "src"),
@@ -99,5 +114,90 @@ describe("renderRuntimeV2Sync", () => {
 
     expect(code).toContain('"/pt-dev"');
     expect(code).not.toContain('DEV_DIR + "/pt-dev"');
+  });
+});
+
+describe("assertTslibHelpersOrThrow", () => {
+  test("no lanza si el code tiene todas las definiciones var", () => {
+    const code = [
+      "var __assign = function () { return Object.assign; };",
+      "var __values = function (o) { return o; };",
+      "var __read = function (o, n) { return o; };",
+      "var __spreadArray = function (to, from, pack) { return to; };",
+      "var __awaiter = function (thisArg, _arguments, P, generator) { return P; };",
+      "var __generator = function (thisArg, body) { return body; };",
+      "var __rest = function (s, e) { return s; };",
+    ].join("\n");
+
+    expect(() => assertTslibHelpersOrThrow("build", code)).not.toThrow();
+  });
+
+  test("lanza con mensaje 'missing tslib helper definitions' si falta var __values", () => {
+    const code = [
+      "var __assign = function () { return Object.assign; };",
+      "var __read = function (o, n) { return o; };",
+      "var __spreadArray = function (to, from, pack) { return to; };",
+      "var __awaiter = function (thisArg, _arguments, P, generator) { return P; };",
+      "var __generator = function (thisArg, body) { return body; };",
+      "var __rest = function (s, e) { return s; };",
+    ].join("\n");
+
+    expect(() => assertTslibHelpersOrThrow("build", code)).toThrow(
+      "missing tslib helper definitions",
+    );
+  });
+
+  test("lanza si faltan dos helpers y los reporta", () => {
+    const code = [
+      "var __assign = function () { return Object.assign; };",
+      "var __values = function (o) { return o; };",
+      "var __read = function (o, n) { return o; };",
+      "var __spreadArray = function (to, from, pack) { return to; };",
+      "var __rest = function (s, e) { return s; };",
+    ].join("\n");
+
+    expect(() => assertTslibHelpersOrThrow("build", code)).toThrow(
+      "__awaiter, __generator",
+    );
+  });
+
+  test("hasAllTslibHelpers devuelve { ok: true, missing: [] } con todas las definiciones", () => {
+    const code = [
+      "var __assign = function () { return Object.assign; };",
+      "var __values = function (o) { return o; };",
+      "var __read = function (o, n) { return o; };",
+      "var __spreadArray = function (to, from, pack) { return to; };",
+      "var __awaiter = function (thisArg, _arguments, P, generator) { return P; };",
+      "var __generator = function (thisArg, body) { return body; };",
+      "var __rest = function (s, e) { return s; };",
+    ].join("\n");
+
+    expect(hasAllTslibHelpers(code)).toEqual({ ok: true, missing: [] });
+  });
+
+  test("REQUIRED_TSLIB_HELPERS contiene los 7 helpers en orden", () => {
+    expect(REQUIRED_TSLIB_HELPERS).toEqual([
+      "__assign",
+      "__values",
+      "__read",
+      "__spreadArray",
+      "__awaiter",
+      "__generator",
+      "__rest",
+    ]);
+  });
+});
+
+describe("hasAllTslibHelpers", () => {
+  test("code vacío → { ok: false, missing con longitud 7 }", () => {
+    const result = hasAllTslibHelpers("");
+    expect(result.ok).toBe(false);
+    expect(result.missing).toHaveLength(7);
+  });
+
+  test("code con solo 'var __values = function' → { ok: false, missing con 6 elementos }", () => {
+    const result = hasAllTslibHelpers("var __values = function(o) { return o; }");
+    expect(result.ok).toBe(false);
+    expect(result.missing).toHaveLength(6);
   });
 });
