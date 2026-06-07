@@ -76,7 +76,7 @@ export function renderRuntimeFromHandlers(options: RenderFromHandlersOptions): s
 
   const output = `
 // PT Runtime - Generated from Handlers
-// Generated at: ${new Date().toISOString()}
+// Do not edit directly — regenerate with: bun run pt build
 ${assembleHandlersOutput(code)}`;
 
   if (options.outputPath) {
