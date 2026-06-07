@@ -72,12 +72,93 @@ export const VerifyLinkPayloadSchema = z
   })
   .describe("Payload para verificar el estado de un enlace entre dos puertos");
 
+// ---------------------------------------------------------------------------
+// Device CRUD schemas
+// ---------------------------------------------------------------------------
+
+export const AddDevicePayloadSchema = z
+  .object({
+    type: z.literal("addDevice"),
+    model: z.string().min(1).optional(),
+    name: z.string().min(1).optional(),
+    x: z.number().finite().optional(),
+    y: z.number().finite().optional(),
+    deviceType: z.number().int().nonnegative().optional(),
+  })
+  .describe("Payload para agregar un dispositivo nuevo al workspace de PT");
+
+export const RemoveDevicePayloadSchema = z
+  .object({
+    type: z.literal("removeDevice"),
+    name: z.string().min(1),
+  })
+  .describe("Payload para eliminar un dispositivo existente");
+
+export const RenameDevicePayloadSchema = z
+  .object({
+    type: z.literal("renameDevice"),
+    oldName: z.string().min(1),
+    newName: z.string().min(1),
+  })
+  .describe("Payload para renombrar un dispositivo");
+
+export const MoveDevicePayloadSchema = z
+  .object({
+    type: z.literal("moveDevice"),
+    name: z.string().min(1),
+    x: z.number().finite(),
+    y: z.number().finite(),
+  })
+  .describe("Payload para mover un dispositivo a nuevas coordenadas");
+
+// ---------------------------------------------------------------------------
+// Device config schemas
+// ---------------------------------------------------------------------------
+
+export const SetDeviceIpPayloadSchema = z
+  .object({
+    type: z.literal("setDeviceIp").optional(),
+    device: z.string().min(1),
+    port: z.string().min(1),
+    ip: z.string().min(1),
+    mask: z.string().min(1),
+  })
+  .describe("Payload para asignar IP y máscara a un puerto de dispositivo");
+
+export const SetDefaultGatewayPayloadSchema = z
+  .object({
+    type: z.literal("setDefaultGateway").optional(),
+    device: z.string().min(1),
+    gw: z.string().min(1),
+  })
+  .describe("Payload para asignar un default gateway a un dispositivo");
+
+export const ListLinksPayloadSchema = z
+  .object({
+    type: z.literal("listLinks").optional(),
+    device: z.string().optional(),
+    port: z.string().optional(),
+    includeDetails: z.boolean().optional(),
+  })
+  .describe("Payload para listar enlaces, opcionalmente filtrados por dispositivo o puerto");
+
+// ---------------------------------------------------------------------------
+// Derived types
+// ---------------------------------------------------------------------------
+
 export type AddLinkPayloadInput = z.infer<typeof AddLinkPayloadSchema>;
 export type RemoveLinkPayloadInput = z.infer<typeof RemoveLinkPayloadSchema>;
 export type ConfigHostPayloadInput = z.infer<typeof ConfigHostPayloadSchema>;
 export type ExecIosPayloadInput = z.infer<typeof ExecIosPayloadSchema>;
 export type ConfigIosPayloadInput = z.infer<typeof ConfigIosPayloadSchema>;
 export type VerifyLinkPayloadInput = z.infer<typeof VerifyLinkPayloadSchema>;
+export type AddDevicePayloadInput = z.infer<typeof AddDevicePayloadSchema>;
+export type RemoveDevicePayloadInput = z.infer<typeof RemoveDevicePayloadSchema>;
+export type RenameDevicePayloadInput = z.infer<typeof RenameDevicePayloadSchema>;
+export type MoveDevicePayloadInput = z.infer<typeof MoveDevicePayloadSchema>;
+export type SetDeviceIpPayloadInput = z.infer<typeof SetDeviceIpPayloadSchema>;
+export type SetDefaultGatewayPayloadInput = z.infer<typeof SetDefaultGatewayPayloadSchema>;
+export type ListLinksPayloadInput = z.infer<typeof ListLinksPayloadSchema>;
 
 export const PayloadSchemas = {
   addLink: AddLinkPayloadSchema,
@@ -86,6 +167,13 @@ export const PayloadSchemas = {
   execIos: ExecIosPayloadSchema,
   configIos: ConfigIosPayloadSchema,
   verifyLink: VerifyLinkPayloadSchema,
+  addDevice: AddDevicePayloadSchema,
+  removeDevice: RemoveDevicePayloadSchema,
+  renameDevice: RenameDevicePayloadSchema,
+  moveDevice: MoveDevicePayloadSchema,
+  setDeviceIp: SetDeviceIpPayloadSchema,
+  setDefaultGateway: SetDefaultGatewayPayloadSchema,
+  listLinks: ListLinksPayloadSchema,
 } as const;
 
 export type PayloadKind = keyof typeof PayloadSchemas;

@@ -5,6 +5,7 @@
 import { createErrorResult, createSuccessResult } from "./result-factories";
 import type { PtRuntimeApi } from "../pt-api/pt-deps.js";
 import type { PtResult } from "../pt-api/pt-results.js";
+import { validatePayload } from "./payload-schemas.js";
 import {
   buildDeferredCommandPlan,
   buildDeferredConfigPlan,
@@ -15,6 +16,10 @@ export function handleSetDeviceIp(
   payload: { device: string; port: string; ip: string; mask: string },
   api: PtRuntimeApi,
 ): PtResult {
+  const validation = validatePayload("setDeviceIp", payload);
+  if (!validation.ok) {
+    return { ok: false, code: validation.code, error: validation.error } as PtResult;
+  }
   const net = (api as any).ipc.network();
   const dev = net.getDevice(payload.device) as any;
   if (!dev) return { ok: false, error: "Device not found" };
@@ -91,6 +96,10 @@ export function handleSetDefaultGateway(
   payload: { device: string; gw: string },
   api: PtRuntimeApi,
 ): PtResult {
+  const validation = validatePayload("setDefaultGateway", payload);
+  if (!validation.ok) {
+    return { ok: false, code: validation.code, error: validation.error } as PtResult;
+  }
   const dev = (api as any).ipc.network().getDevice(payload.device) as any;
   if (!dev) return { ok: false, error: "Device not found" };
 

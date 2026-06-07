@@ -2,9 +2,16 @@
 
 import { describe, expect, test } from "bun:test";
 import {
+  AddDevicePayloadSchema,
   ConfigHostPayloadSchema,
   ConfigIosPayloadSchema,
   ExecIosPayloadSchema,
+  ListLinksPayloadSchema,
+  MoveDevicePayloadSchema,
+  RemoveDevicePayloadSchema,
+  RenameDevicePayloadSchema,
+  SetDefaultGatewayPayloadSchema,
+  SetDeviceIpPayloadSchema,
   PayloadSchemas,
   validatePayload,
 } from "../payload-schemas.js";
@@ -130,32 +137,116 @@ describe("validatePayload - configIos", () => {
 });
 
 describe("PayloadSchemas - estructura", () => {
-  test("tiene exactamente 6 keys: addLink, removeLink, configHost, execIos, configIos, verifyLink", () => {
-    expect(Object.keys(PayloadSchemas).sort()).toEqual(
-      ["addLink", "configHost", "configIos", "execIos", "removeLink", "verifyLink"],
-    );
+  const expectedKeys = [
+    "addDevice", "addLink", "configHost", "configIos",
+    "execIos", "listLinks", "moveDevice", "removeDevice",
+    "removeLink", "renameDevice", "setDefaultGateway", "setDeviceIp",
+    "verifyLink",
+  ];
+
+  test("tiene exactamente 13 keys", () => {
+    expect(Object.keys(PayloadSchemas).sort()).toEqual(expectedKeys);
   });
 
-  test("los 5 schemas tienen description no vacía", () => {
-    const all = [
-      PayloadSchemas.addLink,
-      PayloadSchemas.removeLink,
-      PayloadSchemas.configHost,
-      PayloadSchemas.execIos,
-      PayloadSchemas.configIos,
-    ];
-    for (const schema of all) {
-      const description = schema.description;
+  test("todos los schemas tienen description no vacía", () => {
+    for (const key of Object.keys(PayloadSchemas) as Array<keyof typeof PayloadSchemas>) {
+      const description = PayloadSchemas[key].description;
       expect(typeof description).toBe("string");
       expect(description?.length ?? 0).toBeGreaterThan(0);
     }
   });
 });
 
+describe("validatePayload - addDevice", () => {
+  test("acepta payload mínimo (solo type)", () => {
+    const r = validatePayload("addDevice", { type: "addDevice" });
+    expect(r.ok).toBe(true);
+  });
+
+  test("rechaza x no numérico", () => {
+    const r = validatePayload("addDevice", { type: "addDevice", x: "abc" });
+    expect(r.ok).toBe(false);
+  });
+
+  test("rechaza deviceType negativo", () => {
+    const r = validatePayload("addDevice", { type: "addDevice", deviceType: -1 });
+    expect(r.ok).toBe(false);
+  });
+});
+
+describe("validatePayload - removeDevice", () => {
+  test("acepta payload válido", () => {
+    expect(validatePayload("removeDevice", { type: "removeDevice", name: "R1" }).ok).toBe(true);
+  });
+
+  test("rechaza name vacío", () => {
+    expect(validatePayload("removeDevice", { type: "removeDevice", name: "" }).ok).toBe(false);
+  });
+});
+
+describe("validatePayload - renameDevice", () => {
+  test("acepta payload válido", () => {
+    const r = validatePayload("renameDevice", { type: "renameDevice", oldName: "R1", newName: "R2" });
+    expect(r.ok).toBe(true);
+  });
+
+  test("rechaza oldName vacío", () => {
+    expect(validatePayload("renameDevice", { type: "renameDevice", oldName: "", newName: "R2" }).ok).toBe(false);
+  });
+});
+
+describe("validatePayload - moveDevice", () => {
+  test("acepta payload válido", () => {
+    expect(validatePayload("moveDevice", { type: "moveDevice", name: "R1", x: 100, y: 200 }).ok).toBe(true);
+  });
+
+  test("rechaza x NaN", () => {
+    expect(validatePayload("moveDevice", { type: "moveDevice", name: "R1", x: NaN, y: 200 }).ok).toBe(false);
+  });
+});
+
+describe("validatePayload - setDeviceIp", () => {
+  test("acepta payload válido", () => {
+    const r = validatePayload("setDeviceIp", { device: "PC1", port: "Fa0", ip: "10.0.0.1", mask: "255.0.0.0" });
+    expect(r.ok).toBe(true);
+  });
+
+  test("rechaza puerto vacío", () => {
+    expect(validatePayload("setDeviceIp", { device: "PC1", port: "", ip: "10.0.0.1", mask: "255.0.0.0" }).ok).toBe(false);
+  });
+});
+
+describe("validatePayload - setDefaultGateway", () => {
+  test("acepta payload válido", () => {
+    expect(validatePayload("setDefaultGateway", { device: "PC1", gw: "10.0.0.254" }).ok).toBe(true);
+  });
+
+  test("rechaza gw vacío", () => {
+    expect(validatePayload("setDefaultGateway", { device: "PC1", gw: "" }).ok).toBe(false);
+  });
+});
+
+describe("validatePayload - listLinks", () => {
+  test("acepta payload vacío (todo opcional)", () => {
+    expect(validatePayload("listLinks", {}).ok).toBe(true);
+  });
+
+  test("acepta con filtro device", () => {
+    expect(validatePayload("listLinks", { device: "R1" }).ok).toBe(true);
+  });
+});
+
 describe("imports sanity check", () => {
   test("schemas se importan correctamente", () => {
+    expect(AddDevicePayloadSchema).toBeDefined();
     expect(ConfigHostPayloadSchema).toBeDefined();
     expect(ConfigIosPayloadSchema).toBeDefined();
     expect(ExecIosPayloadSchema).toBeDefined();
+    expect(ListLinksPayloadSchema).toBeDefined();
+    expect(MoveDevicePayloadSchema).toBeDefined();
+    expect(RemoveDevicePayloadSchema).toBeDefined();
+    expect(RenameDevicePayloadSchema).toBeDefined();
+    expect(SetDefaultGatewayPayloadSchema).toBeDefined();
+    expect(SetDeviceIpPayloadSchema).toBeDefined();
   });
 });
