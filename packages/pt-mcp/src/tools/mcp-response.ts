@@ -292,9 +292,23 @@ function summarizeDeviceKinds(devices: unknown[]): { count: number; kinds: Recor
   return { count: devices.length, kinds, firstName };
 }
 
-function collectSignals(value: unknown, signals: Set<string>): void {
+type Signal = { code: string; severity: "error" | "warning" | "info" };
+
+const SEVERITY_RANK: Record<Signal["severity"], number> = {
+  error: 0,
+  warning: 1,
+  info: 2,
+};
+
+function rankSeverity(value: unknown): Signal["severity"] {
+  return value === "error" || value === "warning" || value === "info" ? value : "info";
+}
+
+function collectSignals(value: unknown, signals: Signal[]): void {
   if (typeof value === "string") {
-    if (value.trim()) signals.add(value.trim());
+    if (value.trim()) {
+      signals.push({ code: value.trim(), severity: "info" });
+    }
     return;
   }
 
@@ -307,19 +321,37 @@ function collectSignals(value: unknown, signals: Set<string>): void {
 
   if (!isRecord(value)) return;
 
-  if (typeof value.code === "string") signals.add(value.code);
+  if (typeof value.code === "string") {
+    signals.push({ code: value.code, severity: rankSeverity(value.severity) });
+  }
   if (isRecord(value.error)) collectSignals(value.error, signals);
   if (isRecord(value.result)) collectSignals(value.result, signals);
   if (Array.isArray(value.warnings)) collectSignals(value.warnings, signals);
   if (Array.isArray(value.results)) collectSignals(value.results, signals);
 }
 
-function buildSignalGuidance(payload: JsonRecord): Partial<InstructivoOptions> {
-  const codes = new Set<string>();
+function prioritizeSignals(signals: Signal[]): Signal[] {
+  const seen = new Set<string>();
+  const unique: Signal[] = [];
 
-  collectSignals(payload.error, codes);
-  collectSignals(payload.warnings, codes);
-  collectSignals(payload.results, codes);
+  for (const signal of signals) {
+    if (seen.has(signal.code)) continue;
+    seen.add(signal.code);
+    unique.push(signal);
+  }
+
+  return unique.sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]);
+}
+
+function buildSignalGuidance(payload: JsonRecord): Partial<InstructivoOptions> {
+  const signals: Signal[] = [];
+
+  collectSignals(payload.error, signals);
+  collectSignals(payload.warnings, signals);
+  collectSignals(payload.results, signals);
+
+  const ordered = prioritizeSignals(signals);
+  const codes = new Set(ordered.map((signal) => signal.code));
 
   const tips: string[] = [];
   const siguientes: string[] = [];
@@ -357,6 +389,21 @@ function buildSignalGuidance(payload: JsonRecord): Partial<InstructivoOptions> {
   if (codes.has("PT_CMD_SUBCOMMAND_FAILED") || codes.has("IOS_EXEC_FAILED")) {
     tips.push("Un subcomando falló; valida sintaxis, privilegios y si el IOS/host soporta ese comando.");
     siguientes.push("pt_cmd_run con show commands más básicos, por ejemplo `show ip interface brief` o `show version`.");
+  }
+
+  if (ordered.some((signal) => signal.severity === "error" && codes.has(signal.code))) {
+    const firstError = ordered.find((signal) => signal.severity === "error" && codes.has(signal.code));
+    tips.unshift("Hay advertencias con severidad 'error': corrige la primera antes de continuar.");
+    siguientes.unshift(
+      firstError
+        ? "pt_status op=doctor — investigar el código " + firstError.code + " antes de seguir."
+        : "pt_status op=doctor — diagnosticar la causa raíz antes de seguir.",
+    );
+  }
+
+  if (ordered.length > 0) {
+    const severitySummary = "Señales por severidad: " + ordered.map((signal) => signal.code + "(" + signal.severity + ")").join(", ") + ".";
+    tips.unshift(severitySummary);
   }
 
   return {

@@ -23,11 +23,9 @@ ${code}
 
   // Exponer constantes al scope global de PT para que runtime.js pueda acceder
   var _g = typeof self !== "undefined" ? self : this;
-  if (typeof PT_HELPER_MAPS !== "undefined") {
-    _g.PT_CATALOG = PT_HELPER_MAPS;
-    _g.PT_CABLE_TYPES = PT_HELPER_MAPS.CABLE_TYPES || {};
-    _g.PT_DEVICE_TYPES = PT_HELPER_MAPS.DEVICE_TYPES || {};
-  }
+  _g.PT_CATALOG = S;
+  _g.PT_CABLE_TYPES = S.CABLE_TYPES || {};
+  _g.PT_DEVICE_TYPES = S.DEVICE_TYPES || {};
 })();
 `;
 }

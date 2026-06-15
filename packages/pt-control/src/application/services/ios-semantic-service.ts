@@ -238,6 +238,9 @@ export class IosSemanticService {
     dnsServer?: string,
     options?: { save?: boolean },
   ): Promise<void> {
+    const caps = await this.getCapabilitySet(device);
+    if (!caps.routing.ipRouting) throw new Error(`${device} does not support DHCP pool`);
+
     const commands = [
       `ip dhcp pool ${poolName}`,
       `network ${network} ${mask}`,
@@ -262,6 +265,9 @@ export class IosSemanticService {
     area: number,
     options?: { save?: boolean },
   ): Promise<void> {
+    const caps = await this.getCapabilitySet(device);
+    if (!caps.routing.ipRouting) throw new Error(`${device} does not support OSPF`);
+
     await this.execution.configIos(
       device,
       [`router ospf ${processId}`, `network ${network} ${wildcard} area ${area}`],

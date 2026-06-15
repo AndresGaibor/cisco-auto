@@ -36,11 +36,12 @@ import {
   ensureTerminalReadySync,
 } from "../terminal-ready";
 import { extractCommandOutput } from "../command-output-extractor";
+import { defaultSendPagerAdvance, terminalSnapshotTailHasActivePager } from "./pager-advance-controller";
+import { createOutputPoller } from "./output-poller";
+import { createFinalizeScheduler } from "./finalize-scheduler";
 import {
   pushEvent,
   compactTerminalEvents,
-  buildFinalOutput,
-  resolveTerminalError,
   guessFailureStatus,
   isOnlyPrompt,
   computeConfidenceString,
@@ -88,81 +89,6 @@ export interface SendPagerAdvanceFn {
   (terminal: PTCommandLine, events: TerminalEventRecord[], sessionId: string, deviceName: string, source: string): boolean;
 }
 
-function defaultSendPagerAdvance(
-  terminal: PTCommandLine,
-  events: TerminalEventRecord[],
-  sessionId: string,
-  deviceName: string,
-  source: string,
-): boolean {
-  let sent = false;
-
-  try {
-    terminal.enterChar?.(32, 0);
-    sent = true;
-  } catch {}
-
-  pushEvent(
-    events,
-    sessionId,
-    deviceName,
-    sent ? "pagerAdvance" : "pagerAdvanceFailed",
-    "SPACE",
-    sent ? `SPACE sent to pager from ${source}` : `Failed to send SPACE to pager from ${source}`,
-  );
-
-  setTimeout(() => {
-    try {
-      if (!terminalSnapshotTailHasActivePager(terminal)) return;
-
-      terminal.enterChar?.(32, 0);
-
-      pushEvent(
-        events,
-        sessionId,
-        deviceName,
-        "pagerAdvanceFallback",
-        "SPACE",
-        `Fallback SPACE char sent to active pager from ${source}`,
-      );
-    } catch {
-      pushEvent(
-        events,
-        sessionId,
-        deviceName,
-        "pagerAdvanceFallbackFailed",
-        "SPACE",
-        `Fallback SPACE char failed from ${source}`,
-      );
-    }
-  }, 150);
-
-  return sent;
-}
-
-function terminalSnapshotTailHasActivePager(terminal: PTCommandLine): boolean {
-  try {
-    const snapshot = readTerminalSnapshot(terminal);
-    const tail = String(snapshot.raw || "")
-      .replace(/\r\n/g, "\n")
-      .replace(/\r/g, "\n")
-      .slice(-800);
-
-    if (!tail.trim()) {
-      return false;
-    }
-
-    return (
-      /--More--\s*$/i.test(tail) ||
-      /\s--More--\s*$/i.test(tail) ||
-      /More:\s*$/i.test(tail) ||
-      /Press any key to continue\s*$/i.test(tail)
-    );
-  } catch {
-    return false;
-  }
-}
-
 /**
  * CommandStateMachine - Clase que gestiona el ciclo de vida de un comando terminal.
  *
@@ -178,6 +104,7 @@ function terminalSnapshotTailHasActivePager(terminal: PTCommandLine): boolean {
 export class CommandStateMachine {
   private readonly config: Required<CommandStateMachineConfig>;
   private readonly sendPagerAdvance: SendPagerAdvanceFn;
+  private readonly outputPoller!: ReturnType<typeof createOutputPoller>;
 
   // State
   private settled = false;
@@ -200,7 +127,6 @@ export class CommandStateMachine {
   private stallTimer: ReturnType<typeof setTimeout> | null = null;
   private globalTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
   private startTimer: ReturnType<typeof setTimeout> | null = null;
-  private outputPollTimer: ReturnType<typeof setInterval> | null = null;
 
   // Time tracking
   private readonly startedAt: number;
@@ -212,6 +138,7 @@ export class CommandStateMachine {
   // Handlers
   private readonly pagerHandler;
   private readonly confirmHandler;
+  private readonly finalizeScheduler!: ReturnType<typeof createFinalizeScheduler>;
 
   // Callbacks bound for unregistering
   private readonly onOutputHandler: (src: unknown, args: unknown) => void;
@@ -257,6 +184,90 @@ export class CommandStateMachine {
     this.onEndedHandler = this.onEnded.bind(this);
     this.onPromptChangedHandler = this.onPromptChanged.bind(this);
     this.onMoreDisplayedHandler = this.onMoreDisplayed.bind(this);
+
+    this.outputPoller = createOutputPoller(
+      {
+        deviceName: this.config.deviceName,
+        sessionKind: this.config.sessionKind,
+        options: {
+          autoAdvancePager: this.config.options.autoAdvancePager,
+          expectedMode: this.config.options.expectedMode,
+        },
+        baselineSnapshot: this.config.baselineSnapshot,
+        initialPrompt: this.previousPrompt,
+        session: this.config.session,
+        setInterval: this.config.setInterval!,
+        clearInterval: this.config.clearInterval!,
+        readTerminalSnapshotFn: this.config.readTerminalSnapshotFn!,
+        getPromptSafeFn: this.config.getPromptSafeFn!,
+        getModeSafeFn: this.config.getModeSafeFn!,
+        now: this.config.now,
+      },
+      {
+        onOutput: (chunk: string) => {
+          if (this.outputEventsCount === 0) {
+            this.onOutput(null, { newOutput: chunk });
+          } else {
+            this.debug("poll output delta ignored because event output is active");
+          }
+        },
+        onPromptChanged: (prompt: string, _mode: TerminalMode) => {
+          this.onPromptChanged(null, { prompt });
+        },
+        scheduleFinalizeAfterCommandEnd: () => {
+          this.scheduleFinalizeAfterCommandEnd();
+        },
+        debug: (message: string) => {
+          this.debug(message);
+        },
+      },
+      this.config.terminal,
+    );
+
+    this.finalizeScheduler = createFinalizeScheduler(
+      {
+        command: this.config.command,
+        sessionKind: this.config.sessionKind,
+        options: {
+          commandTimeoutMs: this.config.options.commandTimeoutMs,
+          stallTimeoutMs: this.config.options.stallTimeoutMs,
+          expectedMode: this.config.options.expectedMode,
+          allowEmptyOutput: this.config.options.allowEmptyOutput,
+        },
+        session: {
+          pagerActive: this.config.session.pagerActive,
+          confirmPromptActive: this.config.session.confirmPromptActive,
+        },
+        setTimeout: this.config.setTimeout!,
+        clearTimeout: this.config.clearTimeout!,
+        getPromptSafeFn: this.config.getPromptSafeFn!,
+        getModeSafeFn: this.config.getModeSafeFn!,
+        now: this.config.now,
+      },
+      {
+        finalize: (cmdOk, status, error, code) => {
+          this.finalize(cmdOk, status, error, code);
+        },
+        finalizeFailure: (code, message) => {
+          this.finalizeFailure(code, message);
+        },
+        resetStallTimer: () => {
+          this.resetStallTimer();
+        },
+        debug: (message) => {
+          this.debug(message);
+        },
+      },
+      this.config.terminal,
+      {
+        startedSeen: this.startedSeen,
+        commandEndedSeen: this.commandEndedSeen,
+        commandEndSeenAt: this.commandEndSeenAt,
+        lastOutputAt: this.lastOutputAt,
+        promptStableSince: this.promptStableSince,
+        previousPrompt: this.previousPrompt,
+      },
+    );
   }
 
   private debug(message: string): void {
@@ -554,72 +565,7 @@ export class CommandStateMachine {
   }
 
   private startOutputPolling(): void {
-    const poll = (): void => {
-      if (this.settled) return;
-      const currentRaw = this.config.readTerminalSnapshotFn!(this.config.terminal);
-      const rawTail = String(currentRaw.raw || "")
-        .replace(/\r\n/g, "\n")
-        .replace(/\r/g, "\n")
-        .slice(-800);
-      const pagerVisible =
-        /--More--\s*$/i.test(rawTail) ||
-        /\s--More--\s*$/i.test(rawTail) ||
-        /More:\s*$/i.test(rawTail) ||
-        /Press RETURN to get started\s*$/i.test(rawTail) ||
-        /Press any key to continue\s*$/i.test(rawTail);
-
-      if (pagerVisible) {
-        this.config.session.pagerActive = true;
-        this.debug("poll pager visible tail=" + JSON.stringify(rawTail.slice(-120)));
-
-        if (this.config.options.autoAdvancePager !== false) {
-          try {
-            this.config.terminal.enterChar(32, 0);
-            this.debug("poll pager advanced with space");
-            this.config.session.pagerActive = true;
-            this.lastOutputAt = this.config.now();
-            this.config.session.lastActivityAt = this.config.now();
-          } catch (error) {
-            this.debug("poll pager advance failed error=" + String(error));
-          }
-        }
-      }
-
-      // Handle buffer reset/rotation
-      if (currentRaw.raw.length < this.lastTerminalSnapshot.raw.length) {
-        this.lastTerminalSnapshot = { raw: "", source: "reset" };
-      }
-
-      try {
-        const prompt = this.config.getPromptSafeFn(this.config.terminal);
-        if (prompt && prompt !== this.previousPrompt) {
-          this.previousPrompt = prompt;
-          this.promptStableSince = this.config.now();
-
-          const mode = detectModeFromPrompt(normalizePrompt(prompt));
-          this.config.session.lastPrompt = normalizePrompt(prompt);
-          this.config.session.lastMode = mode;
-
-          this.debug("poll prompt=" + JSON.stringify(prompt) + " mode=" + mode);
-          this.scheduleFinalizeAfterCommandEnd();
-        }
-      } catch {}
-
-      if (currentRaw.raw.length > this.lastTerminalSnapshot.raw.length) {
-        const delta = currentRaw.raw.substring(this.lastTerminalSnapshot.raw.length);
-        this.lastTerminalSnapshot = currentRaw;
-        this.debug("poll output deltaLen=" + delta.length);
-
-        if (this.outputEventsCount === 0) {
-          this.onOutput(null, { chunk: delta, newOutput: delta });
-        } else {
-          this.debug("poll output delta ignored because event output is active");
-        }
-      }
-    };
-
-    poll();
-    this.outputPollTimer = this.config.setInterval!(poll, 250) as unknown as ReturnType<typeof setInterval>;
+    this.outputPoller.start();
   }
 
   private clearTimers(): void {
@@ -627,23 +573,12 @@ export class CommandStateMachine {
     if (this.stallTimer) this.config.clearTimeout!(this.stallTimer);
     if (this.globalTimeoutTimer) this.config.clearTimeout!(this.globalTimeoutTimer);
     if (this.startTimer) this.config.clearTimeout!(this.startTimer);
-    if (this.outputPollTimer) {
-      if (this.config.clearInterval) {
-        this.config.clearInterval(this.outputPollTimer);
-      } else {
-        this.config.clearTimeout!(this.outputPollTimer as unknown as ReturnType<typeof setTimeout>);
-      }
-      this.outputPollTimer = null;
-    }
+    this.finalizeScheduler.clearTimers();
+    this.outputPoller.stop();
   }
 
   private canAdvancePagerNow(): boolean {
-    const now = this.config.now();
-    if (now - this.lastPagerAdvanceAt < 120) {
-      return false;
-    }
-    this.lastPagerAdvanceAt = now;
-    return true;
+    return this.finalizeScheduler.canAdvancePagerNow();
   }
 
   private getCommandInputSafe(): string {
@@ -677,58 +612,9 @@ export class CommandStateMachine {
     return true;
   }
 
-  private snapshotTailHasActivePager(): boolean {
-    try {
-      return terminalSnapshotTailHasActivePager(this.config.terminal);
-    } catch {
-      return false;
-    }
-  }
-
   private resetStallTimer(): void {
-    if (this.stallTimer) this.config.clearTimeout!(this.stallTimer);
-
-    const stallTimeoutMs = this.config.options.stallTimeoutMs ?? DEFAULT_STALL_TIMEOUT;
-
-    this.stallTimer = this.config.setTimeout!(() => {
-      if (this.settled) return;
-
-      const currentPrompt = this.config.getPromptSafeFn(this.config.terminal);
-      const currentMode = this.config.getModeSafeFn(this.config.terminal) as TerminalMode;
-      const now = this.config.now();
-
-      if (currentPrompt !== this.previousPrompt) {
-        this.previousPrompt = currentPrompt;
-        this.promptStableSince = now;
-      }
-
-      const verdict = shouldFinalizeCommand({
-        state: {
-          startedSeen: this.startedSeen,
-          commandEndedSeen: this.commandEndedSeen,
-          commandEndSeenAt: this.commandEndSeenAt,
-          lastOutputAt: this.lastOutputAt,
-          promptStableSince: this.promptStableSince,
-          previousPrompt: this.previousPrompt,
-        },
-        currentPrompt,
-        currentMode,
-        expectedMode: this.config.options.expectedMode,
-        sessionKind: this.config.sessionKind,
-        pagerActive: this.config.session.pagerActive,
-        confirmPromptActive: this.config.session.confirmPromptActive,
-      });
-
-      if (verdict.finished) {
-        this.finalize(true, this.endedStatus, verdict.reason);
-        return;
-      }
-
-      this.finalizeFailure(
-        TerminalErrors.COMMAND_END_TIMEOUT,
-        "Command stalled before completion",
-      );
-    }, stallTimeoutMs);
+    this.syncFinalizeSchedulerState();
+    this.finalizeScheduler.resetStallTimer();
   }
 
   private normalizeIncomingOutputChunk(rawChunk: string): string {
@@ -958,97 +844,19 @@ export class CommandStateMachine {
   }
 
   private scheduleFinalizeAfterCommandEnd(): void {
-    if (this.settled) return;
+    this.syncFinalizeSchedulerState();
+    this.finalizeScheduler.scheduleFinalizeAfterCommandEnd();
+  }
 
-    if (this.commandEndedSeen && this.commandEndSeenAt) {
-      const waitedAfterEnd = this.config.now() - this.commandEndSeenAt;
-
-      if (waitedAfterEnd >= 1000) {
-        this.finalize(true, this.endedStatus, "command-ended-max-wait");
-        return;
-      }
-    }
-
-    if (this.snapshotTailHasActivePager()) {
-      this.config.session.pagerActive = true;
-
-      if (this.config.options.autoAdvancePager !== false && this.canAdvancePagerNow()) {
-        const sent = this.sendPagerAdvance(
-          this.config.terminal,
-          this.config.events,
-          this.config.session.sessionId,
-          this.config.deviceName,
-          "finalizeGuard",
-        );
-
-        this.debug("finalize blocked by active pager sent=" + String(sent));
-        this.lastOutputAt = this.config.now();
-        this.resetStallTimer();
-      }
-
-      return;
-    }
-
-    if (this.config.session.pagerActive) {
-      this.config.session.pagerActive = false;
-      this.debug("pager cleared by snapshot tail");
-    }
-
-    const currentPrompt = this.config.getPromptSafeFn(this.config.terminal);
-
-    const snapshot = this.config.readTerminalSnapshotFn!(this.config.terminal);
-    const diff = diffSnapshotStrict(this.config.baselineOutput, snapshot.raw);
-    const snapshotDelta = String(diff.delta || "");
-    const hasAnyOutput = this.outputBuffer.trim().length > 0 || snapshotDelta.trim().length > 0;
-    const promptLooksReady = /^[A-Za-z0-9._-]+(?:\(config[^)]*\))?[>#]\s*$/.test(String(currentPrompt || "").trim());
-    const quietLongEnough = this.config.now() - this.lastOutputAt >= 700;
-
-    if (
-      this.startedSeen &&
-      promptLooksReady &&
-      quietLongEnough &&
-      !this.config.session.pagerActive &&
-      !this.config.session.confirmPromptActive
-    ) {
-      if (hasAnyOutput || this.config.options.allowEmptyOutput === true || isEnableOrEndCommand(this.config.command)) {
-        this.debug(
-          "finalize by prompt-ready fallback prompt=" +
-            JSON.stringify(currentPrompt) +
-            " hasAnyOutput=" +
-            hasAnyOutput,
-        );
-        this.finalize(true, this.endedStatus, "prompt-ready-fallback");
-        return;
-      }
-    }
-
-    const verdict = shouldFinalizeCommand({
-      state: {
-        startedSeen: this.startedSeen,
-        commandEndedSeen: this.commandEndedSeen,
-        commandEndSeenAt: this.commandEndSeenAt,
-        lastOutputAt: this.lastOutputAt,
-        promptStableSince: this.promptStableSince,
-        previousPrompt: this.previousPrompt,
-      },
-      currentPrompt,
-      currentMode: this.config.getModeSafeFn(this.config.terminal) as TerminalMode,
-      expectedMode: this.config.options.expectedMode,
-      sessionKind: this.config.sessionKind,
-      pagerActive: this.config.session.pagerActive,
-      confirmPromptActive: this.config.session.confirmPromptActive,
+  private syncFinalizeSchedulerState(): void {
+    this.finalizeScheduler.syncState({
+      startedSeen: this.startedSeen,
+      commandEndedSeen: this.commandEndedSeen,
+      commandEndSeenAt: this.commandEndSeenAt,
+      lastOutputAt: this.lastOutputAt,
+      promptStableSince: this.promptStableSince,
+      previousPrompt: this.previousPrompt,
     });
-
-    if (verdict.finished) {
-      this.finalize(true, this.endedStatus, verdict.reason);
-      return;
-    }
-
-    if (this.commandEndGraceTimer) this.config.clearTimeout!(this.commandEndGraceTimer);
-    this.commandEndGraceTimer = this.config.setTimeout!(() => {
-      this.commandEndGraceTimer = null;
-      this.scheduleFinalizeAfterCommandEnd();
-    }, this.config.sessionKind === "host" ? 800 : 250);
   }
 
   private finalize(cmdOk: boolean, status: number | null, error?: string, code?: TerminalErrorCode): void {

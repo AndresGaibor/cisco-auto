@@ -148,10 +148,47 @@ export function collectLiveLinks(net: any): LiveLink[] {
   const links: LiveLink[] = [];
   const seen: string[] = [];
   const ownerByPort: Array<{ port: object; device: string }> = [];
-  const deviceCount = safe(() => Number(net.getDeviceCount()), 0);
+  
+  // REFRESH: En algunas versiones de PT, el objeto 'net' pasado puede estar estático.
+  var freshNet = net;
+  try {
+      if (typeof ipc !== "undefined" && typeof ipc.network === "function") {
+          freshNet = ipc.network();
+      }
+  } catch(e) {}
+
+  // PRIORIDAD: Usar getLinkCount() si está disponible (PT 8+)
+  if (typeof freshNet.getLinkCount === "function" && typeof freshNet.getLinkAt === "function") {
+    const linkCount = safe(() => Number(freshNet.getLinkCount()), 0);
+    if (typeof dprint === "function") dprint("[collectLiveLinks] using getLinkCount=" + linkCount);
+
+    for (let li = 0; li < linkCount; li++) {
+      const link = safe(() => freshNet.getLinkAt(li), null as any);
+      if (!link) continue;
+
+      const rawId = safe(() => (typeof link.getObjectUuid === "function" ? String(link.getObjectUuid()) : ""), "");
+      const p1 = safe(() => (typeof link.getPort1 === "function" ? link.getPort1() : null), null as any);
+      const p2 = safe(() => (typeof link.getPort2 === "function" ? link.getPort2() : null), null as any);
+      if (!p1 || !p2) continue;
+
+      const ep1 = readEndpoint(p1, "", li, ownerByPort);
+      const ep2 = readEndpoint(p2, "", li, ownerByPort);
+      const cableTypeId = safe(
+        () => (typeof link.getConnectionType === "function" ? Number(link.getConnectionType()) : null),
+        null,
+      );
+
+      pushLink(links, seen, ep1, ep2, rawId, cableTypeId, ["Net.getLinkAt()"]);
+    }
+    
+    if (links.length > 0) return links;
+  }
+
+  // FALLBACK: Port scan
+  const deviceCount = safe(() => Number(freshNet.getDeviceCount()), 0);
 
   for (let di = 0; di < deviceCount; di++) {
-    const device = safe(() => net.getDeviceAt(di), null as any);
+    const device = safe(() => freshNet.getDeviceAt(di), null as any);
     if (!device) continue;
 
     const deviceName = safe(() => String(device.getName()), "");
@@ -180,30 +217,7 @@ export function collectLiveLinks(net: any): LiveLink[] {
         null,
       );
 
-      pushLink(links, seen, ep1, ep2, rawId, cableTypeId, ["Port.getLink()", "Link.getPort1()", "Link.getPort2()"]);
-    }
-  }
-
-  if (links.length === 0 && typeof net.getLinkCount === "function" && typeof net.getLinkAt === "function") {
-    const linkCount = safe(() => Number(net.getLinkCount()), 0);
-
-    for (let li = 0; li < linkCount; li++) {
-      const link = safe(() => net.getLinkAt(li), null as any);
-      if (!link) continue;
-
-      const rawId = safe(() => (typeof link.getObjectUuid === "function" ? String(link.getObjectUuid()) : ""), "");
-      const p1 = safe(() => (typeof link.getPort1 === "function" ? link.getPort1() : null), null as any);
-      const p2 = safe(() => (typeof link.getPort2 === "function" ? link.getPort2() : null), null as any);
-      if (!p1 || !p2) continue;
-
-      const ep1 = readEndpoint(p1, "", li, ownerByPort);
-      const ep2 = readEndpoint(p2, "", li, ownerByPort);
-      const cableTypeId = safe(
-        () => (typeof link.getConnectionType === "function" ? Number(link.getConnectionType()) : null),
-        null,
-      );
-
-      pushLink(links, seen, ep1, ep2, rawId, cableTypeId, ["Net.getLinkAt()", "Link.getPort1()", "Link.getPort2()"]);
+      pushLink(links, seen, ep1, ep2, rawId, cableTypeId, ["Port.getLink()"]);
     }
   }
 

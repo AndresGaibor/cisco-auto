@@ -71,6 +71,9 @@ const ROOT_COMMAND_NAMES = [
   "project",
   "app",
   "collab",
+  "inspect",
+  "agent",
+  "save",
 ];
 
 export function createProgram(): Command {

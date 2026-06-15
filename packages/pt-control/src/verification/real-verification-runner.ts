@@ -20,8 +20,8 @@ import { RealLabHarness } from "./real-lab-harness.js";
 import { getScenariosForProfile } from "./real-scenario-registry.js";
 import { checkEnvironmentHealth } from "./recovery/environment-health.js";
 import type { FailureContext } from "./recovery/recovery-policy.js";
-import { shouldContinueAfterStepFailure, shouldAttemptRecovery } from "./recovery/recovery-policy.js";
-import { attemptScenarioRecovery, attemptStepRecovery } from "./recovery/recovery-engine.js";
+import { shouldAttemptRecovery } from "./recovery/recovery-policy.js";
+import { attemptScenarioRecovery } from "./recovery/recovery-engine.js";
 import { captureFingerprint } from "../omni/environment-fingerprint.js";
 
 // ============================================================================

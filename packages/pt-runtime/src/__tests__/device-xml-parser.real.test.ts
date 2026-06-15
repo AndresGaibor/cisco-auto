@@ -271,5 +271,47 @@ describe("device-xml-parser PT real", () => {
       expect(result.vlans.map((v) => v.id)).toEqual([1, 10, 20, 99]);
       expect(result.vlans[2]).toEqual({ id: 20, name: "VOICE", state: "" });
     });
+
+    it("captura ENGINE como extra en XML real de PT", () => {
+      const result = parseDeviceXml(S1_XML);
+
+      expect(result.extras).toHaveProperty("engine");
+      expect(result.extras.engine).toHaveLength(1);
+      expect(result.extras.engine[0]).toContain("SERIALNUMBER");
+    });
+
+    it("captura VLANS como extra en XML real de PT", () => {
+      const result = parseDeviceXml(S1_XML);
+
+      expect(result.extras).toHaveProperty("vlans");
+      expect(result.extras.vlans).toHaveLength(1);
+      expect(result.extras.vlans[0]).toContain("default");
+      expect(result.extras.vlans[0]).toContain("DATA");
+    });
+
+    it("captura LINE como extra en RUNNINGCONFIG de PT real", () => {
+      const result = parseDeviceXml(S1_XML);
+
+      expect(result.extras).toHaveProperty("line");
+      expect(result.extras.line.length).toBeGreaterThanOrEqual(4);
+      expect(result.extras.line.some((l) => l.includes("switchport access vlan 10"))).toBe(true);
+    });
+
+    it("no duplica hostname en extras", () => {
+      const result = parseDeviceXml(PC1_XML);
+
+      expect(result.extras).not.toHaveProperty("hostname");
+      expect(result.extras).not.toHaveProperty("model");
+      expect(result.extras).not.toHaveProperty("power");
+    });
+
+    it("WLC self-closing captura rspan como parte del raw VLAN en extras", () => {
+      const result = parseDeviceXml(WLC_SELFCLOSING_XML);
+
+      expect(result.extras).toHaveProperty("vlans");
+      const vlansRaw = result.extras.vlans[0];
+      expect(vlansRaw).toContain("rspan");
+      expect(vlansRaw).toContain("EDUROAM");
+    });
   });
 });

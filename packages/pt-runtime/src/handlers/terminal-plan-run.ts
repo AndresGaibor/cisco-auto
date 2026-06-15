@@ -156,6 +156,10 @@ export function handleTerminalPlanRun(
     return inlineResult;
   }
 
+  if (typeof api.advanceJob === "function") {
+    api.advanceJob(ticket);
+  }
+
   return createDeferredResult(ticket, deferredPlan);
 }
 

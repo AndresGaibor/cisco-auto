@@ -1,14 +1,9 @@
 import type { HandlerDeps, HandlerResult } from "../utils/helpers";
 import { collectLiveLinks, findLiveLink, findLiveLinkByEndpoint } from "../domain/live-link";
 import type { RemoveLinkPayload } from "./link-types";
-import { validatePayload } from "./payload-schemas.js";
+
 
 export function handleRemoveLink(payload: RemoveLinkPayload, deps: HandlerDeps): HandlerResult {
-  const validation = validatePayload("removeLink", payload);
-  if (!validation.ok) {
-    return { ok: false, code: validation.code, error: validation.error };
-  }
-
   const net = deps.getNet();
   const lw = deps.getLW();
   const device = net.getDevice(payload.device);

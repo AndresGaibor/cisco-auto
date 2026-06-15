@@ -1,5 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import { parseShowCdpNeighbors } from "./show-cdp";
+import { parseShowCdpNeighbors as parseShowCdpNeighborsSanitized } from "./parse-with-sanitization.js";
 
 describe("parseShowCdpNeighbors", () => {
   test("parses basic CDP neighbors output", () => {
@@ -74,7 +75,20 @@ describe("parseShowCdpNeighbors", () => {
 
     const result = parseShowCdpNeighbors(output);
     expect(result.neighbors).toHaveLength(2); // Should not include the header line
-    expect(result.neighbors[0].deviceId).toBe("Switch1");
-    expect(result.neighbors[1].deviceId).toBe("Router2");
+    expect(result.neighbors[0]!.deviceId).toBe("Switch1");
+    expect(result.neighbors[1]!.deviceId).toBe("Router2");
+  });
+
+  test("reduce confidence on truncated output", () => {
+    const output = `
+      Device ID        Local Intrfce     Holdtme    Capability  Platform      Port ID
+      Switch1          Gig 0/1           152        R S I       WS-C2960-24TT-L Gig 0/2
+    `;
+
+    const result = parseShowCdpNeighborsSanitized(output);
+
+    expect(result.confidence).toBeLessThan(1);
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.parsed.neighbors).toHaveLength(1);
   });
 });

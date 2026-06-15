@@ -154,7 +154,8 @@ export class TopologyMutationService {
         return { removedDevices, removedLinks, remainingDevices: 0, remainingLinks: 0 };
       }
 
-      for (const link of linkEntries) {
+      for (let linkIndex = 0; linkIndex < linkEntries.length; linkIndex++) {
+        const link = linkEntries[linkIndex]!;
         try {
           await this.removeLink(link.device1, link.port1);
           removedLinks += 1;
@@ -168,7 +169,8 @@ export class TopologyMutationService {
         }
       }
 
-      for (const name of deviceNames) {
+      for (let deviceIndex = 0; deviceIndex < deviceNames.length; deviceIndex++) {
+        const name = deviceNames[deviceIndex]!;
         try {
           await this.removeDevice(name);
           removedDevices += 1;

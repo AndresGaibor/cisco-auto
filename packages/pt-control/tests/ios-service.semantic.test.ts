@@ -164,6 +164,24 @@ describe('configureDhcpPool()', () => {
     );
     await expect(svc.configureDhcpPool('R1', 'MISSING', '10.0.0.0', '255.255.255.0', '10.0.0.1')).rejects.toThrow('MISSING');
   });
+
+  test('rechaza un switch L2 sin soporte de routing', async () => {
+    const bridge = makeBridge({});
+    const svc = new IosService(
+      bridge,
+      generateId,
+      async (device: string) => ({
+        model: '2960-24TC-L',
+        name: device,
+        type: 'switch',
+      } as any),
+      createTerminalPortFromBridge(bridge),
+    );
+
+    await expect(
+      svc.configureDhcpPool('SW1', 'POOL1', '192.168.1.0', '255.255.255.0', '192.168.1.1'),
+    ).rejects.toThrow('SW1 does not support DHCP pool');
+  });
 });
 
 describe('configureOspfNetwork()', () => {
@@ -187,6 +205,24 @@ describe('configureOspfNetwork()', () => {
     );
     await svc.configureOspfNetwork('R1', 1, '192.168.1.0', '0.0.0.255', 0);
     expect(callLog).toContain('show ip protocols');
+  });
+
+  test('rechaza un switch L2 sin soporte de routing', async () => {
+    const bridge = makeBridge({});
+    const svc = new IosService(
+      bridge,
+      generateId,
+      async (device: string) => ({
+        model: '2960-24TC-L',
+        name: device,
+        type: 'switch',
+      } as any),
+      createTerminalPortFromBridge(bridge),
+    );
+
+    await expect(
+      svc.configureOspfNetwork('SW1', 1, '192.168.1.0', '0.0.0.255', 0),
+    ).rejects.toThrow('SW1 does not support OSPF');
   });
 });
 

@@ -69,7 +69,7 @@ export function classifyIosCommand(command: string): CommandProfile {
     profile.intent = "config-submode";
     profile.expectedMode = "config-if";
     profile.preserveCurrentMode = true;
-    profile.ensurePrivileged = false;
+    profile.ensurePrivileged = true;
     profile.risk = "changes-state";
     return profile;
   }
@@ -78,7 +78,7 @@ export function classifyIosCommand(command: string): CommandProfile {
     profile.intent = "config-submode";
     profile.expectedMode = "config-line";
     profile.preserveCurrentMode = true;
-    profile.ensurePrivileged = false;
+    profile.ensurePrivileged = true;
     profile.risk = "changes-state";
     return profile;
   }
@@ -87,7 +87,7 @@ export function classifyIosCommand(command: string): CommandProfile {
     profile.intent = "config-submode";
     profile.expectedMode = "config-router";
     profile.preserveCurrentMode = true;
-    profile.ensurePrivileged = false;
+    profile.ensurePrivileged = true;
     profile.risk = "changes-state";
     return profile;
   }
@@ -96,7 +96,7 @@ export function classifyIosCommand(command: string): CommandProfile {
     profile.intent = "config-submode";
     profile.expectedMode = "config-vlan";
     profile.preserveCurrentMode = true;
-    profile.ensurePrivileged = false;
+    profile.ensurePrivileged = true;
     profile.risk = "changes-state";
     return profile;
   }
@@ -105,7 +105,7 @@ export function classifyIosCommand(command: string): CommandProfile {
     profile.intent = "config-submode";
     profile.expectedMode = "config-if-range";
     profile.preserveCurrentMode = true;
-    profile.ensurePrivileged = false;
+    profile.ensurePrivileged = true;
     profile.risk = "changes-state";
     return profile;
   }
@@ -141,7 +141,7 @@ export function classifyIosCommand(command: string): CommandProfile {
     profile.intent = "config-submode";
     profile.expectedMode = "dhcp-pool";
     profile.preserveCurrentMode = true;
-    profile.ensurePrivileged = false;
+    profile.ensurePrivileged = true;
     profile.risk = "changes-state";
     return profile;
   }
@@ -150,7 +150,7 @@ export function classifyIosCommand(command: string): CommandProfile {
     profile.intent = "config-command";
     profile.expectedMode = "global-config";
     profile.preserveCurrentMode = true;
-    profile.ensurePrivileged = false;
+    profile.ensurePrivileged = true;
     profile.risk = "changes-state";
     return profile;
   }

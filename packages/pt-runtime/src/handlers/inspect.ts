@@ -63,13 +63,27 @@ export function handleInspect(payload: InspectPayload, deps: HandlerDeps): Handl
   let dhcp = false;
 
   // Intentar leer DHCP flag a nivel dispositivo
-  try {
-    dhcp = !!device.getDhcpFlag();
-  } catch {
-    /* ignore */
-  }
+    try {
+      dhcp = !!device.getDhcpFlag();
+    } catch {
+      /* ignore */
+    }
 
-  for (let i = 0; i < portCount; i++) {
+    var stpMode = "unknown";
+    var passwordEncryption = false;
+    try {
+        var stpProc = (device as any).getProcess ? (device as any).getProcess("StpMainProcess") : null;
+        if (stpProc && typeof stpProc.getSpanningTreeMode === "function") {
+            stpMode = String(stpProc.getSpanningTreeMode());
+        }
+        
+        // Check for password encryption (from XML if possible)
+        // This is a heuristic, in real IOS we would check running-config
+    } catch (e) { /* ignore */ }
+
+
+    for (let i = 0; i < portCount; i++) {
+
     try {
       const port = device.getPortAt(i);
       if (!port) continue;
@@ -145,6 +159,7 @@ export function handleInspect(payload: InspectPayload, deps: HandlerDeps): Handl
     power: device.getPower(),
     ports,
     dhcp,
+    stpMode,
     raw: device, // NECESSARY for host configuration services
   };
 
@@ -378,6 +393,20 @@ export function handleSnapshot(_payload: SnapshotPayload, deps: HandlerDeps): Ha
 
         try {
           portInfo.ipAddress = port.getIpAddress();
+        } catch (e) { /* ignore */ }
+
+        // L2 Deep Inspection (ES5 safe)
+        try {
+            var swPort = port as any;
+            if (typeof swPort.getAccessVlan === 'function') {
+                portInfo.vlan = swPort.getAccessVlan();
+            }
+            if (typeof swPort.isAccessPort === 'function') {
+                portInfo.mode = swPort.isAccessPort() ? 'access' : 'trunk';
+            }
+            if (portInfo.mode === 'trunk' && typeof swPort.getNativeVlanId === 'function') {
+                portInfo.nativeVlan = swPort.getNativeVlanId();
+            }
         } catch (e) { /* ignore */ }
 
         ports.push(portInfo);

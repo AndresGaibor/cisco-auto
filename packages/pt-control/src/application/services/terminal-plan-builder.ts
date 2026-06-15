@@ -18,6 +18,7 @@ import {
 export function splitCommandLines(command: string): string[] {
   return command
     .split(/\r?\n/)
+    .flatMap((line) => line.split(";"))
     .map((line) => line.trimEnd())
     .filter((line) => line.trim().length > 0)
     .filter((line) => !line.trimStart().startsWith("#"));

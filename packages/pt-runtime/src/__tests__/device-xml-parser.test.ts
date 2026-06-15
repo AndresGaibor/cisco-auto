@@ -9,6 +9,8 @@ import {
   extractMacAddressTable,
   extractRoutingTable,
   extractArpTable,
+  extractOspfFromRunningConfig,
+  extractDhcpPoolsFromRunningConfig,
   siphonDevice,
 } from "../utils/device-xml-parser";
 
@@ -150,6 +152,7 @@ describe("device-xml-parser", () => {
       expect(result.configRegister).toBe("0x2102");
       expect(result.ports).toHaveLength(2);
       expect(result.modules).toHaveLength(1);
+      expect(result.modules[0].ports).toEqual(["Port1", "Port2"]);
       expect(result.vlans).toHaveLength(2);
       expect(result.routingTable).toHaveLength(2);
       expect(result.arpTable).toHaveLength(1);
@@ -172,6 +175,15 @@ describe("device-xml-parser", () => {
 
       expect(result.vlans[0]).toEqual({ id: 10, name: "DATA", state: "active" });
       expect(result.vlans[1]).toEqual({ id: 20, name: "VOICE", state: "active" });
+    });
+
+    it("parsea VLAN self-closing con atributo number", () => {
+      const xml = `<device><vlan name="DATA" number="10" rspan="1"/></device>`;
+      const result = parseDeviceXml(xml);
+
+      expect(result.vlans).toHaveLength(1);
+      expect(result.vlans[0].id).toBe(10);
+      expect(result.vlans[0].name).toBe("DATA");
     });
 
     it("parsea routing table con tipo, network, nextHop", () => {
@@ -221,6 +233,7 @@ describe("device-xml-parser", () => {
       expect(result.arpTable).toEqual([]);
       expect(result.macTable).toEqual([]);
       expect(result.rawXml).toBe("");
+      expect(result.extras).toEqual({});
     });
 
     it("con XML malformado devuelve estructura con campos vacíos sin crashear", () => {
@@ -235,6 +248,29 @@ describe("device-xml-parser", () => {
 
       expect(result.hostname).toBe("");
       expect(result.ports).toEqual([]);
+    });
+
+    it("captura extras con tags no parseadas", () => {
+      const xml = `<device>
+  <hostname>R1</hostname>
+  <customTag>customValue</customTag>
+  <dhcpPool>
+    <poolName>POOL1</poolName>
+    <network>192.168.1.0</network>
+  </dhcpPool>
+  <ospfConfig processId="1"/>
+</device>`;
+      const result = parseDeviceXml(xml);
+
+      expect(result.hostname).toBe("R1");
+      expect(result.extras).toHaveProperty("customtag");
+      expect(result.extras.customtag).toHaveLength(1);
+      expect(result.extras.customtag[0]).toContain("customValue");
+      expect(result.extras).toHaveProperty("dhcppool");
+      expect(result.extras.dhcppool[0]).toContain("POOL1");
+      expect(result.extras).toHaveProperty("ospfconfig");
+      expect(result.extras.ospfconfig[0]).toContain("processId");
+      expect(result.extras).not.toHaveProperty("hostname");
     });
 
     it("parsea puertos trunk con PORT_VLAN, trunkVlan y nativeVlan", () => {
@@ -287,6 +323,104 @@ describe("device-xml-parser", () => {
     });
   });
 
+  describe("extractOspfFromRunningConfig", () => {
+    it("extrae proceso OSPF con networks y router-id", () => {
+      const config = `
+router ospf 1
+ router-id 1.1.1.1
+ network 192.168.1.0 0.0.0.255 area 0
+ network 10.0.0.0 0.255.255.255 area 1
+!
+`;
+      const result = extractOspfFromRunningConfig(config);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].processId).toBe(1);
+      expect(result[0].routerId).toBe("1.1.1.1");
+      expect(result[0].networks).toHaveLength(2);
+      expect(result[0].networks[0]).toEqual({
+        network: "192.168.1.0",
+        wildcard: "0.0.0.255",
+        area: 0,
+      });
+      expect(result[0].networks[1]).toEqual({
+        network: "10.0.0.0",
+        wildcard: "0.255.255.255",
+        area: 1,
+      });
+    });
+
+    it("extrae multiples procesos OSPF", () => {
+      const config = `
+router ospf 1
+ network 192.168.1.0 0.0.0.255 area 0
+!
+
+router ospf 2
+ network 172.16.0.0 0.0.255.255 area 2
+!
+`;
+      const result = extractOspfFromRunningConfig(config);
+
+      expect(result).toHaveLength(2);
+      expect(result[0].processId).toBe(1);
+      expect(result[1].processId).toBe(2);
+    });
+
+    it("retorna vacío si no hay OSPF", () => {
+      expect(extractOspfFromRunningConfig("! no ospf")).toEqual([]);
+    });
+  });
+
+  describe("extractDhcpPoolsFromRunningConfig", () => {
+    it("extrae pool DHCP con network, router, dns", () => {
+      const config = `
+ip dhcp pool POOL1
+ network 192.168.1.0 255.255.255.0
+ default-router 192.168.1.1
+ dns-server 8.8.8.8
+ domain-name ejemplo.local
+ lease 7 0 0
+!
+`;
+      const result = extractDhcpPoolsFromRunningConfig(config);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].poolName).toBe("POOL1");
+      expect(result[0].network).toBe("192.168.1.0");
+      expect(result[0].subnetMask).toBe("255.255.255.0");
+      expect(result[0].defaultRouter).toBe("192.168.1.1");
+      expect(result[0].dnsServer).toBe("8.8.8.8");
+      expect(result[0].domainName).toBe("ejemplo.local");
+      expect(result[0].leaseDays).toBe(7);
+      expect(result[0].leaseHours).toBe(0);
+      expect(result[0].leaseMinutes).toBe(0);
+    });
+
+    it("extrae multiples pools DHCP", () => {
+      const config = `
+ip dhcp pool POOL1
+ network 10.0.0.0 255.0.0.0
+ default-router 10.0.0.1
+!
+
+ip dhcp pool POOL2
+ network 172.16.0.0 255.255.0.0
+ default-router 172.16.0.1
+!
+`;
+      const result = extractDhcpPoolsFromRunningConfig(config);
+
+      expect(result).toHaveLength(2);
+      expect(result[0].poolName).toBe("POOL1");
+      expect(result[1].poolName).toBe("POOL2");
+    });
+
+    it("retorna vacío si no hay pools", () => {
+      expect(extractDhcpPoolsFromRunningConfig("! no dhcp")).toEqual([]);
+    });
+  });
+
   describe("extractHostname", () => {
     it("extrae hostname del router", () => {
       expect(extractHostname(ROUTER_XML)).toBe("R1");
@@ -330,6 +464,63 @@ describe("device-xml-parser", () => {
       const result = extractArpTable(ROUTER_XML);
 
       expect(result).toHaveLength(1);
+    });
+  });
+
+  describe("parseDeviceXml con OSPF y DHCP en runningConfig", () => {
+    const ROUTER_XML = `<DEVICE>
+  <ENGINE>
+    <TYPE model="2911">Router</TYPE>
+    <NAME translate="true">R1</NAME>
+    <POWER>true</POWER>
+    <SERIALNUMBER>FTX1234ABCD</SERIALNUMBER>
+    <RUNNINGCONFIG>
+      <LINE>!</LINE>
+      <LINE>router ospf 1</LINE>
+      <LINE> router-id 1.1.1.1</LINE>
+      <LINE> network 192.168.1.0 0.0.0.255 area 0</LINE>
+      <LINE> network 10.0.0.0 0.255.255.255 area 1</LINE>
+      <LINE>!</LINE>
+      <LINE>ip dhcp pool POOL1</LINE>
+      <LINE> network 192.168.1.0 255.255.255.0</LINE>
+      <LINE> default-router 192.168.1.1</LINE>
+      <LINE> dns-server 8.8.8.8</LINE>
+      <LINE>!</LINE>
+      <LINE>ip dhcp pool POOL2</LINE>
+      <LINE> network 172.16.0.0 255.255.0.0</LINE>
+      <LINE> default-router 172.16.0.1</LINE>
+      <LINE>!</LINE>
+    </RUNNINGCONFIG>
+  </ENGINE>
+</DEVICE>`;
+
+    it("extrae OSPF desde runningConfig", () => {
+      const result = parseDeviceXml(ROUTER_XML);
+
+      expect(result.ospf).toHaveLength(1);
+      expect(result.ospf[0].processId).toBe(1);
+      expect(result.ospf[0].routerId).toBe("1.1.1.1");
+      expect(result.ospf[0].networks).toHaveLength(2);
+      expect(result.ospf[0].networks[0].network).toBe("192.168.1.0");
+      expect(result.ospf[0].networks[1].area).toBe(1);
+    });
+
+    it("extrae DHCP pools desde runningConfig", () => {
+      const result = parseDeviceXml(ROUTER_XML);
+
+      expect(result.dhcpPools).toHaveLength(2);
+      expect(result.dhcpPools[0].poolName).toBe("POOL1");
+      expect(result.dhcpPools[0].network).toBe("192.168.1.0");
+      expect(result.dhcpPools[0].defaultRouter).toBe("192.168.1.1");
+      expect(result.dhcpPools[1].poolName).toBe("POOL2");
+      expect(result.dhcpPools[1].network).toBe("172.16.0.0");
+    });
+
+    it("extrae vacío si no hay OSPF ni DHCP", () => {
+      const result = parseDeviceXml(SWITCH_XML);
+
+      expect(result.ospf).toEqual([]);
+      expect(result.dhcpPools).toEqual([]);
     });
   });
 

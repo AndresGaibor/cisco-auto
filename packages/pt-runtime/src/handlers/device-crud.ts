@@ -10,7 +10,6 @@ import {
   getDeviceTypeString,
   collectPorts,
 } from "../utils/helpers.js";
-import { validatePayload } from "./payload-schemas.js";
 
 /**
  * Payload para agregar un dispositivo nuevo al workspace de PT.
@@ -47,10 +46,6 @@ export interface RemoveDevicePayload {
  * // → { ok: true, name: "S1", model: "2960-24TT", type: "switch", power: true, ports: [...] }
  */
 export function handleAddDevice(payload: AddDevicePayload, deps: HandlerDeps): HandlerResult {
-  var validation = validatePayload("addDevice", payload);
-  if (!validation.ok) {
-    return { ok: false, code: validation.code, error: validation.error };
-  }
   deps.dprint("[handleAddDevice] CALLED with payload=" + JSON.stringify({model: payload.model, name: payload.name, x: payload.x, y: payload.y}));
   var lw = deps.getLW();
   var net = deps.getNet();
@@ -106,10 +101,6 @@ export function handleAddDevice(payload: AddDevicePayload, deps: HandlerDeps): H
  * @returns HandlerResult con éxito o error si no se encontró
  */
 export function handleRemoveDevice(payload: RemoveDevicePayload, deps: HandlerDeps): HandlerResult {
-  var validation = validatePayload("removeDevice", payload);
-  if (!validation.ok) {
-    return { ok: false, code: validation.code, error: validation.error };
-  }
   var net = deps.getNet();
   var lw = deps.getLW();
   var dprint = deps.dprint;
@@ -162,10 +153,6 @@ export function handleRemoveDevice(payload: RemoveDevicePayload, deps: HandlerDe
 }
 
 export function handleRenameDevice(payload: any, deps: HandlerDeps): HandlerResult {
-  var validation = validatePayload("renameDevice", payload);
-  if (!validation.ok) {
-    return { ok: false, code: validation.code, error: validation.error };
-  }
   try {
     const device = deps.getDeviceByName(payload.oldName);
 
@@ -218,10 +205,6 @@ export function handleRenameDevice(payload: any, deps: HandlerDeps): HandlerResu
 }
 
 export function handleMoveDevice(payload: any, deps: HandlerDeps): HandlerResult {
-  var validation = validatePayload("moveDevice", payload);
-  if (!validation.ok) {
-    return { ok: false, code: validation.code, error: validation.error };
-  }
   var device = deps.getNet().getDevice(payload.name);
   if (!device) return { ok: false, error: "Device not found: " + payload.name, code: "DEVICE_NOT_FOUND" };
   var x = Math.round(payload.x);

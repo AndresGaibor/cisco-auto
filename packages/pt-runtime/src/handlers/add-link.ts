@@ -3,7 +3,7 @@ import { getCableTypeId, getCableTypeName } from "../utils/constants";
 import { resolveDevicePortName, getDevicePortNames } from "../utils/helpers";
 import { collectLiveLinks, findLiveLink, findLiveLinkByEndpoint } from "../domain/live-link";
 import type { AddLinkPayload } from "./link-types";
-import { validatePayload } from "./payload-schemas.js";
+
 
 export type { AddLinkPayload } from "./link-types";
 
@@ -60,11 +60,6 @@ export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): Handl
   const net = deps.getNet();
   const lw = deps.getLW();
   const { dprint } = deps;
-
-  const validation = validatePayload("addLink", payload);
-  if (!validation.ok) {
-    return { ok: false, code: validation.code, error: validation.error };
-  }
 
   const device1 = net.getDevice(payload.device1);
   const device2 = net.getDevice(payload.device2);

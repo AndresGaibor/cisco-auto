@@ -106,6 +106,35 @@ describe("instructivo", () => {
     expect(text).toContain("pt_cmd_run");
   });
 
+  test("prioriza señales por severidad: error antes que warning antes que info", () => {
+    const result = instructivo("pt_cmd_run", {
+      action: "cmd.run",
+      jobCount: 1,
+      failedCount: 0,
+      warnings: [
+        { code: "CMD_SLOW_SUCCESS", severity: "info", message: "slow", actionable: true },
+        { code: "PT_TERMINAL_BRIDGE_TIMEOUT", severity: "warning", message: "bridge", actionable: true },
+        { code: "PT_RUNTIME_MISSING", severity: "error", message: "runtime down", actionable: true },
+      ],
+      results: [],
+      queue: {},
+    });
+
+    const text = result.content[0]?.text ?? "";
+    const opcionesIdx = text.indexOf("### Opciones");
+    const actionableText = opcionesIdx >= 0 ? text.slice(opcionesIdx) : text;
+
+    const errorIdx = actionableText.indexOf("PT_RUNTIME_MISSING");
+    const warningIdx = actionableText.indexOf("PT_TERMINAL_BRIDGE_TIMEOUT");
+    const infoIdx = actionableText.indexOf("CMD_SLOW_SUCCESS");
+
+    expect(errorIdx).toBeGreaterThan(-1);
+    expect(warningIdx).toBeGreaterThan(-1);
+    expect(infoIdx).toBeGreaterThan(-1);
+    expect(errorIdx).toBeLessThan(warningIdx);
+    expect(warningIdx).toBeLessThan(infoIdx);
+  });
+
   test("reacciona a warnings concretos de cmd.run", () => {
     const result = instructivo("pt_cmd_run", {
       action: "cmd.run",

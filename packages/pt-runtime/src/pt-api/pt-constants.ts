@@ -35,12 +35,12 @@ export const PT_HELPER_MAPS: PtHelperMaps = {
   },
   CABLE_TYPES: {
     'auto': -1,
-    'straight': 0,
-    'cross': 1,
+    'straight': 8100,
+    'cross': 8101,
     'ethernet-straight': 8100,
     'ethernet-cross': 8101,
-    'fiber': 2,
-    'serial': 3,
+    'fiber': 8102,
+    'serial': 8103,
     'console': 4,
     'phone': 5,
     'cable': 6,
@@ -51,6 +51,8 @@ export const PT_HELPER_MAPS: PtHelperMaps = {
     'octal': 11,
     'cellular': 12,
     'usb': 13,
+    'straight-legacy': 0,
+    'cross-legacy': 1,
   },
   DEVICE_TYPES: {
     router: 0,
@@ -88,6 +90,62 @@ export const PT_HELPER_MAPS: PtHelperMaps = {
   },
 };
 
-export const CABLE_TYPES = PT_HELPER_MAPS.CABLE_TYPES;
-export const DEVICE_TYPES = PT_HELPER_MAPS.DEVICE_TYPES;
-export const MODEL_ALIASES = PT_HELPER_MAPS.PT_MODEL_MAP;
+export type CableType = keyof typeof PT_HELPER_MAPS.CABLE_TYPES;
+export type DeviceType = keyof typeof PT_HELPER_MAPS.DEVICE_TYPES;
+
+export const CABLE_TYPES: Record<string, number> = {
+  'auto': -1,
+  'straight': 8100,
+  'cross': 8101,
+  'ethernet-straight': 8100,
+  'ethernet-cross': 8101,
+  'fiber': 8102,
+  'serial': 8103,
+  'console': 4,
+  'phone': 5,
+  'cable': 6,
+  'roll': 7,
+  'wireless': 8,
+  'coaxial': 9,
+  'custom': 10,
+  'octal': 11,
+  'cellular': 12,
+  'usb': 13,
+  'straight-legacy': 0,
+  'cross-legacy': 1,
+};
+export const DEVICE_TYPES: Record<string, number> = {
+  router: 0,
+  switch: 1,
+  hub: 2,
+  bridge: 3,
+  repeater: 4,
+  coaxialSplitter: 5,
+  wireless: 7,
+  pc: 8,
+  server: 9,
+  printer: 10,
+  wirelessRouter: 11,
+  ipPhone: 12,
+  dslModem: 13,
+  cableModem: 14,
+  multilayerSwitch: 16,
+  laptop: 18,
+  tablet: 19,
+  smartphone: 20,
+  wirelessEndDevice: 21,
+  wiredEndDevice: 22,
+  tv: 23,
+  homeVoip: 24,
+  analogPhone: 25,
+  firewall: 27,
+  dlc: 29,
+  homeRouter: 30,
+  cellTower: 31,
+  centralOfficeServer: 32,
+  iot: 34,
+  sniffer: 35,
+  mcu: 36,
+  sbc: 37,
+};
+export const MODEL_ALIASES: Record<string, string> = {};

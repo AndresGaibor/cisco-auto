@@ -42,10 +42,10 @@ export const PT_DEVICE_TYPE_CONSTANTS: Record<string, number> = {
 
 export const PT_CABLE_TYPE_CONSTANTS: Record<string, number> = {
   auto: -1,
-  straight: 0,
-  cross: 1,
-  fiber: 2,
-  serial: 3,
+  straight: 8100,
+  cross: 8101,
+  fiber: 8102,
+  serial: 8103,
   console: 4,
   phone: 5,
   cable: 6,

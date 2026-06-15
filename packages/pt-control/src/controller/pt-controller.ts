@@ -61,6 +61,45 @@ import { parseTerminalOutput } from "../pt/terminal/terminal-output-parsers.js";
 import { createHostCommandPlan } from "../pt/terminal/standard-terminal-plans.js";
 import { verifyTerminalEvidence } from "../pt/terminal/terminal-evidence-verifier.js";
 
+function unavailableService<T>(serviceName: string): Promise<T> {
+  return Promise.reject(new Error(`${serviceName} no disponible`));
+}
+
+function createProjectFacade(composition: ControlComposition) {
+  const services = composition as any;
+
+  return {
+    status: () => services.projectService?.status() ?? unavailableService("projectService"),
+    save: () => services.projectService?.save() ?? unavailableService("projectService"),
+    autosave: (options?: { dir?: string; keep?: number }) =>
+      services.autosaveService?.createAutosave(options) ?? unavailableService("autosaveService"),
+    open: (path: string, options?: { wait?: boolean; waitTimeoutMs?: number }) =>
+      services.recoveryService?.openProject(path, options) ?? unavailableService("recoveryService"),
+    recover: (projectPath?: string) =>
+      services.recoveryService?.recoverFromLast(projectPath) ?? unavailableService("recoveryService"),
+    checkpoints: (projectPath?: string) =>
+      services.recoveryService?.listCheckpoints(projectPath) ?? unavailableService("recoveryService"),
+  };
+}
+
+function createAppFacade(composition: ControlComposition) {
+  const services = composition as any;
+
+  return {
+    paths: () => services.appPathResolver?.resolve() ?? unavailableService("appPathResolver"),
+    status: (options?: { live?: boolean; timeoutMs?: number }) =>
+      services.packetTracerAppService?.status(options) ?? unavailableService("packetTracerAppService"),
+    open: (path?: string, options?: { wait?: boolean; waitTimeoutMs?: number; closeExisting?: boolean; saveExisting?: boolean; autosaveExisting?: boolean; force?: boolean; noRuntimeWait?: boolean; clean?: boolean }) =>
+      services.packetTracerAppService?.open(path, options) ?? unavailableService("packetTracerAppService"),
+    close: (options?: { save?: boolean; autosave?: boolean; force?: boolean; timeoutMs?: number }) =>
+      services.packetTracerAppService?.close(options) ?? unavailableService("packetTracerAppService"),
+    wait: (options?: { runtime?: boolean; activeFile?: string; timeoutMs?: number }) =>
+      services.packetTracerAppService?.wait(options) ?? unavailableService("packetTracerAppService"),
+    track: (options?: { clean?: boolean }) =>
+      services.packetTracerAppService?.track(options) ?? unavailableService("packetTracerAppService"),
+  };
+}
+
 /**
  * Entrada de trace de comando - campos verificados del código.
  *
@@ -150,34 +189,11 @@ export class PTController {
   }
 
   public get project() {
-    return {
-      status: () => (this._composition as any).projectService?.status() ?? Promise.reject(new Error("projectService no disponible")),
-      save: () => (this._composition as any).projectService?.save() ?? Promise.reject(new Error("projectService no disponible")),
-      autosave: (options?: { dir?: string; keep?: number }) =>
-        (this._composition as any).autosaveService?.createAutosave(options) ?? Promise.reject(new Error("autosaveService no disponible")),
-      open: (path: string, options?: { wait?: boolean; waitTimeoutMs?: number }) =>
-        (this._composition as any).recoveryService?.openProject(path, options) ?? Promise.reject(new Error("recoveryService no disponible")),
-      recover: (projectPath?: string) =>
-        (this._composition as any).recoveryService?.recoverFromLast(projectPath) ?? Promise.reject(new Error("recoveryService no disponible")),
-      checkpoints: (projectPath?: string) =>
-        (this._composition as any).recoveryService?.listCheckpoints(projectPath) ?? Promise.reject(new Error("recoveryService no disponible")),
-    };
+    return createProjectFacade(this._composition);
   }
 
   public get app() {
-    return {
-      paths: () => (this._composition as any).appPathResolver?.resolve() ?? Promise.reject(new Error("appPathResolver no disponible")),
-      status: (options?: { live?: boolean; timeoutMs?: number }) =>
-        (this._composition as any).packetTracerAppService?.status(options) ?? Promise.reject(new Error("packetTracerAppService no disponible")),
-      open: (path?: string, options?: { wait?: boolean; waitTimeoutMs?: number; closeExisting?: boolean; saveExisting?: boolean; autosaveExisting?: boolean; force?: boolean; noRuntimeWait?: boolean; clean?: boolean }) =>
-        (this._composition as any).packetTracerAppService?.open(path, options) ?? Promise.reject(new Error("packetTracerAppService no disponible")),
-      close: (options?: { save?: boolean; autosave?: boolean; force?: boolean; timeoutMs?: number }) =>
-        (this._composition as any).packetTracerAppService?.close(options) ?? Promise.reject(new Error("packetTracerAppService no disponible")),
-      wait: (options?: { runtime?: boolean; activeFile?: string; timeoutMs?: number }) =>
-        (this._composition as any).packetTracerAppService?.wait(options) ?? Promise.reject(new Error("packetTracerAppService no disponible")),
-      track: (options?: { clean?: boolean }) =>
-        (this._composition as any).packetTracerAppService?.track(options) ?? Promise.reject(new Error("packetTracerAppService no disponible")),
-    };
+    return createAppFacade(this._composition);
   }
 
   // -------------------------------------------------------------------------

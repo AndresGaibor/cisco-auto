@@ -19,6 +19,7 @@ import type {
   ShowRunningConfig,
   ShowInterfaces,
   ShowVersion,
+  ShowCdpNeighbors,
 } from "@cisco-auto/types";
 import type { ParserCommand } from "./index.js";
 
@@ -155,6 +156,14 @@ export function parseShowInterfaces(raw: string, source?: OutputSource) {
 export function parseShowVersion(raw: string, source?: OutputSource) {
   return parseWithSanitization<ShowVersion>(
     "show version",
+    raw,
+    { source }
+  );
+}
+
+export function parseShowCdpNeighbors(raw: string, source?: OutputSource) {
+  return parseWithSanitization<ShowCdpNeighbors>(
+    "show cdp neighbors",
     raw,
     { source }
   );

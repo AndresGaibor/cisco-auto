@@ -30,6 +30,9 @@ import { createMcpCommand } from "./mcp/index.js";
 import { createProjectCommand } from "./project/index.js";
 import { createAppCommand } from "./app/index.js";
 import { createCollabCommand } from "./collab/index.js";
+import { createInspectCommand } from "./inspect/index.js";
+import { createAgentCommand } from "./agent/index.js";
+import { createSaveCommand } from "./save.js";
 import { toPtMcpCommandCatalog } from "./mcp/command-catalog-adapter.js";
 import { formatDevDirForDisplay } from "../system/paths.js";
 
@@ -486,6 +489,49 @@ export const PUBLIC_COMMAND_DEFINITIONS: PtCommandDefinition[] = [
       "Genera reportes en .reports/pt-e2e/ con evidencia JSON y MD.",
     ],
     factory: createE2eCommand,
+  },
+  {
+    id: "save",
+    name: "save",
+    group: "configuration",
+    summary: "Persistir configuración (write memory) en dispositivos",
+    description: "Ejecuta 'write memory' en uno o varios dispositivos IOS.",
+    examples: [
+      { command: "pt save R1", description: "Guardar config en R1" },
+      { command: "pt save --all", description: "Guardar config en todos los dispositivos IOS" },
+    ],
+    related: ["pt cmd", "pt project save"],
+    agentHints: ["Usar siempre después de cambios importantes de configuración."],
+    factory: createSaveCommand,
+  },
+  {
+    id: "inspect",
+    name: "inspect",
+    group: "debug",
+    summary: "Inspección canónica del estado del laboratorio y del twin",
+    description: "Proporciona vistas detalladas de topología, vecinos, puertos y drift.",
+    examples: [
+      { command: "pt inspect topology", description: "Ver topología lógica" },
+      { command: "pt inspect neighbors", description: "Ver vecinos detectados" },
+      { command: "pt inspect drift", description: "Detectar discrepancias en el twin" },
+    ],
+    related: ["pt device list", "pt link list", "pt omni"],
+    agentHints: ["Usar para auditoría profunda de red y resolución de discrepancias."],
+    factory: createInspectCommand,
+  },
+  {
+    id: "agent",
+    name: "agent",
+    group: "core",
+    summary: "Flujo de trabajo explícito para agentes",
+    description: "Comandos especializados para facilitar el razonamiento de agentes de IA.",
+    examples: [
+      { command: "pt agent context", description: "Obtener contexto relevante para la tarea" },
+      { command: "pt agent plan", description: "Generar plan de acción" },
+    ],
+    related: ["pt doctor", "pt mcp"],
+    agentHints: ["Usa estos comandos para mejorar tu propia toma de decisiones."],
+    factory: createAgentCommand,
   },
 ];
 

@@ -79,6 +79,24 @@ export interface XmlMacEntry {
   ports: string[];
 }
 
+export interface OspfEntry {
+  processId: number;
+  routerId?: string;
+  networks: Array<{ network: string; wildcard: string; area: number }>;
+}
+
+export interface DhcpPoolEntry {
+  poolName: string;
+  network?: string;
+  subnetMask?: string;
+  defaultRouter?: string;
+  dnsServer?: string;
+  domainName?: string;
+  leaseDays?: number;
+  leaseHours?: number;
+  leaseMinutes?: number;
+}
+
 /**
  * Resultado completo del parseo de XML de dispositivo
  */
@@ -98,6 +116,9 @@ export interface ParsedDeviceXml {
   arpTable: XmlArpEntry[];
   macTable: XmlMacEntry[];
   rawXml: string;
+  ospf: OspfEntry[];
+  dhcpPools: DhcpPoolEntry[];
+  extras: Record<string, string[]>;
 }
 
 /**
@@ -144,6 +165,60 @@ function extractAllTags(xml: string, tag: string): string[] {
   return matches;
 }
 
+// Tags conocidos que ya se parsean como campos estructurados
+const KNOWN_PARSED_TAGS = new Set([
+  "hostname", "devicename", "model", "typeid", "devicetype",
+  "power", "powerstate", "iosversion", "version", "uptime",
+  "starttime", "serialnumber", "serial", "configregister",
+  "runningconfig", "startupconfig", "config",
+  "port", "module", "vlan",
+  "route", "routingentry", "iproute",
+  "arpentry", "arp",
+  "macentry", "macaddressentry", "mactableentry",
+  "name", "ipaddress", "ip", "subnetmask", "mask", "subnet",
+  "macaddress", "address",
+  "status", "linestatus", "protocolstatus", "protocol",
+  "mode", "switchportmode", "description",
+  "bandwidth", "bandwidthkbps", "delay",
+  "duplex", "fullduplex", "speed",
+  "encapsulation", "trunkvlan", "nativevlan",
+  "pins", "mediatype",
+  "autonegotiatebandwidth", "autonegotiatespeed", "autonegotiateduplex",
+  "up_method", "upmethod",
+  "clockrate",
+  "channel",
+  "port_vlan",
+  "type",
+  "slot", "portref", "ports",
+  "id", "number", "vlanid", "state",
+  "routetype", "network", "nexthop", "gateway", "via",
+  "interface", "outinterface", "intf",
+  "metric", "administrativedistance", "distance", "age",
+  "hardwareaddress",
+  "vlan",
+]);
+
+function collectUnknownTags(xml: string): Record<string, string[]> {
+  const tagNames = new Set<string>();
+  const tagRe = /<\/(\w+)>|<(\w+)(?:\s[^>]*)?\/>|<(\w+)(?:\s[^>]*?)?>/gi;
+  let m;
+  while ((m = tagRe.exec(xml)) !== null) {
+    const name = (m[1] || m[2] || m[3] || "").toLowerCase();
+    if (name) tagNames.add(name);
+  }
+
+  const extras: Record<string, string[]> = {};
+  for (const tag of tagNames) {
+    if (!KNOWN_PARSED_TAGS.has(tag)) {
+      const occurrences = extractAllTags(xml, tag);
+      if (occurrences.length > 0) {
+        extras[tag] = occurrences;
+      }
+    }
+  }
+  return extras;
+}
+
 /**
  * Parsea un XML de dispositivo PT y extrae toda la información relevante
  * @param xml - Cadena XML del dispositivo
@@ -183,15 +258,21 @@ export function parseDeviceXml(xml: string): ParsedDeviceXml {
   const modules: XmlModule[] = [];
   for (const modXml of extractAllTags(xml, "module")) {
     const slot = tagAttr(modXml, "module", "slot") || extractXmlTagContent(modXml, "slot");
+    let ports: string[] = [];
+    const portsStr = extractXmlTagContent(modXml, "ports");
+    if (portsStr) {
+      ports = portsStr.split(",").map((p) => p.trim());
+    }
+    const portRefs = extractAllTags(modXml, "portRef");
+    for (const refXml of portRefs) {
+      const ref = extractXmlTagContent(refXml, "portRef");
+      if (ref) ports.push(ref);
+    }
     modules.push({
       slot,
       model: extractXmlTagContent(modXml, "model") || undefined,
       type: extractXmlTagContent(modXml, "type") || undefined,
-      ports: extractXmlTagContent(modXml, "ports")
-        ? extractXmlTagContent(modXml, "ports")
-            .split(",")
-            .map((p) => p.trim())
-        : [],
+      ports,
     });
   }
 
@@ -255,5 +336,8 @@ export function parseDeviceXml(xml: string): ParsedDeviceXml {
     arpTable,
     macTable,
     rawXml: xml,
+    ospf: [],
+    dhcpPools: [],
+    extras: collectUnknownTags(xml),
   };
 }

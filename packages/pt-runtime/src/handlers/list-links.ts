@@ -1,6 +1,6 @@
 import type { HandlerDeps, HandlerResult } from "../utils/helpers";
 import { collectLiveLinks } from "../domain/live-link";
-import { validatePayload } from "./payload-schemas.js";
+
 
 export type ListLinksPayload = {
   type: "listLinks";
@@ -52,10 +52,6 @@ function buildStats(links: any[]) {
 }
 
 export function handleListLinks(payload: ListLinksPayload, deps: HandlerDeps): HandlerResult {
-  const validation = validatePayload("listLinks", payload);
-  if (!validation.ok) {
-    return { ok: false, code: validation.code, error: validation.error };
-  }
   const net = deps.getNet();
 
   const allLinks = collectLiveLinks(net);

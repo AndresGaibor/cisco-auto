@@ -4,6 +4,7 @@ import { createInspectTopologyCommand } from './topology.js';
 import { createInspectNeighborsCommand } from './neighbors.js';
 import { createInspectFreePortsCommand } from './free-ports.js';
 import { createInspectDriftCommand } from './drift.js';
+import { createInspectAuditCommand } from './audit.js';
 import { createInspectPortCommand } from './port.js';
 import { createInspectApiCommand } from './api.js';
 import { createEvaluateCommand } from './eval.js';
@@ -16,6 +17,7 @@ export function createInspectCommand(): Command {
   command.addCommand(createInspectNeighborsCommand());
   command.addCommand(createInspectFreePortsCommand());
   command.addCommand(createInspectDriftCommand());
+  command.addCommand(createInspectAuditCommand());
   command.addCommand(createInspectPortCommand());
   command.addCommand(createInspectApiCommand());
   command.addCommand(createEvaluateCommand());

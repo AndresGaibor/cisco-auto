@@ -93,7 +93,8 @@ export function createDeviceWithFallback(
   lw: PTLogicalWorkspace,
   net: PTNetwork,
 ): CreateDeviceResult | null {
-  for (const typeId of typeList) {
+  for (let index = 0; index < typeList.length; index++) {
+    const typeId = typeList[index]!;
     const autoName = lw.addDevice(typeId, model, x, y);
     if (!autoName) continue;
 

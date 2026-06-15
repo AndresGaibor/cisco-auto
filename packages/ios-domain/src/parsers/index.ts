@@ -506,7 +506,7 @@ export function parseShowCdpNeighbors(output: string): ShowCdpNeighbors {
     // Device ID Local Intrfce Holdtme Capability Platform Port ID
     // Capability can be multiple tokens like "R S" or "R S I"
     const match = trimmed.match(/^(\S+)\s+(\S+)\s+(\d+)\s+((?:[A-Z]\s*)+)\s+(\S+)\s+(\S+)$/);
-    
+
     if (match) {
       neighbors.push({
         deviceId: match[1]!,
@@ -515,6 +515,19 @@ export function parseShowCdpNeighbors(output: string): ShowCdpNeighbors {
         capability: match[4]!.trim(),
         platform: match[5]!,
         portId: match[6]!,
+      });
+      continue;
+    }
+
+    const fallback = trimmed.match(/^(.+?)\s{2,}(.+?)\s{2,}(\d+)\s{2,}(.+?)\s{2,}(.+?)\s{2,}(.+)$/);
+    if (fallback) {
+      neighbors.push({
+        deviceId: fallback[1]!.trim(),
+        localInterface: fallback[2]!.trim(),
+        holdtime: parseInt(fallback[3]!, 10),
+        capability: fallback[4]!.trim(),
+        platform: fallback[5]!.trim(),
+        portId: fallback[6]!.trim(),
       });
     }
   }

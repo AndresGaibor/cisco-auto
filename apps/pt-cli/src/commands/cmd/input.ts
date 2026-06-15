@@ -41,7 +41,7 @@ export function looksLikeMultiCommandInput(commandParts: string[]): boolean {
     return true;
   }
 
-  const everyPartLooksLikeFullCommand = parts.every((part) => /\s+/.test(part));
+  const everyPartLooksLikeFullCommand = parts.every((part) => /\s+/.test(part) || /^(end|exit|no|show|wr|write|copy)\b/i.test(part));
 
   if (everyPartLooksLikeFullCommand) {
     return true;

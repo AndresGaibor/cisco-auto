@@ -7,6 +7,20 @@
 // RUNNINGCONFIG o desde índice de módulo.
 //No usa DOMParser para mantener compatibilidad con el entorno QtScript de PT.
 
+import {
+  tagContent,
+  tagSelfClosing,
+  tagHasAttr,
+  tagAttrWithText,
+  tagContentAfterAttr,
+  tagAttr,
+  allTags,
+  allNonEmpty,
+  parseBool,
+  parseBoolOrStr,
+} from "./xml-tag-helpers.js";
+
+
 export interface XmlPort {
   name: string;
   ipAddress?: string;
@@ -75,6 +89,24 @@ export interface XmlMacEntry {
   ports: string[];
 }
 
+export interface OspfEntry {
+  processId: number;
+  routerId?: string;
+  networks: Array<{ network: string; wildcard: string; area: number }>;
+}
+
+export interface DhcpPoolEntry {
+  poolName: string;
+  network?: string;
+  subnetMask?: string;
+  defaultRouter?: string;
+  dnsServer?: string;
+  domainName?: string;
+  leaseDays?: number;
+  leaseHours?: number;
+  leaseMinutes?: number;
+}
+
 export interface ParsedDeviceXml {
   hostname?: string;
   model?: string;
@@ -93,82 +125,9 @@ export interface ParsedDeviceXml {
   rawXml: string;
   runningConfig?: string;
   startupConfig?: string;
-}
-
-// Alias para tags PT reales que difieren del nombre de campo
-function tagContent(xml: string, tag: string, fallback = ""): string {
-  const selfClosingRe = new RegExp(`<${tag}(?:\\s[^>]*)?\\/>`, "i");
-  const openRe = new RegExp(`<${tag}(?:[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, "i");
-
-  const selfMatch = selfClosingRe.exec(xml);
-  const openMatch = openRe.exec(xml);
-
-  if (selfMatch && (!openMatch || selfMatch.index <= openMatch.index)) {
-    return fallback;
-  }
-  return openMatch ? openMatch[1].trim() : fallback;
-}
-
-// Busca tag sin cierre (self-closing o con valor inmediato en atributo)
-function tagSelfClosing(xml: string, tag: string, fallback = ""): string {
-  const re = new RegExp(`<${tag}(?:[^>]*)?\\/>`, "i");
-  const m = xml.match(re);
-  return m ? (fallback !== "" ? fallback : m[0]) : fallback;
-}
-
-// Lee atributo desde tag completo
-function tagHasAttr(xml: string, tag: string, attr: string): boolean {
-  const re = new RegExp(`<${tag}[^>]*\\s${attr}=`, "i");
-  return re.test(xml);
-}
-
-function tagAttrWithText(xml: string, tag: string, attr: string, fallback = ""): string {
-  const re = new RegExp(`<${tag}([^>]*)>([^<]*)<\\/${tag}>`, "i");
-  const m = xml.match(re);
-  if (!m) return fallback;
-  const attrRe = new RegExp(`${attr}=["']([^"']*)["']`, "i");
-  const attrMatch = m[1].match(attrRe);
-  return attrMatch ? m[2].trim() : fallback;
-}
-
-function tagAttr(xml: string, tag: string, attr: string, fallback = ""): string {
-  const re = new RegExp(`<${tag}[^>]*\\s${attr}=["']([^"']*)["']`, "i");
-  const m = xml.match(re);
-  return m ? m[1] : fallback;
-}
-
-function tagContentAfterAttr(xml: string, tag: string, attr: string, fallback = ""): string {
-  const re = new RegExp(`<${tag}[^>]*\\s${attr}(?:=[^>]*)?>([^<]*)`, "i");
-  const m = xml.match(re);
-  return m ? m[1].trim() : fallback;
-}
-
-function allTags(xml: string, tag: string): string[] {
-  const re = new RegExp(
-    `<${tag}(?:\\s[^>]*)?>(?:[\\s\\S]*?)<\\/${tag}>|<${tag}(?:\\s[^>]*)?\\/>`,
-    "gi",
-  );
-  const matches: string[] = [];
-  let m;
-  while ((m = re.exec(xml)) !== null) {
-    matches.push(m[0]);
-  }
-  re.lastIndex = 0;
-  return matches;
-}
-
-function allNonEmpty(...calls: string[][]): string[] {
-  for (const c of calls) if (c.length > 0) return c;
-  return [];
-}
-
-function parseBool(val: string): boolean {
-  return val === "true" || val === "1" || val === "on";
-}
-
-function parseBoolOrStr(val: string): boolean | undefined {
-  if (!val) return undefined;
-  return val === "true" || val === "1" || val === "on";
+  ospf: OspfEntry[];
+  dhcpPools: DhcpPoolEntry[];
+  extras: Record<string, string[]>;
 }
 
 function parsePortFromXml(
@@ -287,6 +246,12 @@ function parseModuleFromXml(modXml: string, modulePortNames: string[]): XmlModul
     if (name) ports.push(name);
   });
 
+  const portRefEls = allTags(modXml, "portRef");
+  for (const ref of portRefEls) {
+    const refName = tagContent(ref, "portRef");
+    if (refName) ports.push(refName);
+  }
+
   return {
     slot: slot || "unknown",
     model: tagContent(modXml, "model") || tagContent(modXml, "MODEL"),
@@ -377,6 +342,130 @@ function extractPortNamesFromDeviceXml(xml: string): string[] {
   return names;
 }
 
+// Tags that the parser already extracts as structured fields
+// Cualquier tag fuera de este set se captura en extras como XML crudo
+const KNOWN_PARSED_TAGS = new Set([
+  // Device-level scalar
+  "hostname", "devicename", "model", "typeid", "devicetype",
+  "power", "powerstate", "iosversion", "version", "uptime",
+  "starttime", "serialnumber", "serial", "configregister",
+  "runningconfig", "startupconfig", "config",
+  // Container tags
+  "port", "module", "vlan",
+  "route", "routingentry", "iproute",
+  "arpentry", "arp",
+  "macentry", "macaddressentry", "mactableentry",
+  // Port-level
+  "name", "ipaddress", "ip", "subnetmask", "mask", "subnet",
+  "macaddress", "address",
+  "status", "linestatus", "protocolstatus", "protocol",
+  "mode", "switchportmode", "description",
+  "bandwidth", "bandwidthkbps", "delay",
+  "duplex", "fullduplex", "speed",
+  "encapsulation", "trunkvlan", "nativevlan",
+  "pins", "mediatype",
+  "autonegotiatebandwidth", "autonegotiatespeed", "autonegotiateduplex",
+  "up_method", "upmethod",
+  "clockrate",
+  "channel",
+  "port_vlan",
+  "type",
+  // Module-level
+  "slot", "portref", "ports",
+  // Vlan-level
+  "id", "number", "vlanid", "state",
+  // Route-level
+  "routetype", "network", "nexthop", "gateway", "via",
+  "interface", "outinterface", "intf",
+  "metric", "administrativedistance", "distance", "age",
+  // ARP-level
+  "hardwareaddress",
+  // MAC-level
+  "vlan",
+]);
+
+// Escanea tags XML no parseadas y las devuelve como extras crudos
+function parseOspfNetworksFromBlock(block: string): Array<{ network: string; wildcard: string; area: number }> {
+  const networks: Array<{ network: string; wildcard: string; area: number }> = [];
+  const re = /network\s+(\S+)\s+(\S+)\s+area\s+(\d+)/gi;
+  let m;
+  while ((m = re.exec(block)) !== null) {
+    networks.push({
+      network: m[1],
+      wildcard: m[2],
+      area: parseInt(m[3], 10),
+    });
+  }
+  return networks;
+}
+
+export function extractOspfFromRunningConfig(runningConfig: string): OspfEntry[] {
+  const entries: OspfEntry[] = [];
+  const sectionRe = /router\s+ospf\s+(\d+)([\s\S]*?)(?=^\s*!\s*$|^\s*router\s|^$)/gim;
+  let m;
+  while ((m = sectionRe.exec(runningConfig)) !== null) {
+    const processId = parseInt(m[1], 10);
+    const block = m[2];
+    if (isNaN(processId)) continue;
+    const routerIdMatch = block.match(/router-id\s+(\S+)/i);
+    entries.push({
+      processId,
+      routerId: routerIdMatch ? routerIdMatch[1] : undefined,
+      networks: parseOspfNetworksFromBlock(block),
+    });
+  }
+  return entries;
+}
+
+export function extractDhcpPoolsFromRunningConfig(runningConfig: string): DhcpPoolEntry[] {
+  const pools: DhcpPoolEntry[] = [];
+  const poolRe = /ip\s+dhcp\s+pool\s+(\S+)([\s\S]*?)(?=^\s*!\s*$|^\s*ip\s+dhcp\s+pool|^$)/gim;
+  let m;
+  while ((m = poolRe.exec(runningConfig)) !== null) {
+    const poolName = m[1];
+    const block = m[2];
+    const networkMatch = block.match(/network\s+(\S+)\s+(\S+)/i);
+    const routerMatch = block.match(/default-router\s+(\S+)/i);
+    const dnsMatch = block.match(/dns-server\s+(\S+)/i);
+    const domainMatch = block.match(/domain-name\s+(\S+)/i);
+    const leaseMatch = block.match(/lease\s+(\d+)\s+(\d+)\s+(\d+)/i);
+    pools.push({
+      poolName,
+      network: networkMatch ? networkMatch[1] : undefined,
+      subnetMask: networkMatch ? networkMatch[2] : undefined,
+      defaultRouter: routerMatch ? routerMatch[1] : undefined,
+      dnsServer: dnsMatch ? dnsMatch[1] : undefined,
+      domainName: domainMatch ? domainMatch[1] : undefined,
+      leaseDays: leaseMatch ? parseInt(leaseMatch[1], 10) : undefined,
+      leaseHours: leaseMatch ? parseInt(leaseMatch[2], 10) : undefined,
+      leaseMinutes: leaseMatch ? parseInt(leaseMatch[3], 10) : undefined,
+    });
+  }
+  return pools;
+}
+
+function collectUnknownTags(xml: string): Record<string, string[]> {
+  // Colectar todos los nombres de tag únicos en el XML
+  const tagNames = new Set<string>();
+  const tagRe = /<\/(\w+)>|<(\w+)(?:\s[^>]*)?\/>|<(\w+)(?:\s[^>]*?)?>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = tagRe.exec(xml)) !== null) {
+    const name = (m[1] || m[2] || m[3]).toLowerCase();
+    if (name) tagNames.add(name);
+  }
+
+  const extras: Record<string, string[]> = {};
+  for (const tag of tagNames) {
+    if (!KNOWN_PARSED_TAGS.has(tag)) {
+      const occurrences = allTags(xml, tag);
+      if (occurrences.length > 0) {
+        extras[tag] = occurrences;
+      }
+    }
+  }
+  return extras;
+}
+
 export function parseDeviceXml(xml: string): ParsedDeviceXml {
   if (!xml || xml.length < 10) {
     return {
@@ -391,6 +480,9 @@ export function parseDeviceXml(xml: string): ParsedDeviceXml {
       arpTable: [],
       macTable: [],
       rawXml: xml || "",
+      ospf: [],
+      dhcpPools: [],
+      extras: {},
     };
   }
 
@@ -421,14 +513,14 @@ export function parseDeviceXml(xml: string): ParsedDeviceXml {
     tagContent(xml, "serialNumber") || tagContent(xml, "serial") || tagContent(xml, "SERIALNUMBER");
   const configRegister = tagContent(xml, "configRegister") || tagContent(xml, "CONFIG_REGISTER");
 
-  const runningConfig =
+  const runningConfig = sanitizeRunningConfig(
     tagContent(xml, "runningConfig") ||
     tagContent(xml, "RUNNINGCONFIG") ||
-    tagContent(xml, "config");
-  const startupConfig =
+    tagContent(xml, "config"));
+  const startupConfig = sanitizeRunningConfig(
     tagContent(xml, "startupConfig") ||
     tagContent(xml, "STARTUPCONFIG") ||
-    tagContent(xml, "config");
+    tagContent(xml, "config"));
 
   const portNamesFromConfig = extractPortNamesFromRunningConfig(xml);
 
@@ -457,6 +549,12 @@ export function parseDeviceXml(xml: string): ParsedDeviceXml {
       if (name) modPorts.push(name);
       modulePortIdx++;
     }
+    const portRefXmls = allTags(modXmls[mIdx], "portRef");
+    for (const refXml of portRefXmls) {
+      const ref = tagContent(refXml, "portRef");
+      if (ref) modPorts.push(ref);
+    }
+
     if (modPorts.length > 0 || tagContent(modXmls[mIdx], "MODEL")) {
       modules.push({
         slot:
@@ -496,6 +594,8 @@ export function parseDeviceXml(xml: string): ParsedDeviceXml {
   );
   const macTable: XmlMacEntry[] = macXmls.map(parseMacEntry).filter((m) => m.macAddress);
 
+  const extras = collectUnknownTags(xml);
+
   return {
     hostname,
     model,
@@ -514,7 +614,15 @@ export function parseDeviceXml(xml: string): ParsedDeviceXml {
     rawXml: xml,
     runningConfig,
     startupConfig,
+    ospf: extractOspfFromRunningConfig(runningConfig || ""),
+    dhcpPools: extractDhcpPoolsFromRunningConfig(runningConfig || ""),
+    extras,
   };
+}
+
+// Remueve tags XML <LINE> del runningConfig para obtener texto IOS puro
+function sanitizeRunningConfig(raw: string): string {
+  return raw.replace(/<\/?LINE\b[^>]*>/gi, "");
 }
 
 export function extractRunningConfig(xml: string): string {

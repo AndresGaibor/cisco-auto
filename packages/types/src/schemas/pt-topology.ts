@@ -20,6 +20,7 @@ export const PortStateSchema = z.object({
   speed: z.string().optional(),
   duplex: z.enum(['auto', 'full', 'half']).optional(),
   vlan: z.number().optional(),
+  nativeVlan: z.number().optional(),
   mode: z.enum(['access', 'trunk', 'dynamic', 'unknown']).optional(),
   link: z.string().optional(), // Connected device:port
 });

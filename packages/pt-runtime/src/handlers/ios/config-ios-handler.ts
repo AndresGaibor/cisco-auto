@@ -10,14 +10,9 @@ import {
   buildDeferredConfigPlan,
   startDeferredJobOrError,
 } from "../deferred-job-factory.js";
-import { validatePayload } from "../payload-schemas.js";
+
 
 export function handleConfigIos(payload: ConfigIosPayload, api: PtRuntimeApi): PtResult {
-  const validation = validatePayload("configIos", payload);
-  if (!validation.ok) {
-    return createErrorResult(validation.error, validation.code);
-  }
-
   const deviceName = payload.device;
   const device = api.getDeviceByName(deviceName);
   if (!device) return createErrorResult(`Device not found: ${deviceName}`, "DEVICE_NOT_FOUND");

@@ -87,28 +87,28 @@ export function computeInitialDeferredPollDelayMs(
 
   const normalized = String(command ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 
-  if (/^show\s+(running-config|startup-config|run|start)\b/.test(normalized)) {
-    return 250;
-  }
-
-  if (/^show\s+interfaces?\b/.test(normalized)) {
-    return 250;
-  }
-
-  if (/^show\s+version\b/.test(normalized)) {
-    return 0;
-  }
-
-  if (
-    /^show\s+ip\s+interface\s+brief\b/.test(normalized) ||
-    /^show\s+vlan(?:\s+brief)?\b/.test(normalized) ||
-    /^show\s+cdp\s+neighbors\b/.test(normalized)
-  ) {
-    return 150;
+  for (const [hint, delayMs] of Object.entries(POLL_DELAY_HINTS)) {
+    if (normalized === hint || normalized.startsWith(hint + " ")) {
+      return delayMs;
+    }
   }
 
   return 0;
 }
+
+const POLL_DELAY_HINTS: Record<string, number> = {
+  "show running-config": 250,
+  "show startup-config": 250,
+  "show run": 250,
+  "show start": 250,
+  "show interfaces": 250,
+  "show interface": 250,
+  "show version": 0,
+  "show ip interface brief": 150,
+  "show vlan": 150,
+  "show vlan brief": 150,
+  "show cdp neighbors": 150,
+};
 
 export function computeTerminalPlanSubmitTimeoutMs(
   plan: TerminalPlan,
@@ -179,61 +179,66 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function getRuntimeStepResults(value: unknown): Record<string, unknown>[] {
-  if (!isRecord(value)) return [];
+const StepReader = {
+  getRawOutput(step: Record<string, unknown>): string {
+    return String(step.raw ?? step.rawOutput ?? step.output ?? "");
+  },
 
-  const rootStepResults = value.stepResults;
-  if (Array.isArray(rootStepResults)) {
-    return rootStepResults.filter(isRecord);
-  }
+  getStatus(step: Record<string, unknown>): number {
+    const parsed = Number(step.status ?? step.statusCode ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  },
 
-  const result = isRecord(value.result) ? value.result : null;
-  const nestedStepResults = result?.stepResults;
-  if (Array.isArray(nestedStepResults)) {
-    return nestedStepResults.filter(isRecord);
-  }
+  getDurationMs(step: Record<string, unknown>): number | undefined {
+    const startedAt = Number(step.startedAt ?? step.startedAtMs);
+    const completedAt = Number(step.completedAt ?? step.completedAtMs);
+    const durationMs = Number(step.durationMs);
 
-  return [];
-}
+    if (Number.isFinite(durationMs) && durationMs >= 0) {
+      return Math.round(durationMs);
+    }
 
-function getVisibleCommandSteps(plan: TerminalPlan): Array<{ step: any; planStepIndex: number }> {
-  return plan.steps
-    .map((step: any, planStepIndex: number) => ({ step, planStepIndex }))
-    .filter(({ step }) => {
-      const metadata = isRecord(step?.metadata) ? step.metadata : {};
-      return metadata.internal !== true && String(step?.command ?? "").trim().length > 0;
-    });
-}
+    if (Number.isFinite(startedAt) && Number.isFinite(completedAt) && completedAt >= startedAt) {
+      return Math.round(completedAt - startedAt);
+    }
 
-function getStepRawOutput(step: Record<string, unknown>): string {
-  return String(
-    step.raw ??
-      step.rawOutput ??
-      step.output ??
-      "",
-  );
-}
+    return undefined;
+  },
 
-function getStepStatus(step: Record<string, unknown>): number {
-  const parsed = Number(step.status ?? step.statusCode ?? 0);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
+  getResultsStatus(
+    fallbackStatus: number,
+    stepResults: Array<{ ok: boolean; status: number }>,
+  ): number {
+    if (stepResults.length === 0) return fallbackStatus;
+    return stepResults.every((item) => item.ok && item.status === 0) ? 0 : 1;
+  },
 
-function getStepDurationMs(step: Record<string, unknown>): number | undefined {
-  const startedAt = Number(step.startedAt ?? step.startedAtMs);
-  const completedAt = Number(step.completedAt ?? step.completedAtMs);
-  const durationMs = Number(step.durationMs);
+  getVisibleCommandSteps(plan: TerminalPlan): Array<{ step: any; planStepIndex: number }> {
+    return plan.steps
+      .map((step: any, planStepIndex: number) => ({ step, planStepIndex }))
+      .filter(({ step }) => {
+        const metadata = isRecord(step?.metadata) ? step.metadata : {};
+        return metadata.internal !== true && String(step?.command ?? "").trim().length > 0;
+      });
+  },
 
-  if (Number.isFinite(durationMs) && durationMs >= 0) {
-    return Math.round(durationMs);
-  }
+  getRuntimeStepResults(value: unknown): Record<string, unknown>[] {
+    if (!isRecord(value)) return [];
 
-  if (Number.isFinite(startedAt) && Number.isFinite(completedAt) && completedAt >= startedAt) {
-    return Math.round(completedAt - startedAt);
-  }
+    const rootStepResults = value.stepResults;
+    if (Array.isArray(rootStepResults)) {
+      return rootStepResults.filter(isRecord);
+    }
 
-  return undefined;
-}
+    const result = isRecord(value.result) ? value.result : null;
+    const nestedStepResults = result?.stepResults;
+    if (Array.isArray(nestedStepResults)) {
+      return nestedStepResults.filter(isRecord);
+    }
+
+    return [];
+  },
+};
 
 function mergeWarnings(...sources: unknown[]): string[] {
   const result: string[] = [];
@@ -269,10 +274,10 @@ function parseRuntimeStepResults(
   parsed?: unknown;
   error?: string;
 }> {
-  const runtimeSteps = getRuntimeStepResults(value);
+  const runtimeSteps = StepReader.getRuntimeStepResults(value);
   if (runtimeSteps.length === 0) return [];
 
-  const visibleSteps = getVisibleCommandSteps(plan);
+  const visibleSteps = StepReader.getVisibleCommandSteps(plan);
   const results: Array<{
     stepIndex: number;
     kind?: string;
@@ -297,8 +302,8 @@ function parseRuntimeStepResults(
 
     if (!runtimeStep) continue;
 
-    const rawOutput = getStepRawOutput(runtimeStep);
-    const status = getStepStatus(runtimeStep);
+    const rawOutput = StepReader.getRawOutput(runtimeStep);
+    const status = StepReader.getStatus(runtimeStep);
     const parsed = responseParser.parseCommandResponse(
       {
         ok: status === 0 && !runtimeStep.error,
@@ -331,7 +336,7 @@ function parseRuntimeStepResults(
       output: parsed.raw.trim(),
       rawOutput,
       status: parsed.status,
-      durationMs: getStepDurationMs(runtimeStep),
+      durationMs: StepReader.getDurationMs(runtimeStep),
       warnings,
       parsed: parsed.parsed,
       error: typeof runtimeStep.error === "string" ? runtimeStep.error : parsed.error,
@@ -355,13 +360,6 @@ function combineStepWarnings(
   return mergeWarnings(baseWarnings, stepResults.flatMap((item) => item.warnings));
 }
 
-function getStepResultsStatus(
-  fallbackStatus: number,
-  stepResults: Array<{ ok: boolean; status: number }>,
-): number {
-  if (stepResults.length === 0) return fallbackStatus;
-  return stepResults.every((item) => item.ok && item.status === 0) ? 0 : 1;
-}
 
 
 function parseInlineTerminalPlanResult(
@@ -388,7 +386,7 @@ function parseInlineTerminalPlanResult(
   const inlineStepResults = parseRuntimeStepResults(submitValue, plan, responseParser);
   const inlineOutput = combineStepOutput(inlineStepResults);
   const inlineWarnings = combineStepWarnings(warnings, inlineStepResults);
-  const inlineStatus = getStepResultsStatus(parsed.status, inlineStepResults);
+  const inlineStatus = StepReader.getResultsStatus(parsed.status, inlineStepResults);
 
   return {
     ok: inlineStepResults.length > 0 ? inlineStatus === 0 : parsed.ok,
@@ -651,7 +649,7 @@ async function handleDeferredPoll(
   const deferredStepResults = parseRuntimeStepResults(pollValue, plan, responseParser);
   const deferredOutput = combineStepOutput(deferredStepResults);
   const deferredWarnings = combineStepWarnings(warnings, deferredStepResults);
-  const deferredStatus = getStepResultsStatus(parsed.status, deferredStepResults);
+  const deferredStatus = StepReader.getResultsStatus(parsed.status, deferredStepResults);
 
   const parsedOk = deferredStepResults.length > 0 ? deferredStatus === 0 : parsed.ok && parsed.status === 0;
   const finalEvidence = parsedOk

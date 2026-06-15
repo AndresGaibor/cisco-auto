@@ -42,7 +42,21 @@ export function parseShowCdpNeighbors(output: string): ShowCdpNeighbors {
     const platform = afterPlatform.substring(0, platformEnd).trim();
     const portId = afterPlatform.substring(platformEnd).trim();
 
-    if (!deviceId || !localInterface) continue;
+    if (!deviceId || !localInterface || !holdtimeStr || !platform || !portId) {
+      const fallback = trimmed.match(/^(.+?)\s{2,}(.+?)\s{2,}(\d+)\s{2,}(.+?)\s{2,}(.+?)\s{2,}(.+)$/);
+      if (!fallback) continue;
+
+      neighbors.push({
+        deviceId: fallback[1]!.trim(),
+        localInterface: fallback[2]!.trim(),
+        holdtime: parseInt(fallback[3]!, 10),
+        capability: fallback[4]!.trim(),
+        platform: fallback[5]!.trim(),
+        portId: fallback[6]!.trim(),
+      });
+
+      continue;
+    }
 
     const holdtime = parseInt(holdtimeStr, 10);
     if (isNaN(holdtime)) continue;

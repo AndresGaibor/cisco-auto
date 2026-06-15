@@ -195,7 +195,9 @@ export function getScenariosForProfile(
   const seen = new Set<string>();
 
   for (const tag of profileTags) {
-    const scenarios = listScenariosByTags([tag]);
+    const scenarios = Array.from(SCENARIOS.values()).filter((scenario) =>
+      scenario.tags.includes(tag) || scenario.profile.includes(tag)
+    );
     for (const s of scenarios) {
       if (!seen.has(s.id)) {
         seen.add(s.id);

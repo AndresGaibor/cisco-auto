@@ -227,7 +227,8 @@ export function createDeviceWithFallback(
 
   deps.dprint("[createDeviceWithFallback] Trying model='" + model + "' with types=[" + typeList.join(",") + "]");
 
-  for (const typeId of typeList) {
+  for (let index = 0; index < typeList.length; index++) {
+    const typeId = typeList[index]!;
     deps.dprint("[createDeviceWithFallback] Attempting: typeId=" + typeId);
 
     const autoName = lw.addDevice(typeId, model, x, y);
