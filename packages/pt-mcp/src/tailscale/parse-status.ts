@@ -30,7 +30,20 @@ export function extractPublicUrl(
   const dnsName = normalizeDnsName(tailscaleStatus.Self?.DNSName);
   if (!dnsName) return null;
 
-  const web = funnelStatus.Web ?? {};
+  let web = funnelStatus.Web ?? {};
+  const fg = (funnelStatus as any).Foreground;
+  if (fg) {
+    if (fg.Web) {
+      web = fg.Web;
+    } else {
+      for (const key of Object.keys(fg)) {
+        if (fg[key] && fg[key].Web) {
+          web = fg[key].Web;
+          break;
+        }
+      }
+    }
+  }
 
   if (publicPort) {
     const portKey = `${dnsName}:${publicPort}`;

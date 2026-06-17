@@ -47,8 +47,8 @@ describe("IosCommandExecutor Edge Cases", () => {
 
     // El primer argumento de runTerminalPlan es el plan
     const planSent = runTerminalPlan.mock.calls[0][0];
-    // En el plan, los steps tienen 'timeout', no 'timeoutMs'
-    expect(planSent.steps[0].timeout).toBeGreaterThanOrEqual(60000);
+    const cmdStep = planSent.steps.find((s: any) => s.command === "show tech-support");
+    expect(cmdStep.timeout).toBeGreaterThanOrEqual(60000);
   });
 
   test("permite comando 'dir' en lote optimizado", async () => {

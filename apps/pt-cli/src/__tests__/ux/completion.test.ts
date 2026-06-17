@@ -10,6 +10,7 @@ describe("completion registry", () => {
       .sort();
 
     expect(visible).toEqual([
+      "agent",
       "app",
       "bench",
       "bridge",
@@ -20,12 +21,14 @@ describe("completion registry", () => {
       "device",
       "doctor",
       "e2e",
+      "inspect",
       "link",
       "logs",
       "mcp",
       "omni",
       "project",
       "runtime",
+      "save",
       "set",
       "verify",
     ]);

@@ -5,6 +5,7 @@ import { getRegisteredCommandIds } from "../../commands/command-registry.js";
 describe("registry público", () => {
   test("solo expone comandos raíz profesionales", () => {
     expect(getRegisteredCommandIds()).toEqual([
+      "agent",
       "app",
       "bench",
       "bridge",
@@ -15,12 +16,14 @@ describe("registry público", () => {
       "device",
       "doctor",
       "e2e",
+      "inspect",
       "link",
       "logs",
       "mcp",
       "omni",
       "project",
       "runtime",
+      "save",
       "set",
       "verify",
     ]);

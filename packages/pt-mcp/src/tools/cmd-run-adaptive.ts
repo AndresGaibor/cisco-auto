@@ -81,16 +81,13 @@ export function mergeRecoveredSubResults(original: SequentialSubCommandResult[],
 export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorFactory: () => Error): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
 
-  try {
-    return Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(errorFactory()), timeoutMs);
-      }),
-    ]);
-  } finally {
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => reject(errorFactory()), timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
     if (timer) clearTimeout(timer);
-  }
+  });
 }
 
 export function buildRecoveryTimeoutWarning(index: number, command: string): { code: string; severity: "warning"; message: string; actionable: boolean } {

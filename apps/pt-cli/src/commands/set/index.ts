@@ -2,7 +2,6 @@
 import { randomUUID } from "node:crypto";
 import { Command } from "commander";
 import chalk from "chalk";
-import { createTerminalCommandService } from "@cisco-auto/pt-control/services";
 import { runCommand } from "../../application/run-command.js";
 import { createSuccessResult, createErrorResult } from "../../contracts/cli-result.js";
 import { getGlobalFlags } from "../../flags.js";
@@ -288,22 +287,21 @@ function createSetInterfaceCommand(): Command {
         },
         payloadPreview: { device, interfaceName, changes },
         execute: async (ctx) => {
-          const service = createTerminalCommandService({
-            controller: ctx.controller as any,
-            runtimeTerminal: null,
-            generateId: () => `set-int-${randomUUID().slice(0, 8)}`,
-          });
+          try {
+            const result = (await ctx.controller.configIosWithResult(device, commands)) as any;
 
-          const result = await service.executeCommand(device, commands.join("\n"), {
-            timeoutMs: flags.timeout ?? 30000,
-            mode: "safe",
-          });
-
-          if (!result.ok) {
+            if (!result.ok) {
+              return createErrorResult("set.interface", {
+                code: "INTERFACE_CONFIG_FAILED",
+                message: `Error configurando interfaz ${interfaceName} en ${device}`,
+                details: { output: result.raw }
+              });
+            }
+          } catch (error) {
             return createErrorResult("set.interface", {
               code: "INTERFACE_CONFIG_FAILED",
               message: `Error configurando interfaz ${interfaceName} en ${device}`,
-              details: { output: result.output }
+              details: { output: error instanceof Error ? error.message : String(error) }
             });
           }
 

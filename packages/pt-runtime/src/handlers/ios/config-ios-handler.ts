@@ -13,13 +13,16 @@ import {
 
 
 export function handleConfigIos(payload: ConfigIosPayload, api: PtRuntimeApi): PtResult {
+  if (!payload || !payload.device || typeof payload.device !== "string") {
+    return createErrorResult("Missing or invalid payload.device", "INVALID_PAYLOAD");
+  }
+  if (!payload.commands || !Array.isArray(payload.commands) || payload.commands.length === 0) {
+    return createErrorResult("Missing or empty payload.commands", "INVALID_PAYLOAD");
+  }
+
   const deviceName = payload.device;
   const device = api.getDeviceByName(deviceName);
   if (!device) return createErrorResult(`Device not found: ${deviceName}`, "DEVICE_NOT_FOUND");
-
-  if (!payload.commands || payload.commands.length === 0) {
-    return createErrorResult("No commands provided", "EMPTY_COMMANDS");
-  }
 
   const plan = buildDeferredConfigPlan(deviceName, {
     commands: payload.commands,

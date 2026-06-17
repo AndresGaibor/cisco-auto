@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, vi } from "bun:test";
+import { beforeEach, afterEach, describe, expect, test, vi } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
@@ -12,6 +12,12 @@ import { createDeviceKindResolver } from "./device-kind-resolver.js";
 
 describe("createDeviceKindResolver", () => {
   let tempRoot = "";
+  let originalPtDevDir: string | undefined;
+
+  beforeEach(() => {
+    originalPtDevDir = process.env.PT_DEV_DIR;
+    delete process.env.PT_DEV_DIR;
+  });
 
   afterEach(() => {
     if (tempRoot) {
@@ -19,7 +25,11 @@ describe("createDeviceKindResolver", () => {
       tempRoot = "";
     }
     fakeHome = "";
-    delete process.env.PT_DEV_DIR;
+    if (originalPtDevDir !== undefined) {
+      process.env.PT_DEV_DIR = originalPtDevDir;
+    } else {
+      delete process.env.PT_DEV_DIR;
+    }
   });
 
   test("usa el directorio pt-dev del host cuando no hay PT_DEV_DIR", async () => {

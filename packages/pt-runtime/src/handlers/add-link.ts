@@ -57,6 +57,22 @@ function deleteExistingLink(deps: HandlerDeps, deviceName: string, portName: str
 }
 
 export function handleAddLink(payload: AddLinkPayload, deps: HandlerDeps): HandlerResult {
+  if (!payload || payload.type !== "addLink") {
+    return { ok: false, code: "INVALID_PAYLOAD", error: "Missing or invalid payload.type" };
+  }
+  if (!payload.device1 || typeof payload.device1 !== "string") {
+    return { ok: false, code: "INVALID_PAYLOAD", error: "Missing or invalid payload.device1" };
+  }
+  if (!payload.device2 || typeof payload.device2 !== "string") {
+    return { ok: false, code: "INVALID_PAYLOAD", error: "Missing or invalid payload.device2" };
+  }
+  if (!payload.port1 || typeof payload.port1 !== "string") {
+    return { ok: false, code: "INVALID_PAYLOAD", error: "Missing or invalid payload.port1" };
+  }
+  if (!payload.port2 || typeof payload.port2 !== "string") {
+    return { ok: false, code: "INVALID_PAYLOAD", error: "Missing or invalid payload.port2" };
+  }
+
   const net = deps.getNet();
   const lw = deps.getLW();
   const { dprint } = deps;

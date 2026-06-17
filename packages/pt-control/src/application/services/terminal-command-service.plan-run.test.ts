@@ -309,6 +309,8 @@ describe("createTerminalCommandService plan run", () => {
 
     expect(submittedPlan.steps.map((step: any) => step.command ?? step.expectMode)).toEqual([
       "privileged-exec",
+      "terminal length 0",
+      "terminal width 512",
       "show running-config",
     ]);
   });

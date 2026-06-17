@@ -1,7 +1,29 @@
-import { describe, expect, test, vi } from "bun:test";
+import { describe, expect, test, vi, beforeEach, afterEach } from "bun:test";
 import { createTerminalCommandService } from "./terminal-command-service.js";
+import { mkdtempSync, rmSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 
 describe("TerminalCommandService IOS semantic errors", () => {
+  let tempRoot = "";
+  let originalPtDevDir = process.env.PT_DEV_DIR;
+
+  beforeEach(() => {
+    tempRoot = mkdtempSync(join(process.cwd(), "tmp-terminal-service-"));
+    mkdirSync(join(tempRoot, "cache"), { recursive: true });
+    process.env.PT_DEV_DIR = tempRoot;
+  });
+
+  afterEach(() => {
+    if (tempRoot) {
+      rmSync(tempRoot, { recursive: true, force: true });
+      tempRoot = "";
+    }
+    if (originalPtDevDir !== undefined) {
+      process.env.PT_DEV_DIR = originalPtDevDir;
+    } else {
+      delete process.env.PT_DEV_DIR;
+    }
+  });
   test("convierte % Invalid input detected en ok:false aunque runtimeResult.ok sea true", async () => {
     const service = createTerminalCommandService({
       generateId: () => "test-plan-1",

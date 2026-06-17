@@ -21,14 +21,15 @@ ptApi: [
     "pt-api/pt-types.ts",
     "pt-api/pt-processes.ts",
     "pt-api/pt-events.ts",
+    "pt-api/registry/device.ts",
+    "pt-api/registry/file.ts",
+    "pt-api/registry/managers.ts",
+    "pt-api/registry/method-index.ts",
+    "pt-api/registry/network.ts",
+    "pt-api/registry/port.ts",
+    "pt-api/registry/terminal.ts",
+    "pt-api/registry/workspace.ts",
     "pt-api/index.ts",
-  ],
-
-  runtime: [
-    "runtime/contracts.ts",
-    "runtime/constants.ts",
-    "runtime/types.ts",
-    "runtime/helpers.ts",
   ],
 
   domain: [
@@ -50,6 +51,7 @@ utils: [
     "utils/device-creation.ts",
     "utils/device-utils.ts",
     "utils/device-xml-parser.ts",
+    "utils/xml-tag-helpers.ts",
     "utils/handler-types.ts",
     "utils/port-utils.ts",
   ],

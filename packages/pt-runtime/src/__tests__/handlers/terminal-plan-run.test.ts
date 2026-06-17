@@ -267,7 +267,7 @@ describe("handleTerminalPlanRun", () => {
       deferred: true,
       ticket: "job-no-inline",
     });
-    expect(advanceJob).not.toHaveBeenCalled();
+    expect(advanceJob).toHaveBeenCalledTimes(1);
     expect(getJobState).not.toHaveBeenCalled();
   });
 

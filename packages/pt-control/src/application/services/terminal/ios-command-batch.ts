@@ -43,7 +43,8 @@ function isReadOnlyOptimizedBatchCommand(command: string): boolean {
     /^show\b/.test(cmd) ||
     /^ping\b/.test(cmd) ||
     /^traceroute\b/.test(cmd) ||
-    /^tracert\b/.test(cmd)
+    /^tracert\b/.test(cmd) ||
+    /^dir\b/.test(cmd)
   );
 }
 

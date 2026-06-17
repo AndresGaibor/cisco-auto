@@ -92,11 +92,11 @@ describe("Phase 3 - Config Handlers", () => {
       expect((result as any).code).toBe("RUNTIME_API_MISSING_CREATE_JOB");
     });
 
-    it("returns EMPTY_COMMANDS for empty commands", () => {
+    it("returns INVALID_PAYLOAD for empty commands", () => {
       const noCreateJobDeps = { ...deps, createJob: undefined };
       const result = handleConfigIos({ type: "configIos", device: "R1", commands: [] }, noCreateJobDeps);
       expect(result.ok).toBe(false);
-      expect((result as any).code).toBe("EMPTY_COMMANDS");
+      expect((result as any).code).toBe("INVALID_PAYLOAD");
     });
 
     it("returns deferred: true with ticket for valid config", () => {

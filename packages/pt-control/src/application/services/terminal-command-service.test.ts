@@ -158,12 +158,12 @@ describe("TerminalCommandService IOS semantic errors", () => {
     expect(result.output).toContain("Cisco IOS Software");
     expect(result.warnings).toEqual(
       expect.arrayContaining([
-        expect.stringContaining("Se reintentó el comando IOS por timeout recuperable"),
+        expect.stringContaining("se reintentó el comando IOS"),
       ]),
     );
     expect(result.evidence).toMatchObject({
       retry: {
-        reason: "empty_show_version_timeout",
+        reason: "empty_terminal_timeout",
         attempts: 2,
         firstErrorCode: "JOB_TIMEOUT",
         firstTicket: "cmd-first-timeout",
@@ -215,7 +215,7 @@ describe("TerminalCommandService IOS semantic errors", () => {
       } as any,
     });
 
-    const result = await service.executeCommand("SW-SRV-DIST", "show running-config", {
+    const result = await service.executeCommand("SW-SRV-DIST", "configure terminal", {
       timeoutMs: 12000,
       mode: "safe",
     } as any);

@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 
 export interface BootstrapCheckpointOptions {
   checkpointBaseUrl: string;
@@ -57,6 +58,19 @@ export async function bootstrapLatestCheckpoint(
   }
 
   const bytes = new Uint8Array(await pktRes.arrayBuffer());
+
+  if (body.sha256) {
+    const computedSha = createHash("sha256").update(bytes).digest("hex");
+    if (computedSha !== body.sha256) {
+      return {
+        checked: true,
+        checkpointId,
+        downloaded: false,
+        error: `Fallo de integridad SHA256: esperado ${body.sha256}, obtenido ${computedSha}`,
+      };
+    }
+  }
+
   const tempDir = opts.tempDir ?? join(tmpdir(), "pt-collab-bootstrap");
   mkdirSync(tempDir, { recursive: true });
   const tempPath = join(tempDir, `${checkpointId}.pkt`);

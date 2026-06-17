@@ -344,45 +344,45 @@ function extractPortNamesFromDeviceXml(xml: string): string[] {
 
 // Tags that the parser already extracts as structured fields
 // Cualquier tag fuera de este set se captura en extras como XML crudo
-const KNOWN_PARSED_TAGS = new Set([
+const KNOWN_PARSED_TAGS: Record<string, boolean> = {
   // Device-level scalar
-  "hostname", "devicename", "model", "typeid", "devicetype",
-  "power", "powerstate", "iosversion", "version", "uptime",
-  "starttime", "serialnumber", "serial", "configregister",
-  "runningconfig", "startupconfig", "config",
+  "hostname": true, "devicename": true, "model": true, "typeid": true, "devicetype": true,
+  "power": true, "powerstate": true, "iosversion": true, "version": true, "uptime": true,
+  "starttime": true, "serialnumber": true, "serial": true, "configregister": true,
+  "runningconfig": true, "startupconfig": true, "config": true,
   // Container tags
-  "port", "module", "vlan",
-  "route", "routingentry", "iproute",
-  "arpentry", "arp",
-  "macentry", "macaddressentry", "mactableentry",
+  "port": true, "module": true, "vlan": true,
+  "route": true, "routingentry": true, "iproute": true,
+  "arpentry": true, "arp": true,
+  "macentry": true, "macaddressentry": true, "mactableentry": true,
   // Port-level
-  "name", "ipaddress", "ip", "subnetmask", "mask", "subnet",
-  "macaddress", "address",
-  "status", "linestatus", "protocolstatus", "protocol",
-  "mode", "switchportmode", "description",
-  "bandwidth", "bandwidthkbps", "delay",
-  "duplex", "fullduplex", "speed",
-  "encapsulation", "trunkvlan", "nativevlan",
-  "pins", "mediatype",
-  "autonegotiatebandwidth", "autonegotiatespeed", "autonegotiateduplex",
-  "up_method", "upmethod",
-  "clockrate",
-  "channel",
-  "port_vlan",
-  "type",
+  "name": true, "ipaddress": true, "ip": true, "subnetmask": true, "mask": true, "subnet": true,
+  "macaddress": true, "address": true,
+  "status": true, "linestatus": true, "protocolstatus": true, "protocol": true,
+  "mode": true, "switchportmode": true, "description": true,
+  "bandwidth": true, "bandwidthkbps": true, "delay": true,
+  "duplex": true, "fullduplex": true, "speed": true,
+  "encapsulation": true, "trunkvlan": true, "nativevlan": true,
+  "pins": true, "mediatype": true,
+  "autonegotiatebandwidth": true, "autonegotiatespeed": true, "autonegotiateduplex": true,
+  "up_method": true, "upmethod": true,
+  "clockrate": true,
+  "channel": true,
+  "port_vlan": true,
+  "type": true,
   // Module-level
-  "slot", "portref", "ports",
+  "slot": true, "portref": true, "ports": true,
   // Vlan-level
-  "id", "number", "vlanid", "state",
+  "id": true, "number": true, "vlanid": true, "state": true,
   // Route-level
-  "routetype", "network", "nexthop", "gateway", "via",
-  "interface", "outinterface", "intf",
-  "metric", "administrativedistance", "distance", "age",
+  "routetype": true, "network": true, "nexthop": true, "gateway": true, "via": true,
+  "interface": true, "outinterface": true, "intf": true,
+  "metric": true, "administrativedistance": true, "distance": true, "age": true,
   // ARP-level
-  "hardwareaddress",
+  "hardwareaddress": true,
   // MAC-level
-  "vlan",
-]);
+  "vlan": true,
+};
 
 // Escanea tags XML no parseadas y las devuelve como extras crudos
 function parseOspfNetworksFromBlock(block: string): Array<{ network: string; wildcard: string; area: number }> {
@@ -445,21 +445,23 @@ export function extractDhcpPoolsFromRunningConfig(runningConfig: string): DhcpPo
 }
 
 function collectUnknownTags(xml: string): Record<string, string[]> {
-  // Colectar todos los nombres de tag únicos en el XML
-  const tagNames = new Set<string>();
+  // Colectar todos los nombres de tag únicos en el XML usando un objeto de lookup
+  const tagNames: Record<string, boolean> = {};
   const tagRe = /<\/(\w+)>|<(\w+)(?:\s[^>]*)?\/>|<(\w+)(?:\s[^>]*?)?>/gi;
   let m: RegExpExecArray | null;
   while ((m = tagRe.exec(xml)) !== null) {
     const name = (m[1] || m[2] || m[3]).toLowerCase();
-    if (name) tagNames.add(name);
+    if (name) tagNames[name] = true;
   }
 
   const extras: Record<string, string[]> = {};
-  for (const tag of tagNames) {
-    if (!KNOWN_PARSED_TAGS.has(tag)) {
-      const occurrences = allTags(xml, tag);
-      if (occurrences.length > 0) {
-        extras[tag] = occurrences;
+  for (const tag in tagNames) {
+    if (Object.prototype.hasOwnProperty.call(tagNames, tag)) {
+      if (!KNOWN_PARSED_TAGS[tag]) {
+        const occurrences = allTags(xml, tag);
+        if (occurrences.length > 0) {
+          extras[tag] = occurrences;
+        }
       }
     }
   }

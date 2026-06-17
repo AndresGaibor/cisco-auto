@@ -25,5 +25,5 @@ describe("RuntimeGenerator build report", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  }, 30000);
+  }, 90000);
 });

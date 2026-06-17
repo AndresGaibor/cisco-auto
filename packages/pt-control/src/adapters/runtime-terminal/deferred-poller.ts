@@ -140,7 +140,7 @@ export async function pollDeferredUntilDone(
   const parsed = measureAdapterSync(timings, "terminalPlanParseResponseMs", () =>
     responseParser.parseCommandResponse(pollValue, {
       stepIndex: 0,
-      isHost: false,
+      isHost: plan.metadata?.deviceKind === "host",
       command: parseCommand,
     }),
   );
@@ -242,7 +242,7 @@ export async function pollNativeDeferredUntilDone(
 
   const parsed = responseParser.parseCommandResponse(pollValue, {
     stepIndex: 0,
-    isHost: false,
+    isHost: plan.metadata?.deviceKind === "host",
     command,
   });
 

@@ -113,6 +113,9 @@ export function createHostCommandPlan(
         expectedPrompt: options?.expectedPrompt,
       },
     ],
+    metadata: {
+      deviceKind: "host",
+    },
   };
 }
 

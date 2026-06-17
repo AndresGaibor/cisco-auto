@@ -9,6 +9,10 @@ import { createErrorResult, createSuccessResult } from "./result-factories";
 
 
 export function handleConfigHost(payload: ConfigHostPayload, api: PtRuntimeApi): PtResult {
+  if (!payload || !payload.device || typeof payload.device !== "string") {
+    return createErrorResult("Missing or invalid payload.device", "INVALID_PAYLOAD");
+  }
+
   const device = api.getDeviceByName(payload.device);
   if (!device) {
     return createErrorResult(`Device not found: ${payload.device}`, "DEVICE_NOT_FOUND");

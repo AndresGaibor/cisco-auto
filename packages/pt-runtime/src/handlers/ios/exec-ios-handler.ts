@@ -13,13 +13,16 @@ import {
 
 
 export function handleExecIos(payload: ExecIosPayload, api: PtRuntimeApi): PtResult {
+  if (!payload || !payload.device || typeof payload.device !== "string") {
+    return createErrorResult("Missing or invalid payload.device", "INVALID_PAYLOAD");
+  }
+  if (!payload.command || typeof payload.command !== "string" || !payload.command.trim()) {
+    return createErrorResult("Missing or invalid payload.command", "INVALID_PAYLOAD");
+  }
+
   const deviceName = payload.device;
   const device = api.getDeviceByName(deviceName);
   if (!device) return createErrorResult(`Device not found: ${deviceName}`, "DEVICE_NOT_FOUND");
-
-  if (!payload.command || !String(payload.command).trim()) {
-    return createErrorResult("Empty command not supported in sync wrapper", "EMPTY_COMMAND");
-  }
 
   const plan = buildDeferredCommandPlan(deviceName, {
     command: payload.command,

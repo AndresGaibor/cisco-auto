@@ -42,6 +42,12 @@ export function resolveImportPath(
     if (knownFiles.has(candidate)) return candidate;
   }
 
+  for (const candidate of candidates) {
+    if (candidate.endsWith(".ts") || candidate.endsWith(".tsx")) {
+      return candidate;
+    }
+  }
+
   return null;
 }
 
@@ -102,17 +108,16 @@ export function shouldShowValidationDetails(): boolean {
 }
 
 export function reportPtSafeValidation(label: string, validation: ValidationResult): void {
-  if (validation.valid) return;
-
-  if (!shouldShowValidationDetails()) {
-    console.warn(
-      `[${label}] PT-safe validation produced ` +
-        `${validation.errors.length} error(s) and ${validation.warnings.length} warning(s). ` +
-        `Details hidden by default. Set PT_SHOW_VALIDATION_WARNINGS=1 to inspect them.`,
-    );
+  if (validation.errors.length === 0) {
+    if (validation.warnings.length > 0 && shouldShowValidationDetails()) {
+      console.warn(`[${label}] PT-safe validation warnings:`);
+      console.warn(formatValidationResult(validation));
+    }
     return;
   }
 
+  // Always output the detailed validation results when there are hard errors
   console.error(`[${label}] Validation FAILED:`);
   console.error(formatValidationResult(validation));
+  throw new Error(`[${label}] PT-safe validation failed with ${validation.errors.length} error(s). Build aborted.`);
 }

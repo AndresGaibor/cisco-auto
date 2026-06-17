@@ -152,7 +152,7 @@ export function collectLiveLinks(net: any): LiveLink[] {
   // REFRESH: En algunas versiones de PT, el objeto 'net' pasado puede estar estático.
   var freshNet = net;
   try {
-      if (typeof ipc !== "undefined" && typeof ipc.network === "function") {
+      if (typeof ipc !== "undefined" && typeof ipc.network === "function" && typeof Bun === "undefined") {
           freshNet = ipc.network();
       }
   } catch(e) {}

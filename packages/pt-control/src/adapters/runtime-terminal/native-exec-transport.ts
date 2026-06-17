@@ -113,7 +113,7 @@ export async function executeTerminalNativeExec(
 
   const parsed = responseParser.parseCommandResponse(nativeValue, {
     stepIndex: 0,
-    isHost: false,
+    isHost: plan.metadata?.deviceKind === "host",
     command,
   });
 

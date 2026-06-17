@@ -20,7 +20,6 @@ export const RUNTIME_MODULE_GROUPS = {
   core: {
     files: [
       ...RUNTIME_MANIFEST.utils,
-      ...RUNTIME_MANIFEST.runtime,
     ],
     description: "Core utilities and runtime helpers",
   },

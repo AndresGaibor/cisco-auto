@@ -318,7 +318,7 @@ function parseRuntimeStepResults(
       },
       {
         stepIndex: planStepIndex,
-        isHost: false,
+        isHost: plan.metadata?.deviceKind === "host",
         command,
       },
     );
@@ -374,13 +374,13 @@ function parseInlineTerminalPlanResult(
   const parsed = measureAdapterSync(timings, "terminalPlanParseResponseMs", () =>
     responseParser.parseCommandResponse(submitValue, {
       stepIndex: 0,
-      isHost: false,
+      isHost: plan.metadata?.deviceKind === "host",
       command: parseCommand,
     }),
   );
 
   const warnings = [...parsed.warnings];
-  const mismatchWarning = responseParser.checkPromptMismatch(parsed, {} as never);
+  const mismatchWarning = responseParser.checkPromptMismatch(parsed, plan.steps[plan.steps.length - 1] ?? {});
   if (mismatchWarning) warnings.push(mismatchWarning);
 
   const inlineStepResults = parseRuntimeStepResults(submitValue, plan, responseParser);
@@ -457,7 +457,7 @@ export async function executeTerminalPlanRun(
     const parsed = measureAdapterSync(timings, "terminalPlanParseResponseMs", () =>
       responseParser.parseCommandResponse(submitValue, {
         stepIndex: 0,
-        isHost: false,
+        isHost: plan.metadata?.deviceKind === "host",
         command: parseCommand,
       }),
     );
@@ -494,7 +494,7 @@ export async function executeTerminalPlanRun(
   const parsed = measureAdapterSync(timings, "terminalPlanParseResponseMs", () =>
     responseParser.parseCommandResponse(submitValue, {
       stepIndex: 0,
-      isHost: false,
+      isHost: plan.metadata?.deviceKind === "host",
       command: parseCommand,
     }),
   );
@@ -637,7 +637,7 @@ async function handleDeferredPoll(
   const parsed = measureAdapterSync(timings, "terminalPlanParseResponseMs", () =>
     responseParser.parseCommandResponse(pollValue, {
       stepIndex: 0,
-      isHost: false,
+      isHost: plan.metadata?.deviceKind === "host",
       command: parseCommand,
     }),
   );

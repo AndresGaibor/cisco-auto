@@ -27,7 +27,7 @@ function stripSemanticCleanupSection(value: string): string {
   return text;
 }
 
-function extractPrimaryIosErrorMessage(value: unknown): string {
+export function extractPrimaryIosErrorMessage(value: unknown): string {
   const withoutCleanup = stripSemanticCleanupSection(normalizeTerminalText(value));
   const lines = withoutCleanup
     .split("\n")
@@ -74,6 +74,13 @@ export function extractIosFailureDetails(input: {
 }): IosFailureDetails {
   const output = String(input.output ?? "").trim();
   const loweredOutput = output.toLowerCase();
+
+  if (loweredOutput.includes("--more--")) {
+    return {
+      code: "IOS_PAGER_STUCK",
+      message: `Terminal page stuck on --More--. Pager was not bypassed correctly or execution timed out. Output tail:\n${output.slice(-200)}`,
+    };
+  }
 
   if (loweredOutput.includes("invalid input detected") || loweredOutput.includes("invalid command")) {
     return {
@@ -154,7 +161,7 @@ export function detectIosSemanticFailure(output: unknown): { code: string; messa
     };
   }
 
-  if (lower.includes("translating...")) {
+  if (lower.includes("translating")) {
     return {
       code: "IOS_DNS_LOOKUP_TRIGGERED",
       message: recent.trim() || "DNS lookup activado durante ejecución de comando",
@@ -165,6 +172,13 @@ export function detectIosSemanticFailure(output: unknown): { code: string; messa
     return {
       code: "IOS_PRIVILEGE_REQUIRED",
       message: recent.trim() || "Se requiere privilegio elevado",
+    };
+  }
+
+  if (lower.includes("% permission denied")) {
+    return {
+      code: "IOS_PERMISSION_DENIED",
+      message: recent.trim() || "Permiso denegado en IOS",
     };
   }
 

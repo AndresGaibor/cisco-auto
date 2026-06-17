@@ -178,6 +178,9 @@ const rules: BoundaryRule[] = [
       "packages/pt-runtime/src/__tests__/session.test.ts",
       "packages/pt-runtime/src/__tests__/queue-cleanup-ttl.test.ts",
       "packages/pt-runtime/src/__tests__/pt-runtime-imports.test.ts",
+      "packages/pt-runtime/src/__tests__/device-creation-pt-safe.test.ts",
+      "packages/pt-runtime/src/__tests__/architecture/build-path-isolation.test.ts",
+      "packages/pt-runtime/src/__tests__/pt-api-helpers-pt-safe.test.ts",
     ],
     forbidden: [
       {

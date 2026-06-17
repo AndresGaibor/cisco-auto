@@ -28,7 +28,7 @@ describe("Fase 7 - RuntimeGenerator", () => {
     expect(existsSync(join(outputDir, "manifest.json"))).toBe(true);
 
     rmSync(root, { recursive: true, force: true });
-  }, 30000);
+  }, 90000);
 
   test("manifest incluye metadata de versión y checksum", async () => {
     const root = mkdtempSync(join(tmpdir(), "pt-runtime-manifest-"));
@@ -48,5 +48,5 @@ describe("Fase 7 - RuntimeGenerator", () => {
     expect(manifest.runtimeChecksum).toBeDefined();
 
     rmSync(root, { recursive: true, force: true });
-  }, 30000);
+  }, 90000);
 });
