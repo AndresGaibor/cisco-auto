@@ -191,6 +191,7 @@ export function nativeConfigCommandEchoAndPromptLooksComplete(
 }
 
 export function nativeFallbackBlockLooksComplete(block: string, command: string, prompt: string): boolean {
+  if (/--More--/i.test(block)) return false;
   const lastLine = block.replace(/\r/g, '').split('\n').pop()?.trim() || '';
   if (/^[A-Za-z0-9._-]+[>#]\s*$/.test(lastLine)) {
     return true;
