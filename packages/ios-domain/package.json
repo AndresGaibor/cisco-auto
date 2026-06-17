@@ -17,6 +17,8 @@
     "./capabilities": "./src/capabilities/index.ts",
     "./capabilities/*": "./src/capabilities/*",
     "./errors": "./src/errors.ts",
+    "./terminal-execution": "./src/terminal-execution/index.ts",
+    "./terminal-execution/*": "./src/terminal-execution/*",
     "./package.json": "./package.json"
   },
   "scripts": {
