@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, copyFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-export type ArtifactName = "main.js" | "runtime.js" | "catalog.js" | "manifest.json";
+export type ArtifactName = "main.js" | "runtime.js" | "catalog.js" | "manifest.json" | "ios-domain.js";
 
 export type ArtifactDiff = {
   name: ArtifactName;
@@ -13,7 +13,7 @@ export type ArtifactDiff = {
   changed: boolean;
 };
 
-export const ARTIFACTS: ArtifactName[] = ["main.js", "runtime.js", "catalog.js", "manifest.json"];
+export const ARTIFACTS: ArtifactName[] = ["main.js", "runtime.js", "catalog.js", "manifest.json", "ios-domain.js"];
 
 export function sha256Text(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -76,6 +76,7 @@ export function classifyDeploy(diff: ArtifactDiff[]) {
   const runtimeChanged = artifactChanged(diff, "runtime.js");
   const catalogChanged = artifactChanged(diff, "catalog.js");
   const manifestChanged = artifactChanged(diff, "manifest.json");
+  const iosDomainChanged = artifactChanged(diff, "ios-domain.js");
   const anyChanged = diff.some((item) => item.changed);
 
   return {
@@ -84,8 +85,10 @@ export function classifyDeploy(diff: ArtifactDiff[]) {
     runtimeChanged,
     catalogChanged,
     manifestChanged,
-    manualMainReloadRequired: mainChanged,
-    runtimeWakeupRecommended: !mainChanged && (runtimeChanged || catalogChanged || manifestChanged),
+    iosDomainChanged,
+    // FIX: ios-domain.js se carga via eval() en main.js boot - necesita reload si cambia
+    manualMainReloadRequired: mainChanged || iosDomainChanged,
+    runtimeWakeupRecommended: !mainChanged && !iosDomainChanged && (runtimeChanged || catalogChanged || manifestChanged),
     noReloadRequired: !anyChanged,
   };
 }

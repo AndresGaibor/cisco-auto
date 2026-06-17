@@ -316,6 +316,28 @@ export function createKernelLifecycle(
       setBootFlag("__ptKernelBootStage", "queue");
       kernelLogSubsystem("queue", "Initializing command queue...");
 
+      setBootFlag("__ptKernelBootStage", "ios-domain-load");
+      kernelLogSubsystem("ios-domain", "Loading ios-domain.js...");
+      try {
+        const devDir = config.devDir || "/pt-dev";
+        const iosDomainPath = devDir + "/ios-domain.js";
+        const fa = (typeof self !== "undefined" && self.fm) ? self.fm : null;
+        if (fa && typeof fa.getFileContents === "function" && fa.fileExists(iosDomainPath)) {
+          const iosCode = fa.getFileContents(iosDomainPath);
+          if (iosCode && iosCode.length > 100) {
+            const _g: any = typeof self !== "undefined" ? self : (typeof globalThis !== "undefined" ? globalThis : null);
+            if (_g) { _g.eval(iosCode); }
+            kernelLogSubsystem("ios-domain", "ios-domain.js loaded OK (" + iosCode.length + " bytes)");
+          } else {
+            kernelLogSubsystem("ios-domain", "ios-domain.js empty or missing, using builtins");
+          }
+        } else {
+          kernelLogSubsystem("ios-domain", "ios-domain.js not on disk yet, using builtins (this is normal on first deploy)");
+        }
+      } catch (e) {
+        kernelLogSubsystem("ios-domain", "ios-domain load skipped: " + String(e));
+      }
+
       const initialQueueCount = getQueueCountSafe();
       kernelLogSubsystem("queue", "Queue ready, count=" + initialQueueCount);
       kernelLogSubsystem(

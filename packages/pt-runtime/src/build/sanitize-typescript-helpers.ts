@@ -1,5 +1,6 @@
 export function sanitizeTypeScriptHelperGlobalThis(code: string): string {
   return code
+    .replace(/\bglobalThis\b/g, "self")
     .replace(
       /var __assign = \(this && this\.__assign\) \|\| function \(\) \{/g,
       "var __assign = function () {",

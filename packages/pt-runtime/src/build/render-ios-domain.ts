@@ -23,41 +23,41 @@ export interface RenderResult {
 
 const IOS_DOMAIN_FILES = [
   // kernel/
-  "ios-domain/src/terminal-execution/kernel/index.ts",
-  "ios-domain/src/terminal-execution/kernel/output-detectors.ts",
-  "ios-domain/src/terminal-execution/kernel/delta.ts",
-  "ios-domain/src/terminal-execution/kernel/semantic.ts",
-  "ios-domain/src/terminal-execution/kernel/completion-policy.ts",
-  "ios-domain/src/terminal-execution/kernel/state.ts",
-  "ios-domain/src/terminal-execution/kernel/types.ts",
-  "ios-domain/src/terminal-execution/kernel/result-envelope.ts",
+  "src/terminal-execution/kernel/index.ts",
+  "src/terminal-execution/kernel/output-detectors.ts",
+  "src/terminal-execution/kernel/delta.ts",
+  "src/terminal-execution/kernel/semantic.ts",
+  "src/terminal-execution/kernel/completion-policy.ts",
+  "src/terminal-execution/kernel/state.ts",
+  "src/terminal-execution/kernel/types.ts",
+  "src/terminal-execution/kernel/result-envelope.ts",
   // session/
-  "ios-domain/src/terminal-execution/session/index.ts",
-  "ios-domain/src/terminal-execution/session/state.ts",
-  "ios-domain/src/terminal-execution/session/registry.ts",
+  "src/terminal-execution/session/index.ts",
+  "src/terminal-execution/session/state.ts",
+  "src/terminal-execution/session/registry.ts",
   // prompt/
-  "ios-domain/src/terminal-execution/prompt/index.ts",
-  "ios-domain/src/terminal-execution/prompt/detector.ts",
+  "src/terminal-execution/prompt/index.ts",
+  "src/terminal-execution/prompt/detector.ts",
   // sanitizer/
-  "ios-domain/src/terminal-execution/sanitizer/index.ts",
-  "ios-domain/src/terminal-execution/sanitizer/command.ts",
+  "src/terminal-execution/sanitizer/index.ts",
+  "src/terminal-execution/sanitizer/command.ts",
   // detection/
-  "ios-domain/src/terminal-execution/detection/index.ts",
-  "ios-domain/src/terminal-execution/detection/stability.ts",
-  "ios-domain/src/terminal-execution/detection/output-extractor.ts",
-  "ios-domain/src/terminal-execution/detection/errors.ts",
-  "ios-domain/src/terminal-execution/detection/semantic-verifier.ts",
+  "src/terminal-execution/detection/index.ts",
+  "src/terminal-execution/detection/stability.ts",
+  "src/terminal-execution/detection/output-extractor.ts",
+  "src/terminal-execution/detection/errors.ts",
+  "src/terminal-execution/detection/semantic-verifier.ts",
   // handler/
-  "ios-domain/src/terminal-execution/handler/index.ts",
-  "ios-domain/src/terminal-execution/handler/pager.ts",
-  "ios-domain/src/terminal-execution/handler/confirm.ts",
+  "src/terminal-execution/handler/index.ts",
+  "src/terminal-execution/handler/pager.ts",
+  "src/terminal-execution/handler/confirm.ts",
   // engine/
-  "ios-domain/src/terminal-execution/engine/index.ts",
-  "ios-domain/src/terminal-execution/engine/event-collector.ts",
-  "ios-domain/src/terminal-execution/engine/completion-controller.ts",
-  "ios-domain/src/terminal-execution/engine/output-pipeline.ts",
-  "ios-domain/src/terminal-execution/engine/error-resolver.ts",
-  "ios-domain/src/terminal-execution/engine/observability.ts",
+  "src/terminal-execution/engine/index.ts",
+  "src/terminal-execution/engine/event-collector.ts",
+  "src/terminal-execution/engine/completion-controller.ts",
+  "src/terminal-execution/engine/output-pipeline.ts",
+  "src/terminal-execution/engine/error-resolver.ts",
+  "src/terminal-execution/engine/observability.ts",
 ];
 
 const TSLIB_HELPERS = `
@@ -89,9 +89,8 @@ var __spreadArray = function(to, from, pack) {
 
 function assembleIosDomainOutput(code: string): string {
   return `
-"use strict";
-
 // ios-domain.js - IIFE PT-safe para terminal-execution de ios-domain
+// FIX: No "use strict" porque eval() en modo estricto hace functions locales, no globals
 // Generado automáticamente - NO editar manualmente
 
 var _g = (typeof self !== "undefined") ? self : (function() { return this; })();
@@ -112,7 +111,9 @@ var iosDomain = (function() {
 })();
 
 // Asignar al scope global para acceso desde PT
-if (typeof window !== "undefined") {
+if (typeof self !== "undefined") {
+  self.IOS_DOMAIN = iosDomain;
+} else if (typeof window !== "undefined") {
   window.IOS_DOMAIN = iosDomain;
 } else if (typeof global !== "undefined") {
   global.IOS_DOMAIN = iosDomain;
@@ -169,22 +170,32 @@ export async function renderIosDomain(options: RenderIosDomainOptions): Promise<
     outputPath: options.outputPath,
     checksum,
     fileCount: IOS_DOMAIN_FILES.length,
+    output: content,
   };
 }
 
 export function renderIosDomainSync(options: RenderIosDomainOptions): RenderResult {
   const output = buildPipeline(options, "ios-domain.js (sync)");
 
-  fs.mkdirSync(path.dirname(options.outputPath), { recursive: true });
-  fs.writeFileSync(options.outputPath, output, "utf-8");
+  if (options.outputPath) {
+    fs.mkdirSync(path.dirname(options.outputPath), { recursive: true });
+    fs.writeFileSync(options.outputPath, output, "utf-8");
+  }
 
-  const content = fs.readFileSync(options.outputPath, "utf-8");
-  const normalized = normalizeArtifactForChecksum(content);
+  const normalized = normalizeArtifactForChecksum(output);
   const checksum = computeChecksum(normalized);
 
   return {
     outputPath: options.outputPath,
     checksum,
     fileCount: IOS_DOMAIN_FILES.length,
+    output,
   };
+}
+
+export interface RenderResult {
+  outputPath: string;
+  checksum: string;
+  fileCount: number;
+  output: string;
 }

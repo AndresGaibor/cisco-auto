@@ -13,7 +13,7 @@
  */
 
 import { resolve, join } from "node:path";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import {
   classifyDeploy,
@@ -295,7 +295,10 @@ async function build(triggerReloadFlag: boolean = true): Promise<boolean> {
     console.log("\n✅ Build idempotente: sin cambios funcionales.");
     console.log("💡 No necesitas recargar main.js.");
   } else if (classification.manualMainReloadRequired) {
-    console.log("\n✅ Build completado. main.js cambió.");
+    const reason = classification.iosDomainChanged && !classification.mainChanged
+      ? "ios-domain.js cambió (cargado via eval() en boot de main.js)"
+      : "main.js cambió";
+    console.log(`\n✅ Build completado. ${reason}.`);
     console.log(`💡 Recarga ${DEV_DIR.replace(/\\/g, "/")}/main.js en Packet Tracer.`);
   } else if (classification.runtimeWakeupRecommended) {
     console.log("\n✅ Build completado. main.js sin cambios.");

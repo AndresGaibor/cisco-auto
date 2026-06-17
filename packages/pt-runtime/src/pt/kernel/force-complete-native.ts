@@ -198,6 +198,7 @@ export function nativeFallbackResult(
   const complete = deps.nativeFallbackBlockLooksComplete(block, command, prompt) || echoLessLongOutputComplete || hostOutputComplete;
 
   if (
+    !complete &&
     !strictBlock.hasCommandEcho &&
     !echoLessLongOutputComplete &&
     !hostOutputComplete &&

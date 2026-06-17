@@ -3,6 +3,7 @@ import * as path from "path";
 import { renderRuntimeV2Sync } from "./render-runtime-v2";
 import { renderMainV2 } from "./render-main-v2";
 import { renderCatalog } from "./render-catalog";
+import { renderIosDomainSync } from "./render-ios-domain";
 import { readExistingManifest, writeRuntimeManifest, type RuntimeBuildReport } from "./manifest";
 import { validateGeneratedArtifacts } from "./validation";
 
@@ -51,19 +52,30 @@ export class RuntimeGenerator {
     });
   }
 
-  async generateAll(): Promise<{ main: string; catalog: string; runtime: string }> {
+  generateIosDomain(): string {
+    const result = renderIosDomainSync({
+      srcDir: path.join(this.resolveSourceDir(), "../../ios-domain"),
+      outputPath: "",
+      minify: this.config.minify,
+    });
+    return typeof result === "string" ? result : (result as any).output ?? "";
+  }
+
+  async generateAll(): Promise<{ main: string; catalog: string; runtime: string; iosDomain: string }> {
     const [main, catalog, runtime] = await Promise.all([
       Promise.resolve().then(() => this.generateMain()),
       Promise.resolve().then(() => this.generateCatalog()),
       Promise.resolve().then(() => this.generateRuntime()),
     ]);
 
+    const iosDomain = this.generateIosDomain();
+
     validateGeneratedArtifacts(main, catalog, runtime);
 
-    return { main, catalog, runtime };
+    return { main, catalog, runtime, iosDomain };
   }
 
-  async generate(): Promise<{ main: string; catalog: string; runtime: string }> {
+  async generate(): Promise<{ main: string; catalog: string; runtime: string; iosDomain: string }> {
     const result = await this.generateAll();
     const outDir = this.resolveOutputDir();
     await fs.promises.mkdir(outDir, { recursive: true });
@@ -71,12 +83,13 @@ export class RuntimeGenerator {
       fs.promises.writeFile(path.join(outDir, "main.js"), result.main, "utf-8"),
       fs.promises.writeFile(path.join(outDir, "catalog.js"), result.catalog, "utf-8"),
       fs.promises.writeFile(path.join(outDir, "runtime.js"), result.runtime, "utf-8"),
+      fs.promises.writeFile(path.join(outDir, "ios-domain.js"), result.iosDomain, "utf-8"),
     ]);
-    this.logBundleSizes(result.main, result.catalog, result.runtime);
+    this.logBundleSizes(result.main, result.catalog, result.runtime, result.iosDomain);
     return result;
   }
 
-  private logBundleSizes(main: string, catalog: string, runtime: string): void {
+  private logBundleSizes(main: string, catalog: string, runtime: string, iosDomain: string): void {
     const fmt = (bytes: number) => {
       if (bytes > 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + " MB";
       if (bytes > 1024) return (bytes / 1024).toFixed(1) + " KB";
@@ -85,7 +98,8 @@ export class RuntimeGenerator {
     console.log(
       `  main.js    ${fmt(main.length)}  ` +
       `catalog.js  ${fmt(catalog.length)}  ` +
-      `runtime.js  ${fmt(runtime.length)}`,
+      `runtime.js  ${fmt(runtime.length)}  ` +
+      `ios-domain.js  ${fmt(iosDomain.length)}`,
     );
   }
 
@@ -102,6 +116,7 @@ export class RuntimeGenerator {
       fs.promises.writeFile(path.join(this.config.devDir, "main.js"), result.main, "utf-8"),
       fs.promises.writeFile(path.join(this.config.devDir, "catalog.js"), result.catalog, "utf-8"),
       fs.promises.writeFile(path.join(this.config.devDir, "runtime.js"), result.runtime, "utf-8"),
+      fs.promises.writeFile(path.join(this.config.devDir, "ios-domain.js"), result.iosDomain, "utf-8"),
     ]);
     await writeRuntimeManifest(result.main, result.catalog, result.runtime, this.config.devDir);
   }
@@ -116,6 +131,7 @@ export class RuntimeGenerator {
       fs.promises.writeFile(path.join(outDir, "main.js"), result.main, "utf-8"),
       fs.promises.writeFile(path.join(outDir, "catalog.js"), result.catalog, "utf-8"),
       fs.promises.writeFile(path.join(outDir, "runtime.js"), result.runtime, "utf-8"),
+      fs.promises.writeFile(path.join(outDir, "ios-domain.js"), result.iosDomain, "utf-8"),
     ]);
 
     const manifest = await writeRuntimeManifest(result.main, result.catalog, result.runtime, outDir);

@@ -3,7 +3,7 @@
 > **Fuente de verdad:** `docs/pt-script-result.json` (generado 2026-04-15 con 12 dispositivos seed)
 > Este extractor produce JSON y TXT con la API real inspeccionada en PT.
 
-> **Última actualización:** 15 Abril 2026
+> **Última actualización:** 17 Junio 2026
 > **Estado:** ⚠️ **Parcial** — secciones con ⚠️ no verificadas vs dump
 
 ---
@@ -109,12 +109,90 @@ Se ejecutó un barrido real sobre 47 tipos de dispositivo. Hallazgos clave:
 - `TacacsClientProcess`
 - `TacacsServerProcess`
 
+### ✅ VlanManager API — Crear/Leer/Eliminar VLANs (17 Junio 2026)
+
+**Acceso:**
+```javascript
+var net = ipc.network();
+var router = net.getDevice("R1");
+var vlan = router.getProcess("VlanManager");
+```
+
+**Métodos de VlanManager:**
+
+| Método | Descripción | Estado |
+|--------|-------------|--------|
+| `getVlanCount()` | Número de VLANs | ✅ 5 → 6 tras addVlan |
+| `getVlanAt(index)` | VLAN por índice (objeto Vlan) | ✅ |
+| `getVlan(vlanId)` | VLAN por número | ✅ |
+| `getVlanByName(name)` | VLAN por nombre | ✅ |
+| `getMaxVlans()` | Máximo de VLANs soportadas | ✅ |
+| `addVlan(vlanId, name)` | **Crear VLAN** | ✅ **Funciona** — retorna true |
+| `removeVlan(vlanId)` | Eliminar VLAN | ⚠️ No probado |
+| `changeVlanName(vlanId, newName)` | Renombrar VLAN | ⚠️ No probado |
+| `getVlanIntCount()` | Interfaces VLAN asignadas | ✅ |
+| `getVlanIntAt(index)` | Interfaz VLAN por índice | ✅ |
+| `getVlanInt(vlanId)` | Interfaz VLAN por número | ✅ |
+| `addVlanInt(vlanId, portName)` | Asignar VLAN a puerto | ⚠️ No probado |
+| `removeVlanInt(vlanId, portName)` | Remover VLAN de puerto | ⚠️ No probado |
+
+**Métodos del objeto Vlan:**
+
+| Método | Descripción |
+|--------|-------------|
+| `getClassName()` | `"Vlan"` |
+| `getVlanNumber()` | Número de VLAN |
+| `getName()` | Nombre de la VLAN |
+| `getMacTable()` | Tabla MAC de la VLAN |
+| `isDefault()` | ¿Es VLAN por defecto? |
+| `getObjectUuid()` | UUID |
+
+**Ejemplo completo:**
+```javascript
+var vlan = net.getDevice("R1").getProcess("VlanManager");
+
+// Crear VLAN
+vlan.addVlan(100, "VLAN-TEST");  // ✅ true
+
+// Leer VLANs
+for (var i = 0; i < vlan.getVlanCount(); i++) {
+  var v = vlan.getVlanAt(i);
+  v.getVlanNumber() + ": " + v.getName();
+  // "1: default", "100: VLAN-TEST", "1002: fddi-default", ...
+}
+
+// Buscar por nombre o número
+vlan.getVlan(100).getName();      // "VLAN-TEST"
+vlan.getVlanByName("default").getVlanNumber();  // 1
+```
+
 ### Eventos y superficies útiles
 
 - Terminal/CLI: `commandStarted`, `outputWritten`, `commandEnded`, `modeChanged`, `promptChanged`, `moreDisplayed`
 - Puerto: `ipChanged`, `powerChanged`, `linkStatusChanged`, `protocolStatusChanged`, `mtuChanged`
 - Workspace: `deviceAdded`, `deviceRemoved`, `deviceMoved`, `linkCreated`, `linkDeleted`, `clusterAdded`, `canvasNoteAdded`, `canvasNoteDeleted`
 - Proceso: `poolAdded`, `poolRemoved`, `leaseAcquired`, `leaseExpired`, `vlanCreated`, `vlanDeleted`, `stpTopologyChanged`
+
+### Eventos verificados (17 Junio 2026)
+
+| Evento | Funciona | Notas |
+|--------|----------|-------|
+| `canvasNoteAdded` | ✅ | Se dispara síncronamente al crear nota via addNote |
+| `canvasNoteDeleted` | ⚠️ | No se disparó al llamar removeCanvasItem |
+| `deviceAdded` | ✅ | Se dispara síncronamente al crear dispositivo via addDevice |
+| `deviceRemoved` | ⚠️ | No verificado |
+| `linkCreated` | ⚠️ | No verificado |
+| `clusterAdded` | ⚠️ | No verificado |
+
+**Patrón de registro de eventos:**
+```javascript
+lws.registerEvent("canvasNoteAdded", ctxArray, function(src, args) {
+  ctxArray.push("RECEIVED");
+});
+// El handler se ejecuta SINCRONAMENTE durante el mismo script
+```
+
+**`registerObjectEvent`** ❌ Falla con "Invalid arguments for IPC call"
 
 ### Observaciones importantes
 
@@ -607,15 +685,28 @@ lws.removeDevice("PC0");
 lws.removeDevice("PC1");
 ```
 
-### LogicalWorkspace - Métodos Completos Descubiertos (14 Abril 2026)
+### LogicalWorkspace - 66 Métodos (17 Junio 2026)
+
 ```
-addCluster, addNote, addRemoteNetwork, addTextPopup, autoConnectDevices,
-centerOn, changeNoteText, clearLayer, createLink, deleteLink, drawCircle,
-drawLine, getCanvasEllipseIds, getCanvasItemIds, getCanvasLineIds,
-getCanvasNoteIds, getCanvasPolygonIds, getCanvasRectIds, getCluster,
-getRectItemData, getWorkspaceImage, removeCanvasItem, removeCluster,
-removeDevice, removeRemoteNetwork, removeTextPopup, setCanvasItemRealPos,
-setDeviceCustomImage, showClusterContents, unCluster
+addCluster, addDevice, addNote, addRemoteNetwork, addTextPopup,
+autoConnectDevices, centerOn, centerOnComponentByName, changeNoteText,
+clearLayer, createLink, deleteLink, drawCircle, drawLine,
+getCanvasEllipseIds, getCanvasItemIds, getCanvasItemRealX,
+getCanvasItemRealY, getCanvasItemX, getCanvasItemY, getCanvasLineIds,
+getCanvasNoteIds, getCanvasNoteText, getCanvasPolygonIds, getCanvasRectIds,
+getClassName, getCluster, getClusterForItem, getClusterFromItem,
+getClusterIdForItem, getClusterItemId, getComponentChildCountFor,
+getComponentChildForAt, getComponentChildForByName, getComponentItem,
+getComponentItemsCount, getCurrentCluster, getCurrentZoom,
+getEllipseItemData, getIncNoteZOrder, getLayerInbetweenComponents,
+getLineItemData, getMUItemCount, getObjectUuid, getPolygonItemData,
+getRectItemData, getRootCluster, getState, getUnusedLayer,
+getWorkspaceImage, isLayerUsed, moveCanvasItemBy, moveItemToCluster,
+moveRemoteNetwork, registerDelegate, registerEvent, registerObjectEvent,
+removeCanvasItem, removeCluster, removeDevice, removeRemoteNetwork,
+removeTextPopup, setCanvasItemRealPos, setCanvasItemX, setCanvasItemY,
+setDeviceCustomImage, showClusterContents, unCluster, unregisterDelegate,
+unregisterEvent, unregisterObjectEvent
 ```
 
 ### HALLAZGO IMPORTANTE (14 Abril 2026)
@@ -1673,5 +1764,377 @@ Métodos encontrados en `docs/pt-script-result.json` que NO aparecen en `PT-API.
 
 ---
 
-*Documentado: 15 Abril 2026 | Actualizado: 16 Abril 2026 (149 addDevice + QtScript fixes)*
+## 🎨 CANVAS UI MANIPULATION API (Junio 2026)
+
+> **Descubrimiento:** API de canvas elements (notas, líneas, elipses, rectángulos, clusters) vía métodos directos de PTLogicalWorkspace.
+> 
+> **Estado:** ⚠️ **Experimental** — Creación de rectángulos NO disponible. Varios bugs/crashes en PT 9.0.0.0810.
+> 
+> **Entornos probados:** macOS ARM64, PT 9.0.0.0810, modo Realtime.
+
+### ⚠️ PRERREQUISITO: PTLogicalWorkspace activo
+
+`w` (shortcut) y `lws` (path completo) solo son objetos funcionales si hay una red (`.pkt`) cargada en PT con dispositivos.
+
+| Estado PT | `w`/`lws` (PTLogicalWorkspace) | `n` (PTNetwork) | Canvas items |
+|-----------|--------------------------------|-----------------|--------------|
+| Abierto sin .pkt | `{}` solo `_parser` | `{}` solo `_parser` | No hay |
+| Con .pkt cargado | 69+ métodos nativos | 14+ métodos | Items visibles |
+
+En PT recién abierto sin red:
+```javascript
+Object.keys(w); // ["_parser"]  ← vacío, sin métodos de canvas
+```
+
+**⚠️ `w` vs `lws`:** En este test session, `w` era un objeto vacío `{_parser}` incluso con .pkt cargado. 
+Siempre usar `var lws = ipc.appWindow().getActiveWorkspace().getLogicalWorkspace();` para obtener el workspace real.
+
+### Acceso
+```javascript
+// Path completo (SIEMPRE usar este, no confiar en w)
+var lws = ipc.appWindow().getActiveWorkspace().getLogicalWorkspace();
+
+// O usando el shortcut (si está disponible)
+w === lws;  // true si getLW() funciona
+```
+
+### Canvas API — Leer items
+
+| Método | Descripción | Estado |
+|--------|-------------|--------|
+| **IDs** | | |
+| `lws.getCanvasItemIds()` | IDs de drawing items SOLO (líneas, elipses, rects, polígonos). **NO incluye notas** | ✅ |
+| `lws.getCanvasNoteIds()` | IDs de notas de texto (incluye labels de interfaces) | ✅ |
+| `lws.getCanvasLineIds()` | IDs de líneas | ✅ |
+| `lws.getCanvasEllipseIds()` | IDs de elipses | ✅ |
+| `lws.getCanvasRectIds()` | IDs de rectángulos | ✅ |
+| `lws.getCanvasPolygonIds()` | IDs de polígonos/formas libres | ⚠️ No probado |
+| **Leer datos** | | |
+| `lws.getCanvasNoteText(id)` | Texto de una nota | ✅ Retorna string |
+| `lws.getLineItemData(id)` | Array `[x1, y1, x2, y2, "color"]` | ✅ |
+| `lws.getCanvasItemX(id)` / `lws.getCanvasItemY(id)` | Posición X/Y del item | ✅ Funciona con UUIDs |
+| `lws.getCanvasItemRealX(id)` / `lws.getCanvasItemRealY(id)` | Posición real (escala 1:1) | ✅ |
+| `lws.getRectItemData(id)` | Datos de rectángulo | ⚠️ No probado — puede crash |
+| `lws.getPolygonItemData(id)` | Datos de polígono | ⚠️ No probado |
+| **Cluster** | | |
+| `lws.getCurrentCluster()` | Cluster actual donde está la vista | ✅ |
+| `lws.getRootCluster()` | Cluster raíz | ✅ |
+| `lws.getCluster(id)` / `lws.getClusterForItem(id)` | Obtener cluster | ✅ |
+| `lws.getClusterIdForItem(id)` / `lws.getClusterItemId(id)` | IDs de cluster/items | ✅ |
+
+### Canvas API — Modificar items (✅ FUNCIONAN)
+
+| Método | Descripción | Estado |
+|--------|-------------|--------|
+| `lws.setCanvasItemX(id, val)` | Mover item a X (coord simple) | ❌ No persiste en notas |
+| `lws.setCanvasItemY(id, val)` | Mover item a Y (coord simple) | ❌ No persiste en notas |
+| `lws.setCanvasItemRealPos(id, x, y)` | Posición absoluta REAL (escala 1:1) | ✅ **Funciona — mueve visualmente** |
+| `lws.moveCanvasItemBy(id, dx, dy)` | Mover relativo en coords reales | ✅ **Funciona — cambia getCanvasItemRealX/Y** |
+| `lws.removeCanvasItem(id)` | Eliminar item (notas incluidas) | ✅ Reduce getCanvasNoteIds() |
+| `lws.changeNoteText(id, text)` | Cambiar texto de nota | ✅ Persiste y visible |
+| `lws.clearLayer(layerId)` | Limpiar capa | ⚠️ No probado |
+| `lws.centerOn(x, y)` | Centrar vista del LogicalWorkspace | ✅ |
+| `lws.showClusterContents(cluster)` | Mostrar contenido de un cluster | ✅ |
+
+### Canvas API — Crear items
+
+#### ✅ NOTAS — `lws.addNote(x, y, scale, text)`
+
+```javascript
+var lws = ipc.appWindow().getActiveWorkspace().getLogicalWorkspace();
+
+// ✅ FUNCIONA — Crear nota visible en canvas
+var noteId = lws.addNote(x, y, scale, text);
+// Retorna: UUID string, ej: "{64015593-5494-4365-b00d-871133a95d5d}"
+// La nota aparece en getCanvasNoteIds()
+```
+
+**Parámetros:**
+
+| Parámetro | Tipo | Descripción | Notas |
+|-----------|------|-------------|-------|
+| `x` | number | Posición X | ⚠️ **IGNORADO** por el API — todas las notas se crean en ~(25,9) |
+| `y` | number | Posición Y | ⚠️ **IGNORADO** — mismo comportamiento |
+| `scale` | number | Escala/tamaño | **≥ 10 para ser visible.** Scale=1 es microscópico |
+| `text` | string | Contenido de la nota | Visible inmediatamente |
+
+**Ejemplo:**
+```javascript
+var id = lws.addNote(400, 200, 10, "mi nota");    // ✅ Visible (scale≥10)
+var id = lws.addNote(400, 200, 1, "invisible");    // ❌ Escala 1 = no se ve
+```
+
+**Workaround para posicionar notas:**
+```javascript
+// 1. Crear nota en posicion default (x,y ignorados)
+var id = lws.addNote(0, 0, 10, "mi nota");
+
+// 2. Mover a posicion exacta usando coordenadas REALES
+lws.setCanvasItemRealPos(id, 400, 250);
+// ✅ Ahora la nota esta en (400, 250) — FUNCIONA visualmente
+```
+
+**⚠️ Dos sistemas de coordenadas:**
+- `getCanvasItemX/Y` — coordenadas "simples" (grid/scaled). NO cambian con move.
+- `getCanvasItemRealX/Y` — coordenadas reales 1:1 del canvas. **Cambian con move/setRealPos.**
+
+**Limitaciones:**
+- `x`, `y` en `addNote` son **ignorados** — la nota siempre aparece en posición por defecto (~25,9)
+- Para posicionar correctamente: crear nota, luego `setCanvasItemRealPos(id, x, y)`
+
+#### ❌ RECTÁNGULOS — NO hay API directa
+
+```javascript
+// ❌ NINGUNA de estas funciona:
+lws.addCluster("nombre", 400, 300);              // "Invalid arguments"
+lws.addCluster(400, 300, "nombre");              // "Invalid arguments"  
+lws.addCluster(400, 300, "nombre", 100, 80);     // "Invalid arguments"
+lws.addCluster(400, 300, 100, 80);               // "Invalid arguments"
+_ScriptModule.ipcObjectCall("LogicalWorkspace", "addCluster", [...]); // "object does not exist"
+```
+
+**Métodos relacionados con rect existentes pero SIN crear:**
+- `lws.getCanvasRectIds()` — ✅ leer IDs de rects existentes
+- `lws.getRectItemData(id)` — ⚠️ leer datos de rect (puede crash)
+- `lws.removeCanvasItem(id)` — ✅ eliminar rect existente
+
+**No hay:** `addRect`, `createRect`, `drawRect`, `insertRect`, ni ningún método equivalente.
+
+#### ✅ TEXTPOPUP — `lws.addTextPopup(x, y, scale, type, text)`
+
+```javascript
+// ✅ FUNCIONA — Crea un elemento tipo "text popup" en el canvas
+var popupId = lws.addTextPopup(200, 100, 10, 0, "popup");
+// Retorna: UUID string, ej: "{71223f08-5b33-43ae-96c2-f051d21efd87}"
+// El popup NO aparece en getCanvasNoteIds() ni en getCanvasItemIds()
+```
+
+**Parámetros:**
+
+| Parámetro | Tipo | Descripción |
+|-----------|------|-------------|
+| `x` | number | Posición X |
+| `y` | number | Posición Y |
+| `scale` | number | Escala/tamaño |
+| `type` | number | Tipo de popup (0 = texto plano?) |
+| `text` | string | Contenido del popup |
+
+**⚠️ Naturaleza del elemento:** `addTextPopup` crea un elemento que NO es nota, NO es rectángulo, NO es línea, NO es elipse, NO es polígono. No aparece en ninguna de las categorías query-ables. Podría ser un elemento de cluster o un componente interno de QT no expuesto al API de script.
+
+**Firma alternativa fallida:**
+```javascript
+lws.addTextPopup("texto", x, y);  // ❌ "Invalid arguments for IPC call addTextPopup"
+```
+
+#### ❌ LÍNEAS Y ELIPSES — No hay API directa en lws
+
+```javascript
+// ❌ FALLAN:
+lws.drawLine(100, 100, 200, 200);   // "Invalid arguments for IPC call"
+lws.drawCircle(300, 200, 50);       // "Invalid arguments for IPC call"
+
+// ❌ _ScriptModule.ipcObjectCall también falla (object does not exist)
+_ScriptModule.ipcObjectCall("LogicalWorkspace", "drawLine", [100, 100, 200, 200]);
+// {"$_error":"IPC Call ERROR: object does not exist or already deleted"}
+```
+
+**Nota:** En la sesión previa, `_ScriptModule.ipcObjectCall` SÍ funcionó para `drawLine`, `drawCircle` y `addCluster` con un workspace que tenía dispositivos creados via `addDevice()`. Parece requerir un estado específico del workspace.
+
+### Estados de ID según tipo de item
+
+| Tipo de item | Formato de ID | Ejemplo |
+|-------------|---------------|---------|
+| Notas de interfaz (labels) | UUID | `{37551abd-4e34-4f00-b5d4-a6fd7df69919}` |
+| Notas creadas por API | UUID | `{64015593-5494-4365-b00d-871133a95d5d}` |
+| Drawing items (con .pkt cargado) | Número | `0`, `1`, `2`, ... |
+| Drawing items (sin .pkt) | UUID | `{05472552-...}` |
+
+### ID spaces separados
+
+Los IDs de notas (`getCanvasNoteIds()`) NO están incluidos en `getCanvasItemIds()`. Son espacios separados:
+
+```javascript
+var allItems = lws.getCanvasItemIds();    // Solo drawing items (lineas, rects, elipses, poligonos)
+var allNotes = lws.getCanvasNoteIds();    // Solo notas (incluye labels de interfaces)
+
+allItems.indexOf(allNotes[0]);  // -1 — las notas NO están en canvasItemIds
+```
+
+Esto implica que `removeCanvasItem(noteId)` funciona para notas, pero las notas se manejan en un layer/almacenamiento separado.
+
+### ❌ NO USAR: Métodos que CRASHEAN o fallan
+
+#### 🔴 `getEllipseItemData(id)` — CRASHEA PACKET TRACER (SIGSEGV)
+
+```javascript
+lws.getEllipseItemData(id);  // 💥 CRASH — EXC_BAD_ACCESS (SIGSEGV)
+```
+
+**Stack trace del crash:**
+```
+0  CCanvasNote::getOriginalText()        ← null pointer dereference
+1  CCanvasEllipse::getShapeData()        ← intenta leer nota de la ellipse
+2  CLogicalWorkspace::getShapeItemData() ← método público
+3  CScriptModule::callFunction           ← IPC call desde script
+4  CScriptModule::timerEvent             ← runtime polling (timer)
+5  [Qt QML recursion]                    ← RECURSION LEVEL markers
+```
+
+**Causa raíz:** `drawCircle()` crea un `CCanvasEllipse` que tiene una referencia interna a `CCanvasNote` para la label. Esa nota es `nullptr`. Cuando `getEllipseItemData()` intenta leer el texto de la nota vía `getOriginalText()`, el objeto no existe y PT crashea con SIGSEGV.
+
+**Consecuencia:** Una vez creada una ellipse corrupta, el runtime timer del kernel (timer 49) intenta periódicamente leer shape data, lo que dispara el crash en cada tick. El crash loop continúa incluso después de cerrar el CLI. **Solución: Cerrar PT completamente y reabrir.**
+
+#### ❌ `w.drawLine(x1, y1, x2, y2)` — Invalid arguments
+
+```javascript
+w.drawLine(100, 100, 200, 200);
+// ERROR: "Invalid arguments for IPC call 'drawLine'"
+```
+
+Los wrappers directos en `w.xxx()` hacen type-checking estricto de argumentos antes de llamar al IPC nativo.
+
+#### ❌ `_ScriptModule.ipcCall(className, method, ...)` — Invalid syntax
+
+```javascript
+_ScriptModule.ipcCall("LogicalWorkspace", "drawLine", [100, 100, 200, 200]);
+// ERROR: "invalid call syntax"
+```
+
+Solo `_ScriptModule.ipcObjectCall` funciona, y solo en ciertos estados del workspace.
+
+#### ❌ `_Parser.createObject()` — No existe
+
+```javascript
+_Parser.createObject();  // TypeError
+```
+
+`_Parser` es un constructor nativo, no un objeto con métodos estáticos.
+
+#### ❌ `$ipc()` sin argumentos
+
+```javascript
+$ipc();  // ERROR: "Insufficient arguments"
+```
+
+### ✅ RESUMEN — Lo que funciona para NOTAS
+
+```javascript
+var lws = ipc.appWindow().getActiveWorkspace().getLogicalWorkspace();
+
+// CREAR nota (scale ≥ 10 para visibilidad)
+var id = lws.addNote(0, 0, 12, "Nota visible");
+// x, y son ignorados — la nota se crea en posición default
+
+// LEER notas existentes
+var ids = lws.getCanvasNoteIds();           // todas las notas
+var texto = lws.getCanvasNoteText(ids[0]);  // "Gig0/0"
+var x = lws.getCanvasItemX(ids[0]);         // posición X
+var y = lws.getCanvasItemY(ids[0]);         // posición Y
+
+// MODIFICAR texto
+lws.changeNoteText(id, "nuevo texto");
+
+// MOVER (usar coordenadas REALES)
+lws.moveCanvasItemBy(id, 50, 30);           // relativo — cambia getCanvasItemRealX/Y
+lws.setCanvasItemRealPos(id, 400, 250);     // absoluto — FUNCIONA visualmente
+lws.setCanvasItemX(id, 200);                // ❌ coord simple — no persiste
+lws.setCanvasItemY(id, 100);                // ❌ coord simple — no persiste
+
+// ELIMINAR
+lws.removeCanvasItem(id);
+
+// CENTRAR vista
+lws.centerOn(400, 300);
+lws.showClusterContents(lws.getRootCluster());
+```
+
+### ✅ RESUMEN — Lo que funciona para DISPOSITIVOS
+
+```javascript
+var lws = ipc.appWindow().getActiveWorkspace().getLogicalWorkspace();
+var net = ipc.network();
+
+// CREAR dispositivo
+var nombre = lws.addDevice(0, "Router-PT", 200, 300); // "Router0"
+
+// CONECTAR
+lws.autoConnectDevices("Router0", "Switch0");
+
+// ELIMINAR
+lws.removeDevice("Router0");
+lws.deleteLink("Router0", "FastEthernet0/0");
+```
+
+### ❌ RESUMEN — Lo que NO funciona
+
+| Operación | Intento | Resultado |
+|-----------|---------|-----------|
+| Crear rectángulo | `addCluster`, `_ScriptModule.ipcObjectCall` | "Invalid arguments" |
+| Crear línea | `drawLine` en lws o ipcObjectCall | Invalid / object does not exist |
+| Crear elipse | `drawCircle` en lws o ipcObjectCall | Invalid / object does not exist |
+| Especificar posición en addNote | `lws.addNote(x, y, ...)` | x,y ignorados |
+| Mover nota con setCanvasItemX/Y | `lws.setCanvasItemX(id, val)` | No persiste en notas |
+| **Mover nota con setCanvasItemRealPos** | `lws.setCanvasItemRealPos(id, x, y)` | ✅ **FUNCIONA visualmente** |
+| Leer datos de elipse | `getEllipseItemData(id)` | 💥 CRASH PT |
+
+### 🔬 Notas técnicas
+
+| Aspecto | Detalle |
+|---------|---------|
+| Límite de script | Scripts > ~500 bytes pueden causar crashes intermitentes |
+| Runtime timer crash loop | Una vez creado item corrupto, el kernel polling (timerEvent) crashea al leer shape data |
+| Recuperación post-crash | Cerrar PT completamente y reabrir |
+| Notas de interfaz existentes | Labels tipo "Gig0/0", "Fa0/1" son creadas por PT al añadir dispositivos |
+| Espacio de IDs separado | Notas ≠ drawing items. getCanvasItemIds() NO incluye notas |
+| addNote(x,y) ignorado | Las coordenadas pasadas a addNote no se respetan — nota siempre en posición default |
+| setCanvasItemRealPos funciona | ✅ Mueve notas visualmente. Usar `setCanvasItemRealPos(id, x, y)` post-creación |
+| Dos sistemas de coordenadas | `getCanvasItemX/Y` = simple (grid), `getCanvasItemRealX/Y` = real (1:1 canvas). Solo las reales cambian con move/setRealPos |
+| addTextPopup | Crea elemento no-categorizable (no nota, no rect, no línea, no elipse, no polígono) |
+| 66 métodos en lws | Ver lista completa arriba. Incluye `getObjectUuid()`, `getState()`, `getCurrentZoom()` |
+| `_ScriptModule.ipcObjectCall` | Solo funciona con workspace en estado específico (dispositivos creados vía addDevice) |
+| `w` shortcut | No siempre es confiable. Usar path completo `ipc.appWindow().getActiveWorkspace().getLogicalWorkspace()` |
+| AddCluster | No se encontró ninguna firma que funcione para crear rectángulos |
+
+---
+
+*Documentado: 16-17 Junio 2026 | Canvas API, addTextPopup, setCanvasItemRealPos, registerEvent, VlanManager API, RoutingProcess | macOS ARM64, PT 9.0.0.0810*
 *Verificado contra: docs/pt-script-result.json (dump 2026-04-15)*
+
+---
+
+## 🖥️ TOPOLOGÍA REAL DEL .PKT (17 Junio 2026)
+
+### 14 dispositivos
+
+| Nombre | Clase | Modelo | Puertos | Posición |
+|--------|-------|--------|---------|----------|
+| Power Distribution Device0 | Device | Power Distribution Device | 0 | (3896, 3885) |
+| R1 | Router | 2911 | 4 | (532, 215) |
+| R2 | Router | 2911 | 4 | (363, 201) |
+| SW1 | CiscoDevice | 2960-24TT | 27 | (378, 338) |
+| SW2 | CiscoDevice | 2960-24TT | 27 | (591, 90) |
+| SW3 | CiscoDevice | 2960-24TT | 27 | (701, 269) |
+| SW4 | CiscoDevice | 2960-24TT | 27 | (124, 148) |
+| PC1 | Pc | PC-PT | 2 | (742, 433) |
+| PC2 | Pc | PC-PT | 2 | (841, 352) |
+| PC3 | Pc | PC-PT | 2 | (192, 450) |
+| PC4 | Pc | PC-PT | 2 | (89, 442) |
+| SRV1 | Server | Server-PT | 1 | (606, 439) |
+| Router0 | Router | Router-PT | 6 | (171, 285) |
+| PC0 | Pc | PC-PT | 2 | (477, 282) |
+
+### R1 — Puertos configurados
+
+| Puerto | IP | MAC | Status |
+|--------|----|-----|--------|
+| Vlan1 | 0.0.0.0 | 0001.97A0.D335 | down |
+| Gig0/0 | 192.168.10.1/24 | 00D0.BCE3.7901 | **up** |
+| Gig0/1 | 192.168.20.1/24 | 00D0.BCE3.7902 | **up** |
+| Gig0/2 | 0.0.0.0 | 00D0.BCE3.7903 | down |
+
+### Procesos verificados en R1
+
+| Proceso | Métodos | Funcionalidades clave |
+|---------|---------|----------------------|
+| VlanManager | 22 | `addVlan`, `removeVlan`, `changeVlanName`, `addVlanInt`, `getMacTable`... |
+| RoutingProcess | 16 | `addStaticRoute` (❌ firma incorrecta), `getRoutingTable`, `getStaticRouteAt`... |
