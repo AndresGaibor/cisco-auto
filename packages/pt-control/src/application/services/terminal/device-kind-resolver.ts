@@ -25,6 +25,7 @@ export interface DeviceKindResolverDeps {
       hostname?: string;
       customDeviceModel?: string;
     } | null | undefined>;
+    batchInspectFast?(): Promise<Record<string, any>>;
   };
   cacheFilePath?: string;
   deviceKindCache?: DeviceKindCachePort;
@@ -41,7 +42,7 @@ const DEVICE_TYPE_MAP: Record<number, string> = {
   16: "switch_layer3",
 };
 
-const DEVICE_KIND_CACHE_TTL_MS = 4_000;
+const DEVICE_KIND_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutos de caché para tipos de dispositivo
 
 type CachedDeviceKind = TerminalDeviceKind;
 
@@ -316,6 +317,34 @@ export function createDeviceKindResolver(deps: DeviceKindResolverDeps) {
     serviceTimings.resolveDeviceKindCacheMiss = 1;
 
     try {
+      // Intentar inspección por lotes si está disponible (vía Omni Raw)
+      if (deps.controller.batchInspectFast) {
+        try {
+          const batchData = await measureServiceAsync(
+            serviceTimings,
+            "batchInspectFastMs",
+            () => deps.controller.batchInspectFast!(),
+          );
+
+          if (batchData && Object.keys(batchData).length > 0) {
+            // Poblar caché para todos los dispositivos encontrados
+            for (const [name, state] of Object.entries(batchData)) {
+              const kind = classifyDeviceState(state);
+              await writeCachedDeviceKind(name, kind);
+            }
+
+            // Retornar el del dispositivo solicitado si está en el lote
+            const requestedState = batchData[device] ?? 
+                                  Object.values(batchData).find(s => (s as any).name === device);
+            if (requestedState) {
+              return classifyDeviceState(requestedState);
+            }
+          }
+        } catch (batchErr) {
+          // Si el lote falla, seguimos con el método individual (fallback)
+        }
+      }
+
       const fastInspector = deps.controller.inspectDeviceFast;
 
       if (fastInspector) {

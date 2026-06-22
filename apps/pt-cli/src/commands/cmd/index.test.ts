@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import { createCmdCommand } from "./index.js";
 import { __test__ } from "./index.js";
 
 describe("cmd --config", () => {
+  test("expone el subcomando read", () => {
+    const cmd = createCmdCommand();
+
+    expect(cmd.commands.some((subcommand) => subcommand.name() === "read")).toBe(true);
+  });
+
   test("preserva cada argumento como línea IOS independiente", () => {
     const commands = __test__.readCommandsFromOptions(
       { config: true },
@@ -99,5 +106,19 @@ describe("cmd --config", () => {
         "end",
       ].join("\n"),
     );
+  });
+
+  test("isMissingReadOnlyInput detecta read sin argumentos suficientes", () => {
+    expect(__test__.isMissingReadOnlyInput(undefined, [], {})).toBe(true);
+    expect(__test__.isMissingReadOnlyInput("R1", [], {})).toBe(true);
+    expect(__test__.isMissingReadOnlyInput("R1", ["show running-config"], {})).toBe(false);
+    expect(__test__.isMissingReadOnlyInput(undefined, [], { file: "cmds.txt" })).toBe(false);
+  });
+
+  test("isLikelyMisorderedReadCommand detecta pt cmd R1 read", () => {
+    expect(__test__.isLikelyMisorderedReadCommand("R1", ["read"], {})).toBe(true);
+    expect(__test__.isLikelyMisorderedReadCommand("R1", ["show running-config"], {})).toBe(false);
+    expect(__test__.isLikelyMisorderedReadCommand(undefined, ["read"], {})).toBe(false);
+    expect(__test__.isLikelyMisorderedReadCommand("R1", ["read"], { stdin: true })).toBe(false);
   });
 });

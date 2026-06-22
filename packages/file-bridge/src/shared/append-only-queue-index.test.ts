@@ -76,6 +76,9 @@ describe("AppendOnlyQueueIndex", () => {
 
   test("compact deduplica y limpia líneas inválidas", () => {
     writeFileSync(indexPath, '"a.json"\n"b.json"\n"a.json"\ninvalid json\n"c.json"\n', "utf8");
+    writeFileSync(join(tempDir, "a.json"), '{"cmd":"a"}');
+    writeFileSync(join(tempDir, "b.json"), '{"cmd":"b"}');
+    writeFileSync(join(tempDir, "c.json"), '{"cmd":"c"}');
 
     const idx = new AppendOnlyQueueIndex({ indexPath });
     idx.invalidateCache();

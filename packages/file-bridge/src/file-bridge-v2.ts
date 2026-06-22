@@ -24,7 +24,7 @@
  * los archivos en commands/.
  */
 import { EventEmitter } from "node:events";
-import { ensureDir, ensureFile } from "./shared/fs-atomic.js";
+import { ensureDir, ensureFile, safeUnlink } from "./shared/fs-atomic.js";
 import type {
   BridgeCommandEnvelope,
   BridgeResultEnvelope,
@@ -55,9 +55,24 @@ import {
 } from "./v2/bridge-command-client.js";
 import { BridgeRuntimeAdmin } from "./v2/bridge-runtime-admin.js";
 
+function formatTimestamp(): string {
+  return new Date().toISOString();
+}
+
+function bridgeLog(level: "debug" | "info" | "warn" | "error", ...args: unknown[]): void {
+  const prefix = `[${formatTimestamp()}] [bridge:${level}]`;
+  if (level === "error") {
+    console.error(prefix, ...args);
+  } else if (level === "warn") {
+    console.warn(prefix, ...args);
+  } else {
+    console.log(prefix, ...args);
+  }
+}
+
 const DEBUG = process.env.PT_DEBUG === "1";
 const debugLog = (...args: unknown[]) => {
-  if (DEBUG) console.log("[bridge]", ...args);
+  if (DEBUG) bridgeLog("debug", ...args);
 };
 
 export interface FileBridgeV2Options {
@@ -80,6 +95,12 @@ export interface SendCommandAndWaitOptionsExt extends SendCommandAndWaitOptions 
   deferredTiming?: DeferredTimingAccumulator;
 }
 
+export interface BridgeHealthReport extends BridgeHealth {
+  timestamp: number;
+  uptime: number;
+  version: string;
+}
+
 export class FileBridgeV2 extends EventEmitter {
   private readonly paths: BridgePathLayout;
   private readonly seq: SequenceStore;
@@ -92,6 +113,7 @@ export class FileBridgeV2 extends EventEmitter {
   private readonly commandProcessor: CommandProcessor;
   private readonly monitoringService: MonitoringService;
   private readonly _diagnostics: BridgeDiagnostics;
+  private startTime: number = 0;
   private readonly garbageCollector: GarbageCollector;
   private readonly lifecycle: BridgeLifecycle;
   private readonly leaseManager: LeaseManager;
@@ -103,6 +125,19 @@ export class FileBridgeV2 extends EventEmitter {
 
   constructor(private readonly options: FileBridgeV2Options) {
     super();
+
+    this.on("disk-full" as any, (err: Error) => {
+      bridgeLog("error", "Disk full - bridge degraded", err.message);
+      this.lifecycle?.transition("degraded" as any);
+    });
+
+    this.on("lease-denied", () => {
+      bridgeLog("warn", "Lease denied - another instance is running");
+    });
+
+    this.on("gap", ({ expected, actual }: { expected: number; actual: number }) => {
+      bridgeLog("warn", `Event gap detected: expected seq ${expected}, got ${actual}`);
+    });
 
     this.paths = new BridgePathLayout(options.root);
     this.seq = new SequenceStore(options.root);
@@ -221,6 +256,7 @@ export class FileBridgeV2 extends EventEmitter {
       return;
     }
 
+    this.startTime = Date.now();
     this.lifecycle.transition("starting");
 
     try {
@@ -349,6 +385,16 @@ export class FileBridgeV2 extends EventEmitter {
       timeout,
       options.recommendedPollAfterMs,
     );
+
+    if (result.status === "timeout") {
+      const commandFile = this.paths.commandFilePath(envelope.seq, envelope.type);
+      const inFlightFile = this.paths.inFlightFilePath(envelope.seq, envelope.type);
+      const queueEntryFilename = this.paths.commandFileName(envelope.seq, envelope.type);
+      safeUnlink(commandFile);
+      safeUnlink(inFlightFile);
+      FileBridgeV2.removeQueueEntry(this.options.root, queueEntryFilename);
+      this.commandProcessor.rebuildQueueIndex();
+    }
 
     const resultSeenAt = Date.now();
     const resultMeta = (result as { meta?: { queueLatencyMs?: number; execLatencyMs?: number; completedAtMs?: number } }).meta;
@@ -518,6 +564,16 @@ export class FileBridgeV2 extends EventEmitter {
         averageQueueAppendMs: snap.averageQueueAppendMs,
         readdirCacheHitRate: snap.readdirCacheHitRate,
       },
+    };
+  }
+
+  getHealthReport(): BridgeHealthReport {
+    const health = this.diagnostics();
+    return {
+      ...health,
+      timestamp: Date.now(),
+      uptime: this.startTime ? Date.now() - this.startTime : 0,
+      version: "2.2.0",
     };
   }
 

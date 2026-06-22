@@ -270,6 +270,22 @@ export class FileBridgeMetrics {
     this.errors = 0;
     this.warnings = 0;
   }
+
+  toPrometheusFormat(): string {
+    const snap = this.getSnapshot();
+    const lines = [
+      `# HELP bridge_fs_write_duration_ms Average filesystem write duration in ms`,
+      `# TYPE bridge_fs_write_duration_ms gauge`,
+      `bridge_fs_write_duration_ms ${snap.averageAtomicWriteMs.toFixed(2)}`,
+      `# HELP bridge_readdir_cache_hit_rate Read directory cache hit rate`,
+      `# TYPE bridge_readdir_cache_hit_rate gauge`,
+      `bridge_readdir_cache_hit_rate ${(snap.readdirCacheHitRate * 100).toFixed(2)}`,
+      `# HELP bridge_claim_duration_ms Average command claim duration in ms`,
+      `# TYPE bridge_claim_duration_ms gauge`,
+      `bridge_claim_duration_ms ${snap.averageClaimMs.toFixed(2)}`,
+    ];
+    return lines.join("\n");
+  }
 }
 
 export function formatMetricsForHumans(snap: FileBridgeMetricsSnapshot): string {

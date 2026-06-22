@@ -41,6 +41,7 @@ export interface BridgeCommandEnvelope<T = unknown> {
   attempt: number;
   expiresAt?: number;
   checksum?: string;
+  priority?: number;
 }
 
 // ============================================================================

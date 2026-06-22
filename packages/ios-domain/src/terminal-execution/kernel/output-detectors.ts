@@ -13,7 +13,7 @@ export function isIosPrompt(value: unknown): boolean {
 }
 
 export function isHostPrompt(value: unknown): boolean {
-  const line = String(value ?? "").trim();
+  const line = String(value ?? "").trim().replace(/\x1b\[[0-9;]*[a-zA-Z]|\x1b[()][a-zA-Z]/g, "");
   return /[A-Z]:\\>$/i.test(line) || /\b(?:pc|server|laptop|host|client|terminal)[A-Za-z0-9._-]*>$/i.test(line);
 }
 

@@ -13,6 +13,7 @@ export interface CmdInputOptions {
 export function normalizeCommandLines(content: string): string[] {
   return content
     .split(/\r?\n/)
+    .flatMap((line) => line.split(";"))
     .map((line) => line.trimEnd())
     .filter((line) => line.trim().length > 0)
     .filter((line) => !line.trimStart().startsWith("#"));
@@ -24,6 +25,10 @@ export function looksLikeMultiCommandInput(commandParts: string[]): boolean {
     .filter(Boolean);
 
   if (parts.some((part) => /\r?\n/.test(part))) {
+    return true;
+  }
+
+  if (parts.some((part) => part.includes(";"))) {
     return true;
   }
 
@@ -76,6 +81,73 @@ export function readCommandsFromOptions(
 
 function isEndCommand(command: string): boolean {
   return /^(end|exit)$/i.test(command.trim());
+}
+
+const CONFIG_CONTEXT_PATTERNS = [
+  /^interface\s+/i,
+  /^vlan\s+\d+/i,
+  /^router\s+/i,
+  /^line\s+/i,
+  /^ip\s+access-list\s+/i,
+  /^class-map\s+/i,
+  /^policy-map\s+/i,
+  /^ip\s+dhcp\s+pool\s+/i,
+  /^telephony-service$/i,
+  /^ephone-dn\s+\d+/i,
+  /^ephone\s+\d+/i,
+  /^spanning-tree\s+vlan\s+/i,
+  /^sdm\s+prefer\s+/i,
+  /^standby\s+/i,
+  /^ipv6\s+unicast-routing$/i,
+  /^ip\s+helper-address\s+/i,
+  /^switchport\s+voice\s+vlan\s+/i,
+  /^channel-group\s+\d+\s+mode\s+/i,
+];
+
+const CONFIG_COMMAND_PATTERNS = [
+  /^description\s+/i,
+  /^switchport\s+/i,
+  /^shutdown$/i,
+  /^no\s+shutdown$/i,
+  /^ip\s+address\s+/i,
+  /^ipv6\s+address\s+/i,
+  /^duplex\s+/i,
+  /^speed\s+/i,
+  /^name\s+/i,
+  /^network\s+/i,
+  /^default-router\s+/i,
+  /^dns-server\s+/i,
+  /^lease\s+/i,
+  /^login\s+/i,
+  /^password\s+/i,
+  /^transport\s+input\s+/i,
+  /^exec-timeout\s+/i,
+  /^channel-group\s+/i,
+  /^spanning-tree\s+/i,
+  /^ip\s+dhcp\s+(excluded-address|relay|server)/i,
+];
+
+export function needsConfigMode(commands: string[]): boolean {
+  if (commands.length === 0) return false;
+
+  for (const cmd of commands) {
+    const trimmed = cmd.trim();
+    if (!trimmed) continue;
+
+    for (const pattern of CONFIG_CONTEXT_PATTERNS) {
+      if (pattern.test(trimmed)) return true;
+    }
+
+    if (trimmed.toLowerCase() === "configure terminal" || trimmed.toLowerCase() === "conf t") {
+      return true;
+    }
+
+    for (const pattern of CONFIG_COMMAND_PATTERNS) {
+      if (pattern.test(trimmed)) return true;
+    }
+  }
+
+  return false;
 }
 
 export function buildConfigCommand(commands: string[], save: boolean): string {

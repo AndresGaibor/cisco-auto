@@ -16,7 +16,7 @@ Con `pt` puedes:
 - Generar y desplegar `main.js`, `runtime.js`, `catalog.js` y `manifest.json`.
 - Listar, crear, mover y eliminar dispositivos en Packet Tracer.
 - Crear, listar, sugerir y remover enlaces físicos.
-- Ejecutar comandos IOS y comandos de PC/Server desde terminal.
+- Ejecutar comandos IOS y comandos de PC/Server desde terminal, con lectura explícita `pt cmd read` para IOS.
 - Configurar propiedades que normalmente son de UI/API, como IP/DHCP de hosts.
 - Validar conectividad, VLANs, routing, servicios y protocolos.
 - Inspeccionar logs, eventos y resultados del bridge.
@@ -194,9 +194,19 @@ bun run pt cmd R1 "show running-config" --json
 bun run pt cmd SW1 "show interfaces" --complete --json
 bun run pt cmd PC1 "ipconfig"
 bun run pt cmd PC1 "ping 192.168.1.1"
+bun run pt cmd read R1 "show running-config"
+bun run pt cmd read SW1 "show ip route"
 ```
 
 `pt cmd` es el camino principal para IOS, switches, routers, PCs y servers. La CLI detecta configuración multilínea cuando corresponde.
+Usa `pt cmd read` cuando sólo quieres lectura IOS y no quieres depender de preámbulos de paginador.
+El orden correcto es `pt cmd read <device> "show ..."`; `pt cmd R1 read` no es una sintaxis válida.
+
+### Limitaciones conocidas
+
+- En algunos labs, la parte de CME/telefonía IP (`telephony-service`, `ephone`, `show ephone`) puede bloquear `pt cmd` con `IOS_EXEC_FAILED` o timeout.
+- Si eso pasa, no sigas probando la misma secuencia por CLI: confirma el proyecto activo con `pt project status --json`, deja la config de datos/voz ya aplicada y termina la parte telefónica desde la GUI de Packet Tracer.
+- Cuando documentes o depures VoIP, anota claramente si la validación quedó pendiente de GUI para que el siguiente agente no repita el intento.
 
 ### Configuración API/GUI
 ```bash
@@ -305,13 +315,22 @@ El filesystem permite auditar lo que ocurrió aunque Packet Tracer se cierre o e
 ### Comandos principales
 ```bash
 bun install
-bun test
 bun run pt build
 bun run pt doctor
 ```
 
-### Validaciones útiles
+### Ejecución de Tests
+
+Para evitar tiempos de espera largos, se recomienda usar los scripts focalizados o testear archivos específicos en lugar de ejecutar `bun test` en la raíz.
+
 ```bash
+# Tests por área
+bun run test:cli     # Solo tests del CLI
+bun run test:control # Solo tests de la capa de control
+bun run test:runtime # Solo tests del runtime
+bun run test:ios     # Solo tests de IOS/parsers
+
+# Validaciones específicas
 bun test apps/pt-cli/src/__tests__/ux/help.test.ts
 bun test tests/architecture/check-architecture-boundaries.test.ts
 bun test packages/pt-runtime/tests/main-runtime-boundary.test.ts

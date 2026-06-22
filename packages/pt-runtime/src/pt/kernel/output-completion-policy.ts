@@ -135,7 +135,8 @@ export function isPromptOnlyTransitionCommand(command: string): boolean {
     normalized === "disable" ||
     normalized === "enable" ||
     normalized === "end" ||
-    normalized === "exit"
+    normalized === "exit" ||
+    normalized === "configure terminal"
   );
 }
 
@@ -192,9 +193,15 @@ export function nativeConfigCommandEchoAndPromptLooksComplete(
 
 export function nativeFallbackBlockLooksComplete(block: string, command: string, prompt: string): boolean {
   if (/--More--/i.test(block)) return false;
-  const lastLine = block.replace(/\r/g, '').split('\n').pop()?.trim() || '';
-  if (/^[A-Za-z0-9._-]+[>#]\s*$/.test(lastLine)) {
-    return true;
+  const lines = block.replace(/\r/g, '').split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (/^[A-Za-z0-9._ ()-]+[>#]$/.test(line)) {
+      return true;
+    }
+    if (line && !/^%[A-Z]/.test(line)) {
+      return false;
+    }
   }
   return false;
 }

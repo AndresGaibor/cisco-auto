@@ -9,8 +9,9 @@
 export function entryPointsTemplate(params: {
   devDirLiteral: string;
   buildTimestamp: string;
+  activeCommandTimeoutMs?: number;
 }): string {
-  const { devDirLiteral, buildTimestamp } = params;
+  const { devDirLiteral, buildTimestamp, activeCommandTimeoutMs } = params;
 
   return `
 // PT Script Module entry points — called by Packet Tracer lifecycle
@@ -53,6 +54,7 @@ function main() {
         pollIntervalMs:         250,
         deferredPollIntervalMs: 200,
         heartbeatIntervalMs:    5000,
+        activeCommandTimeoutMs: ${activeCommandTimeoutMs ?? 30000},
         demoRuntime:            false,
       });
       _g._kernelInstance = kernel;

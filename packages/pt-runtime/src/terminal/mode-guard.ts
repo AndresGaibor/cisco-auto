@@ -222,6 +222,24 @@ export function createModeGuard() {
       const after = currentMode(terminal, deviceName);
       const reachedPrivileged = isPrivilegedMode(after);
 
+      if (reachedPrivileged) {
+        // Silently try to set terminal properties to avoid pagination issues
+        try {
+          await executor.executeCommand(deviceName, "terminal length 0", terminal, {
+            commandTimeoutMs: 1000,
+            stallTimeoutMs: 500,
+            allowEmptyOutput: true,
+          });
+          await executor.executeCommand(deviceName, "terminal width 512", terminal, {
+            commandTimeoutMs: 1000,
+            stallTimeoutMs: 500,
+            allowEmptyOutput: true,
+          });
+        } catch {
+          // Ignore failure if device doesn't support these commands
+        }
+      }
+
       return {
         ok: reachedPrivileged,
         fromMode,

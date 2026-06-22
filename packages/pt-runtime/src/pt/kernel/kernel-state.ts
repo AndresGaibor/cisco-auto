@@ -8,6 +8,7 @@ export interface KernelPollStats {
   processedCount: number;
   emptyCount: number;
   skippedBusyCount: number;
+  activeCommandTimeoutCount: number;
   errorCount: number;
   lastPollAt: number;
   lastPollDurationMs: number;
@@ -48,6 +49,7 @@ export function createKernelState(): KernelState {
       processedCount: 0,
       emptyCount: 0,
       skippedBusyCount: 0,
+      activeCommandTimeoutCount: 0,
       errorCount: 0,
       lastPollAt: 0,
       lastPollDurationMs: 0,

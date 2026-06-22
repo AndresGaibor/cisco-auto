@@ -53,6 +53,7 @@ describe("pollCommandQueue control commands while busy", () => {
         processedCount: 0,
         emptyCount: 0,
         skippedBusyCount: 0,
+        activeCommandTimeoutCount: 0,
         errorCount: 0,
         lastPollAt: 0,
         lastPollDurationMs: 0,

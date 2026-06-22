@@ -97,7 +97,12 @@ export function checkCommandCompletion(ctx: CompletionContext): CommandFinishedV
 
   const hasPrompt = /[>#]\s*$/.test(ctx.currentPrompt) || /[A-Z]:\\>\s*$/i.test(ctx.currentPrompt);
 
-  if (!hasPrompt) return { finished: false };
+  if (!hasPrompt) {
+    if (ctx.sessionKind === "host" && quietFor >= 2000) {
+      return { finished: true, reason: "host-no-prompt-timeout" };
+    }
+    return { finished: false };
+  }
 
   if (ctx.expectedMode && ctx.currentMode !== ctx.expectedMode) {
     if (ctx.commandEndedSeen && quietFor > 1000) {

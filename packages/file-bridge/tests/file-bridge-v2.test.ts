@@ -192,6 +192,39 @@ describe("FileBridgeV2", () => {
       expect(result.status).toBe("timeout");
     });
 
+    it("should clean timed-out command artifacts so they do not block the queue", async () => {
+      bridge.start();
+
+      const result = await bridge.sendCommandAndWait("addDevice", { name: "R1" }, 100);
+
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe("timeout");
+
+      const commandFile = join(testDir, "commands", `${String(result.seq).padStart(12, "0")}-addDevice.json`);
+      const inFlightFile = join(testDir, "in-flight", `${String(result.seq).padStart(12, "0")}-addDevice.json`);
+
+      expect(existsSync(commandFile)).toBe(false);
+      expect(existsSync(inFlightFile)).toBe(false);
+    });
+
+    it("should rebuild the queue index after a timeout", async () => {
+      bridge.start();
+
+      const staleEntry = "000000000999-addDevice.json";
+      writeFileSync(join(testDir, "commands", "_queue.ndjson"), `${JSON.stringify(staleEntry)}\n`, "utf8");
+
+      const result = await bridge.sendCommandAndWait("addDevice", { name: "R1" }, 100);
+
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe("timeout");
+
+      const queueIndexPath = join(testDir, "commands", "_queue.ndjson");
+      const queueIndexContent = readFileSync(queueIndexPath, "utf8");
+
+      expect(queueIndexContent).not.toContain(staleEntry);
+      expect(queueIndexContent).not.toContain("addDevice");
+    });
+
     it("should follow deferred results until completion", async () => {
       bridge.start();
 
@@ -599,6 +632,13 @@ describe("sendCommand", () => {
     if (existsSync(testDir)) {
       rmSync(testDir, { recursive: true, force: true });
     }
+  });
+
+  it("should reject payloads larger than MAX_PAYLOAD_BYTES", () => {
+    bridge = new FileBridgeV2({ root: testDir });
+    bridge.start();
+    const hugePayload = { data: "x".repeat(1024 * 1024 + 1) };
+    expect(() => bridge.sendCommand("addDevice", hugePayload)).toThrow(/payload too large/i);
   });
 
   it("falla si bridge no está ready", () => {

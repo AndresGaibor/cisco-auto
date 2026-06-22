@@ -131,7 +131,7 @@ guid();  // → "1a778aad-095a-3bbd-8ce2-95288c2d9507"
 
 ## scriptEngine
 
-Evaluate arbitrary JS code and call global functions by name.
+Evaluate arbitrary JS code and call global functions by name. Único objeto con 2 funciones: `evaluate` y `evaluateCall`.
 
 ```javascript
 // Evaluate a string as JS code and return the result
@@ -139,50 +139,70 @@ scriptEngine.evaluate(code: string): any
 // Example
 scriptEngine.evaluate("1 + 2");        // → 3
 scriptEngine.evaluate("dprint('hi')");  // → executes dprint
+scriptEngine.evaluate("(function(){ return 'ws-test'; })()");  // → "ws-test"
 
 // Call a global function with arguments
 scriptEngine.evaluateCall(fnName: string, args: Array): any
 // Example
 scriptEngine.evaluateCall("dprint", ["test"]);  // → undefined (dprint runs)
+
+// ⚠️ evaluateCall retorna null en la práctica para funciones nativas:
+scriptEngine.evaluateCall("Math.max", [1, 2, 3]);  // → null (esperado: 3)
+```
+
+### Casos de uso verificados
+
+```javascript
+// Ejecutar código que define funciones y las usa
+scriptEngine.evaluate("function add(a,b){return a+b;}; add(1,1)");  // → 2
+
+// Strings multilínea
+scriptEngine.evaluate("var x = 'Hola ' + 'Mundo'; x");  // → "Hola Mundo"
 ```
 
 ---
 
-## MD5 (⚠️ Object, Not Function)
+## MD5 (Object)
 
-MD5 hash computation. Must instantiate with `new`.
+MD5 hash computation.
+
+### 🔬 Hallazgo clave (Experimento 40, Junio 2026)
+
+**`MD5.hash(str)` es un método estático** que funciona directamente. Mientras que la documentación previa indicaba solo instanciación con `new`, se descubrió que el método `hash()` está disponible directamente en el constructor.
+
+### Método estático ✅
 
 ```javascript
-// Create an MD5 instance
-var md = new MD5();
-
-// Append string data to hash
-md.append(str: string): void
-// Example
-md.append("hello");
-
-// Reset the hash state
-md.reset(): void
-
-// Get raw hash as ArrayBuffer
-md.getHash(): ArrayBuffer
-
-// Convert ArrayBuffer to hex string
-md.toHex(arrayBuffer: ArrayBuffer): string
-// Example
-var hash = md.getHash();
-var hex = md.toHex(hash);  // → "5d41402abc4b2a76b9719d911017c592"
-
-// Get hex string directly
-md.toHexString(): string
-
-// Properties on instance:
-md.hash        // ArrayBuffer — current hash state
-md.hashBinary  // ArrayBuffer — binary representation
-md.ArrayBuffer // ArrayBuffer constructor reference
-
-// NOTE: MD5("string") direct call FAILS with TypeError
+MD5.hash("test123");  // → "cc03e747a6afbbcbf8be7668acfebee5"
+MD5.hash("test");     // → "098f6bcd4621d373cade4e832627b4f6"
+MD5.hash("cisco");    // → "dfeaf10390e560aea745ccba53e044ed"
+MD5.hash("admin");    // → "21232f297a57a5a743894a0e4a801fc3"
+MD5.hash("123456");   // → "e10adc3949ba59abbe56e057f20f883e"
 ```
+
+### Instanciación con `new` ⚠️
+
+La documentación previa muestra la API de instancia, pero `new MD5()` produce un objeto opaco donde `md.hash()` NO es función:
+
+```javascript
+var md = new MD5();
+md.hash("test123");  // ❌ TypeError: Property 'hash' is not a function
+
+// En su lugar, la instancia tiene (no verificado completamente):
+md.append(str)       // Append string data
+md.reset()           // Reset hash state
+md.getHash()         // ArrayBuffer
+md.toHex(buf)        // ArrayBuffer → hex string
+md.toHexString()     // Direct hex output
+```
+
+### Resumen
+
+| Enfoque | Funciona | Notas |
+|---------|----------|-------|
+| `MD5.hash(str)` | ✅ | Método estático, recomendado |
+| `new MD5().hash(str)` | ❌ | `hash` no es método en instancia |
+| `new MD5()` + `append/reset` | ⚠️ | No verificado
 
 ---
 

@@ -13,7 +13,7 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, appendFileSync, renameSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { ensureDir } from "./fs-atomic.js";
 import {
   appendLineAsync,
@@ -219,11 +219,14 @@ export class AppendOnlyQueueIndex {
 
   /**
    * Compacta el archivo eliminando duplicados y entradas inválidas.
+   * También elimina entradas cuyos archivos ya no existen en commands/.
    * Útil después de GC o crash recovery.
    */
   compact(): void {
     this.cachedSet = null;
     if (!existsSync(this.indexPath)) return;
+
+    const commandsDir = dirname(this.indexPath);
 
     try {
       const content = readFileSync(this.indexPath, "utf8");
@@ -236,6 +239,8 @@ export class AppendOnlyQueueIndex {
         try {
           const filename = JSON.parse(line);
           if (typeof filename === "string" && filename !== "" && !seen.has(filename)) {
+            const filePath = join(commandsDir, filename);
+            if (!existsSync(filePath)) continue;
             seen.add(filename);
             deduped.push(JSON.stringify(filename));
           }
@@ -258,6 +263,7 @@ export class AppendOnlyQueueIndex {
     const exists = await pathExists(this.indexPath);
     if (!exists) return;
 
+    const commandsDir = dirname(this.indexPath);
     const content = await readTextFile(this.indexPath);
     if (content === null) return;
 
@@ -270,6 +276,8 @@ export class AppendOnlyQueueIndex {
       try {
         const filename = JSON.parse(line);
         if (typeof filename === "string" && filename !== "" && !seen.has(filename)) {
+          const filePath = join(commandsDir, filename);
+          if (!(await pathExists(filePath))) continue;
           seen.add(filename);
           deduped.push(JSON.stringify(filename));
         }

@@ -176,6 +176,12 @@ export function finishActiveCommand(
     try {
       subsystems.kernelLogSubsystem("queue", "Cleaning up " + activeFilename);
       subsystems.queue.cleanup(activeFilename);
+      
+      // OPTIMIZACIÓN: Solo reconciliar el índice si la cola parece estar vacía
+      // o después de una ráfaga. Esto evita escaneos de disco redundantes.
+      if (subsystems.queue.count() === 0) {
+        subsystems.queue.reconcileIndex();
+      }
     } catch (cleanupError) {
       // El result ya existe y fue verificado; cleanup puede fallar sin perder respuesta.
       subsystems.kernelLog(

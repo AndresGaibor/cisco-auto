@@ -394,9 +394,31 @@ export function pollCommandQueue(subsystems: KernelSubsystems, state: KernelStat
 
     stage = "active-command-check";
     if (state.activeCommand) {
-      state.pollStats.skippedBusyCount += 1;
-      kernelLogSubsystem("queue", "Skipping poll: command already active=" + state.activeCommand.id);
-      return;
+      const elapsed = Date.now() - (state.activeCommand.startedAt || 0);
+      const timeoutMs = (subsystems.config as any).activeCommandTimeoutMs || 30000;
+
+      if (elapsed > timeoutMs) {
+        kernelLogSubsystem(
+          "queue",
+          "ACTIVE COMMAND TIMEOUT id=" +
+            state.activeCommand.id +
+            " elapsedMs=" +
+            elapsed +
+            " timeoutMs=" +
+            timeoutMs,
+        );
+
+        state.pollStats.activeCommandTimeoutCount += 1;
+        finishActiveCommand(subsystems, state, {
+          ok: false,
+          error: "Active command timed out after " + elapsed + "ms",
+          code: "ACTIVE_COMMAND_TIMEOUT",
+        });
+      } else {
+        state.pollStats.skippedBusyCount += 1;
+        kernelLogSubsystem("queue", "Skipping poll: command already active=" + state.activeCommand.id);
+        return;
+      }
     }
 
     stage = "get-active-jobs";

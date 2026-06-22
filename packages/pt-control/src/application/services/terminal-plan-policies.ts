@@ -41,11 +41,41 @@ function checkTerminalLengthZeroCache(device: string): boolean | null {
   return entry.supported;
 }
 
+const STALL_TIMEOUT_FAST_MS = 5000;
+const STALL_TIMEOUT_NORMAL_MS = 12000;
+const STALL_TIMEOUT_LONG_MS = 20000;
+
+const COMMAND_TIMEOUT_FAST_MS = 15000;
+const COMMAND_TIMEOUT_NORMAL_MS = 30000;
+const COMMAND_TIMEOUT_LONG_MS = 60000;
+
 export function buildDefaultTerminalTimeouts(timeoutMs?: number): TerminalPlanTimeouts {
   return {
-    commandTimeoutMs: timeoutMs ?? 30000,
-    stallTimeoutMs: 15000,
+    commandTimeoutMs: timeoutMs ?? COMMAND_TIMEOUT_NORMAL_MS,
+    stallTimeoutMs: STALL_TIMEOUT_NORMAL_MS,
   };
+}
+
+export function buildStallTimeoutForCommand(command: string): number {
+  const cmd = command.trim().toLowerCase();
+
+  if (/^(show|ping|traceroute|trace|dir|more|verify|ssh|telnet)/.test(cmd)) {
+    return STALL_TIMEOUT_FAST_MS;
+  }
+
+  if (/^(configure terminal|conf t|interface |router |line |vlan |ip dhcp pool|class-map|policy-map)/.test(cmd)) {
+    return STALL_TIMEOUT_LONG_MS;
+  }
+
+  if (/^(description|switchport|shutdown|no shutdown|ip address|ipv6 address|duplex|speed|name)/.test(cmd)) {
+    return STALL_TIMEOUT_NORMAL_MS;
+  }
+
+  if (/^(copy running-config|write memory|write erase|reload|erase)/.test(cmd)) {
+    return STALL_TIMEOUT_LONG_MS;
+  }
+
+  return STALL_TIMEOUT_NORMAL_MS;
 }
 
 export function buildDefaultTerminalPolicies(args?: {
@@ -156,7 +186,22 @@ export function buildTerminalTimeoutsForPlan(
     };
   }
 
-  return buildDefaultTerminalTimeouts(options.timeoutMs);
+  if (lines.length === 1) {
+    const firstLine = lines[0] ?? "";
+    const adaptiveStall = buildStallTimeoutForCommand(firstLine);
+    return {
+      commandTimeoutMs: options.timeoutMs ?? COMMAND_TIMEOUT_NORMAL_MS,
+      stallTimeoutMs: adaptiveStall,
+    };
+  }
+
+  const adaptiveStalls = lines.map((line) => buildStallTimeoutForCommand(line));
+  const maxStall = Math.max(...adaptiveStalls);
+
+  return {
+    commandTimeoutMs: options.timeoutMs ?? COMMAND_TIMEOUT_NORMAL_MS,
+    stallTimeoutMs: maxStall,
+  };
 }
 
 export function buildTerminalPoliciesForPlan(

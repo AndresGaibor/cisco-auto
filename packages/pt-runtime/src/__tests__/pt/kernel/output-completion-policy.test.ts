@@ -158,11 +158,12 @@ describe("output-completion-policy", () => {
       expect(isPromptOnlyTransitionCommand("enable")).toBe(true);
       expect(isPromptOnlyTransitionCommand("end")).toBe(true);
       expect(isPromptOnlyTransitionCommand("exit")).toBe(true);
+      expect(isPromptOnlyTransitionCommand("configure terminal")).toBe(true);
     });
 
     test("rechaza otros comandos", () => {
       expect(isPromptOnlyTransitionCommand("show version")).toBe(false);
-      expect(isPromptOnlyTransitionCommand("configure terminal")).toBe(false);
+      expect(isPromptOnlyTransitionCommand("interface f0/1")).toBe(false);
     });
   });
 
@@ -197,6 +198,82 @@ describe("output-completion-policy", () => {
 
     test("devuelve false con pager activo", () => {
       expect(nativeFallbackBlockLooksComplete("show version\n--More--\nRouter#", "show version", "Router#")).toBe(false);
+    });
+
+    test("detecta prompt user-exec Router>", () => {
+      const block = "Router>";
+      expect(nativeFallbackBlockLooksComplete(block, "show version", "Router>")).toBe(true);
+    });
+
+    test("detecta prompt privileged-exec Router#", () => {
+      const block = "Router#";
+      expect(nativeFallbackBlockLooksComplete(block, "show version", "Router#")).toBe(true);
+    });
+
+    test("detecta prompt config Router(config)#", () => {
+      const block = "Enter configuration commands, one per line.  End with CNTL/Z.\nRouter(config)#";
+      expect(nativeFallbackBlockLooksComplete(block, "configure terminal", "Router(config)#")).toBe(true);
+    });
+
+    test("detecta prompt config-if Router(config-if)#", () => {
+      const block = "Router(config-if)#";
+      expect(nativeFallbackBlockLooksComplete(block, "interface f0/1", "Router(config-if)#")).toBe(true);
+    });
+
+    test("detecta prompt config-line Router(config-line)#", () => {
+      const block = "Router(config-line)#";
+      expect(nativeFallbackBlockLooksComplete(block, "line vty", "Router(config-line)#")).toBe(true);
+    });
+
+    test("detecta prompt config-router Router(config-router)#", () => {
+      const block = "Router(config-router)#";
+      expect(nativeFallbackBlockLooksComplete(block, "router ospf 1", "Router(config-router)#")).toBe(true);
+    });
+
+    test("detecta prompt Switch", () => {
+      const block = "Switch#";
+      expect(nativeFallbackBlockLooksComplete(block, "show version", "Switch#")).toBe(true);
+      const block2 = "Switch(config)#";
+      expect(nativeFallbackBlockLooksComplete(block2, "configure terminal", "Switch(config)#")).toBe(true);
+    });
+
+    test("detecta prompt con hostname largo", () => {
+      const block = "R1-CORE-GW-RTR01(config)#";
+      expect(nativeFallbackBlockLooksComplete(block, "configure terminal", "R1-CORE-GW-RTR01(config)#")).toBe(true);
+    });
+
+    test("detecta prompt con IP", () => {
+      const block = "192.168.1.1(config)#";
+      expect(nativeFallbackBlockLooksComplete(block, "configure terminal", "192.168.1.1(config)#")).toBe(true);
+    });
+
+    test("detecta prompt con interface en config", () => {
+      const block = "Router(config-if)#";
+      expect(nativeFallbackBlockLooksComplete(block, "interface GigabitEthernet0/0", "Router(config-if)#")).toBe(true);
+    });
+
+    test("devuelve false con output incompleto sin prompt final", () => {
+      expect(nativeFallbackBlockLooksComplete("some output line", "show version", "")).toBe(false);
+    });
+
+    test("maneja block con \\r\\n line endings", () => {
+      const block = "Router#\r\nshow version\r\nCisco IOS\r\nRouter#";
+      expect(nativeFallbackBlockLooksComplete(block, "show version", "Router#")).toBe(true);
+    });
+
+    test("detecta prompt aunque haya syslog despues", () => {
+      const block = "end\nRouter#\n%SYS-5-CONFIG_I: Configured from console by console\n";
+      expect(nativeFallbackBlockLooksComplete(block, "end", "Router#")).toBe(true);
+    });
+
+    test("detecta prompt con syslog multilinea", () => {
+      const block = "interface GigabitEthernet0/0\nRouter(config-if)#\n%LINK-3-UPDOWN: Interface GigabitEthernet0/0, changed state to up\n";
+      expect(nativeFallbackBlockLooksComplete(block, "interface GigabitEthernet0/0", "Router(config-if)#")).toBe(true);
+    });
+
+    test("rechaza block que solo tiene syslog sin prompt", () => {
+      const block = "%SYS-5-CONFIG_I: Configured from console by console\n";
+      expect(nativeFallbackBlockLooksComplete(block, "end", "Router#")).toBe(false);
     });
   });
 

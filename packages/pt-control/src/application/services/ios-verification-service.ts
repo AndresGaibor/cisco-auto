@@ -66,7 +66,7 @@ export class IosVerificationService {
         }
       }
 
-      const interfaceBlock = raw.match(new RegExp('interface\\s+' + interfaceName.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") + '[\\s\\S]*?(?=^interface\\s+|^!)', 'im'))?.[0] ?? '';
+      const interfaceBlock = raw.match(new RegExp('interface\\s+' + interfaceName.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") + '(?:(?!^interface\\s+|^!).)*', 'ims'))?.[0] ?? '';
       if (interfaceBlock) {
         const ipMatch = interfaceBlock.match(/ip address\s+(\S+)/i);
         const foundIp = ipMatch ? ipMatch[1] : '';
@@ -164,7 +164,7 @@ export class IosVerificationService {
       var re = new RegExp('interface\\s+' + portName.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&"), 'i');
       if (re.test(raw)) {
         // attempt to extract the interface block
-        var blockRe = new RegExp('interface\\s+' + portName.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") + '[\\s\\S]*?(?=^interface\\s+|^!)', 'im');
+        var blockRe = new RegExp('interface\\s+' + portName.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") + '(?:(?!^interface\\s+|^!).)*', 'ims');
         var bm = raw.match(blockRe);
         var block = bm ? bm[0] : '';
         var hasAccess = /switchport access vlan/i.test(block) || /switchport mode access/i.test(block);
@@ -196,7 +196,7 @@ export class IosVerificationService {
       const raw = rc.raw || "";
 
       // Look for interface config
-      var blockRe = new RegExp('interface\\s+' + portName.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") + '[\\s\\S]*?(?=^interface\\s+|^!)', 'im');
+      var blockRe = new RegExp('interface\\s+' + portName.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") + '(?:(?!^interface\\s+|^!).)*', 'ims');
       var bm = raw.match(blockRe);
       var block = bm ? bm[0] : '';
       var isTrunk = /switchport mode trunk/i.test(block) || /switchport trunk encapsulation/i.test(block);
@@ -280,7 +280,7 @@ export class IosVerificationService {
       // fallback to running-config
       const rc = await this.exec(device, "show running-config", true, 3000);
       var raw = rc.raw || "";
-      var re = new RegExp('^interface\\s+' + subinterfaceName.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") + '[\\s\\S]*?(?=^interface\\s+|^!)', 'im');
+      var re = new RegExp('^interface\\s+' + subinterfaceName.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") + '(?:(?!^interface\\s+|^!).)*', 'ims');
       var m = raw.match(re);
       if (m) {
         var block = m[0];
@@ -305,7 +305,7 @@ export class IosVerificationService {
     try {
       const rc = await this.exec(device, "show running-config", true, 3000);
       var raw = rc.raw || "";
-      var blockRe = new RegExp('interface\\s+' + interfaceName.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") + '[\\s\\S]*?(?=^interface\\s+|^!)', 'im');
+      var blockRe = new RegExp('interface\\s+' + interfaceName.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") + '(?:(?!^interface\\s+|^!).)*', 'ims');
       var bm = raw.match(blockRe);
       var block = bm ? bm[0] : '';
       if (!block) {

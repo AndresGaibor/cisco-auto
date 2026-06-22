@@ -36,6 +36,29 @@ import {
 } from "../canvas.js";
 
 import {
+  handleDeviceInfo,
+  handleDeviceListMethods,
+} from "../device-info.js";
+
+import { handleDevicePower } from "../device-power.js";
+
+import { handleDeviceDhcpFlag } from "../device-dhcp-flag.js";
+
+import {
+  handleSetPortMtu,
+  handleSetPortDns,
+} from "../port-config.js";
+
+import {
+  handleFileRead,
+  handleFileWrite,
+  handleFileList,
+  handleFileExists,
+  handleFileMakeDir,
+  handleFileRemove,
+} from "../file-operations.js";
+
+import {
   handleAddModule,
   handleRemoveModule,
   handleInspectModuleSlots,
@@ -54,6 +77,16 @@ import { handleConfigHost } from "../host-handler.js";
 import { handleTerminalPlanRun } from "../terminal-plan-run.js";
 import { handleTerminalNativeExec } from "../terminal-native-exec.js";
 import { handlePollDeferred } from "../poll-deferred.js";
+import {
+  handleSubscribeTerminalEvents,
+  handlePollTerminalEvents,
+  handleUnsubscribeTerminalEvents,
+  handleListSubscriptions,
+} from "../terminal-events.js";
+import {
+  handleSubscribeIpcEvents,
+  handlePollIpcEvents,
+} from "../ipc-events.js";
 import {
   handleExecIos,
   handleConfigIos,
@@ -154,4 +187,24 @@ export function registerStableRuntimeHandlers(): void {
   registerHandler("__projectSnapshotRead", handleProjectSnapshotRead as unknown as HandlerFn);
   registerHandler("__projectSnapshotClear", handleProjectSnapshotClear as unknown as HandlerFn);
   registerHandler("__projectOpen", handleProjectOpen as unknown as HandlerFn);
+
+  registerHandler("subscribeTerminalEvents", handleSubscribeTerminalEvents as unknown as HandlerFn);
+  registerHandler("pollTerminalEvents", handlePollTerminalEvents as unknown as HandlerFn);
+  registerHandler("unsubscribeTerminalEvents", handleUnsubscribeTerminalEvents as unknown as HandlerFn);
+  registerHandler("listSubscriptions", handleListSubscriptions as unknown as HandlerFn);
+  registerHandler("subscribeIpcEvents", handleSubscribeIpcEvents as unknown as HandlerFn);
+  registerHandler("pollIpcEvents", handlePollIpcEvents as unknown as HandlerFn);
+
+  registerHandler("deviceInfo", handleDeviceInfo as unknown as HandlerFn);
+  registerHandler("deviceListMethods", handleDeviceListMethods as unknown as HandlerFn);
+  registerHandler("devicePower", handleDevicePower as unknown as HandlerFn);
+  registerHandler("deviceDhcpFlag", handleDeviceDhcpFlag as unknown as HandlerFn);
+  registerHandler("setPortMtu", handleSetPortMtu as unknown as HandlerFn);
+  registerHandler("setPortDns", handleSetPortDns as unknown as HandlerFn);
+  registerHandler("fileRead", handleFileRead as unknown as HandlerFn);
+  registerHandler("fileWrite", handleFileWrite as unknown as HandlerFn);
+  registerHandler("fileList", handleFileList as unknown as HandlerFn);
+  registerHandler("fileExists", handleFileExists as unknown as HandlerFn);
+  registerHandler("fileMakeDir", handleFileMakeDir as unknown as HandlerFn);
+  registerHandler("fileRemove", handleFileRemove as unknown as HandlerFn);
 }

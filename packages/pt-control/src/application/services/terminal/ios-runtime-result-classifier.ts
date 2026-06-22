@@ -9,7 +9,8 @@ function isIosConfigModeText(value: unknown): boolean {
     text.startsWith("router-config") ||
     text.startsWith("line-config") ||
     text.startsWith("config") ||
-    /\(config[^)]*\)#\s*$/.test(text)
+    /\(config-[^)]+\)#\s*$/.test(text) ||
+    /\(config\)#\s*$/.test(text)
   );
 }
 

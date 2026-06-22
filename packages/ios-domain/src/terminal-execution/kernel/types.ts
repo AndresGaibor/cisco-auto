@@ -24,6 +24,7 @@ export interface KernelConfig {
   pollIntervalMs: number;
   deferredPollIntervalMs: number;
   heartbeatIntervalMs: number;
+  activeCommandTimeoutMs?: number;
   demoRuntime?: boolean;
 }
 

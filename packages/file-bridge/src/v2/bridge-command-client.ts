@@ -9,7 +9,8 @@
  * - Resolución de deferred results
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, readFile } from "node:fs";
+import { readFile as readFileAsync } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { ensureDir, atomicWriteFile } from "../shared/fs-atomic.js";
@@ -27,6 +28,8 @@ const DEBUG = process.env.PT_DEBUG === "1";
 const debugLog = (...args: unknown[]) => {
   if (DEBUG) console.log("[bridge:cmd-client]", ...args);
 };
+
+export const MAX_PAYLOAD_BYTES = 1024 * 1024;
 
 export interface SendCommandOptions {
   enableBackpressure?: boolean;
@@ -81,6 +84,10 @@ export class BridgeCommandClient {
     }
     if (expiresAtMs !== undefined && (typeof expiresAtMs !== "number" || expiresAtMs <= 0)) {
       throw new Error("[bridge] sendCommand: expiresAtMs must be a positive number");
+    }
+    const payloadSize = JSON.stringify(payload).length;
+    if (payloadSize > MAX_PAYLOAD_BYTES) {
+      throw new Error(`[bridge] sendCommand: payload too large (${payloadSize} bytes, max ${MAX_PAYLOAD_BYTES})`);
     }
   }
 
@@ -340,6 +347,83 @@ export class BridgeResultResolver {
 
         try {
           const content = readFileSync(resultPath, "utf8");
+          const result = JSON.parse(content) as BridgeResultEnvelope<TResult>;
+          resolveOnce(result);
+        } catch (err) {
+          const error = err as NodeJS.ErrnoException;
+          if (error.code === "ENOENT") {
+            pollMs = Math.min(pollMs * 1.5, 200);
+            timer = setTimeout(checkResult, pollMs);
+          } else {
+            debugLog(
+              `result read failed id=${envelope.id} code=${String(error.code ?? "unknown")}`,
+            );
+            pollMs = Math.min(pollMs * 1.5, 500);
+            timer = setTimeout(checkResult, pollMs);
+          }
+        }
+      };
+
+      const initialDelay = recommendedPollAfterMs != null ? Math.max(0, recommendedPollAfterMs) : 0;
+      timer = setTimeout(checkResult, initialDelay);
+      this.deps.resultWatcher.watch(envelope.id, checkResult);
+    });
+  }
+
+  /**
+   * Versión async de waitForResult que usa I/O no bloqueante.
+   * Recomendado para entornos con alto concurrency o cuando se espera
+   * muchos resultados en paralelo.
+   */
+  async waitForResultAsync<TResult>(
+    envelope: BridgeCommandEnvelope<unknown>,
+    timeout: number,
+    recommendedPollAfterMs?: number,
+  ): Promise<BridgeResultEnvelope<TResult>> {
+    const resultPath = this.deps.paths.resultFilePath(envelope.id);
+    const started = Date.now();
+    let pollMs = 5;
+    debugLog(`waiting result (async) id=${envelope.id} path=${resultPath}`);
+
+    return new Promise<BridgeResultEnvelope<TResult>>((resolve, reject) => {
+      let resolved = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+
+      const cleanup = () => {
+        if (timer) clearTimeout(timer);
+        this.deps.resultWatcher.unwatch(envelope.id, checkResult);
+      };
+
+      const resolveOnce = (result: BridgeResultEnvelope<TResult>) => {
+        if (resolved) return;
+        resolved = true;
+        cleanup();
+        resolve(result);
+      };
+
+      const rejectOnce = (error: Error) => {
+        if (resolved) return;
+        resolved = true;
+        cleanup();
+        reject(error);
+      };
+
+      const checkResult = async () => {
+        if (Date.now() - started > timeout) {
+          debugLog(`result timeout id=${envelope.id}`);
+          resolveOnce(
+            this.deps.buildResultTimeoutEnvelope(
+              envelope.id,
+              envelope.type,
+              timeout,
+              envelope.seq,
+            ) as unknown as BridgeResultEnvelope<TResult>,
+          );
+          return;
+        }
+
+        try {
+          const content = await readFileAsync(resultPath, "utf8");
           const result = JSON.parse(content) as BridgeResultEnvelope<TResult>;
           resolveOnce(result);
         } catch (err) {

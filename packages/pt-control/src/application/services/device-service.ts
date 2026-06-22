@@ -3,6 +3,7 @@
 // ============================================================================
 
 import type { RuntimePrimitivePort } from "../../ports/runtime-primitive-port.js";
+import type { RuntimeOmniPort } from "../../ports/runtime-omni-port.js";
 import type { TopologyCachePort } from "../ports/topology-cache.port.js";
 import { DeviceQueryService, type DeviceInspectFastState } from "./device-query-service.js";
 import { DeviceMutationService, type AddModuleResult, type AddModuleError, type RemoveModuleResult } from "./device-mutation-service.js";
@@ -17,6 +18,7 @@ import { DeviceMutationService, type AddModuleResult, type AddModuleError, type 
  * @param primitivePort - Puerto para ejecutar operaciones primitivas en PT
  * @param cache - Cache de topología para estados de dispositivos
  * @param generateId - Generador de IDs único para tracking de comandos
+ * @param omniPort - Opcional: Puerto omni para optimizaciones de lectura raw
  */
 export class DeviceService {
   private readonly query: DeviceQueryService;
@@ -26,8 +28,9 @@ export class DeviceService {
     primitivePort: RuntimePrimitivePort,
     cache: TopologyCachePort,
     generateId: () => string,
+    omniPort?: RuntimeOmniPort,
   ) {
-    this.query = new DeviceQueryService(primitivePort, cache, generateId);
+    this.query = new DeviceQueryService(primitivePort, cache, generateId, omniPort);
     this.mutation = new DeviceMutationService(primitivePort, this.query);
   }
 
@@ -37,6 +40,13 @@ export class DeviceService {
 
   inspectFast(device: string): Promise<DeviceInspectFastState> {
     return this.query.inspectFast(device) as Promise<DeviceInspectFastState>;
+  }
+
+  /**
+   * Realiza un escaneo rápido de todos los dispositivos.
+   */
+  batchInspectFast(): Promise<Record<string, DeviceInspectFastState>> {
+    return this.query.batchInspectFast();
   }
 
   addModule(device: string, slot: number | "auto", module: string): Promise<{ ok: true; value: AddModuleResult } | AddModuleError> {

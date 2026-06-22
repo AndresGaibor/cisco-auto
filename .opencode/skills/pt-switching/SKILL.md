@@ -40,6 +40,16 @@ Esta skill proporciona flujos de trabajo expertos para configurar y validar rede
 - [ ] Asociar APs: Verificar LWAPP/CAPWAP join.
 - [ ] **Validación**: `bun run pt verify wlc <WLC>`
 
+## Encadenar comandos con ;
+
+Puedes pasar múltiples comandos separados por `;` en un solo `pt cmd`:
+```bash
+bun run pt cmd SW1 "show vlan brief ; show interfaces trunk ; show spanning-tree summary"
+bun run pt cmd SW1 "show mac address-table ; show interfaces status"
+bun run pt cmd SW1 "show running-config | section vlan ; show etherchannel summary"
+```
+El backend los ejecuta secuencialmente en un mismo plan terminal, reduciendo latencia.
+
 ## Diagnóstico L2 Experto
 
 Si un host no tiene conectividad:

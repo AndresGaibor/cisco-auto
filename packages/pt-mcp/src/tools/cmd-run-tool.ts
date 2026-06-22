@@ -84,11 +84,12 @@ export function registerCmdRunTool(ctx: RegisterToolContext): void {
     {
       title: "Packet Tracer IOS Command Runner",
       description: [
-        "Use this tool to execute Cisco IOS CLI commands on routers and switches, or Command Prompt commands on Packet Tracer end hosts.",
-        "Use it for read-only verification, VLAN/routing/DHCP/HSRP/EtherChannel troubleshooting, and IOS configuration when the user asks to modify the lab.",
-        "Before calling this tool, use pt_device with op=list if you are not certain of the exact device name.",
-        "Prefer profile='fast' for quick show commands, profile='audit' for validation evidence, and profile='debug' when troubleshooting terminal failures.",
-        "Never set allowDestructive=true unless the user explicitly requested a destructive action such as reload, erase, delete, shutdown, or removing configuration.",
+          "Use this tool to execute Cisco IOS CLI commands on routers and switches, or Command Prompt commands on Packet Tracer end hosts.",
+          "Use it for read-only verification, VLAN/routing/DHCP/HSRP/EtherChannel troubleshooting, and IOS configuration when the user asks to modify the lab.",
+          "Before calling this tool, use pt_device with op=list if you are not certain of the exact device name.",
+          "Prefer profile='fast' for quick show commands, profile='audit' for validation evidence, and profile='debug' when troubleshooting terminal failures.",
+          "Never set allowDestructive=true unless the user explicitly requested a destructive action such as reload, erase, delete, shutdown, or removing configuration.",
+          "Chain multiple commands in one string using ';' separator: 'show version ; show ip interface brief ; show ip route'. The backend splits on ; and runs each sequentially in the same terminal plan.",
       ].join(" "),
       inputSchema: z.object({
         profile: z.enum(["fast", "debug", "audit"]).optional().describe(

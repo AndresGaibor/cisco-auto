@@ -58,6 +58,7 @@ export function normalizeCommands(value: string | string[]): string[] {
   if (Array.isArray(value)) {
     return value
       .flatMap((line) => String(line).split(/\r?\n/))
+      .flatMap((line) => line.split(";"))
       .map((line) => line.trimEnd())
       .filter((line) => line.trim().length > 0)
       .filter((line) => !line.trimStart().startsWith("#"));
@@ -65,6 +66,7 @@ export function normalizeCommands(value: string | string[]): string[] {
 
   return String(value)
     .split(/\r?\n/)
+    .flatMap((line) => line.split(";"))
     .map((line) => line.trimEnd())
     .filter((line) => line.trim().length > 0)
     .filter((line) => !line.trimStart().startsWith("#"));

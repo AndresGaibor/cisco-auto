@@ -49,9 +49,14 @@ async function generateAndDeploy(): Promise<{
   try {
     const { RuntimeGenerator } = await import("@cisco-auto/pt-runtime");
 
+    const activeCommandTimeoutMs = process.env.PT_ACTIVE_COMMAND_TIMEOUT_MS
+      ? Number(process.env.PT_ACTIVE_COMMAND_TIMEOUT_MS)
+      : undefined;
+
     const generator = new RuntimeGenerator({
       devDir: DEV_DIR,
       outputDir: GENERATED_DIR,
+      activeCommandTimeoutMs,
     });
 
     await generator.build();

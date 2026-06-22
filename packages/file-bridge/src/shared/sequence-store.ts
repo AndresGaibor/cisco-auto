@@ -69,6 +69,34 @@ export class SequenceStore {
   }
 
   /**
+   * Obtiene múltiples números de secuencia de forma atómica.
+   * Más eficiente que llamar next() N veces cuando se necesita un batch.
+   *
+   * @param count - Cantidad de seq numbers a obtener
+   * @returns Array de seq numbers consecutivos
+   * @throws Error si no puede adquirir lock tras máximo de reintentos
+   */
+  nextBatch(count: number): number[] {
+    const lockFd = this.acquireLock();
+    try {
+      const current = this.read();
+      const startSeq = current.nextSeq;
+      const endSeq = startSeq + count;
+      this.write({ nextSeq: endSeq });
+      const seqs: number[] = [];
+      for (let i = 0; i < count; i++) {
+        seqs.push(startSeq + i);
+      }
+      return seqs;
+    } catch (err) {
+      const error = err as Error;
+      throw new Error(`SequenceStore: failed to increment sequence: ${error.message}`);
+    } finally {
+      this.releaseLock(lockFd);
+    }
+  }
+
+  /**
    * Lee el estado actual sin incrementar.
    * @returns El próximo seq que se asignaría
    */

@@ -618,6 +618,11 @@ export class CommandProcessor {
     }
   }
 
+  rebuildQueueIndex(): void {
+    this.queueIndex.compact();
+    this.metrics?.recordQueueCompaction();
+  }
+
   /**
    * Remueve una entrada del índice auxiliar de cola.
    *

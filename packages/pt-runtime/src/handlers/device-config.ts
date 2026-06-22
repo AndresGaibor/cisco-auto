@@ -92,10 +92,21 @@ export function handleSetDefaultGateway(
   payload: { device: string; gw: string },
   api: PtRuntimeApi,
 ): PtResult {
-  const dev = (api as any).ipc.network().getDevice(payload.device) as any;
+  const net = (api as any).ipc.network();
+  const dev = net.getDevice(payload.device) as any;
   if (!dev) return { ok: false, error: "Device not found" };
 
   try {
+    // Try PTPort.setDefaultGateway first (disponible en PTPort de PC/Server)
+    try {
+      const port0 = typeof dev.getPort === "function" ? dev.getPortAt(0) : null;
+      if (port0 && typeof port0.setDefaultGateway === "function") {
+        port0.setDefaultGateway(payload.gw);
+        return { ok: true, result: "GW_SET_VIA_PORT" };
+      }
+    } catch {}
+
+    // Try IPv4 Manager (some PT devices)
     if (typeof dev.getIPv4Config === "function") {
       const ipv4 = dev.getIPv4Config();
       if (ipv4 && ipv4.setGateway) {
@@ -103,6 +114,7 @@ export function handleSetDefaultGateway(
         return { ok: true, result: "GW_SET_VIA_MANAGER" };
       }
     }
+    // Try device-level setGateway (some PT models)
     if (typeof dev.setGateway === "function") {
       dev.setGateway(payload.gw);
       return { ok: true, result: "GW_SET_VIA_DEVICE" };

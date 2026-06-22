@@ -56,6 +56,9 @@ function makeSnapshot(timestamp: number, atomicWrites: number): FileBridgeMetric
     averageQueueAppendMs: 0,
     errors: 0,
     warnings: 0,
+    pickNextCommandCalls: 0,
+    pickNextCommandSkippedByMtime: 0,
+    pickNextCommandByCacheHit: 0,
   };
 }
 

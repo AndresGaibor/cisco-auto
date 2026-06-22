@@ -1,4 +1,5 @@
 import type { RuntimePrimitivePort } from "../../ports/runtime-primitive-port.js";
+import type { RuntimeOmniPort } from "../../ports/runtime-omni-port.js";
 import type { TopologyCachePort } from "../ports/topology-cache.port.js";
 import type { DeviceState } from "@cisco-auto/types";
 
@@ -21,7 +22,47 @@ export class DeviceQueryService {
     private primitivePort: RuntimePrimitivePort,
     private cache: TopologyCachePort,
     private generateId: () => string,
+    private omniPort?: RuntimeOmniPort,
   ) {}
+
+  /**
+   * Realiza un escaneo rápido de todos los dispositivos usando omni.evaluate.raw.
+   * Útil para calentar la caché de tipos/modelos de una sola vez.
+   */
+  async batchInspectFast(): Promise<Record<string, DeviceInspectFastState>> {
+    if (!this.omniPort) return {};
+
+    const code = `
+      (function(){
+        var count = n.getDeviceCount();
+        var out = {};
+        for(var i=0; i<count; i++) {
+          var d = n.getDeviceAt(i);
+          if (d) {
+            out[d.getName()] = { 
+              name: d.getName(),
+              type: d.getType(), 
+              model: d.getModel() 
+            };
+          }
+        }
+        return JSON.stringify(out);
+      })()
+    `.trim();
+
+    const result = await this.omniPort.runOmniCapability("omni.evaluate.raw", { code });
+    if (!result.ok) return {};
+
+    try {
+      const data = JSON.parse(String(result.value || "{}"));
+      
+      // Opcionalmente podemos inyectar esto en la caché si la caché soporta actualizaciones parciales
+      // Por ahora solo lo retornamos para que el consumidor lo use.
+      return data;
+    } catch {
+      return {};
+    }
+  }
 
   /**
    * Inspecciona un dispositivo y retorna su estado completo.

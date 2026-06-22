@@ -3,7 +3,7 @@
 > **Fuente de verdad:** `docs/pt-script-result.json` (generado 2026-04-15 con 12 dispositivos seed)
 > Este extractor produce JSON y TXT con la API real inspeccionada en PT.
 
-> **Última actualización:** 17 Junio 2026
+> **Última actualización:** 17 Junio 2026 (Sesión 3 — HTTP/TCP/MD5/Process/Port Discovery)
 > **Estado:** ⚠️ **Parcial** — secciones con ⚠️ no verificadas vs dump
 
 ---
@@ -14,22 +14,46 @@
 
 | Categoría | Métodos |
 |-----------|---------|
-| **Topología** | `addDevice()`, `removeDevice()`, `autoConnectDevices()`, `deleteLink()` |
-| **Inventario** | `net.getDeviceCount()`, `net.getLinkCount()`, `net.getDeviceAt()`, `net.getLinkAt()` |
-| **Interfaces** | `device.getPortCount()`, `device.getPortAt()`, `port.getIpAddress()`, `port.getSubnetMask()` |
-| **CLI Read** | `cli.enterCommand("show version")`, `cli.getOutput()` |
-| **Device Mgmt** | `device.setName()`, `device.moveToLocation()`, `device.getXCoordinate()`, `device.getYCoordinate()` |
-| **Archivo** | `app.fileSave()`, `app.fileOpen()`, `app.fileSaveAs()` |
+| **Topología** | `addDevice()`, `removeDevice()`, `autoConnectDevices()`, `deleteLink()`, `createLink()` |
+| **Inventario** | `net.getDeviceCount()`, `net.getLinkCount()`, `net.getDeviceAt()`, `net.getLinkAt()`, `net.getDevice(name)` |
+| **Interfaces (Router/PC/Server)** | `device.getPortCount()`, `device.getPortAt()`, `device.getPort(name)`, `port.getIpAddress()`, `port.getSubnetMask()`, `port.getMacAddress()`, `port.isPortUp()`, `port.isProtocolUp()` |
+| **Interfaces (Switch)** | Solo `getMacAddress()`, `isPortUp()`, `isProtocolUp()`. Sin IP ni MTU |
+| **Configurar IP** | `port.setIpSubnetMask(ip, mask)` en **PCs y Servidores** ✅ (NO en RouterPort/SwitchPort) |
+| **CLI Existencia** | `device.getCommandLine()` → `.getPrompt()` en TODOS los dispositivos |
+| **CLI Comandos** | `cli.enterCommand("show version")`, `cli.getOutput()` |
+| **CLI Windows** | PC/Server usan `C:\>` (cmd de Windows). Comandos: `ipconfig`, `ping` |
+| **Device Mgmt** | `device.setName()`, `device.getName()`, `device.getModel()` ("2911"), `device.getType()` (0=Router), `device.getPower()`, `device.getClassName()`, `device.getObjectUuid()` |
+| **Posición** | `device.getXCoordinate()`, `device.getYCoordinate()`, `device.moveToLocation(x, y)` |
+| **Procesos** | `device.getProcess("RoutingProcess"|"VlanManager"|"DhcpServerMainProcess"|...)` — SRV1 tiene 7 procesos confirmados |
+| **XML Serial** | `device.serializeToXml()` — XML COMPLETO del dispositivo (~19KB Router, ~42KB Switch, ~61KB Server) |
+| **Running Config** | `AssessmentModel.getRunningConfig(uuid)`, `AssessmentModel.getStartupConfig(uuid)` (solo en assessment mode) |
+| **AssessmentModel** | `AssessmentModel.fromBase64/fromString`, `AssessmentModel.toBase64/toString`, `AssessmentModel.getNetwork` |
+| **Eventos** | `ipc.registerEvent(eventName, context, handler)` — 8+ eventos |
+| **Globals** | `guid()`, `Base64.encode/decode()`, `$putData/$getData()`, `$createTcpServer()`, `$createHttpServer()`, `scriptEngine`, `MD5` |
+| **TCP Server** | `$createTcpServer()` → `listen(port)`, `close()`, `isListening()`, `getServerIP()`, `getServerPort()` |
+| **HTTP Server** | `$createHttpServer()` → `start(port, cb)`, `stop()`, `isListening()`, `addWebSocketRouteHandler(path, method, handler)` |
+| **Criptografía** | `MD5.hash(str)` — método estático ✅. MD5("test") → "098f6bcd..." |
+| **Archivo** | `app.fileSave()`, `app.fileOpen()`, `app.fileSaveAs()`, `app.getVersion()` |
+| **scriptEngine** | `scriptEngine.evaluate(code)`, `scriptEngine.evaluateCall(fnName, args)` |
 
 ### ⚠️ LIMITACIONES
 
 | Categoría | Problema | Workaround |
 |-----------|---------|------------|
 | Routers nuevos | No cargan IOS (ROMMON) | Usar routers existentes en .pkt |
-| CLI Config | Buffer mezclado | Usar solo para `show` |
-| Configurar IPs | `setIpSubnetMask()` falla | No hay workaround |
+| SwitchPorts | NO tienen `getIpAddress()`, `getMtu()`, `isDhcpClientOn()` | Usar RouterPort |
+| getDefaultGateway | **TypeError** en todos los tipos de puerto | Leer del XML via serializeToXml |
+| getX/getY | **TypeError** en dispositivos | Usar getXCoordinate/getYCoordinate |
+| Procesos | Objetos opacos (solo `_parser` con uuid/className) | Usar serializeToXml para datos |
+| addModule(slot, model) | "Invalid arguments" | Usar rootModule.addModuleAt(model, slot) |
 | Cloud-PT | type=7 retorna null | No usar con addDevice() |
 | Laptop-PT | type=12 retorna null | No usar con addDevice() |
+| **HTTP addRouteHandler** | **NO funciona** — todas las firmas probadas fallan ("Insufficient arguments") | Usar addWebSocketRouteHandler como alternativa |
+| **HTTP/TCP en host** | **NO accesible desde host** — isListening=true pero curl/puerto no responde | Server está en espacio de simulación PT |
+| **TCP newConnection** | **read-only** — no se puede asignar callback como propiedad | Es signal de Qt, no propiedad |
+| **setIpSubnetMask en Router** | **NO funciona** en RouterPort/SwitchPort | Solo en PC-PT y Server-PT |
+| **lw no disponible en raw** | **ReferenceError** cuando se usa `omni raw` | Solo disponible en contexto PT-safe (runtime generado) |
+| **scriptEngine.evaluateCall** | Retorna **null** para funciones nativas como Math.max | Usar evaluate con código inline |
 
 ## 🔎 DEEP DIVE REAL (47 DISPOSITIVOS)
 
@@ -331,12 +355,15 @@ var port = switchDev.getPortAt(1); // FastEthernet0/1
 
 ---
 
-## ⚠️ LIMITACIONES (14 Abril 2026)
+## ⚠️ LIMITACIONES (17 Junio 2026)
 | Crear topología | `addDevice()` | ✅ Funciona |
 | Conectar | `autoConnectDevices()` | ✅ Funciona |
-| Configurar IPs | API `setIpSubnetMask()` | ❌ Falla |
+| Configurar IPs (Router) | API `setIpSubnetMask()` | ❌ Falla en RouterPort |
+| Configurar IPs (PC/Server) | API `setIpSubnetMask()` | ✅ **FUNCIONA** |
 | Configurar IPs | CLI `ip address` | ⚠️ Buggy |
 | Leer config | CLI `show` | ✅ Funciona |
+| Leer config completa | `serializeToXml()` | ✅ **XML completo 19-61KB por dispositivo** |
+| Leer running-config | `AssessmentModel.getRunningConfig(uuid)` | ⚠️ String vacío (solo en modo assessment) |
 
 ---
 
@@ -558,20 +585,62 @@ isPowerOn: false    // Puerto apagado - ¿necesita estar prendido para crear lin
 isPortUp: false     // Puerto no está up
 ```
 
-### HALLAZGO: Métodos SET fallan con "Invalid arguments"
-```
-setIpSubnetMask(ip, mask) => ERROR: Invalid arguments for IPC call
-setBandwidth(kbps) => ERROR: Invalid arguments for IPC call
-setPower(bool) => ERROR: Invalid arguments for IPC call
+### ✅ ACTUALIZACIÓN 17 Junio 2026: setIpSubnetMask FUNCIONA en PCs y Servers
+```javascript
+// ✅ FUNCIONA en PC-PT y Server-PT
+var pc = net.getDevice("PC1");
+var port = pc.getPortAt(0);
+port.setIpSubnetMask("192.168.1.100", "255.255.255.0");
+port.getIpAddress();   // "192.168.1.100" ✅
+port.getSubnetMask();  // "255.255.255.0" ✅
+
+// ✅ FUNCIONA en Server-PT
+var srv = net.getDevice("SRV1");
+var p = srv.getPortAt(0);
+p.setIpSubnetMask("192.168.50.1", "255.255.255.0");
+p.getIpAddress();   // "192.168.50.1" ✅
+// Restaurar:
+p.setIpSubnetMask("192.168.1.200", "255.255.255.0");
+
+// ❌ NO funciona en RouterPort (SwitchPort ni siquiera tiene getIpAddress)
 ```
 
-**Solo métodos GET funcionan:**
-- `getIpAddress()` → 0.0.0.0
-- `getSubnetMask()` → 0.0.0.0
-- `getBandwidth()` → 100000
-- `getMtu()` → 1500
-- `getMacAddress()` → 0001.C767.1448
-- etc.
+### ❌ Métodos SET que SIGUEN fallando
+```
+setBandwidth(kbps) => ERROR: Invalid arguments for IPC call
+setPower(bool) => ERROR: Invalid arguments for IPC call
+setAccessVlan(id) => Invalid arguments
+setNativeVlanId(id) => Invalid arguments
+```
+
+### ✅ Métodos GET confirmados (por tipo de puerto)
+```
+RouterPort:
+  getIpAddress()    → "192.168.10.1" ✅
+  getSubnetMask()   → "255.255.255.0" ✅
+  getMacAddress()   → "00D0.BCE3.7901" ✅
+  isPortUp()        → true ✅
+  isProtocolUp()    → true ✅
+  getMtu()          → 1500 ✅
+  isDhcpClientOn()  → false ✅
+
+SwitchPort:
+  getIpAddress()    → TypeError ❌
+  getMacAddress()   → "0060.5C27.E101" ✅
+  isPortUp()        → true ✅
+  isProtocolUp()    → true ✅
+  getMtu()          → TypeError ❌
+  isDhcpClientOn()  → TypeError ❌
+
+PC/Server Port:
+  getIpAddress()    → "192.168.10.100" ✅
+  getSubnetMask()   → "255.255.255.0" ✅
+  getMacAddress()   → "0060.3E1B.9759" ✅
+  isPortUp()        → true ✅
+  isProtocolUp()    → true ✅
+  getMtu()          → 1500 ✅
+  isDhcpClientOn()  → false ✅
+```
 
 ### ✅ FUNCIONA - Automatización CLI
 ```javascript
@@ -921,7 +990,7 @@ var port = router.getPort("FastEthernet0/0");  // Por nombre
 | `getSubnetMask()` | Máscara actual | ✅ 0.0.0.0 |
 | `getMacAddress()` | MAC address | ✅ 000A.F322.C8D6 |
 | `getIpMtu()` | MTU IP | - |
-| `setIpSubnetMask(ip, mask)` | **Configurar IP** | ❌ No probado |
+| `setIpSubnetMask(ip, mask)` | **Configurar IP** | ❌ Falla en RouterPort (✅ funciona en PC/Server) |
 | `setDhcpClientFlag(bool)` | Habilitar DHCP | - |
 | `isDhcpClientOn()` | ¿DHCP activo? | - |
 | `setDnsServerIp(ip)` | DNS server | - |
@@ -2102,6 +2171,325 @@ lws.deleteLink("Router0", "FastEthernet0/0");
 
 ---
 
+## 🔬 NUEVOS DESCUBRIMIENTOS (17 Junio 2026 — Sesión 2)
+
+> Experimentos #31-#37 confirmaron APIs críticas NO documentadas o previamente marcadas como fallidas.
+> **Fuente:** AGENTS.md de pt-runtime reveló APIs que no se habían probado.
+
+### 📌 serializeToXml() — XML COMPLETO del dispositivo
+
+**TODOS los dispositivos tienen este método.** Devuelve el estado serializado completo en XML.
+
+```javascript
+var xml = device.serializeToXml();
+// R1:  ~19,274 chars — configuración completa del router
+// SW1: ~42,100 chars — VLANs, STP, puertos, etc.
+// SRV1: ~61,283 chars — servicios: DHCP, HTTP, FTP, DNS, syslog, archivos
+```
+
+**Tags XML encontrados en SRV1 (servidor):**
+```
+DEVICE, ENGINE, TYPE, NAME, POWER, MODULE, SLOT, PORT,
+IP, SUBNET, GATEWAY, MACADDRESS, BIA, DHCP_SERVER_IP,
+HTTP_SERVER (ENABLED=1), HTTPS_SERVER (HTTPSENABLED=1),
+FTP_SERVER (ENABLED=1, usuario cisco/cisco),
+DNS_SERVER, SYSLOG_SERVER (ENABLED=1),
+NTP_SERVER (ENABLED=1), EMAIL_SERVER,
+DHCP_SERVER → POOLS → POOL (NETWORK, MASK, START_IP, END_IP, DEFAULT_ROUTER),
+DHCP_POOL_LEASES, DNS_CLIENT, TFTP_SERVER,
+FILE (91 archivos con FILE_NUMBER, FILE_CONTENT, PERMISSION),
+SNMP_MANAGER (AGENT_IP, READ_COMMUNITY, WRITE_COMMUNITY),
+RADIUS_SETTINGS (AUTH_PORT=1645),
+HTML_CODE, GUI_CODE, PYTHON, USER_APPS, RUNNING_APPS
+```
+
+### 📌 getCommandLine() — CLI en TODOS los dispositivos
+
+| Dispositivo | Prompt |
+|-------------|--------|
+| Router (R1) | `Router#` (modo privilegiado ya!) |
+| Switch (SW1) | `Switch>` |
+| PC (PC1) | `C:\>` (Windows cmd.exe) |
+| Server (SRV1) | `C:\>` (Windows cmd.exe) |
+
+```javascript
+var cli = device.getCommandLine();
+cli.getPrompt();   // "Router#", "Switch>", "C:\>"
+// Nota: El objeto CLI solo expone "_parser" vía Object.keys()
+// Los métodos enterCommand/getOutput/getPrompt funcionan internamente
+```
+
+### 📌 getPort(name) — por nombre exacto
+
+**Requiere el nombre COMPLETO del puerto**, no abreviaturas:
+
+| Dispositivo | getPortAt(i) | getPort(name) |
+|-------------|-------------|---------------|
+| Router (R1) | `getPortAt(1)` → GigabitEthernet0/0 | `getPort("GigabitEthernet0/0")` ✅ |
+| Router (R1) | ❌ `getPort("Gig0/0")` → null | Usar nombre exacto |
+| Switch (SW1) | `getPortAt(1)` → FastEthernet0/1 | `getPort("FastEthernet0/1")` ✅ |
+| PC (PC1) | `getPortAt(0)` → FastEthernet0 | `getPort("FastEthernet0")` ✅ |
+| Server (SRV1) | `getPortAt(0)` → FastEthernet0 | `getPort("FastEthernet0")` ✅ |
+
+```javascript
+var r1 = net.getDevice("R1");
+r1.getPort("GigabitEthernet0/0").getIpAddress();  // "192.168.10.1"
+// NOTE: getPort(name) y getPortAt(index) NO son el mismo objeto (!==)
+```
+
+### 📌 Procesos por dispositivo
+
+**Router (R1):**
+```javascript
+r1.getProcess("RoutingProcess")       // ✅ Objeto con _parser
+r1.getProcess("RipProcess")           // ✅ Objeto con _parser
+r1.getProcess("VlanManager")          // ✅ Objeto con _parser
+r1.getProcess("StpMainProcess")       // ✅ Objeto con _parser
+r1.getProcess("DhcpServerProcess")    // ✅ Objeto con _parser
+r1.getProcess("OspfProcess")          // ❌ null
+r1.getProcess("EigrpProcess")         // ❌ null
+```
+
+**Switch (SW1):**
+```javascript
+sw1.getProcess("VlanManager")         // ✅ Objeto con _parser
+sw1.getProcess("StpMainProcess")      // ✅ Objeto con _parser
+sw1.getProcess("DhcpServerProcess")   // ✅ Objeto con _parser
+sw1.getProcess("RoutingProcess")      // ❌ null
+```
+
+**Server (SRV1):**
+```javascript
+srv1.getProcess("DhcpServerMainProcess")  // ✅
+srv1.getProcess("DnsServerProcess")       // ✅
+srv1.getProcess("HttpServerProcess")      // ✅
+srv1.getProcess("FtpServerProcess")       // ✅
+srv1.getProcess("EmailServerProcess")     // ✅
+srv1.getProcess("SyslogServerProcess")    // ✅
+srv1.getProcess("NtpServerProcess")       // ✅
+srv1.getProcess("DhcpServerProcess")      // ❌ null (usar DhcpServerMainProcess)
+srv1.getProcess("SnmpServerProcess")      // ❌ null
+```
+
+> **⚠️ Todos los procesos son opacos:** solo exponen `_parser` con `uuid` y `className`. No hay métodos públicos como `getVlans()`, `getRoutes()`, etc. en el proxy IPC. Usar `serializeToXml()` para leer datos, y CLI para modificarlos.
+
+### 📌 setIpSubnetMask() — CONFIRMADO FUNCIONA en PCs y Servers
+
+```javascript
+// PC1: Cambiar IP
+var pc1 = net.getDevice("PC1");
+var p = pc1.getPortAt(0);
+p.getIpAddress();                // "192.168.10.100"
+p.setIpSubnetMask("192.168.1.100", "255.255.255.0");  // ✅ retorna null (éxito)
+p.getIpAddress();                // "192.168.1.100" ✅
+p.getSubnetMask();               // "255.255.255.0" ✅
+
+// SRV1: Cambiar IP del servidor
+var srv = net.getDevice("SRV1");
+var sp = srv.getPortAt(0);
+sp.setIpSubnetMask("192.168.50.1", "255.255.255.0");  // ✅
+sp.getIpAddress();               // "192.168.50.1" ✅
+// Restaurar:
+sp.setIpSubnetMask("192.168.1.200", "255.255.255.0");
+```
+
+### 📌 getPower() — Getter de estado
+
+```javascript
+device.getPower();  // true — funciona en TODOS los dispositivos
+```
+
+### 📌 lw.addDevice() / lw.removeDevice() — Crear y eliminar
+
+```javascript
+var lw = ipc.appWindow().getActiveWorkspace().getLogicalWorkspace();
+
+// Crear dispositivo — RETORNA STRING (nombre), NO objeto
+var name = lw.addDevice(8, "PC-PT", 100, 100);
+// name = "PC0" (string, no objeto)
+var pc = net.getDevice(name);
+pc.getName();              // "PC0"
+pc.getPortAt(0).getName(); // "FastEthernet0"
+
+// Configurar IP inmediatamente después de crear
+var p = pc.getPortAt(0);
+p.setIpSubnetMask("10.0.0.1", "255.0.0.0");  // ✅
+
+// Eliminar
+lw.removeDevice("PC0");  // ✅ retorna true
+```
+
+### 📌 ipc.registerEvent() — 8 eventos confirmados
+
+```javascript
+// ✅ Todos funcionan:
+ipc.registerEvent("deviceAdded", null, handler);      // boolean
+ipc.registerEvent("deviceRemoved", null, handler);    // boolean
+ipc.registerEvent("deviceModified", null, handler);   // boolean
+ipc.registerEvent("canvasNoteAdded", null, handler);  // boolean
+ipc.registerEvent("linkAdded", null, handler);        // boolean
+ipc.registerEvent("linkRemoved", null, handler);      // boolean
+ipc.registerEvent("portModified", null, handler);     // boolean
+ipc.registerEvent("powerChanged", null, handler);     // boolean
+
+// Desregistrar:
+var id = ipc.registerEvent("deviceAdded", null, handler);
+ipc.unregisterEvent(id);  // ✅
+```
+
+> NOTA: `registerEvent` de `ipc` es distinto de `lws.registerEvent`. Ambos existen.
+
+### 📌 ipc.getObjectByUuid()
+
+```javascript
+// Recuperar cualquier objeto por UUID
+var uuid = "{5b07090e-e993-03fc-7514-a3be3b5ce1b0}";  // RoutingProcess UUID
+var obj = ipc.getObjectByUuid(uuid);   // ✅ Retorna objeto
+Object.keys(obj);                      // ["_parser"]
+```
+
+### 📌 Globals y utilidades
+
+```javascript
+guid();                    // "fb437434-5260-40f9-3634-17acae95a70f" ✅ UUID v4
+Base64.encode("test123");  // "dGVzdDEyMw==" ✅
+Base64.decode("dGVzdDEyMw=="); // "test123" ✅
+$putData("key", "value");  // ✅ Almacenar dato global
+$getData("key");           // "value" ✅ Recuperar dato global
+AssessmentModel.fromBase64("dGVzdA==");  // "test" ✅
+AssessmentModel.toBase64("test");        // "dGVzdA==" ✅
+```
+
+### 📌 ipc.appWindow() — Nuevos métodos confirmados
+
+```javascript
+var aw = ipc.appWindow();
+aw.getVersion();            // "9.0.0.0810" ✅
+aw.isRealtimeMode();        // true ✅
+```
+
+### 📌 Topología programática completa
+
+```javascript
+// 1. Crear red completa desde cero
+var lw = ipc.appWindow().getActiveWorkspace().getLogicalWorkspace();
+var net = ipc.network();
+
+// 2. Crear dispositivos (addDevice retorna nombre string)
+var r1Name = lw.addDevice(0, "2911", 100, 200);
+var sw1Name = lw.addDevice(1, "2960-24TT", 300, 200);
+var pc1Name = lw.addDevice(8, "PC-PT", 500, 200);
+
+// 3. Obtener objetos
+var r1 = net.getDevice(r1Name);
+var sw1 = net.getDevice(sw1Name);
+var pc1 = net.getDevice(pc1Name);
+
+// 4. Cablear
+lw.autoConnectDevices(r1Name, sw1Name);  // ✅ auto-selecciona puertos
+lw.autoConnectDevices(sw1Name, pc1Name);
+
+// 5. Configurar IP del PC
+var p = pc1.getPortAt(0);
+p.setIpSubnetMask("192.168.1.10", "255.255.255.0");  // ✅
+
+// 6. Leer configuración completa via XML
+var xml = r1.serializeToXml();  // 19KB+ de configuración
+
+// 7. Leer procesos disponibles
+var rp = r1.getProcess("RoutingProcess");
+
+// 8. CLI
+var cli = r1.getCommandLine();
+cli.getPrompt();  // "Router>"
+// NOTA: para enviar comandos, ver sección CLI arriba
+```
+
+### 📌 Servidor SRV1 — Configuración completa via XML
+
+```xml
+<DEVICE>
+  <ENGINE>
+    <TYPE model="Server-PT">Server</TYPE>
+    <NAME>SRV1</NAME>
+    <POWER>true</POWER>
+    <MODULE>
+      <SLOT>
+        <MODULE>
+          <PORT>
+            <IP>192.168.1.200</IP>
+            <SUBNET>255.255.255.0</SUBNET>
+            <MACADDRESS>00D0.58B0.BC26</MACADDRESS>
+          </PORT>
+        </MODULE>
+      </SLOT>
+    </MODULE>
+  </ENGINE>
+  <!-- Servicios: -->
+  <DHCP_SERVER>
+    <POOLS>
+      <POOL>
+        <NETWORK>192.168.1.0</NETWORK>
+        <MASK>255.255.255.0</MASK>
+        <START_IP>192.168.1.0</START_IP>
+        <END_IP>192.168.2.0</END_IP>
+        <MAX_USERS>256</MAX_USERS>
+      </POOL>
+    </POOLS>
+  </DHCP_SERVER>
+  <HTTP_SERVER><ENABLED>1</ENABLED></HTTP_SERVER>
+  <HTTPS_SERVER><HTTPSENABLED>1</HTTPSENABLED></HTTPS_SERVER>
+  <FTP_SERVER>
+    <ENABLED>1</ENABLED>
+    <USER_ACCOUNT_MNGR>
+      <ACCOUNT>
+        <USERNAME>cisco</USERNAME>
+        <PASSWORD>cisco</PASSWORD>
+        <PERMISSIONS>RWDNL</PERMISSIONS>
+      </ACCOUNT>
+    </USER_ACCOUNT_MNGR>
+  </FTP_SERVER>
+  <SYSLOG_SERVER><ENABLED>1</ENABLED></SYSLOG_SERVER>
+  <NTP_SERVER><ENABLED>1</ENABLED></NTP_SERVER>
+  <!-- 91 archivos en filesystem -->
+</DEVICE>
+```
+
+### ❌ APIs que NO funcionan (TypeError / Invalid arguments)
+
+| Método | Error |
+|--------|-------|
+| `port.getDefaultGateway()` | TypeError en todos los tipos de puerto |
+| `port.getIpv6Address()` | "IPC Call ERROR: Invalid arguments" |
+| `port.getInboundFirewallService()` | TypeError |
+| `dev.getX()` / `dev.getY()` | TypeError (usar getXCoordinate/getYCoordinate) |
+| `dev.addModule(slot, model)` | "Invalid arguments" en Device (usar rootModule.addModuleAt) |
+| `ipc.simulation().xxx` | Solo opaco (`_parser` con uuid/className) |
+| `ipc.hardwareFactory().xxx` | Solo opaco (`_parser` con uuid/className) |
+| SwitchPort.getIpAddress() | TypeError — SwitchPort no tiene IP |
+| `lws.registerObjectEvent()` | "Invalid arguments for IPC call" |
+| `Object.getPrototypeOf(device)` | Puede crashear PT — siempre usar try/catch |
+
+### 📌 Resumen: Lo nuevo que cambia
+
+| Antes (14 Abril) | Ahora (17 Junio) | Cambio |
+|------------------|------------------|--------|
+| `setIpSubnetMask()` ❌ Falla | ✅ Funciona en PCs y Servers | **CORREGIDO** |
+| `serializeToXml()` ⚠️ No probado | ✅ Confirmado, XML completo | **NUEVO** |
+| `getCommandLine()` solo en routers | ✅ Todos los dispositivos tienen CLI | **NUEVO** |
+| `getPort(name)` ⚠️ No probado | ✅ Funciona con nombre exacto | **NUEVO** |
+| `getProcess(name)` solo VlanManager | ✅ Mapeado completo por dispositivo | **NUEVO** |
+| `getPower()` solo setter | ✅ Getter funciona en todos | **NUEVO** |
+| `lw.addDevice()` retorna "Router0" | ✅ Retorna string (nombre), no objeto | **CONFIRMADO** |
+| `lw.removeDevice()` ⚠️ No probado | ✅ Funciona | **CONFIRMADO** |
+| `ipc.registerEvent()` ⚠️ No probado | ✅ 8 eventos funcionan | **NUEVO** |
+| `ipc.getObjectByUuid()` ⚠️ | ✅ Funciona | **NUEVO** |
+| `aw.getVersion()` ⚠️ | ✅ "9.0.0.0810" | **CONFIRMADO** |
+| `guid()`, `Base64`, `$putData/$getData` ⚠️ | ✅ Todos funcionan | **NUEVO** |
+| `AssessmentModel.getRunningConfig()` ⚠️ | ✅ Existe, string vacío (modo no-assessment) | **NUEVO** |
+
+---
+
 ## 🖥️ TOPOLOGÍA REAL DEL .PKT (17 Junio 2026)
 
 ### 14 dispositivos
@@ -2138,3 +2526,242 @@ lws.deleteLink("Router0", "FastEthernet0/0");
 |---------|---------|----------------------|
 | VlanManager | 22 | `addVlan`, `removeVlan`, `changeVlanName`, `addVlanInt`, `getMacTable`... |
 | RoutingProcess | 16 | `addStaticRoute` (❌ firma incorrecta), `getRoutingTable`, `getStaticRouteAt`... |
+
+### Procesos verificados en SRV1 (Server-PT)
+
+| Proceso | UUID | Estado |
+|---------|------|--------|
+| DhcpServerMainProcess | `{04619523-f040-bf58-ff1e-a378304b7213}` | ✅ Detectado |
+| HttpServerProcess | `{71bd27c0-dd9c-3884-eb1e-a3225a58548f}` | ✅ Detectado |
+| FtpServerProcess | `{ba41254b-be5b-8561-e81e-a341769a006c}` | ✅ Detectado |
+| DnsServerProcess | `{5c5a9daf-56a3-b1bc-fe1e-a3eacd6beb42}` | ✅ Detectado |
+| EmailServerProcess | `{71cca28f-933b-807f-fd1e-a38bc6ec0210}` | ✅ Detectado |
+| SyslogServerProcess | `{5aa4125e-a454-60d3-051f-a31641e2a385}` | ✅ Detectado |
+| NtpServerProcess | `{ec739c47-7c3a-ac95-9c1e-a3edcb1400c2}` | ✅ Detectado |
+
+**Nota:** Todos los procesos de SRV1 existen pero son objetos opacos (solo `_parser` con uuid/className). Para leer/escribir config de servicios, usar `serializeToXml()` o CLI.
+
+---
+
+## 🧪 SESIÓN 3 — Descubrimiento HTTP/TCP/MD5/Process/Port (17 Junio 2026, Experimentos 37-44)
+
+### Resumen de hallazgos experimentales
+
+| # | Experimento | Resultado | Impacto |
+|---|-------------|-----------|---------|
+| 37 | `getPort(name)` con nombres parciales | ❌ Solo funciona con nombre exacto (e.g., "GigabitEthernet0/0", no "Gig0/0") | Usar nombres exactos siempre |
+| 38 | `setIpSubnetMask` en Router/Switch | ❌ Falla en RouterPort y SwitchPort | Solo funciona en PC-PT y Server-PT |
+| 39 | `$createHttpServer().addRouteHandler()` | ❌ "Insufficient arguments" en todas las firmas | Bug de PT o tipos Qt no expuestos |
+| 39 | `$createHttpServer().start(80)` | ⚠️ OK pero isListening=false | `start(port, callback)` funciona mejor |
+| 39 | `$createHttpServer().addWebSocketRouteHandler()` | ✅ Funciona con 3 args (path, method, handler) | Alternativa viable |
+| 39 | `$createTcpServer().listen()` | ✅ OK, isListening=true | TCP server funcional |
+| 40 | `serializeToXml()` en R1/SW1/SRV1 | ✅ XML COMPLETO (~19K/42K/61K) | Contiene TODA la config (servicios, VLANs, routing) |
+| 40 | `getCommandLine()` en Router/Switch/PC | ✅ Router#, Switch>, C:\> | Windows CLI en PCs |
+| 40 | `getProcess()` en R1/SRV1 | ✅ RoutingProcess, VlanManager, 7 procesos SRV1 | Procesos mapeados |
+| 40 | `getPower()` en todos | ✅ Funciona como getter | Confirmado |
+| 40 | `lw.addDevice()` / `lw.removeDevice()` | ✅ add retorna string, remove funciona | Gestión topología |
+| 40 | `ipc.registerEvent()` | ✅ 8 eventos: deviceAdded/Removed/Modified, linkAdded/Removed, etc. | Eventos funcionales |
+| 40 | `ipc.getObjectByUuid()` | ✅ Funciona | Búsqueda por UUID |
+| 40 | `AssessmentModel.*` | ✅ fromBase64/toBase64, getRunningConfig (string vacío) | Solo en assessment mode |
+| 40 | `$putData/$getData()`, `Base64`, `guid()` | ✅ Todos funcionan | Globals confirmados |
+| 40 | `MD5.hash("test")` | ✅ "098f6bcd..." | Método estático |
+| 40 | `scriptEngine.evaluate()` | ✅ Evalúa JS inline | Motor de scripts |
+| 41 | `$createTcpServer()` clean | ✅ isListening=true, getServerPort=9090 | TCP server funcional |
+| 41 | `$createHttpServer()` start(8080,cb) | ✅ isListening=true | HTTP server "corriendo" |
+| 41 | `$createHttpServer()` addRouteHandler | ❌ "Insufficient arguments" | Confirmado bug |
+| 41 | `new MD5().hash()` | ❌ TypeError: no es función | Usar MD5.hash() estático |
+| 42 | `addWebSocketRouteHandler(path, method, fn)` | ✅ "OK" | ✅ Funciona con 3 args |
+| 42 | `addWebSocketRouteHandler(path, fn)` | ❌ "Insufficient arguments" | Necesita 3 args |
+| 42 | `http.__S0setDevice(device)` | ✅ ok | Asocia server a dispositivo |
+| 42 | TCP from PC1 (telnet 127.0.0.1 7070) | ⚠️ Comando enviado pero sin conexión | Server no está en red simulada |
+| 42 | `MD5.hash()` varios strings | ✅ test, cisco, admin, 123456 | Confirmado MD5 funcional |
+| 43 | R1.getModel() | ✅ "2911" | Modelo accesible |
+| 43 | R1.getType() | ✅ 0 (Router) | Type ID accesible |
+| 43 | R1.getConfig/getRunningConfig/setConfig | ❌ No existen en proxy | Solo CLI o XML |
+| 43 | R1.removeModule() | ❌ Invalid arguments | Módulos no modificables vía IPC directa |
+| 43 | `lw` en contexto omni raw | ❌ ReferenceError | lw solo en contexto PT-safe |
+| 43 | `scriptEngine.evaluateCall(Math.max)` | ❌ Retorna null | No funciona con funciones nativas |
+| 44 | PC1/Server-PT ports | ✅ FastEthernet0 con IP/MAC, Bluetooth sin IP | Puertos mapeados |
+| 44 | SRV1 ports | ✅ FastEthernet0: 192.168.1.200/24, MAC: 00D0.58B0.BC26 | Puerto principal |
+
+### Estado de conectividad HTTP/TCP
+
+```
+Host (macOS) ──curl localhost:8080──❌ Connection refused
+PT Simulation Network (PC1) ──telnet──❌ No reachable
+$createHttpServer() ──isListening()──✅ true
+```
+
+### Recomendaciones
+
+- Para configurar servicios de servidor (DHCP, HTTP, FTP, DNS): usar **`serializeToXml()`** para leer y luego **CLI** para modificar
+- Para comunicación entre dispositivos PT: usar **servicios nativos** (HTTP server de SRV1, telnet entre routers)
+- Para crear servidores embebidos: `$createTcpServer()` es más confiable que `$createHttpServer()` (que tiene addRouteHandler roto)
+- Para hashing: usar **`MD5.hash(str)`** (estático)
+- Para scripting dinámico: **`scriptEngine.evaluate(code)`** funciona para JS arbitrario
+- **NUNCA** usar `for...in`, `Object.getOwnPropertyNames()` ni `Object.getPrototypeOf()` sobre proxies IPC (riesgo de SIGSEGV)
+
+---
+
+## 🧪 SESIÓN 4 — XML/Events/CLI/FileManager Deep Dive (17 Junio 2026, Experimento 45)
+
+### Resumen de hallazgos
+
+| # | Categoría | Resultado | Detalle |
+|---|-----------|-----------|---------|
+| 1 | **Setters Port** | ⚠️ Mixto | `setDefaultGateway` ✅, `setMtu(1500)` ✅ (getMtu retorna 1500), `setDhcpClientFlag` ✅, `setInboundFirewallService` ❌ (firma incorrecta), `setDhcpEnabled` ❌ (no existe en HostPort) |
+| 2 | **Setters Device** | ✅ | `setPower(bool)` ✅, `setDhcpFlag(bool)` ✅ (getDhcpFlag confirma), `restoreToDefault` ❌ (firma incorrecta), `skipBoot` ❌ (no existe en Pc) |
+| 3 | **Device Info** | ✅ | `getUpTime()` ✅ (R1=44673s, PC1=30s), `getSerialNumber()` ✅ (FTX1524FNY6-, CAT10100QP3-, PTT0810A3C7), `isBooting()` ✅ (Router) |
+| 4 | **IPC Events** | ⚠️ Async | 7 eventos registrados exitosamente pero **NO se disparan durante ejecución síncrona** — son asíncronos, requieren runtime persistente |
+| 5 | **Terminal Events** | ✅ Funcionan | `commandStarted`, `outputWritten`, `commandEnded`, `modeChanged`, `promptChanged` — todos se disparan. `outputWritten` se dispara múltiples veces por comando |
+| 6 | **CLI Router** | ⚠️ Bug | `show running-config` y `show ip interface brief` devuelven **boot loader output** en vez del comando. R1 está en `Router>` (modo usuario). Probablemente `getOutput()` captura buffer incorrecto |
+| 7 | **CLI Router mode** | ✅ | Prompt actual: `Router>` (user exec mode). Anteriormente estaba en `Router#` (cambió entre sesiones) |
+| 8 | **CLI Switch** | ⚠️ Bug | `show vlan brief` devuelve **boot loader output**. `enable` sí funciona → `Switch#` |
+| 9 | **CLI PC (Windows)** | ✅ | `ipconfig` funciona: muestra FastEthernet0, IPv4=0.0.0.0, Link-local IPv6. `ping` necesita salida de comando previo |
+| 10 | **systemFileManager** | ✅ **Disponible!** | `getFilesInDirectory("/tmp")` = 179 archivos, `writePlainTextToFile` escribe archivos, `getFileContents` lee archivos |
+| 11 | **SRV1 HTTP** | ✅ Confirmado | XML contiene `HTTP_SERVER` con `ENABLED=0` (HTTP apagado). También `HTTPS_SERVER` con `HTTPSENABLED=1` |
+
+### Detalles por bloque
+
+#### BLOQUE 1: XML → No hay deserialización
+**No existe `deserializeFromXml()` ni `setConfig()` en ningún dispositivo.** No se puede importar XML directamente a PT. Los cambios deben aplicarse vía:
+1. **Setters IPC** (setIpSubnetMask, setPower, setName, setMtu, etc.) — cambios atómicos
+2. **CLI enterCommand** — cambios de configuración IOS
+3. **FileManager** — escribir archivos de configuración en el host
+
+#### BLOQUE 2: Setters — Mapa de lo que funciona
+
+| Setter | PC-PT | Server-PT | Router | Switch |
+|--------|-------|-----------|--------|--------|
+| `setName(name)` | ✅ | ✅ | ✅ | ✅ |
+| `setIpSubnetMask(ip,mask)` | ✅ | ✅ | ❌ | ❌ |
+| `setDefaultGateway(gw)` | ✅ | ✅ | ❌ | ❌ |
+| `setMtu(mtu)` | ✅ | ✅ | ❌ | ❌ |
+| `setDhcpClientFlag(bool)` | ✅ | ✅ | ❌ | ❌ |
+| `setDhcpEnabled(bool)` | ❌ | ❌ | ❌ | ❌ |
+| `setPower(bool)` | ✅ | ✅ | ✅ | ✅ |
+| `setDhcpFlag(bool)` | ✅ | ✅ | ✅ | ✅ |
+| `setInboundFirewallService(s)` | ❌ | ❌ | ❌ | ❌ |
+
+#### BLOQUE 3: Device Info API
+
+```javascript
+// Todos los dispositivos tienen:
+device.getModel();       // "2911", "2960-24TT", "Server-PT", "PC-PT"
+device.getType();        // 0=Router, 1=Switch, 8=PC, 9=Server
+device.getUpTime();      // segundos desde boot (R1=44673, PC1=30)
+device.getSerialNumber();// "FTX1524FNY6-" (R1), "PTT0810A3C7" (SRV1)
+
+// Solo Router y Switch:
+device.isBooting();      // false (ya booteado)
+
+// SRV1 y PC1 NO tienen isBooting():
+device.isBooting();      // ❌ TypeError
+```
+
+#### BLOQUE 4: IPC Events — Son ASÍNCRONOS
+
+```javascript
+// Registrar eventos (funciona)
+var id = ipc.registerEvent("deviceAdded", null, handler);
+
+// PERO: los handlers NO se ejecutan durante la ejecución síncrona del script.
+// Ocurren en el event loop de PT después de que el script termina.
+// Para capturarlos: necesitas runtime persistente (como main.js).
+
+// Eventos disponibles (8 confirmados):
+"deviceAdded"      // Cuando se agrega un dispositivo
+"deviceRemoved"    // Cuando se elimina un dispositivo
+"deviceModified"   // Cuando se modifica un dispositivo
+"linkAdded"        // Cuando se agrega un enlace
+"linkRemoved"      // Cuando se elimina un enlace
+"canvasNoteAdded"  // Cuando se agrega una nota
+"portModified"     // Cuando se modifica un puerto
+"powerChanged"     // Cuando cambia el power state
+```
+
+#### BLOQUE 5: Terminal Events — SÍ funcionan en tiempo real
+
+```javascript
+var cli = device.getCommandLine();
+
+// Eventos del terminal (confirmados):
+cli.registerEvent("commandStarted", null, function(src, args) {
+  // args.command = comando (pero puede ser undefined)
+});
+cli.registerEvent("outputWritten", null, function(src, args) {
+  // args.output = fragmento de output
+  // args.session = snapshot de sesión
+});
+cli.registerEvent("commandEnded", null, function(src, args) {
+  // args.status = 0 (success) u otro
+  // args.output = output completo
+});
+cli.registerEvent("modeChanged", null, function(src, args) {
+  // args.oldMode, args.newMode
+});
+cli.registerEvent("promptChanged", null, function(src, args) {
+  // args.oldPrompt, args.newPrompt
+});
+cli.registerEvent("moreDisplayed", null, handler);   // --More--
+cli.registerEvent("directiveSent", null, handler);    // directiva enviada
+```
+
+**Problema con getOutput():** `cli.getOutput()` captura el buffer actual pero NO espera a que el comando termine. Como `enterCommand()` es asíncrono, `getOutput()` puede devolver datos de comandos anteriores o output parcial.
+
+**Solución:** Usar `registerEvent("commandEnded")` para saber cuándo un comando terminó, o usar el runtime de cisco-auto que maneja la sincronización.
+
+#### BLOQUE 6: CLI — Problema de boot loader
+
+Los comandos `show running-config` y `show ip interface brief` en R1 devuelven **boot loader output**:
+```
+System Bootstrap, Version 15.1(4)M4, RELEASE SOFTWARE (fc1)
+...
+Readonly ROMMON initialized
+program load complete, entry point: 0x80803000...
+```
+
+Causa probable: `getOutput()` está capturando OUTPUT ACUMULADO del boot. Los comandos se ejecutan asíncronamente y el buffer aún contiene datos de arranque. Se necesita limpiar el buffer o esperar a que el comando termine via eventos.
+
+#### BLOQUE 7: FileManager — Acceso completo al filesystem
+
+```javascript
+var fm = ipc.systemFileManager();
+
+// Leer archivos
+fm.getFileContents("/tmp/pt-test-write.txt");  // "hello from PT" ✅
+fm.getFilesInDirectory("/tmp");                // ["file1", "file2", ...] ✅ (179 archivos en /tmp)
+
+// Escribir archivos
+fm.writePlainTextToFile("/tmp/salida.txt", "contenido");  // ✅
+
+// Verificar existencia
+fm.fileExists("/tmp/salida.txt");              // true o path string
+fm.directoryExists("/tmp");                    // true
+
+// Directorios
+fm.makeDirectory("/tmp/nuevo-dir");            // ✅
+fm.removeFile("/tmp/salida.txt");              // ✅
+
+// NO funciona en AppWindow:
+aw.listDirectory("/tmp");                      // ❌ "Invalid arguments"
+```
+
+**Implicaciones:** FileManager permite leer/escribir archivos en el sistema host. Esto podría usarse para:
+- Escribir configuraciones generadas desde scripts
+- Leer archivos de configuración externos
+- Backup de configuraciones vía serializeToXml() + writePlainTextToFile
+- Implementar un sistema de "config push" donde se escribe un archivo y PT lo procesa
+
+### Estrategia XML → PT (automatización)
+
+1. **Leer estado**: `device.serializeToXml()` → XML completo
+2. **Parsear**: `parseDeviceXml(xml)` → `ParsedDeviceXml` (puertos, VLANs, rutas, DHCP...)
+3. **Modificar**: Cambiar propiedades en el objeto parseado
+4. **Aplicar**: 
+   - Para IPs: `port.setIpSubnetMask(newIp, mask)`
+   - Para configs complejas: `cli.enterCommand("configure terminal")` + comandos IOS
+   - Para servicios server: escribir archivos via FileManager + CLI
+5. **Verificar**: `device.serializeToXml()` de nuevo → confirmar cambios
+
+**No hay atajo** de importar XML directamente. PT no expone `deserializeFromXml()`. Cada cambio debe aplicarse vía setter IPC o CLI.

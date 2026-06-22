@@ -88,9 +88,14 @@ describe("FileBridge stress tests", () => {
   });
 
   test("AppendOnlyQueueIndex compact preserva solo entries válidas", () => {
+    const { writeFileSync } = require("node:fs") as typeof import("node:fs");
     const dir = join(tmpdir(), `bridge-compact-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
     mkdirSync(dir, { recursive: true });
     const indexPath = join(dir, "_queue.ndjson");
+
+    writeFileSync(join(dir, "a.json"), '{"cmd":"a"}');
+    writeFileSync(join(dir, "b.json"), '{"cmd":"b"}');
+    writeFileSync(join(dir, "c.json"), '{"cmd":"c"}');
 
     const idx = new AppendOnlyQueueIndex({ indexPath });
     idx.append("a.json");

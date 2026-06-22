@@ -157,3 +157,4 @@ export type {
 // Terminal Command Service
 export { createTerminalCommandService } from "./terminal/terminal-command-service.js";
 export type { TerminalCommandServiceDeps } from "./terminal/terminal-command-service.js";
+export { isReadOnlyExecCommand } from "./terminal-plan-policies.js";

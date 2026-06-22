@@ -40,6 +40,16 @@ Antes de empezar, ejecuta la auditoría automática:
 - ¿Está NAT funcionando correctamente? `bun run pt verify nat <RT>`
 - ¿El servicio (HTTP/DNS) está habilitado en el servidor? `bun run pt omni inspect env`
 
+## Encadenar comandos con ;
+
+Puedes pasar múltiples comandos separados por `;` en un solo `pt cmd` para diagnosticar más rápido:
+```bash
+bun run pt cmd R1 "show ip interface brief ; show ip route ; show running-config | section ospf"
+bun run pt cmd SW1 "show vlan brief ; show interfaces trunk ; show mac address-table"
+bun run pt cmd R1 "show version ; show ip protocols ; show access-lists"
+```
+El backend los ejecuta secuencialmente en un mismo plan terminal, reduciendo latencia.
+
 ## Comandos de Diagnóstico Rápido
 
 ```bash

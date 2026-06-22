@@ -1,0 +1,25 @@
+{
+  "name": "@cisco-auto/http-bridge",
+  "version": "0.1.0",
+  "description": "HTTP/WebSocket bridge for CLI ↔ Packet Tracer communication",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "build": "echo no build needed"
+  },
+  "dependencies": {
+    "@cisco-auto/file-bridge": "workspace:*",
+    "@cisco-auto/types": "workspace:*",
+    "@hono/node-server": "^1.0.0",
+    "hono": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  }
+}

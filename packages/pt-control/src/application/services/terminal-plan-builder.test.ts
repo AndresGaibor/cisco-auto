@@ -22,7 +22,7 @@ describe("terminal-plan-builder", () => {
   test("buildDefaultTerminalTimeouts usa timeoutMs como commandTimeoutMs", () => {
     expect(buildDefaultTerminalTimeouts(12000)).toEqual({
       commandTimeoutMs: 12000,
-      stallTimeoutMs: 15000,
+      stallTimeoutMs: 12000,
     });
   });
 

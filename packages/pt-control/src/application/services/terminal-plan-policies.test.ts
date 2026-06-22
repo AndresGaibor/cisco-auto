@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildDefaultTerminalPolicies,
   buildDefaultTerminalTimeouts,
+  buildStallTimeoutForCommand,
   buildTerminalPoliciesForPlan,
   buildTerminalTimeoutsForPlan,
   isLongOutputIosShowCommand,
@@ -89,9 +90,8 @@ describe("terminal-plan-policies", () => {
   test("buildDefaultTerminalTimeouts y policies conservan defaults", () => {
     expect(buildDefaultTerminalTimeouts(12000)).toEqual({
       commandTimeoutMs: 12000,
-      stallTimeoutMs: 15000,
+      stallTimeoutMs: 12000,
     });
-
     expect(buildDefaultTerminalPolicies({ mode: "safe" })).toMatchObject({
       autoBreakWizard: true,
       autoAdvancePager: true,
@@ -100,5 +100,35 @@ describe("terminal-plan-policies", () => {
       abortOnPromptMismatch: false,
       abortOnModeMismatch: true,
     });
+  });
+
+  test("buildStallTimeoutForCommand para show usa timeout rapido", () => {
+    expect(buildStallTimeoutForCommand("show version")).toBe(5000);
+    expect(buildStallTimeoutForCommand("show ip interface brief")).toBe(5000);
+    expect(buildStallTimeoutForCommand("ping 192.168.1.1")).toBe(5000);
+  });
+
+  test("buildStallTimeoutForCommand para config usa timeout largo", () => {
+    expect(buildStallTimeoutForCommand("configure terminal")).toBe(20000);
+    expect(buildStallTimeoutForCommand("interface g0/0")).toBe(20000);
+    expect(buildStallTimeoutForCommand("router ospf 1")).toBe(20000);
+    expect(buildStallTimeoutForCommand("vlan 10")).toBe(20000);
+  });
+
+  test("buildStallTimeoutForCommand para save/reload usa timeout largo", () => {
+    expect(buildStallTimeoutForCommand("write memory")).toBe(20000);
+    expect(buildStallTimeoutForCommand("copy running-config startup-config")).toBe(20000);
+    expect(buildStallTimeoutForCommand("reload")).toBe(20000);
+  });
+
+  test("buildStallTimeoutForCommand para config commands normales usa timeout normal", () => {
+    expect(buildStallTimeoutForCommand("no shutdown")).toBe(12000);
+    expect(buildStallTimeoutForCommand("ip address 192.168.1.1 255.255.255.0")).toBe(12000);
+    expect(buildStallTimeoutForCommand("description uplink")).toBe(12000);
+  });
+
+  test("buildStallTimeoutForCommand para comandos desconocidos usa timeout normal", () => {
+    expect(buildStallTimeoutForCommand("enable")).toBe(12000);
+    expect(buildStallTimeoutForCommand("exit")).toBe(12000);
   });
 });

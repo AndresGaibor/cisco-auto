@@ -155,6 +155,30 @@ Reglas:
 
 ---
 
+## Estrategia de Tests Focalizados
+
+Ejecutar todos los tests con `bun test` puede ser lento. Usa comandos focalizados para validar el área en la que estás trabajando:
+
+| Área | Comando | Descripción |
+|---|---|---|
+| CLI | `bun run test:cli` | Tests de `apps/pt-cli` |
+| Control | `bun run test:control` | Tests de `packages/pt-control` |
+| Runtime | `bun run test:runtime` | Tests de `packages/pt-runtime` |
+| IOS | `bun run test:ios` | Tests de `ios-domain` e `ios-primitives` |
+| Bridge | `bun run test:bridge` | Tests de `packages/file-bridge` |
+| Core | `bun run test:core` | Tests de orquestación y bridge |
+
+Si editas un archivo específico, es mejor correr solo sus tests asociados:
+```bash
+bun test path/al/archivo.test.ts
+```
+Para correr un test particular:
+```bash
+bun test path/al/archivo.test.ts -t "nombre del test"
+```
+
+---
+
 ## Reglas de arquitectura
 
 ### apps/pt-cli

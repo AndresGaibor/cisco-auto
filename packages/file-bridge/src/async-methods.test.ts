@@ -140,11 +140,16 @@ describe("AppendOnlyQueueIndex async methods", () => {
   });
 
   test("compactAsync deduplica y limpia inválidos", async () => {
+    const { dirname } = await import("node:path");
+    const commandsDir = dirname(indexPath);
     writeFileSync(
       indexPath,
       '"a.json"\n"b.json"\n"a.json"\ninvalid\n"c.json"\n',
       "utf8",
     );
+    writeFileSync(join(commandsDir, "a.json"), '{"cmd":"a"}');
+    writeFileSync(join(commandsDir, "b.json"), '{"cmd":"b"}');
+    writeFileSync(join(commandsDir, "c.json"), '{"cmd":"c"}');
     const idx = new AppendOnlyQueueIndex({ indexPath });
     idx.invalidateCache();
     await idx.compactAsync();

@@ -11,6 +11,7 @@ export interface RuntimeGeneratorConfig {
   outputDir?: string;
   devDir: string;
   minify?: boolean;
+  activeCommandTimeoutMs?: number;
 }
 
 export class RuntimeGenerator {
@@ -34,6 +35,7 @@ export class RuntimeGenerator {
       outputPath: "",
       injectDevDir: this.config.devDir,
       minify: this.config.minify,
+      activeCommandTimeoutMs: this.config.activeCommandTimeoutMs,
     });
   }
 

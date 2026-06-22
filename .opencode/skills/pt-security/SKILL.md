@@ -37,6 +37,16 @@ Esta skill proporciona pautas para asegurar la infraestructura de red y controla
 - [ ] **Hardening SNMP**: Eliminar comunidades `public` y `private`.
 - [ ] **Service Encryption**: Activar `service password-encryption`.
 
+## Encadenar comandos con ;
+
+Puedes pasar múltiples comandos separados por `;` en un solo `pt cmd`:
+```bash
+bun run pt cmd R1 "show access-lists ; show running-config | section nat"
+bun run pt cmd SW1 "show port-security ; show port-security address"
+bun run pt cmd R1 "show ip nat translations ; show ip nat statistics"
+```
+El backend los ejecuta secuencialmente en un mismo plan terminal, reduciendo latencia.
+
 ## Mejores Prácticas de Seguridad
 - Nunca uses contraseñas por defecto (`cisco/cisco`).
 - Deshabilita servicios innecesarios (`no ip http server`).

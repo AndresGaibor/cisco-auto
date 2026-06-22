@@ -139,37 +139,9 @@ export function createIosCommandExecutor(deps: IosCommandExecutorDeps) {
       };
 
       let runtimeResult = (await runPlan(plan, "runtimeTerminalRunPlanMs")) as any;
+      let semanticFailure = detectIosSemanticFailureFromRuntimeResult(runtimeResult);
 
-      if (isRecoverableEmptyTerminalTimeout(runtimeResult, command)) {
-        const retryDelayMs = 350;
-        serviceTimings.runtimeTerminalRetryCount =
-          (serviceTimings.runtimeTerminalRetryCount ?? 0) + 1;
-
-        if (typeof runtimeTerminal.ensureSession === "function") {
-          await measureServiceAsync(serviceTimings, "runtimeTerminalRetryEnsureSessionMs", async () => {
-            try {
-              await runtimeTerminal.ensureSession(device);
-            } catch {
-            }
-          });
-        }
-
-        await measureServiceAsync(serviceTimings, "runtimeTerminalRetryDelayMs", () =>
-          sleep(retryDelayMs),
-        );
-
-        const retryPlan = measureServiceSync(serviceTimings, "buildIosRetryPlanMs", buildPlan);
-        const retryResult = (await runPlan(retryPlan, "runtimeTerminalRetryRunPlanMs")) as any;
-
-        runtimeResult = attachRuntimeRetryEvidence(retryResult, {
-          reason: "empty_terminal_timeout",
-          attempts: 2,
-          firstRuntimeResult: runtimeResult,
-          retryDelayMs,
-        });
-      }
-
-      if (!runtimeResult.ok && hasPagerSuppressionSteps(plan.steps)) {
+      if (hasPagerSuppressionSteps(plan.steps) && (semanticFailure || !runtimeResult.ok)) {
         recordTerminalLengthZeroResult(device, false);
 
         const retryPlan = measureServiceSync(serviceTimings, "buildIosPlanNoPagerMs", () =>
@@ -224,6 +196,36 @@ export function createIosCommandExecutor(deps: IosCommandExecutorDeps) {
         }
 
         runtimeResult = retryResult;
+        semanticFailure = detectIosSemanticFailureFromRuntimeResult(runtimeResult);
+      }
+
+      if (isRecoverableEmptyTerminalTimeout(runtimeResult, command)) {
+        const retryDelayMs = 350;
+        serviceTimings.runtimeTerminalRetryCount =
+          (serviceTimings.runtimeTerminalRetryCount ?? 0) + 1;
+
+        if (typeof runtimeTerminal.ensureSession === "function") {
+          await measureServiceAsync(serviceTimings, "runtimeTerminalRetryEnsureSessionMs", async () => {
+            try {
+              await runtimeTerminal.ensureSession(device);
+            } catch {
+            }
+          });
+        }
+
+        await measureServiceAsync(serviceTimings, "runtimeTerminalRetryDelayMs", () =>
+          sleep(retryDelayMs),
+        );
+
+        const retryPlan = measureServiceSync(serviceTimings, "buildIosRetryPlanMs", buildPlan);
+        const retryResult = (await runPlan(retryPlan, "runtimeTerminalRetryRunPlanMs")) as any;
+
+        runtimeResult = attachRuntimeRetryEvidence(retryResult, {
+          reason: "empty_terminal_timeout",
+          attempts: 2,
+          firstRuntimeResult: runtimeResult,
+          retryDelayMs,
+        });
       }
 
       if (!runtimeResult.ok) {
@@ -243,8 +245,6 @@ export function createIosCommandExecutor(deps: IosCommandExecutorDeps) {
           evidence: runtimeResult.evidence,
         });
       }
-
-      const semanticFailure = detectIosSemanticFailureFromRuntimeResult(runtimeResult);
 
       if (semanticFailure) {
         return buildFailureResult({

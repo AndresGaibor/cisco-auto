@@ -86,6 +86,46 @@ describe("IosCommandExecutor", () => {
     expect(result.error?.code).toBe("IOS_AUTOCONFIG_DID_NOT_EXIT_CONFIG_MODE");
   });
 
+  test("reintenta sin paginador cuando terminal length 0 devuelve invalid input", async () => {
+    const runTerminalPlan = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        output: "          ^\n% Invalid input detected at '^' marker.\nversion 15.2\nhostname R2\nend",
+        rawOutput:
+          "R2#terminal length 0\n          ^\n% Invalid input detected at '^' marker.\nR2#show running-config\nversion 15.2\nhostname R2\nend\nR2#",
+        status: 0,
+        warnings: [],
+        evidence: { test: true },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        output: "version 15.2\nhostname R2\nend",
+        rawOutput: "R2#show running-config\nversion 15.2\nhostname R2\nend\nR2#",
+        status: 0,
+        warnings: [],
+        evidence: { test: true, retry: true },
+      });
+
+    const executor = createIosCommandExecutor({
+      generateId: () => "plan-pager-retry",
+      controller: {
+        execIos: vi.fn(),
+      },
+      runtimeTerminal: {
+        runTerminalPlan,
+        ensureSession: async () => ({ ok: true }) as any,
+        pollTerminalJob: async () => null,
+      } as any,
+    });
+
+    const result = await executor.executeIosCommand("R2", "show running-config");
+
+    expect(result.ok).toBe(true);
+    expect(result.output).toContain("version 15.2");
+    expect(runTerminalPlan).toHaveBeenCalledTimes(2);
+  });
+
   test("acepta auto-config success cuando termina en privileged-exec", async () => {
     const executor = createIosCommandExecutor({
       generateId: () => "plan-4",

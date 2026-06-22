@@ -48,7 +48,8 @@ function matchesCommandEcho(line: string, command: string): boolean {
   const fullCommand = lines.join(" ; ");
   const lastCommand = lines.at(-1)!;
 
-  const promptPrefix = String.raw`(?:[A-Za-z0-9._-]+(?:\(config[^)]*\))?[>#]\s*)?`;
+  // Regex optimizada para evitar backtracking catastrófico
+  const promptPrefix = String.raw`(?:[A-Za-z0-9._-]+(?:\(config(?:-[^)]+)?\))?[>#]\s*)?`;
 
   return (
     new RegExp(`^${promptPrefix}${escapeRegExp(lastCommand)}\\s*$`, "i").test(normalizedLine) ||

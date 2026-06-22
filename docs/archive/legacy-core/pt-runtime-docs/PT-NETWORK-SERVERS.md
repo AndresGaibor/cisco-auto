@@ -6,6 +6,17 @@
 
 ---
 
+## ⚠️ ADVERTENCIA IMPORTANTE (Experimentos 37-43, Junio 2026)
+
+Los servidores creados con `$createHttpServer()` y `$createTcpServer()` se ejecutan en el **contexto del motor de scripts de PT**, NO en la red simulada. Esto significa:
+
+- El servidor TCP/HTTP escucha en `0.0.0.0` (host) pero **NO es accesible desde la red simulada de PT** (dispositivos como PC1 no pueden hacer telnet/conexión).
+- Para comunicación entre dispositivos PT, usar servicios nativos (HTTP de SRV1, telnet entre routers, etc.)
+- `addRouteHandler()` de HttpServer **NO funciona** — todas las combinaciones de argumentos probadas fallan con "Insufficient arguments" (probablemente bug de PT o tipos Qt no expuestos al script engine).
+- `addWebSocketRouteHandler(path, method, handler)` **SÍ funciona** con 3 argumentos.
+
+---
+
 ## Network Server Factories
 
 All accept **0 arguments** — call without parameters:
@@ -28,21 +39,56 @@ Full HTTP server in PT scripting.
 
 | Method | Signature | Description |
 |---|---|---|
-| `start()` | `(): void` | Start HTTP server |
+| `start()` | `(port?: number, callback?: function, ip?: string): string` | Start HTTP server. Retorna "OK". |
 | `stop()` | `(): void` | Stop HTTP server |
 | `isListening()` | `(): boolean` | Check if server is listening |
-| `addRouteHandler(method, path, handler)` | `(method: string, path: string, handler: function): void` | Add HTTP route |
-| `addWebSocketRouteHandler(path, handler)` | `(path: string, handler: function): void` | Add WebSocket route |
+| `addRouteHandler(path, method, handler)` | `(path: string, method: string, handler: function): void` | ❌ **NO FUNCIONA** — "Insufficient arguments" |
+| `addWebSocketRouteHandler(path, method, handler)` | `(path: string, method: string, handler: function): void` | ✅ **FUNCIONA** con 3 argumentos |
 | `cleanUp()` | `(): void` | Cleanup resources |
+| `__S0setDevice(device)` | `(device: Device): void` | Set device context |
 | `setWsMaxAllowedIncomingFrameSize(size)` | `(size: number): void` | Set max WebSocket frame size |
 | `setWsMaxAllowedIncomingMessageSize(size)` | `(size: number): void` | Set max WebSocket message size |
 | `objectNameChanged` | `(handler: function): void` | Event — fired when object name changes |
 
-### Events
+### Detalles de implementación (Experimentos 37-43)
 
 ```javascript
-httpServer.objectNameChanged(handler)  // Fired when object name changes
+var http = $createHttpServer();
+
+// --- start() ---
+// 3 firmas probadas:
+http.start(80);                    // OK, isListening = false
+http.start(8080, function(){});    // OK, isListening = true
+http.start(8080, callback, "0.0.0.0");  // OK, isListening = true
+
+// --- addRouteHandler ---
+// TODAS fallan con "Insufficient arguments" o "TypeError: Passing incompatible arguments":
+http.addRouteHandler("/api", "GET", handler);              // ❌
+http.addRouteHandler("/api", "GET", handler, errHandler); // ❌ (incompatible args)
+http.addRouteHandler({path:"/api", method:"GET"}, handler);// ❌
+
+// --- addWebSocketRouteHandler ---
+// Solo funciona con 3 argumentos:
+http.addWebSocketRouteHandler("/ws", "GET", handler);      // ✅ "OK"
+
+// --- __S0setDevice ---
+// Asocia el server a un dispositivo:
+http.__S0setDevice(ipc.network().getDevice("R1"));         // ✅
+
+// --- isListening ---
+// Retorna true DESPUÉS de start(port, callback)
+// NOTA: Aunque isListening=true, el puerto NO está accesible desde el host (curl localhost:8080 falla)
+http.isListening();  // → true (pero el server está en el espacio de PT, no en el host)
+
+// NOTA: addRouteHandler falla incluso después de __S0setDevice()
 ```
+
+### Notas de conectividad
+
+- El server escucha **dentro del entorno de simulación de PT** (no en la interfaz de red del host)
+- `isListening()=true` pero `curl localhost:8080` → Connection refused (desde host)
+- Dispositivos PT (PC1, etc.) tampoco pueden conectarse vía telnet (el server no está en la red simulada)
+- **Uso práctico limitado** a menos que se descubra cómo enrutar tráfico desde la simulación
 
 ---
 
@@ -67,7 +113,27 @@ TCP server for accepting connections.
 | `objectNameChanged` | `(handler: function): void` | Event |
 | `newConnection` | `(handler: function): void` | Event — fired when client connects |
 
-### Example
+### Notas de conectividad (Experimentos 37-43)
+
+```javascript
+var srv = $createTcpServer();
+srv.listen(7070);
+
+srv.getServerIP();    // → "0.0.0.0"
+srv.getServerPort();  // → 7070
+srv.isListening();    // → true
+srv.hasPendingConnections();  // → false
+
+// ⚠️ No se pudo conectar desde un PC de la simulación:
+var pc1 = ipc.network().getDevice("PC1");
+var cli = pc1.getCommandLine();
+cli.enterCommand("telnet 127.0.0.1 7070");  // comando enviado pero no hay conexión
+
+// NOTA: newConnection es un signal de Qt (event), NO una propiedad asignable:
+srv.newConnection = function(socket){ ... };  // ❌ TypeError: read-only property
+```
+
+### Example (from PT docs, no verificado)
 
 ```javascript
 var srv = $createTcpServer();

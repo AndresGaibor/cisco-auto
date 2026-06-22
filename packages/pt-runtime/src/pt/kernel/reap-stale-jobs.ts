@@ -53,7 +53,7 @@ export function reapStaleJobs(deps: ReapStaleJobsDeps): void {
     if (
       waitingForCommandEnd &&
       waitingPhase &&
-      elapsedMs > 500 &&
+      elapsedMs > 5000 &&
       (job.context as any).semanticErrorCleanupInProgress !== true
     ) {
       try {
@@ -94,7 +94,7 @@ export function reapStaleJobs(deps: ReapStaleJobsDeps): void {
         job.context.phase === "waiting-command" &&
         looksBackAtPrompt &&
         hasOutput &&
-        now - job.context.updatedAt > 750
+        now - job.context.updatedAt > 3000
       ) {
         const shouldForceComplete = checkPromptForceSkip(job, deps, lastPrompt, output);
         if (shouldForceComplete === "continue") {

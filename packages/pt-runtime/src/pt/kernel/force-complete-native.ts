@@ -87,7 +87,8 @@ export function nativeFallbackOutput(job: ActiveJob, command: string, deps: Forc
   const ctx = job.context;
   const fullOutput = deps.readNativeTerminalOutput(job.device);
   const output = deps.getNativeDeltaForCurrentStep(job, fullOutput, command);
-  const fallbackOutput = output || (deps.isLongOutputReadOnlyIosCommand(command) ? fullOutput : "");
+  const isHost = deps.resolveJobSessionKind(job) === "host";
+  const fallbackOutput = output || (isHost ? fullOutput : (deps.isLongOutputReadOnlyIosCommand(command) ? fullOutput : ""));
 
   deps.jobDebug(
     job,
@@ -171,11 +172,14 @@ export function nativeFallbackResult(
 ): NativeFallbackBlockResult {
   const ctx = job.context;
   const { fallbackOutput, prompt, mode } = outputResult;
+  const isHost = deps.resolveJobSessionKind(job) === "host";
 
   const strictBlock = deps.extractCurrentCommandBlockStrict(fallbackOutput, command);
   const block = strictBlock.hasCommandEcho
     ? strictBlock.block
-    : deps.extractLatestCommandBlock(fallbackOutput, command);
+    : isHost
+      ? fallbackOutput
+      : deps.extractLatestCommandBlock(fallbackOutput, command);
   const baselinePrompt = deps.inferPromptFromTerminalText(ctx.nativeBaselineOutput || "");
   const baselineMode = deps.inferModeFromPrompt(baselinePrompt);
 

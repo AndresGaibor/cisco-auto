@@ -182,342 +182,376 @@ async function waitForBridgeReady(controller: PTController, timeoutMs = 35_000):
   throw error;
 }
 
-export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliResult<T>> {
-  const startTime = Date.now();
-  const timings: RunCommandTimingMap = {};
-  const sessionId = measureSync(timings, "sessionIdMs", () => options.flags.sessionId ?? generateSessionId());
-  const correlationId = measureSync(timings, "correlationIdMs", () => generateCorrelationId());
-  const controller = measureSync(timings, "controllerCreateMs", () => createDefaultPTController());
-
-  const logPhase = async (phase: string, metadata?: Record<string, unknown>) => {
-    await sessionLogStore.append({
-      session_id: sessionId,
-      correlation_id: correlationId,
-      timestamp: new Date().toISOString(),
-      phase,
-      action: options.action,
-      metadata,
-    });
-  };
-
-  let result: CliResult<T> | undefined;
-  let runtimeContext: CommandRuntimeContext = {
-    bridgeReady: false,
-    topologyMaterialized: false,
-    deviceCount: 0,
-    linkCount: 0,
-    heartbeat: {
-      state: "unknown",
-    },
-    bridge: {
-      ready: false,
-      warnings: [],
-    },
-    warnings: ["Controller no se pudo iniciar"],
-    notes: ["Contexto del controller no disponible"],
-  };
-  let contextStatusToPersist: Awaited<ReturnType<typeof collectContextStatus>> | null = null;
-
-  try {
+async function runWithRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries = 30,
+  initialDelay = 200,
+): Promise<T> {
+  let lastError: any;
+  for (let i = 0; i < maxRetries; i++) {
     try {
-      await measureAsync(timings, "controllerStartMs", () => controller.start());
-      await measureAsync(timings, "waitBridgeReadyMs", () =>
-        waitForBridgeReady(controller, Number(options.flags.timeout ?? 35_000)),
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+      const isLockError = 
+        error.message?.includes("database is locked") || 
+        error.code === "SQLITE_BUSY";
+      
+      const isBridgeBusy = 
+        error.code === "BRIDGE_NOT_READY" || 
+        error.code === "BACKPRESSURE_LIMIT_REACHED" ||
+        error.message?.includes("busy with another pending command");
+      
+      if (isLockError || isBridgeBusy) {
+        // Exponential backoff capped at 2 seconds
+        const delay = Math.min(initialDelay * Math.pow(1.5, i), 2000);
+        await sleep(delay);
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError;
+}
 
-      runtimeContext = {
-        bridgeReady: false,
-        topologyMaterialized: false,
-        deviceCount: 0,
-        linkCount: 0,
-        heartbeat: controller.getHeartbeatHealth?.() ?? { state: "unknown" },
-        bridge: controller.getBridgeStatus?.() ?? {
-          ready: false,
-          warnings: [],
-        },
-        warnings: ["No se pudo inicializar el bridge para ejecutar el comando."],
-        notes: [message],
+export async function runCommand<T>(options: RunCommandOptions<T>): Promise<CliResult<T>> {
+  return runWithRetry(async () => {
+    const startTime = Date.now();
+    const timings: RunCommandTimingMap = {};
+    const sessionId = measureSync(timings, "sessionIdMs", () => options.flags.sessionId ?? generateSessionId());
+    const correlationId = measureSync(timings, "correlationIdMs", () => generateCorrelationId());
+    const controller = measureSync(timings, "controllerCreateMs", () => createDefaultPTController());
+
+    const logPhase = async (phase: string, metadata?: Record<string, unknown>) => {
+      await sessionLogStore.append({
+        session_id: sessionId,
+        correlation_id: correlationId,
+        timestamp: new Date().toISOString(),
+        phase,
+        action: options.action,
+        metadata,
+      });
+    };
+
+    let result: CliResult<T> | undefined;
+    let runtimeContext: CommandRuntimeContext = {
+      bridgeReady: false,
+      topologyMaterialized: false,
+      deviceCount: 0,
+      linkCount: 0,
+      heartbeat: {
+        state: "unknown",
+      },
+      bridge: {
+        ready: false,
+        warnings: [],
+      },
+      warnings: ["Controller no se pudo iniciar"],
+      notes: ["Contexto del controller no disponible"],
+    };
+    let contextStatusToPersist: Awaited<ReturnType<typeof collectContextStatus>> | null = null;
+
+    try {
+      try {
+        await measureAsync(timings, "controllerStartMs", () => controller.start());
+        await measureAsync(timings, "waitBridgeReadyMs", () =>
+          waitForBridgeReady(controller, Number(options.flags.timeout ?? 35_000)),
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+
+        runtimeContext = {
+          bridgeReady: false,
+          topologyMaterialized: false,
+          deviceCount: 0,
+          linkCount: 0,
+          heartbeat: controller.getHeartbeatHealth?.() ?? { state: "unknown" },
+          bridge: controller.getBridgeStatus?.() ?? {
+            ready: false,
+            warnings: [],
+          },
+          warnings: ["No se pudo inicializar el bridge para ejecutar el comando."],
+          notes: [message],
+        };
+
+        result = createErrorResult<T>(options.action, {
+          code:
+            error instanceof Error && (error as Error & { code?: string }).code
+              ? (error as Error & { code?: string }).code
+              : "BRIDGE_NOT_READY",
+          message,
+          details:
+            error instanceof Error && (error as Error & { details?: Record<string, unknown> }).details
+              ? (error as Error & { details?: Record<string, unknown> }).details
+              : undefined,
+        });
+
+        return result;
+      }
+
+      runtimeContext = await measureAsync(timings, "inspectContextMs", () =>
+        options.flags.lightweightContext
+          ? Promise.resolve({
+              bridgeReady: true,
+              topologyMaterialized: true,
+              deviceCount: 0,
+              linkCount: 0,
+              heartbeat: { state: "ok" as const },
+              bridge: { ready: true, warnings: [] },
+              warnings: [],
+              notes: ["lightweight-context: skipping deep inspection"],
+            } as CommandRuntimeContext)
+          : inspectCommandContext(controller),
+      );
+
+      await measureAsync(timings, "logStartMs", () =>
+        logPhase("start", {
+          flags: options.flags,
+          payloadPreview: options.payloadPreview,
+          contextSummary: {
+            bridgeReady: runtimeContext.bridgeReady,
+            topologyMaterialized: runtimeContext.topologyMaterialized,
+            deviceCount: runtimeContext.deviceCount,
+            linkCount: runtimeContext.linkCount,
+          },
+        }),
+      );
+
+      const ctx: CommandContext = {
+        sessionId,
+        correlationId,
+        flags: options.flags,
+        controller,
+        runtimeContext,
+        logPhase,
       };
 
-      result = createErrorResult<T>(options.action, {
-        code:
-          error instanceof Error && (error as Error & { code?: string }).code
-            ? (error as Error & { code?: string }).code
-            : "BRIDGE_NOT_READY",
-        message,
-        details:
-          error instanceof Error && (error as Error & { details?: Record<string, unknown> }).details
-            ? (error as Error & { details?: Record<string, unknown> }).details
-            : undefined,
-      });
+      try {
+        result = await measureAsync(timings, "executeMs", () => options.execute(ctx));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        result = createErrorResult<T>(options.action, {
+          message,
+          details: error instanceof Error ? { stack: error.stack } : undefined,
+        });
+      }
+    } finally {
+      try {
+        contextStatusToPersist = options.flags.lightweightContext
+          ? null
+          : await measureAsync(timings, "collectContextStatusMs", () =>
+              collectContextStatus(controller),
+            );
+      } catch (err) {
+        console.warn("No se pudo actualizar context-status:", err);
+      }
 
-      return result;
+      await measureAsync(timings, "controllerStopMs", () => controller.stop());
     }
 
-    runtimeContext = await measureAsync(timings, "inspectContextMs", () =>
-      options.flags.lightweightContext
-        ? Promise.resolve({
-            bridgeReady: true,
-            topologyMaterialized: true,
-            deviceCount: 0,
-            linkCount: 0,
-            heartbeat: { state: "ok" as const },
-            bridge: { ready: true, warnings: [] },
-            warnings: [],
-            notes: ["lightweight-context: skipping deep inspection"],
-          } as CommandRuntimeContext)
-        : inspectCommandContext(controller),
-    );
-
-    await measureAsync(timings, "logStartMs", () =>
-      logPhase("start", {
-        flags: options.flags,
-        payloadPreview: options.payloadPreview,
-        contextSummary: {
-          bridgeReady: runtimeContext.bridgeReady,
-          topologyMaterialized: runtimeContext.topologyMaterialized,
-          deviceCount: runtimeContext.deviceCount,
-          linkCount: runtimeContext.linkCount,
-        },
-      }),
-    );
-
-    const ctx: CommandContext = {
-      sessionId,
-      correlationId,
-      flags: options.flags,
-      controller,
-      runtimeContext,
-      logPhase,
-    };
-
-    try {
-      result = await measureAsync(timings, "executeMs", () => options.execute(ctx));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+    if (!result) {
       result = createErrorResult<T>(options.action, {
-        message,
-        details: error instanceof Error ? { stack: error.stack } : undefined,
+        message: "No result produced after execution.",
       });
     }
-  } finally {
-    try {
-      contextStatusToPersist = options.flags.lightweightContext
-        ? null
-        : await measureAsync(timings, "collectContextStatusMs", () =>
-            collectContextStatus(controller),
-          );
-    } catch (err) {
-      console.warn("No se pudo actualizar context-status:", err);
+
+    timings.runCommandCoreMs = Math.max(0, Date.now() - startTime);
+    attachCliTimingsToResult(result, timings);
+
+    const verificationWarnings = result.verification?.warnings ?? [];
+    const contextWarnings = buildContextWarnings(runtimeContext);
+    const mergedWarnings: string[] = [];
+    const seenWarnings = new Set<string>();
+    for (const warning of [...contextWarnings, ...(result.warnings ?? []), ...verificationWarnings]) {
+      if (seenWarnings.has(warning)) continue;
+      seenWarnings.add(warning);
+      mergedWarnings.push(warning);
     }
+    result.warnings = mergedWarnings;
 
-    await measureAsync(timings, "controllerStopMs", () => controller.stop());
-  }
+    // Fase 6: Drenar command trace del controller para trazabilidad end-to-end
+    const commandTrace = measureSync(timings, "drainCommandTraceMs", () =>
+      controller.drainCommandTrace?.() ?? [],
+    );
+    attachCliTimingsToResult(result, timings);
+    const commandIds = commandTrace.map((t) => t.id);
+    const interactionSummary =
+      commandTrace.length > 0
+        ? commandTrace
+            .map((t) => `${t.type}:${t.commandType ?? "unknown"}:${t.status ?? "n/a"}`)
+            .join(", ")
+        : undefined;
 
-  if (!result) {
-    result = createErrorResult<T>(options.action, {
-      message: "No result produced after execution.",
-    });
-  }
-
-  timings.runCommandCoreMs = Math.max(0, Date.now() - startTime);
-  attachCliTimingsToResult(result, timings);
-
-  const verificationWarnings = result.verification?.warnings ?? [];
-  const contextWarnings = buildContextWarnings(runtimeContext);
-  const mergedWarnings: string[] = [];
-  const seenWarnings = new Set<string>();
-  for (const warning of [...contextWarnings, ...(result.warnings ?? []), ...verificationWarnings]) {
-    if (seenWarnings.has(warning)) continue;
-    seenWarnings.add(warning);
-    mergedWarnings.push(warning);
-  }
-  result.warnings = mergedWarnings;
-
-  // Fase 6: Drenar command trace del controller para trazabilidad end-to-end
-  const commandTrace = measureSync(timings, "drainCommandTraceMs", () =>
-    controller.drainCommandTrace?.() ?? [],
-  );
-  attachCliTimingsToResult(result, timings);
-  const commandIds = commandTrace.map((t) => t.id);
-  const interactionSummary =
-    commandTrace.length > 0
-      ? commandTrace
-          .map((t) => `${t.type}:${t.commandType ?? "unknown"}:${t.status ?? "n/a"}`)
-          .join(", ")
-      : undefined;
-
-  // Phase 7: add contextual suggestions based on verification and context
-  const suggestions = getContextualSuggestions(result, { saveRequested: options.flags.verify });
-  if (suggestions.length > 0) {
-    result.advice = [...(result.advice ?? []), ...suggestions];
-  }
-  if (result.meta) {
-    result.meta.sessionId = sessionId;
-    result.meta.correlationId = correlationId;
-    result.meta.commandIds = commandIds.length > 0 ? commandIds : (result.meta.commandIds ?? []);
-    if (interactionSummary) result.meta.interactionSummary = interactionSummary;
-    result.meta.context = {
-      bridgeReady: runtimeContext.bridgeReady,
-      topologyMaterialized: runtimeContext.topologyMaterialized,
-      deviceCount: runtimeContext.deviceCount,
-      linkCount: runtimeContext.linkCount,
-      heartbeat: runtimeContext.heartbeat,
-      bridge: runtimeContext.bridge,
-    };
-  } else {
-    result.meta = {
-      sessionId,
-      correlationId,
-      commandIds: commandIds.length > 0 ? commandIds : undefined,
-      interactionSummary,
-      context: {
+    // Phase 7: add contextual suggestions based on verification and context
+    const suggestions = getContextualSuggestions(result, { saveRequested: options.flags.verify });
+    if (suggestions.length > 0) {
+      result.advice = [...(result.advice ?? []), ...suggestions];
+    }
+    if (result.meta) {
+      result.meta.sessionId = sessionId;
+      result.meta.correlationId = correlationId;
+      result.meta.commandIds = commandIds.length > 0 ? commandIds : (result.meta.commandIds ?? []);
+      if (interactionSummary) result.meta.interactionSummary = interactionSummary;
+      result.meta.context = {
         bridgeReady: runtimeContext.bridgeReady,
         topologyMaterialized: runtimeContext.topologyMaterialized,
         deviceCount: runtimeContext.deviceCount,
         linkCount: runtimeContext.linkCount,
         heartbeat: runtimeContext.heartbeat,
         bridge: runtimeContext.bridge,
-      },
-    };
-  }
+      };
+    } else {
+      result.meta = {
+        sessionId,
+        correlationId,
+        commandIds: commandIds.length > 0 ? commandIds : undefined,
+        interactionSummary,
+        context: {
+          bridgeReady: runtimeContext.bridgeReady,
+          topologyMaterialized: runtimeContext.topologyMaterialized,
+          deviceCount: runtimeContext.deviceCount,
+          linkCount: runtimeContext.linkCount,
+          heartbeat: runtimeContext.heartbeat,
+          bridge: runtimeContext.bridge,
+        },
+      };
+    }
 
-  const durationMs = Date.now() - startTime;
-  if (result.meta) {
-    result.meta.durationMs = durationMs;
-  }
+    const durationMs = Date.now() - startTime;
+    if (result.meta) {
+      result.meta.durationMs = durationMs;
+    }
 
-  const resultSummary =
-    result.data != null && typeof result.data === "object" && !Array.isArray(result.data)
-      ? Object.fromEntries(Object.entries(result.data))
-      : result.data !== undefined
-        ? { value: result.data }
-        : undefined;
-
-  const completionReason = result.ok
-    ? "completed"
-    : result.error?.message
-      ? `error: ${result.error.message}`
-      : "failed";
-
-  const historyEntry: HistoryEntry = {
-    schemaVersion: "1.0",
-    sessionId,
-    correlationId,
-    startedAt: new Date(startTime).toISOString(),
-    endedAt: new Date().toISOString(),
-    durationMs,
-    action: options.action,
-    status: result.ok ? "success" : "error",
-    ok: result.ok,
-    argv: process.argv,
-    flags: Object.fromEntries(Object.entries(options.flags)),
-    payloadSummary: options.payloadPreview,
-    resultSummary:
+    const resultSummary =
       result.data != null && typeof result.data === "object" && !Array.isArray(result.data)
         ? Object.fromEntries(Object.entries(result.data))
-        : undefined,
-    commandIds: commandIds.length > 0 ? commandIds : (result.meta?.commandIds ?? []),
-    interactionSummary: interactionSummary
-      ? { summary: interactionSummary }
-      : result.meta?.interactionSummary
-        ? { summary: result.meta.interactionSummary }
-        : undefined,
-    completionReason,
-    contextSummary: {
-      bridgeReady: runtimeContext.bridgeReady,
-      topologyMaterialized: runtimeContext.topologyMaterialized,
-      deviceCount: runtimeContext.deviceCount,
-      linkCount: runtimeContext.linkCount,
-      warnings: runtimeContext.warnings,
-    },
-    verificationSummary:
-      result.verification?.verified === true
-        ? `verified via ${result.verification.verificationSource && result.verification.verificationSource.length ? result.verification.verificationSource.join(", ") : "checks"}`
-        : result.verification?.partiallyVerified === true
-          ? `partially verified via ${result.verification.verificationSource && result.verification.verificationSource.length ? result.verification.verificationSource.join(", ") : "partial checks"}`
-          : result.verification?.executed === true && result.verification?.verified === false
-            ? "executed only (not verified)"
-            : undefined,
-    warnings: result.warnings ?? [],
-  };
+        : result.data !== undefined
+          ? { value: result.data }
+          : undefined;
 
-  try {
-    await measureAsync(timings, "historyWriteMs", () => historyStore.append(historyEntry));
-  } catch (err) {
-    console.error("Error writing history:", err);
-  }
+    const completionReason = result.ok
+      ? "completed"
+      : result.error?.message
+        ? `error: ${result.error.message}`
+        : "failed";
 
-  try {
-    measureSync(timings, "memoryPersistMs", () => persistHistoryEntryToMemory(historyEntry));
-  } catch (err) {
-    console.error("Error writing memory audit:", err);
-  }
-
-  if (options.flags.traceBundle) {
-    try {
-      await measureAsync(timings, "bundleWriteMs", () => bundleWriter.writeBundle(sessionId));
-    } catch (err) {
-      console.error("Error writing bundle:", err);
-    }
-  }
-
-  await measureAsync(timings, "logEndMs", () =>
-    logPhase("end", {
-      ok: result.ok,
+    const historyEntry: HistoryEntry = {
+      schemaVersion: "1.0",
+      sessionId,
+      correlationId,
+      startedAt: new Date(startTime).toISOString(),
+      endedAt: new Date().toISOString(),
       durationMs,
-      contextWarnings: runtimeContext.warnings,
-      commandIds,
+      action: options.action,
+      status: result.ok ? "success" : "error",
+      ok: result.ok,
+      argv: process.argv,
+      flags: Object.fromEntries(Object.entries(options.flags)),
+      payloadSummary: options.payloadPreview,
+      resultSummary:
+        result.data != null && typeof result.data === "object" && !Array.isArray(result.data)
+          ? Object.fromEntries(Object.entries(result.data))
+          : undefined,
+      commandIds: commandIds.length > 0 ? commandIds : (result.meta?.commandIds ?? []),
+      interactionSummary: interactionSummary
+        ? { summary: interactionSummary }
+        : result.meta?.interactionSummary
+          ? { summary: result.meta.interactionSummary }
+          : undefined,
       completionReason,
-      resultSummary,
-      error: result.error,
-      interactionSummary: interactionSummary ? { summary: interactionSummary } : undefined,
-    }),
-  );
-  attachCliTimingsToResult(result, timings);
+      contextSummary: {
+        bridgeReady: runtimeContext.bridgeReady,
+        topologyMaterialized: runtimeContext.topologyMaterialized,
+        deviceCount: runtimeContext.deviceCount,
+        linkCount: runtimeContext.linkCount,
+        warnings: runtimeContext.warnings,
+      },
+      verificationSummary:
+        result.verification?.verified === true
+          ? `verified via ${result.verification.verificationSource && result.verification.verificationSource.length ? result.verification.verificationSource.join(", ") : "checks"}`
+          : result.verification?.partiallyVerified === true
+            ? `partially verified via ${result.verification.verificationSource && result.verification.verificationSource.length ? result.verification.verificationSource.join(", ") : "partial checks"}`
+            : result.verification?.executed === true && result.verification?.verified === false
+              ? "executed only (not verified)"
+              : undefined,
+      warnings: result.warnings ?? [],
+    };
 
-  // Persistir estado de contexto tras la ejecución (Fase 3)
-  try {
-    if (!options.flags.lightweightContext) {
-      const ctxStatus =
-        contextStatusToPersist ??
-        (await measureAsync(timings, "collectContextStatusAfterMs", () =>
-          collectContextStatus(controller),
-        ));
-      if (result.ok) {
-        ctxStatus.bridge.ready = true;
-      }
-      // Propagar warnings del resultado al estado persistente
-      if (result.warnings && result.warnings.length > 0) {
-        for (const w of result.warnings) {
-          if (!ctxStatus.warnings.includes(w)) ctxStatus.warnings.push(w);
-        }
-      }
-      // Si hubo verificación y falló, marcar posible desincronización con razón
-      if (result.verification && result.verification.verified === false) {
-        ctxStatus.topology.health = "desynced";
-        const desyncReason = `Post-validation failed after ${options.action}`;
-        if (!ctxStatus.warnings.includes(desyncReason)) {
-          ctxStatus.warnings.push(desyncReason);
-        }
-        // Persistir razón en notes para que status/doctor/history explain la reutilicen
-        if (!ctxStatus.notes) ctxStatus.notes = [];
-        const reasonEntry = `[${new Date().toISOString()}] desynced: ${desyncReason}`;
-        if (!ctxStatus.notes.includes(reasonEntry)) ctxStatus.notes.push(reasonEntry);
-      }
-      await measureAsync(timings, "writeContextStatusMs", () => writeContextStatus(ctxStatus));
-      attachCliTimingsToResult(result, timings);
+    try {
+      await measureAsync(timings, "historyWriteMs", () => historyStore.append(historyEntry));
+    } catch (err) {
+      console.error("Error writing history:", err);
     }
-  } catch (err) {
-    console.warn("No se pudo actualizar context-status:", err);
-  }
 
-  timings.runCommandTotalMs = Math.max(0, Date.now() - startTime);
-  attachCliTimingsToResult(result, timings);
+    try {
+      measureSync(timings, "memoryPersistMs", () => persistHistoryEntryToMemory(historyEntry));
+    } catch (err) {
+      console.error("Error writing memory audit:", err);
+    }
 
-  return result;
+    if (options.flags.traceBundle) {
+      try {
+        await measureAsync(timings, "bundleWriteMs", () => bundleWriter.writeBundle(sessionId));
+      } catch (err) {
+        console.error("Error writing bundle:", err);
+      }
+    }
+
+    await measureAsync(timings, "logEndMs", () =>
+      logPhase("end", {
+        ok: result.ok,
+        durationMs,
+        contextWarnings: runtimeContext.warnings,
+        commandIds,
+        completionReason,
+        resultSummary,
+        error: result.error,
+        interactionSummary: interactionSummary ? { summary: interactionSummary } : undefined,
+      }),
+    );
+    attachCliTimingsToResult(result, timings);
+
+    // Persistir estado de contexto tras la ejecución (Fase 3)
+    try {
+      if (!options.flags.lightweightContext) {
+        const ctxStatus =
+          contextStatusToPersist ??
+          (await measureAsync(timings, "collectContextStatusAfterMs", () =>
+            collectContextStatus(controller),
+          ));
+        if (result.ok) {
+          ctxStatus.bridge.ready = true;
+        }
+        // Propagar warnings del resultado al estado persistente
+        if (result.warnings && result.warnings.length > 0) {
+          for (const w of result.warnings) {
+            if (!ctxStatus.warnings.includes(w)) ctxStatus.warnings.push(w);
+          }
+        }
+        // Si hubo verificación y falló, marcar posible desincronización con razón
+        if (result.verification && result.verification.verified === false) {
+          ctxStatus.topology.health = "desynced";
+          const desyncReason = `Post-validation failed after ${options.action}`;
+          if (!ctxStatus.warnings.includes(desyncReason)) {
+            ctxStatus.warnings.push(desyncReason);
+          }
+          // Persistir razón en notes para que status/doctor/history explain la reutilicen
+          if (!ctxStatus.notes) ctxStatus.notes = [];
+          const reasonEntry = `[${new Date().toISOString()}] desynced: ${desyncReason}`;
+          if (!ctxStatus.notes.includes(reasonEntry)) ctxStatus.notes.push(reasonEntry);
+        }
+        await measureAsync(timings, "writeContextStatusMs", () => writeContextStatus(ctxStatus));
+        attachCliTimingsToResult(result, timings);
+      }
+    } catch (err) {
+      console.warn("No se pudo actualizar context-status:", err);
+    }
+
+    timings.runCommandTotalMs = Math.max(0, Date.now() - startTime);
+    attachCliTimingsToResult(result, timings);
+
+    return result;
+  });
 }
 
 export async function runCommandWithRender<T>(

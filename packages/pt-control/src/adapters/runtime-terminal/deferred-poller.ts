@@ -45,7 +45,7 @@ export function computeDeferredPollIntervalMs(plan: TerminalPlan): number {
     return 100;
   }
 
-  return Math.max(75, Math.min(Math.trunc(parsed), 500));
+  return Math.max(50, Math.min(Math.trunc(parsed), 500));
 }
 
 export async function pollDeferredUntilDone(
@@ -176,7 +176,7 @@ export async function pollNativeDeferredUntilDone(
   const timings: AdapterTimingMap = {};
   const startedAt = nowMs();
   const pollTimeoutMs = computeDeferredPollTimeoutMs(plan, timeoutMs);
-  const pollIntervalMs = 300;
+  const pollIntervalMs = computeDeferredPollIntervalMs(plan);
   let pollValue: unknown = null;
 
   while (nowMs() - startedAt < pollTimeoutMs) {

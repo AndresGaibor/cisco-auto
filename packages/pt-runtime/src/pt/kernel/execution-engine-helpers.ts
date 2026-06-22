@@ -495,6 +495,8 @@ export function nativeModeSatisfiesEnsureStep(
     return (mode === "global-config" || mode === "config" || mode.startsWith("config-")) ||
       String(prompt || "").includes("(config");
   }
+  return false;
+}
 
 export function nativeHostFallbackBlockLooksComplete(
   block: string,
@@ -514,14 +516,17 @@ export function nativeHostFallbackBlockLooksComplete(
     if (isHostPrompt(line)) return false;
     if (/^cisco packet tracer pc command line/i.test(line)) return false;
     return true;
-  }
+  });
+  return meaningfulLines.length > 0;
+}
 
 export function semanticErrorNeedsCleanupToPrivilegedExec(
   _job: any,
   prompt: unknown,
   mode: unknown,
 ): boolean {
-  return nativeSnapshotIsStillInConfigMode({ prompt, mode }
+  return nativeSnapshotIsStillInConfigMode({ prompt, mode });
+}
 
 export function isLikelyConfigStep(command: string): boolean {
   const normalized = String(command ?? "").trim().toLowerCase();
@@ -572,6 +577,9 @@ export function hasRemainingEndStep(job: ActiveJob): boolean {
     if (step && step.type === "command" && String(step.value ?? "").trim().toLowerCase() === "end") {
       return true;
     }
+  }
+  return false;
+}
 
 export function appendStepOutput(current: string, next: unknown): string {
   const value = String(next ?? "");
@@ -583,7 +591,18 @@ export function appendStepOutput(current: string, next: unknown): string {
 }
 
 export function buildSemanticErrorResult(
-  semanticError: { code: string; message: string }
+  semanticError: { code: string; message: string },
+) {
+  return {
+    ok: false,
+    output: semanticError.message,
+    status: 1,
+    session: null,
+    mode: "unknown",
+    error: semanticError.message,
+    code: semanticError.code,
+  };
+}
 
 export function extractNativeCleanupOutputSinceBaseline(fullOutput: string, baselineOutput: string): string {
   const normalizedFull = normalizeEol(fullOutput);
@@ -595,6 +614,8 @@ export function extractNativeCleanupOutputSinceBaseline(fullOutput: string, base
     const delta = normalizedFull.slice(normalizedBaseline.length).trim();
     if (delta) return delta;
   }
+  return "";
+}
 
 export function extractLatestCommandBlock(output: string, command: string): string {
   const text = normalizeEol(output);
@@ -612,11 +633,23 @@ export function extractLatestCommandBlock(output: string, command: string): stri
       startIndex = i;
       break;
     }
+  }
+
+  if (startIndex >= 0) {
+    return lines.slice(startIndex).join("\n");
+  }
+  return text;
+}
 
 export function extractCurrentCommandBlockStrict(
   output: string,
   command: string,
-): { block: string; hasCommandEcho: boolean }
+): { block: string; hasCommandEcho: boolean } {
+  const block = extractLatestCommandBlock(output, command);
+  const lines = block.split("\n");
+  const hasCommandEcho = blockHasCommandEcho(lines, command);
+  return { block, hasCommandEcho };
+}
 
 export function getNativeDeltaForCurrentStep(
   _job: NativeDeltaJob,
@@ -633,4 +666,7 @@ export function getNativeDeltaForCurrentStep(
     if (isPromptOnlyTransitionCommand(command)) return extractLatestCommandBlock(output, command).trim();
     return "";
   }
+
+  return strict.block;
+}
 

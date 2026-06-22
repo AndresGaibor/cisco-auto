@@ -41,6 +41,16 @@ Esta skill proporciona flujos de trabajo expertos para la conectividad entre sub
 - [ ] Configurar IP: `ipv6 address <IP/64>` o `ipv6 address autoconfig`
 - [ ] **Validación**: `bun run pt verify ipv6 <RT>`
 
+## Encadenar comandos con ;
+
+Puedes pasar múltiples comandos separados por `;` en un solo `pt cmd`:
+```bash
+bun run pt cmd R1 "show ip interface brief ; show ip route ; show ip ospf neighbor"
+bun run pt cmd R1 "show running-config | section ospf ; show ip protocols"
+bun run pt cmd R1 "ping 192.168.1.1 ; traceroute 192.168.2.1"
+```
+El backend los ejecuta secuencialmente en un mismo plan terminal, reduciendo latencia.
+
 ## Diagnóstico L3 Experto
 
 Si el ping falla entre subredes:

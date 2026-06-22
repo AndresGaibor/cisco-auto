@@ -84,64 +84,28 @@ export function createQueueCleanup(
     const fm = s.fm;
     const now = Date.now();
 
-    const indexedFiles = queueIndex.read();
-    const indexedSet: Record<string, boolean> = {};
-    for (const filename of indexedFiles) {
-      indexedSet[filename] = true;
-    }
-
     const currentCommandFiles = listJsonFiles(fm, commandsDir);
     const currentInFlightFiles = listJsonFiles(fm, inFlightDir);
 
-    const commandSet: Record<string, boolean> = {};
-    const inFlightSet: Record<string, boolean> = {};
-
-    for (const filename of currentCommandFiles) {
-      commandSet[filename] = true;
-    }
-    for (const filename of currentInFlightFiles) {
-      inFlightSet[filename] = true;
-    }
-
+    const inFlightToKeep: string[] = [];
     for (const filename of currentInFlightFiles) {
       const inFlightPath = inFlightDir + "/" + filename;
-      if (!isStale(fm, inFlightPath, now)) continue;
-
-      try {
-        fm.removeFile(inFlightPath);
-        queueIndex.remove(filename);
-        dprint("[queue-cleanup] removed stale in-flight: " + filename);
-      } catch (e) {
-        dprint("[queue-cleanup] stale in-flight error: " + String(e));
-      }
-    }
-
-    for (const filename of currentCommandFiles) {
-      const commandPath = commandsDir + "/" + filename;
-
-      if (!fm.fileExists(commandPath)) {
-        queueIndex.remove(filename);
-        dprint("[queue-cleanup] pruned index for missing command file: " + filename);
-        continue;
-      }
-
-      queueIndex.add(filename);
-
-      if (isStale(fm, commandPath, now)) {
-        dprint("[queue-cleanup] preserved stale pending command and reindexed: " + filename);
+      if (isStale(fm, inFlightPath, now)) {
+        try {
+          fm.removeFile(inFlightPath);
+          dprint("[queue-cleanup] removed stale in-flight: " + filename);
+        } catch (e) {
+          dprint("[queue-cleanup] stale in-flight error: " + String(e));
+        }
       } else {
-        dprint("[queue-cleanup] preserved pending command and reindexed: " + filename);
+        inFlightToKeep.push(filename);
       }
     }
 
-    for (const filename of indexedFiles) {
-      const stillInCommands = !!commandSet[filename];
-      const stillInFlight = !!inFlightSet[filename];
-      if (stillInCommands || stillInFlight) continue;
-
-      queueIndex.remove(filename);
-      dprint("[queue-cleanup] pruned stale index entry: " + filename);
-    }
+    // El nuevo índice son los comandos que quedan en commands/ + los que siguen in-flight
+    const newIndex = [...currentCommandFiles, ...inFlightToKeep];
+    queueIndex.rebuildFromFiles(newIndex);
+    dprint("[queue-cleanup] reconcileIndex complete, new size: " + newIndex.length);
   }
 
   function cleanup(filename: string): void {

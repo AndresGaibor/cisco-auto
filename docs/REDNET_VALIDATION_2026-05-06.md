@@ -11,6 +11,7 @@ La topologia esta bien encaminada, pero la guia pegada por el usuario no estaba 
 - `show ephone registered` tampoco resolvio en esta imagen; para validar CME usar `show ephone`, `show ip dhcp binding` y `show running-config | section ephone`.
 - La validacion de WLC por `pt cmd` no esta disponible de forma confiable en esta sesion; validar por GUI y `device get`.
 - El fallo de `pt cmd` en PCs (`HOST_EXEC_FAILED`) parece del runtime/bridge actual del proyecto, no del taller.
+- En este laboratorio, `telephony-service` puede colgar o devolver `IOS_EXEC_FAILED` aunque el lab este abierto. No insistir por CLI: terminar la parte de telefonia en la GUI de Packet Tracer y validar los phones desde sus ventanas.
 
 ## Evidencia verificada
 
@@ -35,6 +36,7 @@ La topologia esta bien encaminada, pero la guia pegada por el usuario no estaba 
 - `show running-config | section ip dhcp` muestra `option 150 ip 192.168.80.4`.
 - `show running-config | section telephony-service` confirma CME.
 - `show interfaces fa0/11 switchport` en `SW-ACC-P1` muestra `Voice VLAN: 80`.
+- Si `show running-config | section telephony-service` falla o queda vacio, el siguiente paso es GUI, no más `pt cmd`.
 
 ### WLAN / WLC
 

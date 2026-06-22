@@ -25,6 +25,7 @@ import type {
   TerminalMode,
 } from "../../ports/runtime-terminal-port.js";
 import { classifyIosCommand } from "./terminal-command-classifier.js";
+import { buildStallTimeoutForCommand } from "./terminal-plan-policies.js";
 
 /**
  * Servicio de ejecución de comandos IOS.
@@ -152,14 +153,15 @@ export class IosExecutionService {
     };
   }
 
-  private buildPlanDefaults(): {
+  private buildPlanDefaults(command?: string): {
     timeouts: TerminalPlanTimeouts;
     policies: TerminalPlanPolicies;
   } {
+    const adaptiveStallMs = command ? buildStallTimeoutForCommand(command) : 12000;
     return {
       timeouts: {
         commandTimeoutMs: 8000,
-        stallTimeoutMs: 15000,
+        stallTimeoutMs: adaptiveStallMs,
       },
       policies: {
         autoBreakWizard: true,
@@ -178,7 +180,7 @@ export class IosExecutionService {
     _parse = true,
     timeout = 5000,
   ): Promise<{ raw: string; parsed?: unknown }> {
-    const { timeouts, policies } = this.buildPlanDefaults();
+    const { timeouts, policies } = this.buildPlanDefaults(command);
     const profile = classifyIosCommand(command);
     const targetMode = profile.preserveCurrentMode ? undefined : "privileged-exec";
 
@@ -209,7 +211,7 @@ export class IosExecutionService {
     _parse = true,
     timeout = 5000,
   ): Promise<IosExecutionSuccess<T>> {
-    const { timeouts, policies } = this.buildPlanDefaults();
+    const { timeouts, policies } = this.buildPlanDefaults(command);
     const profile = classifyIosCommand(command);
     const targetMode = profile.preserveCurrentMode ? undefined : "privileged-exec";
 
@@ -244,7 +246,7 @@ export class IosExecutionService {
     command: string,
     options?: { timeout?: number; parse?: boolean; ensurePrivileged?: boolean },
   ): Promise<IosExecutionSuccess<ParsedOutput>> {
-    const { timeouts, policies } = this.buildPlanDefaults();
+    const { timeouts, policies } = this.buildPlanDefaults(command);
     const timeout = options?.timeout ?? 30000;
     const profile = classifyIosCommand(command);
     const targetMode: TerminalMode | undefined = profile.preserveCurrentMode
@@ -286,7 +288,7 @@ export class IosExecutionService {
   ): Promise<IosConfigApplyResult> {
     const configStepTimeoutMs = 60000;
     const saveStepTimeoutMs = 60000;
-    const { timeouts, policies } = this.buildPlanDefaults();
+    const { timeouts, policies } = this.buildPlanDefaults(commands[0]);
 
     const steps: TerminalPlan["steps"] = [
       { kind: "ensureMode" as const, expectMode: "privileged-exec" },

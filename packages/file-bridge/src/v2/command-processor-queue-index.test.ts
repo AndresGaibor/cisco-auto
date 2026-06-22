@@ -97,7 +97,9 @@ describe("CommandProcessor + AppendOnlyQueueIndex", () => {
     });
 
     for (let i = 0; i < 50; i++) {
-      processor.appendQueueIndex(`0000000000${String(i).padStart(2, "0")}-configIos.json`);
+      const filename = `0000000000${String(i).padStart(2, "0")}-configIos.json`;
+      writeFileSync(join(paths.commandsDir(), filename), '{"cmd":"test"}');
+      processor.appendQueueIndex(filename);
     }
 
     const ndjsonPath = join(paths.commandsDir(), "_queue.ndjson");

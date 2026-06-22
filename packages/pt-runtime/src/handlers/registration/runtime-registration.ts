@@ -1,5 +1,6 @@
 import { registerStableRuntimeHandlers } from "./stable-handlers.js";
 import { registerExperimentalRuntimeHandlers } from "./experimental-handlers.js";
+import { registerOmniHandlers } from "./omni-adapter.js";
 
 export interface RuntimeHandlerRegistrationOptions {
   /**
@@ -30,6 +31,10 @@ export function registerRuntimeHandlers(options: RuntimeHandlerRegistrationOptio
 
   if (options.experimental === true) {
     registerExperimentalRuntimeHandlers();
+  }
+
+  if (options.omni === true) {
+    registerOmniHandlers();
   }
 }
 
