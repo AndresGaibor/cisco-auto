@@ -17,11 +17,39 @@ import {
 
 export function splitCommandLines(command: string): string[] {
   return command
+    .replace(/;/g, "\n")
     .split(/\r?\n/)
-    .flatMap((line) => line.split(";"))
     .map((line) => line.trimEnd())
     .filter((line) => line.trim().length > 0)
     .filter((line) => !line.trimStart().startsWith("#"));
+}
+
+export function mergeConsecutiveCommandSteps(steps: TerminalPlanStep[]): TerminalPlanStep[] {
+  if (steps.length <= 1) return steps;
+
+  const result: TerminalPlanStep[] = [];
+
+  for (const step of steps) {
+    if (step.kind !== "command") {
+      result.push(step);
+      continue;
+    }
+
+    const prev = result.at(-1);
+    if (prev && prev.kind === "command" && prev.command !== undefined && step.command !== undefined) {
+      prev.command = prev.command + "\n" + step.command;
+      if (step.timeout !== undefined) {
+        prev.timeout = prev.timeout !== undefined ? Math.max(prev.timeout, step.timeout) : step.timeout;
+      }
+      if (prev.optional === true && step.optional === false) {
+        prev.optional = false;
+      }
+    } else {
+      result.push({ ...step });
+    }
+  }
+
+  return result;
 }
 
 function isEnableCommand(line: string): boolean {

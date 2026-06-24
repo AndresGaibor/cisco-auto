@@ -12,8 +12,8 @@ export interface CmdInputOptions {
 
 export function normalizeCommandLines(content: string): string[] {
   return content
+    .replace(/;/g, "\n")
     .split(/\r?\n/)
-    .flatMap((line) => line.split(";"))
     .map((line) => line.trimEnd())
     .filter((line) => line.trim().length > 0)
     .filter((line) => !line.trimStart().startsWith("#"));

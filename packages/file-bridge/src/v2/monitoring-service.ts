@@ -14,6 +14,16 @@ import type { BridgePathLayout } from "../shared/path-layout.js";
 import type { Snapshot } from "@cisco-auto/types";
 import { join } from "path";
 
+export type RecoveryTrigger = "stale" | "missing" | "fatal";
+
+export interface RecoveryAttempt {
+  trigger: RecoveryTrigger;
+  ageMs: number;
+  consecutiveStale: number;
+  attempt: number;
+  startedAt: number;
+}
+
 export interface MonitoringCallbacks {
   /** Callback para enviar comandos a PT (sendCommandAndWait) */
   sendCommandAndWait: <TPayload = unknown, TResult = unknown>(
@@ -31,6 +41,8 @@ export interface MonitoringCallbacks {
   };
   /** Callback para seq.next() */
   nextSeq: () => number;
+  /** Callback opcional para auto-recovery cuando el heartbeat está stale/missing */
+  onRecoveryNeeded?: (attempt: RecoveryAttempt) => Promise<void> | void;
 }
 
 export interface MonitoringOptions {
@@ -46,6 +58,10 @@ export interface MonitoringOptions {
   gcResultTtlMs?: number;
   /** TTL para logs en auto-gc (default: 3600000ms) */
   gcLogTtlMs?: number;
+  /** Número de detecciones stale consecutivas antes de disparar auto-recovery (default: 3) */
+  recoveryStaleThreshold?: number;
+  /** Intervalo mínimo entre intentos de recovery (default: 30000ms) */
+  recoveryCooldownMs?: number;
 }
 
 export interface HeartbeatHealth {
@@ -83,6 +99,9 @@ export class MonitoringService {
   private autoGcTimer: ReturnType<typeof setInterval> | null = null;
   private lastSnapshot: Snapshot | null = null;
   private lastHeartbeat: HeartbeatHealth | null = null;
+  private consecutiveStale = 0;
+  private lastRecoveryAt = 0;
+  private recoveryAttemptCount = 0;
 
   private readonly paths: BridgePathLayout;
   private readonly callbacks: MonitoringCallbacks;
@@ -98,6 +117,8 @@ export class MonitoringService {
       heartbeatStaleThresholdMs: options.heartbeatStaleThresholdMs ?? 10_000,
       gcResultTtlMs: options.gcResultTtlMs ?? 60_000,
       gcLogTtlMs: options.gcLogTtlMs ?? 3_600_000,
+      recoveryStaleThreshold: options.recoveryStaleThreshold ?? 3,
+      recoveryCooldownMs: options.recoveryCooldownMs ?? 30_000,
     };
   }
 
@@ -222,14 +243,19 @@ export class MonitoringService {
         const age = Date.now() - stats.mtime.getTime();
 
         if (age > this.options.heartbeatStaleThresholdMs) {
+          this.consecutiveStale++;
           this.callbacks.appendEvent({
             seq: this.callbacks.nextSeq(),
             ts: Date.now(),
             type: "pt-heartbeat-stale",
             ageMs: age,
+            consecutiveStale: this.consecutiveStale,
             lastModified: stats.mtime.getTime(),
           });
+
+          this.tryAutoRecovery("stale", age);
         } else {
+          this.consecutiveStale = 0;
           try {
             const content = readFileSync(heartbeatFile, "utf8");
             const heartbeat = JSON.parse(content);
@@ -252,11 +278,14 @@ export class MonitoringService {
       } catch (error) {
         const err = error as NodeJS.ErrnoException;
         if (err.code === "ENOENT") {
+          this.consecutiveStale++;
           this.callbacks.appendEvent({
             seq: this.callbacks.nextSeq(),
             ts: Date.now(),
             type: "pt-heartbeat-missing",
           });
+
+          this.tryAutoRecovery("missing", 0);
         } else {
           this.callbacks.appendEvent({
             seq: this.callbacks.nextSeq(),
@@ -267,6 +296,51 @@ export class MonitoringService {
         }
       }
     }, this.options.heartbeatIntervalMs);
+  }
+
+  private tryAutoRecovery(trigger: RecoveryTrigger, ageMs: number): void {
+    if (!this.callbacks.onRecoveryNeeded) return;
+    if (this.consecutiveStale < this.options.recoveryStaleThreshold) return;
+
+    const now = Date.now();
+    if (now - this.lastRecoveryAt < this.options.recoveryCooldownMs) return;
+
+    this.lastRecoveryAt = now;
+    this.recoveryAttemptCount++;
+
+    const attempt: RecoveryAttempt = {
+      trigger,
+      ageMs,
+      consecutiveStale: this.consecutiveStale,
+      attempt: this.recoveryAttemptCount,
+      startedAt: now,
+    };
+
+    this.callbacks.appendEvent({
+      seq: this.callbacks.nextSeq(),
+      ts: now,
+      type: "pt-auto-recovery-start",
+      trigger,
+      attempt: this.recoveryAttemptCount,
+    });
+
+    const promise = this.callbacks.onRecoveryNeeded(attempt);
+    if (promise) {
+      promise.catch((err) => {
+        this.callbacks.appendEvent({
+          seq: this.callbacks.nextSeq(),
+          ts: Date.now(),
+          type: "pt-auto-recovery-failed",
+          error: String(err),
+          attempt: this.recoveryAttemptCount,
+        });
+      });
+    }
+  }
+
+  resetRecoveryCount(): void {
+    this.recoveryAttemptCount = 0;
+    this.lastRecoveryAt = 0;
   }
 
   startAutoGc(): void {

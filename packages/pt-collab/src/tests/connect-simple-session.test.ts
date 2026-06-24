@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { shouldSkipCheckpointBootstrap } from "../cli-mode/connect-simple-session.js";
+import { shouldSkipCheckpointBootstrap, type ConnectSimpleSessionOptions } from "../cli-mode/connect-simple-session.js";
 
 function makeController(statusResult: {
   ok?: boolean;
@@ -7,12 +7,12 @@ function makeController(statusResult: {
     hasActiveFile?: boolean;
     activeFile?: string | null;
   };
-}) {
+}): ConnectSimpleSessionOptions["controller"] {
   return {
     project: {
       status: async () => statusResult,
     },
-  } as const;
+  } as ConnectSimpleSessionOptions["controller"];
 }
 
 describe("connectSimpleSession bootstrap guard", () => {

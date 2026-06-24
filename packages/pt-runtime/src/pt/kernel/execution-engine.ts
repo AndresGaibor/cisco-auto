@@ -174,6 +174,8 @@ export interface ExecutionEngine {
   getJobState(jobId: string): JobContext | null;
   getActiveJobs(): ActiveJob[];
   isJobFinished(jobId: string): boolean;
+  readDeviceTerminalOutput(device: string): string;
+  saveProject(): boolean;
 }
 
 // ─── implementación ────────────────────────────────────────────────────────
@@ -735,42 +737,8 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
     }
     execLog("JOB SEMANTIC ERROR CLEANUP END id=" + job.id + " device=" + job.device + " prompt=" + String(prompt || "") + " mode=" + String(mode || ""));
     try {
-      const cleanupBaselineOutput = readNativeTerminalOutput(job.device);
-      const sent = sendNativeEndForSemanticCleanup(job);
-      job.pendingCommand = null;
-      ctx.waitingForCommandEnd = false;
-      ctx.pendingDelay = 650;
-      ctx.phase = "waiting-delay";
-      ctx.updatedAt = Date.now();
-      if (!sent) {
-        finishJobWithSemanticError(job, semanticError, prompt, mode);
-        return true;
-      }
-      const cleanupStartedAt = Date.now();
-      setTimeout(function semanticCleanupTick() {
-        if (ctx.finished === true) return;
-        if (isDeviceTerminalBusy(job.device) && Date.now() - cleanupStartedAt <= 1200) {
-          ctx.updatedAt = Date.now();
-          ctx.pendingDelay = 100;
-          setTimeout(semanticCleanupTick, 100);
-          return;
-        }
-        const fullOutput = readNativeTerminalOutput(job.device);
-        const currentPrompt = getNativePrompt(job.device, fullOutput);
-        const currentMode = getNativeMode(job.device, currentPrompt);
-        if (nativeSnapshotIsStillInConfigMode({ prompt: currentPrompt, mode: currentMode })) {
-          execLog("JOB SEMANTIC ERROR CLEANUP END RETRY id=" + job.id + " device=" + job.device + " prompt=" + currentPrompt + " mode=" + currentMode);
-          if (sendNativeEndForSemanticCleanup(job)) {
-            ctx.updatedAt = Date.now();
-            ctx.pendingDelay = 650;
-            setTimeout(semanticCleanupTick, 650);
-            return;
-          }
-          finishSemanticCleanupFromNativeSnapshot(job, semanticError, prompt, mode, cleanupBaselineOutput);
-          return;
-        }
-        finishSemanticCleanupFromNativeSnapshot(job, semanticError, currentPrompt, currentMode, cleanupBaselineOutput);
-      }, 650);
+      sendNativeEndForSemanticCleanup(job);
+      finishJobWithSemanticError(job, semanticError, prompt, mode, "");
       return true;
     } catch (err) {
       execLog("JOB SEMANTIC ERROR CLEANUP END THREW id=" + job.id + " device=" + job.device + " error=" + String(err));
@@ -784,7 +752,7 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
   function nativeModeSatisfiesEnsureStep(step: DeferredStep, mode: string, prompt: string): boolean {
     const expected = String((step as any).expectMode ?? (step as any).value ?? "").trim();
     if (!expected) return false;
-    if (expected === "privileged-exec") return mode === "privileged-exec" || String(prompt || "").trim().endsWith("#");
+    if (expected === "privileged-exec") return mode === "privileged-exec" || (String(prompt || "").trim().endsWith("#") && !isConfigMode(mode, prompt));
     if (expected === "user-exec") return mode === "user-exec" || String(prompt || "").trim().endsWith(">");
     if (expected === "global-config" || expected === "config") return isConfigMode(mode, prompt) || String(prompt || "").includes("(config");
     return mode === expected;
@@ -1104,6 +1072,24 @@ export function createExecutionEngine(terminal: TerminalEngine): ExecutionEngine
       return active;
     },
     isJobFinished,
+    readDeviceTerminalOutput: function (device: string): string {
+      try {
+        return readNativeTerminalOutput(device);
+      } catch {
+        return "";
+      }
+    },
+    saveProject: function (): boolean {
+      try {
+        const resolvedIpc = resolvePacketTracerIpc();
+        if (!resolvedIpc || typeof resolvedIpc.appWindow !== "function") return false;
+        const appWindow = resolvedIpc.appWindow();
+        if (!appWindow || typeof appWindow.fileSave !== "function") return false;
+        return appWindow.fileSave() === true;
+      } catch {
+        return false;
+      }
+    },
   };
 }
 

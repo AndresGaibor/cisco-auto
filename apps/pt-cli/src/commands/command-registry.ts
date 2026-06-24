@@ -33,6 +33,7 @@ import { createCollabCommand } from "./collab/index.js";
 import { createInspectCommand } from "./inspect/index.js";
 import { createAgentCommand } from "./agent/index.js";
 import { createSaveCommand } from "./save.js";
+import { createAutosaveCommand } from "./autosave.js";
 import { toPtMcpCommandCatalog } from "./mcp/command-catalog-adapter.js";
 import { formatDevDirForDisplay } from "../system/paths.js";
 
@@ -507,6 +508,23 @@ export const PUBLIC_COMMAND_DEFINITIONS: PtCommandDefinition[] = [
     factory: createSaveCommand,
   },
   {
+    id: "autosave",
+    name: "autosave",
+    group: "runtime",
+    summary: "Guarda el archivo .pkt actual en Packet Tracer (fileSave)",
+    description: "Envía comando saveProject al runtime para que Packet Tracer ejecute fileSave() sobre el .pkt activo.",
+    examples: [
+      { command: "pt autosave", description: "Guardar archivo .pkt actual" },
+      { command: "pt autosave --json", description: "Guardar con salida JSON" },
+    ],
+    related: ["pt project save", "pt runtime status --live --json"],
+    agentHints: [
+      "Usar antes de cambios grandes para evitar pérdida de trabajo.",
+      "Requiere Packet Tracer abierto con runtime cargado.",
+    ],
+    factory: createAutosaveCommand,
+  },
+  {
     id: "inspect",
     name: "inspect",
     group: "debug",
@@ -530,9 +548,11 @@ export const PUBLIC_COMMAND_DEFINITIONS: PtCommandDefinition[] = [
     examples: [
       { command: "pt agent context", description: "Obtener contexto relevante para la tarea" },
       { command: "pt agent plan", description: "Generar plan de acción" },
+      { command: "pt agent daemon start", description: "Iniciar daemon para consultas @agent desde canvas notes" },
+      { command: "pt agent daemon status", description: "Estado del daemon agent" },
     ],
-    related: ["pt doctor", "pt mcp"],
-    agentHints: ["Usa estos comandos para mejorar tu propia toma de decisiones."],
+    related: ["pt doctor", "pt mcp", "pt agent daemon"],
+    agentHints: ["Usa estos comandos para mejorar tu propia toma de decisiones.", "pt agent daemon start para comunicación desde notas del canvas en PT."],
     factory: createAgentCommand,
   },
 ];

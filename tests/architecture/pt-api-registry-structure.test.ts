@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const REGISTRY_FILE = join(
-  process.cwd(),
-  "packages/pt-runtime/src/pt-api/pt-api-registry.ts",
-);
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = resolve(__dirname, "../..");
+
+const REGISTRY_FILE = join(PROJECT_ROOT, "packages/pt-runtime/src/pt-api/pt-api-registry.ts");
 
 describe("pt-api-registry.ts architecture", () => {
   test("pt-api-registry.ts is under 100 lines", () => {
@@ -17,7 +18,6 @@ describe("pt-api-registry.ts architecture", () => {
   test("pt-api-registry.ts only contains re-exports (no type definitions)", () => {
     const content = readFileSync(REGISTRY_FILE, "utf8");
 
-    // Should only have: comments, export * from, and/or export type * from
     const nonExportLines = content
       .split("\n")
       .map((l) => l.trim())
@@ -39,10 +39,9 @@ describe("pt-api-registry.ts architecture", () => {
 
   test("registry/index.ts re-exports all domain files", () => {
     const indexContent = readFileSync(
-      join(process.cwd(), "packages/pt-runtime/src/pt-api/registry/index.ts"),
+      join(PROJECT_ROOT, "packages/pt-runtime/src/pt-api/registry/index.ts"),
       "utf8",
     );
-    // Should export from all-types.ts
     expect(indexContent).toContain("all-types.js");
   });
 });

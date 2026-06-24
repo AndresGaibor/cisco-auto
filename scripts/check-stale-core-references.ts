@@ -24,6 +24,7 @@ const ignoredDirs = new Set([
   "coverage",
   ".sisyphus",
   ".claude",
+  ".gemini",
   "dist-qtscript",
   "packages/pt-runtime/dist-qtscript",
   "packages/generated",
@@ -31,19 +32,6 @@ const ignoredDirs = new Set([
 ]);
 
 const skipFiles = new Set([
-  "docs/archive/legacy-core/pt-control-docs/responsibilities.md",
-  "docs/archive/legacy-core/pt-control-docs/PT-API.md",
-  "docs/archive/legacy-core/pt-control-docs/PT-API-COMPLETE.md",
-  "docs/archive/legacy-core/pt-control-docs/PT-GLOBAL-SCOPE.md",
-  "docs/archive/legacy-core/pt-control-docs/PT-NETWORK-SERVERS.md",
-  "docs/archive/legacy-core/pt-control-docs/pt-script-result.json",
-  "docs/archive/legacy-core/pt-runtime-docs/PT-API.md",
-  "docs/archive/legacy-core/pt-runtime-docs/PT-API-COMPLETE.md",
-  "docs/archive/legacy-core/pt-runtime-docs/PT-GLOBAL-SCOPE.md",
-  "docs/archive/legacy-core/pt-runtime-docs/PT-NETWORK-SERVERS.md",
-  "docs/archive/legacy-core/pt-runtime-docs/pt-script-result.json",
-  "docs/archive/legacy-core/pt-runtime-docs/superpowers/specs/2026-04-11-plugin-first-architecture.md",
-  "docs/archive/legacy-core/README.md",
   "docs/MIGRATION_GUIDE.md",
 ]);
 

@@ -1,6 +1,6 @@
 import type { TerminalDeviceKind, RunTerminalCommandOptions } from "@cisco-auto/terminal-contracts";
 import type { RuntimeTerminalPort } from "../../../ports/runtime-terminal-port.js";
-import { buildUniversalTerminalPlan, splitCommandLines } from "../terminal-plan-builder.js";
+import { buildUniversalTerminalPlan, mergeConsecutiveCommandSteps, splitCommandLines } from "../terminal-plan-builder.js";
 import { hasPagerSuppressionSteps, recordTerminalLengthZeroResult, stripPagerSuppressionSteps } from "../terminal-plan-policies.js";
 import { measureServiceAsync, measureServiceSync, type TerminalServiceTimingMap } from "./command-timing-recorder.js";
 import { applyTerminalEvidenceBarrier } from "./terminal-evidence-barrier.js";
@@ -110,6 +110,7 @@ export function createIosCommandExecutor(deps: IosCommandExecutorDeps) {
       });
 
     const plan = measureServiceSync(serviceTimings, "buildIosPlanMs", buildPlan);
+    plan.steps = mergeConsecutiveCommandSteps(plan.steps);
 
     const { isReady, heartbeat, heartbeatAgeMs, reason } = readinessChecker.checkReadiness({
       isHighRiskCommand: isHighRiskIosCommand(command, plan),
@@ -226,6 +227,20 @@ export function createIosCommandExecutor(deps: IosCommandExecutorDeps) {
           firstRuntimeResult: runtimeResult,
           retryDelayMs,
         });
+
+        semanticFailure = detectIosSemanticFailureFromRuntimeResult(runtimeResult);
+      }
+
+      if (semanticFailure) {
+        return buildFailureResult({
+          result: { device, command },
+          reason: { code: semanticFailure.code, message: semanticFailure.message },
+          output: firstString(runtimeResult.output),
+          rawOutput: firstString(runtimeResult.rawOutput, runtimeResult.output),
+          status: 1,
+          warnings: runtimeResult.warnings,
+          evidence: runtimeResult.evidence,
+        });
       }
 
       if (!runtimeResult.ok) {
@@ -241,18 +256,6 @@ export function createIosCommandExecutor(deps: IosCommandExecutorDeps) {
           output: firstString(runtimeResult.output),
           rawOutput: firstString(runtimeResult.rawOutput, runtimeResult.output),
           status: Number(runtimeResult.status ?? 1),
-          warnings: runtimeResult.warnings,
-          evidence: runtimeResult.evidence,
-        });
-      }
-
-      if (semanticFailure) {
-        return buildFailureResult({
-          result: { device, command },
-          reason: { code: semanticFailure.code, message: semanticFailure.message },
-          output: firstString(runtimeResult.output),
-          rawOutput: firstString(runtimeResult.rawOutput, runtimeResult.output),
-          status: 1,
           warnings: runtimeResult.warnings,
           evidence: runtimeResult.evidence,
         });
@@ -361,6 +364,34 @@ export function createIosCommandExecutor(deps: IosCommandExecutorDeps) {
     const ok = Boolean(execResult.ok ?? false);
     const semanticFailure = detectIosSemanticFailureFromRuntimeResult(execResult);
 
+    if (semanticFailure) {
+      return buildCommandResult({
+        ok: false,
+        action: "ios.exec",
+        device,
+        deviceKind: "ios",
+        command,
+        output,
+        rawOutput: firstString(
+          execResult.rawOutput,
+          execResult.raw,
+          execResult.output,
+          execResult.evidence?.raw,
+          execResult.parsed?.raw,
+          execResult.parsed?.output,
+          execResult.error?.details?.output,
+        ),
+        status: 1,
+        error: {
+          code: semanticFailure.code,
+          message: semanticFailure.message,
+          phase: "execution",
+        },
+        warnings: execResult.warnings,
+        evidence: execResult.evidence,
+      });
+    }
+
     if (!ok) {
       const evidence = execResult.evidence as any;
       const events = Array.isArray(evidence?.events) ? evidence.events : [];
@@ -395,34 +426,6 @@ export function createIosCommandExecutor(deps: IosCommandExecutorDeps) {
         },
         warnings: execResult.warnings,
         evidence,
-      });
-    }
-
-    if (semanticFailure) {
-      return buildCommandResult({
-        ok: false,
-        action: "ios.exec",
-        device,
-        deviceKind: "ios",
-        command,
-        output,
-        rawOutput: firstString(
-          execResult.rawOutput,
-          execResult.raw,
-          execResult.output,
-          execResult.evidence?.raw,
-          execResult.parsed?.raw,
-          execResult.parsed?.output,
-          execResult.error?.details?.output,
-        ),
-        status: 1,
-        error: {
-          code: semanticFailure.code,
-          message: semanticFailure.message,
-          phase: "execution",
-        },
-        warnings: execResult.warnings,
-        evidence: execResult.evidence,
       });
     }
 

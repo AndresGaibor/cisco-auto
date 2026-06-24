@@ -74,6 +74,7 @@ const ROOT_COMMAND_NAMES = [
   "inspect",
   "agent",
   "save",
+  "autosave",
 ];
 
 export function createProgram(): Command {

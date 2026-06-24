@@ -165,6 +165,7 @@ export interface PTLogicalWorkspace {
   getCanvasLineIds?(): string[];
   getCanvasNoteIds?(): string[];
   getCanvasPolygonIds?(): string[];
+  getCanvasNoteText?(noteId: string): string | null;
   getRectItemData?(rectId: string): Record<string, unknown> | null;
   getRectData?(rectId: string): Record<string, unknown> | null;
   getCluster?(clusterId: string): unknown | null;

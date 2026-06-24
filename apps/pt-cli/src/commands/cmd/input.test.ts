@@ -22,6 +22,29 @@ describe("cmd/input", () => {
     ]);
   });
 
+  test("trata ; como salto de línea", () => {
+    expect(normalizeCommandLines("show version;show ip int br;show vlan")).toEqual([
+      "show version",
+      "show ip int br",
+      "show vlan",
+    ]);
+  });
+
+  test("mezcla ; con saltos de línea", () => {
+    expect(normalizeCommandLines("show version;show ip int br\nshow vlan")).toEqual([
+      "show version",
+      "show ip int br",
+      "show vlan",
+    ]);
+  });
+
+  test("no deja líneas vacías por ; al inicio o final", () => {
+    expect(normalizeCommandLines(";show version;show ip int br;")).toEqual([
+      "show version",
+      "show ip int br",
+    ]);
+  });
+
   test("detecta input multiline", () => {
     expect(looksLikeMultiCommandInput(["show version\nshow ip int br"])).toBe(true);
   });

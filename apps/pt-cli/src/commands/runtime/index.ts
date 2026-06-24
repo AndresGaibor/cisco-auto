@@ -68,6 +68,8 @@ Ejemplos:
   pt runtime releases
   pt runtime rollback --last
   pt runtime reload --json
+  pt runtime recover
+  pt runtime recover --force
 
 Si algo falla:
   pt doctor
@@ -249,7 +251,221 @@ Si algo falla:
       }
     });
 
+  runtime
+    .command("recover")
+    .description("Intenta recuperar runtime sin cargar/reiniciar Packet Tracer")
+    .option("--json", "Salida JSON")
+    .option("--force", "Fuerza recovery incluso si runtime responde")
+    .action(async (options) => {
+      const wantsJson = Boolean(options?.json || process.argv.includes("--json"));
+      const wantsForce = Boolean(options?.force || process.argv.includes("--force"));
+      const devDir = getDevDir();
+      const heartbeatFile = join(devDir, "heartbeat.json");
+
+      type StepResult = { ok: boolean; value?: unknown; error?: string };
+      type Step = { label: string; action: () => Promise<StepResult> | StepResult };
+      const results: { label: string; step: string; ok: boolean; error?: string; value?: unknown }[] = [];
+
+      function record(label: string, step: string, result: StepResult): void {
+        results.push({ label, step, ok: result.ok, error: result.error, value: result.value });
+      }
+
+      // Paso 1: Verificar existencia de directorio y archivos
+      const fs = await import("node:fs");
+      const bridgeOk = existsSync(devDir);
+      record("Bridge", "dir-check", {
+        ok: bridgeOk,
+        error: bridgeOk ? undefined : `Directorio ${devDir} no existe`,
+      });
+
+      const mainJsOk = existsSync(join(devDir, "main.js"));
+      record("Bridge", "main.js-check", {
+        ok: mainJsOk,
+        error: mainJsOk ? undefined : "main.js no encontrado",
+      });
+
+      const runtimeJsOk = existsSync(join(devDir, "runtime.js"));
+      record("Bridge", "runtime.js-check", {
+        ok: runtimeJsOk,
+        error: runtimeJsOk ? undefined : "runtime.js no encontrado",
+      });
+
+      // Paso 2: Verificar heartbeat
+      const heartbeat = { exists: existsSync(heartbeatFile), ageMs: -1, state: "unknown" };
+      if (heartbeat.exists) {
+        try {
+          const stats = fs.statSync(heartbeatFile);
+          heartbeat.ageMs = Date.now() - stats.mtime.getTime();
+          heartbeat.state = heartbeat.ageMs > 10_000 ? "stale" : "fresh";
+        } catch {}
+      }
+
+      record("Heartbeat", "check", {
+        ok: heartbeat.exists && heartbeat.state === "fresh",
+        error: !heartbeat.exists
+          ? "heartbeat.json no existe (PT probablemente no inició el runtime)"
+          : heartbeat.state === "stale"
+            ? `Heartbeat stale: ${(heartbeat.ageMs / 1000).toFixed(1)}s sin actualizar`
+            : undefined,
+        value: heartbeat,
+      });
+
+      // Paso 3: Diagnosticar via bridge
+      let diagnosticOk = false;
+      let diagnosticValue: unknown = null;
+
+      try {
+        const bridge = new FileBridgeV2({
+          root: devDir,
+          role: "client",
+          consumerId: "runtime-recover",
+          enableBackpressure: false,
+          resultTimeoutMs: 8_000,
+        });
+        bridge.start();
+        try {
+          const runtimeStatus = await bridge.sendCommandAndWait<{}, unknown>("__runtimeStatus", {}, 8_000);
+          diagnosticOk = (runtimeStatus as any)?.ok !== false;
+          diagnosticValue = runtimeStatus;
+        } finally {
+          try { await bridge.stop(); } catch {}
+        }
+      } catch (error) {
+        diagnosticValue = { error: String(error) };
+      }
+
+      record("Runtime", "status", {
+        ok: diagnosticOk,
+        error: diagnosticOk ? undefined : String((diagnosticValue as any)?.error ?? "sin respuesta de PT"),
+        value: diagnosticValue,
+      });
+
+      // Paso 4: Recovery si no responde
+      let recoveryAttempted = false;
+      let recoveryOk = false;
+      let recoveryValue: unknown = null;
+
+      if (wantsForce || !diagnosticOk) {
+        recoveryAttempted = true;
+        try {
+          const bridge = new FileBridgeV2({
+            root: devDir,
+            role: "client",
+            consumerId: "runtime-recover",
+            enableBackpressure: false,
+            resultTimeoutMs: 15_000,
+          });
+          bridge.start();
+          try {
+            recoveryValue = await bridge.sendCommandAndWait<unknown, unknown>(
+              "__reloadRuntime",
+              { reason: "pt-runtime-recover-cli", requestedAt: Date.now() },
+              15_000,
+            );
+            recoveryOk = (recoveryValue as any)?.ok !== false;
+          } finally {
+            try { await bridge.stop(); } catch {}
+          }
+        } catch (error) {
+          recoveryValue = { error: String(error) };
+        }
+
+        record("Recovery", "reloadRuntime", {
+          ok: recoveryOk,
+          error: recoveryOk ? undefined : String((recoveryValue as any)?.error ?? "comando no enviado"),
+          value: recoveryValue,
+        });
+      }
+
+      // Paso 5: Resumen y output
+      const overall = heartbeat.state === "fresh" || recoveryOk;
+      const data = {
+        schemaVersion: "1.0",
+        ok: overall,
+        action: "runtime.recover",
+        devDir,
+        steps: results,
+        recovery: recoveryAttempted ? { attempted: true, ok: recoveryOk, value: recoveryValue } : { attempted: false },
+        recommendation: buildRecommendation(results, heartbeat, diagnosticOk),
+      };
+
+      if (wantsJson) {
+        printJson(data);
+        process.exitCode = data.ok ? 0 : 1;
+        return;
+      }
+
+      process.stdout.write("\n=== Diagnóstico de Runtime ===\n");
+      for (const r of results) {
+        const icon = r.ok ? "ok" : "fail";
+        process.stdout.write(`  [${icon}] ${r.label}: ${r.step}`);
+        if (!r.ok && r.error) process.stdout.write(` — ${r.error}`);
+        process.stdout.write("\n");
+      }
+
+      if (recoveryAttempted) {
+        process.stdout.write("\n=== Recovery ===\n");
+        if (recoveryOk) {
+          process.stdout.write("  Runtime reload exitoso\n");
+        } else {
+          process.stdout.write("  Runtime reload falló. Packet Tracer probablemente está congelado.\n");
+        }
+      }
+
+      process.stdout.write("\n=== Recomendación ===\n");
+      process.stdout.write(data.recommendation);
+      process.stdout.write("\n\n");
+
+      process.exitCode = overall ? 0 : 1;
+    });
+
   runtime.addCommand(createRuntimeTraceCommand());
 
   return runtime;
+}
+
+function buildRecommendation(
+  results: { label: string; step: string; ok: boolean }[],
+  heartbeat: { exists: boolean; ageMs: number; state: string },
+  diagnosticOk: boolean,
+): string {
+  if (diagnosticOk) {
+    return "Runtime responde normalmente. Usa 'pt runtime status' para más detalles.";
+  }
+
+  if (heartbeat.state === "fresh") {
+    return "El heartbeat está activo pero el comando falló. Podría ser un timeout transitorio. Reintenta con:\n  pt runtime status --live --json";
+  }
+
+  if (!heartbeat.exists) {
+    return (
+      "No se detectó heartbeat — el runtime de Packet Tracer no está activo.\n" +
+      "Pasos:\n" +
+      "  1. Abre Packet Tracer manualmente y asegura que main.js esté cargado\n" +
+      "     (File > User Scripts > main.js o Extensions > Run > main.js)\n" +
+      "  2. Verifica que PT_DEV_DIR apunte al directorio correcto\n" +
+      "  3. pt doctor\n" +
+      "  4. pt runtime status --live --json"
+    );
+  }
+
+  const staleSecs = (heartbeat.ageMs / 1000).toFixed(1);
+  if (heartbeat.state === "stale") {
+    return (
+      `Heartbeat stale (${staleSecs}s). El event loop de PT podría estar congelado.\n` +
+      "Pasos de recovery:\n" +
+      "  1. Reintenta con --force: pt runtime recover --force\n" +
+      "  2. Si sigue fallando, recarga main.js desde Packet Tracer:\n" +
+      "     File > User Scripts > main.js (o Extensions > Run > main.js)\n" +
+      "  3. Si PT no responde, cierra y reinicia Packet Tracer\n" +
+      "  4. pt doctor\n" +
+      "  5. pt runtime status --live --json"
+    );
+  }
+
+  return (
+    "Estado desconocido. Ejecuta:\n" +
+    "  pt doctor\n" +
+    "  pt runtime status --live --json"
+  );
 }

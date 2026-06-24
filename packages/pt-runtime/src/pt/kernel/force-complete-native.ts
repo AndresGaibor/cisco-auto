@@ -40,6 +40,24 @@ export function forceCompleteFromNativeTerminal(job: ActiveJob, reason: string, 
   }
 
   const blockResult = nativeFallbackResult(job, command, outputResult, deps);
+
+  if (blockResult.semanticError) {
+    deps.execLog(
+      "JOB NATIVE IOS SEMANTIC ERROR id=" +
+        job.id +
+        " device=" +
+        job.device +
+        " command=" +
+        command +
+        " code=" +
+        blockResult.semanticError.code +
+        " complete=" +
+        String(blockResult.complete),
+    );
+
+    return deps.cleanupToPrivilegedExecBeforeSemanticError(job, blockResult.semanticError, blockResult.prompt, blockResult.mode);
+  }
+
   if (!blockResult.complete) {
     deps.execLog(
       "JOB NATIVE INCOMPLETE id=" +
@@ -54,21 +72,6 @@ export function forceCompleteFromNativeTerminal(job: ActiveJob, reason: string, 
         blockResult.block.slice(-300),
     );
     return false;
-  }
-
-  if (blockResult.semanticError) {
-    deps.execLog(
-      "JOB NATIVE IOS SEMANTIC ERROR id=" +
-        job.id +
-        " device=" +
-        job.device +
-        " command=" +
-        command +
-        " code=" +
-        blockResult.semanticError.code,
-    );
-
-    return deps.cleanupToPrivilegedExecBeforeSemanticError(job, blockResult.semanticError, blockResult.prompt, blockResult.mode);
   }
 
   return nativeFallbackCleanup(job, command, reason, blockResult, deps);

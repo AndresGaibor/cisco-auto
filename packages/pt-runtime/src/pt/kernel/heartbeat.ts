@@ -26,6 +26,7 @@ export interface HeartbeatManager {
   stop(): void;
   setActiveCommand(id: string | null): void;
   setQueuedCount(count: number): void;
+  getStatus(): { ok: boolean; lastOkTs: number; writesAttempted: number; writesFailed: number; };
 }
 
 export function createHeartbeat(config: { devDir: string; intervalMs: number }) {
@@ -34,6 +35,10 @@ export function createHeartbeat(config: { devDir: string; intervalMs: number }) 
   let activeCommand: { id: string; seq: number; type: string; startedAt: number } | null = null;
   let activeCommandRaw: string | null = null;
   let queuedCount = 0;
+  let writesAttempted = 0;
+  let writesFailed = 0;
+  let lastOkTs = 0;
+  var loadedAt = Date.now();
 
   function setActiveCommand(id: string | null): void {
     debugLog("[heartbeat] setActiveCommand: " + (id || "null"));
@@ -45,16 +50,61 @@ export function createHeartbeat(config: { devDir: string; intervalMs: number }) 
     queuedCount = count;
   }
 
-  function write(): void {
+  function getGlobalScope(): any {
     try {
-      const s = safeFM();
-      if (!s.available || !s.fm) {
-        debugLog("[heartbeat] fm unavailable — skipping write");
-        return;
+      return typeof self !== "undefined" ? self : Function("return this")();
+    } catch {
+      return {};
+    }
+  }
+
+  function tryWriteWithFallback(hbPath: string, jsonContent: string): boolean {
+    var scope = getGlobalScope();
+
+    // Intento 1: fm.writePlainTextToFile (safeFM)
+    try {
+      var s = safeFM();
+      if (s.available && s.fm) {
+        s.fm.writePlainTextToFile(hbPath, jsonContent);
+        return true;
       }
-      const hbPath = config.devDir + "/heartbeat.json";
-      const hb: Heartbeat = {
+    } catch (fmError) {
+      debugLog("[heartbeat] fm.writePlainTextToFile falló: " + String(fmError));
+    }
+
+    // Intento 2: _ScriptModule.writeTextToFile
+    try {
+      if (typeof _ScriptModule !== "undefined" && _ScriptModule && typeof _ScriptModule.writeTextToFile === "function") {
+        _ScriptModule.writeTextToFile(hbPath, jsonContent);
+        return true;
+      }
+    } catch (smError) {
+      debugLog("[heartbeat] _ScriptModule.writeTextToFile falló: " + String(smError));
+    }
+
+    // Intento 3: ipc.systemFileManager().writePlainTextToFile()
+    try {
+      if (scope.ipc && typeof scope.ipc.systemFileManager === "function") {
+        var sysFm = scope.ipc.systemFileManager();
+        if (sysFm && typeof sysFm.writePlainTextToFile === "function") {
+          sysFm.writePlainTextToFile(hbPath, jsonContent);
+          return true;
+        }
+      }
+    } catch (ipcError) {
+      debugLog("[heartbeat] ipc.systemFileManager falló: " + String(ipcError));
+    }
+
+    return false;
+  }
+
+  function write(): void {
+    writesAttempted++;
+    var hb: Heartbeat;
+    try {
+      hb = {
         ts: Date.now(),
+        loadedAt: loadedAt,
         running: isRunning,
         activeCommand: activeCommand
           ? {
@@ -68,18 +118,29 @@ export function createHeartbeat(config: { devDir: string; intervalMs: number }) 
             : null,
         queued: queuedCount,
       };
-      debugLog(
-        "[heartbeat] WRITE path=" +
-          hbPath +
-          " running=" +
-          isRunning +
-          " active=" +
-          (activeCommand || "none"),
-      );
-      s.fm.writePlainTextToFile(hbPath, JSON.stringify(hb));
+    } catch (dataError) {
+      writesFailed++;
+      debugLog("[heartbeat] Error construyendo heartbeat: " + String(dataError));
+      return;
+    }
+
+    var hbPath = config.devDir + "/heartbeat.json";
+    var jsonContent: string;
+    try {
+      jsonContent = JSON.stringify(hb);
+    } catch (jsonError) {
+      writesFailed++;
+      debugLog("[heartbeat] Error serializando heartbeat: " + String(jsonError));
+      return;
+    }
+
+    var wrote = tryWriteWithFallback(hbPath, jsonContent);
+    if (wrote) {
+      lastOkTs = Date.now();
       debugLog("[heartbeat] WRITE OK");
-    } catch (e) {
-      debugLog("[heartbeat] WRITE ERROR: " + String(e));
+    } else {
+      writesFailed++;
+      debugLog("[heartbeat] Todos los métodos de escritura fallaron");
     }
   }
 
@@ -87,7 +148,9 @@ export function createHeartbeat(config: { devDir: string; intervalMs: number }) 
     debugLog("[heartbeat] START interval=" + config.intervalMs + "ms");
     isRunning = true;
     write();
-    interval = setInterval(() => write(), config.intervalMs);
+    interval = setInterval(function () {
+      write();
+    }, config.intervalMs);
   }
 
   function stop(): void {
@@ -99,5 +162,14 @@ export function createHeartbeat(config: { devDir: string; intervalMs: number }) 
     }
   }
 
-  return { write, start, stop, setActiveCommand, setQueuedCount };
+  function getStatus() {
+    return {
+      ok: writesFailed === 0 || writesAttempted > writesFailed,
+      lastOkTs: lastOkTs,
+      writesAttempted: writesAttempted,
+      writesFailed: writesFailed,
+    };
+  }
+
+  return { write, start, stop, setActiveCommand, setQueuedCount, getStatus };
 }

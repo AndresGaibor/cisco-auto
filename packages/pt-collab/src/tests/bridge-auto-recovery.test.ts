@@ -63,14 +63,14 @@ describe("BridgeAutoRecovery", () => {
   });
 
   test("detecta alta tasa de fallos y dispara frequent_failures", async () => {
-    let triggered: string | null = null;
+    let triggered: "frequent_failures" | null = null;
     const recovery = new BridgeAutoRecovery({
       stuckThresholdMs: 5000,
       stuckConsecutivePolls: 10,
       failureRateThreshold: 0.5,
       minSamples: 4,
       cooldownMs: 100,
-      onRecoveryNeeded: (t: string, _d: string) => { triggered = t; },
+      onRecoveryNeeded: (t, _d) => { triggered = t as "frequent_failures"; },
     });
 
     await recovery.recordPoll(100, false);
@@ -78,7 +78,7 @@ describe("BridgeAutoRecovery", () => {
     await recovery.recordPoll(100, true);
     await recovery.recordPoll(100, false);
 
-    expect(triggered).toBe("frequent_failures");
+    expect(triggered as unknown as "frequent_failures").toBe("frequent_failures");
   });
 
   test("triggerFatal respeta cooldown como cualquier otro", async () => {

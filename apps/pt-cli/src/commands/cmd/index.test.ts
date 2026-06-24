@@ -108,11 +108,11 @@ describe("cmd --config", () => {
     );
   });
 
-  test("isMissingReadOnlyInput detecta read sin argumentos suficientes", () => {
-    expect(__test__.isMissingReadOnlyInput(undefined, [], {})).toBe(true);
-    expect(__test__.isMissingReadOnlyInput("R1", [], {})).toBe(true);
-    expect(__test__.isMissingReadOnlyInput("R1", ["show running-config"], {})).toBe(false);
-    expect(__test__.isMissingReadOnlyInput(undefined, [], { file: "cmds.txt" })).toBe(false);
+  test("isMissingReadOnlyInput detecta read sin dispositivo ni file", () => {
+    expect(__test__.isMissingReadOnlyInput(undefined, {})).toBe(true);
+    expect(__test__.isMissingReadOnlyInput("R1", {})).toBe(false);
+    expect(__test__.isMissingReadOnlyInput("R1", { file: "cmds.txt" })).toBe(false);
+    expect(__test__.isMissingReadOnlyInput(undefined, { file: "cmds.txt" })).toBe(false);
   });
 
   test("isLikelyMisorderedReadCommand detecta pt cmd R1 read", () => {

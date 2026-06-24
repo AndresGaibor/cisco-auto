@@ -79,6 +79,16 @@ try {
     }
   }
   dprint("[runtime] dispatch ready. Registered: " + count);
+
+  // Start canvas note watcher for agent communication
+  if (typeof startCanvasNoteWatcher === "function") {
+    try {
+      startCanvasNoteWatcher(deps);
+      dprint("[runtime] canvas note watcher started");
+    } catch (w) {
+      dprint("[runtime] canvas note watcher error: " + String(w));
+    }
+  }
 } catch (e) {
   dprint("[runtime] INIT ERROR: " + String(e));
 }

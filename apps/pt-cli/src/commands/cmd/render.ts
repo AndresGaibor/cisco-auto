@@ -117,6 +117,7 @@ export function toCmdCliResult(
   options: { includeSyslogs?: boolean } = {},
 ): CmdCliResult {
   const nextSteps: string[] = [];
+  const isReadTerminal = result.command === "(read terminal)";
   const timings =
     typeof result.evidence === "object" && result.evidence !== null
       ? ((result.evidence as { timings?: BridgeResultTimings }).timings ?? undefined)
@@ -132,14 +133,16 @@ export function toCmdCliResult(
   const isIosError = isIosErrorResult(result);
   const primaryErrorOutput = String(result.error?.message ?? cleaned.output).trim();
 
-  if (result.deviceKind === "ios") {
-    nextSteps.push(`pt cmd ${result.device} "show running-config"`);
-    nextSteps.push(`pt cmd ${result.device} "show ip interface brief"`);
-  }
+  if (!isReadTerminal) {
+    if (result.deviceKind === "ios") {
+      nextSteps.push(`pt cmd ${result.device} "show running-config"`);
+      nextSteps.push(`pt cmd ${result.device} "show ip interface brief"`);
+    }
 
-  if (result.deviceKind === "host") {
-    nextSteps.push(`pt cmd ${result.device} "ipconfig"`);
-    nextSteps.push(`pt verify ping ${result.device} <target-ip>`);
+    if (result.deviceKind === "host") {
+      nextSteps.push(`pt cmd ${result.device} "ipconfig"`);
+      nextSteps.push(`pt verify ping ${result.device} <target-ip>`);
+    }
   }
 
   if (!result.ok) {
@@ -164,20 +167,47 @@ export function toCmdCliResult(
   };
 }
 
+const READ_TERMINAL_SENTINEL = "(read terminal)";
+
 export function printCmdResult(result: CmdCliResult, options: { json?: boolean; raw?: boolean; quiet?: boolean }): void {
+  const isReadTerminal = result.command === READ_TERMINAL_SENTINEL;
+
   if (options.json) {
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    if (isReadTerminal) {
+      const evidence = isRecord(result.evidence) ? result.evidence : {};
+      const clean = {
+        ok: result.ok,
+        action: "readTerminal",
+        device: result.device,
+        mode: evidence.mode ?? "",
+        prompt: evidence.prompt ?? "",
+        output: result.output,
+      };
+      process.stdout.write(`${JSON.stringify(clean, null, 2)}\n`);
+    } else {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    }
     return;
   }
 
   if (options.raw) {
-    process.stdout.write(result.rawOutput ? `${result.rawOutput}\n` : result.output ? `${result.output}\n` : "");
+    if (isReadTerminal) {
+      const evidence = isRecord(result.evidence) ? result.evidence : {};
+      const parts: string[] = [];
+      if (evidence.mode) parts.push(`Modo: ${evidence.mode}`);
+      if (evidence.prompt) parts.push(`Prompt: ${evidence.prompt}`);
+      if (parts.length) {
+        process.stdout.write(`${parts.join(" | ")}\n\n`);
+      }
+      process.stdout.write(result.output ? `${result.output}\n` : "(vacio)\n");
+    } else {
+      process.stdout.write(result.rawOutput ? `${result.rawOutput}\n` : result.output ? `${result.output}\n` : "");
+    }
     return;
   }
 
-  if (result.timings && !options.quiet) {
+  if (result.timings && !options.quiet && !isReadTerminal) {
     const timingsSummary = formatTimingsSummary(result.timings);
-
     if (timingsSummary) {
       process.stdout.write(`${timingsSummary}\n`);
     }
@@ -205,6 +235,28 @@ export function printCmdResult(result: CmdCliResult, options: { json?: boolean; 
   }
 
   if (options.quiet) return;
+
+  if (isReadTerminal) {
+    const evidence = isRecord(result.evidence) ? result.evidence : {};
+    process.stdout.write("\n");
+    process.stdout.write(`${chalk.green("✓")} Terminal buffer de ${chalk.bold(result.device)}\n`);
+    if (evidence.mode) {
+      process.stdout.write(`  ${chalk.dim("Modo:")} ${evidence.mode}\n`);
+    }
+    if (evidence.prompt) {
+      process.stdout.write(`  ${chalk.dim("Prompt:")} ${evidence.prompt}\n`);
+    }
+    process.stdout.write("\nBuffer:\n");
+    process.stdout.write("────────────────────────────────────────────────────────────────────────────\n");
+    if (result.output.trim()) {
+      process.stdout.write(`${result.output.trimEnd()}\n`);
+    } else {
+      process.stdout.write(chalk.gray("(buffer vacío)\n"));
+    }
+    process.stdout.write("────────────────────────────────────────────────────────────────────────────\n");
+    process.stdout.write("\n");
+    return;
+  }
 
   process.stdout.write("\n");
   process.stdout.write(`${chalk.green("✓")} ${result.device} (${result.deviceKind}) ejecutó:\n`);

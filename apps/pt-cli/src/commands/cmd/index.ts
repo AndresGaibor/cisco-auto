@@ -5,6 +5,7 @@ import { input, select } from "../../utils/inquirer.js";
 import { createTerminalCommandService } from "@cisco-auto/pt-control/services";
 import type { PTController } from "@cisco-auto/pt-control/controller";
 import { isReadOnlyExecCommand } from "@cisco-auto/pt-control/services";
+import type { TerminalCommandResult } from "@cisco-auto/terminal-contracts";
 import { runCommand } from "../../application/run-command.js";
 import { createSuccessResult, createErrorResult } from "../../contracts/cli-result.js";
 import { getGlobalFlags } from "../../flags.js";
@@ -78,10 +79,9 @@ interface ExecuteCmdWorkflowOptions {
 
 function isMissingReadOnlyInput(
   deviceArg: string | undefined,
-  commandParts: string[],
   options: { file?: string; stdin?: boolean },
 ): boolean {
-  return Boolean(!deviceArg || commandParts.length === 0) && !options.file && !options.stdin;
+  return Boolean(!deviceArg) && !options.file && !options.stdin;
 }
 
 function isLikelyMisorderedReadCommand(
@@ -114,15 +114,16 @@ async function executeCmdWorkflow({
     process.stderr.write("El historial se moverá a: pt cmd history <device>. Usa ese subcomando en la Fase 5.3.\n");
   }
 
-  if (readOnly && isMissingReadOnlyInput(deviceArg, commandParts, options)) {
+  if (readOnly && isMissingReadOnlyInput(deviceArg, options)) {
     const result = createErrorResult<CmdCliResult>("cmd.exec", {
       code: "CMD_READ_USAGE",
-      message: "pt cmd read requiere dispositivo y comando. Ejemplo: pt cmd read R1 \"show running-config\"",
+      message: "pt cmd read requiere dispositivo. Ejemplo: pt cmd read R1 (sin comando muestra estado) o pt cmd read R1 \"show running-config\"",
       details: {
         examples: [
           'pt cmd read R1 "show running-config"',
           'pt cmd read SW1 "show ip interface brief"',
           'pt cmd read R1 --file comandos.txt',
+          "pt cmd read R1  (sin comando — muestra prompt actual del dispositivo)",
         ],
       },
     });
@@ -175,12 +176,13 @@ async function executeCmdWorkflow({
   );
 
   const normalizedCommands = commands.length > 0 ? commands : [];
+  const isReadWithoutCommand = Boolean(readOnly) && normalizedCommands.length === 0;
 
-  if (normalizedCommands.length === 0 && !flags.noInput) {
+  if (normalizedCommands.length === 0 && !flags.noInput && !isReadWithoutCommand) {
     normalizedCommands.push(await promptForCommand());
   }
 
-  if (normalizedCommands.length === 0) {
+  if (normalizedCommands.length === 0 && !isReadWithoutCommand) {
     const result = createErrorResult<CmdCliResult>("cmd.exec", {
       code: "CMD_COMMAND_REQUIRED",
       message: "Debes especificar un comando, --file o --stdin.",
@@ -209,7 +211,7 @@ async function executeCmdWorkflow({
     ? buildConfigCommand(normalizedCommands, Boolean(options.save))
     : normalizedCommands.join("\n");
 
-  if (readOnly && !normalizedCommands.every((line) => isReadOnlyExecCommand(line))) {
+  if (readOnly && !isReadWithoutCommand && !normalizedCommands.every((line) => isReadOnlyExecCommand(line))) {
     const result = createErrorResult<CmdCliResult>("cmd.exec", {
       code: "CMD_READ_ONLY_REQUIRED",
       message: "pt cmd read solo acepta comandos IOS de solo lectura.",
@@ -304,8 +306,29 @@ async function executeCmdWorkflow({
           evidenceLevel: flags.verbose ? "full" : "summary",
         });
 
-      const result =
-        Boolean(options.complete) && isCompleteShowInterfacesRequest(finalCommand)
+      const readTerminalResult = isReadWithoutCommand
+        ? (await ctx.controller.ensureTerminalSession(device!),
+          (await ctx.controller.getBridge().sendCommandAndWait("readTerminal", { device })).value) as any
+        : null;
+      const result: TerminalCommandResult = isReadWithoutCommand
+        ? {
+            ok: readTerminalResult?.ok !== false,
+            action: "ios.exec",
+            device: device!,
+            deviceKind: "router" as any,
+            command: "(read terminal)",
+            output: String(readTerminalResult?.output ?? ""),
+            rawOutput: String(readTerminalResult?.output ?? ""),
+            status: readTerminalResult?.ok !== false ? 0 : 1,
+            warnings: [],
+            evidence: {
+              type: "readTerminal",
+              mode: readTerminalResult?.mode ?? "",
+              prompt: readTerminalResult?.prompt ?? "",
+              output: readTerminalResult?.output ?? "",
+            },
+          }
+        : Boolean(options.complete) && isCompleteShowInterfacesRequest(finalCommand)
           ? await executeCompleteShowInterfaces({
               device: device!,
               execute: executeCommand,

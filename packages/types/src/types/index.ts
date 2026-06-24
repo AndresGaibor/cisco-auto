@@ -89,6 +89,13 @@ export type {
   PTEventType,
 } from '../schemas/pt-events.js';
 
+// Agent types
+export type {
+  AgentQuery,
+  AgentResponse,
+  AgentStatus,
+} from './agent.js';
+
 // File Bridge types
 export type {
   BridgeProtocolVersion,

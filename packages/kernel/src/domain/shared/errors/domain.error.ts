@@ -1,1 +1,0 @@
-export { DomainError } from "@cisco-auto/ios-primitives/domain/shared/errors/domain.error";

@@ -185,6 +185,46 @@ export class FileBridgeV2 extends EventEmitter {
         appendEvent: (event) => this.appendEvent(event),
         runGc: (opts) => this.gc(opts),
         nextSeq: () => this.seq.next(),
+        onRecoveryNeeded: async (attempt) => {
+          this.appendEvent({
+            seq: this.seq.next(),
+            ts: Date.now(),
+            type: "pt-auto-recovery-attempt",
+            attempt: attempt.attempt,
+            trigger: attempt.trigger,
+          });
+
+          const timeout = attempt.trigger === "missing" ? 5_000 : 10_000;
+          const statusResult = await this.sendCommandAndWait<{}, { running: boolean }>(
+            "__runtimeStatus",
+            {},
+            timeout,
+          );
+
+          if (statusResult.ok) {
+            this.appendEvent({
+              seq: this.seq.next(),
+              ts: Date.now(),
+              type: "pt-auto-recovery-reload",
+              attempt: attempt.attempt,
+            });
+            await this.sendCommandAndWait("__reloadRuntime", {}, timeout);
+            this.monitoringService.resetRecoveryCount();
+          } else {
+            this.appendEvent({
+              seq: this.seq.next(),
+              ts: Date.now(),
+              type: "pt-auto-recovery-failed",
+              attempt: attempt.attempt,
+              error: String(statusResult.error),
+            });
+            this.emit("pt-frozen", {
+              trigger: attempt.trigger,
+              consecutiveStale: attempt.consecutiveStale,
+              error: statusResult.error,
+            });
+          }
+        },
       },
       {
         autoSnapshotIntervalMs: options.autoSnapshotIntervalMs ?? 5_000,

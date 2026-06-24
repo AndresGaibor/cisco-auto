@@ -113,6 +113,7 @@ utils: [
     "handlers/runtime-handlers.ts",
     "handlers/ipc-events.ts",
     "handlers/terminal-events.ts",
+    "handlers/agent/canvas-notes.ts",
     "handlers/registration/stable-handlers.ts",
     "handlers/registration/experimental-handlers.ts",
     "handlers/registration/runtime-registration.ts",

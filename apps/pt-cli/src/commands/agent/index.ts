@@ -4,6 +4,7 @@ import { createAgentContextCommand } from './context.js';
 import { createAgentPlanCommand } from './plan.js';
 import { createAgentApplyCommand } from './apply.js';
 import { createAgentVerifyCommand } from './verify.js';
+import { createAgentDaemonCommand } from './daemon.js';
 
 export function createAgentCommand(): Command {
   const command = new Command('agent').description('Flujo de trabajo explícito para agentes');
@@ -12,6 +13,7 @@ export function createAgentCommand(): Command {
   command.addCommand(createAgentPlanCommand());
   command.addCommand(createAgentApplyCommand());
   command.addCommand(createAgentVerifyCommand());
+  command.addCommand(createAgentDaemonCommand());
 
   return command;
 }

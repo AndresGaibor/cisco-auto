@@ -8,6 +8,7 @@ import type { KernelSubsystems } from "./kernel-lifecycle";
 import type { KernelState } from "./kernel-state";
 
 let terminalBusySince: number | null = null;
+let lastHotReloadCheck = 0;
 
 const TERMINAL_BUSY_GRACE_MS = 1500;
 
@@ -203,6 +204,7 @@ function isControlCommand(type: string): boolean {
     type === "__reloadRuntime" ||
     type === "inspectDeviceFast" ||
     type === "readTerminal" ||
+    type === "saveProject" ||
     type === "omni.evaluate.raw" ||
     type === "__evaluate"
   );
@@ -216,6 +218,7 @@ function getControlCommandTypes(): string[] {
     "__reloadRuntime",
     "inspectDeviceFast",
     "readTerminal",
+    "saveProject",
     "omni.evaluate.raw",
     "__evaluate",
   ].filter(isControlCommand);
@@ -277,6 +280,65 @@ function handleKernelControlCommand(subsystems: KernelSubsystems, state: KernelS
         : null,
     });
 
+    return true;
+  }
+
+  if (type === "readTerminal") {
+    const device = String((claimed as any)?.payload?.device || "");
+    if (!device) {
+      finishActiveCommand(subsystems, state, {
+        ok: false,
+        type: "readTerminal",
+        error: "Device parameter required",
+        code: "READ_TERMINAL_NO_DEVICE",
+      });
+      return true;
+    }
+
+    let output = "";
+    try {
+      output = subsystems.executionEngine.readDeviceTerminalOutput(device);
+    } catch (e) {
+      finishActiveCommand(subsystems, state, {
+        ok: false,
+        type: "readTerminal",
+        device,
+        error: "Failed to read terminal: " + String(e),
+        code: "READ_TERMINAL_FAILED",
+      });
+      return true;
+    }
+
+    const terminal = subsystems.terminal;
+    const session = terminal && typeof terminal.getSession === "function"
+      ? terminal.getSession(device)
+      : null;
+
+    finishActiveCommand(subsystems, state, {
+      ok: true,
+      type: "readTerminal",
+      device,
+      output,
+      mode: session ? session.mode : "",
+      prompt: session ? session.prompt : "",
+    });
+    return true;
+  }
+
+  if (type === "saveProject") {
+    const saved = subsystems.executionEngine.saveProject();
+
+    finishActiveCommand(subsystems, state, {
+      ok: saved,
+      type: "saveProject",
+      saved,
+      error: saved
+        ? undefined
+        : {
+            code: "SAVE_FAILED",
+            message: "PTAppWindow.fileSave() returned false or is unavailable",
+          },
+    });
     return true;
   }
 
@@ -447,11 +509,10 @@ export function pollCommandQueue(subsystems: KernelSubsystems, state: KernelStat
         busyForPoll,
     );
 
-    stage = "skip-hot-reload";
-    // Packet Tracer es sensible a recargas/evaluaciones frecuentes.
-    // Desactivamos hot reload automático en el loop normal; se recarga manualmente con runtime reload/deploy.
-    if (false) {
-      runtimeLoader.reloadIfNeeded(() => busyForPoll);
+    stage = "hot-reload";
+    if (!busyForPoll && Date.now() - lastHotReloadCheck > 10_000) {
+      lastHotReloadCheck = Date.now();
+      runtimeLoader.reloadIfNeeded(() => false);
     }
 
     let claimed = null as ReturnType<typeof queue.poll>;
